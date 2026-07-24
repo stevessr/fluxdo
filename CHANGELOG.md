@@ -2,6 +2,44 @@
 
 所有版本的变更记录。beta / rc 版本提交在 stable 发版时会折叠并入对应 stable 版本。
 
+## [main] - 2026-07-24
+
+
+### 🌟 新功能
+
+- 完善 Discourse 聊天功能及云端 APK 构建修复
+
+
+### 🐛 修复
+
+- 修复 GitHub Actions if 条件判断中的 secrets 语法错误
+
+
+### 🔧 其他
+
+- 添加 workflow_dispatch 手动触发支持
+
+
+
+
+**Full Changelog**: https://github.com/lingyan000/fluxdo/compare/v0...main
+
+## [0] - 2026-07-24
+
+
+### 🌟 新功能
+
+- Enhance chat functionality with reply, edit, delete, and upload features
+
+- Update chat message handling and improve loading indicators
+
+- Add chat functionality with channels and messages
+
+
+
+
+**Full Changelog**: https://github.com/lingyan000/fluxdo/compare/v0.2.25...v0
+
 ## [0.2.25] - 2026-07-24
 
 
@@ -14,6 +52,40 @@
 - 自研 M3E 组件库 m3e_ui:动效/组件全家桶 + 全局开关 by @Lingyan000
 
 - 图片查看器:双击/缩放弹簧动画 + 打开转场升级 by @Lingyan000
+
+
+### 🐛 修复
+
+- 适配 preloaded 数据新版承载形态:script/json 标签 + 旧属性形态兼容 by @Lingyan000
+
+- 待审回复撤回重编不再丢回复目标:送审时会话级补记 + 冷场景降级提示 by @Lingyan000
+
+- 修复 Windows MSVC UTF-8 源码编码构建失败 by @Lingyan000
+
+
+### ♻️ 重构
+
+- 图片查看器重构:手势状态外提+持久层栈+关闭转场统一 by @Lingyan000
+
+
+### 📝 文档
+
+- 起草 v0.2.25 版本亮点 by @Lingyan000
+
+
+### 🔧 其他
+
+- 🌟 桌面端表情面板改为悬浮弹层 by @Lingyan000
+
+
+
+
+**Full Changelog**: https://github.com/lingyan000/fluxdo/compare/flatpak-wpe-layer-gnome48-v2...v0.2.25
+
+## [flatpak-wpe-layer-gnome48-v2] - 2026-07-22
+
+
+### 🌟 新功能
 
 - 私信列表支持新建私信(可搜索收件人) (#345) ([#345](https://github.com/lingyan000/fluxdo/pull/345)) by @homo11451419
 
@@ -29,12 +101,6 @@
 
 
 ### 🐛 修复
-
-- 适配 preloaded 数据新版承载形态:script/json 标签 + 旧属性形态兼容 by @Lingyan000
-
-- 待审回复撤回重编不再丢回复目标:送审时会话级补记 + 冷场景降级提示 by @Lingyan000
-
-- 修复 Windows MSVC UTF-8 源码编码构建失败 by @Lingyan000
 
 - Win+V 粘贴图片无反应:补原生剪贴板兜底 (#346) ([#346](https://github.com/lingyan000/fluxdo/pull/346)) by @homo11451419
 
@@ -76,19 +142,7 @@
 - ️ 性能三件套:解码闸门离屏摘除 + 帧调度归因 + 图片引用作用域 by @Lingyan000
 
 
-### ♻️ 重构
-
-- 图片查看器重构:手势状态外提+持久层栈+关闭转场统一 by @Lingyan000
-
-
-### 📝 文档
-
-- 起草 v0.2.25 版本亮点 by @Lingyan000
-
-
 ### 🔧 其他
-
-- 🌟 桌面端表情面板改为悬浮弹层 by @Lingyan000
 
 - 🌟 图片直链改为内置查看器打开,不再走"离站确认"弹窗 (#347) ([#347](https://github.com/lingyan000/fluxdo/pull/347)) by @homo11451419
 
@@ -99,7 +153,7 @@
 
 
 
-**Full Changelog**: https://github.com/lingyan000/fluxdo/compare/v0.2.24...v0.2.25
+**Full Changelog**: https://github.com/lingyan000/fluxdo/compare/v0.2.24...flatpak-wpe-layer-gnome48-v2
 
 ## [0.2.24] - 2026-07-17
 
@@ -1484,7 +1538,7 @@
 
 
 
-**Full Changelog**: https://github.com/lingyan000/fluxdo/compare/flatpak-wpe-layer-gnome48-v2...v0.1.56
+**Full Changelog**: https://github.com/lingyan000/fluxdo/compare/flatpak-wpe-layer-gnome48-v1...v0.1.56
 
 ## [0.1.55] - 2026-03-20
 
