@@ -1,0 +1,32 @@
+{
+  "@@locale": "zh_TW",
+  "chat_title": "聊天",
+  "chat_public_channels": "頻道",
+  "chat_direct_messages": "私訊",
+  "chat_empty": "暫無頻道",
+  "chat_new_dm": "新建私訊",
+  "chat_search_users": "搜尋用戶",
+  "chat_search_hint": "輸入用戶名搜尋",
+  "chat_no_results": "未找到匹配用戶",
+  "chat_dm_placeholder": "私訊",
+  "chat_unnamed_channel": "未命名頻道",
+  "chat_send": "發送",
+  "chat_input_hint": "輸入訊息...",
+  "chat_no_messages": "暫無訊息",
+  "chat_send_first_message": "發送第一條訊息開始聊天",
+  "chat_loading": "載入中...",
+  "chat_error": "載入失敗",
+  "chat_retry": "重試",
+  "chat_scroll_to_bottom": "滾動到底部",
+  "chat_load_more": "載入更多",
+  "chat_message_deleted": "此訊息已被刪除",
+  "chat_edited": "已編輯",
+  "chat_send_failed": "發送失敗: {error}",
+  "@chat_send_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
+}

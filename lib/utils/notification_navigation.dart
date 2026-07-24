@@ -12,6 +12,10 @@ import '../utils/dialog_utils.dart';
 import '../widgets/common/page_dialog.dart';
 import '../widgets/layout/master_detail_layout.dart';
 import '../widgets/notification/notification_item.dart';
+import '../pages/badge_page.dart';
+import '../pages/chat/chat_message_page.dart';
+import '../services/local_notification_service.dart';
+import '../l10n/s.dart';
 
 NavigatorState? _rootNavigator(BuildContext context) {
   return navigatorKey.currentState ??
@@ -82,6 +86,32 @@ Widget? _notificationTargetPage(
         initialRevisionPostNumber: notification.postNumber,
         initialRevisionNumber: notification.data.revisionNumber,
       );
+
+    case NotificationType.chatMention:
+    case NotificationType.chatMessage:
+    case NotificationType.chatInvitation:
+    case NotificationType.chatGroupMention:
+    case NotificationType.chatQuotedPost:
+    case NotificationType.chatWatchedThread:
+      if (notification.data.chatChannelId != null) {
+        _pushOnRootNavigator(
+          context,
+          ChatMessagePage(
+            channelId: notification.data.chatChannelId!,
+            channelTitle: notification.data.topicTitle ?? S.current.chat_title,
+          ),
+        );
+      } else if (notification.topicId != null) {
+        // 降级：没有频道 ID 时跳转到话题
+        _pushOnRootNavigator(
+          context,
+          TopicDetailPage(
+            topicId: notification.topicId!,
+            scrollToPostNumber: notification.postNumber,
+          ),
+        );
+      }
+      break;
 
     default:
       // privateMessage/posted/liked/reaction 等所有话题类落点
