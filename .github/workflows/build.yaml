@@ -199,14 +199,20 @@ jobs:
           mv build/app/outputs/flutter-apk/app-release.apk dist/fluxdo-${{ matrix.arch }}.apk
 
       - name: Authenticate to Google Cloud
-        if: startsWith(matrix.platform, 'android') && secrets.GCP_WIF_PROVIDER != '' && secrets.GCP_SA_EMAIL != ''
+        if: startsWith(matrix.platform, 'android') && env.GCP_WIF != '' && env.GCP_SA != ''
+        env:
+          GCP_WIF: ${{ secrets.GCP_WIF_PROVIDER }}
+          GCP_SA: ${{ secrets.GCP_SA_EMAIL }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_SA_EMAIL }}
 
       - name: Upload Dart symbols to Crashlytics
-        if: startsWith(matrix.platform, 'android') && secrets.GCP_WIF_PROVIDER != '' && secrets.GCP_SA_EMAIL != ''
+        if: startsWith(matrix.platform, 'android') && env.GCP_WIF != '' && env.GCP_SA != ''
+        env:
+          GCP_WIF: ${{ secrets.GCP_WIF_PROVIDER }}
+          GCP_SA: ${{ secrets.GCP_SA_EMAIL }}
         run: |
           npx -y firebase-tools@latest crashlytics:symbols:upload \
             --app=1:98542877021:android:e555169791c86bb9c950b4 \
