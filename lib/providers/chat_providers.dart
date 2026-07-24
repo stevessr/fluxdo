@@ -143,7 +143,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
 
 final chatMessagesProvider = AsyncNotifierProvider.family<
     ChatMessagesNotifier, List<ChatMessage>, int>(
-  (ref, channelId) => ChatMessagesNotifier(channelId),
+  ChatMessagesNotifier.new,
 );
 
 /// ============================================================================
