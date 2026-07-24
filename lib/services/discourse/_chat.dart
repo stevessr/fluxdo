@@ -129,4 +129,42 @@ mixin _ChatMixin on _DiscourseServiceBase {
     );
     return Map<String, dynamic>.from(response.data as Map);
   }
+
+  /// 获取指定频道的成员列表
+  Future<List<Map<String, dynamic>>> getChannelMembers(
+    int channelId, {
+    String? filter,
+  }) async {
+    final queryParameters = <String, dynamic>{};
+    if (filter != null && filter.isNotEmpty) {
+      queryParameters['filter'] = filter;
+    }
+
+    try {
+      final response = await _dio.get(
+        '/chat/api/channels/$channelId/members',
+        queryParameters: queryParameters.isEmpty ? null : queryParameters,
+      );
+      final data = response.data;
+      if (data is Map && data.containsKey('members')) {
+        final list = data['members'] as List;
+        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return [];
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 向指定频道添加/邀请成员
+  Future<void> addChannelMember(int channelId, String username) async {
+    try {
+      await _dio.post(
+        '/chat/api/channels/$channelId/members',
+        data: {'username': username},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
 }

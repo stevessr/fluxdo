@@ -69,5 +69,19 @@
         "type": "String"
       }
     }
-  }
+  },
+  "chat_channel_members": "Channel Members",
+  "chat_search_members": "Search members...",
+  "chat_add_member": "Add Member",
+  "chat_add_member_success": "Member added successfully",
+  "chat_add_member_failed": "Failed to add member: {error}",
+  "@chat_add_member_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_view_profile": "View Profile",
+  "chat_no_members": "No members found"
 }

@@ -69,5 +69,19 @@
         "type": "String"
       }
     }
-  }
+  },
+  "chat_channel_members": "頻道成員",
+  "chat_search_members": "搜尋成員...",
+  "chat_add_member": "新增成員",
+  "chat_add_member_success": "成員新增成功",
+  "chat_add_member_failed": "新增失敗: {error}",
+  "@chat_add_member_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_view_profile": "檢看資料",
+  "chat_no_members": "暫無成員資訊"
 }

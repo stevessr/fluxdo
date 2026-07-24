@@ -128,10 +128,61 @@ jobs:
 
       - name: Setup Android Signing
         if: startsWith(matrix.platform, 'android')
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
-          echo "${{ secrets.ANDROID_KEY_PROPERTIES }}" > android/key.properties
-          echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > android/app/google-services.json
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          else
+            echo "ANDROID_KEYSTORE_BASE64 未配置，跳过自签证书创建"
+            rm -f android/app/upload-keystore.jks
+          fi
+
+          if [ -n "$KEY_PROPERTIES" ]; then
+            echo "$KEY_PROPERTIES" > android/key.properties
+          else
+            echo "ANDROID_KEY_PROPERTIES 未配置，跳过 key.properties 创建"
+            rm -f android/key.properties
+          fi
+
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
+          else
+            echo "GOOGLE_SERVICES_JSON 未配置，写入默认 Google Services 配置模版"
+            cat << 'EOF' > android/app/google-services.json
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "fluxdo-dummy",
+              "storage_bucket": "fluxdo-dummy.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:123456789012:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "com.github.lingyan000.fluxdo"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDummyKeyForBuildWithoutSecrets0000"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
 
       - name: Configure Git for CocoaPods
         if: matrix.platform == 'ios' || matrix.platform == 'macos'
@@ -148,14 +199,14 @@ jobs:
           mv build/app/outputs/flutter-apk/app-release.apk dist/fluxdo-${{ matrix.arch }}.apk
 
       - name: Authenticate to Google Cloud
-        if: startsWith(matrix.platform, 'android')
+        if: startsWith(matrix.platform, 'android') && secrets.GCP_WIF_PROVIDER != '' && secrets.GCP_SA_EMAIL != ''
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_SA_EMAIL }}
 
       - name: Upload Dart symbols to Crashlytics
-        if: startsWith(matrix.platform, 'android')
+        if: startsWith(matrix.platform, 'android') && secrets.GCP_WIF_PROVIDER != '' && secrets.GCP_SA_EMAIL != ''
         run: |
           npx -y firebase-tools@latest crashlytics:symbols:upload \
             --app=1:98542877021:android:e555169791c86bb9c950b4 \

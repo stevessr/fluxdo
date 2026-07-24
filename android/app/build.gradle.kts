@@ -42,7 +42,8 @@ val hasReleaseSigning =
     releaseKeyAlias != null &&
     releaseKeyPassword != null &&
     releaseStorePassword != null &&
-    releaseStoreFile?.exists() == true
+    releaseStoreFile?.exists() == true &&
+    (releaseStoreFile?.length() ?: 0L) > 0L
 val releaseBuildSigningName = if (hasReleaseSigning) "release" else "debug"
 
 println(

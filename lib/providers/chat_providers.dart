@@ -245,3 +245,24 @@ final chatSearchProvider =
       .map((e) => Chatable.fromJson(Map<String, dynamic>.from(e as Map)))
       .toList();
 });
+
+/// ============================================================================
+/// 6. 频道成员列表与添加成员 Provider
+/// ============================================================================
+
+final chatChannelMembersProvider =
+    FutureProvider.family<List<ChatUser>, int>((ref, channelId) async {
+  final service = ref.read(discourseServiceProvider);
+  final membersRaw = await service.getChannelMembers(channelId);
+  return membersRaw
+      .map((e) => ChatUser.fromJson(Map<String, dynamic>.from(e['user'] as Map? ?? e)))
+      .toList();
+});
+
+final addChannelMemberProvider =
+    FutureProvider.family<void, ({int channelId, String username})>(
+        (ref, params) async {
+  final service = ref.read(discourseServiceProvider);
+  await service.addChannelMember(params.channelId, params.username);
+  ref.invalidate(chatChannelMembersProvider(params.channelId));
+});

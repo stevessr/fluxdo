@@ -69,5 +69,19 @@
         "type": "String"
       }
     }
-  }
+  },
+  "chat_channel_members": "频道成员",
+  "chat_search_members": "搜索成员...",
+  "chat_add_member": "添加成员",
+  "chat_add_member_success": "成员添加成功",
+  "chat_add_member_failed": "添加失败: {error}",
+  "@chat_add_member_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_view_profile": "查看资料",
+  "chat_no_members": "暂无成员信息"
 }

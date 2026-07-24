@@ -14,6 +14,8 @@ import '../../utils/url_helper.dart';
 import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
+import '../user_profile_page.dart';
+import 'chat_channel_members_sheet.dart';
 
 /// Chat 消息页面
 ///
@@ -415,6 +417,17 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               tooltip: context.l10n.chat_scroll_to_bottom,
               onPressed: _scrollToBottom,
             ),
+          IconButton(
+            icon: const Icon(Icons.people_outline_rounded),
+            tooltip: context.l10n.chat_channel_members,
+            onPressed: () {
+              ChatChannelMembersSheet.show(
+                context,
+                widget.channelId,
+                widget.channelTitle,
+              );
+            },
+          ),
         ],
       ),
       body: Column(
@@ -895,10 +908,22 @@ class _ChatMessageBubble extends StatelessWidget {
               if (showSender)
                 Padding(
                   padding: const EdgeInsets.only(right: 8, bottom: 4),
-                  child: SmartAvatar(
-                    imageUrl: avatarUrl,
-                    radius: 16,
-                    fallbackText: message.user!.username,
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => UserProfilePage(
+                            username: message.user!.username,
+                          ),
+                        ),
+                      );
+                    },
+                    child: SmartAvatar(
+                      imageUrl: avatarUrl,
+                      radius: 16,
+                      fallbackText: message.user!.username,
+                    ),
                   ),
                 ),
 
