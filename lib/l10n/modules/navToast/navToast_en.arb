@@ -7,6 +7,7 @@
   "nav_messages": "Messages",
   "nav_mine": "Me",
   "nav_notifications": "Notifications",
+  "nav_chat": "Chat",
   "toast_authorizationFailed": "Authorization failed: {error}",
   "toast_credentialCleared": "Credentials cleared",
   "toast_credentialIncomplete": "Please fill in all credential fields",

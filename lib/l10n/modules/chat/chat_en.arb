@@ -1,0 +1,32 @@
+{
+  "@@locale": "en",
+  "chat_title": "Chat",
+  "chat_public_channels": "Channels",
+  "chat_direct_messages": "Direct Messages",
+  "chat_empty": "No channels yet",
+  "chat_new_dm": "New DM",
+  "chat_search_users": "Search users",
+  "chat_search_hint": "Type username to search",
+  "chat_no_results": "No users found",
+  "chat_dm_placeholder": "DM",
+  "chat_unnamed_channel": "Unnamed Channel",
+  "chat_send": "Send",
+  "chat_input_hint": "Type a message...",
+  "chat_no_messages": "No messages",
+  "chat_send_first_message": "Send the first message to start chatting",
+  "chat_loading": "Loading...",
+  "chat_error": "Failed to load",
+  "chat_retry": "Retry",
+  "chat_scroll_to_bottom": "Scroll to bottom",
+  "chat_load_more": "Load more",
+  "chat_message_deleted": "This message has been deleted",
+  "chat_edited": "edited",
+  "chat_send_failed": "Failed to send: {error}",
+  "@chat_send_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
+}

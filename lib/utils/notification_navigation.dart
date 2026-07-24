@@ -5,7 +5,9 @@ import '../providers/discourse_providers.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page.dart';
 import '../pages/badge_page.dart';
+import '../pages/chat/chat_message_page.dart';
 import '../services/local_notification_service.dart';
+import '../l10n/s.dart';
 
 NavigatorState? _rootNavigator(BuildContext context) {
   return navigatorKey.currentState ??
@@ -90,6 +92,32 @@ void handleNotificationTap(
             scrollToPostNumber: notification.postNumber,
             initialRevisionPostNumber: notification.postNumber,
             initialRevisionNumber: notification.data.revisionNumber,
+          ),
+        );
+      }
+      break;
+
+    case NotificationType.chatMention:
+    case NotificationType.chatMessage:
+    case NotificationType.chatInvitation:
+    case NotificationType.chatGroupMention:
+    case NotificationType.chatQuotedPost:
+    case NotificationType.chatWatchedThread:
+      if (notification.data.chatChannelId != null) {
+        _pushOnRootNavigator(
+          context,
+          ChatMessagePage(
+            channelId: notification.data.chatChannelId!,
+            channelTitle: notification.data.topicTitle ?? S.current.chat_title,
+          ),
+        );
+      } else if (notification.topicId != null) {
+        // 降级：没有频道 ID 时跳转到话题
+        _pushOnRootNavigator(
+          context,
+          TopicDetailPage(
+            topicId: notification.topicId!,
+            scrollToPostNumber: notification.postNumber,
           ),
         );
       }

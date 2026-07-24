@@ -1,0 +1,32 @@
+{
+  "@@locale": "zh",
+  "chat_title": "聊天",
+  "chat_public_channels": "频道",
+  "chat_direct_messages": "私信",
+  "chat_empty": "暂无频道",
+  "chat_new_dm": "新建私信",
+  "chat_search_users": "搜索用户",
+  "chat_search_hint": "输入用户名搜索",
+  "chat_no_results": "未找到匹配用户",
+  "chat_dm_placeholder": "私信",
+  "chat_unnamed_channel": "未命名频道",
+  "chat_send": "发送",
+  "chat_input_hint": "输入消息...",
+  "chat_no_messages": "暂无消息",
+  "chat_send_first_message": "发送第一条消息开始聊天",
+  "chat_loading": "加载中...",
+  "chat_error": "加载失败",
+  "chat_retry": "重试",
+  "chat_scroll_to_bottom": "滚动到底部",
+  "chat_load_more": "加载更多",
+  "chat_message_deleted": "此消息已被删除",
+  "chat_edited": "已编辑",
+  "chat_send_failed": "发送失败: {error}",
+  "@chat_send_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
+}

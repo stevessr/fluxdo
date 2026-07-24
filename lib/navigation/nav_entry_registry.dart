@@ -11,6 +11,7 @@ import '../pages/private_messages_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/topics_screen.dart';
 import '../providers/discourse_providers.dart';
+import '../pages/chat/chat_page.dart';
 import '../widgets/common/smart_avatar.dart';
 import '../widgets/notification/notification_quick_panel.dart';
 import 'nav_action_bus.dart';
@@ -96,6 +97,15 @@ class NavEntryRegistry {
         selectedIconData: Symbols.notifications_rounded,
         label: (ctx) => ctx.l10n.nav_notifications,
         onPanelTap: (ctx, ref) => NotificationQuickPanel.show(ctx),
+        requiresLogin: true,
+      ),
+      NavEntry(
+        id: NavEntryIds.chat,
+        kind: NavEntryKind.page,
+        iconData: Symbols.chat_rounded,
+        selectedIconData: Symbols.chat_rounded,
+        label: (ctx) => ctx.l10n.nav_chat,
+        pageBuilder: (ctx, isActive) => ChatPage(),
         requiresLogin: true,
       ),
     ];
