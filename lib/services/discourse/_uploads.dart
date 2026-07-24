@@ -36,6 +36,7 @@ class ResolvedUploadUrl {
 
 /// 上传结果
 class UploadResult {
+  final int id;
   final String shortUrl;
   final String? url;
   final String originalFilename;
@@ -48,6 +49,7 @@ class UploadResult {
   final String? extension;
 
   UploadResult({
+    this.id = 0,
     required this.shortUrl,
     this.url,
     required this.originalFilename,
@@ -292,6 +294,7 @@ mixin _UploadsMixin on _DiscourseServiceBase {
           final shortUrl = data['short_url'] as String?;
           if (shortUrl != null) {
             return UploadResult(
+              id: data['id'] as int? ?? 0,
               shortUrl: shortUrl,
               url: data['url'] as String?,
               originalFilename:

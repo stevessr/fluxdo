@@ -28,5 +28,46 @@
         "type": "String"
       }
     }
+  },
+  "chat_reply": "回覆",
+  "chat_replying_to": "回覆 {name}",
+  "@chat_replying_to": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_copy": "複製",
+  "chat_copied": "已複製到剪貼板",
+  "chat_edit": "編輯",
+  "chat_editing_message": "正在編輯訊息",
+  "chat_update_failed": "更新失敗: {error}",
+  "@chat_update_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_delete": "刪除",
+  "chat_delete_confirm": "確定刪除此訊息？",
+  "chat_delete_failed": "刪除失敗: {error}",
+  "@chat_delete_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_cancel": "取消",
+  "chat_upload_image": "上傳圖片",
+  "chat_upload_failed": "上傳失敗: {error}",
+  "@chat_upload_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }

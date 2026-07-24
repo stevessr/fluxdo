@@ -28,5 +28,46 @@
         "type": "String"
       }
     }
+  },
+  "chat_reply": "Reply",
+  "chat_replying_to": "Replying to {name}",
+  "@chat_replying_to": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_copy": "Copy",
+  "chat_copied": "Copied to clipboard",
+  "chat_edit": "Edit",
+  "chat_editing_message": "Editing message",
+  "chat_update_failed": "Failed to update: {error}",
+  "@chat_update_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_delete": "Delete",
+  "chat_delete_confirm": "Delete this message?",
+  "chat_delete_failed": "Failed to delete: {error}",
+  "@chat_delete_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_cancel": "Cancel",
+  "chat_upload_image": "Upload image",
+  "chat_upload_failed": "Upload failed: {error}",
+  "@chat_upload_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }
