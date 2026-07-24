@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/common/error_view.dart';
-import '../../widgets/common/loading_spinner.dart';
 import '../../widgets/common/smart_avatar.dart';
 
 /// Chat 消息页面
@@ -148,7 +148,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       appBar: AppBar(
         title: Text(widget.channelTitle),
         actions: [
-          if (!_isAtBottom && messagesAsync.valueOrNull != null)
+          if (!_isAtBottom && messagesAsync.value != null)
             IconButton(
               icon: const Icon(Icons.arrow_downward_rounded),
               tooltip: context.l10n.chat_scroll_to_bottom,
@@ -211,7 +211,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 );
               },
               loading: () => const Center(
-                child: LoadingSpinner(size: 36),
+                child: CircularProgressIndicator(),
               ),
               error: (error, stack) => ErrorView(
                 error: error,
@@ -243,7 +243,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             ? const SizedBox(
                 width: 24,
                 height: 24,
-                child: LoadingSpinner(size: 24),
+                child: CircularProgressIndicator(strokeWidth: 2),
               )
             : SizedBox(
                 width: 32,
@@ -375,7 +375,7 @@ class _ChatMessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     // 删除的消息不显示内容
     if (message.deleted) {
-      return _buildDeletedMessage();
+      return _buildDeletedMessage(context);
     }
 
     final alignment =
@@ -507,7 +507,7 @@ class _ChatMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildDeletedMessage() {
+  Widget _buildDeletedMessage(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
       child: Row(

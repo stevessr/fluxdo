@@ -38,7 +38,7 @@ class ChatMessage {
       id: json['id'] as int,
       message: json['message'] as String? ?? '',
       cooked: json['cooked'] as String?,
-      createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
+      createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?) ?? DateTime.now(),
       chatChannelId: json['chat_channel_id'] as int,
       user: json['user'] != null
           ? ChatUser.fromJson(json['user'] as Map<String, dynamic>)

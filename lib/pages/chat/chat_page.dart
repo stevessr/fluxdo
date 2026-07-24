@@ -141,10 +141,18 @@ class _ChatChannelListView extends ConsumerWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ChatMessagePage(
-                    channelId: channel.id,
-                    channelTitle: _resolveTitle(context),
-                  ),
+                  builder: (_) {
+                    final title = channel.chatableType == 'DirectMessage'
+                        ? (channel.lastMessage?.user?.name ??
+                            channel.lastMessage?.user?.username ??
+                            channel.title ??
+                            context.l10n.chat_dm_placeholder)
+                        : (channel.title ?? context.l10n.chat_unnamed_channel);
+                    return ChatMessagePage(
+                      channelId: channel.id,
+                      channelTitle: title,
+                    );
+                  },
                 ),
               );
             },
@@ -428,7 +436,10 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ChatMessagePage(channelId: channelId),
+          builder: (_) => ChatMessagePage(
+            channelId: channelId,
+            channelTitle: user.name ?? user.username,
+          ),
         ),
       );
     } catch (e) {

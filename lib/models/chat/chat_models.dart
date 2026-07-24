@@ -1,9 +1,9 @@
-import 'chat_channel.dart';
-
 /// Chat 数据模型
 ///
 /// 集中导出所有 Chat 相关模型，外部只需导入此文件。
 library;
+
+import 'chat_channel.dart';
 
 export 'chat_channel.dart';
 export 'chat_message.dart';
