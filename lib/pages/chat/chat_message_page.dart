@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
@@ -7,12 +11,13 @@ import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
+import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 
 /// Chat 消息页面
 ///
-/// 展示指定频道的聊天消息，支持发送消息、加载历史、标记已读和自动滚动。
+/// 展示指定频道的聊天消息，支持发送、回复、编辑、删除、图片上传及提到用户。
 class ChatMessagePage extends ConsumerStatefulWidget {
   final int channelId;
   final String channelTitle;
@@ -31,20 +36,33 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
   final FocusNode _inputFocusNode = FocusNode();
+
   bool _isSending = false;
   bool _isAtBottom = true;
   bool _initialLoadDone = false;
+
+  // 上下文状态：回复/编辑/附件/mention
+  ChatMessage? _replyToMessage;
+  ChatMessage? _editingMessage;
+  List<int> _uploadIds = [];
+  String? _uploadPreviewPath;
+  bool _isUploadingImage = false;
+
+  List<Chatable> _mentionSuggestions = [];
+  bool _showMentionSuggestions = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _textController.addListener(_onTextChanged);
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _inputFocusNode.dispose();
     super.dispose();
@@ -53,7 +71,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void _onScroll() {
     if (!_scrollController.hasClients) return;
 
-    // 检测是否在底部附近
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.position.pixels;
     final atBottom = (maxScroll - currentScroll) < 100;
@@ -61,7 +78,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       setState(() => _isAtBottom = atBottom);
     }
 
-    // 滚动到顶部时加载更多历史消息
     if (_scrollController.position.pixels <= 50) {
       _loadMoreMessages();
     }
@@ -86,39 +102,285 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     await notifier.loadMore();
   }
 
-  Future<void> _sendMessage() async {
+  /// 监听输入框变化，触发 @ 用户联想
+  void _onTextChanged() {
+    final text = _textController.text;
+    final selection = _textController.selection;
+    if (!selection.isValid || selection.isCollapsed == false) {
+      if (_showMentionSuggestions) {
+        setState(() => _showMentionSuggestions = false);
+      }
+      return;
+    }
+
+    final cursorPosition = selection.baseOffset;
+    if (cursorPosition <= 0) {
+      if (_showMentionSuggestions) {
+        setState(() => _showMentionSuggestions = false);
+      }
+      return;
+    }
+
+    final textBeforeCursor = text.substring(0, cursorPosition);
+    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex >= 0 && (lastAtIndex == 0 || textBeforeCursor[lastAtIndex - 1] == ' ')) {
+      final filter = textBeforeCursor.substring(lastAtIndex + 1);
+      if (!filter.contains(' ')) {
+        _fetchMentionSuggestions(filter);
+        return;
+      }
+    }
+
+    if (_showMentionSuggestions) {
+      setState(() => _showMentionSuggestions = false);
+    }
+  }
+
+  Future<void> _fetchMentionSuggestions(String filter) async {
+    try {
+      final suggestions = await ref.read(chatSearchProvider(filter).future);
+      if (!mounted) return;
+      setState(() {
+        _mentionSuggestions = suggestions;
+        _showMentionSuggestions = suggestions.isNotEmpty;
+      });
+    } catch (_) {
+      if (mounted && _showMentionSuggestions) {
+        setState(() => _showMentionSuggestions = false);
+      }
+    }
+  }
+
+  void _insertMention(Chatable user) {
+    final text = _textController.text;
+    final selection = _textController.selection;
+    final cursorPosition = selection.baseOffset;
+    final textBeforeCursor = text.substring(0, cursorPosition);
+    final lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex >= 0) {
+      final newText = text.substring(0, lastAtIndex) + '@${user.username} ' + text.substring(cursorPosition);
+      _textController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: lastAtIndex + user.username.length + 2),
+      );
+    }
+    setState(() => _showMentionSuggestions = false);
+  }
+
+  /// 选择并上传图片附件
+  Future<void> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile == null) return;
+
+    setState(() {
+      _isUploadingImage = true;
+      _uploadPreviewPath = pickedFile.path;
+    });
+
+    try {
+      final service = ref.read(discourseServiceProvider);
+      final uploadResult = await service.uploadFile(pickedFile.path);
+      if (!mounted) return;
+      setState(() {
+        _uploadIds.add(uploadResult.id);
+        _isUploadingImage = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploadingImage = false;
+        _uploadPreviewPath = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.chat_upload_failed(e.toString()))),
+      );
+    }
+  }
+
+  /// 清除附件
+  void _clearUpload() {
+    setState(() {
+      _uploadIds.clear();
+      _uploadPreviewPath = null;
+    });
+  }
+
+  /// 发送或更新消息
+  Future<void> _sendMessageOrUpdate() async {
     final text = _textController.text.trim();
-    if (text.isEmpty || _isSending) return;
+    if ((text.isEmpty && _uploadIds.isEmpty) || _isSending || _isUploadingImage) return;
 
     setState(() => _isSending = true);
     try {
       final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
-      await notifier.sendMessage(text);
+      if (_editingMessage != null) {
+        await notifier.editMessage(_editingMessage!.id, text);
+      } else {
+        await notifier.sendMessage(
+          text,
+          inReplyToId: _replyToMessage?.id,
+          uploadIds: _uploadIds.isNotEmpty ? _uploadIds : null,
+        );
+      }
+
       _textController.clear();
-      // 发送成功后滚动到底部
+      _onCancelReplyOrEdit();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollToBottom();
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${context.l10n.chat_send_failed}: $e')),
-      );
+      final msg = _editingMessage != null
+          ? context.l10n.chat_update_failed(e.toString())
+          : context.l10n.chat_send_failed(e.toString());
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
   }
 
-  /// 标记最近一条消息为已读
+  void _onStartReply(ChatMessage message) {
+    setState(() {
+      _replyToMessage = message;
+      _editingMessage = null;
+    });
+    _inputFocusNode.requestFocus();
+  }
+
+  void _onStartEdit(ChatMessage message) {
+    setState(() {
+      _editingMessage = message;
+      _replyToMessage = null;
+      _textController.text = message.message;
+    });
+    _inputFocusNode.requestFocus();
+  }
+
+  void _onCancelReplyOrEdit() {
+    setState(() {
+      _replyToMessage = null;
+      _editingMessage = null;
+      _uploadIds.clear();
+      _uploadPreviewPath = null;
+      _showMentionSuggestions = false;
+    });
+  }
+
+  Future<void> _onDeleteMessage(ChatMessage message) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.l10n.chat_delete),
+        content: Text(ctx.l10n.chat_delete_confirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(ctx.l10n.chat_cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: Text(ctx.l10n.chat_delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
+      await notifier.deleteMessage(message.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.chat_delete_failed(e.toString()))),
+      );
+    }
+  }
+
+  void _onCopyMessage(ChatMessage message) {
+    Clipboard.setData(ClipboardData(text: message.message));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(context.l10n.chat_copied),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// 长按弹出消息操作 BottomSheet
+  void _showMessageActionSheet(ChatMessage message, bool isOwnMessage) {
+    if (message.deleted) return;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.reply_rounded),
+              title: Text(ctx.l10n.chat_reply),
+              onTap: () {
+                Navigator.pop(ctx);
+                _onStartReply(message);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy_rounded),
+              title: Text(ctx.l10n.chat_copy),
+              onTap: () {
+                Navigator.pop(ctx);
+                _onCopyMessage(message);
+              },
+            ),
+            if (isOwnMessage) ...[
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(ctx.l10n.chat_edit),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _onStartEdit(message);
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.delete_outline_rounded,
+                  color: Theme.of(ctx).colorScheme.error,
+                ),
+                title: Text(
+                  ctx.l10n.chat_delete,
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _onDeleteMessage(message);
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 标记已读
   void _markAsRead(List<ChatMessage> messages) {
     if (messages.isEmpty) return;
-    // 取最后一条可见消息的 id 标记已读
     final lastMessage = messages.last;
     final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
     notifier.markAsRead(lastMessage.id);
   }
 
-  /// 构建头像 URL
   String? _buildAvatarUrl(ChatUser? user) {
     if (user == null || user.avatarTemplate == null) return null;
     final template = user.avatarTemplate!.replaceAll('{size}', '40');
@@ -131,7 +393,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     final messagesAsync = ref.watch(chatMessagesProvider(widget.channelId));
     final currentUser = ref.watch(currentUserProvider).value;
 
-    // 监听消息列表变化，数据加载完成后自动滚动到底部
     ref.listen(chatMessagesProvider(widget.channelId), (_, next) {
       next.whenData((messages) {
         if (!_initialLoadDone) {
@@ -166,7 +427,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                   return _buildEmptyState(theme);
                 }
 
-                // 首次加载后标记已读
                 if (_initialLoadDone) {
                   _markAsRead(messages);
                 }
@@ -190,29 +450,58 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     itemCount: messages.length + 1,
                     itemBuilder: (context, index) {
                       if (index == 0) {
-                        // 顶部加载更多指示器
                         return _buildLoadMoreIndicator();
                       }
 
                       final message = messages[index - 1];
-                      final isOwnMessage =
-                          currentUser != null &&
+                      final isOwnMessage = currentUser != null &&
                           message.user != null &&
                           message.user!.id == currentUser.id;
 
-                      return _ChatMessageBubble(
-                        message: message,
-                        isOwnMessage: isOwnMessage,
-                        avatarUrl: _buildAvatarUrl(message.user),
-                        theme: theme,
+                      // 检查日期分割线
+                      bool showDateHeader = false;
+                      if (index == 1) {
+                        showDateHeader = true;
+                      } else {
+                        final prevMessage = messages[index - 2];
+                        showDateHeader = !_isSameDay(
+                          message.createdAt,
+                          prevMessage.createdAt,
+                        );
+                      }
+
+                      // 查找关联回复消息
+                      ChatMessage? replyToMsg;
+                      if (message.inReplyToId != null) {
+                        replyToMsg = messages.firstWhere(
+                          (m) => m.id == message.inReplyToId,
+                          orElse: () => message,
+                        );
+                        if (replyToMsg.id == message.id) replyToMsg = null;
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (showDateHeader) _buildDateHeader(theme, message.createdAt),
+                          _ChatMessageBubble(
+                            message: message,
+                            replyToMessage: replyToMsg,
+                            isOwnMessage: isOwnMessage,
+                            avatarUrl: _buildAvatarUrl(message.user),
+                            theme: theme,
+                            onLongPress: () => _showMessageActionSheet(
+                              message,
+                              isOwnMessage,
+                            ),
+                          ),
+                        ],
                       );
                     },
                   ),
                 );
               },
-              loading: () => const Center(
-                child: CircularProgressIndicator(),
-              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, stack) => ErrorView(
                 error: error,
                 stackTrace: stack,
@@ -223,9 +512,35 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             ),
           ),
 
-          // 输入区域
-          _buildInputBar(theme),
+          // 输入区域（含回复/编辑/图片预览/联想菜单）
+          _buildInputArea(theme),
         ],
+      ),
+    );
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  Widget _buildDateHeader(ThemeData theme, DateTime date) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            TimeUtils.formatShortDate(date),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -292,66 +607,249 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     );
   }
 
-  Widget _buildInputBar(ThemeData theme) {
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+  Widget _buildInputArea(ThemeData theme) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // @ 联想弹窗
+        if (_showMentionSuggestions) _buildMentionSuggestions(theme),
+
+        Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            border: Border(
+              top: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 回复 / 编辑提示条
+                if (_replyToMessage != null || _editingMessage != null)
+                  _buildContextBanner(theme),
+
+                // 图片附件预览
+                if (_uploadPreviewPath != null) _buildUploadPreview(theme),
+
+                // 输入框与操作按钮
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // 图片附件上传按钮
+                      IconButton(
+                        onPressed: _isUploadingImage ? null : _pickAndUploadImage,
+                        icon: const Icon(Icons.add_photo_alternate_rounded),
+                        color: theme.colorScheme.onSurfaceVariant,
+                        tooltip: context.l10n.chat_upload_image,
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _textController,
+                          focusNode: _inputFocusNode,
+                          textInputAction: TextInputAction.send,
+                          maxLines: 5,
+                          minLines: 1,
+                          onSubmitted: (_) => _sendMessageOrUpdate(),
+                          decoration: InputDecoration(
+                            hintText: context.l10n.chat_input_hint,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: theme.colorScheme.surfaceContainerHighest,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed: (_isSending || _isUploadingImage)
+                            ? null
+                            : _sendMessageOrUpdate,
+                        icon: _isSending
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              )
+                            : Icon(
+                                _editingMessage != null
+                                    ? Icons.check_rounded
+                                    : Icons.send_rounded,
+                              ),
+                        color: theme.colorScheme.primary,
+                        tooltip: context.l10n.chat_send,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildContextBanner(ThemeData theme) {
+    final isEditing = _editingMessage != null;
+    final title = isEditing
+        ? context.l10n.chat_editing_message
+        : context.l10n.chat_replying_to(
+            _replyToMessage?.user?.name ??
+                _replyToMessage?.user?.username ??
+                '',
+          );
+    final subtitle = isEditing
+        ? _editingMessage!.message
+        : _replyToMessage?.message ?? '';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: Row(
+        children: [
+          Icon(
+            isEditing ? Icons.edit_outlined : Icons.reply_rounded,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 18),
+            onPressed: _onCancelReplyOrEdit,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _textController,
-                  focusNode: _inputFocusNode,
-                  textInputAction: TextInputAction.send,
-                  maxLines: 5,
-                  minLines: 1,
-                  onSubmitted: (_) => _sendMessage(),
-                  decoration: InputDecoration(
-                    hintText: context.l10n.chat_input_hint,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      borderSide: BorderSide.none,
+    );
+  }
+
+  Widget _buildUploadPreview(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      alignment: Alignment.centerLeft,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(
+              File(_uploadPreviewPath!),
+              width: 64,
+              height: 64,
+              fit: BoxFit.cover,
+            ),
+          ),
+          if (_isUploadingImage)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black38,
+                child: const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
                     ),
-                    filled: true,
-                    fillColor: theme.colorScheme.surfaceContainerHighest,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    isDense: true,
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
-              IconButton(
-                onPressed: _isSending ? null : _sendMessage,
-                icon: _isSending
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: theme.colorScheme.primary,
-                        ),
-                      )
-                    : Icon(Icons.send_rounded),
-                color: theme.colorScheme.primary,
-                tooltip: context.l10n.chat_send,
+            ),
+          Positioned(
+            top: 2,
+            right: 2,
+            child: GestureDetector(
+              onTap: _clearUpload,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMentionSuggestions(ThemeData theme) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 160),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: ListView.builder(
+        shrinkWrap: true,
+        itemCount: _mentionSuggestions.length,
+        itemBuilder: (context, index) {
+          final user = _mentionSuggestions[index];
+          final avatarUrl = _buildAvatarUrl(
+            ChatUser(
+              id: user.id,
+              username: user.username,
+              avatarTemplate: user.avatarTemplate,
+            ),
+          );
+
+          return ListTile(
+            dense: true,
+            leading: SmartAvatar(
+              imageUrl: avatarUrl,
+              radius: 12,
+              fallbackText: user.username,
+            ),
+            title: Text('@${user.username}'),
+            subtitle: user.name != null ? Text(user.name!) : null,
+            onTap: () => _insertMention(user),
+          );
+        },
       ),
     );
   }
@@ -360,27 +858,29 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 /// 单条 Chat 消息气泡组件
 class _ChatMessageBubble extends StatelessWidget {
   final ChatMessage message;
+  final ChatMessage? replyToMessage;
   final bool isOwnMessage;
   final String? avatarUrl;
   final ThemeData theme;
+  final VoidCallback onLongPress;
 
   const _ChatMessageBubble({
     required this.message,
+    this.replyToMessage,
     required this.isOwnMessage,
     this.avatarUrl,
     required this.theme,
+    required this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
-    // 删除的消息不显示内容
     if (message.deleted) {
       return _buildDeletedMessage(context);
     }
 
     final alignment =
         isOwnMessage ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    // 发送者信息：其他人的消息显示头像和名字
     final showSender = !isOwnMessage && message.user != null;
 
     return Padding(
@@ -392,7 +892,6 @@ class _ChatMessageBubble extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // 别人消息的头像
               if (showSender)
                 Padding(
                   padding: const EdgeInsets.only(right: 8, bottom: 4),
@@ -403,22 +902,17 @@ class _ChatMessageBubble extends StatelessWidget {
                   ),
                 ),
 
-              // 消息气泡
               Flexible(
                 child: Container(
                   constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.72,
+                    maxWidth: MediaQuery.of(context).size.width * 0.75,
                   ),
                   child: Column(
                     crossAxisAlignment: alignment,
                     children: [
-                      // 用户名（仅显示在他人消息中）
                       if (showSender)
                         Padding(
-                          padding: const EdgeInsets.only(
-                            left: 4,
-                            bottom: 2,
-                          ),
+                          padding: const EdgeInsets.only(left: 4, bottom: 2),
                           child: Text(
                             message.user!.name ?? message.user!.username,
                             style: theme.textTheme.labelSmall?.copyWith(
@@ -428,72 +922,133 @@ class _ChatMessageBubble extends StatelessWidget {
                           ),
                         ),
 
-                      // 气泡主体
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isOwnMessage
-                              ? theme.colorScheme.primaryContainer
-                              : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(16).copyWith(
-                            bottomLeft: isOwnMessage
-                                ? const Radius.circular(16)
-                                : const Radius.circular(4),
-                            bottomRight: isOwnMessage
-                                ? const Radius.circular(4)
-                                : const Radius.circular(16),
+                      GestureDetector(
+                        onLongPress: onLongPress,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
                           ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // 消息文本
-                            Text(
-                              message.message,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: isOwnMessage
-                                    ? theme.colorScheme.onPrimaryContainer
-                                    : theme.colorScheme.onSurface,
-                              ),
+                          decoration: BoxDecoration(
+                            color: isOwnMessage
+                                ? theme.colorScheme.primaryContainer
+                                : theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(16).copyWith(
+                              bottomLeft: isOwnMessage
+                                  ? const Radius.circular(16)
+                                  : const Radius.circular(4),
+                              bottomRight: isOwnMessage
+                                  ? const Radius.circular(4)
+                                  : const Radius.circular(16),
                             ),
-                            const SizedBox(height: 2),
-                            // 时间戳 + 编辑标记
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  TimeUtils.formatCompactTime(message.createdAt),
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: (isOwnMessage
-                                            ? theme.colorScheme
-                                                .onPrimaryContainer
-                                            : theme.colorScheme
-                                                .onSurfaceVariant)
-                                        .withValues(alpha: 0.6),
-                                    fontSize: 10,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 关联回复引用框
+                              if (replyToMessage != null)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.surface
+                                        .withValues(alpha: 0.4),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border(
+                                      left: BorderSide(
+                                        color: theme.colorScheme.primary,
+                                        width: 3,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '${replyToMessage!.user?.username ?? ''}: ${replyToMessage!.message}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontSize: 11,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
                                   ),
                                 ),
-                                if (message.edited) ...[
-                                  const SizedBox(width: 4),
+
+                              // 图片附件展示
+                              if (message.uploads != null &&
+                                  message.uploads!.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    children: message.uploads!.map((u) {
+                                      final url = UrlHelper.resolveUrlWithCdn(
+                                        u['short_url'] as String? ??
+                                            u['url'] as String? ??
+                                            '',
+                                      );
+                                      return ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: CachedImage(
+                                          url: url,
+                                          width: 140,
+                                          height: 100,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+
+                              // 消息文本
+                              SelectableText(
+                                message.message,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: isOwnMessage
+                                      ? theme.colorScheme.onPrimaryContainer
+                                      : theme.colorScheme.onSurface,
+                                ),
+                              ),
+
+                              const SizedBox(height: 2),
+
+                              // 时间戳 + 编辑标记
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
                                   Text(
-                                    context.l10n.chat_edited,
+                                    TimeUtils.formatCompactTime(message.createdAt),
                                     style: theme.textTheme.labelSmall?.copyWith(
                                       color: (isOwnMessage
                                               ? theme.colorScheme
                                                   .onPrimaryContainer
                                               : theme.colorScheme
                                                   .onSurfaceVariant)
-                                          .withValues(alpha: 0.5),
+                                          .withValues(alpha: 0.6),
                                       fontSize: 10,
                                     ),
                                   ),
+                                  if (message.edited) ...[
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      context.l10n.chat_edited,
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: (isOwnMessage
+                                                ? theme.colorScheme
+                                                    .onPrimaryContainer
+                                                : theme.colorScheme
+                                                    .onSurfaceVariant)
+                                            .withValues(alpha: 0.5),
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],

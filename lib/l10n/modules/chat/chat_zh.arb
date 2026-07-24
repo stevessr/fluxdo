@@ -28,5 +28,46 @@
         "type": "String"
       }
     }
+  },
+  "chat_reply": "回复",
+  "chat_replying_to": "回复 {name}",
+  "@chat_replying_to": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_copy": "复制",
+  "chat_copied": "已复制到剪贴板",
+  "chat_edit": "编辑",
+  "chat_editing_message": "正在编辑消息",
+  "chat_update_failed": "更新失败: {error}",
+  "@chat_update_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_delete": "删除",
+  "chat_delete_confirm": "确定删除此消息？",
+  "chat_delete_failed": "删除失败: {error}",
+  "@chat_delete_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_cancel": "取消",
+  "chat_upload_image": "上传图片",
+  "chat_upload_failed": "上传失败: {error}",
+  "@chat_upload_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }

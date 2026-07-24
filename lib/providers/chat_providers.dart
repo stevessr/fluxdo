@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat/chat_models.dart';
+import '../services/message_bus_service.dart';
 import '../utils/paged_async_notifier.dart';
 import 'core_providers.dart';
+import 'message_bus/message_bus_service_provider.dart';
+import 'message_bus/topic_tracking_providers.dart';
 
 /// ============================================================================
 /// 1. Chat 频道列表
@@ -58,6 +61,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   @override
   Future<List<ChatMessage>> build() async {
     resetPagingState();
+    _subscribeMessageBus();
     final service = ref.read(discourseServiceProvider);
     final raw = await service.getChannelMessages(
       channelId,
@@ -71,6 +75,32 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     return completePagedRefresh(
       PagedPage(items: messages, hasMore: hasMore),
     );
+  }
+
+  void _subscribeMessageBus() {
+    try {
+      ref.watch(messageBusInitProvider);
+      final messageBus = ref.watch(messageBusServiceProvider);
+      final channel = '/chat/c/$channelId';
+
+      void onMessage(MessageBusMessage msg) {
+        final data = msg.data;
+        if (data is! Map<String, dynamic>) return;
+        final type = data['type'] as String? ?? data['chat_message_type'] as String?;
+        if (type == 'sent' || type == 'created' || data.containsKey('chat_message')) {
+          unawaited(loadMessages());
+        } else if (type == 'edited' || type == 'deleted') {
+          unawaited(loadMessages());
+        }
+      }
+
+      messageBus.subscribe(channel, onMessage);
+      ref.onDispose(() {
+        messageBus.unsubscribe(channel, onMessage);
+      });
+    } catch (_) {
+      // MessageBus 可选监听，失败不影响主流程
+    }
   }
 
   /// 重新加载消息列表
@@ -112,13 +142,38 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     });
   }
 
-  /// 发送消息
-  Future<int> sendMessage(String text) async {
+  /// 发送消息（支持回复和附件）
+  Future<int> sendMessage(
+    String text, {
+    int? threadId,
+    int? inReplyToId,
+    List<int>? uploadIds,
+  }) async {
     final service = ref.read(discourseServiceProvider);
-    final messageId = await service.sendChatMessage(channelId, text);
+    final messageId = await service.sendChatMessage(
+      channelId,
+      text,
+      threadId: threadId,
+      inReplyToId: inReplyToId,
+      uploadIds: uploadIds,
+    );
     // 发送成功后刷新消息列表
     unawaited(loadMessages());
     return messageId;
+  }
+
+  /// 编辑消息
+  Future<void> editMessage(int messageId, String newText) async {
+    final service = ref.read(discourseServiceProvider);
+    await service.updateChatMessage(channelId, messageId, newText);
+    unawaited(loadMessages());
+  }
+
+  /// 删除消息
+  Future<void> deleteMessage(int messageId) async {
+    final service = ref.read(discourseServiceProvider);
+    await service.deleteChatMessage(channelId, messageId);
+    unawaited(loadMessages());
   }
 
   /// 标记已读
