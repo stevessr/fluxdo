@@ -408,6 +408,15 @@ extension PostUpdateMethods on TopicDetailNotifier {
       bookmarked: true,
       bookmarkId: newBookmarkId,
     ));
+
+    // 写穿本地书签缓存，保证书签列表页与详情页即时一致。
+    // 出现本地与云端不一致时由 BookmarksReconciler 优先从云端拉取纠正。
+    unawaited(_syncBookmarkToCache(
+      bookmarkId: newBookmarkId,
+      topicId: currentDetail.id,
+      name: null,
+      reminderAt: null,
+    ));
     return newBookmarkId;
   }
 
@@ -429,6 +438,9 @@ extension PostUpdateMethods on TopicDetailNotifier {
       clearBookmarkName: true,
       clearBookmarkReminderAt: true,
     ));
+
+    // 同步删除本地书签缓存，保证书签列表页不再显示已删除项。
+    unawaited(_removeBookmarkFromCache(bookmarkId));
   }
 
   /// 更新话题书签元数据（本地状态）
@@ -442,6 +454,104 @@ extension PostUpdateMethods on TopicDetailNotifier {
       clearBookmarkName: clearName,
       clearBookmarkReminderAt: clearReminderAt,
     ));
+
+    // 同步元数据到本地书签缓存，保证书签列表页显示最新的 name/reminder。
+    final bookmarkId = currentDetail.bookmarkId;
+    if (bookmarkId != null) {
+      unawaited(_syncBookmarkMetaToCache(
+        bookmarkId: bookmarkId,
+        name: clearName ? null : name,
+        reminderAt: clearReminderAt ? null : reminderAt,
+      ));
+    }
+  }
+
+  /// 把详情页的书签状态写穿到 [BookmarksRepository]（本地缓存）。
+  ///
+  /// 详情页 add/edit/remove 书签后，书签列表页的数据源是 BookmarksRepository，
+  /// 若不写穿缓存，列表页只能等下一次对账（最长 24h full 或增量不删除）才
+  /// 会感知到变化，导致"本地与云端不一致"。这里在写云端成功后同步写本地。
+  Future<void> _syncBookmarkToCache({
+    required int bookmarkId,
+    required int topicId,
+    String? name,
+    DateTime? reminderAt,
+  }) async {
+    try {
+      final repo = ref.read(bookmarksRepositoryProvider);
+      final username = await ref.read(currentUsernameProvider.future);
+      if (username == null) return;
+      final now = DateTime.now().toUtc();
+      // 若本地尚无该 entry（首次书签），构造一条最小 payload upsert，
+      // 保证书签列表页能立即显示；下次对账拉到完整 payload 会覆盖。
+      final existing = await repo.findOne(username, bookmarkId);
+      if (existing == null) {
+        final payload = <String, dynamic>{
+          'id': topicId,
+          '_bookmark_id': bookmarkId,
+          '_bookmark_updated_at': now.toIso8601String(),
+          if (name != null && name.isNotEmpty) '_bookmark_name': name,
+          if (reminderAt != null)
+            '_bookmark_reminder_at': reminderAt.toUtc().toIso8601String(),
+        };
+        await repo.upsertOne(
+          username,
+          BookmarkCacheEntry(
+            bookmarkId: bookmarkId,
+            topicId: topicId,
+            nameNormalized:
+                name == null || name.isEmpty ? null : name,
+            updatedAt: now,
+            cachedAt: now,
+            payload: payload,
+          ),
+        );
+      } else {
+        await repo.applyMetadataChange(
+          username,
+          bookmarkId,
+          name: name,
+          reminderAt: reminderAt,
+          bookmarkUpdatedAt: now,
+        );
+      }
+    } catch (_) {
+      // 缓存写穿失败不影响详情页主流程，下次对账会纠正。
+    }
+  }
+
+  /// 同步书签元数据变更（name / reminder）到本地缓存。
+  Future<void> _syncBookmarkMetaToCache({
+    required int bookmarkId,
+    String? name,
+    DateTime? reminderAt,
+  }) async {
+    try {
+      final repo = ref.read(bookmarksRepositoryProvider);
+      final username = await ref.read(currentUsernameProvider.future);
+      if (username == null) return;
+      await repo.applyMetadataChange(
+        username,
+        bookmarkId,
+        name: name,
+        reminderAt: reminderAt,
+        bookmarkUpdatedAt: DateTime.now().toUtc(),
+      );
+    } catch (_) {
+      // 缓存写穿失败不影响详情页主流程，下次对账会纠正。
+    }
+  }
+
+  /// 从本地缓存删除书签条目。
+  Future<void> _removeBookmarkFromCache(int bookmarkId) async {
+    try {
+      final repo = ref.read(bookmarksRepositoryProvider);
+      final username = await ref.read(currentUsernameProvider.future);
+      if (username == null) return;
+      await repo.deleteOne(username, bookmarkId);
+    } catch (_) {
+      // 缓存删除失败不影响详情页主流程，下次对账会纠正。
+    }
   }
 
   /// 添加 Boost 到帖子（用于 MessageBus boost_added 消息）

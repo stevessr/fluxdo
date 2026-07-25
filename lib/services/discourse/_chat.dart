@@ -10,7 +10,9 @@ mixin _ChatMixin on _DiscourseServiceBase {
 
   /// 获取指定频道的消息列表
   ///
-  /// [direction] 可选值: 'forward' | 'backward' | 'around'
+  /// [direction] 可选值: 'past' | 'future' (对齐 Discourse messages_query)
+  /// - 'past': 返回 target_message_id 之前的消息（不含 target）
+  /// - 'future': 返回 target_message_id 之后的消息
   Future<Map<String, dynamic>> getChannelMessages(
     int channelId, {
     int? pageSize,
@@ -58,20 +60,22 @@ mixin _ChatMixin on _DiscourseServiceBase {
 
     try {
       Response response;
+      // 对齐 Discourse 官方前端 chat-api: POST /chat/:channelId
+      // (plugins/chat/config/routes.rb: post "/:chat_channel_id" => "api/channel_messages#create")
       try {
         response = await _dio.post(
-          '/chat/api/channels/$channelId/messages',
+          '/chat/$channelId',
           data: data,
         );
       } catch (_) {
         try {
           response = await _dio.post(
-            '/chat/chat_channels/$channelId/messages.json',
+            '/chat/api/channels/$channelId/messages',
             data: data,
           );
         } catch (_) {
           response = await _dio.post(
-            '/chat/$channelId/create.json',
+            '/chat/chat_channels/$channelId/messages.json',
             data: data,
           );
         }
@@ -292,8 +296,10 @@ mixin _ChatMixin on _DiscourseServiceBase {
       'message_id': messageId,
     };
     try {
+      // 对齐 Discourse 路由: PUT /chat/:chat_channel_id/react/:message_id
+      // (plugins/chat/config/routes.rb)。旧路径 /chat/api/channels/.../reactions 不存在。
       await _dio.put(
-        '/chat/api/channels/$channelId/messages/$messageId/reactions',
+        '/chat/$channelId/react/$messageId',
         data: data,
       );
     } on DioException catch (e) {

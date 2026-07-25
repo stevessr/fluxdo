@@ -21,6 +21,12 @@ class ChatUser {
     );
   }
 
+  /// 判断是否为系统用户（Discourse 的 system 用户 id=-1, username="system"）。
+  /// 群聊标题渲染时应过滤掉系统用户，对齐 Discourse
+  /// DirectMessage#chat_channel_title_for_user 中 `.reject { |u| u.is_system_user? }`。
+  bool get isSystemUser =>
+      id == -1 || username.toLowerCase() == 'system';
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'username': username,

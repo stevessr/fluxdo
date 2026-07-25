@@ -228,4 +228,91 @@ void main() {
     await reconciler.fullReconcile('acct');
     expect(reconciler.isFullReconcileDue('acct'), isFalse);
   });
+
+  test('incrementalReconcile 安全删除兜底：清理本应出现却缺席的本地条目',
+      () async {
+    // 本地预置 1(旧) + 2(较新) + 3(最新)
+    await repo.upsertEntries('acct', [
+      _entry(bookmarkId: 1, updatedAt: DateTime.utc(2026, 1, 1)),
+      _entry(bookmarkId: 2, updatedAt: DateTime.utc(2026, 3, 1)),
+      _entry(bookmarkId: 3, updatedAt: DateTime.utc(2026, 5, 1)),
+    ]);
+
+    // 远端第一页只返回 3 和 1（2 已在远端被删除，1 较旧但远端仍返回）。
+    // 增量对账遇到整页已知未变即停止，并通过安全删除兜底清掉 2。
+    final reconciler = buildReconciler((page) async {
+      if (page == 0) {
+        return BookmarkPageParseResult(
+          topics: const [],
+          entries: [
+            _entry(bookmarkId: 3, updatedAt: DateTime.utc(2026, 5, 1)),
+            _entry(bookmarkId: 1, updatedAt: DateTime.utc(2026, 1, 1)),
+          ],
+          moreUrl: null,
+        );
+      }
+      return BookmarkPageParseResult(
+        topics: const [],
+        entries: const [],
+        moreUrl: null,
+      );
+    });
+
+    final report = await reconciler.incrementalReconcile('acct');
+    expect(report.stopReason, ReconcileStopReason.allKnownAndUnchanged);
+    expect(report.deleted, 1); // 只有 2 被清理
+    expect((await repo.allBookmarkIds('acct')), {1, 3});
+  });
+
+  test('incrementalReconcile 不删除可能在未拉取更旧页面的本地条目',
+      () async {
+    // 本地有 1(旧) 和 2(更旧)，远端第一页返回 1 已知未变即停。
+    // 2 的 updated_at 不晚于远端最旧条目(1)，可能在更旧页面里，不能删。
+    await repo.upsertEntries('acct', [
+      _entry(bookmarkId: 1, updatedAt: DateTime.utc(2026, 5, 1)),
+      _entry(bookmarkId: 2, updatedAt: DateTime.utc(2026, 1, 1)),
+    ]);
+
+    final reconciler = buildReconciler((page) async {
+      if (page == 0) {
+        return BookmarkPageParseResult(
+          topics: const [],
+          entries: [
+            _entry(bookmarkId: 1, updatedAt: DateTime.utc(2026, 5, 1)),
+          ],
+          moreUrl: null,
+        );
+      }
+      return BookmarkPageParseResult(
+        topics: const [],
+        entries: const [],
+        moreUrl: null,
+      );
+    });
+
+    final report = await reconciler.incrementalReconcile('acct');
+    expect(report.stopReason, ReconcileStopReason.allKnownAndUnchanged);
+    expect(report.deleted, 0); // 2 不被误删
+    expect((await repo.allBookmarkIds('acct')), {1, 2});
+  });
+
+  test('incrementalReconcile 远端第一页就空时不清理本地（避免异常误删）',
+      () async {
+    await repo.upsertEntries('acct', [
+      _entry(bookmarkId: 1, updatedAt: DateTime.utc(2026, 1, 1)),
+    ]);
+
+    final reconciler = buildReconciler((page) async {
+      return BookmarkPageParseResult(
+        topics: const [],
+        entries: const [],
+        moreUrl: null,
+      );
+    });
+
+    final report = await reconciler.incrementalReconcile('acct');
+    expect(report.stopReason, ReconcileStopReason.emptyPage);
+    expect(report.deleted, 0);
+    expect((await repo.allBookmarkIds('acct')), {1});
+  });
 }

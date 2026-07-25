@@ -9,9 +9,42 @@ import '../cookie/csrf_token_service.dart';
 /// 负责设置 User-Agent 和 CSRF Token
 /// CSRF 策略对齐 Discourse 官方前端：POST 前 token 为空则先从 /session/csrf 获取
 class RequestHeaderInterceptor extends Interceptor {
-  RequestHeaderInterceptor(this._cookieSync);
+  RequestHeaderInterceptor(this._cookieSync, {Dio? dioRef})
+    : _dioRef = dioRef;
 
   final CsrfTokenService _cookieSync;
+
+  /// 重试所用的 Dio 实例（由工厂注入，便于 BAD CSRF 时复用整条拦截器链重试）。
+  final Dio? _dioRef;
+
+  /// 标记 key：请求已因 BAD CSRF 重试过一次，避免无限循环。
+  static const String _csrfRetriedKey = '_csrfRetried';
+
+  /// 判断响应是否为 Discourse 的 BAD CSRF (403 + "BAD CSRF" 文案)。
+  /// Discourse 在 CSRF 校验失败时返回 403，响应体可能是 JSON
+  /// {"errors":["Bad CSRF token..."]} 或纯文本 "Bad CSRF"。
+  bool _isBadCsrfResponse(Response? response) {
+    if (response == null) return false;
+    final status = response.statusCode ?? 0;
+    if (status != 403) return false;
+    final data = response.data;
+    String? text;
+    if (data is String) {
+      text = data;
+    } else if (data is Map) {
+      final errors = data['errors'];
+      if (errors is List) {
+        text = errors.join(' ');
+      } else if (errors is String) {
+        text = errors;
+      } else {
+        text = data['error']?.toString();
+      }
+    }
+    if (text == null) return false;
+    final lower = text.toLowerCase();
+    return lower.contains('csrf');
+  }
 
   @override
   Future<void> onRequest(
@@ -40,6 +73,11 @@ class RequestHeaderInterceptor extends Interceptor {
 
       final csrf = _cookieSync.csrfToken;
       if (method != 'GET' && (csrf == null || csrf.isEmpty)) {
+        // 取不到 CSRF token 时不再直接 cancel 整个请求——那样会让所有 POST
+        // (发消息、点赞、书签等) 静默失败、用户无感知。改为放行请求 (不带
+        // X-CSRF-Token)，由服务端返回 403 BAD CSRF 时再触发刷新重试
+        // (见本拦截器 onError 的 BAD CSRF 处理)。这样即使首次刷新失败，也
+        // 能在拿到 403 后补救，而不是彻底卡死。
         options.headers.remove('X-CSRF-Token');
         options.extra['_csrfUnavailable'] = true;
         LogWriter.instance.write({
@@ -47,20 +85,12 @@ class RequestHeaderInterceptor extends Interceptor {
           'level': 'warning',
           'type': 'request',
           'event': 'csrf_unavailable_before_request',
-          'message': 'POST 前无法取得 CSRF token，已取消请求以避免 BAD CSRF',
+          'message': 'POST 前无 CSRF token，放行请求，依赖 403 BAD CSRF 兜底刷新',
           'method': options.method,
           'url': options.uri.toString(),
           'isSilent': options.extra['isSilent'] == true,
         });
-        handler.reject(
-          DioException(
-            requestOptions: options,
-            type: DioExceptionType.cancel,
-            error:
-                'CSRF token unavailable before ${options.method} ${options.uri.path}',
-          ),
-          true,
-        );
+        handler.next(options);
         return;
       }
       if (csrf != null && csrf.isNotEmpty) {
@@ -89,5 +119,76 @@ class RequestHeaderInterceptor extends Interceptor {
     }
 
     handler.next(options);
+  }
+
+  /// BAD CSRF 自动恢复：收到 403 BAD CSRF 时清空旧 token，重新拉取
+  /// /session/csrf，然后带新 token 重试原请求一次。对齐 Discourse 官方
+  /// 前端 ajax.js 在 403 BAD CSRF 后 `set("csrfToken", null)` + 重试的行为。
+  @override
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final retried = err.requestOptions.extra[_csrfRetriedKey] == true;
+    if (retried || !_isBadCsrfResponse(err.response)) {
+      handler.next(err);
+      return;
+    }
+    // 先清旧 token，再强制刷新
+    _cookieSync.clearCsrfToken();
+    try {
+      await _cookieSync.updateCsrfToken();
+    } catch (_) {
+      handler.next(err);
+      return;
+    }
+    final newCsrf = _cookieSync.csrfToken;
+    if (newCsrf == null || newCsrf.isEmpty) {
+      handler.next(err);
+      return;
+    }
+
+    final dio = _dioRef;
+    if (dio == null) {
+      // 没有可用的 Dio 引用，无法重试，透传错误。
+      handler.next(err);
+      return;
+    }
+    try {
+      final retryOptions = RequestOptions(
+        path: err.requestOptions.path,
+        method: err.requestOptions.method,
+        data: err.requestOptions.data,
+        queryParameters: Map<String, dynamic>.from(
+          err.requestOptions.queryParameters,
+        ),
+        headers: Map<String, dynamic>.from(err.requestOptions.headers),
+        extra: Map<String, dynamic>.from(err.requestOptions.extra)
+          ..[_csrfRetriedKey] = true,
+        baseUrl: err.requestOptions.baseUrl,
+        connectTimeout: err.requestOptions.connectTimeout,
+        sendTimeout: err.requestOptions.sendTimeout,
+        receiveTimeout: err.requestOptions.receiveTimeout,
+        contentType: err.requestOptions.contentType,
+        responseType: err.requestOptions.responseType,
+        validateStatus: err.requestOptions.validateStatus,
+        receiveDataWhenStatusError:
+            err.requestOptions.receiveDataWhenStatusError,
+        followRedirects: err.requestOptions.followRedirects,
+        maxRedirects: err.requestOptions.maxRedirects,
+        persistentConnection: err.requestOptions.persistentConnection,
+        requestEncoder: err.requestOptions.requestEncoder,
+        responseDecoder: err.requestOptions.responseDecoder,
+        listFormat: err.requestOptions.listFormat,
+        cancelToken: err.requestOptions.cancelToken,
+        onReceiveProgress: err.requestOptions.onReceiveProgress,
+        onSendProgress: err.requestOptions.onSendProgress,
+      );
+      retryOptions.headers['X-CSRF-Token'] = newCsrf;
+      final retryResp = await dio.fetch<dynamic>(retryOptions);
+      handler.resolve(retryResp);
+    } catch (e) {
+      handler.next(err);
+    }
   }
 }

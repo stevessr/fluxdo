@@ -165,6 +165,8 @@ class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
     }
 
     // 非首次：先吐第一页，后台跑增量或定期完整对账。
+    // 出现本地与云端不一致时优先从云端拉取纠正：后台对账会 upsert 远端
+    // 新增/变更、并（full 模式）删除远端已删项，保证本地最终与云端一致。
     unawaited(_runBackgroundReconcile(reconciler, username));
     return _hydrateFirstPage(username);
   }

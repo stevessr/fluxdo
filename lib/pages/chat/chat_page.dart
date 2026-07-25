@@ -308,10 +308,11 @@ class _ChatChannelListView extends ConsumerWidget {
                 MaterialPageRoute(
                   builder: (_) {
                     final title = channel.chatableType == 'DirectMessage'
-                        ? (channel.lastMessage?.user?.name ??
-                            channel.lastMessage?.user?.username ??
-                            channel.title ??
-                            context.l10n.chat_dm_placeholder)
+                        ? (channel.title?.isNotEmpty == true
+                            ? channel.title!
+                            : channel.lastMessage?.user?.name ??
+                                channel.lastMessage?.user?.username ??
+                                context.l10n.chat_dm_placeholder)
                         : (channel.title ?? context.l10n.chat_unnamed_channel);
                     return ChatMessagePage(
                       channelId: channel.id,
@@ -355,6 +356,14 @@ class ChatChannelTile extends ConsumerWidget {
     final isDm = channel.chatableType == 'DirectMessage' ||
         channel.chatableType == 'DirectMessageChannel';
     if (isDm) {
+      // 群聊 DM（3+ 人私信）：Discourse 服务端已用成员名拼接出 title，
+      // 优先用它，避免取到系统用户 (system) 而把群聊标题显示成 "system"。
+      // 判据用 isGroupDm（含 group=true 标记或成员>2），覆盖 3 人私信。
+      if (channel.isGroupDm &&
+          channel.title != null &&
+          channel.title!.isNotEmpty) {
+        return channel.title!;
+      }
       final targetUser = channel.getDmTargetUser(currentUserId);
       if (targetUser != null) {
         return targetUser.name ?? targetUser.username;

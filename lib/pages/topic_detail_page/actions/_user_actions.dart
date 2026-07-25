@@ -464,6 +464,8 @@ extension _UserActions on _TopicDetailPageState {
       if (result.deleted) {
         // BookmarkEditSheet 已调用 API 删除，刷新元数据同步本地状态
         notifier.reloadTopicMetadata();
+        // 写穿本地缓存：删除后书签列表页立即不再显示该条。
+        unawaited(_removePostBookmarkFromCache(newBookmarkId));
       } else {
         notifier.updateTopicBookmarkMeta(
           name: result.name,
@@ -805,6 +807,8 @@ extension _UserActions on _TopicDetailPageState {
         ),
       );
       ToastService.showSuccess(S.current.common_bookmarkAdded);
+      // 写穿本地书签缓存，保证书签列表页即时一致。
+      unawaited(_syncPostBookmarkToCache(bookmarkId: bookmarkId));
       writeBookmarkEditTrace(
         phase: 'post_bookmark_created',
         traceId: traceId,
@@ -829,6 +833,8 @@ extension _UserActions on _TopicDetailPageState {
 
       if (result.deleted) {
         notifier.refreshPost(post.id, preserveCooked: true);
+        // 写穿本地缓存：删除后列表页立即不再显示该条。
+        unawaited(_removePostBookmarkFromCache(bookmarkId));
       } else {
         notifier.updatePost(
           post.copyWith(
@@ -838,11 +844,54 @@ extension _UserActions on _TopicDetailPageState {
             bookmarkReminderAt: result.reminderAt,
           ),
         );
+        // 同步元数据到本地缓存，保证列表页显示最新的 name/reminder。
+        unawaited(_syncPostBookmarkToCache(
+          bookmarkId: bookmarkId,
+          name: result.name,
+          reminderAt: result.reminderAt,
+        ));
       }
     } on DioException catch (_) {
       // 网络错误已由 ErrorInterceptor 处理
     } catch (e, s) {
       AppErrorHandler.handleUnexpected(e, s);
+    }
+  }
+
+  /// 把帖级书签状态写穿到 [BookmarksRepository]（本地缓存）。
+  ///
+  /// 详情页/帖子 footer 增删改书签后，书签列表页数据源是 BookmarksRepository，
+  /// 若不写穿缓存，列表页只能等下一次对账才感知变化，造成本地与云端不一致。
+  Future<void> _syncPostBookmarkToCache({
+    required int bookmarkId,
+    String? name,
+    DateTime? reminderAt,
+  }) async {
+    try {
+      final repo = ref.read(bookmarksRepositoryProvider);
+      final username = await ref.read(currentUsernameProvider.future);
+      if (username == null) return;
+      await repo.applyMetadataChange(
+        username,
+        bookmarkId,
+        name: name,
+        reminderAt: reminderAt,
+        bookmarkUpdatedAt: DateTime.now().toUtc(),
+      );
+    } catch (_) {
+      // 缓存写穿失败不影响主流程，下次对账会纠正。
+    }
+  }
+
+  /// 从本地缓存删除帖级书签条目。
+  Future<void> _removePostBookmarkFromCache(int bookmarkId) async {
+    try {
+      final repo = ref.read(bookmarksRepositoryProvider);
+      final username = await ref.read(currentUsernameProvider.future);
+      if (username == null) return;
+      await repo.deleteOne(username, bookmarkId);
+    } catch (_) {
+      // 缓存删除失败不影响主流程，下次对账会纠正。
     }
   }
 

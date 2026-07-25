@@ -106,8 +106,10 @@ class DiscourseDio {
       );
     }
 
-    // 7. 请求头拦截器
-    dio.interceptors.add(RequestHeaderInterceptor(CsrfTokenService()));
+    // 7. 请求头拦截器（注入 dio 引用以便 BAD CSRF 时复用整条拦截器链重试）
+    dio.interceptors.add(
+      RequestHeaderInterceptor(CsrfTokenService(), dioRef: dio),
+    );
 
     // 8. 重定向拦截器
     dio.interceptors.add(RedirectInterceptor(dio));

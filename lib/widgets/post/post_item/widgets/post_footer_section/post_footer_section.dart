@@ -11,6 +11,8 @@ import '../../../../../models/topic.dart';
 import '../../../../../modules/ldc_reward/ldc_reward.dart';
 import '../../../../../providers/discourse_providers.dart';
 import '../../../../../providers/ai_translation_provider.dart';
+import '../../../../../providers/bookmarks_repository.dart';
+import '../../../../../storage/bookmark_cache_dao.dart';
 import '../../../../../providers/preferences_provider.dart';
 import '../../../../../utils/blocked_user_filter.dart';
 import '../../../../../utils/frame_jank_monitor.dart';

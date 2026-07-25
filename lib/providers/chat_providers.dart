@@ -186,7 +186,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       final raw = await service.getChannelMessages(
         channelId,
         pageSize: 50,
-        direction: 'backward',
+        direction: 'past',
         targetMessageId: minTargetId,
       );
       final messages = _parseMessages(raw);

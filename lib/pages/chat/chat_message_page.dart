@@ -1250,22 +1250,50 @@ class _ChatMessageBubble extends StatelessWidget {
     final urls = <String>[];
     final seen = <String>{};
 
-    bool isEmojiUrlOrTag(String rawStr) {
+    // 判断是否为非正文图片（emoji / 引用块头像 / 缩略图 / 站点图标等）
+    // 这些 img 标签由 Discourse 渲染引擎插入，属于 UI 元素而非用户上传的正文图片，
+    // 不应作为独立大图重复渲染（否则引用块头像会被 quote 卡片小头像 + 大图各显示一次）。
+    bool isNonContentImage(String rawStr) {
       final lower = rawStr.toLowerCase();
-      return lower.contains('class="emoji"') ||
+      // emoji 表情
+      if (lower.contains('class="emoji"') ||
           lower.contains("class='emoji'") ||
           lower.contains('class=emoji') ||
           lower.contains('/images/emoji/') ||
-          lower.contains('/emoji/');
+          lower.contains('/emoji/')) {
+        return true;
+      }
+      // 引用块头像 / 缩略图 / 站点图标 / 视频 poster 等装饰性图片
+      if (lower.contains('class="avatar"') ||
+          lower.contains("class='avatar'") ||
+          lower.contains('class=avatar') ||
+          lower.contains('"avatar ') ||
+          lower.contains("'avatar ") ||
+          lower.contains(' avatar"') ||
+          lower.contains(" avatar'") ||
+          lower.contains('class="thumbnail"') ||
+          lower.contains("class='thumbnail'") ||
+          lower.contains('class="site-icon"') ||
+          lower.contains("class='site-icon'") ||
+          lower.contains('class="favicon"') ||
+          lower.contains("class='favicon'") ||
+          lower.contains('class="ytp-thumbnail-image"') ||
+          lower.contains("class='ytp-thumbnail-image'") ||
+          lower.contains('data-avatar')) {
+        return true;
+      }
+      return false;
     }
 
     void addUrl(String? raw) {
       if (raw == null || raw.trim().isEmpty) return;
       final trimmed = raw.trim();
       if (trimmed.startsWith('upload://')) return;
-      if (isEmojiUrlOrTag(trimmed)) return;
+      if (isNonContentImage(trimmed)) return;
       final resolved = UrlHelper.resolveUrlWithCdn(trimmed);
-      if (resolved.isNotEmpty && !isEmojiUrlOrTag(resolved) && seen.add(resolved)) {
+      if (resolved.isNotEmpty &&
+          !isNonContentImage(resolved) &&
+          seen.add(resolved)) {
         urls.add(resolved);
       }
     }
@@ -1297,7 +1325,7 @@ class _ChatMessageBubble extends StatelessWidget {
       final imgRegex = RegExp(r'<img[^>]+>', caseSensitive: false);
       for (final match in imgRegex.allMatches(message.cooked!)) {
         final imgTag = match.group(0) ?? '';
-        if (isEmojiUrlOrTag(imgTag)) continue;
+        if (isNonContentImage(imgTag)) continue;
 
         final srcMatch =
             RegExp('src=["\']([^"\']+)["\']', caseSensitive: false)
@@ -1370,7 +1398,10 @@ class _ChatMessageBubble extends StatelessWidget {
                   ),
                 ),
 
-              Flexible(
+              // IntrinsicWidth 让气泡按内容长度自适应收缩，而不是始终占满
+              // 0.75 屏宽。Container 的 maxWidth 约束仍保证长文本在 0.75 屏宽
+              // 处换行；IntrinsicWidth 让短文本只占内容宽度，实现"按内容自适应"。
+              IntrinsicWidth(
                 child: Container(
                   constraints: BoxConstraints(
                     maxWidth: MediaQuery.of(context).size.width * 0.75,

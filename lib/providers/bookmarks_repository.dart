@@ -141,6 +141,10 @@ class BookmarksRepository {
     return entries.map(BookmarkRecord.fromEntry).toList(growable: false);
   }
 
+  Future<BookmarkCacheEntry?> findOne(String accountId, int bookmarkId) {
+    return _dao.findOne(accountId, bookmarkId);
+  }
+
   Future<Map<int, String>> snapshotById(String accountId) {
     return _dao.snapshotById(accountId);
   }

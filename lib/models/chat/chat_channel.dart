@@ -30,6 +30,7 @@ class ChatChannel {
   final int? retentionHours;
   final String? notificationLevel;
   final List<ChatUser>? dmUsers;
+  final bool isGroupDm;
 
   const ChatChannel({
     required this.id,
@@ -58,6 +59,7 @@ class ChatChannel {
     this.retentionHours,
     this.notificationLevel,
     this.dmUsers,
+    this.isGroupDm = false,
   });
 
   bool get canAddMembers {
@@ -70,24 +72,33 @@ class ChatChannel {
   }
 
   /// 获取 DM 频道的对方用户
+  ///
+  /// 过滤掉当前用户和系统用户（system）。系统用户在群聊中会被 Discourse
+  /// 塞进 members，但官方渲染标题时明确排除它，避免把群聊显示成 "system"。
   ChatUser? getDmTargetUser(int? currentUserId) {
     if (chatableType != 'DirectMessage' && chatableType != 'DirectMessageChannel') {
       return null;
     }
-    // 1. 从 dmUsers 中寻找非当前用户
+    // 1. 从 dmUsers 中寻找非当前用户且非系统用户
     if (dmUsers != null && dmUsers!.isNotEmpty) {
       for (final u in dmUsers!) {
+        if (u.isSystemUser) continue;
         if (currentUserId == null || u.id != currentUserId) {
           return u;
         }
       }
     }
-    // 2. 从 lastMessage 中寻找非当前用户
+    // 2. 从 lastMessage 中寻找非当前用户且非系统用户
     if (lastMessage?.user != null &&
+        !lastMessage!.user!.isSystemUser &&
         (currentUserId == null || lastMessage!.user!.id != currentUserId)) {
       return lastMessage!.user;
     }
-    return lastMessage?.user;
+    // 3. 兜底：若有 lastMessage 用户且非系统用户，返回它
+    if (lastMessage?.user != null && !lastMessage!.user!.isSystemUser) {
+      return lastMessage!.user;
+    }
+    return null;
   }
 
   /// 格式化显示历史消息保留时长
@@ -217,13 +228,30 @@ class ChatChannel {
         json['target_users'] ??
         json['members'] ??
         (chatableObj?['users'] ?? chatableObj?['members'] ?? chatableObj?['target_users']);
+    // 群聊 DM 标记：Discourse DirectMessageSerializer 输出 group 字段
+    // (direct_message_serializer.rb: attributes :group, :users)，并在
+    // users.count > 1 时从 users 中移除当前用户（即返回的是"其他成员"）。
+    // 因此 3 人私信的 dmUsers 长度为 2（两位其他用户），2 人私信长度为 1。
+    // 用 > 1 判定群聊（≥2 位其他成员 = 3 人及以上私信）。
+    final groupDmFlag = (chatableObj?['group'] as bool?) ??
+        (json['group'] as bool?) ??
+        (json['is_group'] as bool?) ??
+        false;
+    final isDmType = json['chatable_type']?.toString() == 'DirectMessage' ||
+        json['chatable_type']?.toString() == 'DirectMessageChannel';
     if (usersList is List) {
       parsedDmUsers = usersList
           .whereType<Map>()
           .map((u) => ChatUser.fromJson(Map<String, dynamic>.from(u)))
           .toList();
     }
-
+    // 在 parsedDmUsers 实际解析后计算 isGroupDm（用真实成员数）。
+    // Discourse 在 users.count > 1 时从 users 中移除当前用户，因此：
+    // - 2 人私信：dmUsers 长度 1（仅对方）
+    // - 3 人及以上私信：dmUsers 长度 ≥ 2（其他成员，已不含当前用户）
+    // 群聊判据 = group 标记为 true，或 dmUsers 长度 > 1（即 ≥2 位其他成员）。
+    final resolvedGroupDm = groupDmFlag ||
+        (isDmType && (parsedDmUsers?.length ?? 0) > 1);
     return ChatChannel(
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['title']?.toString(),
@@ -260,6 +288,7 @@ class ChatChannel {
       retentionHours: rHours,
       notificationLevel: notifLevel,
       dmUsers: parsedDmUsers,
+      isGroupDm: resolvedGroupDm,
     );
   }
 }

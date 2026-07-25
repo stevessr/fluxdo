@@ -22,6 +22,14 @@ extension _PostFooterBookmarkActions on _PostFooterSectionState {
       });
       ToastService.showSuccess(S.current.common_bookmarkAdded);
 
+      // 写穿本地书签缓存：帖子级书签新增后，书签列表页（数据源是
+      // BookmarksRepository）能立即感知，避免本地与云端不一致。
+      unawaited(_syncPostBookmarkToCache(
+        bookmarkId: bookmarkId,
+        name: null,
+        reminderAt: null,
+      ));
+
       // 触发 Notion 自动同步:post 级 -> 只同步这一条,独立 page
       unawaited(
         NotionBookmarkAutoSync.tryTriggerPost(
@@ -61,6 +69,8 @@ extension _PostFooterBookmarkActions on _PostFooterSectionState {
             _bookmarkReminderAt = null;
           });
           ToastService.showSuccess(S.current.common_bookmarkRemoved);
+          // 写穿本地缓存：删除后列表页立即不再显示该条。
+          unawaited(_removePostBookmarkFromCache(bookmarkId));
         }
       }
     } on DioException catch (_) {
@@ -69,6 +79,72 @@ extension _PostFooterBookmarkActions on _PostFooterSectionState {
       AppErrorHandler.handleUnexpected(e, s);
     } finally {
       if (mounted) setState(() => _isBookmarking = false);
+    }
+  }
+
+  /// 把帖级书签状态写穿到 [BookmarksRepository]（本地缓存）。
+  ///
+  /// 详情页/帖子 footer 增删改书签后，书签列表页数据源是 BookmarksRepository，
+  /// 若不写穿缓存，列表页只能等下一次对账才感知变化，造成本地与云端不一致。
+  Future<void> _syncPostBookmarkToCache({
+    required int bookmarkId,
+    String? name,
+    DateTime? reminderAt,
+  }) async {
+    try {
+      final repo = ref.read(bookmarksRepositoryProvider);
+      final username = await ref.read(currentUsernameProvider.future);
+      if (username == null) return;
+      final now = DateTime.now().toUtc();
+      final topicId = widget.topicId;
+      // 本地无该 entry（首次书签）时构造最小 payload upsert，保证列表页立即可见；
+      // 已有 entry 时走 applyMetadataChange 更新 name/reminder。
+      final existing = await repo.findOne(username, bookmarkId);
+      if (existing == null) {
+        final payload = <String, dynamic>{
+          'id': topicId,
+          '_bookmark_id': bookmarkId,
+          '_bookmark_updated_at': now.toIso8601String(),
+          '_bookmarkable_type': 'Post',
+          if (name != null && name.isNotEmpty) '_bookmark_name': name,
+          if (reminderAt != null)
+            '_bookmark_reminder_at': reminderAt.toUtc().toIso8601String(),
+        };
+        await repo.upsertOne(
+          username,
+          BookmarkCacheEntry(
+            bookmarkId: bookmarkId,
+            topicId: topicId,
+            nameNormalized:
+                name == null || name.isEmpty ? null : name,
+            updatedAt: now,
+            cachedAt: now,
+            payload: payload,
+          ),
+        );
+      } else {
+        await repo.applyMetadataChange(
+          username,
+          bookmarkId,
+          name: name,
+          reminderAt: reminderAt,
+          bookmarkUpdatedAt: now,
+        );
+      }
+    } catch (_) {
+      // 缓存写穿失败不影响 UI 主流程，下次对账会纠正。
+    }
+  }
+
+  /// 从本地缓存删除帖级书签条目。
+  Future<void> _removePostBookmarkFromCache(int bookmarkId) async {
+    try {
+      final repo = ref.read(bookmarksRepositoryProvider);
+      final username = await ref.read(currentUsernameProvider.future);
+      if (username == null) return;
+      await repo.deleteOne(username, bookmarkId);
+    } catch (_) {
+      // 缓存删除失败不影响 UI 主流程，下次对账会纠正。
     }
   }
 
