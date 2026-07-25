@@ -327,9 +327,12 @@ final chatChannelMembersProvider =
     FutureProvider.family<List<ChatUser>, int>((ref, channelId) async {
   final service = ref.read(discourseServiceProvider);
   final membersRaw = await service.getChannelMembers(channelId);
-  return membersRaw
-      .map((e) => ChatUser.fromJson(Map<String, dynamic>.from(e['user'] as Map? ?? e)))
-      .toList();
+  return membersRaw.map((e) {
+    final userMap = e['user'] is Map
+        ? Map<String, dynamic>.from(e['user'] as Map)
+        : Map<String, dynamic>.from(e);
+    return ChatUser.fromJson(userMap);
+  }).where((user) => user.username.isNotEmpty).toList();
 });
 
 final addChannelMemberProvider =

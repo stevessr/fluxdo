@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
+import '../../models/emoji.dart';
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../utils/time_utils.dart';
@@ -14,6 +15,7 @@ import '../../utils/url_helper.dart';
 import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
+import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../user_profile_page.dart';
 import 'chat_channel_members_sheet.dart';
 
@@ -52,6 +54,34 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   List<Chatable> _mentionSuggestions = [];
   bool _showMentionSuggestions = false;
+  bool _showEmojiPicker = false;
+
+  void _onEmojiSelected(Emoji emoji) {
+    final text = _textController.text;
+    final selection = _textController.selection;
+    final char = emoji.char;
+    if (selection.isValid && selection.isCollapsed) {
+      final start = selection.start;
+      final newText = text.replaceRange(start, selection.end, char);
+      _textController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: start + char.length),
+      );
+    } else {
+      _textController.text = text + char;
+    }
+  }
+
+  void _onStickerSelected(String stickerMarkdown) {
+    _textController.text = '${_textController.text} $stickerMarkdown'.trim();
+  }
+
+  void _onEmojiBackspace() {
+    final text = _textController.text;
+    if (text.isNotEmpty) {
+      _textController.text = text.substring(0, text.length - 1);
+    }
+  }
 
   @override
   void initState() {
@@ -661,6 +691,27 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                         color: theme.colorScheme.onSurfaceVariant,
                         tooltip: context.l10n.chat_upload_image,
                       ),
+                      // 表情与贴纸切换按钮
+                      IconButton(
+                        onPressed: () {
+                          if (_showEmojiPicker) {
+                            setState(() => _showEmojiPicker = false);
+                            _inputFocusNode.requestFocus();
+                          } else {
+                            _inputFocusNode.unfocus();
+                            setState(() => _showEmojiPicker = true);
+                          }
+                        },
+                        icon: Icon(
+                          _showEmojiPicker
+                              ? Icons.keyboard_rounded
+                              : Icons.sentiment_satisfied_alt_rounded,
+                        ),
+                        color: _showEmojiPicker
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                        tooltip: '表情与贴纸',
+                      ),
                       Expanded(
                         child: TextField(
                           controller: _textController,
@@ -668,6 +719,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           textInputAction: TextInputAction.send,
                           maxLines: 5,
                           minLines: 1,
+                          onTap: () {
+                            if (_showEmojiPicker) {
+                              setState(() => _showEmojiPicker = false);
+                            }
+                          },
                           onSubmitted: (_) => _sendMessageOrUpdate(),
                           decoration: InputDecoration(
                             hintText: context.l10n.chat_input_hint,
@@ -710,6 +766,17 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     ],
                   ),
                 ),
+
+                // 表情 / 表情包面板
+                if (_showEmojiPicker)
+                  SizedBox(
+                    height: 280,
+                    child: EmojiStickerPanel(
+                      onEmojiSelected: _onEmojiSelected,
+                      onStickerSelected: _onStickerSelected,
+                      onBackspace: _onEmojiBackspace,
+                    ),
+                  ),
               ],
             ),
           ),

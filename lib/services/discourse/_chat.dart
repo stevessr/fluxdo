@@ -47,6 +47,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
   }) async {
     final data = <String, dynamic>{
       'message': message,
+      'raw': message,
       'chat_channel_id': channelId,
     };
     if (threadId != null) data['thread_id'] = threadId;
@@ -57,12 +58,27 @@ mixin _ChatMixin on _DiscourseServiceBase {
     if (stagedId != null) data['staged_id'] = stagedId;
 
     try {
-      final response = await _dio.post(
-        '/chat/api/channels/$channelId/messages',
-        data: data,
-      );
-      final respData = response.data as Map<String, dynamic>;
-      return (respData['message_id'] as num?)?.toInt() ?? 0;
+      Response response;
+      try {
+        response = await _dio.post(
+          '/chat/api/channels/$channelId/messages',
+          data: data,
+        );
+      } catch (_) {
+        response = await _dio.post(
+          '/chat/chat_channels/$channelId/messages.json',
+          data: data,
+        );
+      }
+      final respData = Map<String, dynamic>.from(response.data as Map);
+      final msgObj = respData['chat_message'] is Map
+          ? respData['chat_message'] as Map
+          : null;
+      final msgId = (respData['message_id'] as num?)?.toInt() ??
+          (msgObj?['id'] as num?)?.toInt() ??
+          (respData['id'] as num?)?.toInt() ??
+          0;
+      return msgId;
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -146,9 +162,16 @@ mixin _ChatMixin on _DiscourseServiceBase {
         queryParameters: queryParameters.isEmpty ? null : queryParameters,
       );
       final data = response.data;
-      if (data is Map && data.containsKey('members')) {
-        final list = data['members'] as List;
-        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      if (data is Map) {
+        final list = data['members'] ??
+            data['memberships'] ??
+            data['users'] ??
+            data['channel_members'];
+        if (list is List) {
+          return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+      } else if (data is List) {
+        return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
       return [];
     } on DioException catch (e) {
