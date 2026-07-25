@@ -19,6 +19,7 @@ import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../user_profile_page.dart';
 import 'chat_channel_members_sheet.dart';
+import 'chat_channel_settings_sheet.dart';
 
 /// Chat 消息页面
 ///
@@ -477,6 +478,18 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       });
     });
 
+    final channelsAsync = ref.watch(chatChannelsProvider);
+    ChatChannel? currentChannel;
+    if (channelsAsync.value != null) {
+      final all = [
+        ...channelsAsync.value!.publicChannels,
+        ...channelsAsync.value!.directMessageChannels,
+      ];
+      try {
+        currentChannel = all.firstWhere((c) => c.id == widget.channelId);
+      } catch (_) {}
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.channelTitle),
@@ -492,6 +505,18 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             tooltip: context.l10n.chat_channel_members,
             onPressed: () {
               ChatChannelMembersSheet.show(
+                context,
+                widget.channelId,
+                widget.channelTitle,
+                canAddMembers: currentChannel?.canAddMembers ?? false,
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.tune_rounded),
+            tooltip: '频道设置',
+            onPressed: () {
+              ChatChannelSettingsSheet.show(
                 context,
                 widget.channelId,
                 widget.channelTitle,

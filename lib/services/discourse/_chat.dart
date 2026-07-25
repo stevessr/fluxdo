@@ -57,10 +57,25 @@ mixin _ChatMixin on _DiscourseServiceBase {
     if (stagedId != null) data['staged_id'] = stagedId;
 
     try {
-      final response = await _dio.post(
-        '/chat/api/channels/$channelId/messages',
-        data: data,
-      );
+      Response response;
+      try {
+        response = await _dio.post(
+          '/chat/api/channels/$channelId/messages',
+          data: data,
+        );
+      } catch (_) {
+        try {
+          response = await _dio.post(
+            '/chat/chat_channels/$channelId/messages.json',
+            data: data,
+          );
+        } catch (_) {
+          response = await _dio.post(
+            '/chat/$channelId/create.json',
+            data: data,
+          );
+        }
+      }
       final respData = Map<String, dynamic>.from(response.data as Map);
       final msgObj = respData['chat_message'] is Map
           ? respData['chat_message'] as Map

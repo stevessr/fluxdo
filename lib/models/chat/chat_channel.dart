@@ -22,6 +22,7 @@ class ChatChannel {
   final bool starred;
   final bool following;
   final Map<String, dynamic>? userChatChannelMembership;
+  final bool? userCanAddMembers;
 
   const ChatChannel({
     required this.id,
@@ -43,7 +44,17 @@ class ChatChannel {
     this.starred = false,
     this.following = false,
     this.userChatChannelMembership,
+    this.userCanAddMembers,
   });
+
+  bool get canAddMembers {
+    if (chatableType == 'DirectMessage' || chatableType == 'DirectMessageChannel') {
+      return true;
+    }
+    return userCanAddMembers == true ||
+        (userChatChannelMembership?['can_add_members'] as bool? ?? false) ||
+        (meta?['can_add_members'] as bool? ?? false);
+  }
 
   factory ChatChannel.fromJson(Map<String, dynamic> json) {
     final membership = json['user_chat_channel_membership'] is Map
@@ -58,6 +69,10 @@ class ChatChannel {
     final isFollowing = (json['following'] as bool?) ??
         (membership?['following'] as bool?) ??
         (membership != null ? (membership['following'] as bool? ?? true) : false);
+
+    final canAdd = (json['allow_user_add'] as bool?) ??
+        (json['user_can_add_members'] as bool?) ??
+        (json['can_modify_members'] as bool?);
 
     return ChatChannel(
       id: (json['id'] as num?)?.toInt() ?? 0,
@@ -88,6 +103,7 @@ class ChatChannel {
       starred: isStarred,
       following: isFollowing,
       userChatChannelMembership: membership,
+      userCanAddMembers: canAdd,
     );
   }
 }

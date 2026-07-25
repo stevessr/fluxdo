@@ -13,14 +13,21 @@ import '../user_profile_page.dart';
 class ChatChannelMembersSheet extends ConsumerStatefulWidget {
   final int channelId;
   final String channelTitle;
+  final bool canAddMembers;
 
   const ChatChannelMembersSheet({
     super.key,
     required this.channelId,
     required this.channelTitle,
+    this.canAddMembers = false,
   });
 
-  static void show(BuildContext context, int channelId, String channelTitle) {
+  static void show(
+    BuildContext context,
+    int channelId,
+    String channelTitle, {
+    bool canAddMembers = false,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -31,6 +38,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
       builder: (_) => ChatChannelMembersSheet(
         channelId: channelId,
         channelTitle: channelTitle,
+        canAddMembers: canAddMembers,
       ),
     );
   }
@@ -44,7 +52,6 @@ class _ChatChannelMembersSheetState
     extends ConsumerState<ChatChannelMembersSheet> {
   final TextEditingController _searchController = TextEditingController();
   String _filterQuery = '';
-  bool _isAdding = false;
 
   @override
   void dispose() {
@@ -59,6 +66,10 @@ class _ChatChannelMembersSheetState
     return UrlHelper.resolveUrlWithCdn(
       user.avatarTemplate!.replaceAll('{size}', '48'),
     );
+  }
+
+  void _executeFilter() {
+    setState(() => _filterQuery = _searchController.text.trim().toLowerCase());
   }
 
   /// 展开添加成员对话框
@@ -131,32 +142,36 @@ class _ChatChannelMembersSheetState
                           ],
                         ),
                       ),
-                      // 添加成员按钮
-                      FilledButton.icon(
-                        onPressed: _showAddMemberDialog,
-                        icon: const Icon(Icons.person_add_rounded, size: 18),
-                        label: Text(context.l10n.chat_add_member),
-                        style: FilledButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
+                      // 添加成员按钮（仅当有权限时显示）
+                      if (widget.canAddMembers)
+                        FilledButton.icon(
+                          onPressed: _showAddMemberDialog,
+                          icon: const Icon(Icons.person_add_rounded, size: 18),
+                          label: Text(context.l10n.chat_add_member),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ],
               ),
             ),
 
-            // 搜索过滤框
+            // 手动触发搜索过滤框
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: TextField(
                 controller: _searchController,
-                onChanged: (val) {
-                  setState(() => _filterQuery = val.trim().toLowerCase());
-                },
+                onSubmitted: (_) => _executeFilter(),
                 decoration: InputDecoration(
                   hintText: context.l10n.chat_search_members,
                   prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                    onPressed: _executeFilter,
+                    tooltip: '搜索',
+                  ),
                   isDense: true,
                   filled: true,
                   fillColor: theme.colorScheme.surfaceContainerHighest,
@@ -370,18 +385,32 @@ class __AddChannelMemberDialogState
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: TextField(
-                controller: _controller,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: context.l10n.chat_search_users,
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                  isDense: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: context.l10n.chat_search_users,
+                        prefixIcon: const Icon(Icons.person_search_rounded, size: 20),
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onSubmitted: (val) => _searchUsers(val),
+                    ),
                   ),
-                ),
-                onChanged: _searchUsers,
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => _searchUsers(_controller.text),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: const Text('搜索'),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
