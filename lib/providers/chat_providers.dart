@@ -295,6 +295,29 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     }
   }
 
+  /// 切换消息书签状态 (Bookmark)
+  Future<void> toggleBookmark(int messageId) async {
+    final currentList = state.value ?? [];
+    final msgIndex = currentList.indexWhere((m) => m.id == messageId);
+    if (msgIndex == -1) return;
+
+    final msg = currentList[msgIndex];
+    final nextBookmarked = !msg.bookmarked;
+
+    // 乐观更新 UI
+    final updatedList = List<ChatMessage>.from(currentList);
+    updatedList[msgIndex] = msg.copyWith(bookmarked: nextBookmarked);
+    state = AsyncValue.data(updatedList);
+
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.toggleChatMessageBookmark(channelId, messageId, bookmarked: nextBookmarked);
+    } catch (_) {
+      // 失败回滚
+      state = AsyncValue.data(currentList);
+    }
+  }
+
   /// 加载更多失败时重试
   Future<void> retryLoadMore() {
     return retryPagedLoadMore(loadMore);

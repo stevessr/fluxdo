@@ -37,6 +37,9 @@ mixin _ChatMixin on _DiscourseServiceBase {
   /// 发送 Chat 消息
   ///
   /// 返回服务端分配的 [message_id]
+  /// 发送 Chat 消息
+  ///
+  /// 返回服务端分配的 [message_id]
   Future<int> sendChatMessage(
     int channelId,
     String message, {
@@ -57,25 +60,10 @@ mixin _ChatMixin on _DiscourseServiceBase {
     if (stagedId != null) data['staged_id'] = stagedId;
 
     try {
-      Response response;
-      try {
-        response = await _dio.post(
-          '/chat/api/channels/$channelId/messages',
-          data: data,
-        );
-      } catch (_) {
-        try {
-          response = await _dio.post(
-            '/chat/chat_channels/$channelId/messages.json',
-            data: data,
-          );
-        } catch (_) {
-          response = await _dio.post(
-            '/chat/$channelId/create.json',
-            data: data,
-          );
-        }
-      }
+      final response = await _dio.post(
+        '/chat/api/channels/$channelId/messages',
+        data: data,
+      );
       final respData = Map<String, dynamic>.from(response.data as Map);
       final msgObj = respData['chat_message'] is Map
           ? respData['chat_message'] as Map
@@ -151,7 +139,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
-  /// 获取指定频道的成员列表
+  /// 获取指定频道的成员列表 (Discourse 最新标准 Endpoint)
   Future<List<Map<String, dynamic>>> getChannelMembers(
     int channelId, {
     String? filter,
@@ -161,34 +149,15 @@ mixin _ChatMixin on _DiscourseServiceBase {
       queryParameters['filter'] = filter;
     }
 
-    // 1. 尝试标准 Endpoint /chat/api/channels/$channelId/members
     try {
       final response = await _dio.get(
         '/chat/api/channels/$channelId/members',
         queryParameters: queryParameters.isEmpty ? null : queryParameters,
       );
-      final list = _extractMemberList(response.data);
-      if (list.isNotEmpty) return list;
-    } catch (_) {}
-
-    // 2. 尝试 JSON 路由 Endpoint /chat/chat_channels/$channelId/members.json
-    try {
-      final response = await _dio.get(
-        '/chat/chat_channels/$channelId/members.json',
-        queryParameters: queryParameters.isEmpty ? null : queryParameters,
-      );
-      final list = _extractMemberList(response.data);
-      if (list.isNotEmpty) return list;
-    } catch (_) {}
-
-    // 3. 尝试频道详情 Endpoint /chat/api/channels/$channelId
-    try {
-      final response = await _dio.get('/chat/api/channels/$channelId');
-      final list = _extractMemberList(response.data);
-      if (list.isNotEmpty) return list;
-    } catch (_) {}
-
-    return [];
+      return _extractMemberList(response.data);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
   }
 
   List<Map<String, dynamic>> _extractMemberList(dynamic data) {
@@ -246,15 +215,33 @@ mixin _ChatMixin on _DiscourseServiceBase {
       'message_id': messageId,
     };
     try {
-      try {
-        await _dio.put(
-          '/chat/api/channels/$channelId/messages/$messageId/reactions',
-          data: data,
+      await _dio.put(
+        '/chat/api/channels/$channelId/messages/$messageId/reactions',
+        data: data,
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 设置/取消 Chat 消息书签 (Bookmark)
+  Future<void> toggleChatMessageBookmark(
+    int channelId,
+    int messageId, {
+    required bool bookmarked,
+  }) async {
+    try {
+      if (bookmarked) {
+        await _dio.post(
+          '/bookmarks.json',
+          data: {
+            'bookmarkable_type': 'ChatMessage',
+            'bookmarkable_id': messageId,
+          },
         );
-      } catch (_) {
-        await _dio.put(
-          '/chat/chat_channels/$channelId/react.json',
-          data: data,
+      } else {
+        await _dio.delete(
+          '/chat/api/channels/$channelId/messages/$messageId/bookmark',
         );
       }
     } on DioException catch (e) {

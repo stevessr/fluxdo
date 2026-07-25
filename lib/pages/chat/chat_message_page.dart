@@ -10,6 +10,7 @@ import '../../models/chat/chat_models.dart';
 import '../../models/emoji.dart';
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
+import '../../services/discourse/discourse_service.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/common/cached_image.dart';
@@ -57,6 +58,65 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   List<Chatable> _mentionSuggestions = [];
   bool _showMentionSuggestions = false;
   bool _showEmojiPicker = false;
+
+  // 多选消息模式状态
+  bool _isMultiSelectMode = false;
+  final Set<int> _selectedMessageIds = {};
+
+  void _enterMultiSelectMode([int? initialMessageId]) {
+    setState(() {
+      _isMultiSelectMode = true;
+      _selectedMessageIds.clear();
+      if (initialMessageId != null) {
+        _selectedMessageIds.add(initialMessageId);
+      }
+    });
+  }
+
+  void _exitMultiSelectMode() {
+    setState(() {
+      _isMultiSelectMode = false;
+      _selectedMessageIds.clear();
+    });
+  }
+
+  void _toggleSelectMessage(int messageId) {
+    setState(() {
+      if (_selectedMessageIds.contains(messageId)) {
+        _selectedMessageIds.remove(messageId);
+      } else {
+        _selectedMessageIds.add(messageId);
+      }
+    });
+  }
+
+  void _onCopyShareLink(ChatMessage message) {
+    final baseUrl = DiscourseService.baseUrl;
+    final shareUrl = '$baseUrl/chat/channel/${widget.channelId}?message_id=${message.id}';
+    Clipboard.setData(ClipboardData(text: shareUrl));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已复制分享链接到剪贴板')),
+    );
+  }
+
+  void _copySelectedMessages(List<ChatMessage> allMessages) {
+    if (_selectedMessageIds.isEmpty) return;
+    final selectedMsgs = allMessages.where((m) => _selectedMessageIds.contains(m.id)).toList();
+    selectedMsgs.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+    final buffer = StringBuffer();
+    for (final m in selectedMsgs) {
+      final username = m.user?.name ?? m.user?.username ?? '用户';
+      final timeStr = TimeUtils.formatCompactTime(m.createdAt);
+      buffer.writeln('[$timeStr] $username: ${m.message}');
+    }
+
+    Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已复制 ${_selectedMessageIds.length} 条消息到剪贴板')),
+    );
+    _exitMultiSelectMode();
+  }
 
   void _onEmojiSelected(Emoji emoji) {
     final text = _textController.text;
@@ -416,6 +476,35 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 _onCopyMessage(message);
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.link_rounded),
+              title: const Text('复制分享链接'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _onCopyShareLink(message);
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                message.bookmarked ? Icons.bookmark_remove_rounded : Icons.bookmark_add_outlined,
+                color: message.bookmarked ? Theme.of(ctx).colorScheme.primary : null,
+              ),
+              title: Text(message.bookmarked ? '取消书签' : '设为书签'),
+              onTap: () {
+                Navigator.pop(ctx);
+                ref
+                    .read(chatMessagesProvider(widget.channelId).notifier)
+                    .toggleBookmark(message.id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.checklist_rounded),
+              title: const Text('多选消息'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _enterMultiSelectMode(message.id);
+              },
+            ),
             if (isOwnMessage) ...[
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
@@ -491,40 +580,64 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.channelTitle),
-        actions: [
-          if (!_isAtBottom && messagesAsync.value != null)
-            IconButton(
-              icon: const Icon(Icons.arrow_downward_rounded),
-              tooltip: context.l10n.chat_scroll_to_bottom,
-              onPressed: _scrollToBottom,
+      appBar: _isMultiSelectMode
+          ? AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: _exitMultiSelectMode,
+              ),
+              title: Text('已选择 ${_selectedMessageIds.length} 条'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    final msgs = messagesAsync.value ?? [];
+                    setState(() {
+                      _selectedMessageIds.addAll(msgs.map((m) => m.id));
+                    });
+                  },
+                  child: const Text('全选'),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded),
+                  tooltip: '复制选中消息',
+                  onPressed: () => _copySelectedMessages(messagesAsync.value ?? []),
+                ),
+              ],
+            )
+          : AppBar(
+              title: Text(widget.channelTitle),
+              actions: [
+                if (!_isAtBottom && messagesAsync.value != null)
+                  IconButton(
+                    icon: const Icon(Icons.arrow_downward_rounded),
+                    tooltip: context.l10n.chat_scroll_to_bottom,
+                    onPressed: _scrollToBottom,
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.people_outline_rounded),
+                  tooltip: context.l10n.chat_channel_members,
+                  onPressed: () {
+                    ChatChannelMembersSheet.show(
+                      context,
+                      widget.channelId,
+                      widget.channelTitle,
+                      canAddMembers: currentChannel?.canAddMembers ?? false,
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.tune_rounded),
+                  tooltip: '频道设置',
+                  onPressed: () {
+                    ChatChannelSettingsSheet.show(
+                      context,
+                      widget.channelId,
+                      widget.channelTitle,
+                    );
+                  },
+                ),
+              ],
             ),
-          IconButton(
-            icon: const Icon(Icons.people_outline_rounded),
-            tooltip: context.l10n.chat_channel_members,
-            onPressed: () {
-              ChatChannelMembersSheet.show(
-                context,
-                widget.channelId,
-                widget.channelTitle,
-                canAddMembers: currentChannel?.canAddMembers ?? false,
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.tune_rounded),
-            tooltip: '频道设置',
-            onPressed: () {
-              ChatChannelSettingsSheet.show(
-                context,
-                widget.channelId,
-                widget.channelTitle,
-              );
-            },
-          ),
-        ],
-      ),
       body: Column(
         children: [
           // 消息列表
@@ -597,6 +710,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             isOwnMessage: isOwnMessage,
                             avatarUrl: _buildAvatarUrl(message.user),
                             theme: theme,
+                            isMultiSelectMode: _isMultiSelectMode,
+                            isSelected: _selectedMessageIds.contains(message.id),
+                            onToggleSelect: (id) => _toggleSelectMessage(id),
                             onLongPress: () => _showMessageActionSheet(
                               message,
                               isOwnMessage,
@@ -1013,6 +1129,9 @@ class _ChatMessageBubble extends StatelessWidget {
   final ThemeData theme;
   final VoidCallback onLongPress;
   final ValueChanged<String> onToggleReaction;
+  final bool isMultiSelectMode;
+  final bool isSelected;
+  final ValueChanged<int>? onToggleSelect;
 
   const _ChatMessageBubble({
     required this.message,
@@ -1022,6 +1141,9 @@ class _ChatMessageBubble extends StatelessWidget {
     required this.theme,
     required this.onLongPress,
     required this.onToggleReaction,
+    this.isMultiSelectMode = false,
+    this.isSelected = false,
+    this.onToggleSelect,
   });
 
   List<String> _extractImageUrls() {
@@ -1089,7 +1211,7 @@ class _ChatMessageBubble extends StatelessWidget {
     }
     displayText = displayText.replaceAll(RegExp(r'!\[.*?\]\(upload://[^\)]+\)'), '').trim();
 
-    return Padding(
+    final bubbleWidget = Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Column(
         crossAxisAlignment: alignment,
@@ -1098,6 +1220,16 @@ class _ChatMessageBubble extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              if (isMultiSelectMode)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6, bottom: 4),
+                  child: Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => onToggleSelect?.call(message.id),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+
               if (showSender)
                 Padding(
                   padding: const EdgeInsets.only(right: 8, bottom: 4),
@@ -1141,7 +1273,10 @@ class _ChatMessageBubble extends StatelessWidget {
                         ),
 
                       GestureDetector(
-                        onLongPress: onLongPress,
+                        onLongPress: isMultiSelectMode ? null : onLongPress,
+                        onTap: isMultiSelectMode
+                            ? () => onToggleSelect?.call(message.id)
+                            : null,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -1291,7 +1426,7 @@ class _ChatMessageBubble extends StatelessWidget {
 
                               const SizedBox(height: 2),
 
-                              // 时间戳 + 编辑标记
+                              // 时间戳 + 编辑标记 + 书签标记
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -1322,6 +1457,17 @@ class _ChatMessageBubble extends StatelessWidget {
                                       ),
                                     ),
                                   ],
+                                  if (message.bookmarked) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.bookmark_rounded,
+                                      size: 11,
+                                      color: (isOwnMessage
+                                              ? theme.colorScheme.onPrimaryContainer
+                                              : theme.colorScheme.primary)
+                                          .withValues(alpha: 0.8),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ],
@@ -1337,6 +1483,8 @@ class _ChatMessageBubble extends StatelessWidget {
         ],
       ),
     );
+
+    return bubbleWidget;
   }
 
   Widget _buildDeletedMessage(BuildContext context) {

@@ -50,6 +50,7 @@ class ChatMessage {
   final bool deleted;
   final DateTime? deletedAt;
   final int? deletedById;
+  final bool bookmarked;
 
   const ChatMessage({
     required this.id,
@@ -66,6 +67,7 @@ class ChatMessage {
     this.deleted = false,
     this.deletedAt,
     this.deletedById,
+    this.bookmarked = false,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -92,6 +94,7 @@ class ChatMessage {
           ? TimeUtils.parseUtcTime(json['deleted_at']?.toString())
           : null,
       deletedById: (json['deleted_by_id'] as num?)?.toInt(),
+      bookmarked: (json['bookmarked'] as bool?) ?? (json['bookmark'] != null),
     );
   }
 
@@ -110,6 +113,7 @@ class ChatMessage {
     bool? deleted,
     DateTime? deletedAt,
     int? deletedById,
+    bool? bookmarked,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -126,6 +130,7 @@ class ChatMessage {
       deleted: deleted ?? this.deleted,
       deletedAt: deletedAt ?? this.deletedAt,
       deletedById: deletedById ?? this.deletedById,
+      bookmarked: bookmarked ?? this.bookmarked,
     );
   }
 }
