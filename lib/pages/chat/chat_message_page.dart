@@ -1184,7 +1184,7 @@ class _ChatMessageBubble extends StatelessWidget {
 
     // 3. 从 cooked HTML 中匹配 <img src="...">
     if (message.cooked != null && message.cooked!.isNotEmpty) {
-      final htmlRegex = RegExp(r'<img[^>]+src=["\']([^"\']+)["\']', caseSensitive: false);
+      final htmlRegex = RegExp('<img[^>]+src=["\']([^"\']+)["\']', caseSensitive: false);
       for (final match in htmlRegex.allMatches(message.cooked!)) {
         addUrl(match.group(1));
       }
