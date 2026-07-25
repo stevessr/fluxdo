@@ -266,6 +266,58 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     unawaited(loadMessages());
   }
 
+  /// 恢复已删除消息
+  Future<void> restoreMessage(int messageId) async {
+    final service = ref.read(discourseServiceProvider);
+    await service.restoreChatMessage(channelId, messageId);
+    unawaited(loadMessages());
+  }
+
+  /// 举报消息
+  Future<void> flagMessage(
+    int messageId,
+    int flagTypeId, {
+    String? message,
+  }) async {
+    final service = ref.read(discourseServiceProvider);
+    await service.flagChatMessage(
+      channelId,
+      messageId,
+      flagTypeId,
+      message: message,
+    );
+  }
+
+  /// 生成消息引用 Markdown
+  Future<String> quoteMessages(List<int> messageIds) async {
+    final service = ref.read(discourseServiceProvider);
+    return service.quoteChatMessages(channelId, messageIds);
+  }
+
+  /// 置顶/取消置顶
+  Future<void> togglePin(int messageId, {required bool pin}) async {
+    final currentList = state.value ?? [];
+    final msgIndex = currentList.indexWhere((m) => m.id == messageId);
+    if (msgIndex == -1) return;
+
+    final msg = currentList[msgIndex];
+    final updatedList = List<ChatMessage>.from(currentList);
+    updatedList[msgIndex] = msg.copyWith(pinned: pin);
+    state = AsyncValue.data(updatedList);
+
+    try {
+      final service = ref.read(discourseServiceProvider);
+      if (pin) {
+        await service.pinChatMessage(channelId, messageId);
+      } else {
+        await service.unpinChatMessage(channelId, messageId);
+      }
+    } catch (_) {
+      state = AsyncValue.data(currentList);
+      rethrow;
+    }
+  }
+
   /// 标记已读
   Future<void> markAsRead(int messageId) async {
     final service = ref.read(discourseServiceProvider);
@@ -766,4 +818,11 @@ final unfollowChannelProvider =
   await service.unfollowChannel(channelId);
   ref.invalidate(chatChannelsProvider);
   ref.invalidate(browseChannelsProvider);
+});
+
+/// 标记所有聊天频道已读
+final markAllChatChannelsReadProvider = FutureProvider<void>((ref) async {
+  final service = ref.read(discourseServiceProvider);
+  await service.markAllChannelsRead();
+  ref.invalidate(chatChannelsProvider);
 });

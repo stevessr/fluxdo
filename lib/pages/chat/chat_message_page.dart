@@ -9,9 +9,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
 import '../../models/emoji.dart';
+import '../../models/topic.dart' show FlagType;
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
+import '../../services/preloaded_data_service.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
@@ -124,6 +126,91 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('已复制 ${_selectedMessageIds.length} 条消息到剪贴板')),
+    );
+  }
+
+  /// 将选中消息生成 Discourse 引用 Markdown（对齐官方 quote）
+  Future<void> _quoteSelectedMessages() async {
+    if (_selectedMessageIds.isEmpty) return;
+    final ids = _selectedMessageIds.toList()..sort();
+    try {
+      final markdown = await ref
+          .read(chatMessagesProvider(widget.channelId).notifier)
+          .quoteMessages(ids);
+      if (!mounted) return;
+      if (markdown.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('生成引用失败：返回为空')),
+        );
+        return;
+      }
+      await Clipboard.setData(ClipboardData(text: markdown));
+      if (!mounted) return;
+      _exitMultiSelectMode();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已复制 ${ids.length} 条消息的引用 Markdown')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('生成引用失败: $e')),
+      );
+    }
+  }
+
+  bool get _pinEnabled {
+    final settings = PreloadedDataService().siteSettingsSync;
+    return settings?['chat_pinned_messages'] == true;
+  }
+
+  Future<void> _togglePinMessage(ChatMessage message) async {
+    try {
+      await ref
+          .read(chatMessagesProvider(widget.channelId).notifier)
+          .togglePin(message.id, pin: !message.pinned);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message.pinned ? '已取消置顶' : '已置顶消息')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('置顶操作失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _restoreMessage(ChatMessage message) async {
+    try {
+      await ref
+          .read(chatMessagesProvider(widget.channelId).notifier)
+          .restoreMessage(message.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已恢复消息')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('恢复失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _showFlagSheet(ChatMessage message) async {
+    final username = message.user?.username ?? '用户';
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _ChatMessageFlagSheet(
+        channelId: widget.channelId,
+        messageId: message.id,
+        username: username,
+        availableFlagKeys: message.availableFlags,
+      ),
     );
     _exitMultiSelectMode();
   }
@@ -556,7 +643,40 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   /// 长按弹出消息操作 BottomSheet
   void _showMessageActionSheet(ChatMessage message, bool isOwnMessage) {
-    if (message.deleted) return;
+    // 已删除消息：仅提供恢复（若服务端仍返回该消息，通常需有审核权限）
+    if (message.deleted) {
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.restore_rounded),
+                title: const Text('恢复消息'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _restoreMessage(message);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.close_rounded),
+                title: Text(ctx.l10n.chat_cancel),
+                onTap: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+
+    final currentUser = ref.read(currentUserProvider).value;
+    final canFlag = !isOwnMessage &&
+        (message.availableFlags == null || message.availableFlags!.isNotEmpty);
 
     showModalBottomSheet(
       context: context,
@@ -564,159 +684,196 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 快捷 Emoji 回应工具栏：显示最近使用的表情 + 打开完整选择器按钮
-            FutureBuilder<List<String>>(
-              future: _loadRecentReactionEmojis(),
-              builder: (ctx, snapshot) {
-                final recentEmojis = snapshot.data ?? [];
-                // 根据屏幕宽度计算可显示的表情数量（每个约 46px，留出 + 按钮空间）
-                final availableWidth = MediaQuery.of(ctx).size.width - 32 - 46;
-                final maxCount = (availableWidth / 46).floor().clamp(0, recentEmojis.length);
-                final displayEmojis = recentEmojis.take(maxCount).toList();
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 快捷 Emoji 回应工具栏
+              FutureBuilder<List<String>>(
+                future: _loadRecentReactionEmojis(),
+                builder: (ctx, snapshot) {
+                  final recentEmojis = snapshot.data ?? [];
+                  final availableWidth = MediaQuery.of(ctx).size.width - 32 - 46;
+                  final maxCount =
+                      (availableWidth / 46).floor().clamp(0, recentEmojis.length);
+                  final displayEmojis = recentEmojis.take(maxCount).toList();
 
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  child: Row(
-                    children: [
-                      // 最近使用的表情
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: displayEmojis.map((emoji) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: InkWell(
-                                  onTap: () {
-                                    Navigator.pop(ctx);
-                                    _saveRecentReactionEmoji(emoji);
-                                    ref
-                                        .read(chatMessagesProvider(widget.channelId).notifier)
-                                        .toggleReaction(message.id, emoji);
-                                  },
-                                  borderRadius: BorderRadius.circular(24),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(ctx)
-                                          .colorScheme
-                                          .surfaceContainerHighest
-                                          .withValues(alpha: 0.7),
-                                      shape: BoxShape.circle,
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: displayEmojis.map((emoji) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.pop(ctx);
+                                      _saveRecentReactionEmoji(emoji);
+                                      ref
+                                          .read(chatMessagesProvider(
+                                                  widget.channelId)
+                                              .notifier)
+                                          .toggleReaction(message.id, emoji);
+                                    },
+                                    borderRadius: BorderRadius.circular(24),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(ctx)
+                                            .colorScheme
+                                            .surfaceContainerHighest
+                                            .withValues(alpha: 0.7),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: EmojiText(
+                                        ':$emoji:',
+                                        style: const TextStyle(fontSize: 22),
+                                      ),
                                     ),
-                                    child: EmojiText(':$emoji:', style: const TextStyle(fontSize: 22)),
                                   ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ),
-                      // 打开完整表情选择器的 + 按钮
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            _showFullEmojiPickerForReaction(message);
-                          },
-                          borderRadius: BorderRadius.circular(24),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Theme.of(ctx)
-                                  .colorScheme
-                                  .primaryContainer
-                                  .withValues(alpha: 0.7),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.add_rounded,
-                              size: 22,
-                              color: Theme.of(ctx).colorScheme.onPrimaryContainer,
+                                );
+                              }).toList(),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.reply_rounded),
-              title: Text(ctx.l10n.chat_reply),
-              onTap: () {
-                Navigator.pop(ctx);
-                _onStartReply(message);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.copy_rounded),
-              title: Text(ctx.l10n.chat_copy),
-              onTap: () {
-                Navigator.pop(ctx);
-                _onCopyMessage(message);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.link_rounded),
-              title: const Text('复制分享链接'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _onCopyShareLink(message);
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                message.bookmarked ? Icons.bookmark_remove_rounded : Icons.bookmark_add_outlined,
-                color: message.bookmarked ? Theme.of(ctx).colorScheme.primary : null,
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _showFullEmojiPickerForReaction(message);
+                            },
+                            borderRadius: BorderRadius.circular(24),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(ctx)
+                                    .colorScheme
+                                    .primaryContainer
+                                    .withValues(alpha: 0.7),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.add_rounded,
+                                size: 22,
+                                color: Theme.of(ctx)
+                                    .colorScheme
+                                    .onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
-              title: Text(message.bookmarked ? '取消书签' : '设为书签'),
-              onTap: () {
-                Navigator.pop(ctx);
-                ref
-                    .read(chatMessagesProvider(widget.channelId).notifier)
-                    .toggleBookmark(message.id);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.checklist_rounded),
-              title: const Text('多选消息'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _enterMultiSelectMode(message.id);
-              },
-            ),
-            if (isOwnMessage) ...[
+              const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: Text(ctx.l10n.chat_edit),
+                leading: const Icon(Icons.reply_rounded),
+                title: Text(ctx.l10n.chat_reply),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _onStartEdit(message);
+                  _onStartReply(message);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy_rounded),
+                title: Text(ctx.l10n.chat_copy),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _onCopyMessage(message);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.link_rounded),
+                title: const Text('复制分享链接'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _onCopyShareLink(message);
                 },
               ),
               ListTile(
                 leading: Icon(
-                  Icons.delete_outline_rounded,
-                  color: Theme.of(ctx).colorScheme.error,
+                  message.bookmarked
+                      ? Icons.bookmark_remove_rounded
+                      : Icons.bookmark_add_outlined,
+                  color: message.bookmarked
+                      ? Theme.of(ctx).colorScheme.primary
+                      : null,
                 ),
-                title: Text(
-                  ctx.l10n.chat_delete,
-                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
-                ),
+                title: Text(message.bookmarked ? '取消书签' : '设为书签'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _onDeleteMessage(message);
+                  ref
+                      .read(chatMessagesProvider(widget.channelId).notifier)
+                      .toggleBookmark(message.id);
                 },
               ),
+              if (_pinEnabled)
+                ListTile(
+                  leading: Icon(
+                    message.pinned
+                        ? Icons.push_pin_rounded
+                        : Icons.push_pin_outlined,
+                    color: message.pinned
+                        ? Theme.of(ctx).colorScheme.primary
+                        : null,
+                  ),
+                  title: Text(message.pinned ? '取消置顶' : '置顶消息'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _togglePinMessage(message);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.checklist_rounded),
+                title: const Text('多选消息'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _enterMultiSelectMode(message.id);
+                },
+              ),
+              if (canFlag)
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: const Text('举报'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showFlagSheet(message);
+                  },
+                ),
+              if (isOwnMessage || (currentUser?.isStaff ?? false)) ...[
+                if (isOwnMessage)
+                  ListTile(
+                    leading: const Icon(Icons.edit_outlined),
+                    title: Text(ctx.l10n.chat_edit),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _onStartEdit(message);
+                    },
+                  ),
+                ListTile(
+                  leading: Icon(
+                    Icons.delete_outline_rounded,
+                    color: Theme.of(ctx).colorScheme.error,
+                  ),
+                  title: Text(
+                    ctx.l10n.chat_delete,
+                    style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _onDeleteMessage(message);
+                  },
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -818,6 +975,13 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                         });
                       },
                       child: const Text('全选'),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.format_quote_rounded),
+                      tooltip: '引用选中消息',
+                      onPressed: _selectedMessageIds.isEmpty
+                          ? null
+                          : _quoteSelectedMessages,
                     ),
                     IconButton(
                       icon: const Icon(Icons.copy_rounded),
@@ -951,6 +1115,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                 message,
                                 isOwnMessage,
                               ),
+                              onRestore: message.deleted
+                                  ? () => _restoreMessage(message)
+                                  : null,
                               onToggleReaction: (emoji) {
                                 ref
                                     .read(chatMessagesProvider(widget.channelId)
@@ -1462,6 +1629,7 @@ class _ChatMessageBubble extends StatelessWidget {
   final bool isMultiSelectMode;
   final bool isSelected;
   final ValueChanged<int>? onToggleSelect;
+  final VoidCallback? onRestore;
 
   const _ChatMessageBubble({
     required this.message,
@@ -1474,6 +1642,7 @@ class _ChatMessageBubble extends StatelessWidget {
     this.isMultiSelectMode = false,
     this.isSelected = false,
     this.onToggleSelect,
+    this.onRestore,
   });
 
   List<String> _extractImageUrls() {
@@ -1868,6 +2037,17 @@ class _ChatMessageBubble extends StatelessWidget {
                                           .withValues(alpha: 0.8),
                                     ),
                                   ],
+                                  if (message.pinned) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.push_pin_rounded,
+                                      size: 11,
+                                      color: (isOwnMessage
+                                              ? theme.colorScheme.onPrimaryContainer
+                                              : theme.colorScheme.primary)
+                                          .withValues(alpha: 0.8),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ],
@@ -1894,22 +2074,242 @@ class _ChatMessageBubble extends StatelessWidget {
         mainAxisAlignment:
             isOwnMessage ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              context.l10n.chat_message_deleted,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                fontStyle: FontStyle.italic,
+          GestureDetector(
+            onLongPress: onLongPress,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    context.l10n.chat_message_deleted,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.5),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  if (onRestore != null) ...[
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: onRestore,
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('恢复'),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 聊天消息举报面板
+class _ChatMessageFlagSheet extends StatefulWidget {
+  final int channelId;
+  final int messageId;
+  final String username;
+  final List<String>? availableFlagKeys;
+
+  const _ChatMessageFlagSheet({
+    required this.channelId,
+    required this.messageId,
+    required this.username,
+    this.availableFlagKeys,
+  });
+
+  @override
+  State<_ChatMessageFlagSheet> createState() => _ChatMessageFlagSheetState();
+}
+
+class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
+  List<FlagType> _flagTypes = [];
+  FlagType? _selected;
+  final _messageController = TextEditingController();
+  bool _loading = true;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTypes();
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadTypes() async {
+    final preloaded = PreloadedDataService();
+    final types = await preloaded.getPostActionTypes();
+    if (!mounted) return;
+    setState(() {
+      final parsed = (types ?? const [])
+          .map((t) => FlagType.fromJson(Map<String, dynamic>.from(t as Map)))
+          .where((f) => f.isFlag && f.enabled && f.appliesToChatMessage)
+          .toList()
+        ..sort((a, b) => a.position.compareTo(b.position));
+      // 若消息自带 available_flags，再按 nameKey 过滤
+      if (widget.availableFlagKeys != null &&
+          widget.availableFlagKeys!.isNotEmpty) {
+        final keys = widget.availableFlagKeys!.toSet();
+        _flagTypes =
+            parsed.where((f) => keys.contains(f.nameKey)).toList();
+        if (_flagTypes.isEmpty) {
+          // 服务端给了符号但预加载类型匹配不上时，回退全部 chat 适用类型
+          _flagTypes = parsed;
+        }
+      } else {
+        _flagTypes = parsed.isNotEmpty ? parsed : FlagType.defaultTypes;
+      }
+      _loading = false;
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_selected == null || _submitting) return;
+    if (_selected!.requireMessage && _messageController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请填写举报说明')),
+      );
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      await DiscourseService().flagChatMessage(
+        widget.channelId,
+        widget.messageId,
+        _selected!.id,
+        message: _messageController.text.trim().isEmpty
+            ? null
+            : _messageController.text.trim(),
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已提交举报')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('举报失败: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '举报 @${widget.username} 的消息',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              )
+            else ...[
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _flagTypes.length,
+                  itemBuilder: (context, index) {
+                    final type = _flagTypes[index];
+                    return RadioListTile<FlagType>(
+                      value: type,
+                      groupValue: _selected,
+                      onChanged: _submitting
+                          ? null
+                          : (v) => setState(() => _selected = v),
+                      title: Text(type.name),
+                      subtitle: type.shortDescription != null ||
+                              type.description.isNotEmpty
+                          ? Text(
+                              (type.shortDescription ?? type.description)
+                                  .replaceAll('%{username}', widget.username)
+                                  .replaceAll(
+                                    '@%{username}',
+                                    '@${widget.username}',
+                                  ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : null,
+                    );
+                  },
+                ),
+              ),
+              if (_selected?.requireMessage == true)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: TextField(
+                    controller: _messageController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      hintText: '请说明举报原因',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _selected == null || _submitting ? null : _submit,
+                    child: _submitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('提交举报'),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

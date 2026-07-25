@@ -600,4 +600,140 @@ mixin _ChatMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
+
+  /// 恢复已删除的 Chat 消息
+  ///
+  /// 对齐 Discourse: PUT /chat/api/channels/:id/messages/:messageId/restore
+  Future<void> restoreChatMessage(int channelId, int messageId) async {
+    try {
+      await _dio.put(
+        '/chat/api/channels/$channelId/messages/$messageId/restore',
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 举报 Chat 消息
+  ///
+  /// 对齐 Discourse chat-api.flagMessage:
+  /// POST /chat/api/channels/:id/messages/:messageId/flags
+  Future<void> flagChatMessage(
+    int channelId,
+    int messageId,
+    int flagTypeId, {
+    String? message,
+  }) async {
+    try {
+      final data = <String, dynamic>{
+        'flag_type_id': flagTypeId,
+        'message_id': messageId,
+        'channel_id': channelId,
+      };
+      if (message != null && message.isNotEmpty) {
+        data['message'] = message;
+      }
+      await _dio.post(
+        '/chat/api/channels/$channelId/messages/$messageId/flags',
+        data: data,
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 将选中消息生成引用 Markdown
+  ///
+  /// 对齐 Discourse: POST /chat/:channelId/quote  body: { message_ids: [...] }
+  /// 返回 markdown 字符串，可粘贴到话题/私信。
+  Future<String> quoteChatMessages(
+    int channelId,
+    List<int> messageIds,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/chat/$channelId/quote',
+        data: {'message_ids': messageIds},
+      );
+      final respData = Map<String, dynamic>.from(response.data as Map);
+      return respData['markdown']?.toString() ?? '';
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 标记当前用户所有聊天频道已读
+  ///
+  /// 对齐 Discourse: PUT /chat/api/channels/read
+  Future<void> markAllChannelsRead() async {
+    try {
+      await _dio.put('/chat/api/channels/read');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 置顶 Chat 消息（需站点开启 chat_pinned_messages）
+  Future<void> pinChatMessage(int channelId, int messageId) async {
+    try {
+      await _dio.post(
+        '/chat/api/channels/$channelId/messages/$messageId/pin',
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 取消置顶 Chat 消息
+  Future<void> unpinChatMessage(int channelId, int messageId) async {
+    try {
+      await _dio.delete(
+        '/chat/api/channels/$channelId/messages/$messageId/pin',
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 获取频道置顶消息列表
+  Future<Map<String, dynamic>> getPinnedMessages(int channelId) async {
+    try {
+      final response = await _dio.get('/chat/api/channels/$channelId/pins');
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 从频道移除成员
+  ///
+  /// 对齐 Discourse: DELETE /chat/api/channels/:id/memberships/:userId
+  Future<void> removeChannelMember(int channelId, int userId) async {
+    try {
+      await _dio.delete('/chat/api/channels/$channelId/memberships/$userId');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 邀请用户加入频道（公开频道用 invites，不是 memberships）
+  ///
+  /// 对齐 Discourse chat-api.invite:
+  /// POST /chat/api/channels/:id/invites  body: { user_ids: [...] }
+  Future<void> inviteUsersToChannel(
+    int channelId,
+    List<int> userIds, {
+    int? messageId,
+  }) async {
+    try {
+      final data = <String, dynamic>{'user_ids': userIds};
+      if (messageId != null) data['message_id'] = messageId;
+      await _dio.post(
+        '/chat/api/channels/$channelId/invites',
+        data: data,
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
 }

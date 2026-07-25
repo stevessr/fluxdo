@@ -66,6 +66,95 @@ class _ChatChannelSettingsSheetState
     }
   }
 
+  /// 通知级别：never / mention / always（对齐 Discourse membership.notification_level）
+  Future<void> _updateNotificationLevel(
+    ChatChannel channel,
+    String level,
+  ) async {
+    setState(() => _isSaving = true);
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.updateChannelNotificationsSettings(
+        widget.channelId,
+        notificationLevel: level,
+      );
+      ref.invalidate(chatChannelsProvider);
+      if (mounted) {
+        final label = switch (level) {
+          'never' => '从不',
+          'always' => '全部消息',
+          _ => '仅提及',
+        };
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('通知级别已设为「$label」')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('设置失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _showNotificationLevelPicker(ChatChannel channel) {
+    final current = channel.notificationLevel ?? 'mention';
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text(
+                  '通知级别',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              RadioListTile<String>(
+                value: 'never',
+                groupValue: current,
+                title: const Text('从不'),
+                subtitle: const Text('不接收该频道推送'),
+                onChanged: (v) {
+                  Navigator.pop(ctx);
+                  if (v != null) _updateNotificationLevel(channel, v);
+                },
+              ),
+              RadioListTile<String>(
+                value: 'mention',
+                groupValue: current,
+                title: const Text('仅提及'),
+                subtitle: const Text('仅在被 @ 时通知'),
+                onChanged: (v) {
+                  Navigator.pop(ctx);
+                  if (v != null) _updateNotificationLevel(channel, v);
+                },
+              ),
+              RadioListTile<String>(
+                value: 'always',
+                groupValue: current,
+                title: const Text('全部消息'),
+                subtitle: const Text('该频道每条新消息都通知'),
+                onChanged: (v) {
+                  Navigator.pop(ctx);
+                  if (v != null) _updateNotificationLevel(channel, v);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _updateThreading(ChatChannel channel, bool newThreading) async {
     setState(() => _isSaving = true);
     try {
@@ -298,6 +387,24 @@ class _ChatChannelSettingsSheetState
                 onChanged: _isSaving || channel == null
                     ? null
                     : (val) => _updateMute(channel!, val),
+              ),
+
+              // 2.1 通知级别
+              ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: const Text('通知级别'),
+                subtitle: Text(
+                  switch (channel?.notificationLevel) {
+                    'never' => '从不',
+                    'always' => '全部消息',
+                    'mention' => '仅提及',
+                    _ => '仅提及（默认）',
+                  },
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _isSaving || channel == null
+                    ? null
+                    : () => _showNotificationLevelPicker(channel!),
               ),
 
               // 3. 消息串 (Threading) 开关

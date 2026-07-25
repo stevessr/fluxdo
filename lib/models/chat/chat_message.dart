@@ -55,6 +55,12 @@ class ChatMessage {
   /// Discourse 书签 ID（删除书签时需要）
   final int? bookmarkId;
 
+  /// 是否置顶（需站点开启 chat_pinned_messages）
+  final bool pinned;
+
+  /// 服务端下发的可用举报类型符号列表（如 off_topic / spam）
+  final List<String>? availableFlags;
+
   const ChatMessage({
     required this.id,
     required this.message,
@@ -72,6 +78,8 @@ class ChatMessage {
     this.deletedById,
     this.bookmarked = false,
     this.bookmarkId,
+    this.pinned = false,
+    this.availableFlags,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -112,6 +120,10 @@ class ChatMessage {
       bookmarked: (json['bookmarked'] as bool?) ??
           (bookmarkObj != null || parsedBookmarkId != null),
       bookmarkId: parsedBookmarkId,
+      pinned: json['pinned'] as bool? ?? false,
+      availableFlags: (json['available_flags'] as List?)
+          ?.map((e) => e.toString())
+          .toList(),
     );
   }
 
@@ -133,6 +145,8 @@ class ChatMessage {
     bool? bookmarked,
     int? bookmarkId,
     bool clearBookmarkId = false,
+    bool? pinned,
+    List<String>? availableFlags,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -151,6 +165,8 @@ class ChatMessage {
       deletedById: deletedById ?? this.deletedById,
       bookmarked: bookmarked ?? this.bookmarked,
       bookmarkId: clearBookmarkId ? null : (bookmarkId ?? this.bookmarkId),
+      pinned: pinned ?? this.pinned,
+      availableFlags: availableFlags ?? this.availableFlags,
     );
   }
 }

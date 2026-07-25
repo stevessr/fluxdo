@@ -81,6 +81,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
       appBar: AppBar(
         title: Text(context.l10n.chat_title),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.done_all_rounded),
+            tooltip: '全部标为已读',
+            onPressed: () async {
+              try {
+                await ref.read(markAllChatChannelsReadProvider.future);
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('已将所有聊天频道标为已读')),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('操作失败: $e')),
+                );
+              }
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: [
