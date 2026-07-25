@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
 import '../../providers/chat_providers.dart';
+import '../../providers/core_providers.dart';
+import '../../widgets/common/emoji_text.dart';
 import 'chat_channel_members_sheet.dart';
 
 /// 聊天频道设置 Sheet 弹窗
-class ChatChannelSettingsSheet extends ConsumerWidget {
+class ChatChannelSettingsSheet extends ConsumerStatefulWidget {
   final int channelId;
   final String channelTitle;
 
@@ -33,9 +35,146 @@ class ChatChannelSettingsSheet extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatChannelSettingsSheet> createState() =>
+      _ChatChannelSettingsSheetState();
+}
+
+class _ChatChannelSettingsSheetState
+    extends ConsumerState<ChatChannelSettingsSheet> {
+  bool _isSaving = false;
+
+  Future<void> _updateMute(ChatChannel channel, bool newMuted) async {
+    setState(() => _isSaving = true);
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.updateChannelSettings(widget.channelId, muted: newMuted);
+      ref.invalidate(chatChannelsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(newMuted ? '已开启免打扰' : '已关闭免打扰')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('设置失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _updateThreading(ChatChannel channel, bool newThreading) async {
+    setState(() => _isSaving = true);
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.updateChannelSettings(
+        widget.channelId,
+        threadingEnabled: newThreading,
+      );
+      ref.invalidate(chatChannelsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(newThreading ? '已开启消息串' : '已关闭消息串')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('设置失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _showEditChannelDialog(ChatChannel? channel) {
+    final titleController =
+        TextEditingController(text: channel?.title ?? widget.channelTitle);
+    final slugController = TextEditingController(text: channel?.slug ?? '');
+    final emojiController = TextEditingController(text: channel?.emoji ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('编辑频道信息'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: '频道名称',
+                  hintText: '请输入频道名称',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: slugController,
+                decoration: const InputDecoration(
+                  labelText: '频道缩略名 (Slug)',
+                  hintText: '例如: general',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emojiController,
+                decoration: const InputDecoration(
+                  labelText: '频道表情符号',
+                  hintText: '例如: :speech_balloon: 或 😀',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(ctx.l10n.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _isSaving = true);
+              try {
+                final service = ref.read(discourseServiceProvider);
+                await service.updateChannelSettings(
+                  widget.channelId,
+                  name: titleController.text.trim(),
+                  slug: slugController.text.trim(),
+                  emoji: emojiController.text.trim(),
+                );
+                ref.invalidate(chatChannelsProvider);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('频道信息已成功更新')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('更新失败: $e')),
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _isSaving = false);
+              }
+            },
+            child: Text(ctx.l10n.save),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isFavorite = ref.watch(chatFavoritesProvider).contains(channelId);
+    final isFavorite =
+        ref.watch(chatFavoritesProvider).contains(widget.channelId);
 
     // 从频道列表中获取当前频道的详细 Model 信息
     final channelsAsync = ref.watch(chatChannelsProvider);
@@ -46,7 +185,7 @@ class ChatChannelSettingsSheet extends ConsumerWidget {
         ...channelsAsync.value!.directMessageChannels,
       ];
       try {
-        channel = all.firstWhere((c) => c.id == channelId);
+        channel = all.firstWhere((c) => c.id == widget.channelId);
       } catch (_) {}
     }
 
@@ -55,120 +194,206 @@ class ChatChannelSettingsSheet extends ConsumerWidget {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 顶部抓手
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(top: 4, bottom: 12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 顶部抓手
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 4, bottom: 12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurfaceVariant
+                        .withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
 
-            // 频道标题与类型图标
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  channel?.chatableType == 'DirectMessage'
-                      ? Icons.alternate_email_rounded
-                      : Icons.tag_rounded,
-                  color: theme.colorScheme.onPrimaryContainer,
-                  size: 22,
-                ),
-              ),
-              title: Text(
-                channelTitle,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              subtitle: Text(
-                channel?.description != null && channel!.description!.isNotEmpty
-                    ? channel.description!
-                    : '频道 ID: $channelId (${channel?.chatableType ?? "Channel"})',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-
-            const Divider(height: 1),
-
-            // 1. 收藏频道
-            SwitchListTile(
-              secondary: Icon(
-                isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                color: isFavorite ? Colors.amber : null,
-              ),
-              title: const Text('收藏频道'),
-              subtitle: const Text('置顶在频道列表收藏区'),
-              value: isFavorite,
-              onChanged: (_) {
-                ref.read(chatFavoritesProvider.notifier).toggleFavorite(channelId);
-              },
-            ),
-
-            // 2. 查看频道成员
-            ListTile(
-              leading: const Icon(Icons.group_outlined),
-              title: Text(context.l10n.chat_channel_members),
-              subtitle: Text(
-                channel?.membersCount != null
-                    ? '${channel!.membersCount} 位成员'
-                    : '查看并管理频道成员',
-              ),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                Navigator.pop(context);
-                ChatChannelMembersSheet.show(
-                  context,
-                  channelId,
-                  channelTitle,
-                  canAddMembers: canAddMembers,
-                );
-              },
-            ),
-
-            // 3. 添加成员（仅当有权限时显示）
-            if (canAddMembers)
+              // 频道标题与类型图标/表情
               ListTile(
-                leading: Icon(
-                  Icons.person_add_outlined,
-                  color: theme.colorScheme.primary,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: channel?.emoji != null && channel!.emoji!.isNotEmpty
+                      ? EmojiText(
+                          channel.emoji!.startsWith(':')
+                              ? channel.emoji!
+                              : ':${channel.emoji}:',
+                          style: const TextStyle(fontSize: 20),
+                        )
+                      : Icon(
+                          channel?.chatableType == 'DirectMessage'
+                              ? Icons.alternate_email_rounded
+                              : Icons.tag_rounded,
+                          color: theme.colorScheme.onPrimaryContainer,
+                          size: 22,
+                        ),
                 ),
                 title: Text(
-                  context.l10n.chat_add_member,
-                  style: TextStyle(color: theme.colorScheme.primary),
+                  channel?.title ?? widget.channelTitle,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
+                subtitle: Text(
+                  channel?.description != null &&
+                          channel!.description!.isNotEmpty
+                      ? channel.description!
+                      : '频道 ID: ${widget.channelId} (${channel?.chatableType ?? "Channel"})',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: '编辑频道信息',
+                  onPressed: _isSaving
+                      ? null
+                      : () => _showEditChannelDialog(channel),
+                ),
+              ),
+
+              const Divider(height: 1),
+
+              // 1. 收藏频道 (云端同步)
+              SwitchListTile(
+                secondary: Icon(
+                  isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
+                  color: isFavorite ? Colors.amber : null,
+                ),
+                title: const Text('收藏频道'),
+                subtitle: const Text('与云端收藏实时同步，置顶在频道列表'),
+                value: isFavorite,
+                onChanged: _isSaving
+                    ? null
+                    : (_) {
+                        ref
+                            .read(chatFavoritesProvider.notifier)
+                            .toggleFavorite(widget.channelId);
+                      },
+              ),
+
+              // 2. 免打扰设置 (Mute)
+              SwitchListTile(
+                secondary: Icon(
+                  channel?.muted == true
+                      ? Icons.notifications_off_rounded
+                      : Icons.notifications_none_rounded,
+                  color:
+                      channel?.muted == true ? theme.colorScheme.error : null,
+                ),
+                title: const Text('免打扰'),
+                subtitle: const Text('开启后静音该频道的提醒推送'),
+                value: channel?.muted ?? false,
+                onChanged: _isSaving || channel == null
+                    ? null
+                    : (val) => _updateMute(channel, val),
+              ),
+
+              // 3. 消息串 (Threading) 开关
+              SwitchListTile(
+                secondary: Icon(
+                  Icons.forum_outlined,
+                  color: channel?.threadingEnabled == true
+                      ? theme.colorScheme.primary
+                      : null,
+                ),
+                title: const Text('消息串 (Thread)'),
+                subtitle: const Text('允许针对单条消息开启独立讨论子串'),
+                value: channel?.threadingEnabled ?? false,
+                onChanged: _isSaving || channel == null
+                    ? null
+                    : (val) => _updateThreading(channel, val),
+              ),
+
+              const Divider(height: 1),
+
+              // 4. 历史记录保留时长
+              ListTile(
+                leading: const Icon(Icons.history_toggle_off_rounded),
+                title: const Text('历史消息保留时长'),
+                subtitle: const Text('超过周期的历史消息将被服务端清理'),
+                trailing: Text(
+                  channel?.retentionDisplay ?? '永久保留',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+
+              // 5. 编辑频道名称 / 缩略名 / 表情
+              ListTile(
+                leading: const Icon(Icons.tune_rounded),
+                title: const Text('编辑频道属性'),
+                subtitle: const Text('修改频道名称、缩略名及自定义图标'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap:
+                    _isSaving ? null : () => _showEditChannelDialog(channel),
+              ),
+
+              // 6. 查看/管理成员
+              ListTile(
+                leading: const Icon(Icons.group_outlined),
+                title: Text(context.l10n.chat_channel_members),
+                subtitle: Text(
+                  channel?.membersCount != null
+                      ? '${channel!.membersCount} 位成员'
+                      : '查看并管理频道成员',
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () {
                   Navigator.pop(context);
                   ChatChannelMembersSheet.show(
                     context,
-                    channelId,
-                    channelTitle,
-                    canAddMembers: true,
+                    widget.channelId,
+                    widget.channelTitle,
+                    canAddMembers: canAddMembers,
                   );
                 },
               ),
 
-            const SizedBox(height: 12),
-          ],
+              // 7. 添加成员（权限受控）
+              if (canAddMembers)
+                ListTile(
+                  leading: Icon(
+                    Icons.person_add_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
+                  title: Text(
+                    context.l10n.chat_add_member,
+                    style: TextStyle(color: theme.colorScheme.primary),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    ChatChannelMembersSheet.show(
+                      context,
+                      widget.channelId,
+                      widget.channelTitle,
+                      canAddMembers: true,
+                    );
+                  },
+                ),
+
+              if (_isSaving)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
-      ),
-    );
+      );
   }
 }

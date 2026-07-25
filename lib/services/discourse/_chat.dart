@@ -248,4 +248,31 @@ mixin _ChatMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
+
+  /// 修改 Chat 频道设置（频道名称、缩略名、表情图标、免打扰、消息串开关等）
+  Future<void> updateChannelSettings(
+    int channelId, {
+    String? name,
+    String? slug,
+    String? emoji,
+    bool? threadingEnabled,
+    bool? muted,
+    String? notificationLevel,
+  }) async {
+    final data = <String, dynamic>{};
+    if (name != null) data['name'] = name;
+    if (slug != null) data['slug'] = slug;
+    if (emoji != null) data['emoji'] = emoji;
+    if (threadingEnabled != null) data['threading_enabled'] = threadingEnabled;
+    if (muted != null) data['muted'] = muted;
+    if (notificationLevel != null) data['notification_level'] = notificationLevel;
+
+    if (data.isEmpty) return;
+
+    try {
+      await _dio.put('/chat/api/channels/$channelId', data: data);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
 }

@@ -23,6 +23,11 @@ class ChatChannel {
   final bool following;
   final Map<String, dynamic>? userChatChannelMembership;
   final bool? userCanAddMembers;
+  final String? emoji;
+  final bool threadingEnabled;
+  final int? retentionDays;
+  final int? retentionHours;
+  final String? notificationLevel;
 
   const ChatChannel({
     required this.id,
@@ -45,6 +50,11 @@ class ChatChannel {
     this.following = false,
     this.userChatChannelMembership,
     this.userCanAddMembers,
+    this.emoji,
+    this.threadingEnabled = false,
+    this.retentionDays,
+    this.retentionHours,
+    this.notificationLevel,
   });
 
   bool get canAddMembers {
@@ -54,6 +64,21 @@ class ChatChannel {
     return userCanAddMembers == true ||
         (userChatChannelMembership?['can_add_members'] as bool? ?? false) ||
         (meta?['can_add_members'] as bool? ?? false);
+  }
+
+  /// 格式化显示历史消息保留时长
+  String get retentionDisplay {
+    final days = retentionDays ??
+        (meta?['retention_days'] as num?)?.toInt() ??
+        (meta?['auto_archive_duration_days'] as num?)?.toInt();
+    if (days != null && days > 0) return '$days 天';
+
+    final hours = retentionHours ??
+        (meta?['retention_hours'] as num?)?.toInt() ??
+        (meta?['auto_archive_duration_hours'] as num?)?.toInt();
+    if (hours != null && hours > 0) return '$hours 小时';
+
+    return '永久保留';
   }
 
   factory ChatChannel.fromJson(Map<String, dynamic> json) {
@@ -73,6 +98,23 @@ class ChatChannel {
     final canAdd = (json['allow_user_add'] as bool?) ??
         (json['user_can_add_members'] as bool?) ??
         (json['can_modify_members'] as bool?);
+
+    final emojiVal = json['emoji']?.toString() ??
+        json['icon']?.toString() ??
+        (json['meta'] is Map ? (json['meta']['emoji']?.toString()) : null);
+
+    final threading = (json['threading_enabled'] as bool?) ??
+        (json['allow_threading'] as bool?) ??
+        (json['meta'] is Map ? (json['meta']['threading_enabled'] as bool?) : null) ??
+        false;
+
+    final notifLevel = (membership?['notification_level'] as String?) ??
+        (json['notification_level'] as String?);
+
+    final rDays = (json['retention_days'] as num?)?.toInt() ??
+        (json['auto_archive_duration_days'] as num?)?.toInt();
+    final rHours = (json['retention_hours'] as num?)?.toInt() ??
+        (json['auto_archive_duration_hours'] as num?)?.toInt();
 
     return ChatChannel(
       id: (json['id'] as num?)?.toInt() ?? 0,
@@ -104,6 +146,11 @@ class ChatChannel {
       following: isFollowing,
       userChatChannelMembership: membership,
       userCanAddMembers: canAdd,
+      emoji: emojiVal,
+      threadingEnabled: threading,
+      retentionDays: rDays,
+      retentionHours: rHours,
+      notificationLevel: notifLevel,
     );
   }
 }

@@ -469,10 +469,10 @@ class ChatFavoritesNotifier extends Notifier<Set<int>> {
   @override
   Set<int> build() {
     final prefs = ref.watch(sharedPreferencesProvider);
-    final list = prefs.getStringList(_key) ?? [];
-    final set = list.map((e) => int.tryParse(e)).whereType<int>().toSet();
+    final localList = prefs.getStringList(_key) ?? [];
+    final set = localList.map((e) => int.tryParse(e)).whereType<int>().toSet();
 
-    // 合并 Discourse 服务端返回的 starred / following 频道
+    // 优先以后端 Discourse 权威数据 (starred/following) 为准，保持与云端一致
     final channelsAsync = ref.watch(chatChannelsProvider);
     final channelsState = channelsAsync.value;
     if (channelsState != null) {
@@ -481,10 +481,12 @@ class ChatFavoritesNotifier extends Notifier<Set<int>> {
         ...channelsState.directMessageChannels,
       ];
       for (final channel in allChannels) {
-        if (channel.starred ||
+        final isServerFav = channel.starred ||
             channel.following ||
             (channel.userChatChannelMembership?['starred'] == true) ||
-            (channel.userChatChannelMembership?['following'] == true)) {
+            (channel.userChatChannelMembership?['following'] == true);
+
+        if (isServerFav) {
           set.add(channel.id);
         }
       }
@@ -505,10 +507,12 @@ class ChatFavoritesNotifier extends Notifier<Set<int>> {
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setStringList(_key, next.map((e) => e.toString()).toList());
 
-    // 同步关注/取消关注到 Discourse 服务端 (静默请求)
+    // 同步关注/取消关注到 Discourse 服务端
     try {
       final service = ref.read(discourseServiceProvider);
       await service.followChannel(channelId, follow: !isFav);
+      // 刷新频道列表保持云端与本地状态强一致
+      ref.invalidate(chatChannelsProvider);
     } catch (_) {}
   }
 
