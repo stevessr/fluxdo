@@ -18,6 +18,7 @@ import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
+import '../image_viewer_page.dart';
 import '../user_profile_page.dart';
 import 'chat_channel_members_sheet.dart';
 import 'chat_channel_settings_sheet.dart';
@@ -1150,12 +1151,22 @@ class _ChatMessageBubble extends StatelessWidget {
     final urls = <String>[];
     final seen = <String>{};
 
+    bool isEmojiUrlOrTag(String rawStr) {
+      final lower = rawStr.toLowerCase();
+      return lower.contains('class="emoji"') ||
+          lower.contains("class='emoji'") ||
+          lower.contains('class=emoji') ||
+          lower.contains('/images/emoji/') ||
+          lower.contains('/emoji/');
+    }
+
     void addUrl(String? raw) {
       if (raw == null || raw.trim().isEmpty) return;
       final trimmed = raw.trim();
       if (trimmed.startsWith('upload://')) return;
+      if (isEmojiUrlOrTag(trimmed)) return;
       final resolved = UrlHelper.resolveUrlWithCdn(trimmed);
-      if (resolved.isNotEmpty && seen.add(resolved)) {
+      if (resolved.isNotEmpty && !isEmojiUrlOrTag(resolved) && seen.add(resolved)) {
         urls.add(resolved);
       }
     }
@@ -1182,11 +1193,19 @@ class _ChatMessageBubble extends StatelessWidget {
       }
     }
 
-    // 3. 从 cooked HTML 中匹配 <img src="...">
+    // 3. 从 cooked HTML 中匹配非表情 <img ...> 标签
     if (message.cooked != null && message.cooked!.isNotEmpty) {
-      final htmlRegex = RegExp('<img[^>]+src=["\']([^"\']+)["\']', caseSensitive: false);
-      for (final match in htmlRegex.allMatches(message.cooked!)) {
-        addUrl(match.group(1));
+      final imgRegex = RegExp(r'<img[^>]+>', caseSensitive: false);
+      for (final match in imgRegex.allMatches(message.cooked!)) {
+        final imgTag = match.group(0) ?? '';
+        if (isEmojiUrlOrTag(imgTag)) continue;
+
+        final srcMatch =
+            RegExp(r'src=["\']([^"\']+)["\']', caseSensitive: false)
+                .firstMatch(imgTag);
+        if (srcMatch != null) {
+          addUrl(srcMatch.group(1));
+        }
       }
     }
 
@@ -1328,21 +1347,34 @@ class _ChatMessageBubble extends StatelessWidget {
                                   ),
                                 ),
 
-                              // 图片附件与 HTML 媒体展示
+                              // 图片附件与 HTML 媒体展示 (点击放大全屏查看)
                               if (imageUrls.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 4),
                                   child: Wrap(
                                     spacing: 6,
                                     runSpacing: 6,
-                                    children: imageUrls.map((url) {
-                                      return ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: CachedImage(
-                                          url: url,
-                                          width: 180,
-                                          height: 120,
-                                          fit: BoxFit.cover,
+                                    children: imageUrls.asMap().entries.map((entry) {
+                                      final idx = entry.key;
+                                      final url = entry.value;
+                                      return GestureDetector(
+                                        onTap: () {
+                                          ImageViewerPage.open(
+                                            context,
+                                            url,
+                                            galleryImages: imageUrls,
+                                            initialIndex: idx,
+                                            enableShare: true,
+                                          );
+                                        },
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: CachedImage(
+                                            url: url,
+                                            width: 180,
+                                            height: 120,
+                                            fit: BoxFit.cover,
+                                          ),
                                         ),
                                       );
                                     }).toList(),
