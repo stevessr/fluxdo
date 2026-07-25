@@ -130,19 +130,25 @@ class ChatChannel {
   }
 
   /// 格式化显示历史消息保留时长
-  String get retentionDisplay {
-    final days = retentionDays ??
-        (meta?['retention_days'] as num?)?.toInt() ??
-        (meta?['auto_delete_days'] as num?)?.toInt() ??
-        (meta?['auto_archive_duration_days'] as num?)?.toInt();
+  ///
+  /// Discourse 不在频道 JSON 下发 retention；由站点设置控制：
+  /// - 公开频道: chat_channel_retention_days
+  /// - 私信: chat_dm_retention_days
+  /// 0 / null 表示永久保留。
+  String retentionDisplay({
+    int? channelRetentionDays,
+    int? dmRetentionDays,
+  }) {
+    // 若模型上已有解析值（兼容旧数据），优先使用
+    final existingDays = retentionDays;
+    if (existingDays != null && existingDays > 0) return '$existingDays 天';
+    final existingHours = retentionHours;
+    if (existingHours != null && existingHours > 0) return '$existingHours 小时';
+
+    final isDm = chatableType == 'DirectMessage' ||
+        chatableType == 'DirectMessageChannel';
+    final days = isDm ? dmRetentionDays : channelRetentionDays;
     if (days != null && days > 0) return '$days 天';
-
-    final hours = retentionHours ??
-        (meta?['retention_hours'] as num?)?.toInt() ??
-        (meta?['auto_delete_hours'] as num?)?.toInt() ??
-        (meta?['auto_archive_duration_hours'] as num?)?.toInt();
-    if (hours != null && hours > 0) return '$hours 小时';
-
     return '永久保留';
   }
 

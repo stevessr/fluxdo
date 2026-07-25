@@ -5,6 +5,7 @@ import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
+import '../../services/preloaded_data_service.dart';
 import '../../widgets/common/emoji_text.dart';
 import 'chat_channel_members_sheet.dart';
 
@@ -317,18 +318,34 @@ class _ChatChannelSettingsSheetState
 
               const Divider(height: 1),
 
-              // 4. 历史记录保留时长
-              ListTile(
-                leading: const Icon(Icons.history_toggle_off_rounded),
-                title: const Text('历史消息保留时长'),
-                subtitle: const Text('超过周期的历史消息将被服务端清理'),
-                trailing: Text(
-                  channel?.retentionDisplay ?? '永久保留',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
+              // 4. 历史记录保留时长（来自站点设置，非频道字段）
+              Builder(
+                builder: (context) {
+                  final settings =
+                      PreloadedDataService().siteSettingsSync ?? const {};
+                  final channelDays =
+                      (settings['chat_channel_retention_days'] as num?)
+                          ?.toInt();
+                  final dmDays =
+                      (settings['chat_dm_retention_days'] as num?)?.toInt();
+                  final text = channel?.retentionDisplay(
+                        channelRetentionDays: channelDays,
+                        dmRetentionDays: dmDays,
+                      ) ??
+                      '永久保留';
+                  return ListTile(
+                    leading: const Icon(Icons.history_toggle_off_rounded),
+                    title: const Text('历史消息保留时长'),
+                    subtitle: const Text('由站点设置控制，超过周期的历史消息将被清理'),
+                    trailing: Text(
+                      text,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  );
+                },
               ),
 
               // 5. 编辑频道名称 / 缩略名 / 表情
