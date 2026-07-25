@@ -80,10 +80,10 @@ class Chatable {
 
   factory Chatable.fromJson(Map<String, dynamic> json) {
     return Chatable(
-      id: json['id'] as int,
-      username: json['username'] as String? ?? '',
-      name: json['name'] as String?,
-      avatarTemplate: json['avatar_template'] as String?,
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      username: json['username']?.toString() ?? '',
+      name: json['name']?.toString(),
+      avatarTemplate: json['avatar_template']?.toString(),
     );
   }
 }

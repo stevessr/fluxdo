@@ -62,7 +62,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
         data: data,
       );
       final respData = response.data as Map<String, dynamic>;
-      return respData['message_id'] as int;
+      return (respData['message_id'] as num?)?.toInt() ?? 0;
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -118,7 +118,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
       data: {'target_usernames': targetUsernames},
     );
     final respData = response.data as Map<String, dynamic>;
-    return respData['id'] as int;
+    return (respData['id'] as num?)?.toInt() ?? 0;
   }
 
   /// 搜索 Chat 可提及用户

@@ -41,29 +41,29 @@ class ChatChannel {
 
   factory ChatChannel.fromJson(Map<String, dynamic> json) {
     return ChatChannel(
-      id: json['id'] as int,
-      title: json['title'] as String?,
-      slug: json['slug'] as String?,
-      chatableType: json['chatable_type'] as String?,
-      chatableId: json['chatable_id'] as int?,
-      chatableUrl: json['chatable_url'] as String?,
-      description: json['description'] as String?,
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      title: json['title']?.toString(),
+      slug: json['slug']?.toString(),
+      chatableType: json['chatable_type']?.toString(),
+      chatableId: (json['chatable_id'] as num?)?.toInt(),
+      chatableUrl: json['chatable_url']?.toString(),
+      description: json['description']?.toString(),
       lastMessageSentAt: json['last_message_sent_at'] != null
-          ? TimeUtils.parseUtcTime(json['last_message_sent_at'] as String)
+          ? TimeUtils.parseUtcTime(json['last_message_sent_at']?.toString())
           : null,
-      lastMessage: json['last_message'] != null
+      lastMessage: json['last_message'] is Map
           ? ChatMessage.fromJson(
-              json['last_message'] as Map<String, dynamic>)
+              Map<String, dynamic>.from(json['last_message'] as Map))
           : null,
-      lastReadMessageId: json['last_read_message_id'] as int?,
-      membersCount: json['members_count'] as int?,
+      lastReadMessageId: (json['last_read_message_id'] as num?)?.toInt(),
+      membersCount: (json['members_count'] as num?)?.toInt(),
       muted: json['muted'] as bool? ?? false,
       mutedUntil: json['muted_until'] != null
-          ? TimeUtils.parseUtcTime(json['muted_until'] as String)
+          ? TimeUtils.parseUtcTime(json['muted_until']?.toString())
           : null,
-      unreadCount: json['unread_count'] as int? ?? 0,
-      unreadMentions: json['unread_mentions'] as int? ?? 0,
-      meta: json['meta'] as Map<String, dynamic>?,
+      unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
+      unreadMentions: (json['unread_mentions'] as num?)?.toInt() ?? 0,
+      meta: json['meta'] is Map ? Map<String, dynamic>.from(json['meta'] as Map) : null,
     );
   }
 }

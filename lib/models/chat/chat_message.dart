@@ -35,25 +35,25 @@ class ChatMessage {
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
-      id: json['id'] as int,
-      message: json['message'] as String? ?? '',
-      cooked: json['cooked'] as String?,
-      createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?) ?? DateTime.now(),
-      chatChannelId: json['chat_channel_id'] as int,
-      user: json['user'] != null
-          ? ChatUser.fromJson(json['user'] as Map<String, dynamic>)
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      message: json['message']?.toString() ?? '',
+      cooked: json['cooked']?.toString(),
+      createdAt: TimeUtils.parseUtcTime(json['created_at']?.toString()) ?? DateTime.now(),
+      chatChannelId: (json['chat_channel_id'] as num?)?.toInt() ?? 0,
+      user: json['user'] is Map
+          ? ChatUser.fromJson(Map<String, dynamic>.from(json['user'] as Map))
           : null,
-      inReplyToId: json['in_reply_to_id'] as int?,
-      threadId: json['thread_id'] as int?,
+      inReplyToId: (json['in_reply_to_id'] as num?)?.toInt(),
+      threadId: (json['thread_id'] as num?)?.toInt(),
       uploads: (json['uploads'] as List?)
           ?.map((e) => Map<String, dynamic>.from(e as Map))
           .toList(),
       edited: json['edited'] as bool? ?? false,
       deleted: json['deleted'] as bool? ?? false,
       deletedAt: json['deleted_at'] != null
-          ? TimeUtils.parseUtcTime(json['deleted_at'] as String)
+          ? TimeUtils.parseUtcTime(json['deleted_at']?.toString())
           : null,
-      deletedById: json['deleted_by_id'] as int?,
+      deletedById: (json['deleted_by_id'] as num?)?.toInt(),
     );
   }
 }
