@@ -146,27 +146,51 @@ mixin _ChatMixin on _DiscourseServiceBase {
       queryParameters['filter'] = filter;
     }
 
+    // 1. 尝试标准 Endpoint /chat/api/channels/$channelId/members
     try {
       final response = await _dio.get(
         '/chat/api/channels/$channelId/members',
         queryParameters: queryParameters.isEmpty ? null : queryParameters,
       );
-      final data = response.data;
-      if (data is Map) {
-        final list = data['members'] ??
-            data['memberships'] ??
-            data['users'] ??
-            data['channel_members'];
-        if (list is List) {
-          return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        }
-      } else if (data is List) {
-        return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final list = _extractMemberList(response.data);
+      if (list.isNotEmpty) return list;
+    } catch (_) {}
+
+    // 2. 尝试 JSON 路由 Endpoint /chat/chat_channels/$channelId/members.json
+    try {
+      final response = await _dio.get(
+        '/chat/chat_channels/$channelId/members.json',
+        queryParameters: queryParameters.isEmpty ? null : queryParameters,
+      );
+      final list = _extractMemberList(response.data);
+      if (list.isNotEmpty) return list;
+    } catch (_) {}
+
+    // 3. 尝试频道详情 Endpoint /chat/api/channels/$channelId
+    try {
+      final response = await _dio.get('/chat/api/channels/$channelId');
+      final list = _extractMemberList(response.data);
+      if (list.isNotEmpty) return list;
+    } catch (_) {}
+
+    return [];
+  }
+
+  List<Map<String, dynamic>> _extractMemberList(dynamic data) {
+    if (data is Map) {
+      final list = data['members'] ??
+          data['memberships'] ??
+          data['users'] ??
+          data['channel_members'] ??
+          data['user_chat_channel_memberships'] ??
+          (data['chat_channel'] is Map ? data['chat_channel']['memberships'] : null);
+      if (list is List) {
+        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
-      return [];
-    } on DioException catch (e) {
-      _throwApiError(e);
+    } else if (data is List) {
+      return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     }
+    return [];
   }
 
   /// 向指定频道添加/邀请成员

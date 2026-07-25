@@ -110,7 +110,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       setState(() => _isAtBottom = atBottom);
     }
 
-    if (_scrollController.position.pixels <= 50) {
+    if (_scrollController.position.pixels <= 200) {
       _loadMoreMessages();
     }
   }
@@ -476,8 +476,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
                 return NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
-                    if (notification is ScrollEndNotification &&
-                        notification.metrics.pixels <= 50) {
+                    if (notification.metrics.pixels <= 200) {
                       _loadMoreMessages();
                     }
                     return false;
@@ -953,6 +952,53 @@ class _ChatMessageBubble extends StatelessWidget {
     required this.onLongPress,
   });
 
+  List<String> _extractImageUrls() {
+    final urls = <String>[];
+    final seen = <String>{};
+
+    void addUrl(String? raw) {
+      if (raw == null || raw.trim().isEmpty) return;
+      final trimmed = raw.trim();
+      if (trimmed.startsWith('upload://')) return;
+      final resolved = UrlHelper.resolveUrlWithCdn(trimmed);
+      if (resolved.isNotEmpty && seen.add(resolved)) {
+        urls.add(resolved);
+      }
+    }
+
+    // 1. 从 uploads 字典列表中提取 HTTP 图像 URL (优先使用 url / full_url / short_path)
+    if (message.uploads != null) {
+      for (final u in message.uploads!) {
+        final path = u['url'] as String? ??
+            u['full_url'] as String? ??
+            u['short_path'] as String? ??
+            (u['short_url'] is String && !(u['short_url'] as String).startsWith('upload://')
+                ? u['short_url'] as String
+                : null);
+        addUrl(path);
+      }
+    }
+
+    // 2. 从 message 文本中匹配 markdown 图片格式 ![alt](url)
+    final mdRegex = RegExp(r'!\[.*?\]\((.*?)\)');
+    for (final match in mdRegex.allMatches(message.message)) {
+      final urlCandidate = match.group(1);
+      if (urlCandidate != null) {
+        addUrl(urlCandidate.split(' ').first);
+      }
+    }
+
+    // 3. 从 cooked HTML 中匹配 <img src="...">
+    if (message.cooked != null && message.cooked!.isNotEmpty) {
+      final htmlRegex = RegExp(r'<img[^>]+src=["\']([^"\']+)["\']', caseSensitive: false);
+      for (final match in htmlRegex.allMatches(message.cooked!)) {
+        addUrl(match.group(1));
+      }
+    }
+
+    return urls;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (message.deleted) {
@@ -962,6 +1008,14 @@ class _ChatMessageBubble extends StatelessWidget {
     final alignment =
         isOwnMessage ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final showSender = !isOwnMessage && message.user != null;
+    final imageUrls = _extractImageUrls();
+
+    // 过滤除去纯图片 markdown 链接后的文本展示
+    String displayText = message.message;
+    for (final url in imageUrls) {
+      displayText = displayText.replaceAll(RegExp('!\\[.*?\\]\\(${RegExp.escape(url)}\\)'), '');
+    }
+    displayText = displayText.replaceAll(RegExp(r'!\[.*?\]\(upload://[^\)]+\)'), '').trim();
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -1067,26 +1121,20 @@ class _ChatMessageBubble extends StatelessWidget {
                                   ),
                                 ),
 
-                              // 图片附件展示
-                              if (message.uploads != null &&
-                                  message.uploads!.isNotEmpty)
+                              // 图片附件与 HTML 媒体展示
+                              if (imageUrls.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 4),
                                   child: Wrap(
-                                    spacing: 4,
-                                    runSpacing: 4,
-                                    children: message.uploads!.map((u) {
-                                      final url = UrlHelper.resolveUrlWithCdn(
-                                        u['short_url'] as String? ??
-                                            u['url'] as String? ??
-                                            '',
-                                      );
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: imageUrls.map((url) {
                                       return ClipRRect(
                                         borderRadius: BorderRadius.circular(8),
                                         child: CachedImage(
                                           url: url,
-                                          width: 140,
-                                          height: 100,
+                                          width: 180,
+                                          height: 120,
                                           fit: BoxFit.cover,
                                         ),
                                       );
@@ -1095,14 +1143,15 @@ class _ChatMessageBubble extends StatelessWidget {
                                 ),
 
                               // 消息文本
-                              SelectableText(
-                                message.message,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: isOwnMessage
-                                      ? theme.colorScheme.onPrimaryContainer
-                                      : theme.colorScheme.onSurface,
+                              if (displayText.isNotEmpty)
+                                SelectableText(
+                                  displayText,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: isOwnMessage
+                                        ? theme.colorScheme.onPrimaryContainer
+                                        : theme.colorScheme.onSurface,
+                                  ),
                                 ),
-                              ),
 
                               const SizedBox(height: 2),
 

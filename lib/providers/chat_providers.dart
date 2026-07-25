@@ -165,7 +165,9 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
         } catch (_) {}
       }
 
-      final hasMore = raw['can_load_more_past'] as bool? ?? false;
+      final hasMore = (raw['can_load_more_past'] as bool?) ??
+          (raw['meta'] is Map ? raw['meta']['can_load_more_past'] as bool? : null) ??
+          (messages.length >= 10);
       canLoadMoreFuture = raw['can_load_more_future'] as bool? ?? false;
       targetMessageId = (raw['target_message_id'] as num?)?.toInt();
       return PagedPage(items: messages, hasMore: hasMore);
@@ -184,7 +186,9 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
         targetMessageId: currentItems.isNotEmpty ? currentItems.first.id : null,
       );
       final messages = _parseMessages(raw);
-      final hasMorePast = raw['can_load_more_past'] as bool? ?? false;
+      final hasMorePast = (raw['can_load_more_past'] as bool?) ??
+          (raw['meta'] is Map ? raw['meta']['can_load_more_past'] as bool? : null) ??
+          (messages.length >= 10);
       canLoadMoreFuture = raw['can_load_more_future'] as bool? ?? false;
       return PagedPage(
         items: [...messages, ...currentItems],
@@ -326,13 +330,45 @@ final chatSearchProvider =
 final chatChannelMembersProvider =
     FutureProvider.family<List<ChatUser>, int>((ref, channelId) async {
   final service = ref.read(discourseServiceProvider);
-  final membersRaw = await service.getChannelMembers(channelId);
-  return membersRaw.map((e) {
-    final userMap = e['user'] is Map
-        ? Map<String, dynamic>.from(e['user'] as Map)
-        : Map<String, dynamic>.from(e);
-    return ChatUser.fromJson(userMap);
-  }).where((user) => user.username.isNotEmpty).toList();
+  try {
+    final membersRaw = await service.getChannelMembers(channelId);
+    final list = <ChatUser>[];
+    final seenUsernames = <String>{};
+    for (final e in membersRaw) {
+      Map<String, dynamic>? userMap;
+      if (e['user'] is Map) {
+        userMap = Map<String, dynamic>.from(e['user'] as Map);
+      } else if (e['user_chat_channel_membership'] is Map &&
+          e['user_chat_channel_membership']['user'] is Map) {
+        userMap = Map<String, dynamic>.from(
+            e['user_chat_channel_membership']['user'] as Map);
+      } else {
+        userMap = Map<String, dynamic>.from(e);
+      }
+      final u = ChatUser.fromJson(userMap);
+      if (u.username.isNotEmpty && seenUsernames.add(u.username)) {
+        list.add(u);
+      }
+    }
+    if (list.isNotEmpty) return list;
+  } catch (_) {}
+
+  // 兜底方案：从当前频道的聊天消息列表中提取发言过或提及过的用户
+  final messagesState = ref.read(chatMessagesProvider(channelId));
+  final fallbackList = <ChatUser>[];
+  final seen = <String>{};
+  final currentMessages = messagesState.value ?? [];
+  for (final msg in currentMessages) {
+    if (msg.user != null && seen.add(msg.user!.username)) {
+      fallbackList.add(ChatUser(
+        id: msg.user!.id,
+        username: msg.user!.username,
+        name: msg.user!.name,
+        avatarTemplate: msg.user!.avatarTemplate,
+      ));
+    }
+  }
+  return fallbackList;
 });
 
 final addChannelMemberProvider =
