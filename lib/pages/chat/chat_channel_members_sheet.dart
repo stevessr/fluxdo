@@ -134,7 +134,9 @@ class _ChatChannelMembersSheetState
                               ),
                             ),
                             Text(
-                              widget.channelTitle,
+                              membersAsync.value != null
+                                  ? '${widget.channelTitle} (${membersAsync.value!.length}人)'
+                                  : widget.channelTitle,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),

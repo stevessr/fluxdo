@@ -13,6 +13,7 @@ import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
 import 'chat_message_page.dart';
+import 'chat_browse_channels_page.dart';
 
 /// Chat 频道列表页面
 ///
@@ -176,11 +177,30 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'newDm',
-        onPressed: _openNewDmDialog,
-        tooltip: context.l10n.chat_new_dm,
-        child: const Icon(AppIcons.add),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'browseChannels',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ChatBrowseChannelsPage(),
+                ),
+              );
+            },
+            tooltip: '浏览频道',
+            child: const Icon(Symbols.explore_rounded),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: 'newDm',
+            onPressed: _openNewDmDialog,
+            tooltip: context.l10n.chat_new_dm,
+            child: const Icon(AppIcons.add),
+          ),
+        ],
       ),
     );
   }

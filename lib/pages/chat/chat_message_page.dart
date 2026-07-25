@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
@@ -11,6 +12,7 @@ import '../../models/emoji.dart';
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
+import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/common/cached_image.dart';
@@ -409,11 +411,54 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     );
   }
 
+  /// 最近使用的反应表情 SharedPreferences key
+  static const String _recentReactionEmojisKey = 'recent_reaction_emojis';
+
+  /// 记录最近使用的反应表情
+  Future<void> _saveRecentReactionEmoji(String emojiName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_recentReactionEmojisKey) ?? [];
+    list.remove(emojiName);
+    list.insert(0, emojiName);
+    // 最多保留 30 个
+    final trimmed = list.length > 30 ? list.sublist(0, 30) : list;
+    await prefs.setStringList(_recentReactionEmojisKey, trimmed);
+  }
+
+  /// 加载最近使用的反应表情
+  Future<List<String>> _loadRecentReactionEmojis() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_recentReactionEmojisKey) ?? [];
+  }
+
+  /// 打开完整表情选择器用于反应
+  void _showFullEmojiPickerForReaction(ChatMessage message) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.45,
+        child: EmojiStickerPanel(
+          onEmojiSelected: (emoji) {
+            Navigator.pop(ctx);
+            _saveRecentReactionEmoji(emoji.name);
+            ref
+                .read(chatMessagesProvider(widget.channelId).notifier)
+                .toggleReaction(message.id, emoji.name);
+          },
+          onStickerSelected: (_) {},
+          onBackspace: null,
+        ),
+      ),
+    );
+  }
+
   /// 长按弹出消息操作 BottomSheet
   void _showMessageActionSheet(ChatMessage message, bool isOwnMessage) {
     if (message.deleted) return;
-
-    final quickEmojis = ['+1', 'heart', 'tada', 'smile', 'open_mouth', 'cry', 'fire', 'thinking'];
 
     showModalBottomSheet(
       context: context,
@@ -424,22 +469,61 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 快捷 Emoji 回应工具栏
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    ...quickEmojis.map((emoji) {
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 10),
+            // 快捷 Emoji 回应工具栏：显示最近使用的表情 + 打开完整选择器按钮
+            FutureBuilder<List<String>>(
+              future: _loadRecentReactionEmojis(),
+              builder: (ctx, snapshot) {
+                final recentEmojis = snapshot.data ?? [];
+                // 根据屏幕宽度计算可显示的表情数量（每个约 46px，留出 + 按钮空间）
+                final availableWidth = MediaQuery.of(ctx).size.width - 32 - 46;
+                final maxCount = (availableWidth / 46).floor().clamp(0, recentEmojis.length);
+                final displayEmojis = recentEmojis.take(maxCount).toList();
+
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  child: Row(
+                    children: [
+                      // 最近使用的表情
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: displayEmojis.map((emoji) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: InkWell(
+                                  onTap: () {
+                                    Navigator.pop(ctx);
+                                    _saveRecentReactionEmoji(emoji);
+                                    ref
+                                        .read(chatMessagesProvider(widget.channelId).notifier)
+                                        .toggleReaction(message.id, emoji);
+                                  },
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(ctx)
+                                          .colorScheme
+                                          .surfaceContainerHighest
+                                          .withValues(alpha: 0.7),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: EmojiText(':$emoji:', style: const TextStyle(fontSize: 22)),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                      // 打开完整表情选择器的 + 按钮
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
                         child: InkWell(
                           onTap: () {
                             Navigator.pop(ctx);
-                            ref
-                                .read(chatMessagesProvider(widget.channelId).notifier)
-                                .toggleReaction(message.id, emoji);
+                            _showFullEmojiPickerForReaction(message);
                           },
                           borderRadius: BorderRadius.circular(24),
                           child: Container(
@@ -447,18 +531,22 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             decoration: BoxDecoration(
                               color: Theme.of(ctx)
                                   .colorScheme
-                                  .surfaceContainerHighest
+                                  .primaryContainer
                                   .withValues(alpha: 0.7),
                               shape: BoxShape.circle,
                             ),
-                            child: EmojiText(':$emoji:', style: const TextStyle(fontSize: 22)),
+                            child: Icon(
+                              Icons.add_rounded,
+                              size: 22,
+                              color: Theme.of(ctx).colorScheme.onPrimaryContainer,
+                            ),
                           ),
                         ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
             const Divider(height: 1),
             ListTile(
@@ -655,7 +743,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
                 return NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
-                    if (notification.metrics.pixels <= 200) {
+                    if (notification.metrics.axis == Axis.vertical &&
+                        notification.metrics.pixels <= 300) {
                       _loadMoreMessages();
                     }
                     return false;
@@ -776,6 +865,22 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   Widget _buildLoadMoreIndicator() {
     final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
+    if (notifier.isLoadMoreFailed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Center(
+          child: TextButton.icon(
+            onPressed: () => notifier.retryLoadMore(),
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('加载历史消息失败，点击重试'),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
+      );
+    }
+
     if (!notifier.canLoadMorePast && !notifier.isLoadingMore) {
       return const SizedBox.shrink();
     }
@@ -789,18 +894,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 height: 24,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : SizedBox(
-                width: 32,
-                height: 32,
-                child: IconButton(
-                  icon: Icon(
-                    Icons.expand_less_rounded,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  tooltip: context.l10n.chat_load_more,
-                  onPressed: _loadMoreMessages,
+            : TextButton.icon(
+                onPressed: _loadMoreMessages,
+                icon: const Icon(Icons.expand_less_rounded, size: 18),
+                label: Text(context.l10n.chat_load_more),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
                 ),
               ),
       ),
@@ -1201,7 +1300,7 @@ class _ChatMessageBubble extends StatelessWidget {
         if (isEmojiUrlOrTag(imgTag)) continue;
 
         final srcMatch =
-            RegExp(r'src=["\']([^"\']+)["\']', caseSensitive: false)
+            RegExp('src=["\']([^"\']+)["\']', caseSensitive: false)
                 .firstMatch(imgTag);
         if (srcMatch != null) {
           addUrl(srcMatch.group(1));
@@ -1381,8 +1480,16 @@ class _ChatMessageBubble extends StatelessWidget {
                                   ),
                                 ),
 
-                              // 消息文本 (将 :emoji: 转换渲染为图片表情)
-                              if (displayText.isNotEmpty)
+                              // 消息内容渲染：优先使用 cooked HTML（支持引用、onebox 等），
+                              // 回退到纯文本 + emoji 渲染
+                              if (message.cooked != null && message.cooked!.isNotEmpty)
+                                _CookedHtmlContent(
+                                  cooked: message.cooked!,
+                                  messageId: message.id,
+                                  isOwnMessage: isOwnMessage,
+                                  theme: theme,
+                                )
+                              else if (displayText.isNotEmpty)
                                 SelectableEmojiText(
                                   displayText,
                                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -1543,6 +1650,43 @@ class _ChatMessageBubble extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 聊天消息 cooked HTML 渲染组件
+///
+/// 使用 [FluxdoRenderCallbacks.generic] 渲染 Discourse cooked HTML，
+/// 支持引用（quote）、onebox（链接预览）、代码块、图片等富文本内容。
+class _CookedHtmlContent extends StatelessWidget {
+  final String cooked;
+  final int messageId;
+  final bool isOwnMessage;
+  final ThemeData theme;
+
+  const _CookedHtmlContent({
+    required this.cooked,
+    required this.messageId,
+    required this.isOwnMessage,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final callbacks = FluxdoRenderCallbacks.generic(
+      heroTagNamespace: 'chat_msg_$messageId',
+    );
+    return callbacks.render(
+      cookedHtml: cooked,
+      baseTextStyle: theme.textTheme.bodyMedium?.copyWith(
+        color: isOwnMessage
+            ? theme.colorScheme.onPrimaryContainer
+            : theme.colorScheme.onSurface,
+      ),
+      selectionEnabled: true,
+      compact: true,
+      trimTopMargin: true,
+      trimBottomMargin: true,
     );
   }
 }

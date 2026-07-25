@@ -1,5 +1,6 @@
 import '../../utils/time_utils.dart';
 import 'chat_message.dart';
+import 'chat_user.dart';
 
 /// Chat 频道数据模型
 class ChatChannel {
@@ -93,15 +94,89 @@ class ChatChannel {
   String get retentionDisplay {
     final days = retentionDays ??
         (meta?['retention_days'] as num?)?.toInt() ??
+        (meta?['auto_delete_days'] as num?)?.toInt() ??
         (meta?['auto_archive_duration_days'] as num?)?.toInt();
     if (days != null && days > 0) return '$days 天';
 
     final hours = retentionHours ??
         (meta?['retention_hours'] as num?)?.toInt() ??
+        (meta?['auto_delete_hours'] as num?)?.toInt() ??
         (meta?['auto_archive_duration_hours'] as num?)?.toInt();
     if (hours != null && hours > 0) return '$hours 小时';
 
     return '永久保留';
+  }
+
+  /// 内部工具：解析保留时长
+  static (int? days, int? hours) _parseRetentionValues(Map<String, dynamic> json) {
+    int? parsedDays;
+    int? parsedHours;
+
+    void parseValue(dynamic val, {bool defaultIsHours = false}) {
+      if (val == null || parsedDays != null || parsedHours != null) return;
+      if (val is num) {
+        final n = val.toInt();
+        if (n > 0) {
+          if (defaultIsHours) {
+            parsedHours = n;
+          } else {
+            parsedDays = n;
+          }
+        }
+      } else if (val is String) {
+        final str = val.trim().toLowerCase();
+        if (str == 'never' || str == 'none' || str == '0' || str.isEmpty) return;
+        final match = RegExp(r'^(\d+)_?(day|days|hour|hours|year|years)?$').firstMatch(str);
+        if (match != null) {
+          final numVal = int.tryParse(match.group(1) ?? '');
+          final unit = match.group(2);
+          if (numVal != null && numVal > 0) {
+            if (unit == 'hour' || unit == 'hours' || defaultIsHours) {
+              parsedHours = numVal;
+            } else if (unit == 'year' || unit == 'years') {
+              parsedDays = numVal * 365;
+            } else {
+              parsedDays = numVal;
+            }
+          }
+        } else {
+          final n = int.tryParse(str);
+          if (n != null && n > 0) {
+            if (defaultIsHours) {
+              parsedHours = n;
+            } else {
+              parsedDays = n;
+            }
+          }
+        }
+      }
+    }
+
+    final metaObj = json['meta'] is Map ? Map<String, dynamic>.from(json['meta'] as Map) : null;
+    final chatableObj = json['chatable'] is Map ? Map<String, dynamic>.from(json['chatable'] as Map) : null;
+
+    // 天数解析
+    parseValue(json['retention_days']);
+    parseValue(metaObj?['retention_days']);
+    parseValue(chatableObj?['retention_days']);
+    parseValue(json['auto_delete_days']);
+    parseValue(metaObj?['auto_delete_days']);
+    parseValue(json['auto_archive_duration_days']);
+    parseValue(metaObj?['auto_archive_duration_days']);
+
+    // 字符串偏好设置解析 (e.g. "90_days", "24_hours")
+    parseValue(json['auto_delete_preference']);
+    parseValue(metaObj?['auto_delete_preference']);
+    parseValue(chatableObj?['auto_delete_preference']);
+
+    // 小时数解析
+    parseValue(json['retention_hours'], defaultIsHours: true);
+    parseValue(metaObj?['retention_hours'], defaultIsHours: true);
+    parseValue(chatableObj?['retention_hours'], defaultIsHours: true);
+    parseValue(json['auto_delete_hours'], defaultIsHours: true);
+    parseValue(metaObj?['auto_delete_hours'], defaultIsHours: true);
+    parseValue(json['auto_archive_duration_hours'], defaultIsHours: true);
+    return (parsedDays, parsedHours);
   }
 
   factory ChatChannel.fromJson(Map<String, dynamic> json) {
@@ -134,10 +209,7 @@ class ChatChannel {
     final notifLevel = (membership?['notification_level'] as String?) ??
         (json['notification_level'] as String?);
 
-    final rDays = (json['retention_days'] as num?)?.toInt() ??
-        (json['auto_archive_duration_days'] as num?)?.toInt();
-    final rHours = (json['retention_hours'] as num?)?.toInt() ??
-        (json['auto_archive_duration_hours'] as num?)?.toInt();
+    final (rDays, rHours) = _parseRetentionValues(json);
 
     List<ChatUser>? parsedDmUsers;
     final chatableObj = json['chatable'] is Map ? json['chatable'] as Map : null;

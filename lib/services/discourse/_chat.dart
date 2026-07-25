@@ -156,8 +156,13 @@ mixin _ChatMixin on _DiscourseServiceBase {
   Future<List<Map<String, dynamic>>> getChannelMembers(
     int channelId, {
     String? filter,
+    int limit = 200,
+    int offset = 0,
   }) async {
-    final queryParameters = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{
+      'limit': limit,
+      'offset': offset,
+    };
     if (filter != null && filter.isNotEmpty) {
       queryParameters['filter'] = filter;
     }
@@ -165,7 +170,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     try {
       final response = await _dio.get(
         '/chat/api/channels/$channelId/members',
-        queryParameters: queryParameters.isEmpty ? null : queryParameters,
+        queryParameters: queryParameters,
       );
       return _extractMemberList(response.data);
     } on DioException catch (e) {
@@ -175,15 +180,74 @@ mixin _ChatMixin on _DiscourseServiceBase {
 
   List<Map<String, dynamic>> _extractMemberList(dynamic data) {
     if (data is Map) {
-      final list = data['members'] ??
-          data['memberships'] ??
-          data['users'] ??
-          data['channel_members'] ??
-          data['user_chat_channel_memberships'] ??
-          (data['chat_channel'] is Map ? data['chat_channel']['memberships'] : null);
-      if (list is List) {
-        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final mapData = Map<String, dynamic>.from(data);
+      final usersMap = <int, Map<String, dynamic>>{};
+
+      // 1. 提取顶层 users 数组 (Discourse 标准 API 中包含完整的 user 对象)
+      final rawUsers = mapData['users'] ??
+          (mapData['chat_channel'] is Map ? mapData['chat_channel']['users'] : null) ??
+          mapData['target_users'];
+      if (rawUsers is List) {
+        for (final u in rawUsers) {
+          if (u is Map) {
+            final uMap = Map<String, dynamic>.from(u);
+            final id = (uMap['id'] as num?)?.toInt();
+            if (id != null) usersMap[id] = uMap;
+          }
+        }
       }
+
+      // 2. 提取成员或 membership 列表
+      final rawMembers = mapData['members'] ??
+          mapData['memberships'] ??
+          mapData['channel_members'] ??
+          mapData['user_chat_channel_memberships'] ??
+          (mapData['chat_channel'] is Map
+              ? (mapData['chat_channel']['memberships'] ?? mapData['chat_channel']['members'])
+              : null);
+
+      final result = <Map<String, dynamic>>[];
+      final addedIds = <int>{};
+
+      if (rawMembers is List) {
+        for (final e in rawMembers) {
+          if (e is! Map) continue;
+          final item = Map<String, dynamic>.from(e);
+          Map<String, dynamic>? userObj;
+
+          if (item['user'] is Map) {
+            userObj = Map<String, dynamic>.from(item['user'] as Map);
+          } else if (item['user_chat_channel_membership'] is Map &&
+              item['user_chat_channel_membership']['user'] is Map) {
+            userObj = Map<String, dynamic>.from(
+                item['user_chat_channel_membership']['user'] as Map);
+          } else {
+            final userId = (item['user_id'] as num?)?.toInt() ??
+                (item['id'] as num?)?.toInt();
+            if (userId != null && usersMap.containsKey(userId)) {
+              userObj = usersMap[userId];
+            } else if (item.containsKey('username')) {
+              userObj = item;
+            }
+          }
+
+          if (userObj != null) {
+            final uid = (userObj['id'] as num?)?.toInt() ?? 0;
+            if (addedIds.add(uid)) {
+              result.add(userObj);
+            }
+          }
+        }
+      }
+
+      // 3. 将顶层 usersMap 中尚未包含的成员全部加入列表
+      for (final entry in usersMap.entries) {
+        if (addedIds.add(entry.key)) {
+          result.add(entry.value);
+        }
+      }
+
+      return result;
     } else if (data is List) {
       return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     }
@@ -284,6 +348,61 @@ mixin _ChatMixin on _DiscourseServiceBase {
 
     try {
       await _dio.put('/chat/api/channels/$channelId', data: data);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 浏览论坛中的公开频道
+  ///
+  /// [status] 可选值: 'open' | 'closed' | null(全部)
+  /// [filter] 按名称搜索
+  /// [offset] 分页偏移
+  Future<Map<String, dynamic>> browseChannels({
+    String? status,
+    String? filter,
+    int offset = 0,
+    int limit = 25,
+  }) async {
+    final queryParameters = <String, dynamic>{
+      'limit': limit,
+      'offset': offset,
+    };
+    if (status != null && status.isNotEmpty) {
+      queryParameters['status'] = status;
+    }
+    if (filter != null && filter.isNotEmpty) {
+      queryParameters['filter'] = filter;
+    }
+
+    try {
+      final response = await _dio.get(
+        '/chat/api/channels',
+        queryParameters: queryParameters,
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 加入（关注）指定频道
+  ///
+  /// 使用 POST /chat/api/channels/:id/memberships/me 端点
+  Future<void> joinChannel(int channelId) async {
+    try {
+      await _dio.post('/chat/api/channels/$channelId/memberships/me');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 离开（取消关注）指定频道
+  ///
+  /// 使用 DELETE /chat/api/channels/:id/memberships/me 端点
+  Future<void> leaveChannel(int channelId) async {
+    try {
+      await _dio.delete('/chat/api/channels/$channelId/memberships/me');
     } on DioException catch (e) {
       _throwApiError(e);
     }
