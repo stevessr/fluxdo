@@ -28,6 +28,7 @@ class ChatChannel {
   final int? retentionDays;
   final int? retentionHours;
   final String? notificationLevel;
+  final List<ChatUser>? dmUsers;
 
   const ChatChannel({
     required this.id,
@@ -55,6 +56,7 @@ class ChatChannel {
     this.retentionDays,
     this.retentionHours,
     this.notificationLevel,
+    this.dmUsers,
   });
 
   bool get canAddMembers {
@@ -64,6 +66,27 @@ class ChatChannel {
     return userCanAddMembers == true ||
         (userChatChannelMembership?['can_add_members'] as bool? ?? false) ||
         (meta?['can_add_members'] as bool? ?? false);
+  }
+
+  /// 获取 DM 频道的对方用户
+  ChatUser? getDmTargetUser(int? currentUserId) {
+    if (chatableType != 'DirectMessage' && chatableType != 'DirectMessageChannel') {
+      return null;
+    }
+    // 1. 从 dmUsers 中寻找非当前用户
+    if (dmUsers != null && dmUsers!.isNotEmpty) {
+      for (final u in dmUsers!) {
+        if (currentUserId == null || u.id != currentUserId) {
+          return u;
+        }
+      }
+    }
+    // 2. 从 lastMessage 中寻找非当前用户
+    if (lastMessage?.user != null &&
+        (currentUserId == null || lastMessage!.user!.id != currentUserId)) {
+      return lastMessage!.user;
+    }
+    return lastMessage?.user;
   }
 
   /// 格式化显示历史消息保留时长
@@ -116,6 +139,19 @@ class ChatChannel {
     final rHours = (json['retention_hours'] as num?)?.toInt() ??
         (json['auto_archive_duration_hours'] as num?)?.toInt();
 
+    List<ChatUser>? parsedDmUsers;
+    final chatableObj = json['chatable'] is Map ? json['chatable'] as Map : null;
+    final usersList = json['users'] ??
+        json['target_users'] ??
+        json['members'] ??
+        (chatableObj?['users'] ?? chatableObj?['members'] ?? chatableObj?['target_users']);
+    if (usersList is List) {
+      parsedDmUsers = usersList
+          .whereType<Map>()
+          .map((u) => ChatUser.fromJson(Map<String, dynamic>.from(u)))
+          .toList();
+    }
+
     return ChatChannel(
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['title']?.toString(),
@@ -151,6 +187,7 @@ class ChatChannel {
       retentionDays: rDays,
       retentionHours: rHours,
       notificationLevel: notifLevel,
+      dmUsers: parsedDmUsers,
     );
   }
 }

@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
 import '../../providers/chat_providers.dart';
+import '../../providers/core_providers.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
+import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
@@ -329,13 +331,13 @@ class ChatChannelTile extends ConsumerWidget {
   }
 
   /// 获取频道显示标题
-  String _resolveTitle(BuildContext context) {
-    final isDm = channel.chatableType == 'DirectMessage';
+  String _resolveTitle(BuildContext context, ChatUser? currentUser) {
+    final isDm = channel.chatableType == 'DirectMessage' ||
+        channel.chatableType == 'DirectMessageChannel';
     if (isDm) {
-      final lastMessage = channel.lastMessage;
-      final otherUser = lastMessage?.user;
-      if (otherUser != null) {
-        return otherUser.name ?? otherUser.username;
+      final targetUser = channel.getDmTargetUser(currentUser?.id);
+      if (targetUser != null) {
+        return targetUser.name ?? targetUser.username;
       }
       if (channel.title != null && channel.title!.isNotEmpty) {
         return channel.title!;
@@ -358,22 +360,38 @@ class ChatChannelTile extends ConsumerWidget {
   }
 
   /// 获取频道头像
-  Widget _buildLeading(BuildContext context) {
-    final isDm = channel.chatableType == 'DirectMessage';
+  Widget _buildLeading(BuildContext context, ChatUser? currentUser) {
+    final isDm = channel.chatableType == 'DirectMessage' ||
+        channel.chatableType == 'DirectMessageChannel';
 
     if (isDm) {
-      final otherUser = channel.lastMessage?.user;
-      if (otherUser != null) {
-        final avatarUrl = _resolveAvatarUrl(otherUser);
+      final targetUser = channel.getDmTargetUser(currentUser?.id);
+      if (targetUser != null) {
+        final avatarUrl = _resolveAvatarUrl(targetUser);
         return SmartAvatar(
           imageUrl: avatarUrl,
           radius: 22,
-          fallbackText: otherUser.username,
+          fallbackText: targetUser.username,
         );
       }
       return const CircleAvatar(
         radius: 22,
         child: Icon(AppIcons.person, size: 24),
+      );
+    }
+
+    // 如果设置了自定义频道表情/图标
+    if (channel.emoji != null && channel.emoji!.isNotEmpty) {
+      final emojiCode = channel.emoji!.startsWith(':')
+          ? channel.emoji!
+          : ':${channel.emoji}:';
+      return CircleAvatar(
+        radius: 22,
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        child: EmojiText(
+          emojiCode,
+          style: const TextStyle(fontSize: 20),
+        ),
       );
     }
 
@@ -391,15 +409,16 @@ class ChatChannelTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final currentUser = ref.watch(currentUserProvider).value;
     final lastMessage = channel.lastMessage;
     final hasUnread = channel.unreadCount > 0;
     final favorites = ref.watch(chatFavoritesProvider);
     final isFavorite = favorites.contains(channel.id);
 
     return ListTile(
-      leading: _buildLeading(context),
+      leading: _buildLeading(context, currentUser),
       title: Text(
-        _resolveTitle(context),
+        _resolveTitle(context, currentUser),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.titleMedium?.copyWith(
@@ -407,7 +426,7 @@ class ChatChannelTile extends ConsumerWidget {
         ),
       ),
       subtitle: lastMessage != null
-          ? Text(
+          ? EmojiText(
               _resolveLastMessagePreview(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
