@@ -19,6 +19,9 @@ class ChatChannel {
   final int unreadCount;
   final int unreadMentions;
   final Map<String, dynamic>? meta;
+  final bool starred;
+  final bool following;
+  final Map<String, dynamic>? userChatChannelMembership;
 
   const ChatChannel({
     required this.id,
@@ -37,9 +40,25 @@ class ChatChannel {
     this.unreadCount = 0,
     this.unreadMentions = 0,
     this.meta,
+    this.starred = false,
+    this.following = false,
+    this.userChatChannelMembership,
   });
 
   factory ChatChannel.fromJson(Map<String, dynamic> json) {
+    final membership = json['user_chat_channel_membership'] is Map
+        ? Map<String, dynamic>.from(json['user_chat_channel_membership'] as Map)
+        : (json['current_user_membership'] is Map
+            ? Map<String, dynamic>.from(json['current_user_membership'] as Map)
+            : null);
+
+    final isStarred = (json['starred'] as bool?) ??
+        (membership?['starred'] as bool?) ??
+        false;
+    final isFollowing = (json['following'] as bool?) ??
+        (membership?['following'] as bool?) ??
+        (membership != null ? (membership['following'] as bool? ?? true) : false);
+
     return ChatChannel(
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['title']?.toString(),
@@ -57,13 +76,18 @@ class ChatChannel {
           : null,
       lastReadMessageId: (json['last_read_message_id'] as num?)?.toInt(),
       membersCount: (json['members_count'] as num?)?.toInt(),
-      muted: json['muted'] as bool? ?? false,
+      muted: (json['muted'] as bool?) ?? (membership?['muted'] as bool?) ?? false,
       mutedUntil: json['muted_until'] != null
           ? TimeUtils.parseUtcTime(json['muted_until']?.toString())
           : null,
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
       unreadMentions: (json['unread_mentions'] as num?)?.toInt() ?? 0,
-      meta: json['meta'] is Map ? Map<String, dynamic>.from(json['meta'] as Map) : null,
+      meta: json['meta'] is Map
+          ? Map<String, dynamic>.from(json['meta'] as Map)
+          : null,
+      starred: isStarred,
+      following: isFollowing,
+      userChatChannelMembership: membership,
     );
   }
 }

@@ -167,4 +167,17 @@ mixin _ChatMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
+
+  /// 关注/取消关注（收藏）频道
+  Future<void> followChannel(int channelId, {required bool follow}) async {
+    try {
+      if (follow) {
+        await _dio.post('/chat/api/channels/$channelId/follow');
+      } else {
+        await _dio.post('/chat/api/channels/$channelId/unfollow');
+      }
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
 }

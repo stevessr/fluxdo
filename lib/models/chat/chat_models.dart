@@ -31,19 +31,44 @@ class ChatChannelsState {
   });
 
   factory ChatChannelsState.fromJson(Map<String, dynamic> json) {
+    final membershipsMap = <int, Map<String, dynamic>>{};
+    final membershipsRaw = json['user_chat_channel_memberships'] ?? json['memberships'];
+    if (membershipsRaw is List) {
+      for (final m in membershipsRaw) {
+        if (m is Map) {
+          final map = Map<String, dynamic>.from(m);
+          final chId = (map['chat_channel_id'] as num?)?.toInt() ??
+              (map['channel_id'] as num?)?.toInt();
+          if (chId != null) {
+            membershipsMap[chId] = map;
+          }
+        }
+      }
+    }
+
     return ChatChannelsState(
-      publicChannels: _parseChannels(json['public_channels']),
-      directMessageChannels: _parseChannels(json['direct_message_channels']),
+      publicChannels: _parseChannels(json['public_channels'], membershipsMap),
+      directMessageChannels:
+          _parseChannels(json['direct_message_channels'], membershipsMap),
       tracking: _parseTracking(json['tracking']),
       messageBusLastIds: _parseMessageBusIds(json['message_bus_last_ids']),
     );
   }
 
-  static List<ChatChannel> _parseChannels(dynamic channels) {
+  static List<ChatChannel> _parseChannels(dynamic channels,
+      [Map<int, Map<String, dynamic>>? membershipsMap]) {
     if (channels is! List) return [];
-    return channels
-        .map((e) => ChatChannel.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    return channels.map((e) {
+      final map = Map<String, dynamic>.from(e as Map);
+      final chId = (map['id'] as num?)?.toInt();
+      if (chId != null &&
+          !map.containsKey('user_chat_channel_membership') &&
+          membershipsMap != null &&
+          membershipsMap.containsKey(chId)) {
+        map['user_chat_channel_membership'] = membershipsMap[chId];
+      }
+      return ChatChannel.fromJson(map);
+    }).toList();
   }
 
   static Map<String, Map<String, dynamic>> _parseTracking(dynamic tracking) {

@@ -65,15 +65,41 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     resetPagingState();
     _subscribeMessageBus();
     final service = ref.read(discourseServiceProvider);
-    final raw = await service.getChannelMessages(
-      channelId,
-      pageSize: 50,
-      fetchFromLastRead: true,
-    );
-    final messages = _parseMessages(raw);
+
+    Map<String, dynamic> raw;
+    try {
+      raw = await service.getChannelMessages(
+        channelId,
+        pageSize: 50,
+        fetchFromLastRead: true,
+      );
+    } catch (_) {
+      raw = await service.getChannelMessages(
+        channelId,
+        pageSize: 50,
+      );
+    }
+
+    var messages = _parseMessages(raw);
+
+    // 容错处理：如果带 fetchFromLastRead 返回空消息，降级重新请求最新 50 条消息
+    if (messages.isEmpty) {
+      try {
+        final fallbackRaw = await service.getChannelMessages(
+          channelId,
+          pageSize: 50,
+        );
+        final fallbackMessages = _parseMessages(fallbackRaw);
+        if (fallbackMessages.isNotEmpty) {
+          raw = fallbackRaw;
+          messages = fallbackMessages;
+        }
+      } catch (_) {}
+    }
+
     final hasMore = raw['can_load_more_past'] as bool? ?? false;
     canLoadMoreFuture = raw['can_load_more_future'] as bool? ?? false;
-    targetMessageId = raw['target_message_id'] as int?;
+    targetMessageId = (raw['target_message_id'] as num?)?.toInt();
     return completePagedRefresh(
       PagedPage(items: messages, hasMore: hasMore),
     );
@@ -109,15 +135,39 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   Future<void> loadMessages() async {
     await runPagedRefresh(() async {
       final service = ref.read(discourseServiceProvider);
-      final raw = await service.getChannelMessages(
-        channelId,
-        pageSize: 50,
-        fetchFromLastRead: true,
-      );
-      final messages = _parseMessages(raw);
+      Map<String, dynamic> raw;
+      try {
+        raw = await service.getChannelMessages(
+          channelId,
+          pageSize: 50,
+          fetchFromLastRead: true,
+        );
+      } catch (_) {
+        raw = await service.getChannelMessages(
+          channelId,
+          pageSize: 50,
+        );
+      }
+
+      var messages = _parseMessages(raw);
+
+      if (messages.isEmpty) {
+        try {
+          final fallbackRaw = await service.getChannelMessages(
+            channelId,
+            pageSize: 50,
+          );
+          final fallbackMessages = _parseMessages(fallbackRaw);
+          if (fallbackMessages.isNotEmpty) {
+            raw = fallbackRaw;
+            messages = fallbackMessages;
+          }
+        } catch (_) {}
+      }
+
       final hasMore = raw['can_load_more_past'] as bool? ?? false;
       canLoadMoreFuture = raw['can_load_more_future'] as bool? ?? false;
-      targetMessageId = raw['target_message_id'] as int?;
+      targetMessageId = (raw['target_message_id'] as num?)?.toInt();
       return PagedPage(items: messages, hasMore: hasMore);
     });
   }
@@ -191,10 +241,31 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
 
   /// 解析消息列表
   List<ChatMessage> _parseMessages(Map<String, dynamic> raw) {
-    final messages = raw['chat_messages'] as List<dynamic>? ?? [];
-    return messages
-        .map((e) => ChatMessage.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    final list = raw['chat_messages'] ?? raw['messages'];
+    if (list is! List) return [];
+
+    // 解析顶层 users 映射，供消息缺失 user 字段时按 user_id 匹配补全
+    final usersMap = <int, ChatUser>{};
+    if (raw['users'] is List) {
+      for (final u in raw['users'] as List) {
+        if (u is Map) {
+          final user = ChatUser.fromJson(Map<String, dynamic>.from(u));
+          usersMap[user.id] = user;
+        }
+      }
+    }
+
+    return list.map((e) {
+      if (e is! Map) return null;
+      final json = Map<String, dynamic>.from(e);
+      if (json['user'] == null && json['user_id'] != null) {
+        final userId = (json['user_id'] as num?)?.toInt();
+        if (userId != null && usersMap.containsKey(userId)) {
+          json['user'] = usersMap[userId]!.toJson();
+        }
+      }
+      return ChatMessage.fromJson(json);
+    }).whereType<ChatMessage>().toList();
   }
 }
 
@@ -280,12 +351,33 @@ class ChatFavoritesNotifier extends Notifier<Set<int>> {
   Set<int> build() {
     final prefs = ref.watch(sharedPreferencesProvider);
     final list = prefs.getStringList(_key) ?? [];
-    return list.map((e) => int.tryParse(e)).whereType<int>().toSet();
+    final set = list.map((e) => int.tryParse(e)).whereType<int>().toSet();
+
+    // 合并 Discourse 服务端返回的 starred / following 频道
+    final channelsAsync = ref.watch(chatChannelsProvider);
+    final channelsState = channelsAsync.value;
+    if (channelsState != null) {
+      final allChannels = [
+        ...channelsState.publicChannels,
+        ...channelsState.directMessageChannels,
+      ];
+      for (final channel in allChannels) {
+        if (channel.starred ||
+            channel.following ||
+            (channel.userChatChannelMembership?['starred'] == true) ||
+            (channel.userChatChannelMembership?['following'] == true)) {
+          set.add(channel.id);
+        }
+      }
+    }
+
+    return set;
   }
 
   Future<void> toggleFavorite(int channelId) async {
     final next = Set<int>.from(state);
-    if (next.contains(channelId)) {
+    final isFav = next.contains(channelId);
+    if (isFav) {
       next.remove(channelId);
     } else {
       next.add(channelId);
@@ -293,6 +385,12 @@ class ChatFavoritesNotifier extends Notifier<Set<int>> {
     state = next;
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setStringList(_key, next.map((e) => e.toString()).toList());
+
+    // 同步关注/取消关注到 Discourse 服务端 (静默请求)
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.followChannel(channelId, follow: !isFav);
+    } catch (_) {}
   }
 
   bool isFavorite(int channelId) => state.contains(channelId);
