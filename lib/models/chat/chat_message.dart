@@ -52,6 +52,9 @@ class ChatMessage {
   final int? deletedById;
   final bool bookmarked;
 
+  /// Discourse 书签 ID（删除书签时需要）
+  final int? bookmarkId;
+
   const ChatMessage({
     required this.id,
     required this.message,
@@ -68,9 +71,16 @@ class ChatMessage {
     this.deletedAt,
     this.deletedById,
     this.bookmarked = false,
+    this.bookmarkId,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    // Discourse message serializer 在有书签时返回 bookmark 对象（含 id）
+    final bookmarkObj =
+        json['bookmark'] is Map ? Map<String, dynamic>.from(json['bookmark'] as Map) : null;
+    final parsedBookmarkId = (bookmarkObj?['id'] as num?)?.toInt() ??
+        (json['bookmark_id'] as num?)?.toInt();
+
     return ChatMessage(
       id: (json['id'] as num?)?.toInt() ?? 0,
       message: json['message']?.toString() ?? '',
@@ -80,7 +90,11 @@ class ChatMessage {
       user: json['user'] is Map
           ? ChatUser.fromJson(Map<String, dynamic>.from(json['user'] as Map))
           : null,
-      inReplyToId: (json['in_reply_to_id'] as num?)?.toInt(),
+      // Discourse 序列化的是嵌套 in_reply_to 对象，不一定带顶层 in_reply_to_id
+      inReplyToId: (json['in_reply_to_id'] as num?)?.toInt() ??
+          (json['in_reply_to'] is Map
+              ? (json['in_reply_to']['id'] as num?)?.toInt()
+              : null),
       threadId: (json['thread_id'] as num?)?.toInt(),
       uploads: (json['uploads'] as List?)
           ?.map((e) => Map<String, dynamic>.from(e as Map))
@@ -89,12 +103,15 @@ class ChatMessage {
           ?.map((e) => ChatMessageReaction.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
       edited: json['edited'] as bool? ?? false,
-      deleted: json['deleted'] as bool? ?? false,
+      // Discourse 用 deleted_at 表示删除，没有单独的 deleted 布尔字段
+      deleted: json['deleted'] as bool? ?? json['deleted_at'] != null,
       deletedAt: json['deleted_at'] != null
           ? TimeUtils.parseUtcTime(json['deleted_at']?.toString())
           : null,
       deletedById: (json['deleted_by_id'] as num?)?.toInt(),
-      bookmarked: (json['bookmarked'] as bool?) ?? (json['bookmark'] != null),
+      bookmarked: (json['bookmarked'] as bool?) ??
+          (bookmarkObj != null || parsedBookmarkId != null),
+      bookmarkId: parsedBookmarkId,
     );
   }
 
@@ -114,6 +131,8 @@ class ChatMessage {
     DateTime? deletedAt,
     int? deletedById,
     bool? bookmarked,
+    int? bookmarkId,
+    bool clearBookmarkId = false,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -131,6 +150,7 @@ class ChatMessage {
       deletedAt: deletedAt ?? this.deletedAt,
       deletedById: deletedById ?? this.deletedById,
       bookmarked: bookmarked ?? this.bookmarked,
+      bookmarkId: clearBookmarkId ? null : (bookmarkId ?? this.bookmarkId),
     );
   }
 }

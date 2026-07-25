@@ -122,11 +122,14 @@ mixin _ChatMixin on _DiscourseServiceBase {
   }
 
   /// 标记频道已读
+  ///
+  /// 对齐 Discourse chat-api.markChannelAsRead:
+  /// PUT /chat/api/channels/:id/read?message_id=
   Future<void> markChannelRead(int channelId, int messageId) async {
     try {
       await _dio.put(
         '/chat/api/channels/$channelId/read',
-        data: {'message_id': messageId},
+        queryParameters: {'message_id': messageId},
       );
     } on DioException catch (e) {
       _throwApiError(e);
@@ -136,6 +139,8 @@ mixin _ChatMixin on _DiscourseServiceBase {
   /// 创建私信频道
   ///
   /// 返回新创建的频道 [id]
+  ///
+  /// Discourse 响应根为 `channel`（Chat::ChannelSerializer）。
   Future<int> createDirectMessageChannel(
     List<String> targetUsernames,
   ) async {
@@ -143,8 +148,13 @@ mixin _ChatMixin on _DiscourseServiceBase {
       '/chat/api/direct-message-channels',
       data: {'target_usernames': targetUsernames},
     );
-    final respData = response.data as Map<String, dynamic>;
-    return (respData['id'] as num?)?.toInt() ?? 0;
+    final respData = Map<String, dynamic>.from(response.data as Map);
+    final channel = respData['channel'] is Map
+        ? Map<String, dynamic>.from(respData['channel'] as Map)
+        : respData;
+    return (channel['id'] as num?)?.toInt() ??
+        (respData['id'] as num?)?.toInt() ??
+        0;
   }
 
   /// 搜索 Chat 可提及用户
@@ -156,24 +166,30 @@ mixin _ChatMixin on _DiscourseServiceBase {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
-  /// 获取指定频道的成员列表 (Discourse 最新标准 Endpoint)
+  /// 获取指定频道的成员列表
+  ///
+  /// 对齐 Discourse: GET /chat/api/channels/:id/memberships
+  /// 过滤参数为 [username]（非 filter）。
   Future<List<Map<String, dynamic>>> getChannelMembers(
     int channelId, {
     String? filter,
-    int limit = 200,
+    String? username,
+    int limit = 50,
     int offset = 0,
   }) async {
+    // Discourse INDEX_LIMIT = 50；服务端会 clamp 到该上限
     final queryParameters = <String, dynamic>{
-      'limit': limit,
+      'limit': limit.clamp(1, 50),
       'offset': offset,
     };
-    if (filter != null && filter.isNotEmpty) {
-      queryParameters['filter'] = filter;
+    final nameFilter = username ?? filter;
+    if (nameFilter != null && nameFilter.isNotEmpty) {
+      queryParameters['username'] = nameFilter;
     }
 
     try {
       final response = await _dio.get(
-        '/chat/api/channels/$channelId/members',
+        '/chat/api/channels/$channelId/memberships',
         queryParameters: queryParameters,
       );
       return _extractMemberList(response.data);
@@ -258,26 +274,59 @@ mixin _ChatMixin on _DiscourseServiceBase {
     return [];
   }
 
-  /// 向指定频道添加/邀请成员
+  /// 向指定频道添加成员
+  ///
+  /// 对齐 Discourse chat-api.addMembersToChannel:
+  /// POST /chat/api/channels/:id/memberships  body: { usernames: [...] }
   Future<void> addChannelMember(int channelId, String username) async {
     try {
       await _dio.post(
-        '/chat/api/channels/$channelId/members',
-        data: {'username': username},
+        '/chat/api/channels/$channelId/memberships',
+        data: {
+          'usernames': [username],
+        },
       );
     } on DioException catch (e) {
       _throwApiError(e);
     }
   }
 
-  /// 关注/取消关注（收藏）频道
-  Future<void> followChannel(int channelId, {required bool follow}) async {
+  /// 设置/取消频道收藏（starred）
+  ///
+  /// 对齐 Discourse: PUT /chat/api/channels/:id/memberships/me
+  /// body: { starred: true|false }
+  ///
+  /// 注意：这与 join/leave（memberships/me）和 unfollow（memberships/me/follows）不同。
+  Future<void> setChannelStarred(int channelId, {required bool starred}) async {
     try {
-      if (follow) {
-        await _dio.post('/chat/api/channels/$channelId/follow');
-      } else {
-        await _dio.post('/chat/api/channels/$channelId/unfollow');
-      }
+      await _dio.put(
+        '/chat/api/channels/$channelId/memberships/me',
+        data: {'starred': starred},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 关注频道（加入并 following）
+  ///
+  /// 对齐 Discourse chat-api.followChannel:
+  /// POST /chat/api/channels/:id/memberships/me
+  Future<void> followChannel(int channelId) async {
+    try {
+      await _dio.post('/chat/api/channels/$channelId/memberships/me');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 取消关注频道（保留 membership，仅 following=false）
+  ///
+  /// 对齐 Discourse chat-api.unfollowChannel:
+  /// DELETE /chat/api/channels/:id/memberships/me/follows
+  Future<void> unfollowChannel(int channelId) async {
+    try {
+      await _dio.delete('/chat/api/channels/$channelId/memberships/me/follows');
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -307,53 +356,152 @@ mixin _ChatMixin on _DiscourseServiceBase {
     }
   }
 
-  /// 设置/取消 Chat 消息书签 (Bookmark)
-  Future<void> toggleChatMessageBookmark(
-    int channelId,
-    int messageId, {
-    required bool bookmarked,
-  }) async {
+  /// 为 Chat 消息创建书签
+  ///
+  /// 对齐 Discourse: POST /bookmarks.json
+  /// bookmarkable_type 使用 `Chat::Message`（官方前端 chat-message-interactor）。
+  /// 返回新建 bookmark 的 id，供后续删除使用。
+  Future<int> createChatMessageBookmark(int messageId) async {
     try {
-      if (bookmarked) {
-        await _dio.post(
-          '/bookmarks.json',
-          data: {
-            'bookmarkable_type': 'ChatMessage',
-            'bookmarkable_id': messageId,
-          },
-        );
-      } else {
-        await _dio.delete(
-          '/chat/api/channels/$channelId/messages/$messageId/bookmark',
-        );
-      }
+      final response = await _dio.post(
+        '/bookmarks.json',
+        data: {
+          'bookmarkable_type': 'Chat::Message',
+          'bookmarkable_id': messageId,
+        },
+      );
+      final respData = Map<String, dynamic>.from(response.data as Map);
+      return (respData['id'] as num?)?.toInt() ?? 0;
     } on DioException catch (e) {
       _throwApiError(e);
     }
   }
 
-  /// 修改 Chat 频道设置（频道名称、缩略名、表情图标、免打扰、消息串开关等）
+  /// 设置/取消 Chat 消息书签
+  ///
+  /// [bookmarked] 为 true 时创建并返回 bookmarkId；
+  /// 为 false 时必须提供 [bookmarkId]，走核心 DELETE /bookmarks/:id.json
+  /// （Chat 插件没有独立的 bookmark 删除路由）。
+  Future<int?> toggleChatMessageBookmark(
+    int channelId,
+    int messageId, {
+    required bool bookmarked,
+    int? bookmarkId,
+  }) async {
+    try {
+      if (bookmarked) {
+        return await createChatMessageBookmark(messageId);
+      }
+      if (bookmarkId == null || bookmarkId <= 0) {
+        throw ArgumentError(
+          '取消聊天消息书签需要 bookmarkId（Discourse 仅支持 DELETE /bookmarks/:id）',
+        );
+      }
+      // 复用核心书签删除端点（与 _PostsMixin.deleteBookmark 一致）
+      await _dio.delete('/bookmarks/$bookmarkId.json');
+      return null;
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 修改 Chat 频道元信息（名称、缩略名、表情、消息串等）
+  ///
+  /// 对齐 Discourse chat-api.updateChannel:
+  /// PUT /chat/api/channels/:id  body: { channel: { ... } }
+  Future<void> updateChannel(
+    int channelId, {
+    String? name,
+    String? slug,
+    String? emoji,
+    String? description,
+    bool? threadingEnabled,
+  }) async {
+    final channel = <String, dynamic>{};
+    if (name != null) channel['name'] = name;
+    if (slug != null) channel['slug'] = slug;
+    if (emoji != null) channel['emoji'] = emoji;
+    if (description != null) channel['description'] = description;
+    if (threadingEnabled != null) {
+      channel['threading_enabled'] = threadingEnabled;
+    }
+    if (channel.isEmpty) return;
+
+    try {
+      await _dio.put(
+        '/chat/api/channels/$channelId',
+        data: {'channel': channel},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 修改当前用户在频道中的通知设置（免打扰 / 通知级别）
+  ///
+  /// 对齐 Discourse chat-api.updateCurrentUserChannelNotificationsSettings:
+  /// PUT /chat/api/channels/:id/notifications-settings/me
+  /// body: { notifications_settings: { muted, notification_level } }
+  Future<void> updateChannelNotificationsSettings(
+    int channelId, {
+    bool? muted,
+    String? notificationLevel,
+  }) async {
+    final settings = <String, dynamic>{};
+    if (muted != null) settings['muted'] = muted;
+    if (notificationLevel != null) {
+      settings['notification_level'] = notificationLevel;
+    }
+    if (settings.isEmpty) return;
+
+    try {
+      await _dio.put(
+        '/chat/api/channels/$channelId/notifications-settings/me',
+        data: {'notifications_settings': settings},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 修改 Chat 频道设置（兼容旧调用）
+  ///
+  /// 频道元信息走 [updateChannel]；muted / notificationLevel 走通知设置端点。
   Future<void> updateChannelSettings(
     int channelId, {
     String? name,
     String? slug,
     String? emoji,
+    String? description,
     bool? threadingEnabled,
     bool? muted,
     String? notificationLevel,
   }) async {
-    final data = <String, dynamic>{};
-    if (name != null) data['name'] = name;
-    if (slug != null) data['slug'] = slug;
-    if (emoji != null) data['emoji'] = emoji;
-    if (threadingEnabled != null) data['threading_enabled'] = threadingEnabled;
-    if (muted != null) data['muted'] = muted;
-    if (notificationLevel != null) data['notification_level'] = notificationLevel;
-
-    if (data.isEmpty) return;
+    final hasChannelFields = name != null ||
+        slug != null ||
+        emoji != null ||
+        description != null ||
+        threadingEnabled != null;
+    final hasNotificationFields = muted != null || notificationLevel != null;
 
     try {
-      await _dio.put('/chat/api/channels/$channelId', data: data);
+      if (hasChannelFields) {
+        await updateChannel(
+          channelId,
+          name: name,
+          slug: slug,
+          emoji: emoji,
+          description: description,
+          threadingEnabled: threadingEnabled,
+        );
+      }
+      if (hasNotificationFields) {
+        await updateChannelNotificationsSettings(
+          channelId,
+          muted: muted,
+          notificationLevel: notificationLevel,
+        );
+      }
     } on DioException catch (e) {
       _throwApiError(e);
     }
