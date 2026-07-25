@@ -32,6 +32,9 @@ class ChatChannel {
   final List<ChatUser>? dmUsers;
   final bool isGroupDm;
 
+  /// 频道状态：open / closed / read_only / archived（对齐 Discourse Channel#status）
+  final String? status;
+
   const ChatChannel({
     required this.id,
     this.title,
@@ -60,7 +63,26 @@ class ChatChannel {
     this.notificationLevel,
     this.dmUsers,
     this.isGroupDm = false,
+    this.status,
   });
+
+  /// 是否开放（可正常发言/加入）
+  bool get isOpen => (status ?? 'open') == 'open';
+
+  /// 是否已关闭
+  bool get isClosed => status == 'closed';
+
+  /// 是否已归档
+  bool get isArchived => status == 'archived';
+
+  /// 是否只读
+  bool get isReadOnly => status == 'read_only';
+
+  /// 是否可加入（对齐 Discourse chat-channel.js isJoinable）
+  bool get isJoinable => isOpen && !isArchived;
+
+  /// 当前用户是否已关注/加入（membership.following == true）
+  bool get isJoined => following;
 
   /// 是否可向频道添加成员
   ///
@@ -206,9 +228,11 @@ class ChatChannel {
     final isStarred = (json['starred'] as bool?) ??
         (membership?['starred'] as bool?) ??
         false;
+    // 仅当 membership.following == true 才算已加入；有 membership 但 following=false 表示曾加入后取消关注
     final isFollowing = (json['following'] as bool?) ??
         (membership?['following'] as bool?) ??
-        (membership != null ? (membership['following'] as bool? ?? true) : false);
+        false;
+    final statusVal = json['status']?.toString();
 
     final canAdd = (json['allow_user_add'] as bool?) ??
         (json['user_can_add_members'] as bool?) ??
@@ -308,6 +332,70 @@ class ChatChannel {
       notificationLevel: notifLevel,
       dmUsers: parsedDmUsers,
       isGroupDm: resolvedGroupDm,
+      status: statusVal,
+    );
+  }
+
+  ChatChannel copyWith({
+    int? id,
+    String? title,
+    String? slug,
+    String? chatableType,
+    int? chatableId,
+    String? chatableUrl,
+    String? description,
+    DateTime? lastMessageSentAt,
+    ChatMessage? lastMessage,
+    int? lastReadMessageId,
+    int? membersCount,
+    bool? muted,
+    DateTime? mutedUntil,
+    int? unreadCount,
+    int? unreadMentions,
+    Map<String, dynamic>? meta,
+    bool? starred,
+    bool? following,
+    Map<String, dynamic>? userChatChannelMembership,
+    bool? userCanAddMembers,
+    String? emoji,
+    bool? threadingEnabled,
+    int? retentionDays,
+    int? retentionHours,
+    String? notificationLevel,
+    List<ChatUser>? dmUsers,
+    bool? isGroupDm,
+    String? status,
+  }) {
+    return ChatChannel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      slug: slug ?? this.slug,
+      chatableType: chatableType ?? this.chatableType,
+      chatableId: chatableId ?? this.chatableId,
+      chatableUrl: chatableUrl ?? this.chatableUrl,
+      description: description ?? this.description,
+      lastMessageSentAt: lastMessageSentAt ?? this.lastMessageSentAt,
+      lastMessage: lastMessage ?? this.lastMessage,
+      lastReadMessageId: lastReadMessageId ?? this.lastReadMessageId,
+      membersCount: membersCount ?? this.membersCount,
+      muted: muted ?? this.muted,
+      mutedUntil: mutedUntil ?? this.mutedUntil,
+      unreadCount: unreadCount ?? this.unreadCount,
+      unreadMentions: unreadMentions ?? this.unreadMentions,
+      meta: meta ?? this.meta,
+      starred: starred ?? this.starred,
+      following: following ?? this.following,
+      userChatChannelMembership:
+          userChatChannelMembership ?? this.userChatChannelMembership,
+      userCanAddMembers: userCanAddMembers ?? this.userCanAddMembers,
+      emoji: emoji ?? this.emoji,
+      threadingEnabled: threadingEnabled ?? this.threadingEnabled,
+      retentionDays: retentionDays ?? this.retentionDays,
+      retentionHours: retentionHours ?? this.retentionHours,
+      notificationLevel: notificationLevel ?? this.notificationLevel,
+      dmUsers: dmUsers ?? this.dmUsers,
+      isGroupDm: isGroupDm ?? this.isGroupDm,
+      status: status ?? this.status,
     );
   }
 }

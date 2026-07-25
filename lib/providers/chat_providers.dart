@@ -745,15 +745,25 @@ final joinChannelProvider =
     FutureProvider.family<void, int>((ref, channelId) async {
   final service = ref.read(discourseServiceProvider);
   await service.joinChannel(channelId);
-  // 刷新频道列表
+  // 刷新我的频道 + 浏览列表
   ref.invalidate(chatChannelsProvider);
+  ref.invalidate(browseChannelsProvider);
 });
 
-/// 离开频道 Provider
+/// 离开频道 Provider（破坏性 leave，移除 membership）
 final leaveChannelProvider =
     FutureProvider.family<void, int>((ref, channelId) async {
   final service = ref.read(discourseServiceProvider);
   await service.leaveChannel(channelId);
-  // 刷新频道列表
   ref.invalidate(chatChannelsProvider);
+  ref.invalidate(browseChannelsProvider);
+});
+
+/// 取消关注频道 Provider（非破坏性 unfollow，浏览页「退出」用）
+final unfollowChannelProvider =
+    FutureProvider.family<void, int>((ref, channelId) async {
+  final service = ref.read(discourseServiceProvider);
+  await service.unfollowChannel(channelId);
+  ref.invalidate(chatChannelsProvider);
+  ref.invalidate(browseChannelsProvider);
 });

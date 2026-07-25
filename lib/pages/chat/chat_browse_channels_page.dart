@@ -12,7 +12,12 @@ import 'chat_message_page.dart';
 /// 频道浏览页面
 ///
 /// 展示论坛中所有可用的聊天频道，支持按状态（全部/开放/已关闭）筛选，
-/// 可搜索频道名称，并支持加入频道。
+/// 可搜索频道名称，并支持加入/退出频道。
+///
+/// 对齐 Discourse chat-channel-card / toggle-channel-membership-button：
+/// - 已加入：显示「退出」（unfollow，非破坏性）
+/// - 未加入且可加入：显示「加入」
+/// - 已关闭/归档：灰色样式，不可新加入
 class ChatBrowseChannelsPage extends ConsumerStatefulWidget {
   const ChatBrowseChannelsPage({super.key});
 
@@ -133,15 +138,12 @@ class _BrowseChannelListView extends ConsumerWidget {
     );
     final channelsAsync = ref.watch(browseChannelsProvider(params));
 
-    // 获取当前已加入的频道 ID 列表
-    final joinedChannelIds = <int>{};
+    // 我的频道列表中 following 的 id，作为 browse 响应缺 membership 时的兜底
+    final followedIds = <int>{};
     final currentChannels = ref.watch(chatChannelsProvider).value;
     if (currentChannels != null) {
       for (final c in currentChannels.publicChannels) {
-        joinedChannelIds.add(c.id);
-      }
-      for (final c in currentChannels.directMessageChannels) {
-        joinedChannelIds.add(c.id);
+        if (c.following || c.isJoined) followedIds.add(c.id);
       }
     }
 
@@ -157,7 +159,8 @@ class _BrowseChannelListView extends ConsumerWidget {
                       ? Symbols.search_off_rounded
                       : Symbols.forum_rounded,
                   size: 64,
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  color: theme.colorScheme.onSurfaceVariant
+                      .withValues(alpha: 0.5),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -174,16 +177,20 @@ class _BrowseChannelListView extends ConsumerWidget {
         return RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(browseChannelsProvider(params));
+            ref.invalidate(chatChannelsProvider);
           },
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 4),
             itemCount: channels.length,
             itemBuilder: (context, index) {
               final channel = channels[index];
-              final isJoined = joinedChannelIds.contains(channel.id);
+              // 优先用频道自身 current_user_membership.following
+              final isJoined = channel.following || followedIds.contains(channel.id);
               return _BrowseChannelTile(
+                key: ValueKey('browse-channel-${channel.id}'),
                 channel: channel,
                 isJoined: isJoined,
+                browseParams: params,
               );
             },
           ),
@@ -205,10 +212,13 @@ class _BrowseChannelListView extends ConsumerWidget {
 class _BrowseChannelTile extends ConsumerStatefulWidget {
   final ChatChannel channel;
   final bool isJoined;
+  final BrowseChannelsParams browseParams;
 
   const _BrowseChannelTile({
+    super.key,
     required this.channel,
     required this.isJoined,
+    required this.browseParams,
   });
 
   @override
@@ -216,17 +226,27 @@ class _BrowseChannelTile extends ConsumerStatefulWidget {
 }
 
 class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
-  bool _isJoining = false;
+  bool _isBusy = false;
+  /// 本地乐观覆盖：null 表示用 widget.isJoined
+  bool? _localJoined;
+
+  bool get _isJoined => _localJoined ?? widget.isJoined;
+
+  bool get _isClosedOrArchived =>
+      widget.channel.isClosed || widget.channel.isArchived;
+
+  bool get _isJoinable => widget.channel.isJoinable;
 
   Future<void> _joinChannel() async {
-    if (_isJoining) return;
-    setState(() => _isJoining = true);
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
     try {
       final service = ref.read(discourseServiceProvider);
       await service.joinChannel(widget.channel.id);
-      // 刷新已加入的频道列表
       ref.invalidate(chatChannelsProvider);
+      ref.invalidate(browseChannelsProvider(widget.browseParams));
       if (mounted) {
+        setState(() => _localJoined = true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('已加入频道「${widget.channel.title ?? ''}」')),
         );
@@ -238,33 +258,154 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isJoining = false);
+      if (mounted) setState(() => _isBusy = false);
     }
   }
 
-  Widget _buildLeading(BuildContext context) {
-    // 如果设置了自定义频道表情/图标
+  /// 浏览页退出对齐官方：非破坏性 unfollow（memberships/me/follows）
+  Future<void> _leaveChannel() async {
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.unfollowChannel(widget.channel.id);
+      ref.invalidate(chatChannelsProvider);
+      ref.invalidate(browseChannelsProvider(widget.browseParams));
+      if (mounted) {
+        setState(() => _localJoined = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已退出频道「${widget.channel.title ?? ''}」')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('退出失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  void _openChannel() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatMessagePage(
+          channelId: widget.channel.id,
+          channelTitle: widget.channel.title ?? '未命名频道',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLeading(BuildContext context, {required bool dimmed}) {
+    final theme = Theme.of(context);
+    final bg = dimmed
+        ? theme.colorScheme.surfaceContainerHighest
+        : theme.colorScheme.primaryContainer;
+    final fg = dimmed
+        ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.55)
+        : theme.colorScheme.onPrimaryContainer;
+
     if (widget.channel.emoji != null && widget.channel.emoji!.isNotEmpty) {
       final emojiCode = widget.channel.emoji!.startsWith(':')
           ? widget.channel.emoji!
           : ':${widget.channel.emoji}:';
       return CircleAvatar(
         radius: 22,
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-        child: EmojiText(
-          emojiCode,
-          style: const TextStyle(fontSize: 20),
+        backgroundColor: bg,
+        child: Opacity(
+          opacity: dimmed ? 0.55 : 1,
+          child: EmojiText(
+            emojiCode,
+            style: const TextStyle(fontSize: 20),
+          ),
         ),
       );
     }
 
     return CircleAvatar(
       radius: 22,
-      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+      backgroundColor: bg,
       child: Icon(
-        AppIcons.forum,
+        _isClosedOrArchived ? Icons.lock_outline_rounded : AppIcons.forum,
         size: 24,
-        color: Theme.of(context).colorScheme.onPrimaryContainer,
+        color: fg,
+      ),
+    );
+  }
+
+  String _statusLabel() {
+    if (widget.channel.isArchived) return '已归档';
+    if (widget.channel.isClosed) return '已关闭';
+    if (widget.channel.isReadOnly) return '只读';
+    return '';
+  }
+
+  String _membersLabel() {
+    final count = widget.channel.membersCount;
+    if (count == null) return '成员数未知';
+    return '$count 位成员';
+  }
+
+  Widget _buildTrailing(ThemeData theme) {
+    if (_isBusy) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    // 已加入 → 可退出；同时可点进频道
+    if (_isJoined) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: _openChannel,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: const Text('进入'),
+          ),
+          const SizedBox(width: 4),
+          OutlinedButton(
+            onPressed: _leaveChannel,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+              side: BorderSide(
+                color: theme.colorScheme.error.withValues(alpha: 0.5),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('退出'),
+          ),
+        ],
+      );
+    }
+
+    // 未加入：仅 open 且未归档可加入
+    if (_isJoinable) {
+      return FilledButton(
+        onPressed: _joinChannel,
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          visualDensity: VisualDensity.compact,
+        ),
+        child: const Text('加入'),
+      );
+    }
+
+    // 已关闭/归档/只读：不可加入
+    return Text(
+      _statusLabel().isNotEmpty ? _statusLabel() : '不可加入',
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
       ),
     );
   }
@@ -273,114 +414,118 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final channel = widget.channel;
+    final dimmed = _isClosedOrArchived;
+    final mutedStyle = dimmed
+        ? theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
+          )
+        : theme.textTheme.titleMedium;
+    final subColor = dimmed
+        ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.55)
+        : theme.colorScheme.onSurfaceVariant;
 
-    return ListTile(
-      leading: _buildLeading(context),
-      title: Text(
-        channel.title ?? '未命名频道',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.titleMedium,
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (channel.description != null && channel.description!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
+    return Opacity(
+      opacity: dimmed ? 0.72 : 1,
+      child: ListTile(
+        leading: _buildLeading(context, dimmed: dimmed),
+        title: Row(
+          children: [
+            Expanded(
               child: Text(
-                channel.description!,
-                maxLines: 2,
+                channel.title ?? '未命名频道',
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: mutedStyle,
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.people_outline_rounded,
-                  size: 14,
-                  color: theme.colorScheme.onSurfaceVariant,
+            if (_statusLabel().isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '${channel.membersCount ?? 0} 成员',
+                child: Text(
+                  _statusLabel(),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                if (channel.threadingEnabled) ...[
-                  const SizedBox(width: 12),
+              ),
+            ],
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (channel.description != null && channel.description!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  channel.description!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(color: subColor),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                children: [
                   Icon(
-                    Icons.forum_outlined,
+                    Icons.people_outline_rounded,
                     size: 14,
-                    color: theme.colorScheme.onSurfaceVariant,
+                    color: subColor,
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '消息串',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    _membersLabel(),
+                    style: theme.textTheme.labelSmall?.copyWith(color: subColor),
                   ),
+                  if (channel.threadingEnabled) ...[
+                    const SizedBox(width: 12),
+                    Icon(
+                      Icons.forum_outlined,
+                      size: 14,
+                      color: subColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '消息串',
+                      style:
+                          theme.textTheme.labelSmall?.copyWith(color: subColor),
+                    ),
+                  ],
+                  if (_isJoined) ...[
+                    const SizedBox(width: 12),
+                    Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 14,
+                      color: theme.colorScheme.primary.withValues(
+                        alpha: dimmed ? 0.55 : 1,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '已加入',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: dimmed ? 0.55 : 1,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ),
-        ],
-      ),
-      trailing: widget.isJoined
-          ? FilledButton.tonal(
-              onPressed: () {
-                // 已加入 → 进入频道
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ChatMessagePage(
-                      channelId: channel.id,
-                      channelTitle: channel.title ?? '未命名频道',
-                    ),
-                  ),
-                );
-              },
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                visualDensity: VisualDensity.compact,
               ),
-              child: const Text('已加入'),
-            )
-          : _isJoining
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : FilledButton(
-                  onPressed: _joinChannel,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  child: const Text('加入'),
-                ),
-      onTap: widget.isJoined
-          ? () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChatMessagePage(
-                    channelId: channel.id,
-                    channelTitle: channel.title ?? '未命名频道',
-                  ),
-                ),
-              );
-            }
-          : null,
-      isThreeLine: channel.description != null && channel.description!.isNotEmpty,
+            ),
+          ],
+        ),
+        trailing: _buildTrailing(theme),
+        onTap: _isJoined ? _openChannel : null,
+        isThreeLine:
+            channel.description != null && channel.description!.isNotEmpty,
+      ),
     );
   }
 }
