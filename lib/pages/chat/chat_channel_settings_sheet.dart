@@ -394,6 +394,7 @@ class _ChatChannelSettingsSheetState
             ],
           ),
         ),
-      );
+      ),
+    );
   }
 }
