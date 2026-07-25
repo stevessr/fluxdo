@@ -577,9 +577,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
             _prefs.getString(_bottomDoubleTapActionKey),
             fallback: NavTapAction.refresh,
           ),
-          bottomNavIds:
-              _prefs.getStringList(_bottomNavIdsKey) ??
-              const [NavEntryIds.home, NavEntryIds.profile],
+          bottomNavIds: _readBottomNavIds(_prefs),
           displayModeRefreshRate:
               _prefs.getInt(_displayModeRefreshRateKey) ?? 0,
           progressGesturesEnabled:
@@ -1019,3 +1017,21 @@ List<ProgressGestureAction> _readGestureMenuActions(List<String>? raw) {
   }
   return out;
 }
+
+List<String> _readBottomNavIds(SharedPreferences prefs) {
+  final stored = prefs.getStringList(PreferencesNotifier._bottomNavIdsKey);
+  if (stored == null) {
+    return const [NavEntryIds.home, NavEntryIds.chat, NavEntryIds.profile];
+  }
+  final ids = List<String>.from(stored);
+  if (!ids.contains(NavEntryIds.chat)) {
+    final profileIndex = ids.indexOf(NavEntryIds.profile);
+    if (profileIndex != -1) {
+      ids.insert(profileIndex, NavEntryIds.chat);
+    } else {
+      ids.add(NavEntryIds.chat);
+    }
+  }
+  return ids;
+}
+

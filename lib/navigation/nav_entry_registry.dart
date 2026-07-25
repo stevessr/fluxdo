@@ -39,6 +39,16 @@ class NavEntryRegistry {
         defaultInBottomNav: true,
       ),
       NavEntry(
+        id: NavEntryIds.chat,
+        kind: NavEntryKind.page,
+        iconData: Symbols.chat_rounded,
+        selectedIconData: Symbols.chat_rounded,
+        label: (ctx) => ctx.l10n.nav_chat,
+        pageBuilder: (ctx, isActive) => ChatPage(),
+        defaultInBottomNav: true,
+        requiresLogin: true,
+      ),
+      NavEntry(
         id: NavEntryIds.profile,
         kind: NavEntryKind.page,
         iconData: Symbols.person_rounded,
@@ -107,15 +117,6 @@ class NavEntryRegistry {
         selectedIconData: Symbols.notifications_rounded,
         label: (ctx) => ctx.l10n.nav_notifications,
         onPanelTap: (ctx, ref) => NotificationQuickPanel.show(ctx),
-        requiresLogin: true,
-      ),
-      NavEntry(
-        id: NavEntryIds.chat,
-        kind: NavEntryKind.page,
-        iconData: Symbols.chat_rounded,
-        selectedIconData: Symbols.chat_rounded,
-        label: (ctx) => ctx.l10n.nav_chat,
-        pageBuilder: (ctx, isActive) => ChatPage(),
         requiresLogin: true,
       ),
     ];
