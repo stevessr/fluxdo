@@ -94,6 +94,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Gradle Cache
+        if: steps.check.outputs.should_run == 'true'
+        uses: gradle/actions/setup-gradle@v3
 
       - name: Setup Flutter
         if: steps.check.outputs.should_run == 'true'
