@@ -273,13 +273,14 @@ final addChannelMemberProvider =
 /// 7. Chat 收藏频道 Provider
 /// ============================================================================
 
-class ChatFavoritesNotifier extends StateNotifier<Set<int>> {
+class ChatFavoritesNotifier extends Notifier<Set<int>> {
   static const _key = 'favorite_chat_channel_ids';
-  final SharedPreferences _prefs;
 
-  ChatFavoritesNotifier(this._prefs) : super({}) {
-    final list = _prefs.getStringList(_key) ?? [];
-    state = list.map((e) => int.tryParse(e)).whereType<int>().toSet();
+  @override
+  Set<int> build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    final list = prefs.getStringList(_key) ?? [];
+    return list.map((e) => int.tryParse(e)).whereType<int>().toSet();
   }
 
   Future<void> toggleFavorite(int channelId) async {
@@ -290,14 +291,14 @@ class ChatFavoritesNotifier extends StateNotifier<Set<int>> {
       next.add(channelId);
     }
     state = next;
-    await _prefs.setStringList(_key, next.map((e) => e.toString()).toList());
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setStringList(_key, next.map((e) => e.toString()).toList());
   }
 
   bool isFavorite(int channelId) => state.contains(channelId);
 }
 
 final chatFavoritesProvider =
-    StateNotifierProvider<ChatFavoritesNotifier, Set<int>>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return ChatFavoritesNotifier(prefs);
-});
+    NotifierProvider<ChatFavoritesNotifier, Set<int>>(
+  ChatFavoritesNotifier.new,
+);
