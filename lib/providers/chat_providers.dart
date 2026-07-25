@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/chat/chat_models.dart';
 import '../services/message_bus_service.dart';
@@ -8,6 +9,7 @@ import '../utils/paged_async_notifier.dart';
 import 'core_providers.dart';
 import 'message_bus/message_bus_service_provider.dart';
 import 'message_bus/topic_tracking_providers.dart';
+import 'theme_provider.dart';
 
 /// ============================================================================
 /// 1. Chat 频道列表
@@ -265,4 +267,37 @@ final addChannelMemberProvider =
   final service = ref.read(discourseServiceProvider);
   await service.addChannelMember(params.channelId, params.username);
   ref.invalidate(chatChannelMembersProvider(params.channelId));
+});
+
+/// ============================================================================
+/// 7. Chat 收藏频道 Provider
+/// ============================================================================
+
+class ChatFavoritesNotifier extends StateNotifier<Set<int>> {
+  static const _key = 'favorite_chat_channel_ids';
+  final SharedPreferences _prefs;
+
+  ChatFavoritesNotifier(this._prefs) : super({}) {
+    final list = _prefs.getStringList(_key) ?? [];
+    state = list.map((e) => int.tryParse(e)).whereType<int>().toSet();
+  }
+
+  Future<void> toggleFavorite(int channelId) async {
+    final next = Set<int>.from(state);
+    if (next.contains(channelId)) {
+      next.remove(channelId);
+    } else {
+      next.add(channelId);
+    }
+    state = next;
+    await _prefs.setStringList(_key, next.map((e) => e.toString()).toList());
+  }
+
+  bool isFavorite(int channelId) => state.contains(channelId);
+}
+
+final chatFavoritesProvider =
+    StateNotifierProvider<ChatFavoritesNotifier, Set<int>>((ref) {
+  final prefs = ref.watch(sharedPreferencesProvider);
+  return ChatFavoritesNotifier(prefs);
 });

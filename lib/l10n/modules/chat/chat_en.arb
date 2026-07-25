@@ -83,5 +83,11 @@
     }
   },
   "chat_view_profile": "View Profile",
-  "chat_no_members": "No members found"
+  "chat_no_members": "No members found",
+  "chat_favorites": "Favorites",
+  "chat_search_channels": "Search channels or messages...",
+  "chat_favorite_empty": "No favorite chats",
+  "chat_favorite_hint": "Tap the star icon on any channel to favorite it",
+  "chat_add_favorite": "Favorite Channel",
+  "chat_remove_favorite": "Remove from Favorites"
 }

@@ -14,7 +14,7 @@ import 'chat_message_page.dart';
 
 /// Chat 频道列表页面
 ///
-/// 显示公开频道和私信频道，支持 Tab 切换、下拉刷新、新建私信。
+/// 支持收藏/常用频道、公开频道与私信 Tab 切换，包含实时频道与消息检索。
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
 
@@ -25,16 +25,19 @@ class ChatPage extends ConsumerStatefulWidget {
 class _ChatPageState extends ConsumerState<ChatPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -49,9 +52,27 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
+  List<ChatChannel> _filterChannels(List<ChatChannel> list, String query) {
+    if (query.isEmpty) return list;
+    final q = query.toLowerCase();
+    return list.where((c) {
+      final titleMatch = c.title?.toLowerCase().contains(q) ?? false;
+      final slugMatch = c.slug?.toLowerCase().contains(q) ?? false;
+      final descMatch = c.description?.toLowerCase().contains(q) ?? false;
+      final msgMatch =
+          c.lastMessage?.message.toLowerCase().contains(q) ?? false;
+      final userMatch =
+          (c.lastMessage?.user?.username.toLowerCase().contains(q) ?? false) ||
+              (c.lastMessage?.user?.name?.toLowerCase().contains(q) ?? false);
+      return titleMatch || slugMatch || descMatch || msgMatch || userMatch;
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final channelsAsync = ref.watch(chatChannelsProvider);
+    final favoriteIds = ref.watch(chatFavoritesProvider);
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -60,31 +81,98 @@ class _ChatPageState extends ConsumerState<ChatPage>
         bottom: TabBar(
           controller: _tabController,
           tabs: [
+            Tab(text: context.l10n.chat_favorites),
             Tab(text: context.l10n.chat_public_channels),
             Tab(text: context.l10n.chat_direct_messages),
           ],
         ),
       ),
-      body: channelsAsync.when(
-        data: (state) => TabBarView(
-          controller: _tabController,
-          children: [
-            _ChatChannelListView(
-              channels: state.publicChannels,
-              onRefresh: _onRefresh,
+      body: Column(
+        children: [
+          // 搜索栏
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: context.l10n.chat_search_channels,
+                prefixIcon: const Icon(Symbols.search_rounded, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Symbols.close_rounded, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                filled: true,
+                fillColor: theme.colorScheme.surfaceContainerHigh,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (val) {
+                setState(() => _searchQuery = val.trim());
+              },
             ),
-            _ChatChannelListView(
-              channels: state.directMessageChannels,
-              onRefresh: _onRefresh,
+          ),
+          Expanded(
+            child: channelsAsync.when(
+              data: (state) {
+                // 提取所有频道并过滤收藏的频道
+                final allChannels = [
+                  ...state.publicChannels,
+                  ...state.directMessageChannels,
+                ];
+                final favoriteChannels = allChannels
+                    .where((c) => favoriteIds.contains(c.id))
+                    .toList();
+
+                return TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // 收藏 Tab
+                    _ChatChannelListView(
+                      channels: _filterChannels(favoriteChannels, _searchQuery),
+                      isFavorites: true,
+                      searchQuery: _searchQuery,
+                      onRefresh: _onRefresh,
+                    ),
+                    // 公开频道 Tab
+                    _ChatChannelListView(
+                      channels:
+                          _filterChannels(state.publicChannels, _searchQuery),
+                      searchQuery: _searchQuery,
+                      onRefresh: _onRefresh,
+                    ),
+                    // 私信 Tab
+                    _ChatChannelListView(
+                      channels: _filterChannels(
+                        state.directMessageChannels,
+                        _searchQuery,
+                      ),
+                      searchQuery: _searchQuery,
+                      onRefresh: _onRefresh,
+                    ),
+                  ],
+                );
+              },
+              loading: () => const _ChatPageSkeleton(),
+              error: (error, stack) => ErrorView(
+                error: error,
+                stackTrace: stack,
+                onRetry: _onRefresh,
+              ),
             ),
-          ],
-        ),
-        loading: () => const _ChatPageSkeleton(),
-        error: (error, stack) => ErrorView(
-          error: error,
-          stackTrace: stack,
-          onRetry: _onRefresh,
-        ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'newDm',
@@ -99,16 +187,71 @@ class _ChatPageState extends ConsumerState<ChatPage>
 /// 单个 Tab 的频道列表视图
 class _ChatChannelListView extends ConsumerWidget {
   final List<ChatChannel> channels;
+  final bool isFavorites;
+  final String searchQuery;
   final Future<void> Function() onRefresh;
 
   const _ChatChannelListView({
     required this.channels,
+    this.isFavorites = false,
+    this.searchQuery = '',
     required this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+
     if (channels.isEmpty) {
+      if (searchQuery.isNotEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Symbols.search_off_rounded,
+                size: 64,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                context.l10n.chat_no_results,
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        );
+      }
+
+      if (isFavorites) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Symbols.star_outline_rounded,
+                size: 64,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                context.l10n.chat_favorite_empty,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                context.l10n.chat_favorite_hint,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -164,7 +307,7 @@ class _ChatChannelListView extends ConsumerWidget {
 }
 
 /// 频道列表项组件
-class ChatChannelTile extends StatelessWidget {
+class ChatChannelTile extends ConsumerWidget {
   final ChatChannel channel;
   final VoidCallback onTap;
 
@@ -189,19 +332,16 @@ class ChatChannelTile extends StatelessWidget {
   String _resolveTitle(BuildContext context) {
     final isDm = channel.chatableType == 'DirectMessage';
     if (isDm) {
-      // 私信频道：优先显示对方用户名
       final lastMessage = channel.lastMessage;
       final otherUser = lastMessage?.user;
       if (otherUser != null) {
         return otherUser.name ?? otherUser.username;
       }
-      // 没有消息时用频道标题
       if (channel.title != null && channel.title!.isNotEmpty) {
         return channel.title!;
       }
       return context.l10n.chat_dm_placeholder;
     }
-    // 公开频道：显示频道标题
     return channel.title ?? context.l10n.chat_unnamed_channel;
   }
 
@@ -210,7 +350,6 @@ class ChatChannelTile extends StatelessWidget {
     final lastMessage = channel.lastMessage;
     if (lastMessage == null) return '';
 
-    // 使用原始消息文本（不含 HTML），截取前 80 字
     final text = lastMessage.message;
     if (text.length > 80) {
       return '${text.substring(0, 80)}…';
@@ -223,7 +362,6 @@ class ChatChannelTile extends StatelessWidget {
     final isDm = channel.chatableType == 'DirectMessage';
 
     if (isDm) {
-      // 私信频道：显示对方头像
       final otherUser = channel.lastMessage?.user;
       if (otherUser != null) {
         final avatarUrl = _resolveAvatarUrl(otherUser);
@@ -233,14 +371,12 @@ class ChatChannelTile extends StatelessWidget {
           fallbackText: otherUser.username,
         );
       }
-      // 没有对方信息时显示默认头像
       return const CircleAvatar(
         radius: 22,
         child: Icon(AppIcons.person, size: 24),
       );
     }
 
-    // 公开频道：显示频道图标
     return CircleAvatar(
       radius: 22,
       backgroundColor: Theme.of(context).colorScheme.primaryContainer,
@@ -253,11 +389,12 @@ class ChatChannelTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final isDm = channel.chatableType == 'DirectMessage';
     final lastMessage = channel.lastMessage;
     final hasUnread = channel.unreadCount > 0;
+    final favorites = ref.watch(chatFavoritesProvider);
+    final isFavorite = favorites.contains(channel.id);
 
     return ListTile(
       leading: _buildLeading(context),
@@ -279,43 +416,65 @@ class ChatChannelTile extends StatelessWidget {
               ),
             )
           : null,
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 最后消息时间
-          if (channel.lastMessageSentAt != null)
-            Text(
-              TimeUtils.formatRelativeTime(channel.lastMessageSentAt),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontSize: 11,
-              ),
-            ),
-          if (hasUnread) ...[
-            const SizedBox(height: 4),
-            // 未读计数徽章
-            Container(
-              constraints: const BoxConstraints(minWidth: 20),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                channel.unreadCount > 99
-                    ? '99+'
-                    : channel.unreadCount.toString(),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onPrimary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (channel.lastMessageSentAt != null)
+                Text(
+                  TimeUtils.formatRelativeTime(channel.lastMessageSentAt),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
                 ),
-                textAlign: TextAlign.center,
-              ),
+              if (hasUnread) ...[
+                const SizedBox(height: 4),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 20),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    channel.unreadCount > 99
+                        ? '99+'
+                        : channel.unreadCount.toString(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onPrimary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: Icon(
+              isFavorite ? Symbols.star_rounded : Symbols.star_outline_rounded,
+              size: 20,
+              color: isFavorite
+                  ? Colors.amber.shade700
+                  : theme.colorScheme.onSurfaceVariant,
             ),
-          ],
+            tooltip: isFavorite
+                ? context.l10n.chat_remove_favorite
+                : context.l10n.chat_add_favorite,
+            onPressed: () {
+              ref
+                  .read(chatFavoritesProvider.notifier)
+                  .toggleFavorite(channel.id);
+            },
+          ),
         ],
       ),
       onTap: onTap,
@@ -549,8 +708,10 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                               subtitle: user.name != null
                                   ? Text(
                                       '@${user.username}',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.onSurfaceVariant,
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
                                       ),
                                     )
                                   : null,
@@ -563,7 +724,8 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                                       ),
                                     )
                                   : null,
-                              onTap: _isCreating ? null : () => _onSelectUser(user),
+                              onTap:
+                                  _isCreating ? null : () => _onSelectUser(user),
                             );
                           },
                         ),

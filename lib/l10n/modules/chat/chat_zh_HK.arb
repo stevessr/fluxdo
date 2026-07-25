@@ -82,6 +82,12 @@
       }
     }
   },
-  "chat_view_profile": "檢看資料",
-  "chat_no_members": "暫無成員資訊"
+  "chat_view_profile": "查看資料",
+  "chat_no_members": "暫無成員資訊",
+  "chat_favorites": "收藏",
+  "chat_search_channels": "搜尋頻道或訊息...",
+  "chat_favorite_empty": "暫無收藏的聊天",
+  "chat_favorite_hint": "點擊頻道列表中的星標即可加入收藏",
+  "chat_add_favorite": "收藏頻道",
+  "chat_remove_favorite": "取消收藏"
 }

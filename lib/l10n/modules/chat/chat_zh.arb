@@ -83,5 +83,11 @@
     }
   },
   "chat_view_profile": "查看资料",
-  "chat_no_members": "暂无成员信息"
+  "chat_no_members": "暂无成员信息",
+  "chat_favorites": "收藏",
+  "chat_search_channels": "搜索频道或消息...",
+  "chat_favorite_empty": "暂无收藏的聊天",
+  "chat_favorite_hint": "在频道列表中点击星标即可加入收藏",
+  "chat_add_favorite": "收藏频道",
+  "chat_remove_favorite": "取消收藏"
 }
