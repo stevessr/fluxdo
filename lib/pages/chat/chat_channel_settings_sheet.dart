@@ -133,7 +133,7 @@ class _ChatChannelSettingsSheetState
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(ctx.l10n.cancel),
+            child: const Text('取消'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -163,7 +163,7 @@ class _ChatChannelSettingsSheetState
                 if (mounted) setState(() => _isSaving = false);
               }
             },
-            child: Text(ctx.l10n.save),
+            child: const Text('保存'),
           ),
         ],
       ),
@@ -296,7 +296,7 @@ class _ChatChannelSettingsSheetState
                 value: channel?.muted ?? false,
                 onChanged: _isSaving || channel == null
                     ? null
-                    : (val) => _updateMute(channel, val),
+                    : (val) => _updateMute(channel!, val),
               ),
 
               // 3. 消息串 (Threading) 开关
@@ -312,7 +312,7 @@ class _ChatChannelSettingsSheetState
                 value: channel?.threadingEnabled ?? false,
                 onChanged: _isSaving || channel == null
                     ? null
-                    : (val) => _updateThreading(channel, val),
+                    : (val) => _updateThreading(channel!, val),
               ),
 
               const Divider(height: 1),
