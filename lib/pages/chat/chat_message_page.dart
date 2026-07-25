@@ -66,6 +66,13 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   bool _isMultiSelectMode = false;
   final Set<int> _selectedMessageIds = {};
 
+  // 频道内搜索
+  bool _isSearchMode = false;
+  final TextEditingController _searchController = TextEditingController();
+  List<ChatMessage> _searchResults = [];
+  bool _isSearching = false;
+  String? _searchError;
+
   void _enterMultiSelectMode([int? initialMessageId]) {
     setState(() {
       _isMultiSelectMode = true;
@@ -161,8 +168,99 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     _scrollController.dispose();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
+    _searchController.dispose();
     _inputFocusNode.dispose();
     super.dispose();
+  }
+
+  void _enterSearchMode() {
+    setState(() {
+      _isSearchMode = true;
+      _isMultiSelectMode = false;
+      _searchResults = [];
+      _searchError = null;
+    });
+  }
+
+  void _exitSearchMode() {
+    setState(() {
+      _isSearchMode = false;
+      _searchController.clear();
+      _searchResults = [];
+      _isSearching = false;
+      _searchError = null;
+    });
+  }
+
+  Future<void> _runChannelSearch(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _searchError = null;
+        _isSearching = false;
+      });
+      return;
+    }
+    setState(() {
+      _isSearching = true;
+      _searchError = null;
+    });
+    try {
+      final result = await ref.read(
+        chatChannelSearchProvider((
+          channelId: widget.channelId,
+          query: q,
+        )).future,
+      );
+      if (!mounted) return;
+      setState(() {
+        _searchResults = result.messages;
+        _isSearching = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSearching = false;
+        _searchError = e.toString();
+        _searchResults = [];
+      });
+    }
+  }
+
+  Future<void> _jumpToSearchResult(ChatMessage message) async {
+    _exitSearchMode();
+    try {
+      await ref
+          .read(chatMessagesProvider(widget.channelId).notifier)
+          .jumpToMessage(message.id);
+      if (!mounted) return;
+      // 稍等列表渲染后滚到目标附近（底部或中间）
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollController.hasClients) return;
+        final messages =
+            ref.read(chatMessagesProvider(widget.channelId)).value ?? [];
+        final idx = messages.indexWhere((m) => m.id == message.id);
+        if (idx < 0) {
+          _scrollToBottom();
+          return;
+        }
+        // 粗略按索引比例滚动
+        final max = _scrollController.position.maxScrollExtent;
+        final ratio =
+            messages.length <= 1 ? 1.0 : (idx + 1) / messages.length;
+        _scrollController.animateTo(
+          (max * ratio).clamp(0.0, max),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('定位消息失败: $e')),
+      );
+    }
   }
 
   void _onScroll() {
@@ -669,171 +767,303 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     }
 
     return Scaffold(
-      appBar: _isMultiSelectMode
+      appBar: _isSearchMode
           ? AppBar(
               leading: IconButton(
-                icon: const Icon(Icons.close_rounded),
-                onPressed: _exitMultiSelectMode,
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: _exitSearchMode,
               ),
-              title: Text('已选择 ${_selectedMessageIds.length} 条'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    final msgs = messagesAsync.value ?? [];
-                    setState(() {
-                      _selectedMessageIds.addAll(msgs.map((m) => m.id));
-                    });
-                  },
-                  child: const Text('全选'),
+              title: TextField(
+                controller: _searchController,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                decoration: const InputDecoration(
+                  hintText: '搜索此对话中的消息',
+                  border: InputBorder.none,
                 ),
+                onSubmitted: _runChannelSearch,
+              ),
+              actions: [
+                if (_searchController.text.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.clear_rounded),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {
+                        _searchResults = [];
+                        _searchError = null;
+                      });
+                    },
+                  ),
                 IconButton(
-                  icon: const Icon(Icons.copy_rounded),
-                  tooltip: '复制选中消息',
-                  onPressed: () => _copySelectedMessages(messagesAsync.value ?? []),
+                  icon: const Icon(Icons.search_rounded),
+                  tooltip: '搜索',
+                  onPressed: () => _runChannelSearch(_searchController.text),
                 ),
               ],
             )
-          : AppBar(
-              title: Text(widget.channelTitle),
-              actions: [
-                if (!_isAtBottom && messagesAsync.value != null)
-                  IconButton(
-                    icon: const Icon(Icons.arrow_downward_rounded),
-                    tooltip: context.l10n.chat_scroll_to_bottom,
-                    onPressed: _scrollToBottom,
+          : _isMultiSelectMode
+              ? AppBar(
+                  leading: IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: _exitMultiSelectMode,
                   ),
-                IconButton(
-                  icon: const Icon(Icons.people_outline_rounded),
-                  tooltip: context.l10n.chat_channel_members,
-                  onPressed: () {
-                    ChatChannelMembersSheet.show(
-                      context,
-                      widget.channelId,
-                      widget.channelTitle,
-                      canAddMembers: currentChannel?.canAddMembers ?? false,
-                    );
-                  },
+                  title: Text('已选择 ${_selectedMessageIds.length} 条'),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        final msgs = messagesAsync.value ?? [];
+                        setState(() {
+                          _selectedMessageIds.addAll(msgs.map((m) => m.id));
+                        });
+                      },
+                      child: const Text('全选'),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded),
+                      tooltip: '复制选中消息',
+                      onPressed: () =>
+                          _copySelectedMessages(messagesAsync.value ?? []),
+                    ),
+                  ],
+                )
+              : AppBar(
+                  title: Text(widget.channelTitle),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.search_rounded),
+                      tooltip: '搜索对话',
+                      onPressed: _enterSearchMode,
+                    ),
+                    if (!_isAtBottom && messagesAsync.value != null)
+                      IconButton(
+                        icon: const Icon(Icons.arrow_downward_rounded),
+                        tooltip: context.l10n.chat_scroll_to_bottom,
+                        onPressed: _scrollToBottom,
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.people_outline_rounded),
+                      tooltip: context.l10n.chat_channel_members,
+                      onPressed: () {
+                        ChatChannelMembersSheet.show(
+                          context,
+                          widget.channelId,
+                          widget.channelTitle,
+                          canAddMembers: currentChannel?.canAddMembers ?? false,
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.tune_rounded),
+                      tooltip: '频道设置',
+                      onPressed: () {
+                        ChatChannelSettingsSheet.show(
+                          context,
+                          widget.channelId,
+                          widget.channelTitle,
+                        );
+                      },
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.tune_rounded),
-                  tooltip: '频道设置',
-                  onPressed: () {
-                    ChatChannelSettingsSheet.show(
-                      context,
-                      widget.channelId,
-                      widget.channelTitle,
-                    );
-                  },
-                ),
-              ],
-            ),
       body: Column(
         children: [
-          // 消息列表
-          Expanded(
-            child: messagesAsync.when(
-              data: (messages) {
-                if (messages.isEmpty) {
-                  return _buildEmptyState(theme);
-                }
+          if (_isSearchMode)
+            Expanded(child: _buildSearchPanel(theme))
+          else ...[
+            // 消息列表
+            Expanded(
+              child: messagesAsync.when(
+                data: (messages) {
+                  if (messages.isEmpty) {
+                    return _buildEmptyState(theme);
+                  }
 
-                if (_initialLoadDone) {
-                  _markAsRead(messages);
-                }
+                  if (_initialLoadDone) {
+                    _markAsRead(messages);
+                  }
 
-                return NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.axis == Axis.vertical &&
-                        notification.metrics.pixels <= 300) {
-                      _loadMoreMessages();
-                    }
-                    return false;
-                  },
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    padding: EdgeInsets.fromLTRB(
-                      12,
-                      12,
-                      12,
-                      12 + MediaQuery.paddingOf(context).bottom,
-                    ),
-                    itemCount: messages.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return _buildLoadMoreIndicator();
+                  return NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification.metrics.axis == Axis.vertical &&
+                          notification.metrics.pixels <= 300) {
+                        _loadMoreMessages();
                       }
-
-                      final message = messages[index - 1];
-                      final isOwnMessage = currentUser != null &&
-                          message.user != null &&
-                          message.user!.id == currentUser.id;
-
-                      // 检查日期分割线
-                      bool showDateHeader = false;
-                      if (index == 1) {
-                        showDateHeader = true;
-                      } else {
-                        final prevMessage = messages[index - 2];
-                        showDateHeader = !_isSameDay(
-                          message.createdAt,
-                          prevMessage.createdAt,
-                        );
-                      }
-
-                      // 查找关联回复消息
-                      ChatMessage? replyToMsg;
-                      if (message.inReplyToId != null) {
-                        replyToMsg = messages.firstWhere(
-                          (m) => m.id == message.inReplyToId,
-                          orElse: () => message,
-                        );
-                        if (replyToMsg.id == message.id) replyToMsg = null;
-                      }
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (showDateHeader) _buildDateHeader(theme, message.createdAt),
-                          _ChatMessageBubble(
-                            message: message,
-                            replyToMessage: replyToMsg,
-                            isOwnMessage: isOwnMessage,
-                            avatarUrl: _buildAvatarUrl(message.user),
-                            theme: theme,
-                            isMultiSelectMode: _isMultiSelectMode,
-                            isSelected: _selectedMessageIds.contains(message.id),
-                            onToggleSelect: (id) => _toggleSelectMessage(id),
-                            onLongPress: () => _showMessageActionSheet(
-                              message,
-                              isOwnMessage,
-                            ),
-                            onToggleReaction: (emoji) {
-                              ref
-                                  .read(chatMessagesProvider(widget.channelId).notifier)
-                                  .toggleReaction(message.id, emoji);
-                            },
-                          ),
-                        ],
-                      );
+                      return false;
                     },
-                  ),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => ErrorView(
-                error: error,
-                stackTrace: stack,
-                onRetry: () {
-                  ref.invalidate(chatMessagesProvider(widget.channelId));
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: EdgeInsets.fromLTRB(
+                        12,
+                        12,
+                        12,
+                        12 + MediaQuery.paddingOf(context).bottom,
+                      ),
+                      itemCount: messages.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return _buildLoadMoreIndicator();
+                        }
+
+                        final message = messages[index - 1];
+                        final isOwnMessage = currentUser != null &&
+                            message.user != null &&
+                            message.user!.id == currentUser.id;
+
+                        // 检查日期分割线
+                        bool showDateHeader = false;
+                        if (index == 1) {
+                          showDateHeader = true;
+                        } else {
+                          final prevMessage = messages[index - 2];
+                          showDateHeader = !_isSameDay(
+                            message.createdAt,
+                            prevMessage.createdAt,
+                          );
+                        }
+
+                        // 查找关联回复消息
+                        ChatMessage? replyToMsg;
+                        if (message.inReplyToId != null) {
+                          replyToMsg = messages.firstWhere(
+                            (m) => m.id == message.inReplyToId,
+                            orElse: () => message,
+                          );
+                          if (replyToMsg.id == message.id) replyToMsg = null;
+                        }
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (showDateHeader)
+                              _buildDateHeader(theme, message.createdAt),
+                            _ChatMessageBubble(
+                              message: message,
+                              replyToMessage: replyToMsg,
+                              isOwnMessage: isOwnMessage,
+                              avatarUrl: _buildAvatarUrl(message.user),
+                              theme: theme,
+                              isMultiSelectMode: _isMultiSelectMode,
+                              isSelected:
+                                  _selectedMessageIds.contains(message.id),
+                              onToggleSelect: (id) => _toggleSelectMessage(id),
+                              onLongPress: () => _showMessageActionSheet(
+                                message,
+                                isOwnMessage,
+                              ),
+                              onToggleReaction: (emoji) {
+                                ref
+                                    .read(chatMessagesProvider(widget.channelId)
+                                        .notifier)
+                                    .toggleReaction(message.id, emoji);
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  );
                 },
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (error, stack) => ErrorView(
+                  error: error,
+                  stackTrace: stack,
+                  onRetry: () {
+                    ref.invalidate(chatMessagesProvider(widget.channelId));
+                  },
+                ),
               ),
             ),
-          ),
-
-          // 输入区域（含回复/编辑/图片预览/联想菜单）
-          _buildInputArea(theme),
+            // 输入区域（含回复/编辑/图片预览/联想菜单）
+            _buildInputArea(theme),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildSearchPanel(ThemeData theme) {
+    if (_isSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_searchError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, color: theme.colorScheme.error),
+              const SizedBox(height: 8),
+              Text('搜索失败: $_searchError', textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => _runChannelSearch(_searchController.text),
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_searchController.text.trim().isEmpty) {
+      return Center(
+        child: Text(
+          '输入关键词搜索此对话中的消息',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    if (_searchResults.isEmpty) {
+      return Center(
+        child: Text(
+          '未找到匹配消息',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _searchResults.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final message = _searchResults[index];
+        final username = message.user?.name ??
+            message.user?.username ??
+            '用户';
+        final preview = message.message.isNotEmpty
+            ? message.message
+            : (message.cooked?.replaceAll(RegExp(r'<[^>]*>'), '') ?? '');
+        return ListTile(
+          leading: SmartAvatar(
+            imageUrl: _buildAvatarUrl(message.user),
+            radius: 18,
+            fallbackText: username,
+          ),
+          title: Text(
+            username,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            preview,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Text(
+            TimeUtils.formatCompactTime(message.createdAt),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          onTap: () => _jumpToSearchResult(message),
+        );
+      },
     );
   }
 

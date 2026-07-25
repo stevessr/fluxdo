@@ -62,13 +62,19 @@ class ChatChannel {
     this.isGroupDm = false,
   });
 
+  /// 是否可向频道添加成员
+  ///
+  /// 对齐 Discourse AddUsersToChannel / channel-info-members：
+  /// 仅 DirectMessage，且为群组 DM，或尚无消息（可扩展为群聊）的 1:1 DM。
   bool get canAddMembers {
-    if (chatableType == 'DirectMessage' || chatableType == 'DirectMessageChannel') {
-      return true;
-    }
-    return userCanAddMembers == true ||
-        (userChatChannelMembership?['can_add_members'] as bool? ?? false) ||
-        (meta?['can_add_members'] as bool? ?? false);
+    final isDm = chatableType == 'DirectMessage' ||
+        chatableType == 'DirectMessageChannel';
+    if (!isDm) return false;
+    if (userCanAddMembers == true) return true;
+    // 群组 DM 可继续加人；尚无 lastMessage 的 DM 也可加人并升级为群聊
+    if (isGroupDm) return true;
+    if (lastMessage == null && lastMessageSentAt == null) return true;
+    return false;
   }
 
   /// 获取 DM 频道的对方用户
@@ -252,6 +258,17 @@ class ChatChannel {
     // 群聊判据 = group 标记为 true，或 dmUsers 长度 > 1（即 ≥2 位其他成员）。
     final resolvedGroupDm = groupDmFlag ||
         (isDmType && (parsedDmUsers?.length ?? 0) > 1);
+
+    final parsedLastMessage = json['last_message'] is Map
+        ? ChatMessage.fromJson(
+            Map<String, dynamic>.from(json['last_message'] as Map),
+          )
+        : null;
+    // Discourse 已删除 last_message_sent_at 列，时间来自 last_message.created_at
+    final parsedLastMessageSentAt =
+        TimeUtils.parseUtcTime(json['last_message_sent_at']?.toString()) ??
+            parsedLastMessage?.createdAt;
+
     return ChatChannel(
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['title']?.toString(),
@@ -260,21 +277,23 @@ class ChatChannel {
       chatableId: (json['chatable_id'] as num?)?.toInt(),
       chatableUrl: json['chatable_url']?.toString(),
       description: json['description']?.toString(),
-      lastMessageSentAt: json['last_message_sent_at'] != null
-          ? TimeUtils.parseUtcTime(json['last_message_sent_at']?.toString())
-          : null,
-      lastMessage: json['last_message'] is Map
-          ? ChatMessage.fromJson(
-              Map<String, dynamic>.from(json['last_message'] as Map))
-          : null,
-      lastReadMessageId: (json['last_read_message_id'] as num?)?.toInt(),
-      membersCount: (json['members_count'] as num?)?.toInt(),
+      lastMessage: parsedLastMessage,
+      lastMessageSentAt: parsedLastMessageSentAt,
+      lastReadMessageId: (json['last_read_message_id'] as num?)?.toInt() ??
+          (membership?['last_read_message_id'] as num?)?.toInt(),
+      // 官方字段 memberships_count
+      membersCount: (json['memberships_count'] as num?)?.toInt() ??
+          (json['members_count'] as num?)?.toInt() ??
+          (json['user_count'] as num?)?.toInt(),
       muted: (json['muted'] as bool?) ?? (membership?['muted'] as bool?) ?? false,
       mutedUntil: json['muted_until'] != null
           ? TimeUtils.parseUtcTime(json['muted_until']?.toString())
           : null,
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
-      unreadMentions: (json['unread_mentions'] as num?)?.toInt() ?? 0,
+      // 官方 tracking 字段是 mention_count
+      unreadMentions: (json['unread_mentions'] as num?)?.toInt() ??
+          (json['mention_count'] as num?)?.toInt() ??
+          0,
       meta: json['meta'] is Map
           ? Map<String, dynamic>.from(json['meta'] as Map)
           : null,

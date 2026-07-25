@@ -157,13 +157,52 @@ mixin _ChatMixin on _DiscourseServiceBase {
         0;
   }
 
-  /// 搜索 Chat 可提及用户
-  Future<Map<String, dynamic>> searchChatables(String filter) async {
+  /// 搜索 Chat 可提及用户/频道
+  ///
+  /// 对齐 Discourse Chat::SearchChatable：查询参数为 [term]（不是 filter）。
+  Future<Map<String, dynamic>> searchChatables(String term) async {
     final response = await _dio.get(
       '/chat/api/chatables',
-      queryParameters: {'filter': filter},
+      queryParameters: {
+        'term': term,
+        'include_users': true,
+        'include_groups': false,
+        'include_category_channels': false,
+        'include_direct_message_channels': false,
+      },
     );
     return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  /// 在频道内搜索消息
+  ///
+  /// 对齐 Discourse: GET /chat/api/search
+  /// 参数: query, channel_id, limit, offset, sort
+  Future<Map<String, dynamic>> searchChannelMessages({
+    required String query,
+    int? channelId,
+    int limit = 20,
+    int offset = 0,
+    String sort = 'latest',
+  }) async {
+    final queryParameters = <String, dynamic>{
+      'query': query,
+      'limit': limit.clamp(1, 40),
+      'offset': offset,
+      'sort': sort,
+    };
+    if (channelId != null) {
+      queryParameters['channel_id'] = channelId;
+    }
+    try {
+      final response = await _dio.get(
+        '/chat/api/search',
+        queryParameters: queryParameters,
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
   }
 
   /// 获取指定频道的成员列表
