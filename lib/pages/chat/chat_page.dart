@@ -351,11 +351,11 @@ class ChatChannelTile extends ConsumerWidget {
   }
 
   /// 获取频道显示标题
-  String _resolveTitle(BuildContext context, ChatUser? currentUser) {
+  String _resolveTitle(BuildContext context, int? currentUserId) {
     final isDm = channel.chatableType == 'DirectMessage' ||
         channel.chatableType == 'DirectMessageChannel';
     if (isDm) {
-      final targetUser = channel.getDmTargetUser(currentUser?.id);
+      final targetUser = channel.getDmTargetUser(currentUserId);
       if (targetUser != null) {
         return targetUser.name ?? targetUser.username;
       }
@@ -380,12 +380,12 @@ class ChatChannelTile extends ConsumerWidget {
   }
 
   /// 获取频道头像
-  Widget _buildLeading(BuildContext context, ChatUser? currentUser) {
+  Widget _buildLeading(BuildContext context, int? currentUserId) {
     final isDm = channel.chatableType == 'DirectMessage' ||
         channel.chatableType == 'DirectMessageChannel';
 
     if (isDm) {
-      final targetUser = channel.getDmTargetUser(currentUser?.id);
+      final targetUser = channel.getDmTargetUser(currentUserId);
       if (targetUser != null) {
         final avatarUrl = _resolveAvatarUrl(targetUser);
         return SmartAvatar(
@@ -436,9 +436,9 @@ class ChatChannelTile extends ConsumerWidget {
     final isFavorite = favorites.contains(channel.id);
 
     return ListTile(
-      leading: _buildLeading(context, currentUser),
+      leading: _buildLeading(context, currentUser?.id),
       title: Text(
-        _resolveTitle(context, currentUser),
+        _resolveTitle(context, currentUser?.id),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.titleMedium?.copyWith(
