@@ -51,10 +51,23 @@ jobs:
           - arch: universal
             rust-target: all
             flutter-target: universal
-    if: github.event_name == 'push' && matrix.arch == 'arm64-v8a' || github.event_name == 'workflow_dispatch' && (github.event.inputs.arch == 'all' || github.event.inputs.arch == matrix.arch)
 
     steps:
+      - name: Check target architecture
+        id: check
+        run: |
+          target="${{ inputs.arch || 'arm64-v8a' }}"
+          current="${{ matrix.arch }}"
+          if [ "$target" != "all" ] && [ "$target" != "$current" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "跳过当前架构 $current (目标架构: $target)"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "开始构建架构 $current"
+          fi
+
       - name: Free disk space
+        if: steps.check.outputs.should_run == 'true'
         run: |
           echo "清理前:" && df -h /
           sudo rm -rf \
@@ -70,32 +83,38 @@ jobs:
           echo "清理后:" && df -h /
 
       - name: Checkout
+        if: steps.check.outputs.should_run == 'true'
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Setup Java
+        if: steps.check.outputs.should_run == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Setup Flutter
+        if: steps.check.outputs.should_run == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.0'
           cache: true
 
       - name: Setup Rust
+        if: steps.check.outputs.should_run == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust build
+        if: steps.check.outputs.should_run == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: core/doh_proxy
           key: android-apk-${{ matrix.arch }}
 
       - name: Setup Android build environment
+        if: steps.check.outputs.should_run == 'true'
         run: |
           if [ "${{ matrix.arch }}" = "universal" ]; then
             rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
@@ -106,11 +125,13 @@ jobs:
           sudo apt-get update && sudo apt-get install -y cmake
 
       - name: Setup Android NDK
+        if: steps.check.outputs.should_run == 'true'
         uses: android-actions/setup-android@v3
         with:
           packages: 'ndk;${{ env.ANDROID_NDK_VERSION }}'
 
       - name: Configure Android NDK path
+        if: steps.check.outputs.should_run == 'true'
         run: |
           ndk_path="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
           test -d "${ndk_path}"
@@ -118,6 +139,7 @@ jobs:
           echo "ANDROID_NDK_ROOT=${ndk_path}" >> "${GITHUB_ENV}"
 
       - name: Setup Android Signing
+        if: steps.check.outputs.should_run == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
@@ -175,6 +197,7 @@ jobs:
           fi
 
       - name: Build Android APK
+        if: steps.check.outputs.should_run == 'true'
         run: |
           if [ "${{ matrix.arch }}" = "universal" ]; then
             dart tool/flutterw.dart build apk --release --dart-define=cronetHttpNoPlay=true
@@ -187,6 +210,7 @@ jobs:
           fi
 
       - name: Upload APK Artifact
+        if: steps.check.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: fluxdo-apk-${{ matrix.arch }}
