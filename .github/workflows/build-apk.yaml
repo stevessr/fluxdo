@@ -51,13 +51,7 @@ jobs:
           - arch: universal
             rust-target: all
             flutter-target: universal
-    if: |
-      (github.event_name == 'push' && matrix.arch == 'arm64-v8a') ||
-      (github.event_name == 'workflow_dispatch' && (
-        (github.event.inputs.arch == 'all') ||
-        (github.event.inputs.arch == matrix.arch) ||
-        (github.event.inputs.arch == '' && matrix.arch == 'arm64-v8a')
-      ))
+    if: github.event_name == 'push' && matrix.arch == 'arm64-v8a' || github.event_name == 'workflow_dispatch' && (github.event.inputs.arch == 'all' || github.event.inputs.arch == matrix.arch)
 
     steps:
       - name: Free disk space
