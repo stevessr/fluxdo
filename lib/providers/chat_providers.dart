@@ -238,6 +238,63 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     await service.markChannelRead(channelId, messageId);
   }
 
+  /// 切换消息 Emoji 回应 (Reaction)
+  Future<void> toggleReaction(int messageId, String emoji) async {
+    final currentList = state.value ?? [];
+    final msgIndex = currentList.indexWhere((m) => m.id == messageId);
+    if (msgIndex == -1) return;
+
+    final msg = currentList[msgIndex];
+    final reactions = List<ChatMessageReaction>.from(msg.reactions ?? []);
+    final rIndex = reactions.indexWhere((r) => r.emoji == emoji);
+
+    final isAlreadyReacted = rIndex != -1 && reactions[rIndex].reacted;
+    final action = isAlreadyReacted ? 'remove' : 'add';
+
+    // 乐观更新 UI
+    final newReactions = List<ChatMessageReaction>.from(reactions);
+    if (isAlreadyReacted) {
+      final old = newReactions[rIndex];
+      if (old.count <= 1) {
+        newReactions.removeAt(rIndex);
+      } else {
+        newReactions[rIndex] = ChatMessageReaction(
+          emoji: old.emoji,
+          count: old.count - 1,
+          reacted: false,
+        );
+      }
+    } else {
+      if (rIndex != -1) {
+        final old = newReactions[rIndex];
+        newReactions[rIndex] = ChatMessageReaction(
+          emoji: old.emoji,
+          count: old.count + 1,
+          reacted: true,
+        );
+      } else {
+        newReactions.add(ChatMessageReaction(
+          emoji: emoji,
+          count: 1,
+          reacted: true,
+        ));
+      }
+    }
+
+    final updatedMsg = msg.copyWith(reactions: newReactions);
+    final updatedList = List<ChatMessage>.from(currentList);
+    updatedList[msgIndex] = updatedMsg;
+    state = AsyncValue.data(updatedList);
+
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.reactToChatMessage(channelId, messageId, emoji, action: action);
+    } catch (_) {
+      // 失败回滚
+      state = AsyncValue.data(currentList);
+    }
+  }
+
   /// 加载更多失败时重试
   Future<void> retryLoadMore() {
     return retryPagedLoadMore(loadMore);

@@ -13,6 +13,7 @@ import '../../providers/core_providers.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/common/cached_image.dart';
+import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
@@ -350,6 +351,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void _showMessageActionSheet(ChatMessage message, bool isOwnMessage) {
     if (message.deleted) return;
 
+    final quickEmojis = ['+1', 'heart', 'tada', 'smile', 'open_mouth', 'cry', 'fire', 'thinking'];
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -359,6 +362,43 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 快捷 Emoji 回应工具栏
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ...quickEmojis.map((emoji) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            ref
+                                .read(chatMessagesProvider(widget.channelId).notifier)
+                                .toggleReaction(message.id, emoji);
+                          },
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Theme.of(ctx)
+                                  .colorScheme
+                                  .surfaceContainerHighest
+                                  .withValues(alpha: 0.7),
+                              shape: BoxShape.circle,
+                            ),
+                            child: EmojiText(':$emoji:', style: const TextStyle(fontSize: 22)),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.reply_rounded),
               title: Text(ctx.l10n.chat_reply),
@@ -536,6 +576,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               message,
                               isOwnMessage,
                             ),
+                            onToggleReaction: (emoji) {
+                              ref
+                                  .read(chatMessagesProvider(widget.channelId).notifier)
+                                  .toggleReaction(message.id, emoji);
+                            },
                           ),
                         ],
                       );
@@ -942,6 +987,7 @@ class _ChatMessageBubble extends StatelessWidget {
   final String? avatarUrl;
   final ThemeData theme;
   final VoidCallback onLongPress;
+  final ValueChanged<String> onToggleReaction;
 
   const _ChatMessageBubble({
     required this.message,
@@ -950,6 +996,7 @@ class _ChatMessageBubble extends StatelessWidget {
     this.avatarUrl,
     required this.theme,
     required this.onLongPress,
+    required this.onToggleReaction,
   });
 
   List<String> _extractImageUrls() {
@@ -1142,14 +1189,78 @@ class _ChatMessageBubble extends StatelessWidget {
                                   ),
                                 ),
 
-                              // 消息文本
+                              // 消息文本 (将 :emoji: 转换渲染为图片表情)
                               if (displayText.isNotEmpty)
-                                SelectableText(
+                                SelectableEmojiText(
                                   displayText,
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: isOwnMessage
                                         ? theme.colorScheme.onPrimaryContainer
                                         : theme.colorScheme.onSurface,
+                                  ),
+                                ),
+
+                              // Emoji 回应 (Reactions) 展示
+                              if (message.reactions != null &&
+                                  message.reactions!.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    children: message.reactions!.map((r) {
+                                      final isReacted = r.reacted;
+                                      return Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          onTap: () => onToggleReaction(r.emoji),
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isReacted
+                                                  ? theme.colorScheme.primaryContainer
+                                                  : theme.colorScheme.surface,
+                                              border: Border.all(
+                                                color: isReacted
+                                                    ? theme.colorScheme.primary
+                                                    : theme.colorScheme.outlineVariant
+                                                        .withValues(alpha: 0.5),
+                                                width: 1,
+                                              ),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                EmojiText(
+                                                  ':${r.emoji}:',
+                                                  style: const TextStyle(fontSize: 12),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  '${r.count}',
+                                                  style: theme.textTheme.labelSmall
+                                                      ?.copyWith(
+                                                    fontSize: 10,
+                                                    fontWeight: isReacted
+                                                        ? FontWeight.bold
+                                                        : FontWeight.normal,
+                                                    color: isReacted
+                                                        ? theme.colorScheme.primary
+                                                        : theme.colorScheme
+                                                            .onSurfaceVariant,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
                                   ),
                                 ),
 

@@ -217,4 +217,33 @@ mixin _ChatMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
+
+  /// 对 Chat 消息点赞/回应/取消回应 (Reaction)
+  Future<void> reactToChatMessage(
+    int channelId,
+    int messageId,
+    String emoji, {
+    required String action, // 'add' | 'remove'
+  }) async {
+    final data = <String, dynamic>{
+      'emoji': emoji,
+      'react_action': action,
+      'message_id': messageId,
+    };
+    try {
+      try {
+        await _dio.put(
+          '/chat/api/channels/$channelId/messages/$messageId/reactions',
+          data: data,
+        );
+      } catch (_) {
+        await _dio.put(
+          '/chat/chat_channels/$channelId/react.json',
+          data: data,
+        );
+      }
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
 }
