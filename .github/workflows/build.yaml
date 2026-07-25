@@ -9,7 +9,8 @@ on:
 env:
   IS_STABLE: ${{ !contains(github.ref, '-') }}
   FLUTTER_LINUX_VERSION: '3.44.0'
-  ANDROID_NDK_VERSION: '27.3.13750724'
+  # 与 Flutter 3.44 默认 NDK 对齐，避免 CI 重复下载多个 side-by-side NDK
+  ANDROID_NDK_VERSION: '28.2.13676358'
 
 jobs:
   build:
@@ -51,21 +52,30 @@ jobs:
             arch: x86_64
 
     steps:
-      # ubuntu-latest 可用空间仅 ~14GB,Flutter+NDK+Rust 缓存+Gradle 产物会把盘写满,
-      # 先删掉本构建用不到的预装组件,约可腾出 25GB+
+      # ubuntu-latest 可用空间仅 ~14GB；腾出空间，但保留目标 NDK，避免每次重装
       - name: Free disk space
         if: startsWith(matrix.platform, 'android')
         run: |
           echo "清理前:" && df -h /
           sudo rm -rf \
             /usr/share/dotnet \
-            /usr/local/lib/android/sdk/ndk \
             /opt/ghc \
             /usr/local/.ghcup \
             /opt/hostedtoolcache/CodeQL \
             /usr/share/swift \
             /usr/local/share/powershell \
-            /usr/local/share/chromium
+            /usr/local/share/chromium \
+            /usr/local/lib/android/sdk/ndk-bundle \
+            /usr/local/lib/android/sdk/system-images \
+            /usr/local/lib/android/sdk/emulator \
+            /usr/local/lib/android/sdk/platforms/android-30 \
+            /usr/local/lib/android/sdk/platforms/android-32 \
+            /usr/local/lib/android/sdk/platforms/android-33 \
+            /usr/local/lib/android/sdk/platforms/android-34
+          if [ -d /usr/local/lib/android/sdk/ndk ]; then
+            find /usr/local/lib/android/sdk/ndk -mindepth 1 -maxdepth 1 \
+              ! -name "${ANDROID_NDK_VERSION}" -exec sudo rm -rf {} +
+          fi
           sudo docker image prune --all --force > /dev/null 2>&1 || true
           echo "清理后:" && df -h /
 
@@ -79,12 +89,15 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
+          # Gradle 缓存交给 setup-gradle，避免双重缓存互相踩
           java-version: '17'
-          cache: 'gradle'
 
       - name: Setup Gradle Cache
         if: startsWith(matrix.platform, 'android')
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+          cache-cleanup: on-success
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -101,7 +114,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: core/doh_proxy
-          key: ${{ matrix.platform }}-${{ matrix.arch || matrix.flutter-target }}
+          cache-bin: true
+          key: ${{ matrix.platform }}-${{ matrix.arch || matrix.flutter-target }}-${{ startsWith(matrix.platform, 'android') && env.ANDROID_NDK_VERSION || 'host' }}
 
       - name: Setup iOS Rust targets
         if: matrix.platform == 'ios'
@@ -114,23 +128,50 @@ jobs:
       - name: Setup Android build environment
         if: startsWith(matrix.platform, 'android')
         run: |
+          set -euo pipefail
           rustup target add ${{ matrix.rust-target }}
-          cargo install cargo-ndk
-          sudo apt-get update && sudo apt-get install -y cmake
+          if ! command -v cargo-ndk >/dev/null 2>&1; then
+            cargo install cargo-ndk
+          else
+            echo "cargo-ndk 已存在"
+          fi
+          if ! command -v cmake >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cmake
+          fi
 
-      - name: Setup Android NDK
+      - name: Setup Android SDK packages
         if: startsWith(matrix.platform, 'android')
         uses: android-actions/setup-android@v3
         with:
-          packages: 'ndk;${{ env.ANDROID_NDK_VERSION }}'
+          packages: >-
+            ndk;${{ env.ANDROID_NDK_VERSION }}
+            platforms;android-36
+            platforms;android-31
+            cmake;3.22.1
+          log-accepted-android-sdk-licenses: false
 
       - name: Configure Android NDK path
         if: startsWith(matrix.platform, 'android')
         run: |
+          set -euo pipefail
           ndk_path="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
           test -d "${ndk_path}"
           echo "ANDROID_NDK_HOME=${ndk_path}" >> "${GITHUB_ENV}"
           echo "ANDROID_NDK_ROOT=${ndk_path}" >> "${GITHUB_ENV}"
+          props="android/local.properties"
+          touch "$props"
+          for key_val in \
+            "sdk.dir=${ANDROID_HOME}" \
+            "ndk.dir=${ndk_path}" \
+            "flutter.ndkVersion=${ANDROID_NDK_VERSION}"; do
+            key="${key_val%%=*}"
+            if grep -q "^${key}=" "$props" 2>/dev/null; then
+              sed -i "s|^${key}=.*|${key_val}|" "$props"
+            else
+              echo "${key_val}" >> "$props"
+            fi
+          done
 
       - name: Setup Android Signing
         if: startsWith(matrix.platform, 'android')

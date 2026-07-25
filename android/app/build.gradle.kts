@@ -57,7 +57,9 @@ println(
 android {
     namespace = "com.github.lingyan000.fluxdo"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // 显式锁定 Flutter 3.44 默认 NDK，配合 CI 预装与 subprojects 强制统一，
+    // 避免插件 side-by-side 再拉 27.x 导致重复下载。
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
