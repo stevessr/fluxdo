@@ -59,16 +59,16 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void _onEmojiSelected(Emoji emoji) {
     final text = _textController.text;
     final selection = _textController.selection;
-    final char = emoji.char;
+    final emojiCode = ':${emoji.name}: ';
     if (selection.isValid && selection.isCollapsed) {
       final start = selection.start;
-      final newText = text.replaceRange(start, selection.end, char);
+      final newText = text.replaceRange(start, selection.end, emojiCode);
       _textController.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.collapsed(offset: start + char.length),
+        selection: TextSelection.collapsed(offset: start + emojiCode.length),
       );
     } else {
-      _textController.text = text + char;
+      _textController.text = '$text$emojiCode';
     }
   }
 
