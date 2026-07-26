@@ -67,11 +67,21 @@ mixin PagedAsyncNotifierMixin<T> on AsyncNotifier<List<T>> {
     int pageNumber = 0,
   }) async {
     resetPagingState(page: pageNumber);
-    state = AsyncLoading<List<T>>();
-    state = await AsyncValue.guard(() async {
+    final previous = state;
+    // 保留 previous，避免聊天等列表在刷新时整页变成空白 loading。
+    // ignore: invalid_use_of_internal_member
+    state = AsyncLoading<List<T>>().copyWithPrevious(previous);
+    try {
       final page = await loadPage();
-      return completePagedRefresh(page, pageNumber: pageNumber);
-    });
+      state = AsyncData(completePagedRefresh(page, pageNumber: pageNumber));
+    } catch (error, stackTrace) {
+      // 刷新失败时若已有数据，保留旧列表，避免整页 ErrorView 像「消息消失」。
+      if (previous.hasValue) {
+        state = AsyncData(previous.requireValue);
+      } else {
+        state = AsyncError(error, stackTrace);
+      }
+    }
   }
 
   Future<void> runPagedLoadMore(PagedLoadMoreLoader<T> loadPage) async {

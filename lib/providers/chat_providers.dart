@@ -59,9 +59,13 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   /// 定位到指定消息 ID 时传入
   int? targetMessageId;
 
+  /// 已标记已读的最大 message id，避免 build 反复打 read API
+  int? _lastMarkedReadId;
+
   @override
   Future<List<ChatMessage>> build() async {
     resetPagingState();
+    _lastMarkedReadId = null;
     _subscribeMessageBus();
     final loaded = await _loadInitialMessages();
     return completePagedRefresh(
@@ -69,9 +73,11 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     );
   }
 
-  /// 初始加载策略（对齐 Discourse chat-channel.gjs）：
+  /// 初始加载策略（对齐 Discourse + 移动端「看最新」）：
   /// 1) 优先 fetch_from_last_read
-  /// 2) 空/失败则回退到最新 page_size 条（不带 target）
+  /// 2) 空/失败/仍有 future（未读窗口在历史中段）→ 回退最新一页
+  ///    否则 reverse 列表会把中段历史当成底部，看起来像「没有新消息/空白」
+  /// 3) 两次都失败时向上抛错，避免 UI 误显示「无消息」空态
   Future<({List<ChatMessage> messages, bool hasMorePast, bool hasMoreFuture, int? targetId})>
       _loadInitialMessages() async {
     final service = ref.read(discourseServiceProvider);
@@ -87,15 +93,38 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       return (messages: _parseMessages(raw), raw: raw);
     }
 
+    bool readCanLoadMoreFuture(Map<String, dynamic> raw) {
+      final meta = raw['meta'] is Map
+          ? Map<String, dynamic>.from(raw['meta'] as Map)
+          : const <String, dynamic>{};
+      return (meta['can_load_more_future'] as bool?) ??
+          (raw['can_load_more_future'] as bool?) ??
+          false;
+    }
+
     Map<String, dynamic> raw = const {};
     var messages = <ChatMessage>[];
+    Object? lastError;
 
     try {
       final first = await tryFetch(fetchFromLastRead: true);
       raw = first.raw;
       messages = first.messages;
-    } catch (_) {
-      // last_read 目标消息不存在等会 404，直接走最新消息
+      // last_read 窗口若还没贴到 live edge，移动端直接改拉最新，
+      // 避免 reverse 列表底部停在历史中段。
+      if (messages.isNotEmpty && readCanLoadMoreFuture(raw)) {
+        try {
+          final live = await tryFetch();
+          raw = live.raw;
+          messages = live.messages;
+        } catch (e) {
+          // 保留 last_read 结果，总比空白好
+          lastError = e;
+        }
+      }
+    } catch (e) {
+      // last_read 目标消息不存在等会 404，回退最新消息
+      lastError = e;
     }
 
     if (messages.isEmpty) {
@@ -103,7 +132,15 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
         final fallback = await tryFetch();
         raw = fallback.raw;
         messages = fallback.messages;
-      } catch (_) {}
+        lastError = null;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    // 两次都失败：抛出错误，让 UI 走 ErrorView 而不是空白/空态
+    if (messages.isEmpty && lastError != null && raw.isEmpty) {
+      throw lastError;
     }
 
     final meta = raw['meta'] is Map
@@ -128,59 +165,75 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
 
   void _subscribeMessageBus() {
     try {
-      ref.watch(messageBusInitProvider);
-      final messageBus = ref.watch(messageBusServiceProvider);
-      final channel = '/chat/c/$channelId';
+      // 用 read 而非 watch：messageBusInit 重建时不应整表 reload 造成闪空白。
+      // 长轮询域名配置由 main.dart 的 messageBusInitProvider 统一完成。
+      ref.read(messageBusInitProvider);
+      final messageBus = ref.read(messageBusServiceProvider);
+      // 对齐 Discourse ChatChannelSubscriptionManager：`/chat/${channel.id}`
+      final channel = '/chat/$channelId';
 
       void onMessage(MessageBusMessage msg) {
         final data = msg.data;
-        if (data is! Map<String, dynamic>) return;
-        final type =
-            data['type'] as String? ?? data['chat_message_type'] as String?;
+        if (data is! Map) return;
+        final map = Map<String, dynamic>.from(data);
+        final type = map['type'] as String?;
 
-        // 优先增量合并，避免全量 reload 造成列表闪空白
-        if (type == 'sent' ||
-            type == 'created' ||
-            data.containsKey('chat_message')) {
-          final rawMsg = data['chat_message'] ?? data['message'];
-          if (rawMsg is Map) {
-            try {
-              final incoming = ChatMessage.fromJson(
-                Map<String, dynamic>.from(rawMsg),
-              );
-              if (incoming.id > 0) {
-                _upsertMessage(incoming);
-                return;
-              }
-            } catch (_) {}
-          }
-          unawaited(loadMessages());
-        } else if (type == 'edited' || type == 'edit') {
-          final rawMsg = data['chat_message'] ?? data['message'];
-          if (rawMsg is Map) {
-            try {
-              final incoming = ChatMessage.fromJson(
-                Map<String, dynamic>.from(rawMsg),
-              );
-              if (incoming.id > 0) {
-                _upsertMessage(incoming);
-                return;
-              }
-            } catch (_) {}
-          }
-          unawaited(loadMessages());
-        } else if (type == 'deleted' || type == 'delete') {
-          final rawMsg = data['chat_message'] ?? data['message'];
-          final deletedId = (rawMsg is Map
-                  ? (rawMsg['id'] as num?)?.toInt()
-                  : null) ??
-              (data['deleted_id'] as num?)?.toInt() ??
-              (data['message_id'] as num?)?.toInt();
-          if (deletedId != null) {
-            _markMessageDeleted(deletedId);
+        // 严格按 type 分发（对齐 chat-channel-subscription-manager.js）。
+        // 禁止对任意含 chat_message 的事件做全量 reload（reaction/processed 等会刷空白）。
+        switch (type) {
+          case 'sent':
+          case 'created':
+          case 'edit':
+          case 'edited':
+          case 'restore':
+            final rawMsg = map['chat_message'] ?? map['message'];
+            if (rawMsg is Map) {
+              try {
+                final incoming = ChatMessage.fromJson(
+                  Map<String, dynamic>.from(rawMsg),
+                );
+                if (incoming.id > 0) {
+                  _upsertMessage(incoming);
+                }
+              } catch (_) {}
+            }
             return;
-          }
-          unawaited(loadMessages());
+          case 'delete':
+          case 'deleted':
+            final rawMsg = map['chat_message'] ?? map['message'];
+            final deletedId = (rawMsg is Map
+                    ? (rawMsg['id'] as num?)?.toInt()
+                    : null) ??
+                (map['deleted_id'] as num?)?.toInt() ??
+                (map['message_id'] as num?)?.toInt();
+            if (deletedId != null) {
+              _markMessageDeleted(deletedId);
+            }
+            return;
+          case 'bulk_delete':
+            final ids = map['deleted_ids'];
+            if (ids is List) {
+              for (final id in ids) {
+                final mid = (id as num?)?.toInt();
+                if (mid != null) _markMessageDeleted(mid);
+              }
+            }
+            return;
+          case 'processed':
+            // cooked/uploads 更新：尽量增量，失败则忽略（勿全量 reload）
+            final rawMsg = map['chat_message'];
+            if (rawMsg is Map) {
+              try {
+                final incoming = ChatMessage.fromJson(
+                  Map<String, dynamic>.from(rawMsg),
+                );
+                if (incoming.id > 0) _upsertMessage(incoming);
+              } catch (_) {}
+            }
+            return;
+          default:
+            // reaction / notice / pin / thread_* 等：暂不处理，避免误 reload
+            return;
         }
       }
 
@@ -220,11 +273,47 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   }
 
   /// 重新加载消息列表
-  Future<void> loadMessages() async {
+  ///
+  /// [preferLatest] 为 true 时直接拉最新一页（发送后/跳到最新），
+  /// 避免再走 last_read 中窗把刚发出的消息冲掉。
+  Future<void> loadMessages({bool preferLatest = false}) async {
     await runPagedRefresh(() async {
-      final loaded = await _loadInitialMessages();
+      final loaded = preferLatest
+          ? await _loadLatestMessages()
+          : await _loadInitialMessages();
       return PagedPage(items: loaded.messages, hasMore: loaded.hasMorePast);
     });
+  }
+
+  /// 仅拉最新一页（无 target / 无 last_read）
+  Future<({List<ChatMessage> messages, bool hasMorePast, bool hasMoreFuture, int? targetId})>
+      _loadLatestMessages() async {
+    final service = ref.read(discourseServiceProvider);
+    final raw = await service.getChannelMessages(channelId, pageSize: 50);
+    final messages = _parseMessages(raw);
+    final meta = raw['meta'] is Map
+        ? Map<String, dynamic>.from(raw['meta'] as Map)
+        : const <String, dynamic>{};
+    final hasMorePast = (meta['can_load_more_past'] as bool?) ??
+        (raw['can_load_more_past'] as bool?) ??
+        (messages.length >= 10);
+    canLoadMoreFuture = (meta['can_load_more_future'] as bool?) ??
+        (raw['can_load_more_future'] as bool?) ??
+        false;
+    targetMessageId = null;
+    return (
+      messages: messages,
+      hasMorePast: hasMorePast,
+      hasMoreFuture: canLoadMoreFuture,
+      targetId: null,
+    );
+  }
+
+  /// 跳到真正的 live edge：若仍有 future 则重拉最新，否则仅依赖 UI 滚底
+  Future<void> scrollToLatest() async {
+    if (canLoadMoreFuture || targetMessageId != null) {
+      await loadMessages(preferLatest: true);
+    }
   }
 
   /// 跳转到指定消息附近（用于搜索结果定位）
@@ -268,7 +357,8 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       final messages = _parseMessages(raw);
 
       final existingIds = currentItems.map((m) => m.id).toSet();
-      final newMessages = messages.where((m) => !existingIds.contains(m.id)).toList();
+      final newMessages =
+          messages.where((m) => !existingIds.contains(m.id)).toList();
       newMessages.sort((a, b) {
         final byTime = a.createdAt.compareTo(b.createdAt);
         if (byTime != 0) return byTime;
@@ -288,15 +378,57 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       final hasMorePast = (meta['can_load_more_past'] as bool?) ??
           (raw['can_load_more_past'] as bool?) ??
           (messages.isNotEmpty && messages.length >= 10);
-      canLoadMoreFuture = (meta['can_load_more_future'] as bool?) ??
-          (raw['can_load_more_future'] as bool?) ??
-          false;
+      // past 分页不改变 future 标志（除非服务端显式返回）
+      final futureFlag = meta['can_load_more_future'] as bool? ??
+          raw['can_load_more_future'] as bool?;
+      if (futureFlag != null) canLoadMoreFuture = futureFlag;
       return PagedPage(
         items: combined,
         hasMore: hasMorePast,
         advancePage: newMessages.isNotEmpty,
       );
     });
+  }
+
+  /// 向更新方向加载（搜索跳转后贴回 live edge 时用）
+  Future<void> loadMoreFuture() async {
+    if (!canLoadMoreFuture || state.isLoading) return;
+    final currentItems = state.value;
+    if (currentItems == null || currentItems.isEmpty) return;
+
+    final maxTargetId =
+        currentItems.map((m) => m.id).reduce((a, b) => a > b ? a : b);
+    // ignore: invalid_use_of_internal_member
+    state = AsyncLoading<List<ChatMessage>>().copyWithPrevious(state);
+    try {
+      final service = ref.read(discourseServiceProvider);
+      final raw = await service.getChannelMessages(
+        channelId,
+        pageSize: 50,
+        direction: 'future',
+        targetMessageId: maxTargetId,
+      );
+      final messages = _parseMessages(raw);
+      final existingIds = currentItems.map((m) => m.id).toSet();
+      final newMessages =
+          messages.where((m) => !existingIds.contains(m.id)).toList();
+      final combined = [...currentItems, ...newMessages];
+      combined.sort((a, b) {
+        final byTime = a.createdAt.compareTo(b.createdAt);
+        if (byTime != 0) return byTime;
+        return a.id.compareTo(b.id);
+      });
+      final meta = raw['meta'] is Map
+          ? Map<String, dynamic>.from(raw['meta'] as Map)
+          : const <String, dynamic>{};
+      canLoadMoreFuture = (meta['can_load_more_future'] as bool?) ??
+          (raw['can_load_more_future'] as bool?) ??
+          (newMessages.length >= 10);
+      // past 的 hasMore 保持不变；future 仅更新 canLoadMoreFuture
+      state = AsyncData(combined);
+    } catch (_) {
+      state = AsyncData(currentItems);
+    }
   }
 
   /// 发送消息（支持回复和附件）
@@ -314,8 +446,8 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       inReplyToId: inReplyToId,
       uploadIds: uploadIds,
     );
-    // 发送成功后刷新消息列表
-    unawaited(loadMessages());
+    // 发送后拉最新，避免 last_read 中窗覆盖刚发出的消息
+    unawaited(loadMessages(preferLatest: true));
     return messageId;
   }
 
@@ -323,21 +455,27 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   Future<void> editMessage(int messageId, String newText) async {
     final service = ref.read(discourseServiceProvider);
     await service.updateChatMessage(channelId, messageId, newText);
-    unawaited(loadMessages());
+    unawaited(loadMessages(preferLatest: true));
   }
 
   /// 删除消息
   Future<void> deleteMessage(int messageId) async {
+    // 先乐观标记，避免全量 reload 闪空白
+    _markMessageDeleted(messageId);
     final service = ref.read(discourseServiceProvider);
-    await service.deleteChatMessage(channelId, messageId);
-    unawaited(loadMessages());
+    try {
+      await service.deleteChatMessage(channelId, messageId);
+    } catch (_) {
+      unawaited(loadMessages(preferLatest: true));
+      rethrow;
+    }
   }
 
   /// 恢复已删除消息
   Future<void> restoreMessage(int messageId) async {
     final service = ref.read(discourseServiceProvider);
     await service.restoreChatMessage(channelId, messageId);
-    unawaited(loadMessages());
+    unawaited(loadMessages(preferLatest: true));
   }
 
   /// 举报消息
@@ -385,10 +523,21 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     }
   }
 
-  /// 标记已读
+  /// 标记已读（同 id / 更旧 id 跳过，避免 build 反复请求）
   Future<void> markAsRead(int messageId) async {
-    final service = ref.read(discourseServiceProvider);
-    await service.markChannelRead(channelId, messageId);
+    if (_lastMarkedReadId != null && messageId <= _lastMarkedReadId!) {
+      return;
+    }
+    _lastMarkedReadId = messageId;
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.markChannelRead(channelId, messageId);
+    } catch (_) {
+      // 已读失败不阻塞 UI；允许下次重试
+      if (_lastMarkedReadId == messageId) {
+        _lastMarkedReadId = null;
+      }
+    }
   }
 
   /// 切换消息 Emoji 回应 (Reaction)

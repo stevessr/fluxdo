@@ -324,7 +324,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           .read(chatMessagesProvider(widget.channelId).notifier)
           .jumpToMessage(message.id);
       if (!mounted) return;
-      // 稍等列表渲染后滚到目标附近（底部或中间）
+      // reverse 列表：index 0 = 最新；按「距最新的距离」粗略定位
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_scrollController.hasClients) return;
         final messages =
@@ -334,10 +334,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           _scrollToBottom();
           return;
         }
-        // 粗略按索引比例滚动
         final max = _scrollController.position.maxScrollExtent;
-        final ratio =
-            messages.length <= 1 ? 1.0 : (idx + 1) / messages.length;
+        // ASC 列表中 idx 越大越新；reverse 下距底部比例 ≈ 1 - (idx+1)/n
+        final ratio = messages.length <= 1
+            ? 0.0
+            : 1.0 - ((idx + 1) / messages.length);
         _scrollController.animateTo(
           (max * ratio).clamp(0.0, max),
           duration: const Duration(milliseconds: 250),
@@ -357,12 +358,14 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.position.pixels;
-    final atBottom = (maxScroll - currentScroll) < 100;
+    // reverse ListView：pixels≈0 为视觉底部（最新消息）
+    final atBottom = currentScroll <= 100;
     if (atBottom != _isAtBottom) {
       setState(() => _isAtBottom = atBottom);
     }
 
-    if (_scrollController.position.pixels <= 200) {
+    // reverse 列表顶部（历史方向）靠近 maxScrollExtent
+    if (maxScroll > 0 && currentScroll >= maxScroll - 240) {
       _loadMoreMessages();
     }
   }
@@ -370,47 +373,47 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void _scrollToBottom({bool animate = true}) {
     void jump() {
       if (!_scrollController.hasClients) return;
-      final max = _scrollController.position.maxScrollExtent;
+      // reverse ListView 底部即 minScrollExtent（通常为 0）
+      const target = 0.0;
       if (animate) {
         _scrollController.animateTo(
-          max,
+          target,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
       } else {
-        _scrollController.jumpTo(max);
+        _scrollController.jumpTo(target);
       }
     }
 
-    // 首屏布局未完成时 maxScrollExtent 可能为 0，多帧重试确保滚到底部
+    // 首屏布局未完成时多帧重试，确保落在最新消息
     WidgetsBinding.instance.addPostFrameCallback((_) {
       jump();
       WidgetsBinding.instance.addPostFrameCallback((_) => jump());
     });
   }
 
+  /// 对齐 Discourse scrollToLatestMessage：
+  /// 若仍有 future / 中窗会话，先重拉最新再贴底，避免只在已加载窗口内假「到底」。
+  Future<void> _scrollToLatest() async {
+    final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
+    if (notifier.canLoadMoreFuture || notifier.targetMessageId != null) {
+      await notifier.scrollToLatest();
+      if (!mounted) return;
+    }
+    _scrollToBottom(animate: true);
+    final messages =
+        ref.read(chatMessagesProvider(widget.channelId)).asData?.value;
+    if (messages != null) _markAsRead(messages);
+  }
+
   Future<void> _loadMoreMessages() async {
     final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
     if (!notifier.canLoadMorePast || notifier.isLoadingMore) return;
 
-    // 在顶部加载历史时保持视觉锚点，避免整表空白/跳动
-    final beforePixels =
-        _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
-    final beforeMax = _scrollController.hasClients
-        ? _scrollController.position.maxScrollExtent
-        : 0.0;
-
+    // reverse ListView 在 trailing 端插入更旧消息时，会增大 maxScrollExtent，
+    // 同时保持相对底部的 pixels，无需额外锚点补偿。
     await notifier.loadMore();
-
-    if (!mounted || !_scrollController.hasClients) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      final afterMax = _scrollController.position.maxScrollExtent;
-      final delta = afterMax - beforeMax;
-      if (delta > 0) {
-        _scrollController.jumpTo(beforePixels + delta);
-      }
-    });
   }
 
   /// 监听输入框变化，触发 @ 用户联想
@@ -932,22 +935,37 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       next.whenData((messages) {
         if (!_initialLoadDone && messages.isNotEmpty) {
           _initialLoadDone = true;
-          // 无动画 jump，避免首屏还在布局时 animate 失败导致停在顶部空白
+          // reverse 列表默认已在底部；仍 jump 一次以对齐布局
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom(animate: false);
             _markAsRead(messages);
           });
           return;
         }
-        // 自己发送/底部时跟随新消息
+        // 自己发送/底部时跟随新消息（reverse 下贴 minScrollExtent）
         final prevLen = prev?.value?.length ?? 0;
         if (_isAtBottom && messages.length > prevLen) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom(animate: true);
+            _markAsRead(messages);
           });
         }
       });
     });
+
+    // provider 非 autoDispose：缓存已有数据时 ref.listen 不会再触发首屏回调，
+    // 这里补一次，避免重进频道停在错误位置或看起来像空白。
+    final cachedMessages = messagesAsync.asData?.value;
+    if (!_initialLoadDone &&
+        cachedMessages != null &&
+        cachedMessages.isNotEmpty) {
+      _initialLoadDone = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _scrollToBottom(animate: false);
+        _markAsRead(cachedMessages);
+      });
+    }
 
     final channelsAsync = ref.watch(chatChannelsProvider);
     ChatChannel? currentChannel;
@@ -1063,7 +1081,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       IconButton(
                         icon: const Icon(Icons.arrow_downward_rounded),
                         tooltip: context.l10n.chat_scroll_to_bottom,
-                        onPressed: _scrollToBottom,
+                        onPressed: _scrollToLatest,
                       ),
                     IconButton(
                       icon: const Icon(Icons.people_outline_rounded),
@@ -1110,52 +1128,56 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             // 消息列表
             Expanded(
               child: messagesAsync.when(
+                // 刷新时保留旧列表，避免发送/重载把消息区刷成空白转圈
+                skipLoadingOnReload: true,
                 data: (messages) {
                   if (messages.isEmpty) {
                     return _buildEmptyState(theme);
                   }
 
-                  if (_initialLoadDone) {
-                    _markAsRead(messages);
-                  }
-
                   return NotificationListener<ScrollNotification>(
                     onNotification: (notification) {
-                      if (notification.metrics.axis == Axis.vertical &&
-                          notification.metrics.pixels <= 300) {
+                      if (notification.metrics.axis != Axis.vertical) {
+                        return false;
+                      }
+                      final metrics = notification.metrics;
+                      // reverse：靠近 maxScrollExtent = 更旧历史
+                      if (metrics.maxScrollExtent > 0 &&
+                          metrics.pixels >= metrics.maxScrollExtent - 300) {
                         _loadMoreMessages();
                       }
                       return false;
                     },
                     child: ListView.builder(
                       controller: _scrollController,
-                      // 关键屏直接从底部附近布局，减少“先空白再跳”的观感
-                      // （消息少时 fallback 到顶部）
-                      // 增大滚动缓存，减轻快速滑动时的空白闪烁
-                      scrollCacheExtent: const ScrollCacheExtent.pixels(800),
-                      padding: EdgeInsets.fromLTRB(
-                        12,
-                        12,
-                        12,
-                        12 + MediaQuery.paddingOf(context).bottom,
-                      ),
+                      // reverse：index 0 贴在视觉底部 = 最新消息，
+                      // 首屏无需再等 jump，从根上消除「数据在但屏幕空白」。
+                      reverse: true,
+                      scrollCacheExtent:
+                          const ScrollCacheExtent.pixels(800),
+                      // reverse 会翻转 padding：top 落在视觉底部（靠近输入框）
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                      // +1：最旧一侧的「加载更多」指示器
                       itemCount: messages.length + 1,
                       itemBuilder: (context, index) {
-                        if (index == 0) {
+                        // reverse 下最大 index 在视觉顶部
+                        if (index == messages.length) {
                           return _buildLoadMoreIndicator();
                         }
 
-                        final message = messages[index - 1];
+                        // messages 仍为时间升序；reverse 映射最新到 index 0
+                        final messageIndex = messages.length - 1 - index;
+                        final message = messages[messageIndex];
                         final isOwnMessage = currentUser != null &&
                             message.user != null &&
                             message.user!.id == currentUser.id;
 
-                        // 检查日期分割线
+                        // 日期分割：相对时间序上一条（更旧）
                         bool showDateHeader = false;
-                        if (index == 1) {
+                        if (messageIndex == 0) {
                           showDateHeader = true;
                         } else {
-                          final prevMessage = messages[index - 2];
+                          final prevMessage = messages[messageIndex - 1];
                           showDateHeader = !_isSameDay(
                             message.createdAt,
                             prevMessage.createdAt,
@@ -1169,7 +1191,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             (m) => m.id == message.inReplyToId,
                             orElse: () => message,
                           );
-                          if (replyToMsg.id == message.id) replyToMsg = null;
+                          if (replyToMsg.id == message.id) {
+                            replyToMsg = null;
+                          }
                         }
 
                         return Column(
@@ -1186,7 +1210,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               isMultiSelectMode: _isMultiSelectMode,
                               isSelected:
                                   _selectedMessageIds.contains(message.id),
-                              onToggleSelect: (id) => _toggleSelectMessage(id),
+                              onToggleSelect: (id) =>
+                                  _toggleSelectMessage(id),
                               onLongPress: () => _showMessageActionSheet(
                                 message,
                                 isOwnMessage,
@@ -1196,7 +1221,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   : null,
                               onToggleReaction: (emoji) {
                                 ref
-                                    .read(chatMessagesProvider(widget.channelId)
+                                    .read(chatMessagesProvider(
+                                            widget.channelId)
                                         .notifier)
                                     .toggleReaction(message.id, emoji);
                               },
