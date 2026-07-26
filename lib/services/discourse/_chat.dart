@@ -205,20 +205,23 @@ mixin _ChatMixin on _DiscourseServiceBase {
     }
   }
 
-  /// 获取指定频道的成员列表
+  /// 获取指定频道的成员列表（分页）
   ///
   /// 对齐 Discourse: GET /chat/api/channels/:id/memberships
-  /// 过滤参数为 [username]（非 filter）。
-  Future<List<Map<String, dynamic>>> getChannelMembers(
+  /// 过滤参数为 [username]（非 filter）；limit 最大 50。
+  ///
+  /// 返回 members + totalRows（meta.total_rows，大频道用此显示真实人数）。
+  Future<({List<Map<String, dynamic>> members, int? totalRows, bool hasMore})>
+      getChannelMembersPage(
     int channelId, {
     String? filter,
     String? username,
     int limit = 50,
     int offset = 0,
   }) async {
-    // Discourse INDEX_LIMIT = 50；服务端会 clamp 到该上限
+    final clampedLimit = limit.clamp(1, 50);
     final queryParameters = <String, dynamic>{
-      'limit': limit.clamp(1, 50),
+      'limit': clampedLimit,
       'offset': offset,
     };
     final nameFilter = username ?? filter;
@@ -231,10 +234,39 @@ mixin _ChatMixin on _DiscourseServiceBase {
         '/chat/api/channels/$channelId/memberships',
         queryParameters: queryParameters,
       );
-      return _extractMemberList(response.data);
+      final members = _extractMemberList(response.data);
+      int? totalRows;
+      if (response.data is Map) {
+        final meta = (response.data as Map)['meta'];
+        if (meta is Map) {
+          totalRows = (meta['total_rows'] as num?)?.toInt();
+        }
+      }
+      final hasMore = totalRows != null
+          ? offset + members.length < totalRows
+          : members.length >= clampedLimit;
+      return (members: members, totalRows: totalRows, hasMore: hasMore);
     } on DioException catch (e) {
       _throwApiError(e);
     }
+  }
+
+  /// 获取指定频道的成员列表（兼容旧调用，仅首屏）
+  Future<List<Map<String, dynamic>>> getChannelMembers(
+    int channelId, {
+    String? filter,
+    String? username,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final page = await getChannelMembersPage(
+      channelId,
+      filter: filter,
+      username: username,
+      limit: limit,
+      offset: offset,
+    );
+    return page.members;
   }
 
   List<Map<String, dynamic>> _extractMemberList(dynamic data) {

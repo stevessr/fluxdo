@@ -589,6 +589,7 @@ class _ChatChannelSettingsSheetState
                     widget.channelId,
                     widget.channelTitle,
                     canAddMembers: canAddMembers,
+                    membersCountHint: channel?.membersCount,
                   );
                 },
               ),
@@ -611,6 +612,7 @@ class _ChatChannelSettingsSheetState
                       widget.channelId,
                       widget.channelTitle,
                       canAddMembers: true,
+                      membersCountHint: channel?.membersCount,
                     );
                   },
                 ),

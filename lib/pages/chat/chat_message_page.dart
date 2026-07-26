@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +11,7 @@ import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
 import '../../models/emoji.dart';
 import '../../models/topic.dart' show FlagType;
+import '../../models/user.dart';
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
@@ -365,23 +367,50 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     }
   }
 
-  void _scrollToBottom() {
-    if (!_scrollController.hasClients) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+  void _scrollToBottom({bool animate = true}) {
+    void jump() {
+      if (!_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      if (animate) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          max,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
+      } else {
+        _scrollController.jumpTo(max);
       }
+    }
+
+    // 首屏布局未完成时 maxScrollExtent 可能为 0，多帧重试确保滚到底部
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      jump();
+      WidgetsBinding.instance.addPostFrameCallback((_) => jump());
     });
   }
 
   Future<void> _loadMoreMessages() async {
     final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
     if (!notifier.canLoadMorePast || notifier.isLoadingMore) return;
+
+    // 在顶部加载历史时保持视觉锚点，避免整表空白/跳动
+    final beforePixels =
+        _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
+    final beforeMax = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent
+        : 0.0;
+
     await notifier.loadMore();
+
+    if (!mounted || !_scrollController.hasClients) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      final afterMax = _scrollController.position.maxScrollExtent;
+      final delta = afterMax - beforeMax;
+      if (delta > 0) {
+        _scrollController.jumpTo(beforePixels + delta);
+      }
+    });
   }
 
   /// 监听输入框变化，触发 @ 用户联想
@@ -899,13 +928,22 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     final messagesAsync = ref.watch(chatMessagesProvider(widget.channelId));
     final currentUser = ref.watch(currentUserProvider).value;
 
-    ref.listen(chatMessagesProvider(widget.channelId), (_, next) {
+    ref.listen(chatMessagesProvider(widget.channelId), (prev, next) {
       next.whenData((messages) {
-        if (!_initialLoadDone) {
+        if (!_initialLoadDone && messages.isNotEmpty) {
           _initialLoadDone = true;
+          // 无动画 jump，避免首屏还在布局时 animate 失败导致停在顶部空白
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToBottom();
+            _scrollToBottom(animate: false);
             _markAsRead(messages);
+          });
+          return;
+        }
+        // 自己发送/底部时跟随新消息
+        final prevLen = prev?.value?.length ?? 0;
+        if (_isAtBottom && messages.length > prevLen) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom(animate: true);
           });
         }
       });
@@ -1014,6 +1052,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           widget.channelId,
                           widget.channelTitle,
                           canAddMembers: currentChannel?.canAddMembers ?? false,
+                          membersCountHint: currentChannel?.membersCount,
                         );
                       },
                     ),
@@ -1057,6 +1096,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     },
                     child: ListView.builder(
                       controller: _scrollController,
+                      // 关键屏直接从底部附近布局，减少“先空白再跳”的观感
+                      // （消息少时 fallback 到顶部）
+                      // 增大滚动缓存，减轻快速滑动时的空白闪烁
+                      scrollCacheExtent: const ScrollCacheExtent.pixels(800),
                       padding: EdgeInsets.fromLTRB(
                         12,
                         12,
@@ -1143,7 +1186,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               ),
             ),
             // 输入区域（含回复/编辑/图片预览/联想菜单）
-            _buildInputArea(theme),
+            _buildInputArea(theme, currentChannel, currentUser),
           ],
         ],
       ),
@@ -1332,12 +1375,29 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     );
   }
 
-  Widget _buildInputArea(ThemeData theme) {
+  Widget _buildInputArea(
+    ThemeData theme,
+    ChatChannel? channel,
+    User? currentUser,
+  ) {
+    final isStaff = currentUser?.isStaff ?? false;
+    final userSilenced = currentUser?.isSilenced ?? false;
+    final canSend = channel?.canSendMessages(
+          isStaff: isStaff,
+          userSilenced: userSilenced,
+        ) ??
+        true;
+    final disabledReason = channel?.sendDisabledReason(
+          isStaff: isStaff,
+          userSilenced: userSilenced,
+        ) ??
+        '';
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // @ 联想弹窗
-        if (_showMentionSuggestions) _buildMentionSuggestions(theme),
+        if (_showMentionSuggestions && canSend) _buildMentionSuggestions(theme),
 
         Container(
           decoration: BoxDecoration(
@@ -1353,14 +1413,45 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (!canSend)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.lock_outline_rounded,
+                          size: 16,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            disabledReason,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // 回复 / 编辑提示条
-                if (_replyToMessage != null || _editingMessage != null)
+                if (canSend &&
+                    (_replyToMessage != null || _editingMessage != null))
                   _buildContextBanner(theme),
 
                 // 图片附件预览
-                if (_uploadPreviewPath != null) _buildUploadPreview(theme),
+                if (canSend && _uploadPreviewPath != null)
+                  _buildUploadPreview(theme),
 
                 // 输入框与操作按钮
+                if (canSend)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
                   child: Row(
@@ -1450,7 +1541,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 ),
 
                 // 表情 / 表情包面板
-                if (_showEmojiPicker)
+                if (canSend && _showEmojiPicker)
                   SizedBox(
                     height: 280,
                     child: EmojiStickerPanel(

@@ -10,16 +10,21 @@ import '../../widgets/common/smart_avatar.dart';
 import '../user_profile_page.dart';
 
 /// 聊天频道成员与添加成员弹窗
+///
+/// 支持大频道分页流式加载：首屏 50 人，滚动到底继续拉取。
+/// 标题人数优先使用服务端 meta.total_rows / memberships_count。
 class ChatChannelMembersSheet extends ConsumerStatefulWidget {
   final int channelId;
   final String channelTitle;
   final bool canAddMembers;
+  final int? membersCountHint;
 
   const ChatChannelMembersSheet({
     super.key,
     required this.channelId,
     required this.channelTitle,
     this.canAddMembers = false,
+    this.membersCountHint,
   });
 
   static void show(
@@ -27,6 +32,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
     int channelId,
     String channelTitle, {
     bool canAddMembers = false,
+    int? membersCountHint,
   }) {
     showModalBottomSheet(
       context: context,
@@ -39,6 +45,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
         channelId: channelId,
         channelTitle: channelTitle,
         canAddMembers: canAddMembers,
+        membersCountHint: membersCountHint,
       ),
     );
   }
@@ -72,14 +79,15 @@ class _ChatChannelMembersSheetState
     setState(() => _filterQuery = _searchController.text.trim().toLowerCase());
   }
 
-  /// 展开添加成员对话框
   void _showAddMemberDialog() {
     showDialog(
       context: context,
       builder: (ctx) => _AddChannelMemberDialog(
         channelId: widget.channelId,
         onMemberAdded: () {
-          ref.invalidate(chatChannelMembersProvider(widget.channelId));
+          ref
+              .read(chatChannelMembersProvider(widget.channelId).notifier)
+              .refresh();
         },
       ),
     );
@@ -105,169 +113,230 @@ class _ChatChannelMembersSheetState
       maxChildSize: 0.95,
       expand: false,
       builder: (context, scrollController) {
-        return Column(
-          children: [
-            // 顶部抓手与标题
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Column(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(2),
+        // 滚动接近底部时加载更多
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification.metrics.axis != Axis.vertical) return false;
+            final metrics = notification.metrics;
+            if (metrics.pixels >= metrics.maxScrollExtent - 200) {
+              final notifier = ref.read(
+                chatChannelMembersProvider(widget.channelId).notifier,
+              );
+              final state = membersAsync.asData?.value;
+              if (state != null &&
+                  state.hasMore &&
+                  !state.isLoadingMore &&
+                  _filterQuery.isEmpty) {
+                notifier.loadMore();
+              }
+            }
+            return false;
+          },
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onSurfaceVariant
+                            .withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              context.l10n.chat_channel_members,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                context.l10n.chat_channel_members,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            Text(
-                              membersAsync.value != null
-                                  ? '${widget.channelTitle} (${membersAsync.value!.length}人)'
-                                  : widget.channelTitle,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // 添加成员按钮（仅当有权限时显示）
-                      if (widget.canAddMembers)
-                        FilledButton.icon(
-                          onPressed: _showAddMemberDialog,
-                          icon: const Icon(Icons.person_add_rounded, size: 18),
-                          label: Text(context.l10n.chat_add_member),
-                          style: FilledButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // 手动触发搜索过滤框
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: TextField(
-                controller: _searchController,
-                onSubmitted: (_) => _executeFilter(),
-                decoration: InputDecoration(
-                  hintText: context.l10n.chat_search_members,
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                    onPressed: _executeFilter,
-                    tooltip: '搜索',
-                  ),
-                  isDense: true,
-                  filled: true,
-                  fillColor: theme.colorScheme.surfaceContainerHighest,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-              ),
-            ),
-
-            const Divider(height: 1),
-
-            // 成员列表视图
-            Expanded(
-              child: membersAsync.when(
-                data: (members) {
-                  final filteredMembers = members.where((m) {
-                    if (_filterQuery.isEmpty) return true;
-                    final usernameMatch =
-                        m.username.toLowerCase().contains(_filterQuery);
-                    final nameMatch =
-                        m.name?.toLowerCase().contains(_filterQuery) ?? false;
-                    return usernameMatch || nameMatch;
-                  }).toList();
-
-                  if (filteredMembers.isEmpty) {
-                    return Center(
-                      child: Text(
-                        context.l10n.chat_no_members,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    );
-                  }
-
-                  return ListView.builder(
-                    controller: scrollController,
-                    itemCount: filteredMembers.length,
-                    itemBuilder: (context, index) {
-                      final user = filteredMembers[index];
-                      final avatarUrl = _resolveAvatarUrl(user);
-
-                      return ListTile(
-                        leading: SmartAvatar(
-                          imageUrl: avatarUrl,
-                          radius: 20,
-                          fallbackText: user.username,
-                        ),
-                        title: Text(
-                          user.name ?? user.username,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: user.name != null
-                            ? Text(
-                                '@${user.username}',
+                              Text(
+                                () {
+                                  final total = membersAsync.asData?.value.displayCount ??
+                                      widget.membersCountHint;
+                                  final loaded =
+                                      membersAsync.asData?.value.members.length;
+                                  if (total != null) {
+                                    if (loaded != null &&
+                                        loaded < total &&
+                                        _filterQuery.isEmpty) {
+                                      return '${widget.channelTitle}（$total 人，已加载 $loaded）';
+                                    }
+                                    return '${widget.channelTitle}（$total 人）';
+                                  }
+                                  if (loaded != null) {
+                                    return '${widget.channelTitle}（$loaded 人）';
+                                  }
+                                  return widget.channelTitle;
+                                }(),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
-                              )
-                            : null,
-                        trailing: TextButton(
-                          onPressed: () => _navigateToUserProfile(user.username),
-                          child: Text(context.l10n.chat_view_profile),
+                              ),
+                            ],
+                          ),
                         ),
-                        onTap: () => _navigateToUserProfile(user.username),
-                      );
-                    },
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (err, stack) => ErrorView(
-                  error: err,
-                  stackTrace: stack,
-                  onRetry: () => ref.invalidate(
-                    chatChannelMembersProvider(widget.channelId),
+                        if (widget.canAddMembers)
+                          FilledButton.icon(
+                            onPressed: _showAddMemberDialog,
+                            icon: const Icon(Icons.person_add_rounded, size: 18),
+                            label: Text(context.l10n.chat_add_member),
+                            style: FilledButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: TextField(
+                  controller: _searchController,
+                  onSubmitted: (_) => _executeFilter(),
+                  decoration: InputDecoration(
+                    hintText: context.l10n.chat_search_members,
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                      onPressed: _executeFilter,
+                      tooltip: '搜索',
+                    ),
+                    isDense: true,
+                    filled: true,
+                    fillColor: theme.colorScheme.surfaceContainerHighest,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+              const Divider(height: 1),
+              Expanded(
+                child: membersAsync.when(
+                  data: (state) {
+                    final members = state.members;
+                    final filteredMembers = members.where((m) {
+                      if (_filterQuery.isEmpty) return true;
+                      final usernameMatch =
+                          m.username.toLowerCase().contains(_filterQuery);
+                      final nameMatch =
+                          m.name?.toLowerCase().contains(_filterQuery) ?? false;
+                      return usernameMatch || nameMatch;
+                    }).toList();
+
+                    if (filteredMembers.isEmpty && !state.isLoadingMore) {
+                      return Center(
+                        child: Text(
+                          context.l10n.chat_no_members,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      );
+                    }
+
+                    final showFooter = _filterQuery.isEmpty &&
+                        (state.hasMore ||
+                            state.isLoadingMore ||
+                            state.loadMoreError != null);
+
+                    return ListView.builder(
+                      controller: scrollController,
+                      itemCount:
+                          filteredMembers.length + (showFooter ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index >= filteredMembers.length) {
+                          if (state.loadMoreError != null) {
+                            return Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Center(
+                                child: TextButton.icon(
+                                  onPressed: () => ref
+                                      .read(chatChannelMembersProvider(
+                                              widget.channelId)
+                                          .notifier)
+                                      .loadMore(),
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: const Text('加载更多失败，点击重试'),
+                                ),
+                              ),
+                            );
+                          }
+                          if (state.isLoadingMore || state.hasMore) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        }
+
+                        final user = filteredMembers[index];
+                        final avatarUrl = _resolveAvatarUrl(user);
+                        return ListTile(
+                          leading: SmartAvatar(
+                            imageUrl: avatarUrl,
+                            radius: 20,
+                            fallbackText: user.username,
+                          ),
+                          title: Text(user.name ?? user.username),
+                          subtitle: user.name != null
+                              ? Text('@${user.username}')
+                              : null,
+                          onTap: () => _navigateToUserProfile(user.username),
+                        );
+                      },
+                    );
+                  },
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, stack) => ErrorView(
+                    error: error,
+                    stackTrace: stack,
+                    onRetry: () {
+                      ref
+                          .read(chatChannelMembersProvider(widget.channelId)
+                              .notifier)
+                          .refresh();
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 }
 
-/// 弹窗：搜索并添加新成员到频道
+/// 添加频道成员对话框
 class _AddChannelMemberDialog extends ConsumerStatefulWidget {
   final int channelId;
   final VoidCallback onMemberAdded;
@@ -279,10 +348,10 @@ class _AddChannelMemberDialog extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<_AddChannelMemberDialog> createState() =>
-      __AddChannelMemberDialogState();
+      _AddChannelMemberDialogState();
 }
 
-class __AddChannelMemberDialogState
+class _AddChannelMemberDialogState
     extends ConsumerState<_AddChannelMemberDialog> {
   final TextEditingController _controller = TextEditingController();
   List<Chatable> _searchResults = [];
@@ -395,7 +464,8 @@ class __AddChannelMemberDialogState
                       autofocus: true,
                       decoration: InputDecoration(
                         hintText: context.l10n.chat_search_users,
-                        prefixIcon: const Icon(Icons.person_search_rounded, size: 20),
+                        prefixIcon:
+                            const Icon(Icons.person_search_rounded, size: 20),
                         isDense: true,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -449,7 +519,8 @@ class __AddChannelMemberDialogState
                                   ? Text('@${user.username}')
                                   : null,
                               trailing: IconButton(
-                                icon: const Icon(Icons.add_circle_outline_rounded),
+                                icon: const Icon(
+                                    Icons.add_circle_outline_rounded),
                                 color: theme.colorScheme.primary,
                                 onPressed: _isAdding
                                     ? null

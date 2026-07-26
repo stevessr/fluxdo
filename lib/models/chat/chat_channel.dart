@@ -84,6 +84,28 @@ class ChatChannel {
   /// 当前用户是否已关注/加入（membership.following == true）
   bool get isJoined => following;
 
+  /// 当前用户是否可在此频道发言
+  ///
+  /// 对齐 Discourse Guardian#can_create_channel_message?：
+  /// - 普通用户仅 open 可发
+  /// - staff 在 open/closed 可发
+  /// - read_only / archived 均不可发
+  /// - 用户被全站禁言时不可发
+  bool canSendMessages({required bool isStaff, bool userSilenced = false}) {
+    if (userSilenced) return false;
+    if (isStaff) return isOpen || isClosed;
+    return isOpen;
+  }
+
+  /// 不可发言时的提示文案
+  String sendDisabledReason({required bool isStaff, bool userSilenced = false}) {
+    if (userSilenced) return '你当前被禁言，无法发送消息';
+    if (isArchived) return '频道已归档，无法发送消息';
+    if (isReadOnly) return '频道为只读，无法发送消息';
+    if (isClosed && !isStaff) return '频道已关闭，无法发送消息';
+    return '当前无法发送消息';
+  }
+
   /// 规范化频道 emoji 短码（Discourse 存的是不带冒号的 name，如 speech_balloon）
   static String? normalizeEmojiShortcode(String? raw) {
     if (raw == null) return null;
