@@ -754,7 +754,7 @@ class ChatChannelMembersNotifier
     required List<ChatUser> existing,
   }) async {
     final service = ref.read(discourseServiceProvider);
-    final seen = existing.map((u) => u.username).toSet();
+    final seen = <String>{for (final u in existing) u.username.toLowerCase()};
     final list = List<ChatUser>.from(existing);
     final previousTotal = state.asData?.value.totalRows;
 
@@ -766,7 +766,7 @@ class ChatChannelMembersNotifier
       );
       for (final e in page.members) {
         final u = _userFromMembershipMap(e);
-        if (u != null && seen.add(u.username)) {
+        if (u != null && seen.add(u.username.toLowerCase())) {
           list.add(u);
         }
       }
@@ -784,7 +784,8 @@ class ChatChannelMembersNotifier
             if (c.id != channelId) continue;
             channelCount = c.membersCount;
             for (final u in c.dmUsers ?? const <ChatUser>[]) {
-              if (u.username.isNotEmpty && seen.add(u.username)) {
+              if (u.username.isNotEmpty &&
+                  seen.add(u.username.toLowerCase())) {
                 list.add(u);
               }
             }
@@ -794,12 +795,23 @@ class ChatChannelMembersNotifier
       }
 
       final total = page.totalRows ?? channelCount ?? previousTotal;
+      // offset 必须按「服务端返回条数」推进，而不是去重后的本地条数，
+      // 否则下一页会重复请求同一 offset，表现为无法继续流式加载。
       final nextOffset = offset + page.members.length;
+      final bool hasMore;
+      if (page.members.isEmpty) {
+        hasMore = false;
+      } else if (total != null) {
+        hasMore = nextOffset < total;
+      } else {
+        hasMore = page.members.length >= _pageSize;
+      }
+
       return ChatChannelMembersState(
         members: list,
         totalRows: total,
         offset: nextOffset,
-        hasMore: total != null ? list.length < total : page.hasMore,
+        hasMore: hasMore,
       );
     } catch (e) {
       if (existing.isNotEmpty) {
@@ -817,7 +829,9 @@ class ChatChannelMembersNotifier
 
   Future<void> loadMore() async {
     final current = state.asData?.value;
-    if (current == null || !current.hasMore || current.isLoadingMore) return;
+    if (current == null || !current.hasMore || current.isLoadingMore) {
+      return;
+    }
 
     state = AsyncData(
       current.copyWith(isLoadingMore: true, clearLoadMoreError: true),
@@ -827,7 +841,17 @@ class ChatChannelMembersNotifier
         offset: current.offset,
         existing: current.members,
       );
-      state = AsyncData(next.copyWith(isLoadingMore: false));
+      // 若服务端本页为空，结束分页，避免死循环
+      final reachedEnd = next.offset <= current.offset ||
+          (next.members.length <= current.members.length &&
+              next.totalRows != null &&
+              next.offset >= (next.totalRows ?? 0));
+      state = AsyncData(
+        next.copyWith(
+          isLoadingMore: false,
+          hasMore: reachedEnd ? false : next.hasMore,
+        ),
+      );
     } catch (e) {
       state = AsyncData(
         current.copyWith(isLoadingMore: false, loadMoreError: e),

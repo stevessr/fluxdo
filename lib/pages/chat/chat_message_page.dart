@@ -1032,6 +1032,28 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               : AppBar(
                   title: Text(widget.channelTitle),
                   actions: [
+                    // 收藏（与频道列表/设置页共用 chatFavoritesProvider）
+                    Builder(
+                      builder: (context) {
+                        final isFavorite = ref
+                            .watch(chatFavoritesProvider)
+                            .contains(widget.channelId);
+                        return IconButton(
+                          icon: Icon(
+                            isFavorite
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            color: isFavorite ? Colors.amber : null,
+                          ),
+                          tooltip: isFavorite ? '取消收藏' : '收藏频道',
+                          onPressed: () {
+                            ref
+                                .read(chatFavoritesProvider.notifier)
+                                .toggleFavorite(widget.channelId);
+                          },
+                        );
+                      },
+                    ),
                     IconButton(
                       icon: const Icon(Icons.search_rounded),
                       tooltip: '搜索对话',
@@ -1047,12 +1069,23 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       icon: const Icon(Icons.people_outline_rounded),
                       tooltip: context.l10n.chat_channel_members,
                       onPressed: () {
+                        final settings =
+                            PreloadedDataService().siteSettingsSync;
+                        final rawLimit =
+                            settings?['chat_max_direct_message_users'];
+                        final dmLimit = currentChannel?.isDirectMessage == true
+                            ? (rawLimit is num
+                                ? rawLimit.toInt()
+                                : int.tryParse('$rawLimit'))
+                            : null;
                         ChatChannelMembersSheet.show(
                           context,
                           widget.channelId,
                           widget.channelTitle,
-                          canAddMembers: currentChannel?.canAddMembers ?? false,
+                          canAddMembers:
+                              currentChannel?.canAddMembers ?? false,
                           membersCountHint: currentChannel?.membersCount,
+                          membersLimit: dmLimit,
                         );
                       },
                     ),

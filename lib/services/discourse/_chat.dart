@@ -513,7 +513,8 @@ mixin _ChatMixin on _DiscourseServiceBase {
   /// 对齐 Discourse chat-api.updateCurrentUserChannelNotificationsSettings:
   /// PUT /chat/api/channels/:id/notifications-settings/me
   /// body: { notifications_settings: { muted, notification_level } }
-  Future<void> updateChannelNotificationsSettings(
+  /// 返回更新后的 membership（含 muted / notification_level），便于本地同步。
+  Future<Map<String, dynamic>?> updateChannelNotificationsSettings(
     int channelId, {
     bool? muted,
     String? notificationLevel,
@@ -523,13 +524,21 @@ mixin _ChatMixin on _DiscourseServiceBase {
     if (notificationLevel != null) {
       settings['notification_level'] = notificationLevel;
     }
-    if (settings.isEmpty) return;
+    if (settings.isEmpty) return null;
 
     try {
-      await _dio.put(
+      final response = await _dio.put(
         '/chat/api/channels/$channelId/notifications-settings/me',
         data: {'notifications_settings': settings},
       );
+      if (response.data is Map) {
+        final map = Map<String, dynamic>.from(response.data as Map);
+        if (map['membership'] is Map) {
+          return Map<String, dynamic>.from(map['membership'] as Map);
+        }
+        return map;
+      }
+      return null;
     } on DioException catch (e) {
       _throwApiError(e);
     }

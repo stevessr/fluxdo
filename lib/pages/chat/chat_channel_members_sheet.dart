@@ -18,6 +18,8 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
   final String channelTitle;
   final bool canAddMembers;
   final int? membersCountHint;
+  /// 群组私信人数上限（站点 chat_max_direct_message_users）
+  final int? membersLimit;
 
   const ChatChannelMembersSheet({
     super.key,
@@ -25,6 +27,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
     required this.channelTitle,
     this.canAddMembers = false,
     this.membersCountHint,
+    this.membersLimit,
   });
 
   static void show(
@@ -33,6 +36,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
     String channelTitle, {
     bool canAddMembers = false,
     int? membersCountHint,
+    int? membersLimit,
   }) {
     showModalBottomSheet(
       context: context,
@@ -46,6 +50,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
         channelTitle: channelTitle,
         canAddMembers: canAddMembers,
         membersCountHint: membersCountHint,
+        membersLimit: membersLimit,
       ),
     );
   }
@@ -112,61 +117,48 @@ class _ChatChannelMembersSheetState
       minChildSize: 0.4,
       maxChildSize: 0.95,
       expand: false,
-      builder: (context, scrollController) {
-        // 滚动接近底部时加载更多
-        return NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification.metrics.axis != Axis.vertical) return false;
-            final metrics = notification.metrics;
-            if (metrics.pixels >= metrics.maxScrollExtent - 200) {
-              final notifier = ref.read(
-                chatChannelMembersProvider(widget.channelId).notifier,
-              );
-              final state = membersAsync.asData?.value;
-              if (state != null &&
-                  state.hasMore &&
-                  !state.isLoadingMore &&
-                  _filterQuery.isEmpty) {
-                notifier.loadMore();
-              }
-            }
-            return false;
-          },
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurfaceVariant
-                            .withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+      builder: (context, sheetScrollController) {
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Column(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                context.l10n.chat_channel_members,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.l10n.chat_channel_members,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
                               ),
-                              Text(
-                                () {
-                                  final total = membersAsync.asData?.value.displayCount ??
-                                      widget.membersCountHint;
-                                  final loaded =
-                                      membersAsync.asData?.value.members.length;
+                            ),
+                            Text(
+                              () {
+                                final total =
+                                    membersAsync.asData?.value.displayCount ??
+                                        widget.membersCountHint;
+                                final loaded = membersAsync
+                                    .asData?.value.members.length;
+                                final limit = widget.membersLimit;
+                                final base = () {
                                   if (total != null) {
+                                    if (limit != null && limit > 0) {
+                                      return '${widget.channelTitle}（$total / $limit 人）';
+                                    }
                                     if (loaded != null &&
                                         loaded < total &&
                                         _filterQuery.isEmpty) {
@@ -175,91 +167,122 @@ class _ChatChannelMembersSheetState
                                     return '${widget.channelTitle}（$total 人）';
                                   }
                                   if (loaded != null) {
+                                    if (limit != null && limit > 0) {
+                                      return '${widget.channelTitle}（已加载 $loaded / 上限 $limit）';
+                                    }
                                     return '${widget.channelTitle}（$loaded 人）';
                                   }
+                                  if (limit != null && limit > 0) {
+                                    return '${widget.channelTitle}（上限 $limit 人）';
+                                  }
                                   return widget.channelTitle;
-                                }(),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
+                                }();
+                                return base;
+                              }(),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
-                            ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (widget.canAddMembers)
+                        FilledButton.icon(
+                          onPressed: _showAddMemberDialog,
+                          icon:
+                              const Icon(Icons.person_add_rounded, size: 18),
+                          label: Text(context.l10n.chat_add_member),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
                           ),
                         ),
-                        if (widget.canAddMembers)
-                          FilledButton.icon(
-                            onPressed: _showAddMemberDialog,
-                            icon: const Icon(Icons.person_add_rounded, size: 18),
-                            label: Text(context.l10n.chat_add_member),
-                            style: FilledButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ),
+            ),
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: TextField(
-                  controller: _searchController,
-                  onSubmitted: (_) => _executeFilter(),
-                  decoration: InputDecoration(
-                    hintText: context.l10n.chat_search_members,
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                      onPressed: _executeFilter,
-                      tooltip: '搜索',
-                    ),
-                    isDense: true,
-                    filled: true,
-                    fillColor: theme.colorScheme.surfaceContainerHighest,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: TextField(
+                controller: _searchController,
+                onSubmitted: (_) => _executeFilter(),
+                decoration: InputDecoration(
+                  hintText: context.l10n.chat_search_members,
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                    onPressed: _executeFilter,
+                    tooltip: '搜索',
+                  ),
+                  isDense: true,
+                  filled: true,
+                  fillColor: theme.colorScheme.surfaceContainerHighest,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
                   ),
                 ),
               ),
-              const Divider(height: 1),
-              Expanded(
-                child: membersAsync.when(
-                  data: (state) {
-                    final members = state.members;
-                    final filteredMembers = members.where((m) {
-                      if (_filterQuery.isEmpty) return true;
-                      final usernameMatch =
-                          m.username.toLowerCase().contains(_filterQuery);
-                      final nameMatch =
-                          m.name?.toLowerCase().contains(_filterQuery) ?? false;
-                      return usernameMatch || nameMatch;
-                    }).toList();
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: membersAsync.when(
+                data: (state) {
+                  final members = state.members;
+                  final filteredMembers = members.where((m) {
+                    if (_filterQuery.isEmpty) return true;
+                    final usernameMatch =
+                        m.username.toLowerCase().contains(_filterQuery);
+                    final nameMatch =
+                        m.name?.toLowerCase().contains(_filterQuery) ?? false;
+                    return usernameMatch || nameMatch;
+                  }).toList();
 
-                    if (filteredMembers.isEmpty && !state.isLoadingMore) {
-                      return Center(
-                        child: Text(
-                          context.l10n.chat_no_members,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                  if (filteredMembers.isEmpty && !state.isLoadingMore) {
+                    return Center(
+                      child: Text(
+                        context.l10n.chat_no_members,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                      );
-                    }
+                      ),
+                    );
+                  }
 
-                    final showFooter = _filterQuery.isEmpty &&
-                        (state.hasMore ||
-                            state.isLoadingMore ||
-                            state.loadMoreError != null);
+                  final showFooter = _filterQuery.isEmpty &&
+                      (state.hasMore ||
+                          state.isLoadingMore ||
+                          state.loadMoreError != null);
 
-                    return ListView.builder(
-                      controller: scrollController,
+                  // 使用独立 ScrollController 绑定 ListView，避免
+                  // DraggableScrollableSheet 抢走滚动导致无法触底加载。
+                  return NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification.metrics.axis != Axis.vertical) {
+                        return false;
+                      }
+                      final metrics = notification.metrics;
+                      // 内容不足以滚动时也尝试加载更多
+                      final nearBottom = metrics.maxScrollExtent <= 0 ||
+                          metrics.pixels >= metrics.maxScrollExtent - 240;
+                      if (nearBottom &&
+                          state.hasMore &&
+                          !state.isLoadingMore &&
+                          _filterQuery.isEmpty) {
+                        ref
+                            .read(chatChannelMembersProvider(widget.channelId)
+                                .notifier)
+                            .loadMore();
+                      }
+                      return false;
+                    },
+                    child: ListView.builder(
+                      // 不使用 sheetScrollController，让列表自己滚动
+                      physics: const AlwaysScrollableScrollPhysics(),
                       itemCount:
                           filteredMembers.length + (showFooter ? 1 : 0),
                       itemBuilder: (context, index) {
@@ -280,7 +303,7 @@ class _ChatChannelMembersSheetState
                               ),
                             );
                           }
-                          if (state.isLoadingMore || state.hasMore) {
+                          if (state.isLoadingMore) {
                             return const Padding(
                               padding: EdgeInsets.all(16),
                               child: Center(
@@ -290,6 +313,39 @@ class _ChatChannelMembersSheetState
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                   ),
+                                ),
+                              ),
+                            );
+                          }
+                          if (state.hasMore) {
+                            // 内容不足一屏时提供显式加载入口，并在首帧尝试自动续拉
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              final s = ref
+                                  .read(chatChannelMembersProvider(
+                                          widget.channelId))
+                                  .asData
+                                  ?.value;
+                              if (s != null &&
+                                  s.hasMore &&
+                                  !s.isLoadingMore &&
+                                  _filterQuery.isEmpty) {
+                                ref
+                                    .read(chatChannelMembersProvider(
+                                            widget.channelId)
+                                        .notifier)
+                                    .loadMore();
+                              }
+                            });
+                            return Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Center(
+                                child: TextButton(
+                                  onPressed: () => ref
+                                      .read(chatChannelMembersProvider(
+                                              widget.channelId)
+                                          .notifier)
+                                      .loadMore(),
+                                  child: const Text('加载更多成员'),
                                 ),
                               ),
                             );
@@ -309,27 +365,28 @@ class _ChatChannelMembersSheetState
                           subtitle: user.name != null
                               ? Text('@${user.username}')
                               : null,
-                          onTap: () => _navigateToUserProfile(user.username),
+                          onTap: () =>
+                              _navigateToUserProfile(user.username),
                         );
                       },
-                    );
+                    ),
+                  );
+                },
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (error, stack) => ErrorView(
+                  error: error,
+                  stackTrace: stack,
+                  onRetry: () {
+                    ref
+                        .read(chatChannelMembersProvider(widget.channelId)
+                            .notifier)
+                        .refresh();
                   },
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (error, stack) => ErrorView(
-                    error: error,
-                    stackTrace: stack,
-                    onRetry: () {
-                      ref
-                          .read(chatChannelMembersProvider(widget.channelId)
-                              .notifier)
-                          .refresh();
-                    },
-                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );

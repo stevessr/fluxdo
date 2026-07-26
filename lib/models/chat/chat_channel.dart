@@ -106,6 +106,31 @@ class ChatChannel {
     return '当前无法发送消息';
   }
 
+  /// 是否为私信频道
+  bool get isDirectMessage =>
+      chatableType == 'DirectMessage' || chatableType == 'DirectMessageChannel';
+
+  /// 是否为分类/公开频道
+  bool get isCategoryChannel =>
+      chatableType == 'Category' || chatableType == 'CategoryChannel';
+
+  /// 是否可编辑频道属性（名称/slug/emoji/threading 等）
+  ///
+  /// 对齐 Discourse Guardian#can_edit_chat_channel?：
+  /// - 公开频道：仅 staff
+  /// - 私信：成员（或 staff）可编辑
+  bool canEditChannel({required bool isStaff}) {
+    final metaCanEdit = meta?['can_edit'] as bool? ??
+        meta?['can_edit_channel'] as bool? ??
+        userChatChannelMembership?['can_edit'] as bool?;
+    if (metaCanEdit != null) return metaCanEdit;
+
+    if (isDirectMessage) {
+      return isStaff || following || userChatChannelMembership != null;
+    }
+    return isStaff;
+  }
+
   /// 规范化频道 emoji 短码（Discourse 存的是不带冒号的 name，如 speech_balloon）
   static String? normalizeEmojiShortcode(String? raw) {
     if (raw == null) return null;
@@ -318,8 +343,20 @@ class ChatChannel {
         (json['meta'] is Map ? (json['meta']['threading_enabled'] as bool?) : null) ??
         false;
 
-    final notifLevel = (membership?['notification_level'] as String?) ??
-        (json['notification_level'] as String?);
+    // 通知级别可能是字符串 never/mention/always，或枚举整数 0/1/2
+    String? notifLevel;
+    final rawNotif =
+        membership?['notification_level'] ?? json['notification_level'];
+    if (rawNotif is String) {
+      notifLevel = rawNotif;
+    } else if (rawNotif is num) {
+      notifLevel = switch (rawNotif.toInt()) {
+        0 => 'never',
+        1 => 'mention',
+        2 => 'always',
+        _ => rawNotif.toString(),
+      };
+    }
 
     final (rDays, rHours) = _parseRetentionValues(json);
 
