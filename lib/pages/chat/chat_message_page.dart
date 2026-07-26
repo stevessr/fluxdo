@@ -1947,265 +1947,268 @@ class _ChatMessageBubble extends StatelessWidget {
                   ),
                 ),
 
-              // IntrinsicWidth 让气泡按内容长度自适应收缩，而不是始终占满
-              // 0.75 屏宽。Container 的 maxWidth 约束仍保证长文本在 0.75 屏宽
-              // 处换行；IntrinsicWidth 让短文本只占内容宽度，实现"按内容自适应"。
-              IntrinsicWidth(
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.75,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: alignment,
-                    children: [
-                      if (showSender)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4, bottom: 2),
-                          child: Text(
-                            message.user!.name ?? message.user!.username,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                            ),
+              // 气泡「按内容自适应宽度」靠的是整条链路都不横向拉伸：
+              // Column(crossAxisAlignment != stretch) → 宽度 = 最宽子项自然宽，
+              // Container 的 maxWidth 仍保证长文本在 0.75 屏宽处换行。
+              //
+              // 这里**不能**用 IntrinsicWidth：正文渲染子树里图片 / iframe /
+              // 视频等 builder 内部有 LayoutBuilder，不支持 dry layout 与内在
+              // 尺寸，被问到就抛异常，整条消息布局失败 → 消息肉眼不可见。
+              Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: alignment,
+                  children: [
+                    if (showSender)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 2),
+                        child: Text(
+                          message.user!.name ?? message.user!.username,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
+                      ),
 
-                      GestureDetector(
-                        onLongPress: isMultiSelectMode ? null : onLongPress,
-                        onTap: isMultiSelectMode
-                            ? () => onToggleSelect?.call(message.id)
-                            : null,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
+                    GestureDetector(
+                      onLongPress: isMultiSelectMode ? null : onLongPress,
+                      onTap: isMultiSelectMode
+                          ? () => onToggleSelect?.call(message.id)
+                          : null,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isOwnMessage
+                              ? theme.colorScheme.primaryContainer
+                              : theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(16).copyWith(
+                            bottomLeft: isOwnMessage
+                                ? const Radius.circular(16)
+                                : const Radius.circular(4),
+                            bottomRight: isOwnMessage
+                                ? const Radius.circular(4)
+                                : const Radius.circular(16),
                           ),
-                          decoration: BoxDecoration(
-                            color: isOwnMessage
-                                ? theme.colorScheme.primaryContainer
-                                : theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(16).copyWith(
-                              bottomLeft: isOwnMessage
-                                  ? const Radius.circular(16)
-                                  : const Radius.circular(4),
-                              bottomRight: isOwnMessage
-                                  ? const Radius.circular(4)
-                                  : const Radius.circular(16),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 关联回复引用框
-                              if (replyToMessage != null)
-                                Container(
-                                  margin: const EdgeInsets.only(bottom: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 关联回复引用框
+                            if (replyToMessage != null)
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surface
+                                      .withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border(
+                                    left: BorderSide(
+                                      color: theme.colorScheme.primary,
+                                      width: 3,
+                                    ),
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.surface
-                                        .withValues(alpha: 0.4),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border(
-                                      left: BorderSide(
-                                        color: theme.colorScheme.primary,
-                                        width: 3,
+                                ),
+                                child: Text(
+                                  '${replyToMessage!.user?.username ?? ''}: ${replyToMessage!.message}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontSize: 11,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+
+                            // 图片附件与 HTML 媒体展示 (点击放大全屏查看)
+                            if (imageUrls.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: imageUrls.asMap().entries.map((entry) {
+                                    final idx = entry.key;
+                                    final url = entry.value;
+                                    return GestureDetector(
+                                      onTap: () {
+                                        ImageViewerPage.open(
+                                          context,
+                                          url,
+                                          galleryImages: imageUrls,
+                                          initialIndex: idx,
+                                          enableShare: true,
+                                        );
+                                      },
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: CachedImage(
+                                          url: url,
+                                          width: 180,
+                                          height: 120,
+                                          fit: BoxFit.cover,
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '${replyToMessage!.user?.username ?? ''}: ${replyToMessage!.message}',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontSize: 11,
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
+                                    );
+                                  }).toList(),
                                 ),
+                              ),
 
-                              // 图片附件与 HTML 媒体展示 (点击放大全屏查看)
-                              if (imageUrls.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Wrap(
-                                    spacing: 6,
-                                    runSpacing: 6,
-                                    children: imageUrls.asMap().entries.map((entry) {
-                                      final idx = entry.key;
-                                      final url = entry.value;
-                                      return GestureDetector(
-                                        onTap: () {
-                                          ImageViewerPage.open(
-                                            context,
-                                            url,
-                                            galleryImages: imageUrls,
-                                            initialIndex: idx,
-                                            enableShare: true,
-                                          );
-                                        },
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: CachedImage(
-                                            url: url,
-                                            width: 180,
-                                            height: 120,
-                                            fit: BoxFit.cover,
+                            // 消息内容渲染：优先使用 cooked HTML（支持引用、onebox 等），
+                            // 回退到纯文本 + emoji 渲染
+                            if (message.cooked != null && message.cooked!.isNotEmpty)
+                              _CookedHtmlContent(
+                                cooked: message.cooked!,
+                                messageId: message.id,
+                                isOwnMessage: isOwnMessage,
+                                theme: theme,
+                              )
+                            else if (displayText.isNotEmpty)
+                              SelectableEmojiText(
+                                displayText,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: isOwnMessage
+                                      ? theme.colorScheme.onPrimaryContainer
+                                      : theme.colorScheme.onSurface,
+                                ),
+                              ),
+
+                            // Emoji 回应 (Reactions) 展示
+                            if (message.reactions != null &&
+                                message.reactions!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Wrap(
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  children: message.reactions!.map((r) {
+                                    final isReacted = r.reacted;
+                                    return Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        onTap: () => onToggleReaction(r.emoji),
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
                                           ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-
-                              // 消息内容渲染：优先使用 cooked HTML（支持引用、onebox 等），
-                              // 回退到纯文本 + emoji 渲染
-                              if (message.cooked != null && message.cooked!.isNotEmpty)
-                                _CookedHtmlContent(
-                                  cooked: message.cooked!,
-                                  messageId: message.id,
-                                  isOwnMessage: isOwnMessage,
-                                  theme: theme,
-                                )
-                              else if (displayText.isNotEmpty)
-                                SelectableEmojiText(
-                                  displayText,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: isOwnMessage
-                                        ? theme.colorScheme.onPrimaryContainer
-                                        : theme.colorScheme.onSurface,
-                                  ),
-                                ),
-
-                              // Emoji 回应 (Reactions) 展示
-                              if (message.reactions != null &&
-                                  message.reactions!.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Wrap(
-                                    spacing: 4,
-                                    runSpacing: 4,
-                                    children: message.reactions!.map((r) {
-                                      final isReacted = r.reacted;
-                                      return Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          onTap: () => onToggleReaction(r.emoji),
-                                          borderRadius: BorderRadius.circular(12),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
+                                          decoration: BoxDecoration(
+                                            color: isReacted
+                                                ? theme.colorScheme.primaryContainer
+                                                : theme.colorScheme.surface,
+                                            border: Border.all(
                                               color: isReacted
-                                                  ? theme.colorScheme.primaryContainer
-                                                  : theme.colorScheme.surface,
-                                              border: Border.all(
-                                                color: isReacted
-                                                    ? theme.colorScheme.primary
-                                                    : theme.colorScheme.outlineVariant
-                                                        .withValues(alpha: 0.5),
-                                                width: 1,
+                                                  ? theme.colorScheme.primary
+                                                  : theme.colorScheme.outlineVariant
+                                                      .withValues(alpha: 0.5),
+                                              width: 1,
+                                            ),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              EmojiText(
+                                                ':${r.emoji}:',
+                                                style: const TextStyle(fontSize: 12),
                                               ),
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                EmojiText(
-                                                  ':${r.emoji}:',
-                                                  style: const TextStyle(fontSize: 12),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '${r.count}',
+                                                style: theme.textTheme.labelSmall
+                                                    ?.copyWith(
+                                                  fontSize: 10,
+                                                  fontWeight: isReacted
+                                                      ? FontWeight.bold
+                                                      : FontWeight.normal,
+                                                  color: isReacted
+                                                      ? theme.colorScheme.primary
+                                                      : theme.colorScheme
+                                                          .onSurfaceVariant,
                                                 ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  '${r.count}',
-                                                  style: theme.textTheme.labelSmall
-                                                      ?.copyWith(
-                                                    fontSize: 10,
-                                                    fontWeight: isReacted
-                                                        ? FontWeight.bold
-                                                        : FontWeight.normal,
-                                                    color: isReacted
-                                                        ? theme.colorScheme.primary
-                                                        : theme.colorScheme
-                                                            .onSurfaceVariant,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      );
-                                    }).toList(),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+
+                            const SizedBox(height: 2),
+
+                            // 时间戳 + 编辑标记 + 书签标记
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  TimeUtils.formatCompactTime(message.createdAt),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: (isOwnMessage
+                                            ? theme.colorScheme
+                                                .onPrimaryContainer
+                                            : theme.colorScheme
+                                                .onSurfaceVariant)
+                                        .withValues(alpha: 0.6),
+                                    fontSize: 10,
                                   ),
                                 ),
-
-                              const SizedBox(height: 2),
-
-                              // 时间戳 + 编辑标记 + 书签标记
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
+                                if (message.edited) ...[
+                                  const SizedBox(width: 4),
                                   Text(
-                                    TimeUtils.formatCompactTime(message.createdAt),
+                                    context.l10n.chat_edited,
                                     style: theme.textTheme.labelSmall?.copyWith(
                                       color: (isOwnMessage
                                               ? theme.colorScheme
                                                   .onPrimaryContainer
                                               : theme.colorScheme
                                                   .onSurfaceVariant)
-                                          .withValues(alpha: 0.6),
+                                          .withValues(alpha: 0.5),
                                       fontSize: 10,
                                     ),
                                   ),
-                                  if (message.edited) ...[
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      context.l10n.chat_edited,
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: (isOwnMessage
-                                                ? theme.colorScheme
-                                                    .onPrimaryContainer
-                                                : theme.colorScheme
-                                                    .onSurfaceVariant)
-                                            .withValues(alpha: 0.5),
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ],
-                                  if (message.bookmarked) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                      Icons.bookmark_rounded,
-                                      size: 11,
-                                      color: (isOwnMessage
-                                              ? theme.colorScheme.onPrimaryContainer
-                                              : theme.colorScheme.primary)
-                                          .withValues(alpha: 0.8),
-                                    ),
-                                  ],
-                                  if (message.pinned) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                      Icons.push_pin_rounded,
-                                      size: 11,
-                                      color: (isOwnMessage
-                                              ? theme.colorScheme.onPrimaryContainer
-                                              : theme.colorScheme.primary)
-                                          .withValues(alpha: 0.8),
-                                    ),
-                                  ],
                                 ],
-                              ),
-                            ],
-                          ),
+                                if (message.bookmarked) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.bookmark_rounded,
+                                    size: 11,
+                                    color: (isOwnMessage
+                                            ? theme.colorScheme.onPrimaryContainer
+                                            : theme.colorScheme.primary)
+                                        .withValues(alpha: 0.8),
+                                  ),
+                                ],
+                                if (message.pinned) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.push_pin_rounded,
+                                    size: 11,
+                                    color: (isOwnMessage
+                                            ? theme.colorScheme.onPrimaryContainer
+                                            : theme.colorScheme.primary)
+                                        .withValues(alpha: 0.8),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -2498,6 +2501,9 @@ class _CookedHtmlContent extends StatelessWidget {
       compact: true,
       trimTopMargin: true,
       trimBottomMargin: true,
+      // 气泡宽度要贴合内容：块级子项不横向拉伸，否则每条消息都会撑满
+      // 0.75 屏宽（外层不能用 IntrinsicWidth，见 _ChatMessageBubble 注释）。
+      stretchBlocks: false,
     );
   }
 }
