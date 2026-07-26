@@ -100,14 +100,10 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName(releaseBuildSigningName)
-            // 启用代码与资源压缩
-            isMinifyEnabled = true
-            isShrinkResources = true
-            // 使用 Flutter 自带的 R8 规则（已优化混淆与保留规则）
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            // 关闭 R8 代码压缩与资源压缩：开启后 Release 包运行时闪退，
+            // 在定位到具体被裁剪的类之前保持禁用状态。
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
 
         debug {
