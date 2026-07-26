@@ -408,12 +408,51 @@ class ChatChannelTile extends ConsumerWidget {
     return text;
   }
 
-  /// 获取频道头像
+  /// 获取频道头像/图标
+  ///
+  /// 对齐 Discourse channel-icon：
+  /// - 只要设置了频道 emoji（含群组私信），优先显示表情
+  /// - 1:1 私信无 emoji 时显示对方头像
+  /// - 群组私信无 emoji 时显示人数/默认图标
+  /// - 公开频道无 emoji 时显示论坛图标
   Widget _buildLeading(BuildContext context, int? currentUserId) {
+    final theme = Theme.of(context);
     final isDm = channel.chatableType == 'DirectMessage' ||
         channel.chatableType == 'DirectMessageChannel';
 
+    // 1. 频道自定义表情优先（公开频道 + 群组 DM 均适用）
+    final emojiCode = channel.emojiShortcode;
+    if (emojiCode != null && emojiCode.isNotEmpty) {
+      return CircleAvatar(
+        radius: 22,
+        backgroundColor: theme.colorScheme.primaryContainer,
+        child: EmojiText(
+          emojiCode,
+          style: const TextStyle(fontSize: 20),
+        ),
+      );
+    }
+
+    // 2. 私信回退
     if (isDm) {
+      // 群组私信：无 emoji 时优先显示人数徽标（对齐官方 --users-count）
+      if (channel.isGroupDm) {
+        final count = channel.membersCount;
+        if (count != null && count > 0) {
+          return CircleAvatar(
+            radius: 22,
+            backgroundColor: theme.colorScheme.primaryContainer,
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }
+      }
+
       final targetUser = channel.getDmTargetUser(currentUserId);
       if (targetUser != null) {
         final avatarUrl = _resolveAvatarUrl(targetUser);
@@ -423,32 +462,25 @@ class ChatChannelTile extends ConsumerWidget {
           fallbackText: targetUser.username,
         );
       }
-      return const CircleAvatar(
-        radius: 22,
-        child: Icon(AppIcons.person, size: 24),
-      );
-    }
-
-    // 如果设置了自定义频道表情/图标（Discourse 存无冒号短码）
-    final emojiCode = channel.emojiShortcode;
-    if (emojiCode != null && emojiCode.isNotEmpty) {
       return CircleAvatar(
         radius: 22,
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-        child: EmojiText(
-          emojiCode,
-          style: const TextStyle(fontSize: 20),
+        backgroundColor: theme.colorScheme.primaryContainer,
+        child: Icon(
+          AppIcons.person,
+          size: 24,
+          color: theme.colorScheme.onPrimaryContainer,
         ),
       );
     }
 
+    // 3. 公开频道默认图标
     return CircleAvatar(
       radius: 22,
-      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+      backgroundColor: theme.colorScheme.primaryContainer,
       child: Icon(
         AppIcons.forum,
         size: 24,
-        color: Theme.of(context).colorScheme.onPrimaryContainer,
+        color: theme.colorScheme.onPrimaryContainer,
       ),
     );
   }

@@ -251,69 +251,51 @@ class _ChatChannelSettingsSheetState
                       ),
                     ),
                     const SizedBox(height: 8),
+                    // 仅显示图标预览 + 操作，不展示 :shortcode: 文字
                     Row(
                       children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: Theme.of(ctx)
-                                .colorScheme
-                                .primaryContainer,
-                            shape: BoxShape.circle,
+                        Material(
+                          color: Theme.of(ctx).colorScheme.primaryContainer,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: openEmojiPicker,
+                            child: SizedBox(
+                              width: 56,
+                              height: 56,
+                              child: Center(
+                                child: previewCode != null
+                                    ? EmojiText(
+                                        previewCode,
+                                        style: const TextStyle(fontSize: 26),
+                                      )
+                                    : Icon(
+                                        Icons.add_reaction_outlined,
+                                        color: Theme.of(ctx)
+                                            .colorScheme
+                                            .onPrimaryContainer,
+                                      ),
+                              ),
+                            ),
                           ),
-                          alignment: Alignment.center,
-                          child: previewCode != null
-                              ? EmojiText(
-                                  previewCode,
-                                  style: const TextStyle(fontSize: 22),
-                                )
-                              : Icon(
-                                  Icons.tag_rounded,
-                                  color: Theme.of(ctx)
-                                      .colorScheme
-                                      .onPrimaryContainer,
-                                ),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                selectedEmoji != null
-                                    ? (ChatChannel.looksLikeEmojiShortcodeName(
-                                            selectedEmoji!)
-                                        ? ':$selectedEmoji:'
-                                        : selectedEmoji!)
-                                    : '未设置（使用默认图标）',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(ctx).textTheme.bodyMedium,
-                              ),
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 8,
-                                children: [
-                                  TextButton.icon(
-                                    onPressed: openEmojiPicker,
-                                    icon: const Icon(Icons.emoji_emotions_outlined,
-                                        size: 18),
-                                    label: Text(
-                                      selectedEmoji == null ? '选择表情' : '更换表情',
-                                    ),
-                                  ),
-                                  if (selectedEmoji != null)
-                                    TextButton(
-                                      onPressed: () {
-                                        setDialogState(() => selectedEmoji = null);
-                                      },
-                                      child: const Text('清除'),
-                                    ),
-                                ],
-                              ),
-                            ],
+                        if (selectedEmoji != null)
+                          IconButton(
+                            tooltip: '清除表情',
+                            onPressed: () {
+                              setDialogState(() => selectedEmoji = null);
+                            },
+                            icon: Icon(
+                              Icons.close_rounded,
+                              color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                            ),
                           ),
+                        const Spacer(),
+                        IconButton.filledTonal(
+                          tooltip: selectedEmoji == null ? '选择表情' : '更换表情',
+                          onPressed: openEmojiPicker,
+                          icon: const Icon(Icons.emoji_emotions_outlined),
                         ),
                       ],
                     ),
