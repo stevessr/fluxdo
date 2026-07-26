@@ -309,10 +309,8 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
         ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.55)
         : theme.colorScheme.onPrimaryContainer;
 
-    if (widget.channel.emoji != null && widget.channel.emoji!.isNotEmpty) {
-      final emojiCode = widget.channel.emoji!.startsWith(':')
-          ? widget.channel.emoji!
-          : ':${widget.channel.emoji}:';
+    final emojiCode = widget.channel.emojiShortcode;
+    if (emojiCode != null && emojiCode.isNotEmpty) {
       return CircleAvatar(
         radius: 22,
         backgroundColor: bg,

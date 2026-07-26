@@ -84,6 +84,47 @@ class ChatChannel {
   /// 当前用户是否已关注/加入（membership.following == true）
   bool get isJoined => following;
 
+  /// 规范化频道 emoji 短码（Discourse 存的是不带冒号的 name，如 speech_balloon）
+  static String? normalizeEmojiShortcode(String? raw) {
+    if (raw == null) return null;
+    var value = raw.trim();
+    if (value.isEmpty) return null;
+    // 去掉首尾冒号；兼容用户误输入 :name: 或 name:
+    while (value.startsWith(':')) {
+      value = value.substring(1);
+    }
+    while (value.endsWith(':')) {
+      value = value.substring(0, value.length - 1);
+    }
+    value = value.trim();
+    if (value.isEmpty) return null;
+    // 纯 Unicode emoji 保留原样（少数站点可能直接存字符）
+    return value;
+  }
+
+  /// 用于 EmojiText 渲染的 :name: 形式
+  String? get emojiShortcode {
+    final name = normalizeEmojiShortcode(emoji);
+    if (name == null) return null;
+    // 已是 Unicode 字符时直接返回，不包冒号
+    if (!looksLikeEmojiShortcodeName(name)) return name;
+    return ':$name:';
+  }
+
+  /// 是否为 Discourse 风格 emoji 短码名（可包进 :name:）
+  static bool looksLikeEmojiShortcodeName(String value) {
+    // Discourse emoji 名：字母数字、下划线、连字符，可选 skin tone :t2 等
+    return RegExp(r'^[a-zA-Z0-9_+-]+(?::t\d)?$').hasMatch(value);
+  }
+
+  /// 把短码名转成 EmojiText 可渲染文本
+  static String? toEmojiTextCode(String? raw) {
+    final name = normalizeEmojiShortcode(raw);
+    if (name == null) return null;
+    if (!looksLikeEmojiShortcodeName(name)) return name;
+    return ':$name:';
+  }
+
   /// 是否可向频道添加成员
   ///
   /// 对齐 Discourse AddUsersToChannel / channel-info-members：
@@ -244,9 +285,11 @@ class ChatChannel {
         (json['user_can_add_members'] as bool?) ??
         (json['can_modify_members'] as bool?);
 
-    final emojiVal = json['emoji']?.toString() ??
-        json['icon']?.toString() ??
-        (json['meta'] is Map ? (json['meta']['emoji']?.toString()) : null);
+    final emojiVal = normalizeEmojiShortcode(
+      json['emoji']?.toString() ??
+          json['icon']?.toString() ??
+          (json['meta'] is Map ? (json['meta']['emoji']?.toString()) : null),
+    );
 
     final threading = (json['threading_enabled'] as bool?) ??
         (json['allow_threading'] as bool?) ??

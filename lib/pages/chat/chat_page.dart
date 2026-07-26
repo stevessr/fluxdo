@@ -429,11 +429,9 @@ class ChatChannelTile extends ConsumerWidget {
       );
     }
 
-    // 如果设置了自定义频道表情/图标
-    if (channel.emoji != null && channel.emoji!.isNotEmpty) {
-      final emojiCode = channel.emoji!.startsWith(':')
-          ? channel.emoji!
-          : ':${channel.emoji}:';
+    // 如果设置了自定义频道表情/图标（Discourse 存无冒号短码）
+    final emojiCode = channel.emojiShortcode;
+    if (emojiCode != null && emojiCode.isNotEmpty) {
       return CircleAvatar(
         radius: 22,
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,

@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
+import '../../models/emoji.dart';
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../widgets/common/emoji_text.dart';
+import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import 'chat_channel_members_sheet.dart';
 
 /// 聊天频道设置 Sheet 弹窗
@@ -184,79 +186,182 @@ class _ChatChannelSettingsSheetState
     final titleController =
         TextEditingController(text: channel?.title ?? widget.channelTitle);
     final slugController = TextEditingController(text: channel?.slug ?? '');
-    final emojiController = TextEditingController(text: channel?.emoji ?? '');
+    // Discourse 存的是无冒号短码；编辑态也按短码维护
+    var selectedEmoji =
+        ChatChannel.normalizeEmojiShortcode(channel?.emoji);
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('编辑频道信息'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: '频道名称',
-                  hintText: '请输入频道名称',
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            void openEmojiPicker() {
+              showModalBottomSheet<void>(
+                context: ctx,
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                builder: (sheetCtx) => SizedBox(
+                  height: MediaQuery.of(sheetCtx).size.height * 0.45,
+                  child: EmojiStickerPanel(
+                    onEmojiSelected: (Emoji emoji) {
+                      Navigator.pop(sheetCtx);
+                      setDialogState(() {
+                        selectedEmoji =
+                            ChatChannel.normalizeEmojiShortcode(emoji.name);
+                      });
+                    },
+                    onStickerSelected: (_) {},
+                    onBackspace: null,
+                  ),
+                ),
+              );
+            }
+
+            final previewCode = ChatChannel.toEmojiTextCode(selectedEmoji);
+
+            return AlertDialog(
+              title: const Text('编辑频道信息'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(
+                        labelText: '频道名称',
+                        hintText: '请输入频道名称',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: slugController,
+                      decoration: const InputDecoration(
+                        labelText: '频道缩略名 (Slug)',
+                        hintText: '例如: general',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '频道表情图标',
+                        style: Theme.of(ctx).textTheme.labelLarge,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Theme.of(ctx)
+                                .colorScheme
+                                .primaryContainer,
+                            shape: BoxShape.circle,
+                          ),
+                          alignment: Alignment.center,
+                          child: previewCode != null
+                              ? EmojiText(
+                                  previewCode,
+                                  style: const TextStyle(fontSize: 22),
+                                )
+                              : Icon(
+                                  Icons.tag_rounded,
+                                  color: Theme.of(ctx)
+                                      .colorScheme
+                                      .onPrimaryContainer,
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                selectedEmoji != null
+                                    ? (ChatChannel.looksLikeEmojiShortcodeName(
+                                            selectedEmoji!)
+                                        ? ':$selectedEmoji:'
+                                        : selectedEmoji!)
+                                    : '未设置（使用默认图标）',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(ctx).textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: openEmojiPicker,
+                                    icon: const Icon(Icons.emoji_emotions_outlined,
+                                        size: 18),
+                                    label: Text(
+                                      selectedEmoji == null ? '选择表情' : '更换表情',
+                                    ),
+                                  ),
+                                  if (selectedEmoji != null)
+                                    TextButton(
+                                      onPressed: () {
+                                        setDialogState(() => selectedEmoji = null);
+                                      },
+                                      child: const Text('清除'),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: slugController,
-                decoration: const InputDecoration(
-                  labelText: '频道缩略名 (Slug)',
-                  hintText: '例如: general',
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('取消'),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: emojiController,
-                decoration: const InputDecoration(
-                  labelText: '频道表情符号',
-                  hintText: '例如: :speech_balloon: 或 😀',
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    setState(() => _isSaving = true);
+                    try {
+                      final service = ref.read(discourseServiceProvider);
+                      // 与 Discourse 一致：提交无冒号短码；清除时传空字符串
+                      final emojiToSave = selectedEmoji ?? '';
+                      await service.updateChannelSettings(
+                        widget.channelId,
+                        name: titleController.text.trim(),
+                        slug: slugController.text.trim(),
+                        emoji: emojiToSave,
+                      );
+                      ref.invalidate(chatChannelsProvider);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('频道信息已成功更新')),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('更新失败: $e')),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isSaving = false);
+                    }
+                  },
+                  child: const Text('保存'),
                 ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              setState(() => _isSaving = true);
-              try {
-                final service = ref.read(discourseServiceProvider);
-                await service.updateChannelSettings(
-                  widget.channelId,
-                  name: titleController.text.trim(),
-                  slug: slugController.text.trim(),
-                  emoji: emojiController.text.trim(),
-                );
-                ref.invalidate(chatChannelsProvider);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('频道信息已成功更新')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('更新失败: $e')),
-                  );
-                }
-              } finally {
-                if (mounted) setState(() => _isSaving = false);
-              }
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -311,20 +416,22 @@ class _ChatChannelSettingsSheetState
                     color: theme.colorScheme.primaryContainer,
                     shape: BoxShape.circle,
                   ),
-                  child: channel?.emoji != null && channel!.emoji!.isNotEmpty
-                      ? EmojiText(
-                          channel.emoji!.startsWith(':')
-                              ? channel.emoji!
-                              : ':${channel.emoji}:',
-                          style: const TextStyle(fontSize: 20),
-                        )
-                      : Icon(
-                          channel?.chatableType == 'DirectMessage'
-                              ? Icons.alternate_email_rounded
-                              : Icons.tag_rounded,
-                          color: theme.colorScheme.onPrimaryContainer,
-                          size: 22,
-                        ),
+                  child: () {
+                    final code = channel?.emojiShortcode;
+                    if (code != null && code.isNotEmpty) {
+                      return EmojiText(
+                        code,
+                        style: const TextStyle(fontSize: 20),
+                      );
+                    }
+                    return Icon(
+                      channel?.chatableType == 'DirectMessage'
+                          ? Icons.alternate_email_rounded
+                          : Icons.tag_rounded,
+                      color: theme.colorScheme.onPrimaryContainer,
+                      size: 22,
+                    );
+                  }(),
                 ),
                 title: Text(
                   channel?.title ?? widget.channelTitle,
