@@ -21,9 +21,11 @@ import '../../services/preloaded_data_service.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
+import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
+import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../image_viewer_page.dart';
@@ -2266,6 +2268,7 @@ class _ChatMessageBubble extends StatelessWidget {
                     ),
 
                     // Emoji 回应 (Reactions) 移到气泡下方
+                    // 点击切换自己的回应；长按查看该 emoji 的反应用户
                     if (message.reactions != null &&
                         message.reactions!.isNotEmpty)
                       Padding(
@@ -2279,6 +2282,8 @@ class _ChatMessageBubble extends StatelessWidget {
                               color: Colors.transparent,
                               child: InkWell(
                                 onTap: () => onToggleReaction(r.emoji),
+                                onLongPress: () =>
+                                    _showChatReactionUsers(context, r),
                                 borderRadius: BorderRadius.circular(12),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -2347,6 +2352,145 @@ class _ChatMessageBubble extends StatelessWidget {
         }
       },
       child: bubbleWidget,
+    );
+  }
+
+  /// 长按 reaction：展示该 emoji 对应的反应用户列表。
+  ///
+  /// Discourse chat 消息序列化里每个 reaction 自带最多 5 个 users，
+  /// 没有独立的 reaction-users 接口，因此直接使用消息内嵌数据。
+  void _showChatReactionUsers(
+    BuildContext context,
+    ChatMessageReaction reaction,
+  ) {
+    final users = reaction.users ?? const <ChatUser>[];
+    AppBottomSheet.show(
+      context: context,
+      showCloseButton: false,
+      maxHeightFactor: 0.5,
+      contentPadding: EdgeInsets.zero,
+      titleWidget: Row(
+        children: [
+          EmojiText(
+            ':${reaction.emoji}:',
+            style: const TextStyle(fontSize: 20),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${reaction.count} 人回应',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      builder: (ctx) {
+        if (users.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Text(
+                reaction.count > 0
+                    ? '暂无详细用户信息（共 ${reaction.count} 人）'
+                    : '暂无用户',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+
+        final truncated = reaction.count > users.length;
+        return ListView.builder(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          itemCount: users.length + (truncated ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (truncated && index == users.length) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Text(
+                  '以及另外 ${reaction.count - users.length} 人',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              );
+            }
+
+            final user = users[index];
+            final displayName =
+                (user.name != null && user.name!.isNotEmpty)
+                    ? user.name!
+                    : user.username;
+            final avatarUrl = user.avatarTemplate == null
+                ? null
+                : UrlHelper.resolveUrlWithCdn(
+                    user.avatarTemplate!.replaceAll('{size}', '96'),
+                  );
+
+            return InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => UserProfilePage(
+                      username: user.username,
+                    ),
+                  ),
+                );
+              },
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    SmartAvatar(
+                      imageUrl: avatarUrl,
+                      radius: 18,
+                      fallbackText: user.username,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (user.name != null &&
+                              user.name!.isNotEmpty &&
+                              user.name != user.username)
+                            Text(
+                              user.username,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    EmojiText(
+                      ':${reaction.emoji}:',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

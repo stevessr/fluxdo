@@ -595,7 +595,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     final isAlreadyReacted = rIndex != -1 && reactions[rIndex].reacted;
     final action = isAlreadyReacted ? 'remove' : 'add';
 
-    // 乐观更新 UI
+    // 乐观更新 UI（保留 users，避免长按查看反应用户时列表被清空）
     final newReactions = List<ChatMessageReaction>.from(reactions);
     if (isAlreadyReacted) {
       final old = newReactions[rIndex];
@@ -606,6 +606,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
           emoji: old.emoji,
           count: old.count - 1,
           reacted: false,
+          users: old.users,
         );
       }
     } else {
@@ -615,6 +616,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
           emoji: old.emoji,
           count: old.count + 1,
           reacted: true,
+          users: old.users,
         );
       } else {
         newReactions.add(ChatMessageReaction(
