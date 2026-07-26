@@ -23,11 +23,15 @@ class ChatChannelsState {
   /// MessageBus 最新 ID 映射
   final Map<String, int>? messageBusLastIds;
 
+  /// 聊天全局在线用户 ID 集合（来自 /chat/online presence channel）
+  final Set<int> onlineUserIds;
+
   const ChatChannelsState({
     required this.publicChannels,
     required this.directMessageChannels,
     required this.tracking,
     this.messageBusLastIds,
+    this.onlineUserIds = const {},
   });
 
   factory ChatChannelsState.fromJson(Map<String, dynamic> json) {
@@ -60,6 +64,17 @@ class ChatChannelsState {
       ),
       tracking: tracking,
       messageBusLastIds: _parseMessageBusIds(json['message_bus_last_ids']),
+    );
+  }
+
+  /// 复制并更新在线用户列表
+  ChatChannelsState copyWith({Set<int>? onlineUserIds}) {
+    return ChatChannelsState(
+      publicChannels: publicChannels,
+      directMessageChannels: directMessageChannels,
+      tracking: tracking,
+      messageBusLastIds: messageBusLastIds,
+      onlineUserIds: onlineUserIds ?? this.onlineUserIds,
     );
   }
 

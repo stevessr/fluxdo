@@ -23,6 +23,7 @@ import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
+import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../image_viewer_page.dart';
 import '../user_profile_page.dart';
@@ -249,6 +250,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _textController.addListener(_onTextChanged);
+    // 上报用户进入聊天（用于在线状态追踪）
+    _reportPresence();
+  }
+
+  void _reportPresence() {
+    final discourse = ref.read(discourseServiceProvider);
+    discourse.chat.reportChatPresence(widget.channelId).catchError((_) {
+      // 静默失败，不影响主流程
+    });
   }
 
   @override
@@ -1309,7 +1319,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             ? message.message
             : (message.cooked?.replaceAll(RegExp(r'<[^>]*>'), '') ?? '');
         return ListTile(
-          leading: SmartAvatar(
+          leading: OnlineStatusAvatar(
+            userId: message.user?.id,
             imageUrl: _buildAvatarUrl(message.user),
             radius: 18,
             fallbackText: username,
@@ -1752,7 +1763,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
           return ListTile(
             dense: true,
-            leading: SmartAvatar(
+            leading: OnlineStatusAvatar(
+              userId: user.id,
               imageUrl: avatarUrl,
               radius: 12,
               fallbackText: user.username,
@@ -1939,7 +1951,8 @@ class _ChatMessageBubble extends StatelessWidget {
                         ),
                       );
                     },
-                    child: SmartAvatar(
+                    child: OnlineStatusAvatar(
+                      userId: message.user!.id,
                       imageUrl: avatarUrl,
                       radius: 16,
                       fallbackText: message.user!.username,

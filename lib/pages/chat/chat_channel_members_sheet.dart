@@ -6,7 +6,7 @@ import '../../models/chat/chat_models.dart';
 import '../../providers/chat_providers.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/common/error_view.dart';
-import '../../widgets/common/smart_avatar.dart';
+import '../../widgets/chat/online_status_avatar.dart';
 import '../user_profile_page.dart';
 
 /// 聊天频道成员与添加成员弹窗
@@ -233,9 +233,9 @@ class _ChatChannelMembersSheetState
               child: membersAsync.when(
                 data: (state) {
                   final members = state.members;
-                  // 过滤掉已删除用户（id=0 或 username 为空）
+                  // 过滤掉已删除用户与系统用户
                   final validMembers = members.where((m) =>
-                    m.id > 0 && m.username.isNotEmpty
+                    !m.isDeleted && !m.isSystemUser
                   ).toList();
                   final filteredMembers = validMembers.where((m) {
                     if (_filterQuery.isEmpty) return true;
@@ -360,7 +360,8 @@ class _ChatChannelMembersSheetState
                         final user = filteredMembers[index];
                         final avatarUrl = _resolveAvatarUrl(user);
                         return ListTile(
-                          leading: SmartAvatar(
+                          leading: OnlineStatusAvatar(
+                            userId: user.id,
                             imageUrl: avatarUrl,
                             radius: 20,
                             fallbackText: user.username,

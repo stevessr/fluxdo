@@ -27,6 +27,10 @@ class ChatUser {
   bool get isSystemUser =>
       id == -1 || username.toLowerCase() == 'system';
 
+  /// 判断是否为已删除用户（id=0 或 username 为空）。
+  /// 已删除用户不应显示在成员列表中。
+  bool get isDeleted => id <= 0 || username.isEmpty;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'username': username,

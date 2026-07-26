@@ -20,7 +20,29 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
   Future<ChatChannelsState> build() async {
     final service = ref.read(discourseServiceProvider);
     final raw = await service.getChatChannels();
-    return ChatChannelsState.fromJson(raw);
+    final state = ChatChannelsState.fromJson(raw);
+
+    // 获取聊天全局在线状态
+    Set<int> onlineUserIds = {};
+    try {
+      final presenceState = await service.chat.getChatPresenceState();
+      final chatOnline = presenceState['/chat/online'];
+      if (chatOnline is Map) {
+        final users = chatOnline['users'];
+        if (users is List) {
+          for (final u in users) {
+            if (u is Map) {
+              final userId = (u['id'] as num?)?.toInt();
+              if (userId != null) onlineUserIds.add(userId);
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // 在线状态获取失败不影响主流程
+    }
+
+    return state.copyWith(onlineUserIds: onlineUserIds);
   }
 
   /// 刷新频道列表
@@ -29,7 +51,27 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
     state = await AsyncValue.guard(() async {
       final service = ref.read(discourseServiceProvider);
       final raw = await service.getChatChannels();
-      return ChatChannelsState.fromJson(raw);
+      final channelsState = ChatChannelsState.fromJson(raw);
+
+      // 获取在线状态
+      Set<int> onlineUserIds = {};
+      try {
+        final presenceState = await service.chat.getChatPresenceState();
+        final chatOnline = presenceState['/chat/online'];
+        if (chatOnline is Map) {
+          final users = chatOnline['users'];
+          if (users is List) {
+            for (final u in users) {
+              if (u is Map) {
+                final userId = (u['id'] as num?)?.toInt();
+                if (userId != null) onlineUserIds.add(userId);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      return channelsState.copyWith(onlineUserIds: onlineUserIds);
     });
   }
 }

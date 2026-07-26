@@ -269,6 +269,43 @@ mixin _ChatMixin on _DiscourseServiceBase {
     return page.members;
   }
 
+  /// 上报用户进入聊天频道（用于在线状态追踪）
+  ///
+  /// 对齐 Discourse PresenceChannel.present：POST /presence/update
+  /// 客户端应该周期性调用（间隔 < 60s）以维持在线状态。
+  Future<void> reportChatPresence(int channelId) async {
+    try {
+      await _dio.post(
+        '/presence/update',
+        data: {
+          'client_id': 'flutter_${DateTime.now().millisecondsSinceEpoch}',
+          'present_channels': ['/chat/online'],
+        },
+      );
+    } on DioException catch (e) {
+      // 在线状态上报失败不影响主流程，仅记录日志
+      debugPrint('Failed to report chat presence: $e');
+    }
+  }
+
+  /// 获取聊天全局在线状态
+  ///
+  /// 对齐 Discourse: GET /presence/get
+  /// 返回 /chat/online 频道的在线用户列表。
+  Future<Map<String, dynamic>> getChatPresenceState() async {
+    try {
+      final response = await _dio.get(
+        '/presence/get',
+        queryParameters: {
+          'channels': ['/chat/online'],
+        },
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
   List<Map<String, dynamic>> _extractMemberList(dynamic data) {
     if (data is Map) {
       final mapData = Map<String, dynamic>.from(data);
