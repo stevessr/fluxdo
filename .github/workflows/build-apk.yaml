@@ -287,21 +287,33 @@ jobs:
           # 限制 Gradle/原生编译可见 NDK，避免 side-by-side 探测
           export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
           export ANDROID_NDK_ROOT="${ANDROID_NDK_HOME}"
+
+          # 提取版本号（pubspec.yaml version: 行）
+          version=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | tr -d '\r')
+          # 提取短 commit SHA（前 7 位）
+          commit_sha=$(echo "${{ github.sha }}" | cut -c1-7)
+          # 构建时间戳（UTC）
+          timestamp=$(date -u +%Y%m%d-%H%M%S)
+
           if [ "${{ matrix.arch }}" = "universal" ]; then
             dart tool/flutterw.dart build apk --release --dart-define=cronetHttpNoPlay=true
             mkdir -p dist
-            mv build/app/outputs/flutter-apk/app-release.apk dist/fluxdo-universal.apk
+            # fluxdo-v1.2.3-abc1234-20260726-123456-universal.apk
+            mv build/app/outputs/flutter-apk/app-release.apk \
+              "dist/fluxdo-v${version}-${commit_sha}-${timestamp}-universal.apk"
           else
             dart tool/flutterw.dart build apk --release --target-platform ${{ matrix.flutter-target }} --dart-define=cronetHttpNoPlay=true
             mkdir -p dist
-            mv build/app/outputs/flutter-apk/app-release.apk dist/fluxdo-${{ matrix.arch }}.apk
+            # fluxdo-v1.2.3-abc1234-20260726-123456-arm64-v8a.apk
+            mv build/app/outputs/flutter-apk/app-release.apk \
+              "dist/fluxdo-v${version}-${commit_sha}-${timestamp}-${{ matrix.arch }}.apk"
           fi
           ls -lh dist/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fluxdo-apk-${{ matrix.arch }}
+          name: fluxdo-apk-${{ matrix.arch }}-${{ github.run_number }}
           path: dist/*.apk
           retention-days: 90
           if-no-files-found: error
