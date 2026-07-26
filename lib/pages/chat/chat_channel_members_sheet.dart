@@ -233,7 +233,11 @@ class _ChatChannelMembersSheetState
               child: membersAsync.when(
                 data: (state) {
                   final members = state.members;
-                  final filteredMembers = members.where((m) {
+                  // 过滤掉已删除用户（id=0 或 username 为空）
+                  final validMembers = members.where((m) =>
+                    m.id > 0 && m.username.isNotEmpty
+                  ).toList();
+                  final filteredMembers = validMembers.where((m) {
                     if (_filterQuery.isEmpty) return true;
                     final usernameMatch =
                         m.username.toLowerCase().contains(_filterQuery);
