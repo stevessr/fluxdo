@@ -1974,6 +1974,56 @@ class _ChatMessageBubble extends StatelessWidget {
                         ),
                       ),
 
+                    // 关联回复引用框（移到气泡上方）
+                    if (replyToMessage != null)
+                      GestureDetector(
+                        onTap: () {
+                          // TODO: 滚动到被引用的消息位置
+                          // 需要通过回调将 replyToMessage.id 传给父级，
+                          // 父级通过 ScrollController 滚动到对应位置
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 4, left: 4, right: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border(
+                              left: BorderSide(
+                                color: theme.colorScheme.primary,
+                                width: 3,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.reply,
+                                size: 14,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  '${replyToMessage!.user?.username ?? '未知用户'}: ${replyToMessage!.message}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
                     GestureDetector(
                       onLongPress: isMultiSelectMode ? null : onLongPress,
                       onTap: isMultiSelectMode
@@ -2000,35 +2050,6 @@ class _ChatMessageBubble extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 关联回复引用框
-                            if (replyToMessage != null)
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 6),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.surface
-                                      .withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border(
-                                    left: BorderSide(
-                                      color: theme.colorScheme.primary,
-                                      width: 3,
-                                    ),
-                                  ),
-                                ),
-                                child: Text(
-                                  '${replyToMessage!.user?.username ?? ''}: ${replyToMessage!.message}',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontSize: 11,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
 
                             // 图片附件与 HTML 媒体展示 (点击放大全屏查看)
                             if (imageUrls.isNotEmpty)
@@ -2080,70 +2101,6 @@ class _ChatMessageBubble extends StatelessWidget {
                                   color: isOwnMessage
                                       ? theme.colorScheme.onPrimaryContainer
                                       : theme.colorScheme.onSurface,
-                                ),
-                              ),
-
-                            // Emoji 回应 (Reactions) 展示
-                            if (message.reactions != null &&
-                                message.reactions!.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Wrap(
-                                  spacing: 4,
-                                  runSpacing: 4,
-                                  children: message.reactions!.map((r) {
-                                    final isReacted = r.reacted;
-                                    return Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        onTap: () => onToggleReaction(r.emoji),
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isReacted
-                                                ? theme.colorScheme.primaryContainer
-                                                : theme.colorScheme.surface,
-                                            border: Border.all(
-                                              color: isReacted
-                                                  ? theme.colorScheme.primary
-                                                  : theme.colorScheme.outlineVariant
-                                                      .withValues(alpha: 0.5),
-                                              width: 1,
-                                            ),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              EmojiText(
-                                                ':${r.emoji}:',
-                                                style: const TextStyle(fontSize: 12),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '${r.count}',
-                                                style: theme.textTheme.labelSmall
-                                                    ?.copyWith(
-                                                  fontSize: 10,
-                                                  fontWeight: isReacted
-                                                      ? FontWeight.bold
-                                                      : FontWeight.normal,
-                                                  color: isReacted
-                                                      ? theme.colorScheme.primary
-                                                      : theme.colorScheme
-                                                          .onSurfaceVariant,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
                                 ),
                               ),
 
@@ -2208,6 +2165,70 @@ class _ChatMessageBubble extends StatelessWidget {
                         ),
                       ),
                     ),
+
+                    // Emoji 回应 (Reactions) 移到气泡下方
+                    if (message.reactions != null &&
+                        message.reactions!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+                        child: Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: message.reactions!.map((r) {
+                            final isReacted = r.reacted;
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => onToggleReaction(r.emoji),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isReacted
+                                        ? theme.colorScheme.primaryContainer
+                                        : theme.colorScheme.surface,
+                                    border: Border.all(
+                                      color: isReacted
+                                          ? theme.colorScheme.primary
+                                          : theme.colorScheme.outlineVariant
+                                              .withValues(alpha: 0.5),
+                                      width: 1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      EmojiText(
+                                        ':${r.emoji}:',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${r.count}',
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                          fontSize: 10,
+                                          fontWeight: isReacted
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          color: isReacted
+                                              ? theme.colorScheme.primary
+                                              : theme.colorScheme
+                                                  .onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
                   ],
                 ),
               ),
