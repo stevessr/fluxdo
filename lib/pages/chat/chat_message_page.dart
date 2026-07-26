@@ -24,7 +24,6 @@ import '../../utils/url_helper.dart';
 import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
-import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../image_viewer_page.dart';
@@ -80,9 +79,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   bool _isSearching = false;
   String? _searchError;
 
-  // 已读回执：记录最后可见消息及其首次可见时间
+  // 已读回执：当前正在计时的可见消息 + 0.5s 停留计时器
   int? _lastVisibleMessageId;
-  DateTime? _lastVisibleSince;
   Timer? _markAsReadTimer;
 
   void _enterMultiSelectMode([int? initialMessageId]) {
@@ -261,25 +259,17 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     _reportPresence();
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _textController.dispose();
-    _inputFocusNode.dispose();
-    _searchController.dispose();
-    _markAsReadTimer?.cancel();
-    super.dispose();
-  }
-
   void _reportPresence() {
     final discourse = ref.read(discourseServiceProvider);
-    discourse.chat.reportChatPresence(widget.channelId).catchError((_) {
-      // 静默失败，不影响主流程
-    });
+    // 方法本身已吞掉 DioException，这里只兜住极端情况下的同步/其他异常
+    unawaited(
+      discourse.reportChatPresence(widget.channelId).catchError((_) {}),
+    );
   }
 
   @override
   void dispose() {
+    _markAsReadTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _textController.removeListener(_onTextChanged);
@@ -938,31 +928,27 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     );
   }
 
-  /// 标记已读（延迟版本）
+  /// 标记已读（可见性 + 停留时长版本）
   ///
-  /// 对齐 Discourse 已读回执策略：
-  /// 1. 消息必须在视口中可见
-  /// 2. 可见时间超过 0.5 秒（避免快速滚动过程中误触发）
-  /// 3. 同一消息 ID 不重复标记
+  /// 对齐 Discourse chat 的 mark-as-read 条件：消息进入视口且停留
+  /// 满 0.5s 才算「读过」，快速滚动掠过不算（见 chat-constants.js
+  /// READ_INTERVAL / check-message-visibility.js）。
+  ///
+  /// 同屏通常有多条消息各自回调，这里只保留 id 最大（最新）的那条作为
+  /// 候选，并在 500ms 静默后一次性上报：
+  /// - 更旧的 id 直接忽略，不打断正在计时的候选；
+  /// - 更新的 id 顶替候选并重置计时窗口（持续滚动期间不会上报）。
   void _markAsReadDelayed(int messageId) {
-    // 取消旧定时器
+    final pending = _lastVisibleMessageId;
+    if (pending != null && messageId <= pending) return;
+
+    _lastVisibleMessageId = messageId;
     _markAsReadTimer?.cancel();
-
-    if (_lastVisibleMessageId != messageId) {
-      // 新消息进入视口，记录时间并启动定时器
-      _lastVisibleMessageId = messageId;
-      _lastVisibleSince = DateTime.now();
-
-      _markAsReadTimer = Timer(const Duration(milliseconds: 500), () {
-        // 0.5 秒后检查该消息是否仍是最后可见的
-        if (_lastVisibleMessageId == messageId) {
-          _performMarkAsRead(messageId);
-          _lastVisibleMessageId = null;
-          _lastVisibleSince = null;
-        }
-      });
-    }
-    // 如果是同一消息持续可见，定时器已经在运行，无需重复启动
+    _markAsReadTimer = Timer(const Duration(milliseconds: 500), () {
+      final id = _lastVisibleMessageId;
+      _lastVisibleMessageId = null;
+      if (id != null && mounted) _performMarkAsRead(id);
+    });
   }
 
   /// 执行实际的已读回执 API 调用
@@ -1955,6 +1941,26 @@ class _ChatMessageBubble extends StatelessWidget {
     return urls;
   }
 
+  /// Discourse upload URL 里的 sha1（40 位十六进制）—— 原图与 optimized
+  /// 变体路径不同（`/original/1X/<sha1>.png` vs
+  /// `/optimized/1X/<sha1>_2_690x388.png`）但共享同一 sha1，是判断
+  /// 「cooked 是否已经渲染过这张图」唯一可靠的锚点。
+  static final RegExp _uploadSha1 = RegExp(r'[0-9a-f]{40}');
+
+  /// cooked HTML 是否已经渲染了 [url] 指向的图片。
+  ///
+  /// 命中则不再进缩略图条：否则同一张图会被 cooked 与缩略图各画一次
+  /// （用户看到的「图片重复渲染」）。
+  static bool _cookedRendersUrl(String cooked, String url) {
+    if (cooked.isEmpty) return false;
+    final sha = _uploadSha1.firstMatch(url)?.group(0);
+    if (sha != null) return cooked.contains(sha);
+    // 非 Discourse 上传（外链图）没有 sha1，退化为按路径比对，
+    // 规避 CDN 域名重写导致的整串不相等。
+    final path = Uri.tryParse(url)?.path ?? '';
+    return path.isNotEmpty && cooked.contains(path);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (message.deleted) {
@@ -1965,6 +1971,13 @@ class _ChatMessageBubble extends StatelessWidget {
         isOwnMessage ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final showSender = !isOwnMessage && message.user != null;
     final imageUrls = _extractImageUrls();
+
+    // 缩略图条只负责 cooked 没渲染的图（对齐 Discourse chat：正文由 cooked
+    // 渲染，附件区补 uploads）。cooked 已含的图交给 cooked，避免画两次。
+    final cookedHtml = message.cooked ?? '';
+    final thumbnailUrls = cookedHtml.isEmpty
+        ? imageUrls
+        : imageUrls.where((u) => !_cookedRendersUrl(cookedHtml, u)).toList();
 
     // 过滤除去纯图片 markdown 链接后的文本展示
     String displayText = message.message;
@@ -2120,13 +2133,13 @@ class _ChatMessageBubble extends StatelessWidget {
                           children: [
 
                             // 图片附件与 HTML 媒体展示 (点击放大全屏查看)
-                            if (imageUrls.isNotEmpty)
+                            if (thumbnailUrls.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
                                 child: Wrap(
                                   spacing: 6,
                                   runSpacing: 6,
-                                  children: imageUrls.asMap().entries.map((entry) {
+                                  children: thumbnailUrls.asMap().entries.map((entry) {
                                     final idx = entry.key;
                                     final url = entry.value;
                                     return GestureDetector(
@@ -2134,7 +2147,7 @@ class _ChatMessageBubble extends StatelessWidget {
                                         ImageViewerPage.open(
                                           context,
                                           url,
-                                          galleryImages: imageUrls,
+                                          galleryImages: thumbnailUrls,
                                           initialIndex: idx,
                                           enableShare: true,
                                         );
@@ -2161,7 +2174,6 @@ class _ChatMessageBubble extends StatelessWidget {
                                 messageId: message.id,
                                 isOwnMessage: isOwnMessage,
                                 theme: theme,
-                                extractedImageUrls: imageUrls,
                               )
                             else if (displayText.isNotEmpty)
                               SelectableEmojiText(
@@ -2572,38 +2584,26 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
 ///
 /// 使用 [FluxdoRenderCallbacks.generic] 渲染 Discourse cooked HTML，
 /// 支持引用（quote）、onebox（链接预览）、代码块、图片等富文本内容。
-///
-/// [extractedImageUrls] 参数用于防止图片重复渲染：上层已经通过
-/// [_extractImageUrls] 提取并单独显示为缩略图的图片，在 cooked HTML
-/// 渲染时会被过滤掉，避免同一张图显示两次。
 class _CookedHtmlContent extends StatelessWidget {
   final String cooked;
   final int messageId;
   final bool isOwnMessage;
   final ThemeData theme;
-  final List<String> extractedImageUrls;
 
   const _CookedHtmlContent({
     required this.cooked,
     required this.messageId,
     required this.isOwnMessage,
     required this.theme,
-    this.extractedImageUrls = const [],
   });
 
   @override
   Widget build(BuildContext context) {
-    // 过滤 cooked HTML 中已被提取的图片，避免重复渲染
-    String filteredCooked = cooked;
-    if (extractedImageUrls.isNotEmpty) {
-      filteredCooked = _removeExtractedImages(cooked, extractedImageUrls);
-    }
-
     final callbacks = FluxdoRenderCallbacks.generic(
       heroTagNamespace: 'chat_msg_$messageId',
     );
     return callbacks.render(
-      cookedHtml: filteredCooked,
+      cookedHtml: cooked,
       baseTextStyle: theme.textTheme.bodyMedium?.copyWith(
         color: isOwnMessage
             ? theme.colorScheme.onPrimaryContainer
@@ -2619,38 +2619,4 @@ class _CookedHtmlContent extends StatelessWidget {
     );
   }
 
-  /// 从 cooked HTML 中移除已被 _extractImageUrls 提取的图片标签，
-  /// 避免图片重复渲染（一次在缩略图列表，一次在 HTML 内）。
-  ///
-  /// 简单策略：将 extractedImageUrls 中的 URL 对应的整个 <img> 标签
-  /// （包括外层可能的 <p> 包裹）移除。如果移除后段落为空，则删除空 <p>。
-  static String _removeExtractedImages(String cooked, List<String> extractedUrls) {
-    if (extractedUrls.isEmpty) return cooked;
-
-    String result = cooked;
-    for (final url in extractedUrls) {
-      // 匹配 <img src="url" ...> 或 <img ... src="url" ...>
-      // 使用非贪婪匹配，支持 src 在任意位置
-      final escapedUrl = RegExp.escape(url);
-
-      // 匹配整个 img 标签
-      final imgPattern = RegExp(
-        r'<img\s+[^>]*src=["\']' + escapedUrl + r'["\'][^>]*>',
-        caseSensitive: false,
-      );
-      result = result.replaceAll(imgPattern, '');
-
-      // 也匹配 src 在前面的情况
-      final imgPattern2 = RegExp(
-        r'<img\s+src=["\']' + escapedUrl + r'["\'][^>]*>',
-        caseSensitive: false,
-      );
-      result = result.replaceAll(imgPattern2, '');
-    }
-
-    // 清理空段落：<p></p> 或 <p> </p> 或 <p>\n</p>
-    result = result.replaceAll(RegExp(r'<p>\s*</p>'), '');
-
-    return result;
-  }
 }

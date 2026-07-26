@@ -148,37 +148,4 @@ void main() {
     expect(long.width, lessThanOrEqualTo(_maxBubbleWidth));
     expect(long.height, greaterThan(short.height));
   });
-
-  group('图片重复渲染防御', () {
-    test('_removeExtractedImages 移除单张图片', () {
-      const cooked = '<p><img src="https://example.com/a.png" width="690" height="388"></p>';
-      const extractedUrls = ['https://example.com/a.png'];
-
-      // 应移除整个 img 标签和空 <p>
-      final result = _CookedHtmlContent._removeExtractedImages(cooked, extractedUrls);
-      expect(result.contains('<img'), false);
-      expect(result.contains('a.png'), false);
-    });
-
-    test('_removeExtractedImages 保留未提取的图片', () {
-      const cooked = '<p><img src="https://example.com/a.png" alt="a"></p>'
-                     '<p><img src="https://example.com/b.png" alt="b"></p>';
-      const extractedUrls = ['https://example.com/a.png'];
-
-      final result = _CookedHtmlContent._removeExtractedImages(cooked, extractedUrls);
-      expect(result.contains('a.png'), false);
-      expect(result.contains('b.png'), true);
-    });
-
-    test('_removeExtractedImages 处理混合内容', () {
-      const cooked = '<p>查看这张图片：<img src="https://example.com/a.png" alt="a"></p>'
-                     '<p>这是正常文本</p>';
-      const extractedUrls = ['https://example.com/a.png'];
-
-      final result = _CookedHtmlContent._removeExtractedImages(cooked, extractedUrls);
-      expect(result.contains('a.png'), false);
-      expect(result.contains('查看这张图片：'), true);
-      expect(result.contains('这是正常文本'), true);
-    });
-  });
 }

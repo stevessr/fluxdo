@@ -25,7 +25,7 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
     // 获取聊天全局在线状态
     Set<int> onlineUserIds = {};
     try {
-      final presenceState = await service.chat.getChatPresenceState();
+      final presenceState = await service.getChatPresenceState();
       final chatOnline = presenceState['/chat/online'];
       if (chatOnline is Map) {
         final users = chatOnline['users'];
@@ -56,7 +56,7 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
       // 获取在线状态
       Set<int> onlineUserIds = {};
       try {
-        final presenceState = await service.chat.getChatPresenceState();
+        final presenceState = await service.getChatPresenceState();
         final chatOnline = presenceState['/chat/online'];
         if (chatOnline is Map) {
           final users = chatOnline['users'];

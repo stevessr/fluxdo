@@ -269,35 +269,49 @@ mixin _ChatMixin on _DiscourseServiceBase {
     return page.members;
   }
 
+  /// 聊天全局在线 presence 频道（对齐 Discourse chat 插件 `/chat/online`）
+  static const String chatOnlinePresenceChannel = '/chat/online';
+
   /// 上报用户进入聊天频道（用于在线状态追踪）
   ///
-  /// 对齐 Discourse PresenceChannel.present：POST /presence/update
-  /// 客户端应该周期性调用（间隔 < 60s）以维持在线状态。
+  /// 对齐 Discourse PresenceChannel#present：POST /presence/update。
+  /// client_id 必须是 MessageBus 的 clientId —— 服务端按 (user, client_id)
+  /// 记录在线条目并在 60s 后过期，用随机值会每次生成孤儿条目且无法 leave。
+  /// 客户端应周期性调用（间隔 < 60s）以维持在线状态。
   Future<void> reportChatPresence(int channelId) async {
+    if (!isAuthenticated) return;
     try {
       await _dio.post(
         '/presence/update',
         data: {
-          'client_id': 'flutter_${DateTime.now().millisecondsSinceEpoch}',
-          'present_channels': ['/chat/online'],
+          'client_id': MessageBusService().clientId,
+          'present_channels[]': [chatOnlinePresenceChannel],
         },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          headers: {
+            'X-SILENCE-LOGGER': 'true',
+            'Discourse-Background': 'true',
+          },
+          extra: {'isSilent': true},
+        ),
       );
     } on DioException catch (e) {
       // 在线状态上报失败不影响主流程，仅记录日志
-      debugPrint('Failed to report chat presence: $e');
+      debugPrint('Failed to report chat presence: ${e.response?.statusCode}');
     }
   }
 
   /// 获取聊天全局在线状态
   ///
-  /// 对齐 Discourse: GET /presence/get
-  /// 返回 /chat/online 频道的在线用户列表。
+  /// 对齐 Discourse: GET /presence/get?channels[]=/chat/online
+  /// 返回形如 `{ "/chat/online": { count, users: [...] } }`。
   Future<Map<String, dynamic>> getChatPresenceState() async {
     try {
       final response = await _dio.get(
         '/presence/get',
         queryParameters: {
-          'channels': ['/chat/online'],
+          'channels[]': chatOnlinePresenceChannel,
         },
       );
       return Map<String, dynamic>.from(response.data as Map);

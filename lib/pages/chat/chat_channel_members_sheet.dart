@@ -571,7 +571,8 @@ class _AddChannelMemberDialogState
                             final avatarUrl = _resolveUserAvatarUrl(user);
 
                             return ListTile(
-                              leading: SmartAvatar(
+                              leading: OnlineStatusAvatar(
+                                userId: user.id,
                                 imageUrl: avatarUrl,
                                 radius: 18,
                                 fallbackText: user.username,
