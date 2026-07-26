@@ -309,12 +309,6 @@ class _ChatChannelSettingsSheetState
                               color: Theme.of(ctx).colorScheme.onSurfaceVariant,
                             ),
                           ),
-                        const Spacer(),
-                        IconButton.filledTonal(
-                          tooltip: selectedEmoji == null ? '选择表情' : '更换表情',
-                          onPressed: openEmojiPicker,
-                          icon: const Icon(Icons.emoji_emotions_outlined),
-                        ),
                       ],
                     ),
                   ],
