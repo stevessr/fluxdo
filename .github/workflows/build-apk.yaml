@@ -317,4 +317,5 @@ jobs:
           path: dist/*.apk
           retention-days: 90
           if-no-files-found: error
+          # APK 已是压缩格式，artifact 再压缩收益极小且浪费 CPU
           compression-level: 0

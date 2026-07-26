@@ -85,6 +85,14 @@ android {
                 keyPassword = releaseKeyPassword
                 storeFile = releaseStoreFile
                 storePassword = releaseStorePassword
+                // 启用 V1 (JAR signing) + V2 (APK Signature Scheme v2) + V3 (APK Signature Scheme v3)
+                // V1: 兼容 Android 6.x 及以下
+                // V2: Android 7.0+ 快速校验
+                // V3: Android 9.0+ 支持密钥轮转
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true  // Android 11+ 增量更新优化（可选）
             }
         }
     }
