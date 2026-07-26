@@ -336,26 +336,37 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   Future<void> _jumpToSearchResult(ChatMessage message) async {
     _exitSearchMode();
+    await _jumpToMessage(message.id);
+  }
+
+  /// 定位到指定消息：必要时先按 target 重拉窗口，再在 reverse 列表中滚动。
+  Future<void> _jumpToMessage(int messageId) async {
     try {
-      await ref
-          .read(chatMessagesProvider(widget.channelId).notifier)
-          .jumpToMessage(message.id);
+      final messages =
+          ref.read(chatMessagesProvider(widget.channelId)).value ?? [];
+      final alreadyLoaded = messages.any((m) => m.id == messageId);
+      if (!alreadyLoaded) {
+        await ref
+            .read(chatMessagesProvider(widget.channelId).notifier)
+            .jumpToMessage(messageId);
+      }
       if (!mounted) return;
       // reverse 列表：index 0 = 最新；按「距最新的距离」粗略定位
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_scrollController.hasClients) return;
-        final messages =
+        final loaded =
             ref.read(chatMessagesProvider(widget.channelId)).value ?? [];
-        final idx = messages.indexWhere((m) => m.id == message.id);
+        final idx = loaded.indexWhere((m) => m.id == messageId);
         if (idx < 0) {
-          _scrollToBottom();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('未找到被回复的消息')),
+          );
           return;
         }
         final max = _scrollController.position.maxScrollExtent;
         // ASC 列表中 idx 越大越新；reverse 下距底部比例 ≈ 1 - (idx+1)/n
-        final ratio = messages.length <= 1
-            ? 0.0
-            : 1.0 - ((idx + 1) / messages.length);
+        final ratio =
+            loaded.length <= 1 ? 0.0 : 1.0 - ((idx + 1) / loaded.length);
         _scrollController.animateTo(
           (max * ratio).clamp(0.0, max),
           duration: const Duration(milliseconds: 250),
@@ -1229,16 +1240,17 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           );
                         }
 
-                        // 查找关联回复消息
+                        // 查找关联回复消息：优先用当前窗口内完整消息，
+                        // 找不到则回退到服务端嵌套的 in_reply_to 摘要。
                         ChatMessage? replyToMsg;
                         if (message.inReplyToId != null) {
-                          replyToMsg = messages.firstWhere(
-                            (m) => m.id == message.inReplyToId,
-                            orElse: () => message,
-                          );
-                          if (replyToMsg.id == message.id) {
-                            replyToMsg = null;
+                          for (final m in messages) {
+                            if (m.id == message.inReplyToId) {
+                              replyToMsg = m;
+                              break;
+                            }
                           }
+                          replyToMsg ??= message.inReplyTo;
                         }
 
                         return Column(
@@ -1271,6 +1283,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                         .notifier)
                                     .toggleReaction(message.id, emoji);
                               },
+                              onReplyTap: message.inReplyToId != null
+                                  ? () =>
+                                      _jumpToMessage(message.inReplyToId!)
+                                  : null,
                               onMessageVisible: (messageId) {
                                 // 当消息进入视口时触发延迟已读检查
                                 _markAsReadDelayed(messageId);
@@ -1831,6 +1847,7 @@ class _ChatMessageBubble extends StatelessWidget {
   final bool isSelected;
   final ValueChanged<int>? onToggleSelect;
   final VoidCallback? onRestore;
+  final VoidCallback? onReplyTap;
   final ValueChanged<int>? onMessageVisible;
 
   const _ChatMessageBubble({
@@ -1845,6 +1862,7 @@ class _ChatMessageBubble extends StatelessWidget {
     this.isSelected = false,
     this.onToggleSelect,
     this.onRestore,
+    this.onReplyTap,
     this.onMessageVisible,
   });
 
@@ -2043,28 +2061,16 @@ class _ChatMessageBubble extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: alignment,
                   children: [
-                    if (showSender)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 2),
-                        child: Text(
-                          message.user!.name ?? message.user!.username,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-
-                    // 关联回复引用框（移到气泡上方）
+                    // 关联回复引用框：显示在发送者用户名上方
                     if (replyToMessage != null)
                       GestureDetector(
-                        onTap: () {
-                          // TODO: 滚动到被引用的消息位置
-                          // 需要通过回调将 replyToMessage.id 传给父级，
-                          // 父级通过 ScrollController 滚动到对应位置
-                        },
+                        onTap: onReplyTap,
                         child: Container(
-                          margin: const EdgeInsets.only(bottom: 4, left: 4, right: 4),
+                          margin: const EdgeInsets.only(
+                            bottom: 4,
+                            left: 4,
+                            right: 4,
+                          ),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
                             vertical: 4,
@@ -2091,7 +2097,7 @@ class _ChatMessageBubble extends StatelessWidget {
                               const SizedBox(width: 4),
                               Flexible(
                                 child: Text(
-                                  '${replyToMessage!.user?.username ?? '未知用户'}: ${replyToMessage!.message}',
+                                  '${replyToMessage!.user?.name ?? replyToMessage!.user?.username ?? '未知用户'}: ${replyToMessage!.message}',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.bodySmall?.copyWith(
@@ -2101,6 +2107,18 @@ class _ChatMessageBubble extends StatelessWidget {
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                      ),
+
+                    if (showSender)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 2),
+                        child: Text(
+                          message.user!.name ?? message.user!.username,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),

@@ -43,6 +43,10 @@ class ChatMessage {
   final int chatChannelId;
   final ChatUser? user;
   final int? inReplyToId;
+
+  /// Discourse 嵌套的被回复消息摘要（可能不在当前消息窗口内）。
+  /// 仅作预览；完整消息以列表内查找结果为准。
+  final ChatMessage? inReplyTo;
   final int? threadId;
   final List<Map<String, dynamic>>? uploads;
   final List<ChatMessageReaction>? reactions;
@@ -69,6 +73,7 @@ class ChatMessage {
     required this.chatChannelId,
     this.user,
     this.inReplyToId,
+    this.inReplyTo,
     this.threadId,
     this.uploads,
     this.reactions,
@@ -89,6 +94,15 @@ class ChatMessage {
     final parsedBookmarkId = (bookmarkObj?['id'] as num?)?.toInt() ??
         (json['bookmark_id'] as num?)?.toInt();
 
+    // 嵌套 in_reply_to 只解析一层，避免循环引用
+    ChatMessage? nestedReply;
+    if (json['in_reply_to'] is Map) {
+      final replyJson = Map<String, dynamic>.from(json['in_reply_to'] as Map);
+      // 去掉更深一层的 in_reply_to，防止无限递归
+      replyJson.remove('in_reply_to');
+      nestedReply = ChatMessage.fromJson(replyJson);
+    }
+
     return ChatMessage(
       id: (json['id'] as num?)?.toInt() ?? 0,
       message: json['message']?.toString() ?? '',
@@ -99,10 +113,8 @@ class ChatMessage {
           ? ChatUser.fromJson(Map<String, dynamic>.from(json['user'] as Map))
           : null,
       // Discourse 序列化的是嵌套 in_reply_to 对象，不一定带顶层 in_reply_to_id
-      inReplyToId: (json['in_reply_to_id'] as num?)?.toInt() ??
-          (json['in_reply_to'] is Map
-              ? (json['in_reply_to']['id'] as num?)?.toInt()
-              : null),
+      inReplyToId: (json['in_reply_to_id'] as num?)?.toInt() ?? nestedReply?.id,
+      inReplyTo: nestedReply,
       threadId: (json['thread_id'] as num?)?.toInt(),
       uploads: (json['uploads'] as List?)
           ?.map((e) => Map<String, dynamic>.from(e as Map))
@@ -135,6 +147,7 @@ class ChatMessage {
     int? chatChannelId,
     ChatUser? user,
     int? inReplyToId,
+    ChatMessage? inReplyTo,
     int? threadId,
     List<Map<String, dynamic>>? uploads,
     List<ChatMessageReaction>? reactions,
@@ -156,6 +169,7 @@ class ChatMessage {
       chatChannelId: chatChannelId ?? this.chatChannelId,
       user: user ?? this.user,
       inReplyToId: inReplyToId ?? this.inReplyToId,
+      inReplyTo: inReplyTo ?? this.inReplyTo,
       threadId: threadId ?? this.threadId,
       uploads: uploads ?? this.uploads,
       reactions: reactions ?? this.reactions,
