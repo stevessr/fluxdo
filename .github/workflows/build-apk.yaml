@@ -139,7 +139,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-          # 依赖缓存已足够；构建缓存对 Flutter 多模块收益有限且体积大
+          # 启用构建缓存：Gradle 7.5+ 的 configuration cache + build cache 能大幅缩短重复构建
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
+          build-scan-terms-of-use-agree: "yes"
           cache-cleanup: on-success
 
       - name: Setup Flutter
