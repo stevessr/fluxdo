@@ -49,30 +49,55 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
   Future<void> refresh() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      final service = ref.read(discourseServiceProvider);
-      final raw = await service.getChatChannels();
-      final channelsState = ChatChannelsState.fromJson(raw);
+      return _fetchChannelsState();
+    });
+  }
 
-      // 获取在线状态
-      Set<int> onlineUserIds = {};
-      try {
-        final presenceState = await service.getChatPresenceState();
-        final chatOnline = presenceState['/chat/online'];
-        if (chatOnline is Map) {
-          final users = chatOnline['users'];
-          if (users is List) {
-            for (final u in users) {
-              if (u is Map) {
-                final userId = (u['id'] as num?)?.toInt();
-                if (userId != null) onlineUserIds.add(userId);
-              }
+  /// 静默刷新：保留当前值，不进入 loading（用于开关同步等）
+  Future<void> refreshSilently() async {
+    try {
+      final next = await _fetchChannelsState();
+      state = AsyncData(next);
+    } catch (_) {
+      // 静默失败，保留现有状态
+    }
+  }
+
+  Future<ChatChannelsState> _fetchChannelsState() async {
+    final service = ref.read(discourseServiceProvider);
+    final raw = await service.getChatChannels();
+    final channelsState = ChatChannelsState.fromJson(raw);
+
+    Set<int> onlineUserIds = {};
+    try {
+      final presenceState = await service.getChatPresenceState();
+      final chatOnline = presenceState['/chat/online'];
+      if (chatOnline is Map) {
+        final users = chatOnline['users'];
+        if (users is List) {
+          for (final u in users) {
+            if (u is Map) {
+              final userId = (u['id'] as num?)?.toInt();
+              if (userId != null) onlineUserIds.add(userId);
             }
           }
         }
-      } catch (_) {}
+      }
+    } catch (_) {}
 
-      return channelsState.copyWith(onlineUserIds: onlineUserIds);
-    });
+    return channelsState.copyWith(onlineUserIds: onlineUserIds);
+  }
+
+  /// 乐观更新频道消息串开关，避免 invalidate 前 UI 不同步
+  void setThreadingEnabledLocally(int channelId, bool enabled) {
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      current.mapChannel(
+        channelId,
+        (c) => c.copyWith(threadingEnabled: enabled),
+      ),
+    );
   }
 }
 
@@ -493,6 +518,61 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     return messageId;
   }
 
+  /// 确保消息有 thread：已有则返回，否则 createThread
+  ///
+  /// 对齐 Discourse chat-channel-composer.replyTo：
+  /// threadingEnabled 时回复会先创建/进入消息串。
+  Future<ChatThread> ensureThreadForMessage(ChatMessage message) async {
+    if (message.thread != null && message.thread!.id > 0) {
+      return message.thread!;
+    }
+    if (message.threadId != null && message.threadId! > 0) {
+      return ChatThread(
+        id: message.threadId!,
+        channelId: channelId,
+        title: message.threadTitle,
+      );
+    }
+
+    final service = ref.read(discourseServiceProvider);
+    final raw = await service.createChatThread(channelId, message.id);
+    // create 接口 root:false，本身就是 thread 对象；兼容 {thread: {...}}
+    final threadJson = raw['thread'] is Map
+        ? Map<String, dynamic>.from(raw['thread'] as Map)
+        : raw;
+    final thread = ChatThread.fromJson(threadJson);
+
+    // 回写本地消息的 thread 字段，便于指示器立刻出现
+    final current = List<ChatMessage>.from(state.value ?? const []);
+    final idx = current.indexWhere((m) => m.id == message.id);
+    if (idx >= 0) {
+      current[idx] = current[idx].copyWith(
+        threadId: thread.id,
+        thread: thread,
+        threadTitle: thread.title,
+      );
+      state = AsyncData(current);
+    }
+    return thread;
+  }
+
+  /// 在消息串内发送
+  Future<int> sendThreadMessage(
+    int threadId,
+    String text, {
+    int? inReplyToId,
+    List<int>? uploadIds,
+  }) async {
+    final service = ref.read(discourseServiceProvider);
+    return service.sendChatMessage(
+      channelId,
+      text,
+      threadId: threadId,
+      inReplyToId: inReplyToId,
+      uploadIds: uploadIds,
+    );
+  }
+
   /// 编辑消息
   Future<void> editMessage(int messageId, String newText) async {
     final service = ref.read(discourseServiceProvider);
@@ -747,6 +827,54 @@ final chatMessagesProvider = AsyncNotifierProvider.family<
     ChatMessagesNotifier, List<ChatMessage>, int>(
   ChatMessagesNotifier.new,
 );
+
+/// 消息串消息列表参数
+typedef ChatThreadMessagesParams = ({int channelId, int threadId});
+
+/// 消息串消息列表
+final chatThreadMessagesProvider = FutureProvider.autoDispose
+    .family<List<ChatMessage>, ChatThreadMessagesParams>((ref, params) async {
+  final service = ref.read(discourseServiceProvider);
+  final raw = await service.getChatThreadMessages(
+    params.channelId,
+    params.threadId,
+    pageSize: 50,
+  );
+  final list = raw['messages'] ?? raw['chat_messages'];
+  if (list is! List) return const [];
+
+  final usersMap = <int, ChatUser>{};
+  if (raw['users'] is List) {
+    for (final u in raw['users'] as List) {
+      if (u is Map) {
+        final user = ChatUser.fromJson(Map<String, dynamic>.from(u));
+        usersMap[user.id] = user;
+      }
+    }
+  }
+
+  final parsed = <ChatMessage>[];
+  for (final e in list) {
+    if (e is! Map) continue;
+    try {
+      final json = Map<String, dynamic>.from(e);
+      if (json['user'] == null && json['user_id'] != null) {
+        final userId = (json['user_id'] as num?)?.toInt();
+        if (userId != null && usersMap.containsKey(userId)) {
+          json['user'] = usersMap[userId]!.toJson();
+        }
+      }
+      final msg = ChatMessage.fromJson(json);
+      if (msg.id > 0) parsed.add(msg);
+    } catch (_) {}
+  }
+  parsed.sort((a, b) {
+    final byTime = a.createdAt.compareTo(b.createdAt);
+    if (byTime != 0) return byTime;
+    return a.id.compareTo(b.id);
+  });
+  return parsed;
+});
 
 /// ============================================================================
 /// 3. 未读统计 Provider

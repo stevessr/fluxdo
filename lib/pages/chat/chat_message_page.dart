@@ -32,6 +32,7 @@ import '../image_viewer_page.dart';
 import '../user_profile_page.dart';
 import 'chat_channel_members_sheet.dart';
 import 'chat_channel_settings_sheet.dart';
+import 'chat_thread_sheet.dart';
 
 /// Chat 消息页面
 ///
@@ -587,11 +588,67 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   }
 
   void _onStartReply(ChatMessage message) {
+    // 消息串开启时：对齐 Discourse replyTo —— 创建/进入消息串，而非频道内引用回复
+    final channel = _currentChannelOrNull();
+    final threadingOn = channel?.threadingEnabled == true ||
+        message.thread?.force == true ||
+        message.thread != null;
+    if (threadingOn) {
+      _openOrCreateThread(message);
+      return;
+    }
     setState(() {
       _replyToMessage = message;
       _editingMessage = null;
     });
     _inputFocusNode.requestFocus();
+  }
+
+  ChatChannel? _currentChannelOrNull() {
+    final channelsAsync = ref.read(chatChannelsProvider);
+    final value = channelsAsync.value;
+    if (value == null) return null;
+    final all = [...value.publicChannels, ...value.directMessageChannels];
+    for (final c in all) {
+      if (c.id == widget.channelId) return c;
+    }
+    return null;
+  }
+
+  /// 打开消息串；若消息尚无 thread 则先 createThread
+  Future<void> _openOrCreateThread(ChatMessage message) async {
+    try {
+      final thread = await ref
+          .read(chatMessagesProvider(widget.channelId).notifier)
+          .ensureThreadForMessage(message);
+      if (!mounted) return;
+      await ChatThreadSheet.show(
+        context,
+        channelId: widget.channelId,
+        thread: thread,
+        originalMessage: message,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('打开消息串失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _openThreadFromIndicator(ChatMessage message) async {
+    final thread = message.thread;
+    if (thread == null || thread.id <= 0) {
+      await _openOrCreateThread(message);
+      return;
+    }
+    if (!mounted) return;
+    await ChatThreadSheet.show(
+      context,
+      channelId: widget.channelId,
+      thread: thread,
+      originalMessage: message,
+    );
   }
 
   void _onStartEdit(ChatMessage message) {
@@ -837,12 +894,31 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.reply_rounded),
-                title: Text(ctx.l10n.chat_reply),
+                title: Text(
+                  (_currentChannelOrNull()?.threadingEnabled == true ||
+                          message.thread != null)
+                      ? '在消息串中回复'
+                      : ctx.l10n.chat_reply,
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _onStartReply(message);
                 },
               ),
+              if (message.thread != null &&
+                  (message.thread!.hasVisibleReplies ||
+                      message.threadId != null))
+                ListTile(
+                  leading: const Icon(Icons.forum_outlined),
+                  title: const Text('查看消息串'),
+                  subtitle: Text(
+                    '${message.thread!.preview?.replyCount ?? message.thread!.replyCount} 条回复',
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openThreadFromIndicator(message);
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.copy_rounded),
                 title: Text(ctx.l10n.chat_copy),
@@ -1135,6 +1211,24 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       tooltip: '搜索对话',
                       onPressed: _enterSearchMode,
                     ),
+                    // 消息串开启时显示入口（对齐 Discourse threads-list-button）
+                    if (currentChannel?.threadingEnabled == true)
+                      IconButton(
+                        icon: Icon(
+                          Icons.forum_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
+                        tooltip: '消息串已开启',
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                '消息串已开启：回复消息将进入独立讨论串，点击消息下的消息串入口可查看',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     if (!_isAtBottom && messagesAsync.value != null)
                       IconButton(
                         icon: const Icon(Icons.arrow_downward_rounded),
@@ -1244,8 +1338,13 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
                         // 查找关联回复消息：优先用当前窗口内完整消息，
                         // 找不到则回退到服务端嵌套的 in_reply_to 摘要。
+                        // 消息串开启时对齐 Discourse hideReplyToInfo：
+                        // 不展示频道内引用条，改走消息串指示器。
+                        final threadingOn =
+                            currentChannel?.threadingEnabled == true ||
+                                message.thread?.force == true;
                         ChatMessage? replyToMsg;
-                        if (message.inReplyToId != null) {
+                        if (!threadingOn && message.inReplyToId != null) {
                           for (final m in messages) {
                             if (m.id == message.inReplyToId) {
                               replyToMsg = m;
@@ -1266,6 +1365,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               isOwnMessage: isOwnMessage,
                               avatarUrl: _buildAvatarUrl(message.user),
                               theme: theme,
+                              threadingEnabled: threadingOn,
                               isMultiSelectMode: _isMultiSelectMode,
                               isSelected:
                                   _selectedMessageIds.contains(message.id),
@@ -1288,6 +1388,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               onReplyTap: message.inReplyToId != null
                                   ? () =>
                                       _jumpToMessage(message.inReplyToId!)
+                                  : null,
+                              onThreadTap: (message.thread != null &&
+                                      message.thread!.hasVisibleReplies)
+                                  ? () => _openThreadFromIndicator(message)
                                   : null,
                               onMessageVisible: (messageId) {
                                 // 当消息进入视口时触发延迟已读检查
@@ -1847,9 +1951,11 @@ class _ChatMessageBubble extends StatelessWidget {
   final ValueChanged<String> onToggleReaction;
   final bool isMultiSelectMode;
   final bool isSelected;
+  final bool threadingEnabled;
   final ValueChanged<int>? onToggleSelect;
   final VoidCallback? onRestore;
   final VoidCallback? onReplyTap;
+  final VoidCallback? onThreadTap;
   final ValueChanged<int>? onMessageVisible;
 
   const _ChatMessageBubble({
@@ -1862,9 +1968,11 @@ class _ChatMessageBubble extends StatelessWidget {
     required this.onToggleReaction,
     this.isMultiSelectMode = false,
     this.isSelected = false,
+    this.threadingEnabled = false,
     this.onToggleSelect,
     this.onRestore,
     this.onReplyTap,
+    this.onThreadTap,
     this.onMessageVisible,
   });
 
@@ -2267,6 +2375,17 @@ class _ChatMessageBubble extends StatelessWidget {
                       ),
                     ),
 
+                    // 消息串入口（对齐 Discourse ChatMessageThreadIndicator）
+                    if (threadingEnabled &&
+                        message.thread != null &&
+                        message.thread!.hasVisibleReplies &&
+                        onThreadTap != null)
+                      _ChatThreadIndicator(
+                        thread: message.thread!,
+                        theme: theme,
+                        onTap: onThreadTap!,
+                      ),
+
                     // Emoji 回应 (Reactions) 移到气泡下方
                     // 点击切换自己的回应；长按查看该 emoji 的反应用户
                     if (message.reactions != null &&
@@ -2539,6 +2658,90 @@ class _ChatMessageBubble extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 消息串入口指示器（对齐 Discourse chat-message-thread-indicator）
+class _ChatThreadIndicator extends StatelessWidget {
+  final ChatThread thread;
+  final ThemeData theme;
+  final VoidCallback onTap;
+
+  const _ChatThreadIndicator({
+    required this.thread,
+    required this.theme,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = thread.preview;
+    final replyCount = preview?.replyCount ?? thread.replyCount;
+    final lastUser = preview?.lastReplyUser;
+    final lastName = lastUser?.name ?? lastUser?.username;
+    final excerpt = preview?.lastReplyExcerpt?.trim();
+    final time = preview?.lastReplyCreatedAt != null
+        ? TimeUtils.formatRelativeTime(preview!.lastReplyCreatedAt!)
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+      child: Material(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.forum_outlined,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$replyCount 条回复${lastName != null ? ' · $lastName' : ''}'
+                        '${time != null ? ' · $time' : ''}',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (excerpt != null && excerpt.isNotEmpty)
+                        Text(
+                          excerpt,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

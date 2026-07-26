@@ -527,6 +527,88 @@ mixin _ChatMixin on _DiscourseServiceBase {
     }
   }
 
+  /// 创建消息串（对齐 Discourse chat-api.createThread）
+  ///
+  /// POST /chat/api/channels/:channelId/threads
+  /// body: { original_message_id, title? }
+  Future<Map<String, dynamic>> createChatThread(
+    int channelId,
+    int originalMessageId, {
+    String? title,
+  }) async {
+    final data = <String, dynamic>{
+      'original_message_id': originalMessageId,
+    };
+    if (title != null && title.isNotEmpty) data['title'] = title;
+    try {
+      final response = await _dio.post(
+        '/chat/api/channels/$channelId/threads',
+        data: data,
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 获取消息串详情
+  ///
+  /// GET /chat/api/channels/:channelId/threads/:threadId
+  Future<Map<String, dynamic>> getChatThread(
+    int channelId,
+    int threadId,
+  ) async {
+    try {
+      final response = await _dio.get(
+        '/chat/api/channels/$channelId/threads/$threadId',
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 获取消息串内消息列表
+  ///
+  /// GET /chat/api/channels/:channelId/threads/:threadId/messages
+  Future<Map<String, dynamic>> getChatThreadMessages(
+    int channelId,
+    int threadId, {
+    int? pageSize,
+    int? targetMessageId,
+    String? direction,
+  }) async {
+    final queryParameters = <String, dynamic>{};
+    if (pageSize != null) queryParameters['page_size'] = pageSize;
+    if (targetMessageId != null) {
+      queryParameters['target_message_id'] = targetMessageId;
+    }
+    if (direction != null) queryParameters['direction'] = direction;
+    try {
+      final response = await _dio.get(
+        '/chat/api/channels/$channelId/threads/$threadId/messages',
+        queryParameters: queryParameters.isEmpty ? null : queryParameters,
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 列出频道消息串
+  ///
+  /// GET /chat/api/channels/:channelId/threads
+  Future<Map<String, dynamic>> getChatChannelThreads(int channelId) async {
+    try {
+      final response = await _dio.get(
+        '/chat/api/channels/$channelId/threads',
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
   /// 修改 Chat 频道元信息（名称、缩略名、表情、消息串等）
   ///
   /// 对齐 Discourse chat-api.updateChannel:

@@ -1,4 +1,5 @@
 import '../../utils/time_utils.dart';
+import 'chat_thread.dart';
 import 'chat_user.dart';
 
 /// Chat 消息的回应（Reaction）数据模型
@@ -48,6 +49,12 @@ class ChatMessage {
   /// 仅作预览；完整消息以列表内查找结果为准。
   final ChatMessage? inReplyTo;
   final int? threadId;
+
+  /// 消息串元数据（仅原消息/OM 会带完整 thread 对象）
+  final ChatThread? thread;
+
+  /// 非原消息时服务端可能只下发 thread_title
+  final String? threadTitle;
   final List<Map<String, dynamic>>? uploads;
   final List<ChatMessageReaction>? reactions;
   final bool edited;
@@ -75,6 +82,8 @@ class ChatMessage {
     this.inReplyToId,
     this.inReplyTo,
     this.threadId,
+    this.thread,
+    this.threadTitle,
     this.uploads,
     this.reactions,
     this.edited = false,
@@ -103,6 +112,13 @@ class ChatMessage {
       nestedReply = ChatMessage.fromJson(replyJson);
     }
 
+    ChatThread? thread;
+    if (json['thread'] is Map) {
+      thread = ChatThread.fromJson(
+        Map<String, dynamic>.from(json['thread'] as Map),
+      );
+    }
+
     return ChatMessage(
       id: (json['id'] as num?)?.toInt() ?? 0,
       message: json['message']?.toString() ?? '',
@@ -115,7 +131,9 @@ class ChatMessage {
       // Discourse 序列化的是嵌套 in_reply_to 对象，不一定带顶层 in_reply_to_id
       inReplyToId: (json['in_reply_to_id'] as num?)?.toInt() ?? nestedReply?.id,
       inReplyTo: nestedReply,
-      threadId: (json['thread_id'] as num?)?.toInt(),
+      threadId: (json['thread_id'] as num?)?.toInt() ?? thread?.id,
+      thread: thread,
+      threadTitle: json['thread_title']?.toString() ?? thread?.title,
       uploads: (json['uploads'] as List?)
           ?.map((e) => Map<String, dynamic>.from(e as Map))
           .toList(),
@@ -149,6 +167,8 @@ class ChatMessage {
     int? inReplyToId,
     ChatMessage? inReplyTo,
     int? threadId,
+    ChatThread? thread,
+    String? threadTitle,
     List<Map<String, dynamic>>? uploads,
     List<ChatMessageReaction>? reactions,
     bool? edited,
@@ -171,6 +191,8 @@ class ChatMessage {
       inReplyToId: inReplyToId ?? this.inReplyToId,
       inReplyTo: inReplyTo ?? this.inReplyTo,
       threadId: threadId ?? this.threadId,
+      thread: thread ?? this.thread,
+      threadTitle: threadTitle ?? this.threadTitle,
       uploads: uploads ?? this.uploads,
       reactions: reactions ?? this.reactions,
       edited: edited ?? this.edited,

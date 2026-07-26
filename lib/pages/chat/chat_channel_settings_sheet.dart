@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -180,19 +182,34 @@ class _ChatChannelSettingsSheetState
 
   Future<void> _updateThreading(ChatChannel channel, bool newThreading) async {
     setState(() => _isSaving = true);
+    // 先乐观更新频道列表，让消息页立刻按消息串风格渲染
+    ref
+        .read(chatChannelsProvider.notifier)
+        .setThreadingEnabledLocally(widget.channelId, newThreading);
     try {
       final service = ref.read(discourseServiceProvider);
       await service.updateChannel(
         widget.channelId,
         threadingEnabled: newThreading,
       );
-      ref.invalidate(chatChannelsProvider);
+      // 后台对齐服务端状态（静默刷新，避免 loading 闪一下）
+      unawaited(ref.read(chatChannelsProvider.notifier).refreshSilently());
+      // 开启后消息序列化才会带 thread / thread_id，需重拉消息列表
+      unawaited(
+        ref
+            .read(chatMessagesProvider(widget.channelId).notifier)
+            .loadMessages(preferLatest: true),
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(newThreading ? '已开启消息串' : '已关闭消息串')),
         );
       }
     } catch (e) {
+      // 失败回滚
+      ref
+          .read(chatChannelsProvider.notifier)
+          .setThreadingEnabledLocally(widget.channelId, channel.threadingEnabled);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('设置失败: $e')),

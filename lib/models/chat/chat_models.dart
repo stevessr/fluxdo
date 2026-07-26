@@ -7,6 +7,7 @@ import 'chat_channel.dart';
 
 export 'chat_channel.dart';
 export 'chat_message.dart';
+export 'chat_thread.dart';
 export 'chat_user.dart';
 
 /// Chat 频道列表状态
@@ -67,14 +68,33 @@ class ChatChannelsState {
     );
   }
 
-  /// 复制并更新在线用户列表
-  ChatChannelsState copyWith({Set<int>? onlineUserIds}) {
+  /// 复制并更新在线用户列表 / 频道字段
+  ChatChannelsState copyWith({
+    Set<int>? onlineUserIds,
+    List<ChatChannel>? publicChannels,
+    List<ChatChannel>? directMessageChannels,
+  }) {
     return ChatChannelsState(
-      publicChannels: publicChannels,
-      directMessageChannels: directMessageChannels,
+      publicChannels: publicChannels ?? this.publicChannels,
+      directMessageChannels:
+          directMessageChannels ?? this.directMessageChannels,
       tracking: tracking,
       messageBusLastIds: messageBusLastIds,
       onlineUserIds: onlineUserIds ?? this.onlineUserIds,
+    );
+  }
+
+  /// 按 id 更新某个频道（乐观更新 threading 等字段）
+  ChatChannelsState mapChannel(
+    int channelId,
+    ChatChannel Function(ChatChannel) transform,
+  ) {
+    List<ChatChannel> mapList(List<ChatChannel> list) => [
+          for (final c in list) c.id == channelId ? transform(c) : c,
+        ];
+    return copyWith(
+      publicChannels: mapList(publicChannels),
+      directMessageChannels: mapList(directMessageChannels),
     );
   }
 
