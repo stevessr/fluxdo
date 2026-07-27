@@ -19,6 +19,40 @@
     }
   },
   "login_browserHint": "将在浏览器中打开登录页面",
+  "login_qrAccount": "账号：{username}",
+  "@login_qrAccount": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "login_qrCameraUnavailable": "无法使用相机",
+  "login_qrDecodingImage": "正在识别图片中的二维码…",
+  "login_qrDisplayHint": "请用另一台未登录的设备打开 FluxDO，扫描此二维码完成登录。",
+  "login_qrDisplayTitle": "登录二维码",
+  "login_qrExpired": "二维码已过期",
+  "login_qrExpiresIn": "有效期剩余 {time}",
+  "@login_qrExpiresIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "login_qrGalleryOnlyHint": "当前平台不支持实时扫码，请从相册选择包含登录二维码的图片。",
+  "login_qrGenerateFailed": "生成登录二维码失败",
+  "login_qrLoggingIn": "正在完成登录…",
+  "login_qrNoCodeInImage": "图片中未识别到登录二维码",
+  "login_qrPickImage": "从相册选择",
+  "login_qrRefresh": "刷新二维码",
+  "login_qrScanFailed": "扫码登录失败，请重试",
+  "login_qrScanHint": "将镜头对准另一台设备上的登录二维码",
+  "login_qrScanTitle": "扫码登录",
+  "login_qrSecurityWarning": "二维码含有你的登录凭证，请勿分享给他人或在公共场合长时间展示。过期后自动失效。",
+  "login_qrShowCode": "显示登录二维码",
+  "login_qrSuccess": "扫码登录成功",
+  "login_scanToLogin": "扫码登录",
   "login_slogan": "真诚、友善、团结、专业",
   "migration_cookieUpgrade": "正在升级 Cookie 存储...",
   "migration_reloginRequired": "本次版本升级优化了 Cookie 存储机制，已清除旧的登录状态。请重新登录。",
