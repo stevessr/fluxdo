@@ -663,110 +663,154 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   }
 
   /// 切换消息 Emoji 回应 (Reaction)
-  Future<void> toggleReaction(int messageId, String emoji) async {
+  ///
+  /// [knownReacted]：消息不在当前频道窗口（如消息串内）时，由调用方
+  /// 传入已知 reacted 状态；缺省时若本地无该消息则按「添加」处理。
+  Future<void> toggleReaction(
+    int messageId,
+    String emoji, {
+    bool? knownReacted,
+  }) async {
     final currentList = state.value ?? [];
     final msgIndex = currentList.indexWhere((m) => m.id == messageId);
-    if (msgIndex == -1) return;
 
-    final msg = currentList[msgIndex];
-    final reactions = List<ChatMessageReaction>.from(msg.reactions ?? []);
-    final rIndex = reactions.indexWhere((r) => r.emoji == emoji);
+    // 本地有消息：乐观更新；否则只打 API（消息串场景）
+    if (msgIndex != -1) {
+      final msg = currentList[msgIndex];
+      final reactions = List<ChatMessageReaction>.from(msg.reactions ?? []);
+      final rIndex = reactions.indexWhere((r) => r.emoji == emoji);
 
-    final isAlreadyReacted = rIndex != -1 && reactions[rIndex].reacted;
-    final action = isAlreadyReacted ? 'remove' : 'add';
+      final isAlreadyReacted = rIndex != -1 && reactions[rIndex].reacted;
+      final action = isAlreadyReacted ? 'remove' : 'add';
 
-    // 乐观更新 UI（保留 users，避免长按查看反应用户时列表被清空）
-    final newReactions = List<ChatMessageReaction>.from(reactions);
-    if (isAlreadyReacted) {
-      final old = newReactions[rIndex];
-      if (old.count <= 1) {
-        newReactions.removeAt(rIndex);
-      } else {
-        newReactions[rIndex] = ChatMessageReaction(
-          emoji: old.emoji,
-          count: old.count - 1,
-          reacted: false,
-          users: old.users,
-        );
-      }
-    } else {
-      if (rIndex != -1) {
+      // 乐观更新 UI（保留 users，避免长按查看反应用户时列表被清空）
+      final newReactions = List<ChatMessageReaction>.from(reactions);
+      if (isAlreadyReacted) {
         final old = newReactions[rIndex];
-        newReactions[rIndex] = ChatMessageReaction(
-          emoji: old.emoji,
-          count: old.count + 1,
-          reacted: true,
-          users: old.users,
-        );
+        if (old.count <= 1) {
+          newReactions.removeAt(rIndex);
+        } else {
+          newReactions[rIndex] = ChatMessageReaction(
+            emoji: old.emoji,
+            count: old.count - 1,
+            reacted: false,
+            users: old.users,
+          );
+        }
       } else {
-        newReactions.add(ChatMessageReaction(
-          emoji: emoji,
-          count: 1,
-          reacted: true,
-        ));
+        if (rIndex != -1) {
+          final old = newReactions[rIndex];
+          newReactions[rIndex] = ChatMessageReaction(
+            emoji: old.emoji,
+            count: old.count + 1,
+            reacted: true,
+            users: old.users,
+          );
+        } else {
+          newReactions.add(ChatMessageReaction(
+            emoji: emoji,
+            count: 1,
+            reacted: true,
+          ));
+        }
       }
-    }
 
-    final updatedMsg = msg.copyWith(reactions: newReactions);
-    final updatedList = List<ChatMessage>.from(currentList);
-    updatedList[msgIndex] = updatedMsg;
-    state = AsyncValue.data(updatedList);
+      final updatedMsg = msg.copyWith(reactions: newReactions);
+      final updatedList = List<ChatMessage>.from(currentList);
+      updatedList[msgIndex] = updatedMsg;
+      state = AsyncValue.data(updatedList);
 
-    try {
-      final service = ref.read(discourseServiceProvider);
-      await service.reactToChatMessage(channelId, messageId, emoji, action: action);
-    } catch (_) {
-      // 失败回滚
-      state = AsyncValue.data(currentList);
-    }
-  }
-
-  /// 切换消息书签状态 (Bookmark)
-  Future<void> toggleBookmark(int messageId) async {
-    final currentList = state.value ?? [];
-    final msgIndex = currentList.indexWhere((m) => m.id == messageId);
-    if (msgIndex == -1) return;
-
-    final msg = currentList[msgIndex];
-    final nextBookmarked = !msg.bookmarked;
-
-    // 取消书签需要服务端 bookmark id
-    if (!nextBookmarked && (msg.bookmarkId == null || msg.bookmarkId! <= 0)) {
-      // 没有 id 无法删除，保持现状
+      try {
+        final service = ref.read(discourseServiceProvider);
+        await service.reactToChatMessage(
+          channelId,
+          messageId,
+          emoji,
+          action: action,
+        );
+      } catch (_) {
+        state = AsyncValue.data(currentList);
+        rethrow;
+      }
       return;
     }
 
-    // 乐观更新 UI
-    final updatedList = List<ChatMessage>.from(currentList);
-    updatedList[msgIndex] = nextBookmarked
-        ? msg.copyWith(bookmarked: true)
-        : msg.copyWith(bookmarked: false, clearBookmarkId: true);
-    state = AsyncValue.data(updatedList);
+    // 消息不在频道窗口：直接 API（消息串内回复等）
+    final action = (knownReacted == true) ? 'remove' : 'add';
+    final service = ref.read(discourseServiceProvider);
+    await service.reactToChatMessage(
+      channelId,
+      messageId,
+      emoji,
+      action: action,
+    );
+  }
 
-    try {
-      final service = ref.read(discourseServiceProvider);
-      final newBookmarkId = await service.toggleChatMessageBookmark(
-        channelId,
-        messageId,
-        bookmarked: nextBookmarked,
-        bookmarkId: msg.bookmarkId,
-      );
-      // 创建成功后回写 bookmarkId，便于再次取消
-      if (nextBookmarked) {
-        final latest = List<ChatMessage>.from(state.value ?? updatedList);
-        final idx = latest.indexWhere((m) => m.id == messageId);
-        if (idx != -1) {
-          latest[idx] = latest[idx].copyWith(
-            bookmarked: true,
-            bookmarkId: newBookmarkId,
-          );
-          state = AsyncValue.data(latest);
-        }
+  /// 切换消息书签状态 (Bookmark)
+  ///
+  /// [knownBookmarked] / [knownBookmarkId]：消息不在当前窗口时由调用方提供。
+  Future<void> toggleBookmark(
+    int messageId, {
+    bool? knownBookmarked,
+    int? knownBookmarkId,
+  }) async {
+    final currentList = state.value ?? [];
+    final msgIndex = currentList.indexWhere((m) => m.id == messageId);
+
+    if (msgIndex != -1) {
+      final msg = currentList[msgIndex];
+      final nextBookmarked = !msg.bookmarked;
+
+      if (!nextBookmarked && (msg.bookmarkId == null || msg.bookmarkId! <= 0)) {
+        return;
       }
-    } catch (_) {
-      // 失败回滚
-      state = AsyncValue.data(currentList);
+
+      final updatedList = List<ChatMessage>.from(currentList);
+      updatedList[msgIndex] = nextBookmarked
+          ? msg.copyWith(bookmarked: true)
+          : msg.copyWith(bookmarked: false, clearBookmarkId: true);
+      state = AsyncValue.data(updatedList);
+
+      try {
+        final service = ref.read(discourseServiceProvider);
+        final newBookmarkId = await service.toggleChatMessageBookmark(
+          channelId,
+          messageId,
+          bookmarked: nextBookmarked,
+          bookmarkId: msg.bookmarkId,
+        );
+        if (nextBookmarked) {
+          final latest = List<ChatMessage>.from(state.value ?? updatedList);
+          final idx = latest.indexWhere((m) => m.id == messageId);
+          if (idx != -1) {
+            latest[idx] = latest[idx].copyWith(
+              bookmarked: true,
+              bookmarkId: newBookmarkId,
+            );
+            state = AsyncValue.data(latest);
+          }
+        }
+      } catch (_) {
+        state = AsyncValue.data(currentList);
+        rethrow;
+      }
+      return;
     }
+
+    // 消息不在频道窗口
+    final currentlyBookmarked = knownBookmarked ?? false;
+    final nextBookmarked = !currentlyBookmarked;
+    if (!nextBookmarked &&
+        (knownBookmarkId == null || knownBookmarkId <= 0)) {
+      return;
+    }
+    final service = ref.read(discourseServiceProvider);
+    await service.toggleChatMessageBookmark(
+      channelId,
+      messageId,
+      bookmarked: nextBookmarked,
+      bookmarkId: knownBookmarkId,
+    );
   }
 
   /// 加载更多失败时重试
