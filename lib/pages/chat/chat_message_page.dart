@@ -760,6 +760,106 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     );
   }
 
+  /// 气泡异侧 react 按钮：快捷表情 + 打开完整选择器
+  void _showQuickReactionPicker(ChatMessage message) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        // Discourse 默认快捷反应 + 最近使用
+        const defaults = ['heart', '+1', 'smile', 'tada', 'open_mouth'];
+        return SafeArea(
+          child: FutureBuilder<List<String>>(
+            future: _loadRecentReactionEmojis(),
+            builder: (ctx, snapshot) {
+              final recent = snapshot.data ?? const <String>[];
+              final emojis = <String>[
+                ...recent,
+                for (final e in defaults)
+                  if (!recent.contains(e)) e,
+              ].take(12).toList();
+
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '回应',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final emoji in emojis)
+                          InkWell(
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _saveRecentReactionEmoji(emoji);
+                              ref
+                                  .read(
+                                    chatMessagesProvider(widget.channelId)
+                                        .notifier,
+                                  )
+                                  .toggleReaction(message.id, emoji);
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.7),
+                                shape: BoxShape.circle,
+                              ),
+                              child: EmojiText(
+                                ':$emoji:',
+                                style: const TextStyle(fontSize: 22),
+                              ),
+                            ),
+                          ),
+                        InkWell(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _showFullEmojiPickerForReaction(message);
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer
+                                  .withValues(alpha: 0.8),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.add_rounded,
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   /// 长按弹出消息操作 BottomSheet
   void _showMessageActionSheet(ChatMessage message, bool isOwnMessage) {
     // 已删除消息：仅提供恢复（若服务端仍返回该消息，通常需有审核权限）
@@ -1385,6 +1485,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                         .notifier)
                                     .toggleReaction(message.id, emoji);
                               },
+                              onReactButtonTap: () =>
+                                  _showQuickReactionPicker(message),
                               onReplyTap: message.inReplyToId != null
                                   ? () =>
                                       _jumpToMessage(message.inReplyToId!)
@@ -1941,7 +2043,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 }
 
 /// 单条 Chat 消息气泡组件
-class _ChatMessageBubble extends StatelessWidget {
+class _ChatMessageBubble extends StatefulWidget {
   final ChatMessage message;
   final ChatMessage? replyToMessage;
   final bool isOwnMessage;
@@ -1949,6 +2051,7 @@ class _ChatMessageBubble extends StatelessWidget {
   final ThemeData theme;
   final VoidCallback onLongPress;
   final ValueChanged<String> onToggleReaction;
+  final VoidCallback? onReactButtonTap;
   final bool isMultiSelectMode;
   final bool isSelected;
   final bool threadingEnabled;
@@ -1966,6 +2069,7 @@ class _ChatMessageBubble extends StatelessWidget {
     required this.theme,
     required this.onLongPress,
     required this.onToggleReaction,
+    this.onReactButtonTap,
     this.isMultiSelectMode = false,
     this.isSelected = false,
     this.threadingEnabled = false,
@@ -1975,6 +2079,31 @@ class _ChatMessageBubble extends StatelessWidget {
     this.onThreadTap,
     this.onMessageVisible,
   });
+
+  @override
+  State<_ChatMessageBubble> createState() => _ChatMessageBubbleState();
+}
+
+class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
+  /// 桌面鼠标悬停时显示异侧 react 按钮；触控设备始终保留轻量入口。
+  bool _hovered = false;
+
+  ChatMessage get message => widget.message;
+  ChatMessage? get replyToMessage => widget.replyToMessage;
+  bool get isOwnMessage => widget.isOwnMessage;
+  String? get avatarUrl => widget.avatarUrl;
+  ThemeData get theme => widget.theme;
+  VoidCallback get onLongPress => widget.onLongPress;
+  ValueChanged<String> get onToggleReaction => widget.onToggleReaction;
+  VoidCallback? get onReactButtonTap => widget.onReactButtonTap;
+  bool get isMultiSelectMode => widget.isMultiSelectMode;
+  bool get isSelected => widget.isSelected;
+  bool get threadingEnabled => widget.threadingEnabled;
+  ValueChanged<int>? get onToggleSelect => widget.onToggleSelect;
+  VoidCallback? get onRestore => widget.onRestore;
+  VoidCallback? get onReplyTap => widget.onReplyTap;
+  VoidCallback? get onThreadTap => widget.onThreadTap;
+  ValueChanged<int>? get onMessageVisible => widget.onMessageVisible;
 
   List<String> _extractImageUrls() {
     final urls = <String>[];
@@ -2114,6 +2243,49 @@ class _ChatMessageBubble extends StatelessWidget {
     }
     displayText = displayText.replaceAll(RegExp(r'!\[.*?\]\(upload://[^\)]+\)'), '').trim();
 
+    // 触控设备无 hover，保留轻量可见入口；桌面仅在悬停时显示
+    final platform = Theme.of(context).platform;
+    final isTouch = platform == TargetPlatform.android ||
+        platform == TargetPlatform.iOS;
+    final showReactButton = !isMultiSelectMode &&
+        onReactButtonTap != null &&
+        (_hovered || isTouch);
+
+    Widget buildReactButton() {
+      return AnimatedOpacity(
+        opacity: showReactButton ? 1 : 0,
+        duration: const Duration(milliseconds: 120),
+        child: IgnorePointer(
+          ignoring: !showReactButton,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: isOwnMessage ? 0 : 4,
+              right: isOwnMessage ? 4 : 0,
+              bottom: 2,
+            ),
+            child: Material(
+              color: theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.85),
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onReactButtonTap,
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: Icon(
+                    Icons.add_reaction_outlined,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final bubbleWidget = Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Column(
@@ -2132,6 +2304,9 @@ class _ChatMessageBubble extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
+
+              // 自己的消息：react 在气泡左侧（异侧）
+              if (isOwnMessage) buildReactButton(),
 
               if (showSender)
                 Padding(
@@ -2455,6 +2630,9 @@ class _ChatMessageBubble extends StatelessWidget {
                   ],
                 ),
               ),
+
+              // 对方的消息：react 在气泡右侧（异侧）
+              if (!isOwnMessage) buildReactButton(),
             ],
           ),
         ],
@@ -2463,14 +2641,22 @@ class _ChatMessageBubble extends StatelessWidget {
 
     // 使用 VisibilityDetector 追踪消息可见性，用于已读回执
     // 当消息可见比例 >= 80% 且在底部附近时，触发延迟已读逻辑
-    return VisibilityDetector(
-      key: Key('chat_msg_${message.id}'),
-      onVisibilityChanged: (info) {
-        if (info.visibleFraction >= 0.8 && onMessageVisible != null) {
-          onMessageVisible!(message.id);
-        }
+    return MouseRegion(
+      onEnter: (_) {
+        if (!_hovered) setState(() => _hovered = true);
       },
-      child: bubbleWidget,
+      onExit: (_) {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: VisibilityDetector(
+        key: Key('chat_msg_${message.id}'),
+        onVisibilityChanged: (info) {
+          if (info.visibleFraction >= 0.8 && onMessageVisible != null) {
+            onMessageVisible!(message.id);
+          }
+        },
+        child: bubbleWidget,
+      ),
     );
   }
 
