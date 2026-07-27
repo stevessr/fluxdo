@@ -1118,6 +1118,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     );
   }
 
+  /// 举报面板（原 _ChatMessageFlagSheet 已抽到 widget/chat_message_flag_sheet.dart）
+
   /// 标记已读（可见性 + 停留时长版本）
   ///
   /// 对齐 Discourse chat 的 mark-as-read 条件：消息进入视口且停留
