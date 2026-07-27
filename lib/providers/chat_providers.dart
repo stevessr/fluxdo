@@ -840,6 +840,29 @@ final chatThreadMessagesProvider = FutureProvider.autoDispose
     params.threadId,
     pageSize: 50,
   );
+  return _parseChatMessageList(raw);
+});
+
+/// 频道消息串列表
+final chatChannelThreadsProvider =
+    FutureProvider.autoDispose.family<List<ChatThread>, int>((ref, channelId) async {
+  final service = ref.read(discourseServiceProvider);
+  final raw = await service.getChatChannelThreads(channelId);
+  final list = raw['threads'];
+  if (list is! List) return const [];
+  final threads = <ChatThread>[];
+  for (final e in list) {
+    if (e is! Map) continue;
+    try {
+      final thread = ChatThread.fromJson(Map<String, dynamic>.from(e));
+      if (thread.id > 0) threads.add(thread);
+    } catch (_) {}
+  }
+  return threads;
+});
+
+/// 解析消息列表公共逻辑（频道消息 / 消息串消息）
+List<ChatMessage> _parseChatMessageList(Map<String, dynamic> raw) {
   final list = raw['messages'] ?? raw['chat_messages'];
   if (list is! List) return const [];
 
@@ -874,7 +897,7 @@ final chatThreadMessagesProvider = FutureProvider.autoDispose
     return a.id.compareTo(b.id);
   });
   return parsed;
-});
+}
 
 /// ============================================================================
 /// 3. 未读统计 Provider

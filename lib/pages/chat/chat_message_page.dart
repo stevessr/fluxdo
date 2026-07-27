@@ -32,6 +32,7 @@ import '../image_viewer_page.dart';
 import '../user_profile_page.dart';
 import 'chat_channel_members_sheet.dart';
 import 'chat_channel_settings_sheet.dart';
+import 'chat_thread_list_sheet.dart';
 import 'chat_thread_sheet.dart';
 
 /// Chat 消息页面
@@ -1311,21 +1312,20 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       tooltip: '搜索对话',
                       onPressed: _enterSearchMode,
                     ),
-                    // 消息串开启时显示入口（对齐 Discourse threads-list-button）
+                    // 消息串开启时显示入口：进入频道消息串列表
+                    // （对齐 Discourse threads-list-button → chat.channel.threads）
                     if (currentChannel?.threadingEnabled == true)
                       IconButton(
                         icon: Icon(
                           Icons.forum_outlined,
                           color: theme.colorScheme.primary,
                         ),
-                        tooltip: '消息串已开启',
+                        tooltip: '消息串列表',
                         onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                '消息串已开启：回复消息将进入独立讨论串，点击消息下的消息串入口可查看',
-                              ),
-                            ),
+                          ChatThreadListSheet.show(
+                            context,
+                            channelId: widget.channelId,
+                            channelTitle: widget.channelTitle,
                           );
                         },
                       ),
