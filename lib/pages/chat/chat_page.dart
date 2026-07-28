@@ -14,6 +14,7 @@ import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
 import 'chat_message_page.dart';
 import 'chat_browse_channels_page.dart';
+import 'chat_channel_settings_sheet.dart';
 import 'chat_create_channel_sheet.dart';
 import 'chat_search_page.dart';
 
@@ -521,6 +522,128 @@ class ChatChannelTile extends ConsumerWidget {
     );
   }
 
+
+  String _leaveLabel(BuildContext context) {
+    final l10n = context.l10n;
+    if (channel.isDirectMessage) {
+      // 官方侧栏对所有 DM 文案是 close_channel；群组设置页才强调 leave group
+      return channel.isGroupDm ? l10n.chat_leave_group : l10n.chat_leave_dm;
+    }
+    return l10n.chat_leave_channel;
+  }
+
+  Future<void> _leaveFromList(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
+    final confirmMsg = channel.isDirectMessage
+        ? (channel.isGroupDm
+            ? l10n.chat_leave_confirm_group
+            : l10n.chat_leave_confirm_dm)
+        : l10n.chat_leave_confirm_channel;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_leaveLabel(context)),
+        content: Text(confirmMsg),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.chat_cancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.chat_leave),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      // 对齐侧栏菜单：
+      // - 直接消息（含群组）：unfollow（列表关闭；群组破坏性仅设置页 leaveDestructive）
+      // - 公开频道：leaveChannel API（对 category 等价 unfollow，但走 leave 服务）
+      if (channel.isDirectMessage) {
+        await ref.read(unfollowChannelProvider(channel.id).future);
+      } else {
+        await ref.read(leaveChannelProvider(channel.id).future);
+      }
+      if (!context.mounted) return;
+      final title = channel.title ?? l10n.chat_unnamed_channel;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chat_leave_success(title))),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chat_leave_failed('$e'))),
+      );
+    }
+  }
+
+  void _showChannelMenu(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final isFavorite = ref.read(chatFavoritesProvider).contains(channel.id);
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(
+                  isFavorite ? Symbols.star_rounded : Symbols.star_outline_rounded,
+                  color: isFavorite ? Colors.amber.shade700 : null,
+                ),
+                title: Text(
+                  isFavorite ? l10n.chat_remove_favorite : l10n.chat_add_favorite,
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ref
+                      .read(chatFavoritesProvider.notifier)
+                      .toggleFavorite(channel.id);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune_rounded),
+                title: const Text('频道设置'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  final title = channel.title ?? l10n.chat_unnamed_channel;
+                  ChatChannelSettingsSheet.show(context, channel.id, title);
+                },
+              ),
+              if (channel.isJoined)
+                ListTile(
+                  leading: Icon(
+                    Icons.logout_rounded,
+                    color: theme.colorScheme.error,
+                  ),
+                  title: Text(
+                    _leaveLabel(context),
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _leaveFromList(context, ref);
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -612,6 +735,7 @@ class ChatChannelTile extends ConsumerWidget {
         ],
       ),
       onTap: onTap,
+      onLongPress: () => _showChannelMenu(context, ref),
     );
   }
 }
