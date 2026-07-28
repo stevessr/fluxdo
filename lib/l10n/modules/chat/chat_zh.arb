@@ -4,7 +4,28 @@
   "chat_public_channels": "频道",
   "chat_direct_messages": "直接消息",
   "chat_empty": "暂无频道",
-  "chat_new_dm": "新建直接消息",
+  "chat_new_dm": "新建聊天",
+  "chat_new_group": "新建群组聊天",
+  "chat_group_name_hint": "群名称（可选）",
+  "chat_group_name_label": "群名称",
+  "chat_members_selected": "已选 {count}/{max}",
+  "@chat_members_selected": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "max": { "type": "int" }
+    }
+  },
+  "chat_member_limit_reached": "最多可添加 {max} 人（不含自己）",
+  "@chat_member_limit_reached": {
+    "placeholders": {
+      "max": { "type": "int" }
+    }
+  },
+  "chat_create_dm": "开始聊天",
+  "chat_create_group": "创建群聊",
+  "chat_remove_member": "移除",
+  "chat_select_users_hint": "搜索并选择一位或多位用户",
+  "chat_dm_disabled": "当前无法创建直接消息",
   "chat_search_users": "搜索用户",
   "chat_search_hint": "输入用户名搜索",
   "chat_no_results": "未找到匹配用户",
