@@ -114,11 +114,11 @@
   "chat_browse_channels": "瀏覽頻道",
   "chat_leave": "離開",
   "chat_leave_channel": "離開頻道",
-  "chat_leave_dm": "離開私訊",
+  "chat_leave_dm": "關閉私訊",
   "chat_leave_group": "離開群組",
-  "chat_leave_confirm_dm": "確定離開此私訊？離開後會從列表移除，對方再傳訊息時可能重新出現。",
-  "chat_leave_confirm_group": "確定離開此群組？離開後你不再是成員，需他人再次邀請才能加入。",
-  "chat_leave_confirm_channel": "確定離開此頻道？之後可在瀏覽頁重新加入。",
+  "chat_leave_confirm_dm": "關閉此私訊？它會從列表移除；對方再傳訊息時可能重新出現。",
+  "chat_leave_confirm_group": "離開此群組？你將不再是成員，需他人再次邀請才能加入。",
+  "chat_leave_confirm_channel": "離開此頻道？之後可在瀏覽頻道頁重新加入。",
   "chat_leave_success": "已離開「{title}」",
   "@chat_leave_success": {
     "placeholders": {
