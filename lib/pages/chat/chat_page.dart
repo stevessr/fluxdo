@@ -84,6 +84,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }).toList();
   }
 
+  void _openBrowseChannels() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ChatBrowseChannelsPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final channelsAsync = ref.watch(chatChannelsProvider);
@@ -92,9 +101,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     final currentUser = ref.watch(currentUserProvider).value;
     final canCreateChannel = currentUser?.isStaff ?? false;
+    // 论坛 Chat 总开关：仅读启动预加载的 siteSettings 快照
+    final forumChatEnabled =
+        ref.watch(forumChatEnabledProvider).value ?? false;
 
     return Scaffold(
       appBar: AppBar(
+        // 浏览频道入口：左上角
+        leading: IconButton(
+          icon: const Icon(Symbols.explore_rounded),
+          tooltip: context.l10n.chat_browse_channels,
+          onPressed: _openBrowseChannels,
+        ),
         title: Text(context.l10n.chat_title),
         centerTitle: true,
         actions: [
@@ -141,38 +159,50 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
       body: Column(
         children: [
-          // 搜索栏
+          // 搜索栏 + 创建聊天（论坛开启 chat 时显示在搜索框右侧）
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: context.l10n.chat_search_channels,
-                prefixIcon: const Icon(Symbols.search_rounded, size: 20),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Symbols.close_rounded, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: context.l10n.chat_search_channels,
+                      prefixIcon: const Icon(Symbols.search_rounded, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Symbols.close_rounded, size: 18),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHigh,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onChanged: (val) {
+                      setState(() => _searchQuery = val.trim());
+                    },
+                  ),
                 ),
-                filled: true,
-                fillColor: theme.colorScheme.surfaceContainerHigh,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              onChanged: (val) {
-                setState(() => _searchQuery = val.trim());
-              },
+                if (forumChatEnabled)
+                  IconButton(
+                    icon: const Icon(Symbols.add_comment_rounded),
+                    tooltip: context.l10n.chat_new_dm,
+                    onPressed: _openNewDmDialog,
+                  ),
+              ],
             ),
           ),
           Expanded(
@@ -223,31 +253,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 onRetry: _onRefresh,
               ),
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.small(
-            heroTag: 'browseChannels',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ChatBrowseChannelsPage(),
-                ),
-              );
-            },
-            tooltip: '浏览频道',
-            child: const Icon(Symbols.explore_rounded),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: 'newDm',
-            onPressed: _openNewDmDialog,
-            tooltip: context.l10n.chat_new_dm,
-            child: const Icon(AppIcons.add),
           ),
         ],
       ),

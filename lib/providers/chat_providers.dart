@@ -4,11 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat/chat_models.dart';
 import '../services/message_bus_service.dart';
+import '../services/preloaded_data_service.dart';
 import '../utils/paged_async_notifier.dart';
 import 'core_providers.dart';
 import 'message_bus/message_bus_service_provider.dart';
 import 'message_bus/topic_tracking_providers.dart';
 import 'theme_provider.dart';
+
+/// ============================================================================
+/// 0. 论坛 Chat 总开关（仅启动预加载快照）
+/// ============================================================================
+
+/// 论坛是否开启 Discourse Chat。
+///
+/// 对齐 `SiteSetting.chat_enabled`：只读 [PreloadedDataService] 启动时缓存的
+/// siteSettings，不在运行期反复请求。首次 watch 时会等待 preload 完成一次。
+final forumChatEnabledProvider = FutureProvider<bool>((ref) async {
+  return PreloadedDataService().isChatEnabled();
+});
 
 /// ============================================================================
 /// 1. Chat 频道列表

@@ -51,6 +51,8 @@ import 'badge_page.dart';
 import 'package:common_ui/common_ui.dart';
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
+import '../providers/chat_providers.dart';
+import 'chat/chat_message_page.dart';
 
 /// 用户个人页
 class UserProfilePage extends ConsumerStatefulWidget {
@@ -82,6 +84,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
   User? _user;
+  bool _isOpeningChat = false;
   UserSummary? _summary;
   bool _isLoading = true;
   Object? _error;
@@ -321,7 +324,24 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       ]);
 
       if (mounted) {
-        final user = results[0] as User;
+        var user = results[0] as User;
+        // /u/:username.json 继承 UserCardSerializer，通常已带 can_chat_user。
+        // 若缺失则补一次 card 接口（与网页用户卡同源字段）。
+        if (user.canChatUser == null) {
+          try {
+            final card = await service.getUserCard(widget.username);
+            if (card.canChatUser != null) {
+              user = user.copyWith(
+                cardBackgroundUploadUrl: user.cardBackgroundUploadUrl ??
+                    card.cardBackgroundUploadUrl,
+                canChatUser: card.canChatUser,
+              );
+            }
+          } catch (_) {
+            // card 失败不影响主资料展示
+          }
+        }
+        if (!mounted) return;
         setState(() {
           _user = user;
           _summary = results[1] as UserSummary;
@@ -380,6 +400,39 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
     if (_user == null) return;
 
     showReplySheet(context: context, targetUsername: _user!.username);
+  }
+
+  /// 打开 / 创建与该用户的 Chat 直接消息
+  Future<void> _openChatWithUser() async {
+    if (_user == null || _isOpeningChat) return;
+
+    setState(() => _isOpeningChat = true);
+    try {
+      final channelId = await ref.read(
+        createDirectMessageProvider([_user!.username]).future,
+      );
+      if (!mounted) return;
+      final title = _user!.name?.isNotEmpty == true
+          ? _user!.name!
+          : _user!.username;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatMessagePage(
+            channelId: channelId,
+            channelTitle: title,
+          ),
+        ),
+      );
+    } on DioException catch (_) {
+      // 网络错误已由 ErrorInterceptor 处理
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    } finally {
+      if (mounted) {
+        setState(() => _isOpeningChat = false);
+      }
+    }
   }
 
   /// 打开用户内容搜索
@@ -1266,6 +1319,21 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
           icon: const Icon(Symbols.search_rounded),
           onPressed: () => _openUserSearch(),
         ),
+        // Discourse Chat：can_chat_user 已含站点开启 + 双方 chat_enabled 等判断
+        if (!isOwnProfile &&
+            _user != null &&
+            _user!.canChatUser == true)
+          IconButton(
+            onPressed: _isOpeningChat ? null : _openChatWithUser,
+            icon: _isOpeningChat
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Symbols.chat_rounded),
+            tooltip: context.l10n.chat_start,
+          ),
         if (_user != null && _user!.canSendPrivateMessageToUser != false)
           IconButton(
             onPressed: _openMessageDialog,
