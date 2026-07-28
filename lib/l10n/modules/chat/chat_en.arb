@@ -112,5 +112,24 @@
   "chat_add_favorite": "Favorite Channel",
   "chat_remove_favorite": "Remove from Favorites",
   "chat_browse_channels": "Browse Channels",
+  "chat_leave": "Leave",
+  "chat_leave_channel": "Leave channel",
+  "chat_leave_dm": "Leave DM",
+  "chat_leave_group": "Leave group",
+  "chat_leave_confirm_dm": "Leave this direct message? It will be removed from your list and can reappear if the other person messages you.",
+  "chat_leave_confirm_group": "Leave this group chat? You will no longer be a member and must be invited again to rejoin.",
+  "chat_leave_confirm_channel": "Leave this channel? You can rejoin later from Browse channels.",
+  "chat_leave_success": "Left “{title}”",
+  "@chat_leave_success": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+  "chat_leave_failed": "Failed to leave: {error}",
+  "@chat_leave_failed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
   "chat_start": "Chat"
 }
