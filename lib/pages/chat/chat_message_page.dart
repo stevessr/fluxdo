@@ -42,10 +42,14 @@ class ChatMessagePage extends ConsumerStatefulWidget {
   final int channelId;
   final String channelTitle;
 
+  /// 打开时定位到的消息（通知 / 全局搜索）
+  final int? targetMessageId;
+
   const ChatMessagePage({
     super.key,
     required this.channelId,
     required this.channelTitle,
+    this.targetMessageId,
   });
 
   @override
@@ -261,6 +265,14 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     _textController.addListener(_onTextChanged);
     // 上报用户进入聊天（用于在线状态追踪）
     _reportPresence();
+    // 通知 / 全局搜索：打开后定位到目标消息
+    final targetId = widget.targetMessageId;
+    if (targetId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _jumpToMessage(targetId);
+      });
+    }
   }
 
   void _reportPresence() {
@@ -1168,10 +1180,13 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     final messagesAsync = ref.watch(chatMessagesProvider(widget.channelId));
     final currentUser = ref.watch(currentUserProvider).value;
 
+    final hasTargetJump = widget.targetMessageId != null;
     ref.listen(chatMessagesProvider(widget.channelId), (prev, next) {
       next.whenData((messages) {
         if (!_initialLoadDone && messages.isNotEmpty) {
           _initialLoadDone = true;
+          // 有 targetMessageId 时由 _jumpToMessage 定位，勿先贴底
+          if (hasTargetJump) return;
           // reverse 列表默认已在底部；仍 jump 一次以对齐布局
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom(animate: false);
@@ -1197,24 +1212,22 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         cachedMessages != null &&
         cachedMessages.isNotEmpty) {
       _initialLoadDone = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _scrollToBottom(animate: false);
-        _markAsRead(cachedMessages);
-      });
+      if (!hasTargetJump) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _scrollToBottom(animate: false);
+          _markAsRead(cachedMessages);
+        });
+      }
     }
 
-    final channelsAsync = ref.watch(chatChannelsProvider);
-    ChatChannel? currentChannel;
-    if (channelsAsync.value != null) {
-      final all = [
-        ...channelsAsync.value!.publicChannels,
-        ...channelsAsync.value!.directMessageChannels,
-      ];
-      try {
-        currentChannel = all.firstWhere((c) => c.id == widget.channelId);
-      } catch (_) {}
-    }
+    // 优先用 me/channels；浏览未加入频道时走详情 API（含 status 只读）
+    final channelDetailAsync =
+        ref.watch(chatChannelDetailProvider(widget.channelId));
+    final currentChannel = channelDetailAsync.value;
+    final isStaff = currentUser?.isStaff ?? false;
+    final canEditChannel =
+        currentChannel?.canEditChannel(isStaff: isStaff) ?? false;
 
     return Scaffold(
       appBar: _isSearchMode
@@ -1287,6 +1300,20 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               : AppBar(
                   title: Text(widget.channelTitle),
                   actions: [
+                    // 公开频道有编辑权限时，编辑入口放在顶部（对齐需求）
+                    if (canEditChannel &&
+                        (currentChannel?.isCategoryChannel ?? false))
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined),
+                        tooltip: '编辑频道',
+                        onPressed: () {
+                          ChatChannelSettingsSheet.show(
+                            context,
+                            widget.channelId,
+                            widget.channelTitle,
+                          );
+                        },
+                      ),
                     // 收藏（与频道列表/设置页共用 chatFavoritesProvider）
                     Builder(
                       builder: (context) {
@@ -1717,11 +1744,13 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   ) {
     final isStaff = currentUser?.isStaff ?? false;
     final userSilenced = currentUser?.isSilenced ?? false;
-    final canSend = channel?.canSendMessages(
-          isStaff: isStaff,
-          userSilenced: userSilenced,
-        ) ??
-        true;
+    // 频道详情未加载前保守禁用输入，避免关闭/只读频道短暂可发
+    final canSend = channel == null
+        ? false
+        : channel.canSendMessages(
+            isStaff: isStaff,
+            userSilenced: userSilenced,
+          );
     final disabledReason = channel?.sendDisabledReason(
           isStaff: isStaff,
           userSilenced: userSilenced,

@@ -14,10 +14,12 @@ import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
 import 'chat_message_page.dart';
 import 'chat_browse_channels_page.dart';
+import 'chat_create_channel_sheet.dart';
+import 'chat_search_page.dart';
 
 /// Chat 频道列表页面
 ///
-/// 支持收藏/常用频道、公开频道与私信 Tab 切换，包含实时频道与消息检索。
+/// 支持收藏/常用频道、公开频道与直接消息 Tab 切换，包含实时频道与消息检索。
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
 
@@ -55,6 +57,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
+  void _openGlobalSearch() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ChatSearchPage()),
+    );
+  }
+
+  void _openCreateChannel() {
+    ChatCreateChannelSheet.show(context);
+  }
+
   List<ChatChannel> _filterChannels(List<ChatChannel> list, String query) {
     if (query.isEmpty) return list;
     final q = query.toLowerCase();
@@ -77,11 +90,27 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final favoriteIds = ref.watch(chatFavoritesProvider);
     final theme = Theme.of(context);
 
+    final currentUser = ref.watch(currentUserProvider).value;
+    final canCreateChannel = currentUser?.isStaff ?? false;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(context.l10n.chat_title),
         centerTitle: true,
         actions: [
+          // 全局搜索：独立入口，对齐 Discourse chat search（相关性/最新）
+          IconButton(
+            icon: const Icon(Icons.search_rounded),
+            tooltip: '搜索聊天',
+            onPressed: _openGlobalSearch,
+          ),
+          // 有建频道权限（staff）时显示创建按钮
+          if (canCreateChannel)
+            IconButton(
+              icon: const Icon(Icons.add_box_outlined),
+              tooltip: '创建频道',
+              onPressed: _openCreateChannel,
+            ),
           IconButton(
             icon: const Icon(Icons.done_all_rounded),
             tooltip: '全部标为已读',
@@ -175,7 +204,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       searchQuery: _searchQuery,
                       onRefresh: _onRefresh,
                     ),
-                    // 私信 Tab
+                    // 直接消息 Tab
                     _ChatChannelListView(
                       channels: _filterChannels(
                         state.directMessageChannels,
@@ -360,7 +389,7 @@ class ChatChannelTile extends ConsumerWidget {
     required this.onTap,
   });
 
-  /// 获取私信频道中对方的头像 URL
+  /// 获取直接消息频道中对方的头像 URL
   String? _resolveAvatarUrl(ChatUser? user) {
     if (user == null) return null;
     if (user.avatarTemplate == null || user.avatarTemplate!.isEmpty) {
@@ -376,9 +405,9 @@ class ChatChannelTile extends ConsumerWidget {
     final isDm = channel.chatableType == 'DirectMessage' ||
         channel.chatableType == 'DirectMessageChannel';
     if (isDm) {
-      // 群聊 DM（3+ 人私信）：Discourse 服务端已用成员名拼接出 title，
+      // 群聊 DM（3+ 人直接消息）：Discourse 服务端已用成员名拼接出 title，
       // 优先用它，避免取到系统用户 (system) 而把群聊标题显示成 "system"。
-      // 判据用 isGroupDm（含 group=true 标记或成员>2），覆盖 3 人私信。
+      // 判据用 isGroupDm（含 group=true 标记或成员>2），覆盖 3 人直接消息。
       if (channel.isGroupDm &&
           channel.title != null &&
           channel.title!.isNotEmpty) {
@@ -411,9 +440,9 @@ class ChatChannelTile extends ConsumerWidget {
   /// 获取频道头像/图标
   ///
   /// 对齐 Discourse channel-icon：
-  /// - 只要设置了频道 emoji（含群组私信），优先显示表情
-  /// - 1:1 私信无 emoji 时显示对方头像
-  /// - 群组私信无 emoji 时显示人数/默认图标
+  /// - 只要设置了频道 emoji（含群组直接消息），优先显示表情
+  /// - 1:1 直接消息无 emoji 时显示对方头像
+  /// - 群组直接消息无 emoji 时显示人数/默认图标
   /// - 公开频道无 emoji 时显示论坛图标
   Widget _buildLeading(BuildContext context, int? currentUserId) {
     final theme = Theme.of(context);
@@ -433,9 +462,9 @@ class ChatChannelTile extends ConsumerWidget {
       );
     }
 
-    // 2. 私信回退
+    // 2. 直接消息回退
     if (isDm) {
-      // 群组私信：无 emoji 时优先显示人数徽标（对齐官方 --users-count）
+      // 群组直接消息：无 emoji 时优先显示人数徽标（对齐官方 --users-count）
       if (channel.isGroupDm) {
         final count = channel.membersCount;
         if (count != null && count > 0) {
@@ -630,9 +659,9 @@ class _ChatPageSkeleton extends StatelessWidget {
   }
 }
 
-/// 新建私信对话框
+/// 新建直接消息对话框
 ///
-/// 搜索用户并创建私信频道。
+/// 搜索用户并创建直接消息频道。
 class _NewDmDialog extends ConsumerStatefulWidget {
   const _NewDmDialog();
 

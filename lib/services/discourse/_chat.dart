@@ -136,7 +136,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     }
   }
 
-  /// 创建私信频道
+  /// 创建直接消息频道
   ///
   /// 返回新创建的频道 [id]
   ///
@@ -155,6 +155,57 @@ mixin _ChatMixin on _DiscourseServiceBase {
     return (channel['id'] as num?)?.toInt() ??
         (respData['id'] as num?)?.toInt() ??
         0;
+  }
+
+  /// 获取单个 Chat 频道详情
+  ///
+  /// 对齐 Discourse chat-api: GET /chat/api/channels/:id
+  Future<Map<String, dynamic>> getChatChannel(int channelId) async {
+    try {
+      final response = await _dio.get('/chat/api/channels/$channelId');
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 创建公开（分类）频道
+  ///
+  /// 对齐 Discourse chat-api.createChannel:
+  /// POST /chat/api/channels  body: { channel: { name, chatable_id, ... } }
+  /// 权限：Guardian#can_create_chat_channel? → staff
+  Future<Map<String, dynamic>> createChannel({
+    required String name,
+    required int chatableId,
+    String? slug,
+    String? description,
+    String? emoji,
+    bool autoJoinUsers = false,
+    bool threadingEnabled = false,
+  }) async {
+    final channel = <String, dynamic>{
+      'name': name,
+      'chatable_id': chatableId,
+      'auto_join_users': autoJoinUsers,
+      'threading_enabled': threadingEnabled,
+    };
+    if (slug != null && slug.isNotEmpty) channel['slug'] = slug;
+    if (description != null) channel['description'] = description;
+    if (emoji != null && emoji.isNotEmpty) channel['emoji'] = emoji;
+
+    try {
+      final response = await _dio.post(
+        '/chat/api/channels',
+        data: {'channel': channel},
+      );
+      final respData = Map<String, dynamic>.from(response.data as Map);
+      if (respData['channel'] is Map) {
+        return Map<String, dynamic>.from(respData['channel'] as Map);
+      }
+      return respData;
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
   }
 
   /// 搜索 Chat 可提及用户/频道

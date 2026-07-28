@@ -79,7 +79,8 @@ class ChatChannel {
   bool get isReadOnly => status == 'read_only';
 
   /// 是否可加入（对齐 Discourse chat-channel.js isJoinable）
-  bool get isJoinable => isOpen && !isArchived;
+  /// open 且非 archived；closed / read_only / archived 均不可新加入
+  bool get isJoinable => isOpen && !isArchived && !isClosed && !isReadOnly;
 
   /// 当前用户是否已关注/加入（membership.following == true）
   bool get isJoined => following;
@@ -106,7 +107,7 @@ class ChatChannel {
     return '当前无法发送消息';
   }
 
-  /// 是否为私信频道
+  /// 是否为直接消息频道（Discourse Direct Message）
   bool get isDirectMessage =>
       chatableType == 'DirectMessage' || chatableType == 'DirectMessageChannel';
 
@@ -118,7 +119,7 @@ class ChatChannel {
   ///
   /// 对齐 Discourse Guardian#can_edit_chat_channel?：
   /// - 公开频道：仅 staff
-  /// - 私信：成员（或 staff）可编辑
+  /// - 直接消息：成员（或 staff）可编辑
   bool canEditChannel({required bool isStaff}) {
     final metaCanEdit = meta?['can_edit'] as bool? ??
         meta?['can_edit_channel'] as bool? ??
@@ -221,7 +222,7 @@ class ChatChannel {
   ///
   /// Discourse 不在频道 JSON 下发 retention；由站点设置控制：
   /// - 公开频道: chat_channel_retention_days
-  /// - 私信: chat_dm_retention_days
+  /// - 直接消息: chat_dm_retention_days
   /// 0 / null 表示永久保留。
   String retentionDisplay({
     int? channelRetentionDays,
@@ -369,8 +370,8 @@ class ChatChannel {
     // 群聊 DM 标记：Discourse DirectMessageSerializer 输出 group 字段
     // (direct_message_serializer.rb: attributes :group, :users)，并在
     // users.count > 1 时从 users 中移除当前用户（即返回的是"其他成员"）。
-    // 因此 3 人私信的 dmUsers 长度为 2（两位其他用户），2 人私信长度为 1。
-    // 用 > 1 判定群聊（≥2 位其他成员 = 3 人及以上私信）。
+    // 因此 3 人直接消息的 dmUsers 长度为 2（两位其他用户），2 人直接消息长度为 1。
+    // 用 > 1 判定群聊（≥2 位其他成员 = 3 人及以上直接消息）。
     final groupDmFlag = (chatableObj?['group'] as bool?) ??
         (json['group'] as bool?) ??
         (json['is_group'] as bool?) ??
@@ -385,8 +386,8 @@ class ChatChannel {
     }
     // 在 parsedDmUsers 实际解析后计算 isGroupDm（用真实成员数）。
     // Discourse 在 users.count > 1 时从 users 中移除当前用户，因此：
-    // - 2 人私信：dmUsers 长度 1（仅对方）
-    // - 3 人及以上私信：dmUsers 长度 ≥ 2（其他成员，已不含当前用户）
+    // - 2 人直接消息：dmUsers 长度 1（仅对方）
+    // - 3 人及以上直接消息：dmUsers 长度 ≥ 2（其他成员，已不含当前用户）
     // 群聊判据 = group 标记为 true，或 dmUsers 长度 > 1（即 ≥2 位其他成员）。
     final resolvedGroupDm = groupDmFlag ||
         (isDmType && (parsedDmUsers?.length ?? 0) > 1);

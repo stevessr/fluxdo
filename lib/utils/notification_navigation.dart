@@ -99,6 +99,8 @@ Widget? _notificationTargetPage(
           ChatMessagePage(
             channelId: notification.data.chatChannelId!,
             channelTitle: notification.data.topicTitle ?? S.current.chat_title,
+            // 联动：打开频道并定位到被通知的聊天消息
+            targetMessageId: notification.data.chatMessageId,
           ),
         );
       } else if (notification.topicId != null) {

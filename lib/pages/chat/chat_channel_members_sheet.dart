@@ -18,7 +18,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
   final String channelTitle;
   final bool canAddMembers;
   final int? membersCountHint;
-  /// 群组私信人数上限（站点 chat_max_direct_message_users）
+  /// 群组直接消息人数上限（站点 chat_max_direct_message_users）
   final int? membersLimit;
 
   const ChatChannelMembersSheet({

@@ -94,6 +94,14 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
   Future<void> _send() async {
     final text = _textController.text.trim();
     if ((text.isEmpty) || _isSending) return;
+    final channel = ref.read(chatChannelDetailProvider(widget.channelId)).value;
+    final currentUser = ref.read(currentUserProvider).value;
+    final canSend = channel?.canSendMessages(
+          isStaff: currentUser?.isStaff ?? false,
+          userSilenced: currentUser?.isSilenced ?? false,
+        ) ??
+        false;
+    if (!canSend) return;
     setState(() => _isSending = true);
     try {
       final notifier =
@@ -621,6 +629,20 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     );
     final messagesAsync = ref.watch(chatThreadMessagesProvider(params));
     final currentUser = ref.watch(currentUserProvider).value;
+    final channel = ref.watch(chatChannelDetailProvider(widget.channelId)).value;
+    final isStaff = currentUser?.isStaff ?? false;
+    final userSilenced = currentUser?.isSilenced ?? false;
+    final canSend = channel == null
+        ? false
+        : channel.canSendMessages(
+            isStaff: isStaff,
+            userSilenced: userSilenced,
+          );
+    final disabledReason = channel?.sendDisabledReason(
+          isStaff: isStaff,
+          userSilenced: userSilenced,
+        ) ??
+        '当前无法发送消息';
     final replyCount =
         widget.thread.preview?.replyCount ?? widget.thread.replyCount;
 
@@ -632,7 +654,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     return Column(
       children: [
         // 回复/编辑提示条
-        if (isEditing || _replyToId != null)
+        if (canSend && (isEditing || _replyToId != null))
           Container(
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest
@@ -765,6 +787,34 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (!canSend)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.lock_outline_rounded,
+                        size: 16,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          disabledReason,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (canSend)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
                 child: Row(
@@ -823,7 +873,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                   ],
                 ),
               ),
-              if (_showEmojiPicker)
+              if (canSend && _showEmojiPicker)
                 SizedBox(
                   height: 240,
                   child: EmojiStickerPanel(

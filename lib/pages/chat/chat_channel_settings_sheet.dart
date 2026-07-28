@@ -378,7 +378,7 @@ class _ChatChannelSettingsSheetState
   String _channelTypeLabel(ChatChannel? channel) {
     if (channel == null) return '未知';
     if (channel.isDirectMessage) {
-      return channel.isGroupDm ? '群组私信' : '私信';
+      return channel.isGroupDm ? '群组直接消息' : '直接消息';
     }
     if (channel.isCategoryChannel) return '公开频道';
     return channel.chatableType ?? '频道';
@@ -392,7 +392,7 @@ class _ChatChannelSettingsSheetState
     return '开放';
   }
 
-  /// 群组私信人数上限（站点设置 chat_max_direct_message_users）
+  /// 群组直接消息人数上限（站点设置 chat_max_direct_message_users）
   int? _dmMemberLimit() {
     final settings = PreloadedDataService().siteSettingsSync;
     final raw = settings?['chat_max_direct_message_users'];
@@ -685,7 +685,7 @@ class _ChatChannelSettingsSheetState
                     style: TextStyle(color: theme.colorScheme.primary),
                   ),
                   subtitle: dmLimit != null && dmLimit > 0
-                      ? Text('群组私信最多 $dmLimit 人')
+                      ? Text('群组直接消息最多 $dmLimit 人')
                       : null,
                   onTap: () {
                     Navigator.pop(context);

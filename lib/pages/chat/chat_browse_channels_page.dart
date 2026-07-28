@@ -357,33 +357,20 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
       );
     }
 
-    // 已加入 → 可退出；同时可点进频道
+    // 对齐 Discourse chat-channel-card：已加入只显示「退出」，点整行进入频道。
+    // 切勿同时显示「进入」+「退出」。
     if (_isJoined) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextButton(
-            onPressed: _openChannel,
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-            child: const Text('进入'),
+      return OutlinedButton(
+        onPressed: _leaveChannel,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: theme.colorScheme.error,
+          side: BorderSide(
+            color: theme.colorScheme.error.withValues(alpha: 0.5),
           ),
-          const SizedBox(width: 4),
-          OutlinedButton(
-            onPressed: _leaveChannel,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: theme.colorScheme.error,
-              side: BorderSide(
-                color: theme.colorScheme.error.withValues(alpha: 0.5),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              visualDensity: VisualDensity.compact,
-            ),
-            child: const Text('退出'),
-          ),
-        ],
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          visualDensity: VisualDensity.compact,
+        ),
+        child: const Text('退出'),
       );
     }
 
@@ -399,7 +386,7 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
       );
     }
 
-    // 已关闭/归档/只读：不可加入
+    // 已关闭/归档/只读：不可加入，但仍可点进只读浏览（若曾加入则走上方分支）
     return Text(
       _statusLabel().isNotEmpty ? _statusLabel() : '不可加入',
       style: theme.textTheme.labelMedium?.copyWith(
@@ -520,7 +507,10 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
           ],
         ),
         trailing: _buildTrailing(theme),
-        onTap: _isJoined ? _openChannel : null,
+        // 已加入可进入；未加入但可预览的频道（关闭/归档）也允许只读打开
+        onTap: (_isJoined || _isClosedOrArchived || widget.channel.isReadOnly)
+            ? _openChannel
+            : null,
         isThreeLine:
             channel.description != null && channel.description!.isNotEmpty,
       ),
