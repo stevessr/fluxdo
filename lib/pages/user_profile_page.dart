@@ -409,10 +409,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
     setState(() => _isOpeningChat = true);
     try {
       final channelId = await ref.read(
-        createDirectMessageProvider((
-          usernames: [_user!.username],
-          name: null,
-        )).future,
+        createDirectMessageProvider([_user!.username]).future,
       );
       if (!mounted) return;
       final title = _user!.name?.isNotEmpty == true
