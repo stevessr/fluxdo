@@ -23,6 +23,14 @@ final forumChatEnabledProvider = FutureProvider<bool>((ref) async {
   return PreloadedDataService().isChatEnabled();
 });
 
+/// 创建直接消息时「除自己外」可选人数上限。
+///
+/// 对齐 `SiteSetting.chat_max_direct_message_users`（默认 20）。
+/// `0` 表示禁止选他人（仅可与自己会话）。
+final chatMaxDirectMessageUsersProvider = FutureProvider<int>((ref) async {
+  return PreloadedDataService().getChatMaxDirectMessageUsers();
+});
+
 /// ============================================================================
 /// 1. Chat 频道列表
 /// ============================================================================
@@ -994,10 +1002,22 @@ final chatUnreadProvider = Provider<int>((ref) {
 /// 4. 创建直接消息 / 公开频道
 /// ============================================================================
 
+/// 创建直接消息 / 群组聊天参数
+///
+/// [usernames]：对方用户名列表（不含自己；服务端会并入当前用户）。
+/// [name]：群聊可选名称（多人时建议填写）。
+typedef CreateDirectMessageParams = ({
+  List<String> usernames,
+  String? name,
+});
+
 final createDirectMessageProvider =
-    FutureProvider.family<int, List<String>>((ref, targetUsernames) async {
+    FutureProvider.family<int, CreateDirectMessageParams>((ref, params) async {
   final service = ref.read(discourseServiceProvider);
-  final channelId = await service.createDirectMessageChannel(targetUsernames);
+  final channelId = await service.createDirectMessageChannel(
+    params.usernames,
+    name: params.name,
+  );
   // 创建后刷新频道列表
   ref.invalidate(chatChannelsProvider);
   return channelId;
