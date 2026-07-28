@@ -112,5 +112,24 @@
   "chat_add_favorite": "收藏频道",
   "chat_remove_favorite": "取消收藏",
   "chat_browse_channels": "浏览频道",
+  "chat_leave": "离开",
+  "chat_leave_channel": "离开频道",
+  "chat_leave_dm": "离开私聊",
+  "chat_leave_group": "离开群聊",
+  "chat_leave_confirm_dm": "确定离开此私聊？离开后会话将从列表中移除，对方再发消息时可重新出现。",
+  "chat_leave_confirm_group": "确定离开此群聊？离开后你将不再是成员，需要他人再次邀请才能加入。",
+  "chat_leave_confirm_channel": "确定离开此频道？你仍可在浏览页重新加入。",
+  "chat_leave_success": "已离开「{title}」",
+  "@chat_leave_success": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+  "chat_leave_failed": "离开失败: {error}",
+  "@chat_leave_failed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
   "chat_start": "聊天"
 }
