@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/chat/chat_models.dart';
@@ -67,29 +64,17 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
   final FocusNode _inputFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
-  bool _isUploadingImage = false;
   bool _showEmojiPicker = false;
 
   /// 编辑中的消息（null 表示新建回复）
   ChatMessage? _editingMessage;
 
-  /// 上传中的文件 ID 列表
-  final List<int> _uploadIds = [];
-
-  /// 上传中图片的本地预览路径
-  String? _uploadPreviewPath;
-
-  /// 回复目标消息（用于展示回复提示条）
-  ChatMessage? _replyToMessage;
-
-  /// 消息串内回复目标消息ID
-  int? _replyToId;
-
   /// 最近使用的反应表情 SharedPreferences key（与主聊共用）
   static const String _recentReactionEmojisKey = 'recent_reaction_emojis';
 
   bool get _pinEnabled =>
-      PreloadedDataService().siteSettingsSync?['chat_pinned_messages'] == true;
+      PreloadedDataService().siteSettingsSync?['chat_pinned_messages'] ==
+          true;
 
   @override
   void dispose() {
@@ -108,15 +93,10 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
 
   Future<void> _send() async {
     final text = _textController.text.trim();
-    if ((text.isEmpty && _uploadIds.isEmpty) ||
-        _isSending ||
-        _isUploadingImage) {
-      return;
-    }
+    if ((text.isEmpty) || _isSending) return;
     final channel = ref.read(chatChannelDetailProvider(widget.channelId)).value;
     final currentUser = ref.read(currentUserProvider).value;
-    final canSend =
-        channel?.canSendMessages(
+    final canSend = channel?.canSendMessages(
           isStaff: currentUser?.isStaff ?? false,
           userSilenced: currentUser?.isSilenced ?? false,
         ) ??
@@ -124,9 +104,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     if (!canSend) return;
     setState(() => _isSending = true);
     try {
-      final notifier = ref.read(
-        chatMessagesProvider(widget.channelId).notifier,
-      );
+      final notifier =
+          ref.read(chatMessagesProvider(widget.channelId).notifier);
       if (_editingMessage != null) {
         await notifier.editMessage(_editingMessage!.id, text);
         setState(() => _editingMessage = null);
@@ -135,16 +114,10 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
           widget.thread.id,
           text,
           inReplyToId: _replyToId,
-          uploadIds: _uploadIds.isNotEmpty ? _uploadIds : null,
         );
-        setState(() {
-          _replyToId = null;
-          _replyToMessage = null;
-        });
+        setState(() => _replyToId = null);
       }
       _textController.clear();
-      _uploadIds.clear();
-      _uploadPreviewPath = null;
       ref.invalidate(
         chatThreadMessagesProvider((
           channelId: widget.channelId,
@@ -164,9 +137,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('发送失败: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('发送失败: $e')),
+      );
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
@@ -181,12 +154,17 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
   }
 
   Future<void> _toggleReaction(ChatMessage message, String emoji) async {
-    final already =
-        message.reactions?.any((r) => r.emoji == emoji && r.reacted) ?? false;
+    final already = message.reactions?.any((r) =>
+        r.emoji == emoji && r.reacted) ??
+        false;
     try {
       await ref
           .read(chatMessagesProvider(widget.channelId).notifier)
-          .toggleReaction(message.id, emoji, knownReacted: already);
+          .toggleReaction(
+            message.id,
+            emoji,
+            knownReacted: already,
+          );
       ref.invalidate(
         chatThreadMessagesProvider((
           channelId: widget.channelId,
@@ -195,9 +173,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('回应失败: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('回应失败: $e')),
+      );
     }
   }
 
@@ -222,9 +200,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('书签操作失败: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('书签操作失败: $e')),
+      );
     }
   }
 
@@ -245,16 +223,19 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('置顶操作失败: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('置顶操作失败: $e')),
+      );
     }
   }
 
   void _onCopyMessage(ChatMessage message) {
     Clipboard.setData(ClipboardData(text: message.message));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已复制'), duration: Duration(seconds: 2)),
+      const SnackBar(
+        content: Text('已复制'),
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 
@@ -263,9 +244,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     final shareUrl =
         '$baseUrl/chat/channel/${widget.channelId}?message_id=${message.id}';
     Clipboard.setData(ClipboardData(text: shareUrl));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('已复制分享链接到剪贴板')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已复制分享链接到剪贴板')),
+    );
   }
 
   Future<void> _onDeleteMessage(ChatMessage message) async {
@@ -302,9 +283,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('删除失败: $e')),
+      );
     }
   }
 
@@ -320,14 +301,14 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
         )),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已恢复消息')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已恢复消息')),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('恢复失败: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('恢复失败: $e')),
+      );
     }
   }
 
@@ -359,10 +340,6 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
   void _onCancelEdit() {
     setState(() {
       _editingMessage = null;
-      _replyToMessage = null;
-      _replyToId = null;
-      _uploadIds.clear();
-      _uploadPreviewPath = null;
       _textController.clear();
     });
     _inputFocusNode.unfocus();
@@ -380,96 +357,6 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     list.insert(0, emojiName);
     final trimmed = list.length > 30 ? list.sublist(0, 30) : list;
     await prefs.setStringList(_recentReactionEmojisKey, trimmed);
-  }
-
-  Future<void> _pickAndUploadImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile == null) return;
-
-    setState(() {
-      _isUploadingImage = true;
-      _uploadPreviewPath = pickedFile.path;
-    });
-
-    try {
-      final service = ref.read(discourseServiceProvider);
-      final uploadResult = await service.uploadFile(pickedFile.path);
-      setState(() {
-        _uploadIds.add(uploadResult.id);
-        _isUploadingImage = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isUploadingImage = false;
-        _uploadPreviewPath = null;
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('上传失败: $e')));
-    }
-  }
-
-  void _clearUpload() {
-    setState(() {
-      _uploadIds.clear();
-      _uploadPreviewPath = null;
-    });
-  }
-
-  Widget _buildUploadPreview(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      alignment: Alignment.centerLeft,
-      child: Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.file(
-              File(_uploadPreviewPath!),
-              width: 64,
-              height: 64,
-              fit: BoxFit.cover,
-            ),
-          ),
-          if (_isUploadingImage)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black38,
-                child: const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          Positioned(
-            top: 2,
-            right: 2,
-            child: GestureDetector(
-              onTap: _clearUpload,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.close_rounded,
-                  size: 16,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showFullEmojiPickerForReaction(ChatMessage message) {
@@ -527,9 +414,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     }
 
     final currentUser = ref.read(currentUserProvider).value;
-    final canFlag =
-        !isOwnMessage &&
-        (message.availableFlags == null || message.availableFlags!.isNotEmpty);
+    final canFlag = !isOwnMessage &&
+        (message.availableFlags == null ||
+            message.availableFlags!.isNotEmpty);
 
     showModalBottomSheet(
       context: context,
@@ -548,10 +435,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                   final recentEmojis = snapshot.data ?? [];
                   final availableWidth =
                       MediaQuery.of(ctx).size.width - 32 - 46;
-                  final maxCount = (availableWidth / 46).floor().clamp(
-                    0,
-                    recentEmojis.length,
-                  );
+                  final maxCount = (availableWidth / 46)
+                      .floor()
+                      .clamp(0, recentEmojis.length);
                   final displayEmojis = recentEmojis.take(maxCount).toList();
 
                   return Padding(
@@ -612,9 +498,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                               child: Icon(
                                 Icons.add_rounded,
                                 size: 22,
-                                color: Theme.of(
-                                  ctx,
-                                ).colorScheme.onPrimaryContainer,
+                                color: Theme.of(ctx)
+                                    .colorScheme
+                                    .onPrimaryContainer,
                               ),
                             ),
                           ),
@@ -706,7 +592,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                   ),
                   title: Text(
                     '删除',
-                    style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                    style:
+                        TextStyle(color: Theme.of(ctx).colorScheme.error),
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -726,43 +613,32 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     setState(() {
       _editingMessage = null;
       _textController.clear();
-      _replyToMessage = message;
       _replyToId = message.id;
     });
     _inputFocusNode.requestFocus();
   }
 
-  String _buildContextBannerTitle(bool isEditing) {
-    if (isEditing) {
-      return '正在编辑消息';
-    }
-    if (_replyToMessage != null) {
-      final name =
-          _replyToMessage!.user?.name ??
-          _replyToMessage!.user?.username ??
-          '用户';
-      final preview = _replyToMessage!.message;
-      return '正在回复 $name: $preview';
-    }
-    return '正在回复消息串中的消息';
-  }
+  int? _replyToId;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final params = (channelId: widget.channelId, threadId: widget.thread.id);
+    final params = (
+      channelId: widget.channelId,
+      threadId: widget.thread.id,
+    );
     final messagesAsync = ref.watch(chatThreadMessagesProvider(params));
     final currentUser = ref.watch(currentUserProvider).value;
-    final channel = ref
-        .watch(chatChannelDetailProvider(widget.channelId))
-        .value;
+    final channel = ref.watch(chatChannelDetailProvider(widget.channelId)).value;
     final isStaff = currentUser?.isStaff ?? false;
     final userSilenced = currentUser?.isSilenced ?? false;
     final canSend = channel == null
         ? false
-        : channel.canSendMessages(isStaff: isStaff, userSilenced: userSilenced);
-    final disabledReason =
-        channel?.sendDisabledReason(
+        : channel.canSendMessages(
+            isStaff: isStaff,
+            userSilenced: userSilenced,
+          );
+    final disabledReason = channel?.sendDisabledReason(
           isStaff: isStaff,
           userSilenced: userSilenced,
         ) ??
@@ -773,12 +649,50 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     final isEditing = _editingMessage != null;
     final composerHint = isEditing
         ? '编辑消息…'
-        : (_replyToMessage != null
-              ? '回复 ${_replyToMessage!.user?.name ?? _replyToMessage!.user?.username ?? ''}…'
-              : '回复消息串…');
+        : (_replyToId != null ? '回复消息串…' : '回复消息串…');
 
     return Column(
       children: [
+        // 回复/编辑提示条
+        if (canSend && (isEditing || _replyToId != null))
+          Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+              border: Border(
+                bottom: BorderSide(
+                  color: theme.colorScheme.outlineVariant
+                      .withValues(alpha: 0.3),
+                ),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              children: [
+                Icon(
+                  isEditing ? Icons.edit_outlined : Icons.reply_rounded,
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isEditing ? '正在编辑消息' : '正在回复消息串中的消息',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  onPressed: _onCancelEdit,
+                  tooltip: '取消',
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Row(
@@ -811,8 +725,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                     Text('加载失败: $e'),
                     const SizedBox(height: 12),
                     FilledButton.tonal(
-                      onPressed: () =>
-                          ref.invalidate(chatThreadMessagesProvider(params)),
+                      onPressed: () => ref.invalidate(
+                        chatThreadMessagesProvider(params),
+                      ),
                       child: const Text('重试'),
                     ),
                   ],
@@ -847,8 +762,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                   final message = items[index];
                   final isOriginal =
                       om != null && message.id == om.id && index == 0;
-                  final isOwn =
-                      currentUser != null &&
+                  final isOwn = currentUser != null &&
                       message.user != null &&
                       message.user!.id == currentUser.id;
                   return _ThreadChatBubble(
@@ -859,7 +773,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                     isOriginal: isOriginal,
                     onToggleReaction: (emoji) =>
                         _toggleReaction(message, emoji),
-                    onLongPress: () => _showMessageActionSheet(message, isOwn),
+                    onLongPress: () =>
+                        _showMessageActionSheet(message, isOwn),
                   );
                 },
               );
@@ -867,220 +782,130 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
           ),
         ),
         const Divider(height: 1),
-        // 键盘 inset 自适应：获取键盘高度
-        Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 回复 / 编辑提示条
-                if (canSend &&
-                    (isEditing ||
-                        _replyToMessage != null ||
-                        _replyToId != null))
-                  Container(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      border: Border(
-                        bottom: BorderSide(
-                          color: theme.colorScheme.outlineVariant.withValues(
-                            alpha: 0.3,
+        SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!canSend)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.lock_outline_rounded,
+                        size: 16,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          disabledReason,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (canSend)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: '表情',
+                      onPressed: () {
+                        setState(() => _showEmojiPicker = !_showEmojiPicker);
+                        if (_showEmojiPicker) {
+                          _inputFocusNode.unfocus();
+                        } else {
+                          _inputFocusNode.requestFocus();
+                        }
+                      },
+                      icon: Icon(
+                        _showEmojiPicker
+                            ? Icons.keyboard_alt_outlined
+                            : Icons.emoji_emotions_outlined,
+                      ),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _textController,
+                        focusNode: _inputFocusNode,
+                        minLines: 1,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _send(),
+                        onTap: () {
+                          if (_showEmojiPicker) {
+                            setState(() => _showEmojiPicker = false);
+                          }
+                        },
+                        decoration: InputDecoration(
+                          hintText: composerHint,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
                           ),
                         ),
                       ),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                    const SizedBox(width: 4),
+                    IconButton.filled(
+                      onPressed: _isSending ? null : _send,
+                      icon: _isSending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(isEditing ? Icons.check_rounded : Icons.send_rounded),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isEditing ? Icons.edit_outlined : Icons.reply_rounded,
-                          size: 18,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _buildContextBannerTitle(isEditing),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                  ],
+                ),
+              ),
+              if (canSend && _showEmojiPicker)
+                SizedBox(
+                  height: 240,
+                  child: EmojiStickerPanel(
+                    onEmojiSelected: (emoji) {
+                      final text = _textController.text;
+                      final selection = _textController.selection;
+                      final code = ':${emoji.name}: ';
+                      if (selection.isValid) {
+                        final start = selection.start;
+                        final newText =
+                            text.replaceRange(start, selection.end, code);
+                        _textController.value = TextEditingValue(
+                          text: newText,
+                          selection: TextSelection.collapsed(
+                            offset: start + code.length,
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                          onPressed: _onCancelEdit,
-                          tooltip: '取消',
-                        ),
-                      ],
-                    ),
+                        );
+                      } else {
+                        _textController.text = '$text$code';
+                      }
+                    },
+                    onStickerSelected: (_) {},
+                    onBackspace: () {
+                      final text = _textController.text;
+                      if (text.isNotEmpty) {
+                        _textController.text =
+                            text.substring(0, text.length - 1);
+                      }
+                    },
                   ),
-
-                // 图片附件预览
-                if (canSend && _uploadPreviewPath != null)
-                  _buildUploadPreview(theme),
-
-                if (!canSend)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.lock_outline_rounded,
-                          size: 16,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            disabledReason,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (canSend)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 8, 8, 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        // 图片附件上传按钮
-                        IconButton(
-                          tooltip: '上传图片',
-                          onPressed: _isUploadingImage
-                              ? null
-                              : _pickAndUploadImage,
-                          icon: const Icon(Icons.add_photo_alternate_rounded),
-                        ),
-                        // 表情按钮
-                        IconButton(
-                          tooltip: '表情',
-                          onPressed: () {
-                            setState(
-                              () => _showEmojiPicker = !_showEmojiPicker,
-                            );
-                            if (_showEmojiPicker) {
-                              _inputFocusNode.unfocus();
-                            } else {
-                              _inputFocusNode.requestFocus();
-                            }
-                          },
-                          icon: Icon(
-                            _showEmojiPicker
-                                ? Icons.keyboard_alt_outlined
-                                : Icons.emoji_emotions_outlined,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: TextField(
-                            controller: _textController,
-                            focusNode: _inputFocusNode,
-                            minLines: 1,
-                            maxLines: 4,
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: (_) => _send(),
-                            onTap: () {
-                              if (_showEmojiPicker) {
-                                setState(() => _showEmojiPicker = false);
-                              }
-                            },
-                            decoration: InputDecoration(
-                              hintText: composerHint,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              filled: true,
-                              fillColor:
-                                  theme.colorScheme.surfaceContainerHighest,
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton.filled(
-                          onPressed: (_isSending || _isUploadingImage)
-                              ? null
-                              : _send,
-                          icon: _isSending
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Icon(
-                                  isEditing
-                                      ? Icons.check_rounded
-                                      : Icons.send_rounded,
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (canSend && _showEmojiPicker)
-                  SizedBox(
-                    height: 240,
-                    child: EmojiStickerPanel(
-                      onEmojiSelected: (emoji) {
-                        final text = _textController.text;
-                        final selection = _textController.selection;
-                        final code = ':${emoji.name}: ';
-                        if (selection.isValid) {
-                          final start = selection.start;
-                          final newText = text.replaceRange(
-                            start,
-                            selection.end,
-                            code,
-                          );
-                          _textController.value = TextEditingValue(
-                            text: newText,
-                            selection: TextSelection.collapsed(
-                              offset: start + code.length,
-                            ),
-                          );
-                        } else {
-                          _textController.text = '$text$code';
-                        }
-                      },
-                      onStickerSelected: (_) {},
-                      onBackspace: () {
-                        final text = _textController.text;
-                        if (text.isNotEmpty) {
-                          _textController.text = text.substring(
-                            0,
-                            text.length - 1,
-                          );
-                        }
-                      },
-                    ),
-                  ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       ],
@@ -1171,8 +996,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
 
     if (message.uploads != null) {
       for (final u in message.uploads!) {
-        final path =
-            u['url'] as String? ??
+        final path = u['url'] as String? ??
             u['full_url'] as String? ??
             u['short_path'] as String?;
         addUrl(path);
@@ -1190,10 +1014,9 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
       for (final match in imgRegex.allMatches(message.cooked!)) {
         final imgTag = match.group(0) ?? '';
         if (isNonContentImage(imgTag)) continue;
-        final srcMatch = RegExp(
-          'src=["\']([^"\']+)["\']',
-          caseSensitive: false,
-        ).firstMatch(imgTag);
+        final srcMatch =
+            RegExp('src=["\']([^"\']+)["\']', caseSensitive: false)
+                .firstMatch(imgTag);
         if (srcMatch != null) addUrl(srcMatch.group(1));
       }
     }
@@ -1203,9 +1026,8 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final alignment = isOwnMessage
-        ? CrossAxisAlignment.end
-        : CrossAxisAlignment.start;
+    final alignment =
+        isOwnMessage ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final showSender = !isOwnMessage && message.user != null;
     final imageUrls = _extractImageUrls();
     final cookedHtml = message.cooked ?? '';
@@ -1324,177 +1146,158 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                             ),
                             border: isOriginal
                                 ? Border.all(
-                                    color: theme.colorScheme.primary.withValues(
-                                      alpha: 0.35,
-                                    ),
+                                    color: theme.colorScheme.primary
+                                        .withValues(alpha: 0.35),
                                   )
                                 : null,
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (thumbnailUrls.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Wrap(
-                                    spacing: 6,
-                                    runSpacing: 6,
-                                    children: thumbnailUrls.asMap().entries.map(
-                                      (entry) {
-                                        final idx = entry.key;
-                                        final url = entry.value;
-                                        return GestureDetector(
-                                          onTap: () {
-                                            ImageViewerPage.open(
-                                              context,
-                                              url,
-                                              galleryImages: thumbnailUrls,
-                                              initialIndex: idx,
-                                              enableShare: true,
-                                            );
-                                          },
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            child: CachedImage(
-                                              url: url,
-                                              width: 180,
-                                              height: 120,
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ).toList(),
-                                  ),
-                                ),
-                              if (message.cooked != null &&
-                                  message.cooked!.isNotEmpty)
-                                FluxdoRenderCallbacks.generic(
-                                  heroTagNamespace:
-                                      'chat_thread_msg_${message.id}',
-                                ).render(
-                                  cookedHtml: message.cooked!,
-                                  baseTextStyle: theme.textTheme.bodyMedium
-                                      ?.copyWith(
-                                        color: isOwnMessage
-                                            ? theme
-                                                  .colorScheme
-                                                  .onPrimaryContainer
-                                            : theme.colorScheme.onSurface,
-                                      ),
-                                  selectionEnabled: true,
-                                  compact: true,
-                                  trimTopMargin: true,
-                                  trimBottomMargin: true,
-                                )
-                              else if (displayText.isNotEmpty)
-                                SelectableEmojiText(
-                                  displayText,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: isOwnMessage
-                                        ? theme.colorScheme.onPrimaryContainer
-                                        : theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                              const SizedBox(height: 2),
-                              Text(
-                                TimeUtils.formatCompactTime(message.createdAt),
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color:
-                                      (isOwnMessage
-                                              ? theme
-                                                    .colorScheme
-                                                    .onPrimaryContainer
-                                              : theme
-                                                    .colorScheme
-                                                    .onSurfaceVariant)
-                                          .withValues(alpha: 0.6),
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (message.reactions != null &&
-                            message.reactions!.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              top: 4,
-                              left: 4,
-                              right: 4,
-                            ),
-                            child: Wrap(
-                              spacing: 4,
-                              runSpacing: 4,
-                              children: message.reactions!.map((r) {
-                                final isReacted = r.reacted;
-                                return Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: () => onToggleReaction(r.emoji),
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isReacted
-                                            ? theme.colorScheme.primaryContainer
-                                            : theme.colorScheme.surface,
-                                        border: Border.all(
-                                          color: isReacted
-                                              ? theme.colorScheme.primary
-                                              : theme.colorScheme.outlineVariant
-                                                    .withValues(alpha: 0.5),
-                                        ),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          EmojiText(
-                                            ':${r.emoji}:',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${r.count}',
-                                            style: theme.textTheme.labelSmall
-                                                ?.copyWith(
-                                                  fontSize: 10,
-                                                  fontWeight: isReacted
-                                                      ? FontWeight.bold
-                                                      : FontWeight.normal,
-                                                  color: isReacted
-                                                      ? theme
-                                                            .colorScheme
-                                                            .primary
-                                                      : theme
-                                                            .colorScheme
-                                                            .onSurfaceVariant,
-                                                ),
-                                          ),
-                                        ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (thumbnailUrls.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children:
+                                    thumbnailUrls.asMap().entries.map((entry) {
+                                  final idx = entry.key;
+                                  final url = entry.value;
+                                  return GestureDetector(
+                                    onTap: () {
+                                      ImageViewerPage.open(
+                                        context,
+                                        url,
+                                        galleryImages: thumbnailUrls,
+                                        initialIndex: idx,
+                                        enableShare: true,
+                                      );
+                                    },
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: CachedImage(
+                                        url: url,
+                                        width: 180,
+                                        height: 120,
+                                        fit: BoxFit.cover,
                                       ),
                                     ),
-                                  ),
-                                );
-                              }).toList(),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          if (message.cooked != null &&
+                              message.cooked!.isNotEmpty)
+                            FluxdoRenderCallbacks.generic(
+                              heroTagNamespace:
+                                  'chat_thread_msg_${message.id}',
+                            ).render(
+                              cookedHtml: message.cooked!,
+                              baseTextStyle:
+                                  theme.textTheme.bodyMedium?.copyWith(
+                                color: isOwnMessage
+                                    ? theme.colorScheme.onPrimaryContainer
+                                    : theme.colorScheme.onSurface,
+                              ),
+                              selectionEnabled: true,
+                              compact: true,
+                              trimTopMargin: true,
+                              trimBottomMargin: true,
+                            )
+                          else if (displayText.isNotEmpty)
+                            SelectableEmojiText(
+                              displayText,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: isOwnMessage
+                                    ? theme.colorScheme.onPrimaryContainer
+                                    : theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          const SizedBox(height: 2),
+                          Text(
+                            TimeUtils.formatCompactTime(message.createdAt),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: (isOwnMessage
+                                      ? theme.colorScheme.onPrimaryContainer
+                                      : theme.colorScheme.onSurfaceVariant)
+                                  .withValues(alpha: 0.6),
+                              fontSize: 10,
                             ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    if (message.reactions != null &&
+                        message.reactions!.isNotEmpty)
+                      Padding(
+                        padding:
+                            const EdgeInsets.only(top: 4, left: 4, right: 4),
+                        child: Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: message.reactions!.map((r) {
+                            final isReacted = r.reacted;
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => onToggleReaction(r.emoji),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isReacted
+                                        ? theme.colorScheme.primaryContainer
+                                        : theme.colorScheme.surface,
+                                    border: Border.all(
+                                      color: isReacted
+                                          ? theme.colorScheme.primary
+                                          : theme.colorScheme.outlineVariant
+                                              .withValues(alpha: 0.5),
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      EmojiText(
+                                        ':${r.emoji}:',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${r.count}',
+                                        style:
+                                            theme.textTheme.labelSmall?.copyWith(
+                                          fontSize: 10,
+                                          fontWeight: isReacted
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          color: isReacted
+                                              ? theme.colorScheme.primary
+                                              : theme.colorScheme
+                                                  .onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
-        ),
+        ],
+      ),
+    ),
       ),
     );
   }
