@@ -5,6 +5,7 @@ import '../l10n/s.dart';
 import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
 import '../pages/badge_page.dart';
+import '../pages/chat/chat_message_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page.dart';
 import '../services/local_notification_service.dart';
@@ -12,10 +13,6 @@ import '../utils/dialog_utils.dart';
 import '../widgets/common/page_dialog.dart';
 import '../widgets/layout/master_detail_layout.dart';
 import '../widgets/notification/notification_item.dart';
-import '../pages/badge_page.dart';
-import '../pages/chat/chat_message_page.dart';
-import '../services/local_notification_service.dart';
-import '../l10n/s.dart';
 
 NavigatorState? _rootNavigator(BuildContext context) {
   return navigatorKey.currentState ??
@@ -93,27 +90,22 @@ Widget? _notificationTargetPage(
     case NotificationType.chatGroupMention:
     case NotificationType.chatQuotedPost:
     case NotificationType.chatWatchedThread:
+      // 与其它类型一致：只返回落点页面，由 handleNotificationTap /
+      // openNotificationPage 负责弹窗或 push，不再在这里副作用导航。
       if (notification.data.chatChannelId != null) {
-        _pushOnRootNavigator(
-          context,
-          ChatMessagePage(
-            channelId: notification.data.chatChannelId!,
-            channelTitle: notification.data.topicTitle ?? S.current.chat_title,
-            // 联动：打开频道并定位到被通知的聊天消息
-            targetMessageId: notification.data.chatMessageId,
-          ),
-        );
-      } else if (notification.topicId != null) {
-        // 降级：没有频道 ID 时跳转到话题
-        _pushOnRootNavigator(
-          context,
-          TopicDetailPage(
-            topicId: notification.topicId!,
-            scrollToPostNumber: notification.postNumber,
-          ),
+        return ChatMessagePage(
+          channelId: notification.data.chatChannelId!,
+          channelTitle: notification.data.topicTitle ?? S.current.chat_title,
+          // 联动：打开频道并定位到被通知的聊天消息
+          targetMessageId: notification.data.chatMessageId,
         );
       }
-      break;
+      // 降级：没有频道 ID 时跳转到话题
+      if (notification.topicId == null) return null;
+      return TopicDetailPage(
+        topicId: notification.topicId!,
+        scrollToPostNumber: notification.postNumber,
+      );
 
     default:
       // privateMessage/posted/liked/reaction 等所有话题类落点
