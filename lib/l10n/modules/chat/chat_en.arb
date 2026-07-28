@@ -1,0 +1,93 @@
+{
+  "@@locale": "en",
+  "chat_title": "Chat",
+  "chat_public_channels": "Channels",
+  "chat_direct_messages": "Direct Messages",
+  "chat_empty": "No channels yet",
+  "chat_new_dm": "New DM",
+  "chat_search_users": "Search users",
+  "chat_search_hint": "Type username to search",
+  "chat_no_results": "No users found",
+  "chat_dm_placeholder": "DM",
+  "chat_unnamed_channel": "Unnamed Channel",
+  "chat_send": "Send",
+  "chat_input_hint": "Type a message...",
+  "chat_no_messages": "No messages",
+  "chat_send_first_message": "Send the first message to start chatting",
+  "chat_loading": "Loading...",
+  "chat_error": "Failed to load",
+  "chat_retry": "Retry",
+  "chat_scroll_to_bottom": "Scroll to bottom",
+  "chat_load_more": "Load more",
+  "chat_message_deleted": "This message has been deleted",
+  "chat_edited": "edited",
+  "chat_send_failed": "Failed to send: {error}",
+  "@chat_send_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_reply": "Reply",
+  "chat_replying_to": "Replying to {name}",
+  "@chat_replying_to": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_copy": "Copy",
+  "chat_copied": "Copied to clipboard",
+  "chat_edit": "Edit",
+  "chat_editing_message": "Editing message",
+  "chat_update_failed": "Failed to update: {error}",
+  "@chat_update_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_delete": "Delete",
+  "chat_delete_confirm": "Delete this message?",
+  "chat_delete_failed": "Failed to delete: {error}",
+  "@chat_delete_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_cancel": "Cancel",
+  "chat_upload_image": "Upload image",
+  "chat_upload_failed": "Upload failed: {error}",
+  "@chat_upload_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_channel_members": "Channel Members",
+  "chat_search_members": "Search members...",
+  "chat_add_member": "Add Member",
+  "chat_add_member_success": "Member added successfully",
+  "chat_add_member_failed": "Failed to add member: {error}",
+  "@chat_add_member_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_view_profile": "View Profile",
+  "chat_no_members": "No members found",
+  "chat_favorites": "Favorites",
+  "chat_search_channels": "Search channels or messages...",
+  "chat_favorite_empty": "No favorite chats",
+  "chat_favorite_hint": "Tap the star icon on any channel to favorite it",
+  "chat_add_favorite": "Favorite Channel",
+  "chat_remove_favorite": "Remove from Favorites"
+}
