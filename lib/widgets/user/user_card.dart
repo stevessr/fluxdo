@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/s.dart';
 import '../../models/user.dart';
+import '../../pages/chat/chat_message_page.dart';
+import '../../providers/chat_providers.dart';
 import '../../providers/discourse_providers.dart';
 import '../../providers/selected_topic_provider.dart';
 import '../../services/app_error_handler.dart';
@@ -462,6 +464,7 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
 
   bool _isFollowed = false;
   bool _followLoading = false;
+  bool _isOpeningChat = false;
 
   // normal / mute / ignore
   String _notificationLevel = 'normal';
@@ -507,6 +510,46 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
       postNumber: widget.postNumber,
       topicTitle: widget.topicTitle,
     );
+  }
+
+  /// 打开 / 创建与该用户的 Chat 直接消息（对齐用户主页 `_openChatWithUser`）。
+  ///
+  /// 显示条件用 `can_chat_user`：站点开启 chat + 双方可聊等服务端判断。
+  Future<void> _openChatWithUser() async {
+    final user = _user;
+    if (user == null || _isOpeningChat) return;
+
+    setState(() => _isOpeningChat = true);
+    try {
+      final channelId = await ref.read(
+        createDirectMessageProvider((
+          usernames: [user.username],
+          name: null,
+        )).future,
+      );
+      if (!mounted) return;
+
+      // 先关卡片，再进聊天页，避免浮层挡导航。
+      widget.onClose();
+      final navContext = widget.anchorContext;
+      if (!navContext.mounted) return;
+
+      final title = user.name?.isNotEmpty == true ? user.name! : user.username;
+      await Navigator.of(navContext).push(
+        MaterialPageRoute(
+          builder: (_) => ChatMessagePage(
+            channelId: channelId,
+            channelTitle: title,
+          ),
+        ),
+      );
+    } on DioException catch (_) {
+      // 网络错误已由 ErrorInterceptor 处理
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    } finally {
+      if (mounted) setState(() => _isOpeningChat = false);
+    }
   }
 
   Future<void> _toggleFollow() async {
@@ -952,22 +995,47 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
   }
 
   Widget _buildActions(ThemeData theme, User? user) {
-    final isLoggedIn = ref.watch(
-      currentUserProvider.select((value) => value.value != null),
-    );
+    final currentUser = ref.watch(currentUserProvider).value;
+    final isLoggedIn = currentUser != null;
+    final isSelf = isLoggedIn &&
+        user != null &&
+        currentUser.username == user.username;
     final canMessage = isLoggedIn && user?.canSendPrivateMessageToUser == true;
+    // Discourse user_card.can_chat_user：站点 chat + 双方可聊等综合判断。
+    final canChat = isLoggedIn && !isSelf && user?.canChatUser == true;
     final canFollow = isLoggedIn && user?.canFollow == true;
     final canMute = isLoggedIn && user?.canMuteUser == true;
     final canIgnore = isLoggedIn && user?.canIgnoreUser == true;
 
     final primary = <Widget>[];
-    if (canMessage) {
+    if (canChat) {
       primary.add(Expanded(
         child: FilledButton.icon(
-          onPressed: _composeMessage,
-          icon: const Icon(Symbols.mail_rounded, size: 18),
-          label: Text(S.current.userProfile_message),
+          onPressed: _isOpeningChat ? null : _openChatWithUser,
+          icon: _isOpeningChat
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Symbols.chat_rounded, size: 18),
+          label: Text(S.current.chat_start),
         ),
+      ));
+    }
+    if (canMessage) {
+      primary.add(Expanded(
+        child: canChat
+            ? FilledButton.tonalIcon(
+                onPressed: _composeMessage,
+                icon: const Icon(Symbols.mail_rounded, size: 18),
+                label: Text(S.current.userProfile_message),
+              )
+            : FilledButton.icon(
+                onPressed: _composeMessage,
+                icon: const Icon(Symbols.mail_rounded, size: 18),
+                label: Text(S.current.userProfile_message),
+              ),
       ));
     }
     if (canFollow) {
@@ -986,20 +1054,30 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
       ));
     }
 
+    // 主操作可能有 3 个（聊天/私信/关注）：两行排布，避免窄卡挤爆。
+    final primaryRows = <List<Widget>>[];
+    if (primary.length <= 2) {
+      if (primary.isNotEmpty) primaryRows.add(primary);
+    } else {
+      primaryRows.add(primary.sublist(0, 2));
+      primaryRows.add(primary.sublist(2));
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (primary.isNotEmpty) ...[
+        for (var r = 0; r < primaryRows.length; r++) ...[
+          if (r > 0) const SizedBox(height: 8),
           Row(
             children: [
-              for (var i = 0; i < primary.length; i++) ...[
+              for (var i = 0; i < primaryRows[r].length; i++) ...[
                 if (i > 0) const SizedBox(width: 8),
-                primary[i],
+                primaryRows[r][i],
               ],
             ],
           ),
-          const SizedBox(height: 8),
         ],
+        if (primaryRows.isNotEmpty) const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
