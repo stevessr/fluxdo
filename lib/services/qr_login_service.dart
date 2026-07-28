@@ -1,41 +1,56 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:zxing2/qrcode.dart';
 
 import 'discourse/discourse_service.dart';
 import 'log/log_writer.dart';
-import 'network/cookie/cookie_jar_service.dart';
+import 'user_api_key_service.dart';
 
 /// 扫码登录 payload。
 ///
-/// 由**已登录设备**把当前 `_t` 会话封装进短时二维码, **待登录设备**扫码后
-/// 写入本地 cookie 并走与密码/浏览器授权一致的 [DiscourseService.finalizeNativeLoginSuccess]
+/// 由**已登录设备**在用户二次确认后向服务端创建 User API Key(+OTP),
+/// 封装进二维码; **待登录设备**扫码后保存 API Key,用 OTP 兑换 `_t`,
+/// 再走与密码/浏览器授权一致的 [DiscourseService.finalizeNativeLoginSuccess]
 /// 收口。
 ///
-/// 协议 (v1):
+/// 协议 (v2):
 /// ```
-/// fluxdo://qr-login?v=1&t=<token>&u=<username>&exp=<unix_ms>
+/// fluxdo://qr-login?v=2&k=<api_key>&o=<otp>&u=<username>&exp=<unix_ms|0>
 /// ```
-/// - 仅含 Discourse 主站会话 cookie `_t`(足够完成登录)
-/// - 默认 2 分钟 TTL,过期拒绝导入
-/// - 不传密码;二维码等同临时分享登录态,UI 需提示勿外泄
+/// - `k`: User API Key(明文,等同临时分享登录能力,UI 需提示勿外泄)
+/// - `o`: 服务端随 create 下发的一次性 OTP(约 10 分钟有效,兑换即焚)
+/// - `exp`: API Key 过期时间 UTC 毫秒; `0` 表示不过期
+/// - 不传 `_t`/密码;二维码只传 API Key + OTP
 class QrLoginPayload {
   const QrLoginPayload({
     required this.version,
-    required this.token,
+    required this.apiKey,
+    required this.otp,
     required this.username,
-    required this.expiresAt,
+    this.expiresAt,
   });
 
   final int version;
-  final String token;
+  final String apiKey;
+  final String otp;
   final String username;
-  final DateTime expiresAt;
 
-  bool get isExpired => DateTime.now().toUtc().isAfter(expiresAt.toUtc());
+  /// API Key 服务端过期时间; `null` 表示不过期。
+  final DateTime? expiresAt;
+
+  bool get neverExpires => expiresAt == null;
+
+  bool get isExpired {
+    final exp = expiresAt;
+    if (exp == null) return false;
+    return DateTime.now().toUtc().isAfter(exp.toUtc());
+  }
 
   Duration get remaining {
-    final left = expiresAt.toUtc().difference(DateTime.now().toUtc());
+    final exp = expiresAt;
+    if (exp == null) return Duration.zero;
+    final left = exp.toUtc().difference(DateTime.now().toUtc());
     return left.isNegative ? Duration.zero : left;
   }
 }
@@ -48,13 +63,19 @@ enum QrLoginError {
   /// 版本不支持
   unsupportedVersion,
 
-  /// 已过期
+  /// API Key 已过期
   expired,
 
   /// 本机当前没有可分享的登录会话(展示端)
   noSession,
 
-  /// 写入 cookie 或收口失败
+  /// 用户取消二次确认
+  cancelled,
+
+  /// 服务端创建 API Key 失败
+  createFailed,
+
+  /// 写入凭证或收口失败
   applyFailed,
 }
 
@@ -65,47 +86,7 @@ class QrLoginService {
 
   static const String scheme = 'fluxdo';
   static const String host = 'qr-login';
-  static const int currentVersion = 1;
-
-  /// 二维码默认有效期。短 TTL 降低被旁人拍下后滥用的窗口。
-  static const Duration defaultTtl = Duration(minutes: 2);
-
-  final _cookieJar = CookieJarService();
-
-  /// 已登录设备:从本地 jar 组装可编码进二维码的 payload 字符串。
-  Future<({String raw, QrLoginPayload payload})> buildPayload({
-    Duration ttl = defaultTtl,
-    String? username,
-  }) async {
-    final token = await _cookieJar.getTToken();
-    if (token == null || token.isEmpty) {
-      throw const QrLoginException(QrLoginError.noSession, '当前没有登录会话');
-    }
-
-    var resolvedUsername = username?.trim() ?? '';
-    if (resolvedUsername.isEmpty) {
-      try {
-        resolvedUsername = await DiscourseService().getUsername() ?? '';
-      } catch (e) {
-        debugPrint('[QrLogin] 取 username 失败(可忽略): $e');
-      }
-    }
-
-    final expiresAt = DateTime.now().toUtc().add(ttl);
-    final payload = QrLoginPayload(
-      version: currentVersion,
-      token: token,
-      username: resolvedUsername,
-      expiresAt: expiresAt,
-    );
-    final raw = encodePayload(payload);
-    _log('info', 'qr_login_payload_built', '已生成扫码登录二维码 payload', {
-      'ttlSec': ttl.inSeconds,
-      'username': resolvedUsername,
-      'tokenLen': token.length,
-    });
-    return (raw: raw, payload: payload);
-  }
+  static const int currentVersion = 2;
 
   /// 把 [payload] 编码为二维码字符串(稳定、可单测)。
   String encodePayload(QrLoginPayload payload) {
@@ -114,9 +95,12 @@ class QrLoginService {
       host: host,
       queryParameters: {
         'v': '${payload.version}',
-        't': payload.token,
+        'k': payload.apiKey,
+        'o': payload.otp,
         'u': payload.username,
-        'exp': '${payload.expiresAt.toUtc().millisecondsSinceEpoch}',
+        'exp': payload.expiresAt == null
+            ? '0'
+            : '${payload.expiresAt!.toUtc().millisecondsSinceEpoch}',
       },
     ).toString();
   }
@@ -136,17 +120,26 @@ class QrLoginService {
     if (hostOrPath != host) return null;
 
     final version = int.tryParse(uri.queryParameters['v'] ?? '');
-    final token = uri.queryParameters['t']?.trim() ?? '';
-    final username = uri.queryParameters['u']?.trim() ?? '';
-    final expMs = int.tryParse(uri.queryParameters['exp'] ?? '');
-    if (version == null || token.isEmpty || expMs == null) return null;
-    if (expMs <= 0) return null;
+    if (version == null) return null;
 
+    // v2+ 字段: api-key + otp。版本校验留给 requireValidPayload,
+    // 以便区分 invalid 与 unsupportedVersion。
+    final apiKey = uri.queryParameters['k']?.trim() ?? '';
+    final otp = uri.queryParameters['o']?.trim() ?? '';
+    final username = uri.queryParameters['u']?.trim() ?? '';
+    final expRaw = uri.queryParameters['exp']?.trim() ?? '0';
+    final expMs = int.tryParse(expRaw);
+    if (apiKey.isEmpty || otp.isEmpty || expMs == null || expMs < 0) {
+      return null;
+    }
     return QrLoginPayload(
       version: version,
-      token: token,
+      apiKey: apiKey,
+      otp: otp,
       username: username,
-      expiresAt: DateTime.fromMillisecondsSinceEpoch(expMs, isUtc: true),
+      expiresAt: expMs == 0
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(expMs, isUtc: true),
     );
   }
 
@@ -163,9 +156,51 @@ class QrLoginService {
       );
     }
     if (payload.isExpired) {
-      throw const QrLoginException(QrLoginError.expired, '二维码已过期,请让对方刷新');
+      throw const QrLoginException(QrLoginError.expired, '登录凭证已过期,请让对方重新生成');
     }
     return payload;
+  }
+
+  /// 已登录设备:经用户批准后创建可分享的 User API Key,组装二维码字符串。
+  ///
+  /// [expiresIn] 为 `null` 表示 API Key 不过期(默认);传入正时长则带
+  /// `expires_in_seconds` 创建。
+  Future<({String raw, QrLoginPayload payload})> buildPayload({
+    Duration? expiresIn,
+    String? username,
+    Dio? dio,
+  }) async {
+    var resolvedUsername = username?.trim() ?? '';
+    if (resolvedUsername.isEmpty) {
+      try {
+        resolvedUsername = await DiscourseService().getUsername() ?? '';
+      } catch (e) {
+        debugPrint('[QrLogin] 取 username 失败(可忽略): $e');
+      }
+    }
+
+    final service = UserApiKeyService();
+    final created = await service.createCrossDeviceKey(
+      dio ?? DiscourseService().dio,
+      expiresIn: expiresIn,
+    );
+
+    final payload = QrLoginPayload(
+      version: currentVersion,
+      apiKey: created.apiKey,
+      otp: created.otp,
+      username: resolvedUsername,
+      expiresAt: created.expiresAt,
+    );
+    final raw = encodePayload(payload);
+    _log('info', 'qr_login_payload_built', '已生成扫码登录 API Key 二维码', {
+      'neverExpires': payload.neverExpires,
+      'expiresInSec': expiresIn?.inSeconds,
+      'username': resolvedUsername,
+      'apiKeyLen': created.apiKey.length,
+      'otpLen': created.otp.length,
+    });
+    return (raw: raw, payload: payload);
   }
 
   /// 待登录设备:用扫到的内容完成登录。
@@ -175,30 +210,47 @@ class QrLoginService {
     final payload = requireValidPayload(raw);
 
     try {
-      await _cookieJar.setCookie(
-        '_t',
-        payload.token,
-        httpOnly: true,
-        trusted: true,
-      );
-      final written = await _cookieJar.getTToken();
-      if (written == null || written.isEmpty || written != payload.token) {
+      final userApiKeyService = UserApiKeyService();
+      await userApiKeyService.persistSharedKey(payload.apiKey);
+
+      final service = DiscourseService();
+      final token = await userApiKeyService.redeemOtp(service.dio, payload.otp);
+      if (token == null || token.isEmpty) {
         throw const QrLoginException(
           QrLoginError.applyFailed,
-          '写入登录凭证失败',
+          '登录令牌兑换失败,二维码可能已失效,请让对方重新生成',
         );
       }
 
-      final identifier = payload.username.isNotEmpty
-          ? payload.username
-          : 'user';
-      await DiscourseService().finalizeNativeLoginSuccess(identifier);
+      var username = payload.username;
+      if (username.isEmpty) {
+        try {
+          final response = await service.dio.get(
+            '/session/current.json',
+            options: Options(
+              extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+            ),
+          );
+          final data = response.data;
+          final currentUser = data is Map<String, dynamic>
+              ? data['current_user']
+              : null;
+          if (currentUser is Map<String, dynamic>) {
+            username = currentUser['username']?.toString() ?? '';
+          }
+        } catch (e) {
+          debugPrint('[QrLogin] 取 current_user 失败: $e');
+        }
+      }
+
+      final identifier = username.isNotEmpty ? username : 'user';
+      await service.finalizeNativeLoginSuccess(identifier);
 
       _log('info', 'qr_login_success', '扫码登录成功', {
-        'username': payload.username,
-        'tokenLen': payload.token.length,
+        'username': username,
+        'apiKeyLen': payload.apiKey.length,
       });
-      return payload.username;
+      return username;
     } on QrLoginException {
       rethrow;
     } catch (e, st) {
