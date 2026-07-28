@@ -3,26 +3,8 @@
   "chat_title": "Chat",
   "chat_public_channels": "Channels",
   "chat_direct_messages": "Direct Messages",
-  "chat_private_chats": "Private chats",
-  "chat_group_chats": "Group chats",
   "chat_empty": "No channels yet",
-  "chat_private_empty": "No private chats yet",
-  "chat_group_empty": "No group chats yet",
-  "chat_new_dm": "New chat",
-  "chat_new_group": "New group chat",
-  "chat_group_name_hint": "Group name (optional)",
-  "chat_group_name_label": "Group name",
-  "chat_members_selected": "{count} selected",
-  "@chat_members_selected": {
-    "placeholders": {
-      "count": { "type": "int" }
-    }
-  },
-  "chat_create_dm": "Start chat",
-  "chat_create_group": "Create group",
-  "chat_remove_member": "Remove",
-  "chat_select_users_hint": "Search and select one or more users",
-  "chat_dm_disabled": "Direct messages are not available",
+  "chat_new_dm": "New DM",
   "chat_search_users": "Search users",
   "chat_search_hint": "Type username to search",
   "chat_no_results": "No users found",
@@ -105,33 +87,7 @@
   "chat_favorites": "Favorites",
   "chat_search_channels": "Search channels or messages...",
   "chat_favorite_empty": "No favorite chats",
-  "chat_favorite_private_empty": "No favorite private chats",
-  "chat_favorite_group_empty": "No favorite group chats",
   "chat_favorite_hint": "Tap the star icon on any channel to favorite it",
   "chat_add_favorite": "Favorite Channel",
-  "chat_remove_favorite": "Remove from Favorites",
-  "chat_browse_channels": "Browse Channels",
-  "chat_leave": "Leave",
-  "chat_leave_channel": "Leave channel",
-  "chat_leave_dm": "Close DM",
-  "chat_leave_group": "Leave group",
-  "chat_leave_confirm_dm": "Close this direct message? It will be removed from your list and can reappear if the other person messages you.",
-  "chat_leave_confirm_group": "Leave this group chat? You will no longer be a member and must be invited again to rejoin.",
-  "chat_leave_confirm_channel": "Leave this channel? You can rejoin later from Browse channels.",
-  "chat_leave_success": "Left “{title}”",
-  "@chat_leave_success": {
-    "placeholders": {
-      "title": { "type": "String" }
-    }
-  },
-  "chat_leave_failed": "Failed to leave: {error}",
-  "@chat_leave_failed": {
-    "placeholders": {
-      "error": { "type": "String" }
-    }
-  },
-  "chat_start": "Chat",
-  "chat_pinned_messages_title": "Pinned Messages",
-  "chat_pinned_messages_empty": "No pinned messages",
-  "chat_view_pinned_messages": "View pinned messages"
+  "chat_remove_favorite": "Remove from Favorites"
 }
