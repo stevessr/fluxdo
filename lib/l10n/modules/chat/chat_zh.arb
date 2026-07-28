@@ -89,5 +89,7 @@
   "chat_favorite_empty": "暂无收藏的聊天",
   "chat_favorite_hint": "在频道列表中点击星标即可加入收藏",
   "chat_add_favorite": "收藏频道",
-  "chat_remove_favorite": "取消收藏"
+  "chat_remove_favorite": "取消收藏",
+  "chat_browse_channels": "浏览频道",
+  "chat_start": "聊天"
 }
