@@ -196,9 +196,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     },
                   ),
                 ),
-                if (forumChatEnabled)
+                if (forumChatEnabled &&
+                    (currentUser?.canDirectMessage ?? true))
                   IconButton(
                     icon: const Icon(Symbols.add_comment_rounded),
+                    // 上限>1 时可多选建群；文案仍用「新建聊天」兼容单人 DM
                     tooltip: context.l10n.chat_new_dm,
                     onPressed: _openNewDmDialog,
                   ),
@@ -676,15 +678,38 @@ class _NewDmDialog extends ConsumerStatefulWidget {
 
 class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _groupNameController = TextEditingController();
+  final List<Chatable> _selected = [];
   List<Chatable> _results = [];
   bool _isSearching = false;
   bool _isCreating = false;
 
+  /// Discourse 默认 20：可选「除自己以外」的人数上限。
+  static const int _kDefaultMaxOthers = 20;
+
   @override
   void dispose() {
     _searchController.dispose();
+    _groupNameController.dispose();
     super.dispose();
   }
+
+  int get _maxOthers {
+    final v = ref.watch(chatMaxDirectMessageUsersProvider).value;
+    return v ?? _kDefaultMaxOthers;
+  }
+
+  bool get _canCreateDm {
+    final user = ref.watch(currentUserProvider).value;
+    // canDirectMessage 来自 currentUser JSON；缺失时不阻断（站点若禁 DM，
+    // 创建接口会返回错误，由 SnackBar 展示）。
+    if (user?.canDirectMessage == false) return false;
+    return true;
+  }
+
+  bool get _isGroup => _selected.length >= 2;
+
+  bool get _atLimit => _maxOthers > 0 && _selected.length >= _maxOthers;
 
   Future<void> _onSearch(String query) async {
     if (query.trim().isEmpty) {
@@ -700,8 +725,19 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     try {
       final results = await ref.read(chatSearchProvider(query.trim()).future);
       if (!mounted) return;
+      final me = ref.read(currentUserProvider).value?.username.toLowerCase();
+      // 过滤自己、已选用户，以及 system（服务端通常也不返回）
+      final filtered = results.where((u) {
+        final name = u.username.toLowerCase();
+        if (name.isEmpty || name == 'system') return false;
+        if (me != null && name == me) return false;
+        if (_selected.any((s) => s.id == u.id || s.username == u.username)) {
+          return false;
+        }
+        return true;
+      }).toList();
       setState(() {
-        _results = results;
+        _results = filtered;
         _isSearching = false;
       });
     } catch (e) {
@@ -710,36 +746,107 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     }
   }
 
-  Future<void> _onSelectUser(Chatable user) async {
-    if (_isCreating) return;
+  void _toggleUser(Chatable user) {
+    final exists = _selected.any((s) => s.id == user.id);
+    setState(() {
+      if (exists) {
+        _selected.removeWhere((s) => s.id == user.id);
+      } else {
+        if (_maxOthers == 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.chat_dm_disabled)),
+          );
+          return;
+        }
+        if (_atLimit) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                context.l10n.chat_member_limit_reached(_maxOthers),
+              ),
+            ),
+          );
+          return;
+        }
+        _selected.add(user);
+      }
+    });
+    // 选中后清搜索框，方便继续加下一位
+    if (!exists) {
+      _searchController.clear();
+      _results = [];
+    }
+  }
+
+  void _removeSelected(Chatable user) {
+    setState(() => _selected.removeWhere((s) => s.id == user.id));
+  }
+
+  Future<void> _create() async {
+    if (_isCreating || _selected.isEmpty) return;
+    if (!_canCreateDm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.chat_dm_disabled)),
+      );
+      return;
+    }
+    if (_maxOthers == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.chat_dm_disabled)),
+      );
+      return;
+    }
+    if (_selected.length > _maxOthers) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.chat_member_limit_reached(_maxOthers)),
+        ),
+      );
+      return;
+    }
 
     setState(() => _isCreating = true);
-
     try {
+      final usernames = _selected.map((u) => u.username).toList();
+      final groupName = _groupNameController.text.trim();
       final channelId = await ref.read(
-        createDirectMessageProvider([user.username]).future,
+        createDirectMessageProvider((
+          usernames: usernames,
+          name: _isGroup && groupName.isNotEmpty ? groupName : null,
+        )).future,
       );
 
       if (!mounted) return;
-
       Navigator.of(context).pop();
+
+      final title = _isGroup
+          ? (groupName.isNotEmpty
+              ? groupName
+              : _selected
+                  .map((u) => u.name?.trim().isNotEmpty == true
+                      ? u.name!
+                      : u.username)
+                  .join(', '))
+          : (_selected.first.name ?? _selected.first.username);
 
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ChatMessagePage(
             channelId: channelId,
-            channelTitle: user.name ?? user.username,
+            channelTitle: title,
           ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isCreating = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${context.l10n.chat_error}: $e')),
+      );
     }
   }
 
-  /// 解析用户头像 URL
   String? _resolveUserAvatarUrl(Chatable user) {
     if (user.avatarTemplate == null || user.avatarTemplate!.isEmpty) {
       return null;
@@ -752,27 +859,44 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
+    final title = _isGroup ? l10n.chat_new_group : l10n.chat_new_dm;
+    final createLabel = _isGroup ? l10n.chat_create_group : l10n.chat_create_dm;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
+        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 560),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 标题栏
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
-                      context.l10n.chat_new_dm,
+                      title,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
+                  if (_selected.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Text(
+                        l10n.chat_members_selected(
+                          _selected.length,
+                          _maxOthers,
+                        ),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: _atLimit
+                              ? theme.colorScheme.error
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
                   IconButton(
                     icon: const Icon(AppIcons.close, size: 20),
                     onPressed: () => Navigator.of(context).pop(),
@@ -780,14 +904,61 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                 ],
               ),
             ),
-            // 搜索输入框
+            if (_selected.isNotEmpty) ...[
+              SizedBox(
+                height: 48,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  itemCount: _selected.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final user = _selected[index];
+                    final label = user.name?.trim().isNotEmpty == true
+                        ? user.name!
+                        : user.username;
+                    return InputChip(
+                      avatar: SmartAvatar(
+                        imageUrl: _resolveUserAvatarUrl(user),
+                        radius: 12,
+                        fallbackText: user.username,
+                      ),
+                      label: Text(label),
+                      onDeleted: _isCreating
+                          ? null
+                          : () => _removeSelected(user),
+                      deleteIconColor: theme.colorScheme.onSurfaceVariant,
+                    );
+                  },
+                ),
+              ),
+              if (_isGroup)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: TextField(
+                    controller: _groupNameController,
+                    enabled: !_isCreating,
+                    decoration: InputDecoration(
+                      labelText: l10n.chat_group_name_label,
+                      hintText: l10n.chat_group_name_hint,
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: TextField(
                 controller: _searchController,
                 autofocus: true,
+                enabled: !_isCreating && (_maxOthers == 0 ? false : !_atLimit),
                 decoration: InputDecoration(
-                  hintText: context.l10n.chat_search_users,
+                  hintText: _atLimit
+                      ? l10n.chat_member_limit_reached(_maxOthers)
+                      : l10n.chat_search_users,
                   prefixIcon: const Icon(AppIcons.search, size: 20),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(
@@ -802,7 +973,6 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
               ),
             ),
             const SizedBox(height: 8),
-            // 搜索结果列表
             Flexible(
               child: _isSearching
                   ? const Center(child: CircularProgressIndicator())
@@ -811,8 +981,11 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                           padding: const EdgeInsets.all(32),
                           child: Text(
                             _searchController.text.isEmpty
-                                ? context.l10n.chat_search_hint
-                                : context.l10n.chat_no_results,
+                                ? (_selected.isEmpty
+                                    ? l10n.chat_select_users_hint
+                                    : l10n.chat_search_hint)
+                                : l10n.chat_no_results,
+                            textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -825,7 +998,9 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                           itemBuilder: (context, index) {
                             final user = _results[index];
                             final avatarUrl = _resolveUserAvatarUrl(user);
-
+                            final selected = _selected.any(
+                              (s) => s.id == user.id,
+                            );
                             return ListTile(
                               leading: SmartAvatar(
                                 imageUrl: avatarUrl,
@@ -840,27 +1015,53 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                               subtitle: user.name != null
                                   ? Text(
                                       '@${user.username}',
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                        color: theme
+                                            .colorScheme.onSurfaceVariant,
                                       ),
                                     )
                                   : null,
-                              trailing: _isCreating
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : null,
-                              onTap:
-                                  _isCreating ? null : () => _onSelectUser(user),
+                              trailing: Icon(
+                                selected
+                                    ? Icons.check_circle_rounded
+                                    : Icons.add_circle_outline_rounded,
+                                color: selected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurfaceVariant,
+                              ),
+                              onTap: _isCreating
+                                  ? null
+                                  : () => _toggleUser(user),
                             );
                           },
                         ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Row(
+                children: [
+                  TextButton(
+                    onPressed: _isCreating
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                    child: Text(l10n.chat_cancel),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: _isCreating || _selected.isEmpty
+                        ? null
+                        : _create,
+                    child: _isCreating
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(createLabel),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

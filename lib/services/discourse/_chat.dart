@@ -140,13 +140,35 @@ mixin _ChatMixin on _DiscourseServiceBase {
   ///
   /// 返回新创建的频道 [id]
   ///
+  /// 对齐 Discourse `Chat::CreateDirectMessageChannel` /
+  /// `POST /chat/api/direct-message-channels`：
+  /// - [targetUsernames]：对方用户名（服务端会自动并入当前用户）
+  /// - [name]：群聊可选名称；人数>2 或提供 name 时服务端记为 group DM
+  /// - [targetGroups]：可选，按组名展开成员（可见且成员可见的组）
+  ///
+  /// 人数上限由站点 `chat_max_direct_message_users` 约束（默认 20，
+  /// 计的是「除自己以外」的目标用户数；staff 豁免）。
+  ///
   /// Discourse 响应根为 `channel`（Chat::ChannelSerializer）。
   Future<int> createDirectMessageChannel(
-    List<String> targetUsernames,
-  ) async {
+    List<String> targetUsernames, {
+    String? name,
+    List<String>? targetGroups,
+  }) async {
+    final data = <String, dynamic>{
+      'target_usernames': targetUsernames,
+    };
+    final trimmedName = name?.trim();
+    if (trimmedName != null && trimmedName.isNotEmpty) {
+      data['name'] = trimmedName;
+    }
+    if (targetGroups != null && targetGroups.isNotEmpty) {
+      data['target_groups'] = targetGroups;
+    }
+
     final response = await _dio.post(
       '/chat/api/direct-message-channels',
-      data: {'target_usernames': targetUsernames},
+      data: data,
     );
     final respData = Map<String, dynamic>.from(response.data as Map);
     final channel = respData['channel'] is Map
