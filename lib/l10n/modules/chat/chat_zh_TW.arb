@@ -3,26 +3,8 @@
   "chat_title": "聊天",
   "chat_public_channels": "頻道",
   "chat_direct_messages": "直接訊息",
-  "chat_private_chats": "私訊",
-  "chat_group_chats": "群聊",
   "chat_empty": "暫無頻道",
-  "chat_private_empty": "暫無私訊",
-  "chat_group_empty": "暫無群聊",
-  "chat_new_dm": "新建聊天",
-  "chat_new_group": "新建群組聊天",
-  "chat_group_name_hint": "群名稱（可選）",
-  "chat_group_name_label": "群名稱",
-  "chat_members_selected": "已選 {count}",
-  "@chat_members_selected": {
-    "placeholders": {
-      "count": { "type": "int" }
-    }
-  },
-  "chat_create_dm": "開始聊天",
-  "chat_create_group": "建立群組",
-  "chat_remove_member": "移除",
-  "chat_select_users_hint": "搜尋並選擇一位或多位使用者",
-  "chat_dm_disabled": "目前無法建立直接訊息",
+  "chat_new_dm": "新建直接訊息",
   "chat_search_users": "搜尋用戶",
   "chat_search_hint": "輸入用戶名搜尋",
   "chat_no_results": "未找到匹配用戶",
@@ -105,30 +87,7 @@
   "chat_favorites": "收藏",
   "chat_search_channels": "搜尋頻道或訊息...",
   "chat_favorite_empty": "暫無收藏的聊天",
-  "chat_favorite_private_empty": "暫無收藏的私訊",
-  "chat_favorite_group_empty": "暫無收藏的群聊",
   "chat_favorite_hint": "點擊頻道列表中的星標即可加入收藏",
   "chat_add_favorite": "收藏頻道",
-  "chat_remove_favorite": "取消收藏",
-  "chat_browse_channels": "瀏覽頻道",
-  "chat_leave": "離開",
-  "chat_leave_channel": "離開頻道",
-  "chat_leave_dm": "關閉私訊",
-  "chat_leave_group": "離開群組",
-  "chat_leave_confirm_dm": "關閉此私訊？它會從列表移除；對方再傳訊息時可能重新出現。",
-  "chat_leave_confirm_group": "離開此群組？你將不再是成員，需他人再次邀請才能加入。",
-  "chat_leave_confirm_channel": "離開此頻道？之後可在瀏覽頻道頁重新加入。",
-  "chat_leave_success": "已離開「{title}」",
-  "@chat_leave_success": {
-    "placeholders": {
-      "title": { "type": "String" }
-    }
-  },
-  "chat_leave_failed": "離開失敗: {error}",
-  "@chat_leave_failed": {
-    "placeholders": {
-      "error": { "type": "String" }
-    }
-  },
-  "chat_start": "聊天"
+  "chat_remove_favorite": "取消收藏"
 }
