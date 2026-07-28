@@ -1,0 +1,93 @@
+{
+  "@@locale": "zh",
+  "chat_title": "聊天",
+  "chat_public_channels": "频道",
+  "chat_direct_messages": "直接消息",
+  "chat_empty": "暂无频道",
+  "chat_new_dm": "新建直接消息",
+  "chat_search_users": "搜索用户",
+  "chat_search_hint": "输入用户名搜索",
+  "chat_no_results": "未找到匹配用户",
+  "chat_dm_placeholder": "直接消息",
+  "chat_unnamed_channel": "未命名频道",
+  "chat_send": "发送",
+  "chat_input_hint": "输入消息...",
+  "chat_no_messages": "暂无消息",
+  "chat_send_first_message": "发送第一条消息开始聊天",
+  "chat_loading": "加载中...",
+  "chat_error": "加载失败",
+  "chat_retry": "重试",
+  "chat_scroll_to_bottom": "滚动到底部",
+  "chat_load_more": "加载更多",
+  "chat_message_deleted": "此消息已被删除",
+  "chat_edited": "已编辑",
+  "chat_send_failed": "发送失败: {error}",
+  "@chat_send_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_reply": "回复",
+  "chat_replying_to": "回复 {name}",
+  "@chat_replying_to": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_copy": "复制",
+  "chat_copied": "已复制到剪贴板",
+  "chat_edit": "编辑",
+  "chat_editing_message": "正在编辑消息",
+  "chat_update_failed": "更新失败: {error}",
+  "@chat_update_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_delete": "删除",
+  "chat_delete_confirm": "确定删除此消息？",
+  "chat_delete_failed": "删除失败: {error}",
+  "@chat_delete_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_cancel": "取消",
+  "chat_upload_image": "上传图片",
+  "chat_upload_failed": "上传失败: {error}",
+  "@chat_upload_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_channel_members": "频道成员",
+  "chat_search_members": "搜索成员...",
+  "chat_add_member": "添加成员",
+  "chat_add_member_success": "成员添加成功",
+  "chat_add_member_failed": "添加失败: {error}",
+  "@chat_add_member_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_view_profile": "查看资料",
+  "chat_no_members": "暂无成员信息",
+  "chat_favorites": "收藏",
+  "chat_search_channels": "搜索频道或消息...",
+  "chat_favorite_empty": "暂无收藏的聊天",
+  "chat_favorite_hint": "在频道列表中点击星标即可加入收藏",
+  "chat_add_favorite": "收藏频道",
+  "chat_remove_favorite": "取消收藏"
+}
