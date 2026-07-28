@@ -3,33 +3,8 @@
   "chat_title": "聊天",
   "chat_public_channels": "频道",
   "chat_direct_messages": "直接消息",
-  "chat_private_chats": "私聊",
-  "chat_group_chats": "群聊",
   "chat_empty": "暂无频道",
-  "chat_private_empty": "暂无私聊",
-  "chat_group_empty": "暂无群聊",
-  "chat_new_dm": "新建聊天",
-  "chat_new_group": "新建群组聊天",
-  "chat_group_name_hint": "群名称（可选）",
-  "chat_group_name_label": "群名称",
-  "chat_members_selected": "已选 {count}/{max}",
-  "@chat_members_selected": {
-    "placeholders": {
-      "count": { "type": "int" },
-      "max": { "type": "int" }
-    }
-  },
-  "chat_member_limit_reached": "最多可添加 {max} 人（不含自己）",
-  "@chat_member_limit_reached": {
-    "placeholders": {
-      "max": { "type": "int" }
-    }
-  },
-  "chat_create_dm": "开始聊天",
-  "chat_create_group": "创建群聊",
-  "chat_remove_member": "移除",
-  "chat_select_users_hint": "搜索并选择一位或多位用户",
-  "chat_dm_disabled": "当前无法创建直接消息",
+  "chat_new_dm": "新建直接消息",
   "chat_search_users": "搜索用户",
   "chat_search_hint": "输入用户名搜索",
   "chat_no_results": "未找到匹配用户",
@@ -112,30 +87,7 @@
   "chat_favorites": "收藏",
   "chat_search_channels": "搜索频道或消息...",
   "chat_favorite_empty": "暂无收藏的聊天",
-  "chat_favorite_private_empty": "暂无收藏的私聊",
-  "chat_favorite_group_empty": "暂无收藏的群聊",
   "chat_favorite_hint": "在频道列表中点击星标即可加入收藏",
   "chat_add_favorite": "收藏频道",
-  "chat_remove_favorite": "取消收藏",
-  "chat_browse_channels": "浏览频道",
-  "chat_leave": "离开",
-  "chat_leave_channel": "离开频道",
-  "chat_leave_dm": "关闭私聊",
-  "chat_leave_group": "离开群聊",
-  "chat_leave_confirm_dm": "关闭此私聊？它会从列表中移除；对方再发消息时可能重新出现。",
-  "chat_leave_confirm_group": "离开此群聊？你将不再是成员，需要他人再次邀请才能加入。",
-  "chat_leave_confirm_channel": "离开此频道？之后可在浏览频道页重新加入。",
-  "chat_leave_success": "已离开「{title}」",
-  "@chat_leave_success": {
-    "placeholders": {
-      "title": { "type": "String" }
-    }
-  },
-  "chat_leave_failed": "离开失败: {error}",
-  "@chat_leave_failed": {
-    "placeholders": {
-      "error": { "type": "String" }
-    }
-  },
-  "chat_start": "聊天"
+  "chat_remove_favorite": "取消收藏"
 }
