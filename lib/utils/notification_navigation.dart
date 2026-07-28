@@ -5,6 +5,7 @@ import '../l10n/s.dart';
 import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
 import '../pages/badge_page.dart';
+import '../pages/chat/chat_message_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page.dart';
 import '../services/local_notification_service.dart';
@@ -81,6 +82,27 @@ Widget? _notificationTargetPage(
         scrollToPostNumber: notification.postNumber,
         initialRevisionPostNumber: notification.postNumber,
         initialRevisionNumber: notification.data.revisionNumber,
+      );
+
+    case NotificationType.chatMention:
+    case NotificationType.chatMessage:
+    case NotificationType.chatInvitation:
+    case NotificationType.chatGroupMention:
+    case NotificationType.chatQuotedPost:
+    case NotificationType.chatWatchedThread:
+      // 聊天通知：打开频道并定位到具体消息
+      final channelId = notification.data.chatChannelId;
+      if (channelId == null) {
+        if (notification.topicId == null) return null;
+        return TopicDetailPage(
+          topicId: notification.topicId!,
+          scrollToPostNumber: notification.postNumber,
+        );
+      }
+      return ChatMessagePage(
+        channelId: channelId,
+        channelTitle: notification.data.topicTitle ?? S.current.chat_title,
+        targetMessageId: notification.data.chatMessageId,
       );
 
     default:

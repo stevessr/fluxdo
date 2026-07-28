@@ -9,6 +9,7 @@ import '../pages/browsing_history_page.dart';
 import '../pages/drafts_page.dart';
 import '../pages/private_messages_page.dart';
 import '../pages/profile_page.dart';
+import '../pages/chat/chat_page.dart';
 import '../pages/seeking_page.dart';
 import '../pages/topics_screen.dart';
 import '../providers/discourse_providers.dart';
@@ -36,6 +37,16 @@ class NavEntryRegistry {
         pageBuilder: (ctx, isActive) => TopicsScreen(isActive: isActive),
         locked: true,
         defaultInBottomNav: true,
+      ),
+      NavEntry(
+        id: NavEntryIds.chat,
+        kind: NavEntryKind.page,
+        iconData: Symbols.chat_rounded,
+        selectedIconData: Symbols.chat_rounded,
+        label: (ctx) => ctx.l10n.nav_chat,
+        pageBuilder: (ctx, isActive) => const ChatPage(),
+        defaultInBottomNav: true,
+        requiresLogin: true,
       ),
       NavEntry(
         id: NavEntryIds.profile,
