@@ -392,89 +392,13 @@ class _ChatChannelSettingsSheetState
     return '开放';
   }
 
-  /// 设置页「离开」标题：私聊 / 群聊 / 公开频道文案区分。
-  String _leaveActionTitle(ChatChannel channel) {
-    final l10n = context.l10n;
-    if (channel.isDirectMessage) {
-      return channel.isGroupDm ? l10n.chat_leave_group : l10n.chat_leave_dm;
-    }
-    return l10n.chat_leave_channel;
-  }
-
-  String _leaveActionSubtitle(ChatChannel channel) {
-    if (channel.isDirectMessage) {
-      return channel.isGroupDm
-          ? '离开后不再是成员，需再次邀请才能加入'
-          : '离开后从列表移除；对方再发消息时可能重新出现';
-    }
-    return '离开后可在浏览频道页重新加入';
-  }
-
-  String _leaveConfirmMessage(ChatChannel channel) {
-    final l10n = context.l10n;
-    if (channel.isDirectMessage) {
-      return channel.isGroupDm
-          ? l10n.chat_leave_confirm_group
-          : l10n.chat_leave_confirm_dm;
-    }
-    return l10n.chat_leave_confirm_channel;
-  }
-
-  /// 对齐 Discourse 设置页 `leaveDestructive=true`：
-  /// 统一走 `Chat::LeaveChannel`（`DELETE .../memberships/me`）。
-  /// 服务端按频道类型分流：
-  /// - 群组 DM：删除 membership + 从 DM 用户列表移除
-  /// - 1:1 私聊 / 公开频道：等价于 unfollow（following=false）
-  Future<void> _confirmAndLeave(ChatChannel channel) async {
-    final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(_leaveActionTitle(channel)),
-        content: Text(_leaveConfirmMessage(channel)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n.chat_cancel),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(l10n.chat_leave),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isSaving = true);
-    try {
-      // 设置页始终 destructive leave API（与 channel-info-settings 一致）
-      await ref.read(leaveChannelProvider(widget.channelId).future);
-
-      if (!mounted) return;
-      final title = channel.title ?? widget.channelTitle;
-      final messenger = ScaffoldMessenger.of(context);
-      // 设置 sheet 是 modal route；再 pop 一层回到频道列表（离开消息页）。
-      final nav = Navigator.of(context);
-      nav.pop(); // 关闭 settings sheet
-      if (nav.canPop()) {
-        nav.pop(); // 离开 ChatMessagePage
-      }
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.chat_leave_success(title))),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.chat_leave_failed('$e'))),
-      );
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
+  /// 群组直接消息人数上限（站点设置 chat_max_direct_message_users）
+  int? _dmMemberLimit() {
+    final settings = PreloadedDataService().siteSettingsSync;
+    final raw = settings?['chat_max_direct_message_users'];
+    if (raw is num) return raw.toInt();
+    if (raw is String) return int.tryParse(raw);
+    return null;
   }
 
   @override
@@ -502,6 +426,8 @@ class _ChatChannelSettingsSheetState
     final mutedValue = _localMuted ?? channel?.muted ?? false;
     final notifLevel =
         _localNotificationLevel ?? channel?.notificationLevel ?? 'mention';
+    final dmLimit = channel?.isDirectMessage == true ? _dmMemberLimit() : null;
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -723,7 +649,14 @@ class _ChatChannelSettingsSheetState
                 subtitle: Text(
                   () {
                     final count = channel?.membersCount;
+                    final limit = dmLimit;
+                    if (count != null && limit != null && limit > 0) {
+                      return '$count / $limit 位成员（上限 $limit）';
+                    }
                     if (count != null) return '$count 位成员';
+                    if (limit != null && limit > 0) {
+                      return '人数上限 $limit';
+                    }
                     return '查看并管理频道成员';
                   }(),
                 ),
@@ -736,6 +669,7 @@ class _ChatChannelSettingsSheetState
                     widget.channelTitle,
                     canAddMembers: canAddMembers,
                     membersCountHint: channel?.membersCount,
+                    membersLimit: dmLimit,
                   );
                 },
               ),
@@ -750,6 +684,9 @@ class _ChatChannelSettingsSheetState
                     context.l10n.chat_add_member,
                     style: TextStyle(color: theme.colorScheme.primary),
                   ),
+                  subtitle: dmLimit != null && dmLimit > 0
+                      ? Text('群组直接消息最多 $dmLimit 人')
+                      : null,
                   onTap: () {
                     Navigator.pop(context);
                     ChatChannelMembersSheet.show(
@@ -758,26 +695,10 @@ class _ChatChannelSettingsSheetState
                       widget.channelTitle,
                       canAddMembers: true,
                       membersCountHint: channel?.membersCount,
+                      membersLimit: dmLimit,
                     );
                   },
                 ),
-
-              // 离开：私聊/群聊/公开频道均可；语义对齐 Discourse toggle-channel-membership
-              if (channel != null && channel.isJoined) ...[
-                const Divider(height: 1),
-                ListTile(
-                  leading: Icon(
-                    Icons.logout_rounded,
-                    color: theme.colorScheme.error,
-                  ),
-                  title: Text(
-                    _leaveActionTitle(channel),
-                    style: TextStyle(color: theme.colorScheme.error),
-                  ),
-                  subtitle: Text(_leaveActionSubtitle(channel)),
-                  onTap: _isSaving ? null : () => _confirmAndLeave(channel!),
-                ),
-              ],
 
               if (_isSaving)
                 const Padding(

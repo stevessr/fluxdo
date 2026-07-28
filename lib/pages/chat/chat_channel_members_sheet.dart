@@ -18,6 +18,8 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
   final String channelTitle;
   final bool canAddMembers;
   final int? membersCountHint;
+  /// 群组直接消息人数上限（站点 chat_max_direct_message_users）
+  final int? membersLimit;
 
   const ChatChannelMembersSheet({
     super.key,
@@ -25,6 +27,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
     required this.channelTitle,
     this.canAddMembers = false,
     this.membersCountHint,
+    this.membersLimit,
   });
 
   static void show(
@@ -33,6 +36,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
     String channelTitle, {
     bool canAddMembers = false,
     int? membersCountHint,
+    int? membersLimit,
   }) {
     showModalBottomSheet(
       context: context,
@@ -46,6 +50,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
         channelTitle: channelTitle,
         canAddMembers: canAddMembers,
         membersCountHint: membersCountHint,
+        membersLimit: membersLimit,
       ),
     );
   }
@@ -148,8 +153,12 @@ class _ChatChannelMembersSheetState
                                         widget.membersCountHint;
                                 final loaded = membersAsync
                                     .asData?.value.members.length;
+                                final limit = widget.membersLimit;
                                 final base = () {
                                   if (total != null) {
+                                    if (limit != null && limit > 0) {
+                                      return '${widget.channelTitle}（$total / $limit 人）';
+                                    }
                                     if (loaded != null &&
                                         loaded < total &&
                                         _filterQuery.isEmpty) {
@@ -158,7 +167,13 @@ class _ChatChannelMembersSheetState
                                     return '${widget.channelTitle}（$total 人）';
                                   }
                                   if (loaded != null) {
+                                    if (limit != null && limit > 0) {
+                                      return '${widget.channelTitle}（已加载 $loaded / 上限 $limit）';
+                                    }
                                     return '${widget.channelTitle}（$loaded 人）';
+                                  }
+                                  if (limit != null && limit > 0) {
+                                    return '${widget.channelTitle}（上限 $limit 人）';
                                   }
                                   return widget.channelTitle;
                                 }();
