@@ -1,0 +1,93 @@
+{
+  "@@locale": "zh_TW",
+  "chat_title": "聊天",
+  "chat_public_channels": "頻道",
+  "chat_direct_messages": "直接訊息",
+  "chat_empty": "暫無頻道",
+  "chat_new_dm": "新建直接訊息",
+  "chat_search_users": "搜尋用戶",
+  "chat_search_hint": "輸入用戶名搜尋",
+  "chat_no_results": "未找到匹配用戶",
+  "chat_dm_placeholder": "直接訊息",
+  "chat_unnamed_channel": "未命名頻道",
+  "chat_send": "發送",
+  "chat_input_hint": "輸入訊息...",
+  "chat_no_messages": "暫無訊息",
+  "chat_send_first_message": "發送第一條訊息開始聊天",
+  "chat_loading": "載入中...",
+  "chat_error": "載入失敗",
+  "chat_retry": "重試",
+  "chat_scroll_to_bottom": "滾動到底部",
+  "chat_load_more": "載入更多",
+  "chat_message_deleted": "此訊息已被刪除",
+  "chat_edited": "已編輯",
+  "chat_send_failed": "發送失敗: {error}",
+  "@chat_send_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_reply": "回覆",
+  "chat_replying_to": "回覆 {name}",
+  "@chat_replying_to": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_copy": "複製",
+  "chat_copied": "已複製到剪貼簿",
+  "chat_edit": "編輯",
+  "chat_editing_message": "正在編輯訊息",
+  "chat_update_failed": "更新失敗: {error}",
+  "@chat_update_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_delete": "刪除",
+  "chat_delete_confirm": "確定刪除此訊息？",
+  "chat_delete_failed": "刪除失敗: {error}",
+  "@chat_delete_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_cancel": "取消",
+  "chat_upload_image": "上傳圖片",
+  "chat_upload_failed": "上傳失敗: {error}",
+  "@chat_upload_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_channel_members": "頻道成員",
+  "chat_search_members": "搜尋成員...",
+  "chat_add_member": "新增成員",
+  "chat_add_member_success": "成員新增成功",
+  "chat_add_member_failed": "新增失敗: {error}",
+  "@chat_add_member_failed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_view_profile": "查看資料",
+  "chat_no_members": "暫無成員資訊",
+  "chat_favorites": "收藏",
+  "chat_search_channels": "搜尋頻道或訊息...",
+  "chat_favorite_empty": "暫無收藏的聊天",
+  "chat_favorite_hint": "點擊頻道列表中的星標即可加入收藏",
+  "chat_add_favorite": "收藏頻道",
+  "chat_remove_favorite": "取消收藏"
+}
