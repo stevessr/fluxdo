@@ -154,6 +154,8 @@ class FluxdoRenderCallbacks {
     int chunkIndex = 0,
     bool trimTopMargin = false,
     bool trimBottomMargin = false,
+    /// 块级是否横向拉满可用宽。聊天气泡等「按内容收缩」场景传 false。
+    bool stretchBlocks = true,
     QuoteRequestCallback? onQuoteRequest,
     QuoteRequestCallback? onCopyQuoteRequest,
     CopyToastCallback? onCopyToast,
@@ -172,6 +174,7 @@ class FluxdoRenderCallbacks {
       chunkIndex: chunkIndex,
       trimTopMargin: trimTopMargin,
       trimBottomMargin: trimBottomMargin,
+      stretchBlocks: stretchBlocks,
       onQuoteRequest: onQuoteRequest,
       onCopyQuoteRequest: onCopyQuoteRequest,
       onCopyToast: onCopyToast,

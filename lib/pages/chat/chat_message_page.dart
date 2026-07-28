@@ -3195,8 +3195,9 @@ class _CookedHtmlContent extends StatelessWidget {
       compact: true,
       trimTopMargin: true,
       trimBottomMargin: true,
-      // upstream fluxdo_render 尚未暴露 stretchBlocks；气泡贴合宽度依赖
-      // 外层布局 + compact 渲染，后续上游补齐后再传 stretchBlocks: false。
+      // 气泡宽度贴合内容：块级不横向拉满，否则每条消息都撑满 0.75 屏宽
+      // （外层不能用 IntrinsicWidth，见 _ChatMessageBubble 注释）。
+      stretchBlocks: false,
     );
   }
 
