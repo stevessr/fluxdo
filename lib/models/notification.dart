@@ -145,6 +145,8 @@ class NotificationData {
   final String? username2;
   final String? avatarTemplate;
   final String? boostRaw;
+  final int? chatChannelId;
+  final int? chatMessageId;
 
   NotificationData({
     this.displayUsername,
@@ -163,6 +165,8 @@ class NotificationData {
     this.username2,
     this.avatarTemplate,
     this.boostRaw,
+    this.chatChannelId,
+    this.chatMessageId,
   });
 
   factory NotificationData.fromJson(Map<String, dynamic> json) {
@@ -183,6 +187,8 @@ class NotificationData {
       username2: json['username2'] as String?,
       avatarTemplate: json['acting_user_avatar_template'] as String? ?? json['avatar_template'] as String?,
       boostRaw: json['boost_raw'] as String?,
+      chatChannelId: json['chat_channel_id'] as int?,
+      chatMessageId: json['chat_message_id'] as int?,
     );
   }
 }
