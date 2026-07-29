@@ -1427,15 +1427,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       icon: const Icon(Icons.people_outline_rounded),
                       tooltip: context.l10n.chat_channel_members,
                       onPressed: () {
-                        final settings =
-                            PreloadedDataService().siteSettingsSync;
-                        final rawLimit =
-                            settings?['chat_max_direct_message_users'];
-                        final dmLimit = currentChannel?.isDirectMessage == true
-                            ? (rawLimit is num
-                                ? rawLimit.toInt()
-                                : int.tryParse('$rawLimit'))
-                            : null;
                         ChatChannelMembersSheet.show(
                           context,
                           widget.channelId,
@@ -1443,7 +1434,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           canAddMembers:
                               currentChannel?.canAddMembers ?? false,
                           membersCountHint: currentChannel?.membersCount,
-                          membersLimit: dmLimit,
                         );
                       },
                     ),

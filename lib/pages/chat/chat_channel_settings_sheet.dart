@@ -392,15 +392,6 @@ class _ChatChannelSettingsSheetState
     return '开放';
   }
 
-  /// 群组直接消息人数上限（站点设置 chat_max_direct_message_users）
-  int? _dmMemberLimit() {
-    final settings = PreloadedDataService().siteSettingsSync;
-    final raw = settings?['chat_max_direct_message_users'];
-    if (raw is num) return raw.toInt();
-    if (raw is String) return int.tryParse(raw);
-    return null;
-  }
-
   /// 设置页「离开」标题：私聊 / 群聊 / 公开频道文案区分。
   String _leaveActionTitle(ChatChannel channel) {
     final l10n = context.l10n;
@@ -511,8 +502,6 @@ class _ChatChannelSettingsSheetState
     final mutedValue = _localMuted ?? channel?.muted ?? false;
     final notifLevel =
         _localNotificationLevel ?? channel?.notificationLevel ?? 'mention';
-    final dmLimit = channel?.isDirectMessage == true ? _dmMemberLimit() : null;
-
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -734,14 +723,7 @@ class _ChatChannelSettingsSheetState
                 subtitle: Text(
                   () {
                     final count = channel?.membersCount;
-                    final limit = dmLimit;
-                    if (count != null && limit != null && limit > 0) {
-                      return '$count / $limit 位成员（上限 $limit）';
-                    }
                     if (count != null) return '$count 位成员';
-                    if (limit != null && limit > 0) {
-                      return '人数上限 $limit';
-                    }
                     return '查看并管理频道成员';
                   }(),
                 ),
@@ -754,7 +736,6 @@ class _ChatChannelSettingsSheetState
                     widget.channelTitle,
                     canAddMembers: canAddMembers,
                     membersCountHint: channel?.membersCount,
-                    membersLimit: dmLimit,
                   );
                 },
               ),
@@ -769,9 +750,6 @@ class _ChatChannelSettingsSheetState
                     context.l10n.chat_add_member,
                     style: TextStyle(color: theme.colorScheme.primary),
                   ),
-                  subtitle: dmLimit != null && dmLimit > 0
-                      ? Text('群组直接消息最多 $dmLimit 人')
-                      : null,
                   onTap: () {
                     Navigator.pop(context);
                     ChatChannelMembersSheet.show(
@@ -780,7 +758,6 @@ class _ChatChannelSettingsSheetState
                       widget.channelTitle,
                       canAddMembers: true,
                       membersCountHint: channel?.membersCount,
-                      membersLimit: dmLimit,
                     );
                   },
                 ),

@@ -146,8 +146,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
   /// - [name]：群聊可选名称；人数>2 或提供 name 时服务端记为 group DM
   /// - [targetGroups]：可选，按组名展开成员（可见且成员可见的组）
   ///
-  /// 人数上限由站点 `chat_max_direct_message_users` 约束（默认 20，
-  /// 计的是「除自己以外」的目标用户数；staff 豁免）。
+  /// 客户端不限制 [targetUsernames] 的人数；若服务端拒绝请求，错误会原样上抛。
   ///
   /// Discourse 响应根为 `channel`（Chat::ChannelSerializer）。
   Future<int> createDirectMessageChannel(
