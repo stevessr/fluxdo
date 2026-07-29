@@ -8,6 +8,7 @@ import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
+import '../../widgets/chat/chat_conversation_tabs.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
@@ -17,6 +18,31 @@ import 'chat_browse_channels_page.dart';
 import 'chat_channel_settings_sheet.dart';
 import 'chat_create_channel_sheet.dart';
 import 'chat_search_page.dart';
+
+typedef ChatConversationGroups = ({
+  List<ChatChannel> privateChats,
+  List<ChatChannel> groupChats,
+});
+
+/// 按对话参与者拆分聊天频道。
+///
+/// 「私聊」仅指 1:1 Direct Message；群组 Direct Message 与公开频道都属于
+/// 多人会话，放入「群聊」。这样收藏页加入子 Tab 后不会丢失已收藏的
+/// 公开频道。
+ChatConversationGroups partitionChatChannels(
+  List<ChatChannel> channels,
+) {
+  final privateChats = <ChatChannel>[];
+  final groupChats = <ChatChannel>[];
+  for (final channel in channels) {
+    if (channel.isDirectMessage && !channel.isGroupDm) {
+      privateChats.add(channel);
+    } else {
+      groupChats.add(channel);
+    }
+  }
+  return (privateChats: privateChats, groupChats: groupChats);
+}
 
 /// Chat 频道列表页面
 ///
@@ -223,8 +249,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 return TabBarView(
                   controller: _tabController,
                   children: [
-                    // 收藏 Tab
-                    _ChatChannelListView(
+                    // 收藏 Tab：1:1 私聊 / 多人会话二级分类
+                    _ChatConversationSubtabs(
+                      id: 'favorites',
                       channels: _filterChannels(favoriteChannels, _searchQuery),
                       isFavorites: true,
                       searchQuery: _searchQuery,
@@ -237,8 +264,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       searchQuery: _searchQuery,
                       onRefresh: _onRefresh,
                     ),
-                    // 直接消息 Tab
-                    _ChatChannelListView(
+                    // 直接消息 Tab：1:1 私聊 / 群组 DM 二级分类
+                    _ChatConversationSubtabs(
+                      id: 'direct-messages',
                       channels: _filterChannels(
                         state.directMessageChannels,
                         _searchQuery,
@@ -263,16 +291,71 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 }
 
-/// 单个 Tab 的频道列表视图
-class _ChatChannelListView extends ConsumerWidget {
+/// 「收藏」和「直接消息」共用的私聊 / 群聊二级分类。
+class _ChatConversationSubtabs extends StatelessWidget {
+  const _ChatConversationSubtabs({
+    required this.id,
+    required this.channels,
+    this.isFavorites = false,
+    required this.searchQuery,
+    required this.onRefresh,
+  });
+
+  final String id;
   final List<ChatChannel> channels;
   final bool isFavorites;
   final String searchQuery;
   final Future<void> Function() onRefresh;
 
+  @override
+  Widget build(BuildContext context) {
+    final groups = partitionChatChannels(channels);
+    return ChatConversationTabs(
+      key: PageStorageKey('chat-$id-conversation-tabs'),
+      id: id,
+      privateCount: groups.privateChats.length,
+      groupCount: groups.groupChats.length,
+      privateChild: _ChatChannelListView(
+        key: PageStorageKey('chat-$id-private-list'),
+        channels: groups.privateChats,
+        emptyKind: isFavorites
+            ? _ChatChannelEmptyKind.favoritePrivateChats
+            : _ChatChannelEmptyKind.privateChats,
+        searchQuery: searchQuery,
+        onRefresh: onRefresh,
+      ),
+      groupChild: _ChatChannelListView(
+        key: PageStorageKey('chat-$id-group-list'),
+        channels: groups.groupChats,
+        emptyKind: isFavorites
+            ? _ChatChannelEmptyKind.favoriteGroupChats
+            : _ChatChannelEmptyKind.groupChats,
+        searchQuery: searchQuery,
+        onRefresh: onRefresh,
+      ),
+    );
+  }
+}
+
+enum _ChatChannelEmptyKind {
+  channels,
+  privateChats,
+  groupChats,
+  favoritePrivateChats,
+  favoriteGroupChats,
+}
+
+/// 单个 Tab 的频道列表视图
+class _ChatChannelListView extends ConsumerWidget {
+  final List<ChatChannel> channels;
+  final _ChatChannelEmptyKind emptyKind;
+  final String searchQuery;
+  final Future<void> Function() onRefresh;
+
   const _ChatChannelListView({
+    super.key,
     required this.channels,
-    this.isFavorites = false,
+    this.emptyKind = _ChatChannelEmptyKind.channels,
     this.searchQuery = '',
     required this.onRefresh,
   });
@@ -302,30 +385,55 @@ class _ChatChannelListView extends ConsumerWidget {
         );
       }
 
-      if (isFavorites) {
+      if (emptyKind != _ChatChannelEmptyKind.channels) {
+        final isFavorite = emptyKind ==
+                _ChatChannelEmptyKind.favoritePrivateChats ||
+            emptyKind == _ChatChannelEmptyKind.favoriteGroupChats;
+        final isPrivate = emptyKind == _ChatChannelEmptyKind.privateChats ||
+            emptyKind == _ChatChannelEmptyKind.favoritePrivateChats;
+        final title = switch (emptyKind) {
+          _ChatChannelEmptyKind.privateChats =>
+            context.l10n.chat_private_empty,
+          _ChatChannelEmptyKind.groupChats => context.l10n.chat_group_empty,
+          _ChatChannelEmptyKind.favoritePrivateChats =>
+            context.l10n.chat_favorite_private_empty,
+          _ChatChannelEmptyKind.favoriteGroupChats =>
+            context.l10n.chat_favorite_group_empty,
+          _ChatChannelEmptyKind.channels => context.l10n.chat_empty,
+        };
         return Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                Symbols.star_outline_rounded,
+                isFavorite
+                    ? Symbols.star_outline_rounded
+                    : isPrivate
+                        ? Icons.person_outline_rounded
+                        : Icons.groups_outlined,
                 size: 64,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(height: 16),
               Text(
-                context.l10n.chat_favorite_empty,
+                title,
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                context.l10n.chat_favorite_hint,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+              if (isFavorite) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    context.l10n.chat_favorite_hint,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         );
@@ -358,6 +466,7 @@ class _ChatChannelListView extends ConsumerWidget {
         itemBuilder: (context, index) {
           final channel = channels[index];
           return ChatChannelTile(
+            key: ValueKey('chat-channel-${channel.id}'),
             channel: channel,
             onTap: () {
               Navigator.push(
