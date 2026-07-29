@@ -18,6 +18,7 @@ import 'chat_browse_channels_page.dart';
 import 'chat_channel_settings_sheet.dart';
 import 'chat_create_channel_sheet.dart';
 import 'chat_search_page.dart';
+import 'chat_thread_sheet.dart';
 
 typedef ChatConversationGroups = ({
   List<ChatChannel> privateChats,
@@ -29,9 +30,7 @@ typedef ChatConversationGroups = ({
 /// 「私聊」仅指 1:1 Direct Message；群组 Direct Message 与公开频道都属于
 /// 多人会话，放入「群聊」。这样收藏页加入子 Tab 后不会丢失已收藏的
 /// 公开频道。
-ChatConversationGroups partitionChatChannels(
-  List<ChatChannel> channels,
-) {
+ChatConversationGroups partitionChatChannels(List<ChatChannel> channels) {
   final privateChats = <ChatChannel>[];
   final groupChats = <ChatChannel>[];
   for (final channel in channels) {
@@ -63,7 +62,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -78,10 +77,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   void _openNewDmDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => const _NewDmDialog(),
-    );
+    showDialog(context: context, builder: (context) => const _NewDmDialog());
   }
 
   void _openGlobalSearch() {
@@ -106,7 +102,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           c.lastMessage?.message.toLowerCase().contains(q) ?? false;
       final userMatch =
           (c.lastMessage?.user?.username.toLowerCase().contains(q) ?? false) ||
-              (c.lastMessage?.user?.name?.toLowerCase().contains(q) ?? false);
+          (c.lastMessage?.user?.name?.toLowerCase().contains(q) ?? false);
       return titleMatch || slugMatch || descMatch || msgMatch || userMatch;
     }).toList();
   }
@@ -114,9 +110,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _openBrowseChannels() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const ChatBrowseChannelsPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const ChatBrowseChannelsPage()),
     );
   }
 
@@ -129,8 +123,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final currentUser = ref.watch(currentUserProvider).value;
     final canCreateChannel = currentUser?.isStaff ?? false;
     // 论坛 Chat 总开关：仅读启动预加载的 siteSettings 快照
-    final forumChatEnabled =
-        ref.watch(forumChatEnabledProvider).value ?? false;
+    final forumChatEnabled = ref.watch(forumChatEnabledProvider).value ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -163,14 +156,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
               try {
                 await ref.read(markAllChatChannelsReadProvider.future);
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已将所有聊天频道标为已读')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('已将所有聊天频道标为已读')));
               } catch (e) {
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('操作失败: $e')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
               }
             },
           ),
@@ -181,6 +174,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             Tab(text: context.l10n.chat_favorites),
             Tab(text: context.l10n.chat_public_channels),
             Tab(text: context.l10n.chat_direct_messages),
+            Tab(text: '消息串'),
           ],
         ),
       ),
@@ -223,8 +217,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     },
                   ),
                 ),
-                if (forumChatEnabled &&
-                    (currentUser?.canDirectMessage ?? true))
+                if (forumChatEnabled && (currentUser?.canDirectMessage ?? true))
                   IconButton(
                     icon: const Icon(Symbols.add_comment_rounded),
                     // 上限>1 时可多选建群；文案仍用「新建聊天」兼容单人 DM
@@ -259,8 +252,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     ),
                     // 公开频道 Tab
                     _ChatChannelListView(
-                      channels:
-                          _filterChannels(state.publicChannels, _searchQuery),
+                      channels: _filterChannels(
+                        state.publicChannels,
+                        _searchQuery,
+                      ),
                       searchQuery: _searchQuery,
                       onRefresh: _onRefresh,
                     ),
@@ -274,6 +269,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       searchQuery: _searchQuery,
                       onRefresh: _onRefresh,
                     ),
+                    // 消息串 Tab：全部频道的消息串
+                    const _ChatThreadTabView(),
                   ],
                 );
               },
@@ -386,14 +383,14 @@ class _ChatChannelListView extends ConsumerWidget {
       }
 
       if (emptyKind != _ChatChannelEmptyKind.channels) {
-        final isFavorite = emptyKind ==
-                _ChatChannelEmptyKind.favoritePrivateChats ||
+        final isFavorite =
+            emptyKind == _ChatChannelEmptyKind.favoritePrivateChats ||
             emptyKind == _ChatChannelEmptyKind.favoriteGroupChats;
-        final isPrivate = emptyKind == _ChatChannelEmptyKind.privateChats ||
+        final isPrivate =
+            emptyKind == _ChatChannelEmptyKind.privateChats ||
             emptyKind == _ChatChannelEmptyKind.favoritePrivateChats;
         final title = switch (emptyKind) {
-          _ChatChannelEmptyKind.privateChats =>
-            context.l10n.chat_private_empty,
+          _ChatChannelEmptyKind.privateChats => context.l10n.chat_private_empty,
           _ChatChannelEmptyKind.groupChats => context.l10n.chat_group_empty,
           _ChatChannelEmptyKind.favoritePrivateChats =>
             context.l10n.chat_favorite_private_empty,
@@ -409,8 +406,8 @@ class _ChatChannelListView extends ConsumerWidget {
                 isFavorite
                     ? Symbols.star_outline_rounded
                     : isPrivate
-                        ? Icons.person_outline_rounded
-                        : Icons.groups_outlined,
+                    ? Icons.person_outline_rounded
+                    : Icons.groups_outlined,
                 size: 64,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -443,11 +440,7 @@ class _ChatChannelListView extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              AppIcons.forum,
-              size: 64,
-              color: Colors.grey,
-            ),
+            const Icon(AppIcons.forum, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             Text(
               context.l10n.chat_empty,
@@ -475,10 +468,10 @@ class _ChatChannelListView extends ConsumerWidget {
                   builder: (_) {
                     final title = channel.chatableType == 'DirectMessage'
                         ? (channel.title?.isNotEmpty == true
-                            ? channel.title!
-                            : channel.lastMessage?.user?.name ??
-                                channel.lastMessage?.user?.username ??
-                                context.l10n.chat_dm_placeholder)
+                              ? channel.title!
+                              : channel.lastMessage?.user?.name ??
+                                    channel.lastMessage?.user?.username ??
+                                    context.l10n.chat_dm_placeholder)
                         : (channel.title ?? context.l10n.chat_unnamed_channel);
                     return ChatMessagePage(
                       channelId: channel.id,
@@ -519,7 +512,8 @@ class ChatChannelTile extends ConsumerWidget {
 
   /// 获取频道显示标题
   String _resolveTitle(BuildContext context, int? currentUserId) {
-    final isDm = channel.chatableType == 'DirectMessage' ||
+    final isDm =
+        channel.chatableType == 'DirectMessage' ||
         channel.chatableType == 'DirectMessageChannel';
     if (isDm) {
       // 群聊 DM（3+ 人直接消息）：Discourse 服务端已用成员名拼接出 title，
@@ -563,7 +557,8 @@ class ChatChannelTile extends ConsumerWidget {
   /// - 公开频道无 emoji 时显示论坛图标
   Widget _buildLeading(BuildContext context, int? currentUserId) {
     final theme = Theme.of(context);
-    final isDm = channel.chatableType == 'DirectMessage' ||
+    final isDm =
+        channel.chatableType == 'DirectMessage' ||
         channel.chatableType == 'DirectMessageChannel';
 
     // 1. 频道自定义表情优先（公开频道 + 群组 DM 均适用）
@@ -572,10 +567,7 @@ class ChatChannelTile extends ConsumerWidget {
       return CircleAvatar(
         radius: 22,
         backgroundColor: theme.colorScheme.primaryContainer,
-        child: EmojiText(
-          emojiCode,
-          style: const TextStyle(fontSize: 20),
-        ),
+        child: EmojiText(emojiCode, style: const TextStyle(fontSize: 20)),
       );
     }
 
@@ -631,7 +623,6 @@ class ChatChannelTile extends ConsumerWidget {
     );
   }
 
-
   String _leaveLabel(BuildContext context) {
     final l10n = context.l10n;
     if (channel.isDirectMessage) {
@@ -645,8 +636,8 @@ class ChatChannelTile extends ConsumerWidget {
     final l10n = context.l10n;
     final confirmMsg = channel.isDirectMessage
         ? (channel.isGroupDm
-            ? l10n.chat_leave_confirm_group
-            : l10n.chat_leave_confirm_dm)
+              ? l10n.chat_leave_confirm_group
+              : l10n.chat_leave_confirm_dm)
         : l10n.chat_leave_confirm_channel;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -682,14 +673,14 @@ class ChatChannelTile extends ConsumerWidget {
       }
       if (!context.mounted) return;
       final title = channel.title ?? l10n.chat_unnamed_channel;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.chat_leave_success(title))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.chat_leave_success(title))));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.chat_leave_failed('$e'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.chat_leave_failed('$e'))));
     }
   }
 
@@ -709,11 +700,15 @@ class ChatChannelTile extends ConsumerWidget {
             children: [
               ListTile(
                 leading: Icon(
-                  isFavorite ? Symbols.star_rounded : Symbols.star_outline_rounded,
+                  isFavorite
+                      ? Symbols.star_rounded
+                      : Symbols.star_outline_rounded,
                   color: isFavorite ? Colors.amber.shade700 : null,
                 ),
                 title: Text(
-                  isFavorite ? l10n.chat_remove_favorite : l10n.chat_add_favorite,
+                  isFavorite
+                      ? l10n.chat_remove_favorite
+                      : l10n.chat_add_favorite,
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -802,8 +797,10 @@ class ChatChannelTile extends ConsumerWidget {
                 const SizedBox(height: 4),
                 Container(
                   constraints: const BoxConstraints(minWidth: 20),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primary,
                     borderRadius: BorderRadius.circular(10),
@@ -992,9 +989,9 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   Future<void> _create() async {
     if (_isCreating || _selected.isEmpty) return;
     if (!_canCreateDm) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.chat_dm_disabled)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.chat_dm_disabled)));
       return;
     }
     setState(() => _isCreating = true);
@@ -1013,29 +1010,29 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
 
       final title = _isGroup
           ? (groupName.isNotEmpty
-              ? groupName
-              : _selected
-                  .map((u) => u.name?.trim().isNotEmpty == true
-                      ? u.name!
-                      : u.username)
-                  .join(', '))
+                ? groupName
+                : _selected
+                      .map(
+                        (u) => u.name?.trim().isNotEmpty == true
+                            ? u.name!
+                            : u.username,
+                      )
+                      .join(', '))
           : (_selected.first.name ?? _selected.first.username);
 
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ChatMessagePage(
-            channelId: channelId,
-            channelTitle: title,
-          ),
+          builder: (_) =>
+              ChatMessagePage(channelId: channelId, channelTitle: title),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isCreating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${context.l10n.chat_error}: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${context.l10n.chat_error}: $e')));
     }
   }
 
@@ -1162,65 +1159,59 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
               child: _isSearching
                   ? const Center(child: CircularProgressIndicator())
                   : _results.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Text(
-                            _searchController.text.isEmpty
-                                ? (_selected.isEmpty
-                                    ? l10n.chat_select_users_hint
-                                    : l10n.chat_search_hint)
-                                : l10n.chat_no_results,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: _results.length,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          itemBuilder: (context, index) {
-                            final user = _results[index];
-                            final avatarUrl = _resolveUserAvatarUrl(user);
-                            final selected = _selected.any(
-                              (s) => s.id == user.id,
-                            );
-                            return ListTile(
-                              leading: SmartAvatar(
-                                imageUrl: avatarUrl,
-                                radius: 20,
-                                fallbackText: user.username,
-                              ),
-                              title: Text(
-                                user.name ?? user.username,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: user.name != null
-                                  ? Text(
-                                      '@${user.username}',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                        color: theme
-                                            .colorScheme.onSurfaceVariant,
-                                      ),
-                                    )
-                                  : null,
-                              trailing: Icon(
-                                selected
-                                    ? Icons.check_circle_rounded
-                                    : Icons.add_circle_outline_rounded,
-                                color: selected
-                                    ? theme.colorScheme.primary
-                                    : theme.colorScheme.onSurfaceVariant,
-                              ),
-                              onTap: _isCreating
-                                  ? null
-                                  : () => _toggleUser(user),
-                            );
-                          },
+                  ? Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text(
+                        _searchController.text.isEmpty
+                            ? (_selected.isEmpty
+                                  ? l10n.chat_select_users_hint
+                                  : l10n.chat_search_hint)
+                            : l10n.chat_no_results,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _results.length,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemBuilder: (context, index) {
+                        final user = _results[index];
+                        final avatarUrl = _resolveUserAvatarUrl(user);
+                        final selected = _selected.any((s) => s.id == user.id);
+                        return ListTile(
+                          leading: SmartAvatar(
+                            imageUrl: avatarUrl,
+                            radius: 20,
+                            fallbackText: user.username,
+                          ),
+                          title: Text(
+                            user.name ?? user.username,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: user.name != null
+                              ? Text(
+                                  '@${user.username}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                )
+                              : null,
+                          trailing: Icon(
+                            selected
+                                ? Icons.check_circle_rounded
+                                : Icons.add_circle_outline_rounded,
+                            color: selected
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                          onTap: _isCreating ? null : () => _toggleUser(user),
+                        );
+                      },
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -1251,6 +1242,192 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 消息串 Tab 视图
+///
+/// 展示所有已加入频道的消息串，按最后回复时间降序排列。
+class _ChatThreadTabView extends ConsumerWidget {
+  const _ChatThreadTabView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final threadsAsync = ref.watch(chatAllThreadsProvider);
+
+    return threadsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('加载失败: $e'),
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                onPressed: () => ref.invalidate(chatAllThreadsProvider),
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      data: (threads) {
+        if (threads.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.forum_outlined,
+                    size: 48,
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '还没有消息串\n回复消息即可开启讨论',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(chatAllThreadsProvider);
+            await ref.read(chatAllThreadsProvider.future);
+          },
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: threads.length,
+            separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
+            itemBuilder: (context, index) {
+              final (thread, channel) = threads[index];
+              final om = thread.originalMessage;
+              String? avatarUrl;
+              if (om?.user?.avatarTemplate != null) {
+                avatarUrl = UrlHelper.resolveUrlWithCdn(
+                  om!.user!.avatarTemplate!.replaceAll('{size}', '48'),
+                );
+              }
+              final replyCount =
+                  thread.preview?.replyCount ?? thread.replyCount;
+              final lastAt = thread.preview?.lastReplyCreatedAt;
+              final time = lastAt != null
+                  ? TimeUtils.formatRelativeTime(lastAt)
+                  : (om?.createdAt != null
+                        ? TimeUtils.formatRelativeTime(om!.createdAt!)
+                        : null);
+
+              return ListTile(
+                leading: SmartAvatar(
+                  imageUrl: avatarUrl,
+                  radius: 20,
+                  fallbackText: om?.user?.username,
+                ),
+                title: Text(
+                  thread.displayTitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.secondaryContainer
+                              .withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          channel.title ?? '#${channel.id}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSecondaryContainer,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.forum_outlined,
+                        size: 14,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        replyCount > 0 ? '$replyCount 条回复' : '消息串',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      if (om?.user?.username != null) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            '@${om!.user!.username}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (time != null) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          time,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () async {
+                  ChatMessage? original;
+                  if (om != null) {
+                    try {
+                      original = ChatMessage.fromJson(om.toMessageJson());
+                    } catch (_) {}
+                  }
+                  if (!context.mounted) return;
+                  await ChatThreadSheet.show(
+                    context,
+                    channelId: channel.id,
+                    thread: thread,
+                    originalMessage: original,
+                  );
+                },
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
