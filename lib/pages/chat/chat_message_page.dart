@@ -559,6 +559,40 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         _isUploadingImage = false;
       });
     } catch (e) {
+      _handleImageUploadFailure(e);
+    }
+  }
+
+  void _handleImageUploadFailure(Object error) {
+    if (!mounted) return;
+    setState(() {
+      _isUploadingImage = false;
+      _uploadPreviewPath = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(context.l10n.chat_upload_failed(error.toString())),
+      ),
+    );
+  }
+
+  /// 接收 Android 输入法提交的剪贴板图片。
+  void _onClipboardImageInserted(Uint8List bytes, String extension) {
+    if (_isUploadingImage || bytes.isEmpty) return;
+    unawaited(_uploadClipboardImage(bytes, extension));
+  }
+
+  /// 将输入法传入的图片数据写入临时文件，再复用现有上传流程。
+  Future<void> _uploadClipboardImage(Uint8List bytes, String extension) async {
+    if (!_beginImageUpload()) return;
+
+    try {
+      final temporaryDirectory = await getTemporaryDirectory();
+      final fileName =
+          'chat_paste_${DateTime.now().microsecondsSinceEpoch}.$extension';
+      final imageFile = File(p.join(temporaryDirectory.path, fileName));
+      await imageFile.writeAsBytes(bytes, flush: true);
+
       if (!mounted) return;
       setState(() {
         _isUploadingImage = false;
@@ -1939,12 +1973,13 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                         // 表情与贴纸切换按钮
                         IconButton(
                           onPressed: () {
+                            setState(
+                              () => _showEmojiPicker = !_showEmojiPicker,
+                            );
                             if (_showEmojiPicker) {
-                              setState(() => _showEmojiPicker = false);
-                              _inputFocusNode.requestFocus();
-                            } else {
                               _inputFocusNode.unfocus();
-                              setState(() => _showEmojiPicker = true);
+                            } else {
+                              _inputFocusNode.requestFocus();
                             }
                           },
                           icon: Icon(
@@ -1957,34 +1992,23 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               : theme.colorScheme.onSurfaceVariant,
                           tooltip: '表情与贴纸',
                         ),
+                        const SizedBox(width: 4),
                         Expanded(
-                          child: TextField(
+                          child: ChatMessageInputField(
                             controller: _textController,
                             focusNode: _inputFocusNode,
-                            textInputAction: TextInputAction.send,
-                            maxLines: 5,
-                            minLines: 1,
+                            hintText: context.l10n.chat_input_hint,
                             onTap: () {
                               if (_showEmojiPicker) {
                                 setState(() => _showEmojiPicker = false);
+                                _inputFocusNode.requestFocus();
+                              } else {
+                                _inputFocusNode.unfocus();
+                                setState(() => _showEmojiPicker = true);
                               }
                             },
                             onSubmitted: (_) => _sendMessageOrUpdate(),
-                            decoration: InputDecoration(
-                              hintText: context.l10n.chat_input_hint,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              filled: true,
-                              fillColor:
-                                  theme.colorScheme.surfaceContainerHighest,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              isDense: true,
-                            ),
+                            onImageInserted: _onClipboardImageInserted,
                           ),
                         ),
                         const SizedBox(width: 4),
