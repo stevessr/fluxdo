@@ -12,17 +12,10 @@
   "chat_new_group": "New group chat",
   "chat_group_name_hint": "Group name (optional)",
   "chat_group_name_label": "Group name",
-  "chat_members_selected": "{count}/{max} selected",
+  "chat_members_selected": "{count} selected",
   "@chat_members_selected": {
     "placeholders": {
-      "count": { "type": "int" },
-      "max": { "type": "int" }
-    }
-  },
-  "chat_member_limit_reached": "You can add up to {max} people (not including yourself)",
-  "@chat_member_limit_reached": {
-    "placeholders": {
-      "max": { "type": "int" }
+      "count": { "type": "int" }
     }
   },
   "chat_create_dm": "Start chat",
