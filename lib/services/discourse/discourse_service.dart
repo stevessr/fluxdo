@@ -198,6 +198,12 @@ class DiscourseService extends _DiscourseServiceBase
 
   Dio get dio => _dio;
 
+  /// 当前 _t token（只读，供 AccountManager 等外部访问）
+  String? get tToken => _tToken;
+
+  /// 当前用户名（只读）
+  String? get currentUsername => _username;
+
   @override
   bool get isAuthenticated => _tToken != null && _tToken!.isNotEmpty;
 
