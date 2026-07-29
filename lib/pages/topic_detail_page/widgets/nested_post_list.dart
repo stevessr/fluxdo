@@ -12,6 +12,7 @@ import '../../../widgets/post/post_item/post_item.dart';
 import 'topic_detail_header.dart';
 import 'shared_issue_button.dart';
 import 'topic_more_topics.dart';
+import 'private_message_participants.dart';
 
 /// 嵌套视图帖子列表 — 在现有 TopicDetailPage 内替换平铺帖子流
 class NestedPostList extends ConsumerStatefulWidget {
@@ -23,6 +24,10 @@ class NestedPostList extends ConsumerStatefulWidget {
   final ScrollController scrollController;
   final GlobalKey headerKey;
   final bool isLoggedIn;
+  final int? currentUserId;
+  final bool currentUserIsAdmin;
+  final int? removingPrivateMessageParticipantId;
+  final ValueChanged<TopicUser>? onRemovePrivateMessageParticipant;
   final void Function(Post? replyToPost, {String? initialContent}) onReply;
   final void Function(Post post) onEdit;
   final void Function(int postId) onRefreshPost;
@@ -47,6 +52,10 @@ class NestedPostList extends ConsumerStatefulWidget {
     required this.scrollController,
     required this.headerKey,
     required this.isLoggedIn,
+    this.currentUserId,
+    this.currentUserIsAdmin = false,
+    this.removingPrivateMessageParticipantId,
+    this.onRemovePrivateMessageParticipant,
     required this.onReply,
     required this.onEdit,
     required this.onRefreshPost,
@@ -108,6 +117,22 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
       DeviceType.tablet => 7,
       DeviceType.desktop => 10,
     };
+  }
+
+  PrivateMessageParticipants _buildPrivateMessageParticipants(
+    PrivateMessageParticipantsLocation location,
+  ) {
+    return PrivateMessageParticipants(
+      key: ValueKey('pm-participants-${location.name}'),
+      location: location,
+      participants: widget.detail.allowedUsers,
+      currentUserId: widget.currentUserId,
+      canRemoveOtherParticipants:
+          widget.currentUserIsAdmin && widget.detail.canRemoveAllowedUsers,
+      removableSelfId: widget.detail.canRemoveSelfId,
+      removingParticipantId: widget.removingPrivateMessageParticipantId,
+      onRemoveParticipant: widget.onRemovePrivateMessageParticipant,
+    );
   }
 
   @override
@@ -180,6 +205,15 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
                         onChanged: widget.onSharedIssueChanged,
                       )
                     : null,
+              ),
+            ),
+
+          if (opPost != null &&
+              widget.detail.isPrivateMessage &&
+              widget.detail.allowedUsers.isNotEmpty)
+            SliverToBoxAdapter(
+              child: _buildPrivateMessageParticipants(
+                PrivateMessageParticipantsLocation.firstPost,
               ),
             ),
 
@@ -269,6 +303,15 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
           if (!ns.hasMoreRoots)
             SliverToBoxAdapter(
               child: MoreTopicsSection(detail: widget.detail),
+            ),
+
+          if (!ns.hasMoreRoots &&
+              widget.detail.isPrivateMessage &&
+              widget.detail.allowedUsers.isNotEmpty)
+            SliverToBoxAdapter(
+              child: _buildPrivateMessageParticipants(
+                PrivateMessageParticipantsLocation.bottom,
+              ),
             ),
 
           SliverToBoxAdapter(

@@ -1624,6 +1624,11 @@ class TopicDetail {
   // 话题权限（来自 details）
   final bool canEdit; // 是否可以编辑话题元数据（标题、分类、标签）
 
+  // 私信成员与移除权限（来自 details）
+  final List<TopicUser> allowedUsers;
+  final bool canRemoveAllowedUsers;
+  final int? canRemoveSelfId;
+
   // 话题书签相关
   final bool bookmarked; // 话题是否已被书签（Topic 级别）
   final int? bookmarkId; // 话题书签 ID（用于删除书签）
@@ -1685,6 +1690,9 @@ class TopicDetail {
     this.archetype = 'regular',
     this.pmWithNonHumanUser = false,
     this.canEdit = false,
+    this.allowedUsers = const [],
+    this.canRemoveAllowedUsers = false,
+    this.canRemoveSelfId,
     this.bookmarked = false,
     this.bookmarkId,
     this.bookmarkName,
@@ -1820,6 +1828,11 @@ class TopicDetail {
       );
     }
 
+    final detailsJson = json['details'];
+    final details = detailsJson is Map
+        ? Map<String, dynamic>.from(detailsJson)
+        : const <String, dynamic>{};
+
     return TopicDetail(
       id: json['id'] as int,
       title: json['title'] as String? ?? '',
@@ -1845,10 +1858,9 @@ class TopicDetail {
       sharedIssueCount: json['shared_issue_count'] as int? ?? 0,
       userCreatedSharedIssue:
           json['user_created_shared_issue'] as bool? ?? false,
-      createdBy:
-          (json['details'] as Map<String, dynamic>?)?['created_by'] != null
+      createdBy: details['created_by'] is Map
           ? TopicUser.fromJson(
-              (json['details']!['created_by'] as Map<String, dynamic>),
+              Map<String, dynamic>.from(details['created_by'] as Map),
             )
           : null,
       summarizable: json['summarizable'] as bool? ?? false,
@@ -1857,12 +1869,15 @@ class TopicDetail {
       archetype: json['archetype'] as String? ?? 'regular',
       pmWithNonHumanUser: json['pm_with_non_human_user'] as bool? ?? false,
       notificationLevel: TopicNotificationLevel.fromValue(
-        (json['details'] as Map<String, dynamic>?)?['notification_level']
-            as int?,
+        details['notification_level'] as int?,
       ),
-      canEdit:
-          (json['details'] as Map<String, dynamic>?)?['can_edit'] as bool? ??
-          false,
+      canEdit: details['can_edit'] as bool? ?? false,
+      allowedUsers: (details['allowed_users'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((user) => TopicUser.fromJson(Map<String, dynamic>.from(user)))
+          .toList(growable: false),
+      canRemoveAllowedUsers: details['can_remove_allowed_users'] == true,
+      canRemoveSelfId: (details['can_remove_self_id'] as num?)?.toInt(),
       bookmarked: topicBookmarked,
       bookmarkId: topicBookmarkId,
       bookmarkName: topicBookmarkName,
@@ -1908,6 +1923,10 @@ class TopicDetail {
     String? archetype,
     bool? pmWithNonHumanUser,
     bool? canEdit,
+    List<TopicUser>? allowedUsers,
+    bool? canRemoveAllowedUsers,
+    int? canRemoveSelfId,
+    bool clearCanRemoveSelfId = false,
     bool? bookmarked,
     int? bookmarkId,
     bool clearBookmarkId = false,
@@ -1951,6 +1970,12 @@ class TopicDetail {
       archetype: archetype ?? this.archetype,
       pmWithNonHumanUser: pmWithNonHumanUser ?? this.pmWithNonHumanUser,
       canEdit: canEdit ?? this.canEdit,
+      allowedUsers: allowedUsers ?? this.allowedUsers,
+      canRemoveAllowedUsers:
+          canRemoveAllowedUsers ?? this.canRemoveAllowedUsers,
+      canRemoveSelfId: clearCanRemoveSelfId
+          ? null
+          : (canRemoveSelfId ?? this.canRemoveSelfId),
       bookmarked: bookmarked ?? this.bookmarked,
       bookmarkId: clearBookmarkId ? null : (bookmarkId ?? this.bookmarkId),
       bookmarkName: clearBookmarkName
