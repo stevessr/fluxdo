@@ -42,6 +42,28 @@
       }
     }
   },
+  "topicDetail_removeFromReadLater": "移出浮窗",
+  "topicDetail_removeFromReadLaterSuccess": "已从浮窗移除",
+  "topicDetail_replyLabel": "回复",
+  "topicDetail_scrollToTop": "回到顶部",
+  "topicDetail_searchHint": "在本话题中搜索...",
+  "topicDetail_searchTopic": "搜索本话题",
+  "topicDetail_setToLevel": "已设置为{level}",
+  "@topicDetail_setToLevel": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_removedPrivateMessageParticipant": "已将 @{username} 移出私信",
+  "@topicDetail_removedPrivateMessageParticipant": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
   "topicDetail_removeFromReadLater": "从浮窗移除",
   "topicDetail_removeFromReadLaterSuccess": "已从浮窗移除",
   "topicDetail_replyLabel": "回复",

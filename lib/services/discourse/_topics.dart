@@ -12,9 +12,9 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       '/latest.json',
       queryParameters: {'topic_ids': topicIds.join(',')},
     );
-    // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
+    // isolate 内构造 (jsonDecode 已由 BackgroundTransformer 移出主线程，
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
-    // Isolate.exit 转移,回传零拷贝
+    // Isolate.exit 转移，回传零拷贝
     return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
   }
 
@@ -36,9 +36,9 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       '/latest.json',
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
-    // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
+    // isolate 内构造 (jsonDecode 已由 BackgroundTransformer 移出主线程，
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
-    // Isolate.exit 转移,回传零拷贝
+    // Isolate.exit 转移，回传零拷贝
     return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
   }
 
@@ -100,9 +100,9 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     }
 
     final response = await _dio.get(path, queryParameters: queryParams.isNotEmpty ? queryParams : null);
-    // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
+    // isolate 内构造 (jsonDecode 已由 BackgroundTransformer 移出主线程，
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
-    // Isolate.exit 转移,回传零拷贝
+    // Isolate.exit 转移，回传零拷贝
     return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
   }
 
@@ -117,9 +117,9 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       '/new.json',
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
-    // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
+    // isolate 内构造 (jsonDecode 已由 BackgroundTransformer 移出主线程，
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
-    // Isolate.exit 转移,回传零拷贝
+    // Isolate.exit 转移，回传零拷贝
     return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
   }
 
@@ -133,9 +133,9 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       '/unread.json',
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
-    // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
+    // isolate 内构造 (jsonDecode 已由 BackgroundTransformer 移出主线程，
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
-    // Isolate.exit 转移,回传零拷贝
+    // Isolate.exit 转移，回传零拷贝
     return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
   }
 
@@ -149,9 +149,9 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       '/unseen.json',
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
-    // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
+    // isolate 内构造 (jsonDecode 已由 BackgroundTransformer 移出主线程，
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
-    // Isolate.exit 转移,回传零拷贝
+    // Isolate.exit 转移，回传零拷贝
     return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
   }
 
@@ -165,9 +165,9 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       '/hot.json',
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
-    // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
+    // isolate 内构造 (jsonDecode 已由 BackgroundTransformer 移出主线程，
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
-    // Isolate.exit 转移,回传零拷贝
+    // Isolate.exit 转移，回传零拷贝
     return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
   }
 
@@ -199,9 +199,9 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       options: (options ?? Options())
           .copyWith(responseType: ResponseType.plain),
     );
-    // isolate 内 jsonDecode + fromJson:大话题响应几百 KB~几 MB,主线程
+    // isolate 内 jsonDecode + fromJson:大话题响应几百 KB~几 MB，主线程
     // 解析实测把 DartIsolate::HandleMessage 顶到 46~56ms(滚动/进话题时
-    // 直接掉帧)。结果对象经 Isolate.exit 转移,回传零拷贝。
+    // 直接掉帧)。结果对象经 Isolate.exit 转移，回传零拷贝。
     return compute(_parseTopicDetailJson, response.data!);
   }
 
@@ -230,8 +230,8 @@ mixin _TopicsMixin on _DiscourseServiceBase {
   /// 批量获取帖子内容
   ///
   /// [includeSuggested] 对齐网页版 post-stream 的 `include_suggested`:话题
-  /// 详情首屏未到末尾时服务端不下发推荐话题,靠翻页请求补一次(已拿到就别
-  /// 再要,服务端每次都要多跑一轮 TopicQuery)。
+  /// 详情首屏未到末尾时服务端不下发推荐话题，靠翻页请求补一次 (已拿到就别
+  /// 再要，服务端每次都要多跑一轮 TopicQuery)。
   Future<PostStream> getPosts(int topicId, List<int> postIds, {bool includeSuggested = false}) async {
     final response = await _dio.get<String>(
       '/t/$topicId/posts.json',
@@ -260,17 +260,17 @@ mixin _TopicsMixin on _DiscourseServiceBase {
 
   Future<TopicListResponse> getTopTopics() async {
     final response = await _dio.get('/top.json');
-    // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
+    // isolate 内构造 (jsonDecode 已由 BackgroundTransformer 移出主线程，
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
-    // Isolate.exit 转移,回传零拷贝
+    // Isolate.exit 转移，回传零拷贝
     return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
   }
 
   Future<TopicListResponse> getCategoryTopics(String categorySlug) async {
     final response = await _dio.get('/c/$categorySlug.json');
-    // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
+    // isolate 内构造 (jsonDecode 已由 BackgroundTransformer 移出主线程，
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
-    // Isolate.exit 转移,回传零拷贝
+    // Isolate.exit 转移，回传零拷贝
     return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
   }
 
@@ -550,12 +550,12 @@ mixin _TopicsMixin on _DiscourseServiceBase {
   }
 }
 
-/// isolate 入口:话题详情响应解析(jsonDecode + fromJson 全部移出 UI 线程)
+/// isolate 入口：话题详情响应解析 (jsonDecode + fromJson 全部移出 UI 线程)
 TopicDetail _parseTopicDetailJson(String body) {
   return TopicDetail.fromJson(jsonDecode(body) as Map<String, dynamic>);
 }
 
-/// isolate 入口:posts 响应解析(含 topic 级 badges 注入)
+/// isolate 入口:posts 响应解析 (含 topic 级 badges 注入)
 PostStream _parsePostStreamJson(String body) {
   final data = jsonDecode(body) as Map<String, dynamic>;
   final streamJson = data.containsKey('post_stream')
@@ -567,8 +567,8 @@ PostStream _parsePostStreamJson(String body) {
     data,
     streamJson['posts'] as List<dynamic>?,
   );
-  // 推荐话题挂在响应顶层(与 post_stream 同级),仅 include_suggested=true
-  // 的请求才有;没有就原样返回,不必重建对象。
+  // 推荐话题挂在响应顶层 (与 post_stream 同级),仅 include_suggested=true
+  // 的请求才有;没有就原样返回，不必重建对象。
   final suggested = parseSuggestedTopicList(data['suggested_topics']);
   final related = parseSuggestedTopicList(data['related_topics']);
   if (suggested.isEmpty && related.isEmpty) return postStream;
@@ -581,7 +581,7 @@ PostStream _parsePostStreamJson(String body) {
   );
 }
 
-/// isolate 入口:话题列表响应构造
+/// isolate 入口：话题列表响应构造
 TopicListResponse _parseTopicListResponse(Map<String, dynamic> data) {
   return TopicListResponse.fromJson(data);
 }
