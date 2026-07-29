@@ -12,7 +12,6 @@ import '../widgets/desktop_refresh_indicator.dart';
 import '../services/discourse_cache_manager.dart';
 import 'webview_page.dart';
 import 'login_page.dart';
-import 'qr_login_display_page.dart';
 import 'browsing_history_page.dart';
 import 'bookmarks_page.dart';
 import 'export_history_page.dart';
@@ -46,7 +45,7 @@ import '../services/cdk_oauth_service.dart';
 import '../l10n/s.dart';
 import '../navigation/nav_action_bus.dart';
 import '../services/toast_service.dart';
-import '../services/account_manager.dart';
+import '../widgets/auth/account_switch_sheet.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/responsive.dart';
 import '../services/emoji_handler.dart';
@@ -260,16 +259,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         'event': 'logout_active',
         'message': '用户主动退出登录',
       });
-
-      // 从多账号管理器移除
-      final currentUser = ref.read(currentUserProvider).value;
-      if (currentUser?.username != null) {
-        try {
-          await AccountManager().removeAccount(currentUser!.username);
-        } catch (e) {
-          debugPrint('[ProfilePage] 从多账号管理器移除失败: $e');
-        }
-      }
 
       await ref.read(discourseServiceProvider).logout(callApi: true);
       if (mounted) {
@@ -846,21 +835,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  Widget _buildCommunityCard(ThemeData theme, {required bool canAccessInviteLinks}) {
-    final username = ref.read(currentUserProvider).value?.username;
+  Widget _buildCommunityCard(
+    ThemeData theme, {
+    required bool canAccessInviteLinks,
+  }) {
     return SegmentedCardGroup(
       children: [
-        _buildOptionTile(
-          icon: Symbols.qr_code_rounded,
-          iconColor: Colors.teal,
-          title: context.l10n.login_qrShowCode,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => QrLoginDisplayPage(username: username),
-            ),
-          ),
-        ),
         _buildOptionTile(
           icon: Symbols.mail_rounded,
           iconColor: Colors.indigo,
@@ -1030,7 +1010,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => EmbeddedStackScope.openSettings(context),
+              onPressed: () => showAccountSwitchSheet(context, ref),
               icon: const Icon(Symbols.swap_horiz_rounded, size: 18),
               label: const Text('切换账号'),
               style: OutlinedButton.styleFrom(

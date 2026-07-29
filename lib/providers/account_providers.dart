@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/account_manager.dart';
 import '../services/discourse/discourse_service.dart';
@@ -49,10 +48,7 @@ class AccountNotifier extends AsyncNotifier<List<StoredAccount>> {
 /// 2. 写入 CookieJar `_t` cookie
 /// 3. 更新 [DiscourseService] 内部状态
 /// 4. 推进 [AuthSession] 使旧请求自动失效
-/// 5. 探测 token 有效性（避免静默登出）
-/// 6. 重载用户数据
-///
-/// 返回 true 表示切换成功。若 token 已过期/失效返回 false。
+/// 5. 重载用户数据
 Future<bool> switchToAccount({
   required String username,
   required WidgetRef ref,
@@ -66,10 +62,6 @@ Future<bool> switchToAccount({
     debugPrint('[AccountSwitch] 目标账号 $username 无有效 token');
     return false;
   }
-
-  // 先缓存当前用户信息，切换失败时恢复
-  final prevUsername = service.currentUsername;
-  final prevToken = service.tToken;
 
   // 写入 cookie jar
   final cookieJar = CookieJarService();
@@ -85,53 +77,18 @@ Future<bool> switchToAccount({
   // 重置预加载数据
   PreloadedDataService().reset();
 
-  // 探测 token 有效性（直接 dio 请求，不触发 auth 自愈逻辑）
-  var tokenValid = false;
+  // 刷新用户数据
+  ref.invalidate(currentUserProvider);
   try {
-    final response = await service.dio.get(
-      '/session/current.json',
-      options: Options(
-        extra: const {'skipAuthCheck': true, 'skipCsrf': true},
-        sendTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 8),
-      ),
-    );
-    final data = response.data;
-    if (data is Map<String, dynamic>) {
-      final currentUser = data['current_user'];
-      tokenValid =
-          currentUser is Map<String, dynamic> &&
-          currentUser['username']?.toString() == username;
-    }
+    await ref
+        .read(currentUserProvider.future)
+        .timeout(const Duration(seconds: 10));
   } catch (e) {
-    debugPrint('[AccountSwitch] token 探测失败: $e');
-  }
-
-  if (!tokenValid) {
-    debugPrint('[AccountSwitch] token 已失效，回滚到之前的账号');
-    // 恢复旧 cookie 和内存状态
-    if (prevToken != null) {
-      await cookieJar.setCookie('_t', prevToken);
-      service.setToken(prevToken);
-      if (prevUsername != null) {
-        await service.saveUsername(prevUsername);
-      }
-    } else {
-      // 之前没有登录态 → 直接清除
-      await cookieJar.deleteCookie('_t');
-      service.setToken('');
-    }
-    AuthSession().advance();
-    PreloadedDataService().reset();
-    ref.invalidate(currentUserProvider);
-    return false;
+    debugPrint('[AccountSwitch] 刷新用户数据失败: $e');
   }
 
   // 更新最后登录时间
   await manager.touchAccount(username);
-
-  // 重载用户数据
-  ref.invalidate(currentUserProvider);
   ref.invalidate(accountListProvider);
 
   return true;
