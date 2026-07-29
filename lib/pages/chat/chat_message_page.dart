@@ -120,16 +120,19 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   void _onCopyShareLink(ChatMessage message) {
     final baseUrl = DiscourseService.baseUrl;
-    final shareUrl = '$baseUrl/chat/channel/${widget.channelId}?message_id=${message.id}';
+    final shareUrl =
+        '$baseUrl/chat/channel/${widget.channelId}?message_id=${message.id}';
     Clipboard.setData(ClipboardData(text: shareUrl));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已复制分享链接到剪贴板')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已复制分享链接到剪贴板')));
   }
 
   void _copySelectedMessages(List<ChatMessage> allMessages) {
     if (_selectedMessageIds.isEmpty) return;
-    final selectedMsgs = allMessages.where((m) => _selectedMessageIds.contains(m.id)).toList();
+    final selectedMsgs = allMessages
+        .where((m) => _selectedMessageIds.contains(m.id))
+        .toList();
     selectedMsgs.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     final buffer = StringBuffer();
@@ -155,9 +158,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           .quoteMessages(ids);
       if (!mounted) return;
       if (markdown.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('生成引用失败：返回为空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('生成引用失败：返回为空')));
         return;
       }
       await Clipboard.setData(ClipboardData(text: markdown));
@@ -168,9 +171,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('生成引用失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('生成引用失败: $e')));
     }
   }
 
@@ -190,9 +193,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('置顶操作失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('置顶操作失败: $e')));
     }
   }
 
@@ -202,14 +205,14 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           .read(chatMessagesProvider(widget.channelId).notifier)
           .restoreMessage(message.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已恢复消息')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已恢复消息')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('恢复失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('恢复失败: $e')));
     }
   }
 
@@ -374,15 +377,16 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             ref.read(chatMessagesProvider(widget.channelId)).value ?? [];
         final idx = loaded.indexWhere((m) => m.id == messageId);
         if (idx < 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('未找到被回复的消息')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('未找到被回复的消息')));
           return;
         }
         final max = _scrollController.position.maxScrollExtent;
         // ASC 列表中 idx 越大越新；reverse 下距底部比例 ≈ 1 - (idx+1)/n
-        final ratio =
-            loaded.length <= 1 ? 0.0 : 1.0 - ((idx + 1) / loaded.length);
+        final ratio = loaded.length <= 1
+            ? 0.0
+            : 1.0 - ((idx + 1) / loaded.length);
         _scrollController.animateTo(
           (max * ratio).clamp(0.0, max),
           duration: const Duration(milliseconds: 250),
@@ -391,9 +395,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('定位消息失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('定位消息失败: $e')));
     }
   }
 
@@ -446,8 +450,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       if (!mounted) return;
     }
     _scrollToBottom(animate: true);
-    final messages =
-        ref.read(chatMessagesProvider(widget.channelId)).asData?.value;
+    final messages = ref
+        .read(chatMessagesProvider(widget.channelId))
+        .asData
+        ?.value;
     if (messages != null) _markAsRead(messages);
   }
 
@@ -482,7 +488,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     final textBeforeCursor = text.substring(0, cursorPosition);
     final lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
-    if (lastAtIndex >= 0 && (lastAtIndex == 0 || textBeforeCursor[lastAtIndex - 1] == ' ')) {
+    if (lastAtIndex >= 0 &&
+        (lastAtIndex == 0 || textBeforeCursor[lastAtIndex - 1] == ' ')) {
       final filter = textBeforeCursor.substring(lastAtIndex + 1);
       if (!filter.contains(' ')) {
         _fetchMentionSuggestions(filter);
@@ -518,10 +525,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     final lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
     if (lastAtIndex >= 0) {
-      final newText = text.substring(0, lastAtIndex) + '@${user.username} ' + text.substring(cursorPosition);
+      final newText =
+          text.substring(0, lastAtIndex) +
+          '@${user.username} ' +
+          text.substring(cursorPosition);
       _textController.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.collapsed(offset: lastAtIndex + user.username.length + 2),
+        selection: TextSelection.collapsed(
+          offset: lastAtIndex + user.username.length + 2,
+        ),
       );
     }
     setState(() => _showMentionSuggestions = false);
@@ -569,11 +581,14 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   /// 发送或更新消息
   Future<void> _sendMessageOrUpdate() async {
     final text = _textController.text.trim();
-    if ((text.isEmpty && _uploadIds.isEmpty) || _isSending || _isUploadingImage) return;
+    if ((text.isEmpty && _uploadIds.isEmpty) || _isSending || _isUploadingImage)
+      return;
 
     setState(() => _isSending = true);
     try {
-      final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
+      final notifier = ref.read(
+        chatMessagesProvider(widget.channelId).notifier,
+      );
       if (_editingMessage != null) {
         await notifier.editMessage(_editingMessage!.id, text);
       } else {
@@ -603,7 +618,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void _onStartReply(ChatMessage message) {
     // 消息串开启时：对齐 Discourse replyTo —— 创建/进入消息串，而非频道内引用回复
     final channel = _currentChannelOrNull();
-    final threadingOn = channel?.threadingEnabled == true ||
+    final threadingOn =
+        channel?.threadingEnabled == true ||
         message.thread?.force == true ||
         message.thread != null;
     if (threadingOn) {
@@ -643,9 +659,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('打开消息串失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('打开消息串失败: $e')));
     }
   }
 
@@ -708,7 +724,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     if (confirmed != true || !mounted) return;
 
     try {
-      final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
+      final notifier = ref.read(
+        chatMessagesProvider(widget.channelId).notifier,
+      );
       await notifier.deleteMessage(message.id);
     } catch (e) {
       if (!mounted) return;
@@ -782,18 +800,13 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       ),
       builder: (ctx) {
         final theme = Theme.of(ctx);
-        // Discourse 默认快捷反应 + 最近使用
-        const defaults = ['heart', '+1', 'smile', 'tada', 'open_mouth'];
+        // 仅使用最近使用的表情（用户自己的习惯，不添加默认表情）
         return SafeArea(
           child: FutureBuilder<List<String>>(
             future: _loadRecentReactionEmojis(),
             builder: (ctx, snapshot) {
               final recent = snapshot.data ?? const <String>[];
-              final emojis = <String>[
-                ...recent,
-                for (final e in defaults)
-                  if (!recent.contains(e)) e,
-              ].take(12).toList();
+              final emojis = recent.take(12).toList();
 
               return Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -819,8 +832,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               _saveRecentReactionEmoji(emoji);
                               ref
                                   .read(
-                                    chatMessagesProvider(widget.channelId)
-                                        .notifier,
+                                    chatMessagesProvider(
+                                      widget.channelId,
+                                    ).notifier,
                                   )
                                   .toggleReaction(message.id, emoji);
                             },
@@ -907,7 +921,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     }
 
     final currentUser = ref.read(currentUserProvider).value;
-    final canFlag = !isOwnMessage &&
+    final canFlag =
+        !isOwnMessage &&
         (message.availableFlags == null || message.availableFlags!.isNotEmpty);
 
     showModalBottomSheet(
@@ -925,9 +940,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 future: _loadRecentReactionEmojis(),
                 builder: (ctx, snapshot) {
                   final recentEmojis = snapshot.data ?? [];
-                  final availableWidth = MediaQuery.of(ctx).size.width - 32 - 46;
-                  final maxCount =
-                      (availableWidth / 46).floor().clamp(0, recentEmojis.length);
+                  final availableWidth =
+                      MediaQuery.of(ctx).size.width - 32 - 46;
+                  final maxCount = (availableWidth / 46).floor().clamp(
+                    0,
+                    recentEmojis.length,
+                  );
                   final displayEmojis = recentEmojis.take(maxCount).toList();
 
                   return Padding(
@@ -946,9 +964,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                       Navigator.pop(ctx);
                                       _saveRecentReactionEmoji(emoji);
                                       ref
-                                          .read(chatMessagesProvider(
-                                                  widget.channelId)
-                                              .notifier)
+                                          .read(
+                                            chatMessagesProvider(
+                                              widget.channelId,
+                                            ).notifier,
+                                          )
                                           .toggleReaction(message.id, emoji);
                                     },
                                     borderRadius: BorderRadius.circular(24),
@@ -992,9 +1012,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               child: Icon(
                                 Icons.add_rounded,
                                 size: 22,
-                                color: Theme.of(ctx)
-                                    .colorScheme
-                                    .onPrimaryContainer,
+                                color: Theme.of(
+                                  ctx,
+                                ).colorScheme.onPrimaryContainer,
                               ),
                             ),
                           ),
@@ -1174,7 +1194,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     return UrlHelper.resolveUrlWithCdn(template);
   }
 
-
   /// 对齐 Discourse 侧栏 leave：
   /// - DM（含群组）：unfollow
   /// - 公开频道：leaveChannel API
@@ -1222,14 +1241,14 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       }
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.chat_leave_success(title))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.chat_leave_success(title))));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.chat_leave_failed('$e'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.chat_leave_failed('$e'))));
     }
   }
 
@@ -1281,8 +1300,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     }
 
     // 优先用 me/channels；浏览未加入频道时走详情 API（含 status 只读）
-    final channelDetailAsync =
-        ref.watch(chatChannelDetailProvider(widget.channelId));
+    final channelDetailAsync = ref.watch(
+      chatChannelDetailProvider(widget.channelId),
+    );
     final currentChannel = channelDetailAsync.value;
     final isStaff = currentUser?.isStaff ?? false;
     final canEditChannel =
@@ -1325,161 +1345,160 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               ],
             )
           : _isMultiSelectMode
-              ? AppBar(
-                  leading: IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: _exitMultiSelectMode,
-                  ),
-                  title: Text('已选择 ${_selectedMessageIds.length} 条'),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        final msgs = messagesAsync.value ?? [];
-                        setState(() {
-                          _selectedMessageIds.addAll(msgs.map((m) => m.id));
-                        });
-                      },
-                      child: const Text('全选'),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.format_quote_rounded),
-                      tooltip: '引用选中消息',
-                      onPressed: _selectedMessageIds.isEmpty
-                          ? null
-                          : _quoteSelectedMessages,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.copy_rounded),
-                      tooltip: '复制选中消息',
-                      onPressed: () =>
-                          _copySelectedMessages(messagesAsync.value ?? []),
-                    ),
-                  ],
-                )
-              : AppBar(
-                  title: Text(widget.channelTitle),
-                  actions: [
-                    // 公开频道有编辑权限时，编辑入口放在顶部（对齐需求）
-                    if (canEditChannel &&
-                        (currentChannel?.isCategoryChannel ?? false))
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined),
-                        tooltip: '编辑频道',
-                        onPressed: () {
-                          ChatChannelSettingsSheet.show(
-                            context,
-                            widget.channelId,
-                            widget.channelTitle,
-                          );
-                        },
-                      ),
-                    // 收藏（与频道列表/设置页共用 chatFavoritesProvider）
-                    Builder(
-                      builder: (context) {
-                        final isFavorite = ref
-                            .watch(chatFavoritesProvider)
-                            .contains(widget.channelId);
-                        return IconButton(
-                          icon: Icon(
-                            isFavorite
-                                ? Icons.star_rounded
-                                : Icons.star_outline_rounded,
-                            color: isFavorite ? Colors.amber : null,
-                          ),
-                          tooltip: isFavorite ? '取消收藏' : '收藏频道',
-                          onPressed: () {
-                            ref
-                                .read(chatFavoritesProvider.notifier)
-                                .toggleFavorite(widget.channelId);
-                          },
-                        );
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.search_rounded),
-                      tooltip: '搜索对话',
-                      onPressed: _enterSearchMode,
-                    ),
-                    // 消息串开启时显示入口：进入频道消息串列表
-                    // （对齐 Discourse threads-list-button → chat.channel.threads）
-                    if (currentChannel?.threadingEnabled == true)
-                      IconButton(
-                        icon: Icon(
-                          Icons.forum_outlined,
-                          color: theme.colorScheme.primary,
-                        ),
-                        tooltip: '消息串列表',
-                        onPressed: () {
-                          ChatThreadListSheet.show(
-                            context,
-                            channelId: widget.channelId,
-                            channelTitle: widget.channelTitle,
-                          );
-                        },
-                      ),
-                    if (!_isAtBottom && messagesAsync.value != null)
-                      IconButton(
-                        icon: const Icon(Icons.arrow_downward_rounded),
-                        tooltip: context.l10n.chat_scroll_to_bottom,
-                        onPressed: _scrollToLatest,
-                      ),
-                    IconButton(
-                      icon: const Icon(Icons.people_outline_rounded),
-                      tooltip: context.l10n.chat_channel_members,
-                      onPressed: () {
-                        ChatChannelMembersSheet.show(
-                          context,
-                          widget.channelId,
-                          widget.channelTitle,
-                          canAddMembers:
-                              currentChannel?.canAddMembers ?? false,
-                          membersCountHint: currentChannel?.membersCount,
-                        );
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.tune_rounded),
-                      tooltip: '频道设置',
-                      onPressed: () {
-                        ChatChannelSettingsSheet.show(
-                          context,
-                          widget.channelId,
-                          widget.channelTitle,
-                        );
-                      },
-                    ),
-                    PopupMenuButton<String>(
-                      tooltip: '更多',
-                      onSelected: (value) async {
-                        if (value == 'leave') {
-                          await _leaveCurrentChannel(currentChannel);
-                        }
-                      },
-                      itemBuilder: (ctx) {
-                        final ch = currentChannel;
-                        final isDm = ch?.isDirectMessage == true;
-                        final isGroup = ch?.isGroupDm == true;
-                        final leaveLabel = isDm
-                            ? (isGroup
-                                ? context.l10n.chat_leave_group
-                                : context.l10n.chat_leave_dm)
-                            : context.l10n.chat_leave_channel;
-                        return [
-                          PopupMenuItem<String>(
-                            value: 'leave',
-                            enabled: ch?.isJoined != false,
-                            child: Text(
-                              leaveLabel,
-                              style: TextStyle(
-                                color: Theme.of(ctx).colorScheme.error,
-                              ),
-                            ),
-                          ),
-                        ];
-                      },
-                    ),
-                  ],
+          ? AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: _exitMultiSelectMode,
+              ),
+              title: Text('已选择 ${_selectedMessageIds.length} 条'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    final msgs = messagesAsync.value ?? [];
+                    setState(() {
+                      _selectedMessageIds.addAll(msgs.map((m) => m.id));
+                    });
+                  },
+                  child: const Text('全选'),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.format_quote_rounded),
+                  tooltip: '引用选中消息',
+                  onPressed: _selectedMessageIds.isEmpty
+                      ? null
+                      : _quoteSelectedMessages,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded),
+                  tooltip: '复制选中消息',
+                  onPressed: () =>
+                      _copySelectedMessages(messagesAsync.value ?? []),
+                ),
+              ],
+            )
+          : AppBar(
+              title: Text(widget.channelTitle),
+              actions: [
+                // 公开频道有编辑权限时，编辑入口放在顶部（对齐需求）
+                if (canEditChannel &&
+                    (currentChannel?.isCategoryChannel ?? false))
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: '编辑频道',
+                    onPressed: () {
+                      ChatChannelSettingsSheet.show(
+                        context,
+                        widget.channelId,
+                        widget.channelTitle,
+                      );
+                    },
+                  ),
+                // 收藏（与频道列表/设置页共用 chatFavoritesProvider）
+                Builder(
+                  builder: (context) {
+                    final isFavorite = ref
+                        .watch(chatFavoritesProvider)
+                        .contains(widget.channelId);
+                    return IconButton(
+                      icon: Icon(
+                        isFavorite
+                            ? Icons.star_rounded
+                            : Icons.star_outline_rounded,
+                        color: isFavorite ? Colors.amber : null,
+                      ),
+                      tooltip: isFavorite ? '取消收藏' : '收藏频道',
+                      onPressed: () {
+                        ref
+                            .read(chatFavoritesProvider.notifier)
+                            .toggleFavorite(widget.channelId);
+                      },
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.search_rounded),
+                  tooltip: '搜索对话',
+                  onPressed: _enterSearchMode,
+                ),
+                // 消息串开启时显示入口：进入频道消息串列表
+                // （对齐 Discourse threads-list-button → chat.channel.threads）
+                if (currentChannel?.threadingEnabled == true)
+                  IconButton(
+                    icon: Icon(
+                      Icons.forum_outlined,
+                      color: theme.colorScheme.primary,
+                    ),
+                    tooltip: '消息串列表',
+                    onPressed: () {
+                      ChatThreadListSheet.show(
+                        context,
+                        channelId: widget.channelId,
+                        channelTitle: widget.channelTitle,
+                      );
+                    },
+                  ),
+                if (!_isAtBottom && messagesAsync.value != null)
+                  IconButton(
+                    icon: const Icon(Icons.arrow_downward_rounded),
+                    tooltip: context.l10n.chat_scroll_to_bottom,
+                    onPressed: _scrollToLatest,
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.people_outline_rounded),
+                  tooltip: context.l10n.chat_channel_members,
+                  onPressed: () {
+                    ChatChannelMembersSheet.show(
+                      context,
+                      widget.channelId,
+                      widget.channelTitle,
+                      canAddMembers: currentChannel?.canAddMembers ?? false,
+                      membersCountHint: currentChannel?.membersCount,
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.tune_rounded),
+                  tooltip: '频道设置',
+                  onPressed: () {
+                    ChatChannelSettingsSheet.show(
+                      context,
+                      widget.channelId,
+                      widget.channelTitle,
+                    );
+                  },
+                ),
+                PopupMenuButton<String>(
+                  tooltip: '更多',
+                  onSelected: (value) async {
+                    if (value == 'leave') {
+                      await _leaveCurrentChannel(currentChannel);
+                    }
+                  },
+                  itemBuilder: (ctx) {
+                    final ch = currentChannel;
+                    final isDm = ch?.isDirectMessage == true;
+                    final isGroup = ch?.isGroupDm == true;
+                    final leaveLabel = isDm
+                        ? (isGroup
+                              ? context.l10n.chat_leave_group
+                              : context.l10n.chat_leave_dm)
+                        : context.l10n.chat_leave_channel;
+                    return [
+                      PopupMenuItem<String>(
+                        value: 'leave',
+                        enabled: ch?.isJoined != false,
+                        child: Text(
+                          leaveLabel,
+                          style: TextStyle(
+                            color: Theme.of(ctx).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ];
+                  },
+                ),
+              ],
+            ),
       body: Column(
         children: [
           if (_isSearchMode)
@@ -1513,8 +1532,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       // reverse：index 0 贴在视觉底部 = 最新消息，
                       // 首屏无需再等 jump，从根上消除「数据在但屏幕空白」。
                       reverse: true,
-                      scrollCacheExtent:
-                          const ScrollCacheExtent.pixels(800),
+                      scrollCacheExtent: const ScrollCacheExtent.pixels(800),
                       // reverse 会翻转 padding：top 落在视觉底部（靠近输入框）
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                       // +1：最旧一侧的「加载更多」指示器
@@ -1528,7 +1546,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                         // messages 仍为时间升序；reverse 映射最新到 index 0
                         final messageIndex = messages.length - 1 - index;
                         final message = messages[messageIndex];
-                        final isOwnMessage = currentUser != null &&
+                        final isOwnMessage =
+                            currentUser != null &&
                             message.user != null &&
                             message.user!.id == currentUser.id;
 
@@ -1544,13 +1563,30 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           );
                         }
 
+                        // 连续相同发送者的消息分组：不重复显示昵称和头像
+                        // 昵称只显示在第一条（最上面），头像只显示在最后一条
+                        final bool isFirstInGroup;
+                        final bool isLastInGroup;
+                        if (!isOwnMessage && message.user != null) {
+                          final userId = message.user!.id;
+                          isFirstInGroup =
+                              messageIndex == 0 ||
+                              messages[messageIndex - 1].user?.id != userId;
+                          isLastInGroup =
+                              messageIndex == messages.length - 1 ||
+                              messages[messageIndex + 1].user?.id != userId;
+                        } else {
+                          isFirstInGroup = false;
+                          isLastInGroup = false;
+                        }
+
                         // 查找关联回复消息：优先用当前窗口内完整消息，
                         // 找不到则回退到服务端嵌套的 in_reply_to 摘要。
                         // 消息串开启时对齐 Discourse hideReplyToInfo：
                         // 不展示频道内引用条，改走消息串指示器。
                         final threadingOn =
                             currentChannel?.threadingEnabled == true ||
-                                message.thread?.force == true;
+                            message.thread?.force == true;
                         ChatMessage? replyToMsg;
                         if (!threadingOn && message.inReplyToId != null) {
                           for (final m in messages) {
@@ -1571,14 +1607,16 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               message: message,
                               replyToMessage: replyToMsg,
                               isOwnMessage: isOwnMessage,
+                              showSender: isFirstInGroup,
+                              showAvatar: isLastInGroup,
                               avatarUrl: _buildAvatarUrl(message.user),
                               theme: theme,
                               threadingEnabled: threadingOn,
                               isMultiSelectMode: _isMultiSelectMode,
-                              isSelected:
-                                  _selectedMessageIds.contains(message.id),
-                              onToggleSelect: (id) =>
-                                  _toggleSelectMessage(id),
+                              isSelected: _selectedMessageIds.contains(
+                                message.id,
+                              ),
+                              onToggleSelect: (id) => _toggleSelectMessage(id),
                               onLongPress: () => _showMessageActionSheet(
                                 message,
                                 isOwnMessage,
@@ -1588,18 +1626,20 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   : null,
                               onToggleReaction: (emoji) {
                                 ref
-                                    .read(chatMessagesProvider(
-                                            widget.channelId)
-                                        .notifier)
+                                    .read(
+                                      chatMessagesProvider(
+                                        widget.channelId,
+                                      ).notifier,
+                                    )
                                     .toggleReaction(message.id, emoji);
                               },
                               onReactButtonTap: () =>
                                   _showQuickReactionPicker(message),
                               onReplyTap: message.inReplyToId != null
-                                  ? () =>
-                                      _jumpToMessage(message.inReplyToId!)
+                                  ? () => _jumpToMessage(message.inReplyToId!)
                                   : null,
-                              onThreadTap: (message.thread != null &&
+                              onThreadTap:
+                                  (message.thread != null &&
                                       message.thread!.hasVisibleReplies)
                                   ? () => _openThreadFromIndicator(message)
                                   : null,
@@ -1614,8 +1654,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     ),
                   );
                 },
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, stack) => ErrorView(
                   error: error,
                   stackTrace: stack,
@@ -1683,9 +1722,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final message = _searchResults[index];
-        final username = message.user?.name ??
-            message.user?.username ??
-            '用户';
+        final username = message.user?.name ?? message.user?.username ?? '用户';
         final preview = message.message.isNotEmpty
             ? message.message
             : (message.cooked?.replaceAll(RegExp(r'<[^>]*>'), '') ?? '');
@@ -1696,16 +1733,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             radius: 18,
             fallbackText: username,
           ),
-          title: Text(
-            username,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Text(
-            preview,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          title: Text(username, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis),
           trailing: Text(
             TimeUtils.formatCompactTime(message.createdAt),
             style: theme.textTheme.labelSmall?.copyWith(
@@ -1729,7 +1758,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.6,
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
@@ -1754,9 +1785,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             onPressed: () => notifier.retryLoadMore(),
             icon: const Icon(Icons.refresh_rounded, size: 16),
             label: const Text('加载历史消息失败，点击重试'),
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-            ),
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
           ),
         ),
       );
@@ -1826,11 +1855,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     // 频道详情未加载前保守禁用输入，避免关闭/只读频道短暂可发
     final canSend = channel == null
         ? false
-        : channel.canSendMessages(
-            isStaff: isStaff,
-            userSilenced: userSilenced,
-          );
-    final disabledReason = channel?.sendDisabledReason(
+        : channel.canSendMessages(isStaff: isStaff, userSilenced: userSilenced);
+    final disabledReason =
+        channel?.sendDisabledReason(
           isStaff: isStaff,
           userSilenced: userSilenced,
         ) ??
@@ -1895,93 +1922,96 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
                 // 输入框与操作按钮
                 if (canSend)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      // 图片附件上传按钮
-                      IconButton(
-                        onPressed: _isUploadingImage ? null : _pickAndUploadImage,
-                        icon: const Icon(Icons.add_photo_alternate_rounded),
-                        color: theme.colorScheme.onSurfaceVariant,
-                        tooltip: context.l10n.chat_upload_image,
-                      ),
-                      // 表情与贴纸切换按钮
-                      IconButton(
-                        onPressed: () {
-                          if (_showEmojiPicker) {
-                            setState(() => _showEmojiPicker = false);
-                            _inputFocusNode.requestFocus();
-                          } else {
-                            _inputFocusNode.unfocus();
-                            setState(() => _showEmojiPicker = true);
-                          }
-                        },
-                        icon: Icon(
-                          _showEmojiPicker
-                              ? Icons.keyboard_rounded
-                              : Icons.sentiment_satisfied_alt_rounded,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // 图片附件上传按钮
+                        IconButton(
+                          onPressed: _isUploadingImage
+                              ? null
+                              : _pickAndUploadImage,
+                          icon: const Icon(Icons.add_photo_alternate_rounded),
+                          color: theme.colorScheme.onSurfaceVariant,
+                          tooltip: context.l10n.chat_upload_image,
                         ),
-                        color: _showEmojiPicker
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurfaceVariant,
-                        tooltip: '表情与贴纸',
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _textController,
-                          focusNode: _inputFocusNode,
-                          textInputAction: TextInputAction.send,
-                          maxLines: 5,
-                          minLines: 1,
-                          onTap: () {
+                        // 表情与贴纸切换按钮
+                        IconButton(
+                          onPressed: () {
                             if (_showEmojiPicker) {
                               setState(() => _showEmojiPicker = false);
+                              _inputFocusNode.requestFocus();
+                            } else {
+                              _inputFocusNode.unfocus();
+                              setState(() => _showEmojiPicker = true);
                             }
                           },
-                          onSubmitted: (_) => _sendMessageOrUpdate(),
-                          decoration: InputDecoration(
-                            hintText: context.l10n.chat_input_hint,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide.none,
+                          icon: Icon(
+                            _showEmojiPicker
+                                ? Icons.keyboard_rounded
+                                : Icons.sentiment_satisfied_alt_rounded,
+                          ),
+                          color: _showEmojiPicker
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                          tooltip: '表情与贴纸',
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _textController,
+                            focusNode: _inputFocusNode,
+                            textInputAction: TextInputAction.send,
+                            maxLines: 5,
+                            minLines: 1,
+                            onTap: () {
+                              if (_showEmojiPicker) {
+                                setState(() => _showEmojiPicker = false);
+                              }
+                            },
+                            onSubmitted: (_) => _sendMessageOrUpdate(),
+                            decoration: InputDecoration(
+                              hintText: context.l10n.chat_input_hint,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor:
+                                  theme.colorScheme.surfaceContainerHighest,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              isDense: true,
                             ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surfaceContainerHighest,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            isDense: true,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        onPressed: (_isSending || _isUploadingImage)
-                            ? null
-                            : _sendMessageOrUpdate,
-                        icon: _isSending
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: theme.colorScheme.primary,
+                        const SizedBox(width: 4),
+                        IconButton(
+                          onPressed: (_isSending || _isUploadingImage)
+                              ? null
+                              : _sendMessageOrUpdate,
+                          icon: _isSending
+                              ? SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                )
+                              : Icon(
+                                  _editingMessage != null
+                                      ? Icons.check_rounded
+                                      : Icons.send_rounded,
                                 ),
-                              )
-                            : Icon(
-                                _editingMessage != null
-                                    ? Icons.check_rounded
-                                    : Icons.send_rounded,
-                              ),
-                        color: theme.colorScheme.primary,
-                        tooltip: context.l10n.chat_send,
-                      ),
-                    ],
+                          color: theme.colorScheme.primary,
+                          tooltip: context.l10n.chat_send,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
                 // 表情 / 表情包面板
                 if (canSend && _showEmojiPicker)
@@ -2099,7 +2129,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                   color: Colors.black54,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+                child: const Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -2157,6 +2191,12 @@ class _ChatMessageBubble extends StatefulWidget {
   final ChatMessage message;
   final ChatMessage? replyToMessage;
   final bool isOwnMessage;
+
+  /// 是否显示发送者昵称（连续相同发送者的第一条消息）
+  final bool showSender;
+
+  /// 是否显示发送者头像（连续相同发送者的最后一条消息）
+  final bool showAvatar;
   final String? avatarUrl;
   final ThemeData theme;
   final VoidCallback onLongPress;
@@ -2175,6 +2215,8 @@ class _ChatMessageBubble extends StatefulWidget {
     required this.message,
     this.replyToMessage,
     required this.isOwnMessage,
+    required this.showSender,
+    required this.showAvatar,
     this.avatarUrl,
     required this.theme,
     required this.onLongPress,
@@ -2201,6 +2243,8 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
   ChatMessage get message => widget.message;
   ChatMessage? get replyToMessage => widget.replyToMessage;
   bool get isOwnMessage => widget.isOwnMessage;
+  bool get showSender => widget.showSender;
+  bool get showAvatar => widget.showAvatar;
   String? get avatarUrl => widget.avatarUrl;
   ThemeData get theme => widget.theme;
   VoidCallback get onLongPress => widget.onLongPress;
@@ -2270,10 +2314,12 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
     // 1. 从 uploads 字典列表中提取 HTTP 图像 URL (优先使用 url / full_url / short_path)
     if (message.uploads != null) {
       for (final u in message.uploads!) {
-        final path = u['url'] as String? ??
+        final path =
+            u['url'] as String? ??
             u['full_url'] as String? ??
             u['short_path'] as String? ??
-            (u['short_url'] is String && !(u['short_url'] as String).startsWith('upload://')
+            (u['short_url'] is String &&
+                    !(u['short_url'] as String).startsWith('upload://')
                 ? u['short_url'] as String
                 : null);
         addUrl(path);
@@ -2296,9 +2342,10 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
         final imgTag = match.group(0) ?? '';
         if (isNonContentImage(imgTag)) continue;
 
-        final srcMatch =
-            RegExp('src=["\']([^"\']+)["\']', caseSensitive: false)
-                .firstMatch(imgTag);
+        final srcMatch = RegExp(
+          'src=["\']([^"\']+)["\']',
+          caseSensitive: false,
+        ).firstMatch(imgTag);
         if (srcMatch != null) {
           addUrl(srcMatch.group(1));
         }
@@ -2334,9 +2381,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
       return _buildDeletedMessage(context);
     }
 
-    final alignment =
-        isOwnMessage ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final showSender = !isOwnMessage && message.user != null;
+    final alignment = isOwnMessage
+        ? CrossAxisAlignment.end
+        : CrossAxisAlignment.start;
     final imageUrls = _extractImageUrls();
 
     // 缩略图条只负责 cooked 没渲染的图（对齐 Discourse chat：正文由 cooked
@@ -2349,17 +2396,21 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
     // 过滤除去纯图片 markdown 链接后的文本展示
     String displayText = message.message;
     for (final url in imageUrls) {
-      displayText = displayText.replaceAll(RegExp('!\\[.*?\\]\\(${RegExp.escape(url)}\\)'), '');
+      displayText = displayText.replaceAll(
+        RegExp('!\\[.*?\\]\\(${RegExp.escape(url)}\\)'),
+        '',
+      );
     }
-    displayText = displayText.replaceAll(RegExp(r'!\[.*?\]\(upload://[^\)]+\)'), '').trim();
+    displayText = displayText
+        .replaceAll(RegExp(r'!\[.*?\]\(upload://[^\)]+\)'), '')
+        .trim();
 
     // 触控设备无 hover，保留轻量可见入口；桌面仅在悬停时显示
     final platform = Theme.of(context).platform;
-    final isTouch = platform == TargetPlatform.android ||
-        platform == TargetPlatform.iOS;
-    final showReactButton = !isMultiSelectMode &&
-        onReactButtonTap != null &&
-        (_hovered || isTouch);
+    final isTouch =
+        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+    final showReactButton =
+        !isMultiSelectMode && onReactButtonTap != null && (_hovered || isTouch);
 
     Widget buildReactButton() {
       return AnimatedOpacity(
@@ -2374,8 +2425,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
               bottom: 2,
             ),
             child: Material(
-              color: theme.colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.85),
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.85,
+              ),
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),
@@ -2418,7 +2470,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
               // 自己的消息：react 在气泡左侧（异侧）
               if (isOwnMessage) buildReactButton(),
 
-              if (showSender)
+              if (showAvatar)
                 Padding(
                   padding: const EdgeInsets.only(right: 8, bottom: 4),
                   child: GestureDetector(
@@ -2426,9 +2478,8 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => UserProfilePage(
-                            username: message.user!.username,
-                          ),
+                          builder: (_) =>
+                              UserProfilePage(username: message.user!.username),
                         ),
                       );
                     },
@@ -2544,7 +2595,6 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-
                             // 图片附件与 HTML 媒体展示 (点击放大全屏查看)
                             if (thumbnailUrls.isNotEmpty)
                               Padding(
@@ -2552,7 +2602,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                 child: Wrap(
                                   spacing: 6,
                                   runSpacing: 6,
-                                  children: thumbnailUrls.asMap().entries.map((entry) {
+                                  children: thumbnailUrls.asMap().entries.map((
+                                    entry,
+                                  ) {
                                     final idx = entry.key;
                                     final url = entry.value;
                                     return GestureDetector(
@@ -2581,7 +2633,8 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
 
                             // 消息内容渲染：优先使用 cooked HTML（支持引用、onebox 等），
                             // 回退到纯文本 + emoji 渲染
-                            if (message.cooked != null && message.cooked!.isNotEmpty)
+                            if (message.cooked != null &&
+                                message.cooked!.isNotEmpty)
                               _CookedHtmlContent(
                                 cooked: message.cooked!,
                                 messageId: message.id,
@@ -2605,14 +2658,19 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  TimeUtils.formatCompactTime(message.createdAt),
+                                  TimeUtils.formatCompactTime(
+                                    message.createdAt,
+                                  ),
                                   style: theme.textTheme.labelSmall?.copyWith(
-                                    color: (isOwnMessage
-                                            ? theme.colorScheme
-                                                .onPrimaryContainer
-                                            : theme.colorScheme
-                                                .onSurfaceVariant)
-                                        .withValues(alpha: 0.6),
+                                    color:
+                                        (isOwnMessage
+                                                ? theme
+                                                      .colorScheme
+                                                      .onPrimaryContainer
+                                                : theme
+                                                      .colorScheme
+                                                      .onSurfaceVariant)
+                                            .withValues(alpha: 0.6),
                                     fontSize: 10,
                                   ),
                                 ),
@@ -2621,12 +2679,15 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                   Text(
                                     context.l10n.chat_edited,
                                     style: theme.textTheme.labelSmall?.copyWith(
-                                      color: (isOwnMessage
-                                              ? theme.colorScheme
-                                                  .onPrimaryContainer
-                                              : theme.colorScheme
-                                                  .onSurfaceVariant)
-                                          .withValues(alpha: 0.5),
+                                      color:
+                                          (isOwnMessage
+                                                  ? theme
+                                                        .colorScheme
+                                                        .onPrimaryContainer
+                                                  : theme
+                                                        .colorScheme
+                                                        .onSurfaceVariant)
+                                              .withValues(alpha: 0.5),
                                       fontSize: 10,
                                     ),
                                   ),
@@ -2636,10 +2697,13 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                   Icon(
                                     Icons.bookmark_rounded,
                                     size: 11,
-                                    color: (isOwnMessage
-                                            ? theme.colorScheme.onPrimaryContainer
-                                            : theme.colorScheme.primary)
-                                        .withValues(alpha: 0.8),
+                                    color:
+                                        (isOwnMessage
+                                                ? theme
+                                                      .colorScheme
+                                                      .onPrimaryContainer
+                                                : theme.colorScheme.primary)
+                                            .withValues(alpha: 0.8),
                                   ),
                                 ],
                                 if (message.pinned) ...[
@@ -2647,10 +2711,13 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                   Icon(
                                     Icons.push_pin_rounded,
                                     size: 11,
-                                    color: (isOwnMessage
-                                            ? theme.colorScheme.onPrimaryContainer
-                                            : theme.colorScheme.primary)
-                                        .withValues(alpha: 0.8),
+                                    color:
+                                        (isOwnMessage
+                                                ? theme
+                                                      .colorScheme
+                                                      .onPrimaryContainer
+                                                : theme.colorScheme.primary)
+                                            .withValues(alpha: 0.8),
                                   ),
                                 ],
                               ],
@@ -2676,7 +2743,11 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                     if (message.reactions != null &&
                         message.reactions!.isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+                        padding: const EdgeInsets.only(
+                          top: 4,
+                          left: 4,
+                          right: 4,
+                        ),
                         child: Wrap(
                           spacing: 4,
                           runSpacing: 4,
@@ -2702,7 +2773,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                       color: isReacted
                                           ? theme.colorScheme.primary
                                           : theme.colorScheme.outlineVariant
-                                              .withValues(alpha: 0.5),
+                                                .withValues(alpha: 0.5),
                                       width: 1,
                                     ),
                                     borderRadius: BorderRadius.circular(12),
@@ -2719,15 +2790,16 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                         '${r.count}',
                                         style: theme.textTheme.labelSmall
                                             ?.copyWith(
-                                          fontSize: 10,
-                                          fontWeight: isReacted
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
-                                          color: isReacted
-                                              ? theme.colorScheme.primary
-                                              : theme.colorScheme
-                                                  .onSurfaceVariant,
-                                        ),
+                                              fontSize: 10,
+                                              fontWeight: isReacted
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                              color: isReacted
+                                                  ? theme.colorScheme.primary
+                                                  : theme
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                            ),
                                       ),
                                     ],
                                   ),
@@ -2805,9 +2877,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
             padding: const EdgeInsets.all(32),
             child: Center(
               child: Text(
-                reaction.count > 0
-                    ? '暂无详细用户信息（共 ${reaction.count} 人）'
-                    : '暂无用户',
+                reaction.count > 0 ? '暂无详细用户信息（共 ${reaction.count} 人）' : '暂无用户',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -2836,10 +2906,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
             }
 
             final user = users[index];
-            final displayName =
-                (user.name != null && user.name!.isNotEmpty)
-                    ? user.name!
-                    : user.username;
+            final displayName = (user.name != null && user.name!.isNotEmpty)
+                ? user.name!
+                : user.username;
             final avatarUrl = user.avatarTemplate == null
                 ? null
                 : UrlHelper.resolveUrlWithCdn(
@@ -2852,15 +2921,15 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => UserProfilePage(
-                      username: user.username,
-                    ),
+                    builder: (_) => UserProfilePage(username: user.username),
                   ),
                 );
               },
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     SmartAvatar(
@@ -2913,16 +2982,18 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
       child: Row(
-        mainAxisAlignment:
-            isOwnMessage ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isOwnMessage
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           GestureDetector(
             onLongPress: onLongPress,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.5),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5,
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -2931,8 +3002,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                   Text(
                     context.l10n.chat_message_deleted,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant
-                          .withValues(alpha: 0.5),
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.5,
+                      ),
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -2985,7 +3057,9 @@ class _ChatThreadIndicator extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
       child: Material(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.55,
+        ),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           onTap: onTap,
@@ -3085,17 +3159,19 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
     final types = await preloaded.getPostActionTypes();
     if (!mounted) return;
     setState(() {
-      final parsed = (types ?? const [])
-          .map((t) => FlagType.fromJson(Map<String, dynamic>.from(t as Map)))
-          .where((f) => f.isFlag && f.enabled && f.appliesToChatMessage)
-          .toList()
-        ..sort((a, b) => a.position.compareTo(b.position));
+      final parsed =
+          (types ?? const [])
+              .map(
+                (t) => FlagType.fromJson(Map<String, dynamic>.from(t as Map)),
+              )
+              .where((f) => f.isFlag && f.enabled && f.appliesToChatMessage)
+              .toList()
+            ..sort((a, b) => a.position.compareTo(b.position));
       // 若消息自带 available_flags，再按 nameKey 过滤
       if (widget.availableFlagKeys != null &&
           widget.availableFlagKeys!.isNotEmpty) {
         final keys = widget.availableFlagKeys!.toSet();
-        _flagTypes =
-            parsed.where((f) => keys.contains(f.nameKey)).toList();
+        _flagTypes = parsed.where((f) => keys.contains(f.nameKey)).toList();
         if (_flagTypes.isEmpty) {
           // 服务端给了符号但预加载类型匹配不上时，回退全部 chat 适用类型
           _flagTypes = parsed;
@@ -3110,9 +3186,9 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
   Future<void> _submit() async {
     if (_selected == null || _submitting) return;
     if (_selected!.requireMessage && _messageController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请填写举报说明')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请填写举报说明')));
       return;
     }
     setState(() => _submitting = true);
@@ -3127,15 +3203,15 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
       );
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已提交举报')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已提交举报')));
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('举报失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('举报失败: $e')));
     }
   }
 
@@ -3188,7 +3264,8 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
                           ? null
                           : (v) => setState(() => _selected = v),
                       title: Text(type.name),
-                      subtitle: type.shortDescription != null ||
+                      subtitle:
+                          type.shortDescription != null ||
                               type.description.isNotEmpty
                           ? Text(
                               (type.shortDescription ?? type.description)
@@ -3222,7 +3299,9 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
                 child: SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: _selected == null || _submitting ? null : _submit,
+                    onPressed: _selected == null || _submitting
+                        ? null
+                        : _submit,
                     child: _submitting
                         ? const SizedBox(
                             width: 18,
@@ -3279,5 +3358,4 @@ class _CookedHtmlContent extends StatelessWidget {
       stretchBlocks: false,
     );
   }
-
 }
