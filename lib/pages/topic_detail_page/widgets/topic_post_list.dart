@@ -30,6 +30,7 @@ import 'shared_issue_button.dart';
 import 'topic_more_topics.dart';
 import 'typing_indicator.dart';
 import 'pending_posts_section.dart';
+import 'private_message_participants.dart';
 
 /// 话题帖子列表
 /// 负责构建 CustomScrollView 及其 Slivers
@@ -51,6 +52,10 @@ class TopicPostList extends StatefulWidget {
   final int? selectedPostNumber;
   final int? highlightPostNumber;
   final bool isLoggedIn;
+  final int? currentUserId;
+  final bool currentUserIsAdmin;
+  final int? removingPrivateMessageParticipantId;
+  final ValueChanged<TopicUser>? onRemovePrivateMessageParticipant;
   final bool hasMoreBefore;
   final bool hasMoreAfter;
 
@@ -119,6 +124,10 @@ class TopicPostList extends StatefulWidget {
     this.highlightBoostUsername,
     this.hideHeaderTitle = false,
     required this.isLoggedIn,
+    this.currentUserId,
+    this.currentUserIsAdmin = false,
+    this.removingPrivateMessageParticipantId,
+    this.onRemovePrivateMessageParticipant,
     required this.hasMoreBefore,
     required this.hasMoreAfter,
     required this.loadingPreviousListenable,
@@ -216,6 +225,22 @@ class _TopicPostListState extends State<TopicPostList> {
 
   int get _currentMaterializeStep =>
       ScrollBusySignal.isBusy ? _materializeBusyStep : _materializeIdleStep;
+
+  PrivateMessageParticipants _buildPrivateMessageParticipants(
+    PrivateMessageParticipantsLocation location,
+  ) {
+    return PrivateMessageParticipants(
+      key: ValueKey('pm-participants-${location.name}'),
+      location: location,
+      participants: detail.allowedUsers,
+      currentUserId: widget.currentUserId,
+      canRemoveOtherParticipants:
+          widget.currentUserIsAdmin && detail.canRemoveAllowedUsers,
+      removableSelfId: detail.canRemoveSelfId,
+      removingParticipantId: widget.removingPrivateMessageParticipantId,
+      onRemoveParticipant: widget.onRemovePrivateMessageParticipant,
+    );
+  }
 
   void _scheduleMaterializeStep() {
     if (_materializeTicking) return;
@@ -1278,6 +1303,19 @@ class _TopicPostListState extends State<TopicPostList> {
                 ),
               ),
 
+            // 对齐 Discourse bottom topic map：帖子流真正到底后再次展示私信成员。
+            if (!hasMoreAfter &&
+                detail.isPrivateMessage &&
+                detail.allowedUsers.isNotEmpty)
+              SliverToBoxAdapter(
+                child: _wrapContent(
+                  context,
+                  _buildPrivateMessageParticipants(
+                    PrivateMessageParticipantsLocation.bottom,
+                  ),
+                ),
+              ),
+
             SliverPadding(
               padding: EdgeInsets.only(
                 bottom: 80 + MediaQuery.of(context).padding.bottom,
@@ -1538,6 +1576,23 @@ class _TopicPostListState extends State<TopicPostList> {
         break;
     }
 
+    final childWithParticipants =
+        detail.isPrivateMessage &&
+            detail.allowedUsers.isNotEmpty &&
+            post.postNumber == 1 &&
+            (segment.type == _PostRenderSegmentType.shortPost ||
+                segment.type == _PostRenderSegmentType.longFooter)
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              child,
+              _buildPrivateMessageParticipants(
+                PrivateMessageParticipantsLocation.firstPost,
+              ),
+            ],
+          )
+        : child;
+
     final wrapped = _wrapContent(
       context,
       AutoScrollTag(
@@ -1548,7 +1603,7 @@ class _TopicPostListState extends State<TopicPostList> {
         // 常驻 DecoratedBoxTransition 包装(项目不用包的 highlight 功能,
         // 楼层高亮是 PostItem 自己的 highlight 参数),每帖少一层
         // transition + tween 求值
-        builder: (context, animation) => child,
+        builder: (context, animation) => childWithParticipants,
       ),
     );
 

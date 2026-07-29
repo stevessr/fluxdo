@@ -25,6 +25,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import '../../models/draft.dart';
 import '../../models/topic.dart';
+import '../../models/user.dart';
 import '../../models/pending_post.dart';
 import '../../utils/blocked_user_filter.dart';
 import '../../utils/responsive.dart';
@@ -201,6 +202,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   bool _hasFirstPost = false;
   bool _isCheckTitleVisibilityScheduled = false;
   bool _isRefreshing = false;
+  int? _removingPrivateMessageParticipantId;
 
   /// 本地屏蔽名单过滤缓存：provider 状态与名单实例都未变时复用同一份
   /// 过滤结果，保证同一帧内多处读取拿到 identical 的 posts 列表
@@ -613,6 +615,20 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       // clear 清空右栏回空态(首页/私信/搜索/追觅四家现已统一为恒非
       // null)。不能落到 maybePop:嵌入面板不是独立路由,pop 的会是宿主
       // 页面(如整个书签页)。
+      widget.onEmbeddedBack?.call();
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
+  void _closeRemovedPrivateMessage() {
+    ref.invalidate(pmInboxProvider);
+    ref.invalidate(pmSentProvider);
+    ref.invalidate(pmArchiveProvider);
+    if (!mounted) return;
+    // 被移出后必须直接离开私信，不能复用 Esc 语义：
+    // 后者会在搜索或 AI 页中只退出子模式，仍把无权访问的私信留在屏幕上。
+    if (widget.embeddedMode) {
       widget.onEmbeddedBack?.call();
       return;
     }
@@ -1827,7 +1843,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isLoggedIn = ref.watch(currentUserProvider).value != null;
+    final currentUser = ref.watch(currentUserProvider).value;
+    final isLoggedIn = currentUser != null;
     final canShowDetailPane = MasterDetailLayout.canShowBothPanesFor(context);
 
     ref.listen<AsyncValue<void>>(authStateProvider, (_, _) {
@@ -1888,6 +1905,12 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               .read(topicChannelProvider(widget.topicId).notifier)
               .clearReloadRequest();
           _handleReloadTopic(notifier, next.refreshStreamRequested);
+          return;
+        }
+
+        if (next.removedFromPrivateMessage &&
+            !(previous?.removedFromPrivateMessage ?? false)) {
+          _closeRemovedPrivateMessage();
           return;
         }
 
@@ -2118,6 +2141,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             detailAsync.value,
             notifier,
             isLoggedIn,
+            currentUser,
           );
         },
       ),
@@ -2291,6 +2315,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     TopicDetail? detail,
     TopicDetailNotifier notifier,
     bool isLoggedIn,
+    User? currentUser,
   ) {
     final params = _params;
     final searchState = ref.watch(topicSearchProvider(widget.topicId));
@@ -2353,7 +2378,13 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       );
     } else if (detail != null) {
       // 正常内容构建 (保持原有逻辑，但简化提取)
-      content = _buildPostListContent(context, detail, notifier, isLoggedIn);
+      content = _buildPostListContent(
+        context,
+        detail,
+        notifier,
+        isLoggedIn,
+        currentUser,
+      );
     }
 
     // Stack 组装
@@ -2474,6 +2505,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     TopicDetail detail,
     TopicDetailNotifier notifier,
     bool isLoggedIn,
+    User? currentUser,
   ) {
     // 本地屏蔽过滤统一在此出口完成：页面内所有 postIndex（centerPostIndex/
     // dividerPostIndex/滚动映射）都基于同一份过滤后列表，语义天然一致。
@@ -2568,6 +2600,13 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           headerKey: _headerKey,
           hideHeaderTitle: widget.hideInlineHeaderTitle,
           isLoggedIn: isLoggedIn,
+          currentUserId: currentUser?.id,
+          currentUserIsAdmin: currentUser?.admin ?? false,
+          removingPrivateMessageParticipantId:
+              _removingPrivateMessageParticipantId,
+          onRemovePrivateMessageParticipant: isLoggedIn
+              ? _handleRemovePrivateMessageParticipant
+              : null,
           onReply: _handleReply,
           onEdit: _handleEdit,
           onRefreshPost: _handleRefreshPost,
@@ -2604,6 +2643,13 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               highlightPostNumber: highlightPostNumber,
               highlightBoostUsername: widget.highlightBoostUsername,
               isLoggedIn: isLoggedIn,
+              currentUserId: currentUser?.id,
+              currentUserIsAdmin: currentUser?.admin ?? false,
+              removingPrivateMessageParticipantId:
+                  _removingPrivateMessageParticipantId,
+              onRemovePrivateMessageParticipant: isLoggedIn
+                  ? _handleRemovePrivateMessageParticipant
+                  : null,
               hasMoreBefore: notifier.hasMoreBefore,
               hasMoreAfter: notifier.hasMoreAfter,
               loadingPreviousListenable: notifier.loadingPreviousListenable,
