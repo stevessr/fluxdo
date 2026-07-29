@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -21,12 +23,13 @@ import '../../services/preloaded_data_service.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
+import '../../widgets/chat/chat_message_input_field.dart';
+import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
-import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../image_viewer_page.dart';
 import '../user_profile_page.dart';
@@ -68,7 +71,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   // 上下文状态：回复/编辑/附件/mention
   ChatMessage? _replyToMessage;
   ChatMessage? _editingMessage;
-  List<int> _uploadIds = [];
+  final List<int> _uploadIds = [];
   String? _uploadPreviewPath;
   bool _isUploadingImage = false;
 
@@ -529,32 +532,83 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   /// 选择并上传图片附件
   Future<void> _pickAndUploadImage() async {
+    if (_isUploadingImage) return;
+
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile == null) return;
+    if (pickedFile == null || !mounted) return;
 
+    await _uploadImageFile(pickedFile.path);
+  }
+
+  /// 上传已落盘的图片，并沿用聊天附件的预览与发送流程。
+  Future<void> _uploadImageFile(String imagePath) async {
+    if (!_beginImageUpload(previewPath: imagePath)) return;
+    await _uploadPreparedImageFile(imagePath);
+  }
+
+  /// 锁定一次图片上传，避免选择图片与输入法粘贴同时触发重复任务。
+  bool _beginImageUpload({String? previewPath}) {
+    if (_isUploadingImage || !mounted) return false;
     setState(() {
       _isUploadingImage = true;
-      _uploadPreviewPath = pickedFile.path;
+      _uploadPreviewPath = previewPath;
     });
+    return true;
+  }
 
+  /// 执行共用的 Discourse 图片上传与状态收尾。
+  Future<void> _uploadPreparedImageFile(String imagePath) async {
     try {
       final service = ref.read(discourseServiceProvider);
-      final uploadResult = await service.uploadFile(pickedFile.path);
+      final uploadResult = await service.uploadFile(imagePath);
       if (!mounted) return;
       setState(() {
         _uploadIds.add(uploadResult.id);
         _isUploadingImage = false;
       });
     } catch (e) {
+      _handleImageUploadFailure(e);
+    }
+  }
+
+  void _handleImageUploadFailure(Object error) {
+    if (!mounted) return;
+    setState(() {
+      _isUploadingImage = false;
+      _uploadPreviewPath = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.l10n.chat_upload_failed(error.toString()))),
+    );
+  }
+
+  /// 接收 Android 输入法提交的剪贴板图片。
+  void _onClipboardImageInserted(Uint8List bytes, String extension) {
+    if (_isUploadingImage || bytes.isEmpty) return;
+    unawaited(_uploadClipboardImage(bytes, extension));
+  }
+
+  /// 将输入法传入的图片数据写入临时文件，再复用现有上传流程。
+  Future<void> _uploadClipboardImage(
+    Uint8List bytes,
+    String extension,
+  ) async {
+    if (!_beginImageUpload()) return;
+
+    try {
+      final temporaryDirectory = await getTemporaryDirectory();
+      final fileName =
+          'chat_paste_${DateTime.now().microsecondsSinceEpoch}.$extension';
+      final imageFile = File(p.join(temporaryDirectory.path, fileName));
+      await imageFile.writeAsBytes(bytes, flush: true);
+
       if (!mounted) return;
-      setState(() {
-        _isUploadingImage = false;
-        _uploadPreviewPath = null;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.chat_upload_failed(e.toString()))),
-      );
+      setState(() => _uploadPreviewPath = imageFile.path);
+
+      await _uploadPreparedImageFile(imageFile.path);
+    } catch (e) {
+      _handleImageUploadFailure(e);
     }
   }
 
@@ -1939,32 +1993,17 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                         tooltip: '表情与贴纸',
                       ),
                       Expanded(
-                        child: TextField(
+                        child: ChatMessageInputField(
                           controller: _textController,
                           focusNode: _inputFocusNode,
-                          textInputAction: TextInputAction.send,
-                          maxLines: 5,
-                          minLines: 1,
+                          hintText: context.l10n.chat_input_hint,
                           onTap: () {
                             if (_showEmojiPicker) {
                               setState(() => _showEmojiPicker = false);
                             }
                           },
                           onSubmitted: (_) => _sendMessageOrUpdate(),
-                          decoration: InputDecoration(
-                            hintText: context.l10n.chat_input_hint,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide.none,
-                            ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surfaceContainerHighest,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            isDense: true,
-                          ),
+                          onImageInserted: _onClipboardImageInserted,
                         ),
                       ),
                       const SizedBox(width: 4),
