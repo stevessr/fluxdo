@@ -917,19 +917,11 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   bool _isSearching = false;
   bool _isCreating = false;
 
-  /// Discourse 默认 20：可选「除自己以外」的人数上限。
-  static const int _kDefaultMaxOthers = 20;
-
   @override
   void dispose() {
     _searchController.dispose();
     _groupNameController.dispose();
     super.dispose();
-  }
-
-  int get _maxOthers {
-    final v = ref.watch(chatMaxDirectMessageUsersProvider).value;
-    return v ?? _kDefaultMaxOthers;
   }
 
   bool get _canCreateDm {
@@ -941,8 +933,6 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   }
 
   bool get _isGroup => _selected.length >= 2;
-
-  bool get _atLimit => _maxOthers > 0 && _selected.length >= _maxOthers;
 
   Future<void> _onSearch(String query) async {
     if (query.trim().isEmpty) {
@@ -985,22 +975,6 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
       if (exists) {
         _selected.removeWhere((s) => s.id == user.id);
       } else {
-        if (_maxOthers == 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.chat_dm_disabled)),
-          );
-          return;
-        }
-        if (_atLimit) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                context.l10n.chat_member_limit_reached(_maxOthers),
-              ),
-            ),
-          );
-          return;
-        }
         _selected.add(user);
       }
     });
@@ -1023,21 +997,6 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
       );
       return;
     }
-    if (_maxOthers == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.chat_dm_disabled)),
-      );
-      return;
-    }
-    if (_selected.length > _maxOthers) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.chat_member_limit_reached(_maxOthers)),
-        ),
-      );
-      return;
-    }
-
     setState(() => _isCreating = true);
     try {
       final usernames = _selected.map((u) => u.username).toList();
@@ -1119,14 +1078,9 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                     Padding(
                       padding: const EdgeInsets.only(right: 4),
                       child: Text(
-                        l10n.chat_members_selected(
-                          _selected.length,
-                          _maxOthers,
-                        ),
+                        l10n.chat_members_selected(_selected.length),
                         style: theme.textTheme.labelMedium?.copyWith(
-                          color: _atLimit
-                              ? theme.colorScheme.error
-                              : theme.colorScheme.onSurfaceVariant,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -1187,11 +1141,9 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
               child: TextField(
                 controller: _searchController,
                 autofocus: true,
-                enabled: !_isCreating && (_maxOthers == 0 ? false : !_atLimit),
+                enabled: !_isCreating,
                 decoration: InputDecoration(
-                  hintText: _atLimit
-                      ? l10n.chat_member_limit_reached(_maxOthers)
-                      : l10n.chat_search_users,
+                  hintText: l10n.chat_search_users,
                   prefixIcon: const Icon(AppIcons.search, size: 20),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(
