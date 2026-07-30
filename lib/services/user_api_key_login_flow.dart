@@ -8,7 +8,6 @@ import 'discourse/discourse_service.dart';
 import 'local_notification_service.dart' show navigatorKey;
 import 'network/cookie/cookie_jar_service.dart';
 import 'toast_service.dart';
-import 'account_manager.dart';
 import 'user_api_key_service.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
@@ -147,23 +146,6 @@ class UserApiKeyLoginFlow {
         }
 
         await service.finalizeNativeLoginSuccess(username);
-
-        // 保存到多账号管理器
-        try {
-          final accountToken = await CookieJarService().getTToken();
-          if (accountToken != null && accountToken.isNotEmpty) {
-            await AccountManager().addAccount(
-              StoredAccount(
-                username: username,
-                token: accountToken,
-                lastLoginAt: DateTime.now(),
-              ),
-            );
-          }
-        } catch (e) {
-          debugPrint('[UserApiKeyLoginFlow] 保存账号到多账号管理器失败: $e');
-        }
-
         ToastService.showSuccess('登录成功');
         onFlowFinished?.call(true);
       } finally {

@@ -9,7 +9,6 @@ import '../../services/account_manager.dart';
 import '../../services/toast_service.dart';
 import '../../utils/dialog_utils.dart';
 import '../common/smart_avatar.dart';
-import '../../pages/login_page.dart';
 
 /// 多账号切换底部弹出面板
 ///
@@ -180,12 +179,8 @@ class _AccountSwitchSheetState extends ConsumerState<_AccountSwitchSheet> {
             onPressed: _switching
                 ? null
                 : () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const _LoginPageForwarder(),
-                      ),
-                    );
+                    Navigator.of(context).pop(true);
+                    // 由调用方决定如何触发登录页
                   },
             icon: const Icon(Symbols.add_rounded, size: 20),
             label: const Text('添加账号'),
@@ -198,7 +193,6 @@ class _AccountSwitchSheetState extends ConsumerState<_AccountSwitchSheet> {
               onPressed: _switching
                   ? null
                   : () async {
-                      final navigator = Navigator.of(context);
                       final confirmed = await showAppDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
@@ -218,19 +212,9 @@ class _AccountSwitchSheetState extends ConsumerState<_AccountSwitchSheet> {
                       );
                       if (confirmed == true && mounted) {
                         final service = ref.read(discourseServiceProvider);
-                        final currentUser = ref.read(currentUserProvider).value;
-                        if (currentUser?.username != null) {
-                          try {
-                            await AccountManager().removeAccount(
-                              currentUser!.username,
-                            );
-                          } catch (e) {
-                            debugPrint('[AccountSwitch] 移除账号失败: $e');
-                          }
-                        }
                         await service.logout();
                         if (mounted) {
-                          navigator.pop();
+                          Navigator.of(context).pop();
                         }
                       }
                     },
@@ -248,34 +232,6 @@ class _AccountSwitchSheetState extends ConsumerState<_AccountSwitchSheet> {
       constraints: const BoxConstraints(minHeight: 200),
       child: child,
     );
-  }
-}
-
-/// 添加账号的跳板 widget —— 渲染后立即 push LoginPage，
-/// 让底栏弹出的切换面板先关闭，再由同一 Navigator 打开登录页。
-class _LoginPageForwarder extends StatefulWidget {
-  const _LoginPageForwarder();
-
-  @override
-  State<_LoginPageForwarder> createState() => _LoginPageForwarderState();
-}
-
-class _LoginPageForwarderState extends State<_LoginPageForwarder> {
-  @override
-  void initState() {
-    super.initState();
-    // 用 post-frame 确保 sheet 关闭动画首帧无卡顿、路由不会中间态闪现
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginPage()));
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox.shrink();
   }
 }
 

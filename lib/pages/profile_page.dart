@@ -47,7 +47,6 @@ import '../l10n/s.dart';
 import '../navigation/nav_action_bus.dart';
 import '../services/toast_service.dart';
 import '../widgets/auth/account_switch_sheet.dart';
-import '../services/account_manager.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/responsive.dart';
 import '../services/emoji_handler.dart';
@@ -261,16 +260,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         'event': 'logout_active',
         'message': '用户主动退出登录',
       });
-
-      // 从多账号管理器移除
-      final currentUser = ref.read(currentUserProvider).value;
-      if (currentUser?.username != null) {
-        try {
-          await AccountManager().removeAccount(currentUser!.username);
-        } catch (e) {
-          debugPrint('[ProfilePage] 从多账号管理器移除失败: $e');
-        }
-      }
 
       await ref.read(discourseServiceProvider).logout(callApi: true);
       if (mounted) {
