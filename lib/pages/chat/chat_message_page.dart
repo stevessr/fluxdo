@@ -91,6 +91,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   int? _lastVisibleMessageId;
   Timer? _markAsReadTimer;
 
+  // 在线状态周期性上报计时器（~55s，对齐 Discourse 60s 过期）
+  Timer? _presenceTimer;
+
   void _enterMultiSelectMode([int? initialMessageId]) {
     setState(() {
       _isMultiSelectMode = true;
@@ -266,8 +269,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _textController.addListener(_onTextChanged);
-    // 上报用户进入聊天（用于在线状态追踪）
+    // 上报用户进入聊天（用于在线状态追踪），并启动周期性心跳
     _reportPresence();
+    _presenceTimer = Timer.periodic(
+      const Duration(seconds: 55),
+      (_) => _reportPresence(),
+    );
     // 通知 / 全局搜索：打开后定位到目标消息
     final targetId = widget.targetMessageId;
     if (targetId != null) {
@@ -282,12 +289,24 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     final discourse = ref.read(discourseServiceProvider);
     // 方法本身已吞掉 DioException，这里只兜住极端情况下的同步/其他异常
     unawaited(
-      discourse.reportChatPresence(widget.channelId).catchError((_) {}),
+      discourse
+          .reportChatPresence(widget.channelId)
+          .then((_) {
+            // 上报成功后同步标记自己在线，使 own avatar 绿环即时生效
+            final currentUser = ref.read(currentUserProvider).value;
+            if (currentUser != null) {
+              ref
+                  .read(chatChannelsProvider.notifier)
+                  .markUserOnline(currentUser.id);
+            }
+          })
+          .catchError((_) {}),
     );
   }
 
   @override
   void dispose() {
+    _presenceTimer?.cancel();
     _markAsReadTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -2173,6 +2192,39 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
   VoidCallback? get onThreadTap => widget.onThreadTap;
   ValueChanged<int>? get onMessageVisible => widget.onMessageVisible;
 
+  /// 构建消息发送者头像（左侧/右侧由 [isOwnSide] 控制 padding）
+  Widget _buildAvatar({required bool isOwnSide}) {
+    if (showAvatar) {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: isOwnSide ? 8 : 0,
+          right: isOwnSide ? 0 : 8,
+          bottom: 4,
+        ),
+        child: GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    UserProfilePage(username: message.user!.username),
+              ),
+            );
+          },
+          child: OnlineStatusAvatar(
+            userId: message.user!.id,
+            imageUrl: avatarUrl,
+            radius: 16,
+            fallbackText: message.user!.username,
+          ),
+        ),
+      );
+    }
+    // 连续同发送者分组时用占位符保持对齐（对齐 Discourse left-gutter）
+    if (message.user != null) return const SizedBox(width: 40);
+    return const SizedBox.shrink();
+  }
+
   List<String> _extractImageUrls() {
     final urls = <String>[];
     final seen = <String>{};
@@ -2384,30 +2436,8 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
               // 自己的消息：react 在气泡左侧（异侧）
               if (isOwnMessage) buildReactButton(),
 
-              if (showAvatar)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8, bottom: 4),
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              UserProfilePage(username: message.user!.username),
-                        ),
-                      );
-                    },
-                    child: OnlineStatusAvatar(
-                      userId: message.user!.id,
-                      imageUrl: avatarUrl,
-                      radius: 16,
-                      fallbackText: message.user!.username,
-                    ),
-                  ),
-                )
-              else if (message.user != null)
-                // 连续同发送者分组时用占位符保持对齐（对齐 Discourse left-gutter）
-                const SizedBox(width: 40),
+              // 对方消息头像在左侧；自己的头像在右侧
+              if (!isOwnMessage) _buildAvatar(isOwnSide: false),
 
               // 气泡「按内容自适应宽度」靠的是整条链路都不横向拉伸：
               // Column(crossAxisAlignment != stretch) → 宽度 = 最宽子项自然宽，
@@ -2756,6 +2786,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                   ],
                 ),
               ),
+
+              // 自己的头像在右侧
+              if (isOwnMessage) _buildAvatar(isOwnSide: true),
 
               // 对方的消息：react 在气泡右侧（异侧）
               if (!isOwnMessage) buildReactButton(),

@@ -101,6 +101,16 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
     return channelsState.copyWith(onlineUserIds: onlineUserIds);
   }
 
+  /// 将用户 ID 标记为在线（乐观更新，无需等待服务器响应）
+  void markUserOnline(int userId) {
+    final current = state.value;
+    if (current == null) return;
+    if (current.onlineUserIds.contains(userId)) return;
+    state = AsyncData(
+      current.copyWith(onlineUserIds: {...current.onlineUserIds, userId}),
+    );
+  }
+
   /// 乐观更新频道消息串开关，避免 invalidate 前 UI 不同步
   void setThreadingEnabledLocally(int channelId, bool enabled) {
     final current = state.value;
