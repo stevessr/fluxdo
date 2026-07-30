@@ -129,6 +129,9 @@ Future<bool> switchToAccount({
 
   // 更新最后登录时间
   await manager.touchAccount(username);
+
+  // 重载用户数据
+  ref.invalidate(currentUserProvider);
   ref.invalidate(accountListProvider);
 
   return true;

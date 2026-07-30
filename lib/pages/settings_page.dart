@@ -20,6 +20,7 @@ import 'notion_settings_page.dart';
 import 'preferences_page.dart';
 import 'reading_settings_page.dart';
 import 'shortcut_settings_page.dart';
+import '../widgets/auth/account_manage_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   static const double parallelMasterWidth = 380;
@@ -341,6 +342,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               iconColor: Colors.teal,
               title: l10n.settings_appearance,
               onTap: () => _openSettingsPage((_) => const AppearancePage()),
+            ),
+            _buildOptionTile(
+              icon: Symbols.swap_horiz_rounded,
+              iconColor: Colors.orange,
+              title: '账号管理',
+              onTap: () => _openSettingsPage((_) => const AccountManagePage()),
             ),
             _buildOptionTile(
               icon: Symbols.auto_stories_rounded,

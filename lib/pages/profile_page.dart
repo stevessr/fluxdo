@@ -46,7 +46,6 @@ import '../services/cdk_oauth_service.dart';
 import '../l10n/s.dart';
 import '../navigation/nav_action_bus.dart';
 import '../services/toast_service.dart';
-import '../widgets/auth/account_switch_sheet.dart';
 import '../services/account_manager.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/responsive.dart';
@@ -1031,7 +1030,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => showAccountSwitchSheet(context, ref),
+              onPressed: () => EmbeddedStackScope.openSettings(context),
               icon: const Icon(Symbols.swap_horiz_rounded, size: 18),
               label: const Text('切换账号'),
               style: OutlinedButton.styleFrom(

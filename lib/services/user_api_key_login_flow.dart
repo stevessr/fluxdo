@@ -93,8 +93,37 @@ class UserApiKeyLoginFlow {
       }
 
       // 已有登录态:只是补授权(存 key,供支持的站点自愈),不动现有会话
+      // 但仍需确保账号已保存到多账号管理器
       final existingToken = await CookieJarService().getTToken();
       if (existingToken != null && existingToken.isNotEmpty) {
+        // 取当前用户并保存到多账号管理器
+        try {
+          final service = DiscourseService();
+          final response = await service.dio.get(
+            '/session/current.json',
+            options: Options(
+              extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+            ),
+          );
+          final data = response.data;
+          final currentUser = data is Map<String, dynamic>
+              ? data['current_user']
+              : null;
+          if (currentUser is Map<String, dynamic>) {
+            final username = currentUser['username']?.toString() ?? '';
+            if (username.isNotEmpty) {
+              await AccountManager().addAccount(
+                StoredAccount(
+                  username: username,
+                  token: existingToken,
+                  lastLoginAt: DateTime.now(),
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          debugPrint('[UserApiKeyLoginFlow] 已登录态保存账号失败: $e');
+        }
         ToastService.showSuccess('授权成功');
         onFlowFinished?.call(true);
         return;
