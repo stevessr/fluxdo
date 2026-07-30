@@ -80,9 +80,7 @@ List<RadialMenuItem> buildAvatarMenuItems(
   ).read(currentUserProvider).value;
   final isSelf = currentUser != null && currentUser.username == username;
   final canMessage =
-      currentUser != null &&
-      currentUser.canSendPrivateMessages != false &&
-      !isSelf;
+      currentUser != null && currentUser.canSendPrivateMessages != false;
 
   return [
     RadialMenuItem(

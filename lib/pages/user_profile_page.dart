@@ -332,7 +332,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
             final card = await service.getUserCard(widget.username);
             if (card.canChatUser != null) {
               user = user.copyWith(
-                cardBackgroundUploadUrl: user.cardBackgroundUploadUrl ??
+                cardBackgroundUploadUrl:
+                    user.cardBackgroundUploadUrl ??
                     card.cardBackgroundUploadUrl,
                 canChatUser: card.canChatUser,
               );
@@ -421,10 +422,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ChatMessagePage(
-            channelId: channelId,
-            channelTitle: title,
-          ),
+          builder: (_) =>
+              ChatMessagePage(channelId: channelId, channelTitle: title),
         ),
       );
     } on DioException catch (_) {
@@ -1323,9 +1322,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
           onPressed: () => _openUserSearch(),
         ),
         // Discourse Chat：can_chat_user 已含站点开启 + 双方 chat_enabled 等判断
-        if (!isOwnProfile &&
-            _user != null &&
-            _user!.canChatUser == true)
+        if (_user != null && _user!.canChatUser == true)
           IconButton(
             onPressed: _isOpeningChat ? null : _openChatWithUser,
             icon: _isOpeningChat
@@ -1602,7 +1599,9 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                                 // linux.do 站点定制:个别账号头像方形化,外层白边框
                                 // 得跟 SmartAvatar 里的裁切形状对齐,不然会出现
                                 // "图是方的、外层白圈还是圆的"这种两层错位。
-                                final avatarUrl = _user?.getAvatarUrl(size: 144);
+                                final avatarUrl = _user?.getAvatarUrl(
+                                  size: 144,
+                                );
                                 final isSquare = isSquareAvatarUrl(avatarUrl);
                                 return Container(
                                   decoration: BoxDecoration(
@@ -1626,7 +1625,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                                     flairBgColor: _user?.flairBgColor,
                                     flairColor: _user?.flairColor,
                                     avatar: Hero(
-                                      tag: 'user_avatar_${_user?.username ?? ''}',
+                                      tag:
+                                          'user_avatar_${_user?.username ?? ''}',
                                       child: SmartAvatar(
                                         imageUrl: avatarUrl,
                                         radius: 36,
