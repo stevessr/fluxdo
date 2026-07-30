@@ -45,7 +45,6 @@ import '../services/cdk_oauth_service.dart';
 import '../l10n/s.dart';
 import '../navigation/nav_action_bus.dart';
 import '../services/toast_service.dart';
-import '../services/account_manager.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/responsive.dart';
 import '../services/emoji_handler.dart';
@@ -1007,24 +1006,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => EmbeddedStackScope.openSettings(context),
-              icon: const Icon(Symbols.swap_horiz_rounded, size: 18),
-              label: const Text('切换账号'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
           Center(
             child: TextButton.icon(
               onPressed: _logout,
