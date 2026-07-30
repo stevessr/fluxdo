@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -26,6 +28,7 @@ import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
+import '../../widgets/chat/chat_message_input_field.dart';
 import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../image_viewer_page.dart';
@@ -576,6 +579,14 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     );
   }
 
+  bool _beginImageUpload() {
+    if (_isUploadingImage) return false;
+    setState(() {
+      _isUploadingImage = true;
+    });
+    return true;
+  }
+
   /// 接收 Android 输入法提交的剪贴板图片。
   void _onClipboardImageInserted(Uint8List bytes, String extension) {
     if (_isUploadingImage || bytes.isEmpty) return;
@@ -593,14 +604,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       final imageFile = File(p.join(temporaryDirectory.path, fileName));
       await imageFile.writeAsBytes(bytes, flush: true);
 
+      final service = ref.read(discourseServiceProvider);
+      final uploadResult = await service.uploadFile(imageFile.path);
       if (!mounted) return;
       setState(() {
+        _uploadIds.add(uploadResult.id);
         _isUploadingImage = false;
-        _uploadPreviewPath = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.chat_upload_failed(e.toString()))),
-      );
+    } catch (e) {
+      _handleImageUploadFailure(e);
     }
   }
 
