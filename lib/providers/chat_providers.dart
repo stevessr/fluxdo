@@ -116,8 +116,8 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
 
 final chatChannelsProvider =
     AsyncNotifierProvider.autoDispose<ChatChannelsNotifier, ChatChannelsState>(
-  ChatChannelsNotifier.new,
-);
+      ChatChannelsNotifier.new,
+    );
 
 /// ============================================================================
 /// 2. Chat 消息列表（按频道分页）
@@ -158,8 +158,15 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   /// 2) 空/失败/仍有 future（未读窗口在历史中段）→ 回退最新一页
   ///    否则 reverse 列表会把中段历史当成底部，看起来像「没有新消息/空白」
   /// 3) 两次都失败时向上抛错，避免 UI 误显示「无消息」空态
-  Future<({List<ChatMessage> messages, bool hasMorePast, bool hasMoreFuture, int? targetId})>
-      _loadInitialMessages() async {
+  Future<
+    ({
+      List<ChatMessage> messages,
+      bool hasMorePast,
+      bool hasMoreFuture,
+      int? targetId,
+    })
+  >
+  _loadInitialMessages() async {
     final service = ref.read(discourseServiceProvider);
 
     Future<({List<ChatMessage> messages, Map<String, dynamic> raw})> tryFetch({
@@ -226,13 +233,16 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     final meta = raw['meta'] is Map
         ? Map<String, dynamic>.from(raw['meta'] as Map)
         : const <String, dynamic>{};
-    final hasMorePast = (meta['can_load_more_past'] as bool?) ??
+    final hasMorePast =
+        (meta['can_load_more_past'] as bool?) ??
         (raw['can_load_more_past'] as bool?) ??
         (messages.length >= 10);
-    canLoadMoreFuture = (meta['can_load_more_future'] as bool?) ??
+    canLoadMoreFuture =
+        (meta['can_load_more_future'] as bool?) ??
         (raw['can_load_more_future'] as bool?) ??
         false;
-    targetMessageId = (meta['target_message_id'] as num?)?.toInt() ??
+    targetMessageId =
+        (meta['target_message_id'] as num?)?.toInt() ??
         (raw['target_message_id'] as num?)?.toInt();
 
     return (
@@ -281,9 +291,8 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
           case 'delete':
           case 'deleted':
             final rawMsg = map['chat_message'] ?? map['message'];
-            final deletedId = (rawMsg is Map
-                    ? (rawMsg['id'] as num?)?.toInt()
-                    : null) ??
+            final deletedId =
+                (rawMsg is Map ? (rawMsg['id'] as num?)?.toInt() : null) ??
                 (map['deleted_id'] as num?)?.toInt() ??
                 (map['message_id'] as num?)?.toInt();
             if (deletedId != null) {
@@ -366,18 +375,27 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   }
 
   /// 仅拉最新一页（无 target / 无 last_read）
-  Future<({List<ChatMessage> messages, bool hasMorePast, bool hasMoreFuture, int? targetId})>
-      _loadLatestMessages() async {
+  Future<
+    ({
+      List<ChatMessage> messages,
+      bool hasMorePast,
+      bool hasMoreFuture,
+      int? targetId,
+    })
+  >
+  _loadLatestMessages() async {
     final service = ref.read(discourseServiceProvider);
     final raw = await service.getChannelMessages(channelId, pageSize: 50);
     final messages = _parseMessages(raw);
     final meta = raw['meta'] is Map
         ? Map<String, dynamic>.from(raw['meta'] as Map)
         : const <String, dynamic>{};
-    final hasMorePast = (meta['can_load_more_past'] as bool?) ??
+    final hasMorePast =
+        (meta['can_load_more_past'] as bool?) ??
         (raw['can_load_more_past'] as bool?) ??
         (messages.length >= 10);
-    canLoadMoreFuture = (meta['can_load_more_future'] as bool?) ??
+    canLoadMoreFuture =
+        (meta['can_load_more_future'] as bool?) ??
         (raw['can_load_more_future'] as bool?) ??
         false;
     targetMessageId = null;
@@ -409,10 +427,12 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       final meta = raw['meta'] is Map
           ? Map<String, dynamic>.from(raw['meta'] as Map)
           : const <String, dynamic>{};
-      final hasMorePast = (meta['can_load_more_past'] as bool?) ??
+      final hasMorePast =
+          (meta['can_load_more_past'] as bool?) ??
           (raw['can_load_more_past'] as bool?) ??
           (messages.length >= 10);
-      canLoadMoreFuture = (meta['can_load_more_future'] as bool?) ??
+      canLoadMoreFuture =
+          (meta['can_load_more_future'] as bool?) ??
           (raw['can_load_more_future'] as bool?) ??
           false;
       targetMessageId = messageId;
@@ -437,8 +457,9 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       final messages = _parseMessages(raw);
 
       final existingIds = currentItems.map((m) => m.id).toSet();
-      final newMessages =
-          messages.where((m) => !existingIds.contains(m.id)).toList();
+      final newMessages = messages
+          .where((m) => !existingIds.contains(m.id))
+          .toList();
       newMessages.sort((a, b) {
         final byTime = a.createdAt.compareTo(b.createdAt);
         if (byTime != 0) return byTime;
@@ -455,11 +476,13 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       final meta = raw['meta'] is Map
           ? Map<String, dynamic>.from(raw['meta'] as Map)
           : const <String, dynamic>{};
-      final hasMorePast = (meta['can_load_more_past'] as bool?) ??
+      final hasMorePast =
+          (meta['can_load_more_past'] as bool?) ??
           (raw['can_load_more_past'] as bool?) ??
           (messages.isNotEmpty && messages.length >= 10);
       // past 分页不改变 future 标志（除非服务端显式返回）
-      final futureFlag = meta['can_load_more_future'] as bool? ??
+      final futureFlag =
+          meta['can_load_more_future'] as bool? ??
           raw['can_load_more_future'] as bool?;
       if (futureFlag != null) canLoadMoreFuture = futureFlag;
       return PagedPage(
@@ -476,8 +499,9 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     final currentItems = state.value;
     if (currentItems == null || currentItems.isEmpty) return;
 
-    final maxTargetId =
-        currentItems.map((m) => m.id).reduce((a, b) => a > b ? a : b);
+    final maxTargetId = currentItems
+        .map((m) => m.id)
+        .reduce((a, b) => a > b ? a : b);
     // ignore: invalid_use_of_internal_member
     state = AsyncLoading<List<ChatMessage>>().copyWithPrevious(state);
     try {
@@ -490,8 +514,9 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       );
       final messages = _parseMessages(raw);
       final existingIds = currentItems.map((m) => m.id).toSet();
-      final newMessages =
-          messages.where((m) => !existingIds.contains(m.id)).toList();
+      final newMessages = messages
+          .where((m) => !existingIds.contains(m.id))
+          .toList();
       final combined = [...currentItems, ...newMessages];
       combined.sort((a, b) {
         final byTime = a.createdAt.compareTo(b.createdAt);
@@ -501,7 +526,8 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       final meta = raw['meta'] is Map
           ? Map<String, dynamic>.from(raw['meta'] as Map)
           : const <String, dynamic>{};
-      canLoadMoreFuture = (meta['can_load_more_future'] as bool?) ??
+      canLoadMoreFuture =
+          (meta['can_load_more_future'] as bool?) ??
           (raw['can_load_more_future'] as bool?) ??
           (newMessages.length >= 10);
       // past 的 hasMore 保持不变；future 仅更新 canLoadMoreFuture
@@ -720,11 +746,9 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
             users: old.users,
           );
         } else {
-          newReactions.add(ChatMessageReaction(
-            emoji: emoji,
-            count: 1,
-            reacted: true,
-          ));
+          newReactions.add(
+            ChatMessageReaction(emoji: emoji, count: 1, reacted: true),
+          );
         }
       }
 
@@ -813,8 +837,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     // 消息不在频道窗口
     final currentlyBookmarked = knownBookmarked ?? false;
     final nextBookmarked = !currentlyBookmarked;
-    if (!nextBookmarked &&
-        (knownBookmarkId == null || knownBookmarkId <= 0)) {
+    if (!nextBookmarked && (knownBookmarkId == null || knownBookmarkId <= 0)) {
       return;
     }
     final service = ref.read(discourseServiceProvider);
@@ -880,10 +903,10 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   }
 }
 
-final chatMessagesProvider = AsyncNotifierProvider.family<
-    ChatMessagesNotifier, List<ChatMessage>, int>(
-  ChatMessagesNotifier.new,
-);
+final chatMessagesProvider =
+    AsyncNotifierProvider.family<ChatMessagesNotifier, List<ChatMessage>, int>(
+      ChatMessagesNotifier.new,
+    );
 
 /// 消息串消息列表参数
 typedef ChatThreadMessagesParams = ({int channelId, int threadId});
@@ -891,32 +914,32 @@ typedef ChatThreadMessagesParams = ({int channelId, int threadId});
 /// 消息串消息列表
 final chatThreadMessagesProvider = FutureProvider.autoDispose
     .family<List<ChatMessage>, ChatThreadMessagesParams>((ref, params) async {
-  final service = ref.read(discourseServiceProvider);
-  final raw = await service.getChatThreadMessages(
-    params.channelId,
-    params.threadId,
-    pageSize: 50,
-  );
-  return _parseChatMessageList(raw);
-});
+      final service = ref.read(discourseServiceProvider);
+      final raw = await service.getChatThreadMessages(
+        params.channelId,
+        params.threadId,
+        pageSize: 50,
+      );
+      return _parseChatMessageList(raw);
+    });
 
 /// 频道消息串列表
-final chatChannelThreadsProvider =
-    FutureProvider.autoDispose.family<List<ChatThread>, int>((ref, channelId) async {
-  final service = ref.read(discourseServiceProvider);
-  final raw = await service.getChatChannelThreads(channelId);
-  final list = raw['threads'];
-  if (list is! List) return const [];
-  final threads = <ChatThread>[];
-  for (final e in list) {
-    if (e is! Map) continue;
-    try {
-      final thread = ChatThread.fromJson(Map<String, dynamic>.from(e));
-      if (thread.id > 0) threads.add(thread);
-    } catch (_) {}
-  }
-  return threads;
-});
+final chatChannelThreadsProvider = FutureProvider.autoDispose
+    .family<List<ChatThread>, int>((ref, channelId) async {
+      final service = ref.read(discourseServiceProvider);
+      final raw = await service.getChatChannelThreads(channelId);
+      final list = raw['threads'];
+      if (list is! List) return const [];
+      final threads = <ChatThread>[];
+      for (final e in list) {
+        if (e is! Map) continue;
+        try {
+          final thread = ChatThread.fromJson(Map<String, dynamic>.from(e));
+          if (thread.id > 0) threads.add(thread);
+        } catch (_) {}
+      }
+      return threads;
+    });
 
 /// 解析消息列表公共逻辑（频道消息 / 消息串消息）
 List<ChatMessage> _parseChatMessageList(Map<String, dynamic> raw) {
@@ -956,6 +979,64 @@ List<ChatMessage> _parseChatMessageList(Map<String, dynamic> raw) {
   return parsed;
 }
 
+/// 所有频道消息串列表（全局消息串 Tab 使用）
+///
+/// 遍历所有启用了消息串的频道（兜底取前 15 个活跃频道），
+/// 获取每个频道的消息串列表，按最后回复时间排序。
+final chatAllThreadsProvider =
+    FutureProvider.autoDispose<List<(ChatThread, ChatChannel)>>((ref) async {
+      final channelsState = ref.watch(chatChannelsProvider).value;
+      if (channelsState == null) return const [];
+
+      final all = [
+        ...channelsState.publicChannels,
+        ...channelsState.directMessageChannels,
+      ];
+
+      // 优先取启用了消息串的频道；若没有则取前 15 个活跃频道
+      final candidates = all.where((c) => c.threadingEnabled).toList();
+      if (candidates.isEmpty) {
+        candidates.addAll(all.take(15));
+      }
+
+      final service = ref.read(discourseServiceProvider);
+      final result = <(ChatThread, ChatChannel)>[];
+
+      for (final channel in candidates) {
+        try {
+          final raw = await service.getChatChannelThreads(channel.id);
+          final list = raw['threads'];
+          if (list is! List) continue;
+          for (final e in list) {
+            if (e is! Map) continue;
+            try {
+              final thread = ChatThread.fromJson(Map<String, dynamic>.from(e));
+              if (thread.id > 0) {
+                result.add((thread, channel));
+              }
+            } catch (_) {}
+          }
+        } catch (_) {
+          // 单个频道加载失败不影响其他频道
+        }
+      }
+
+      // 按最后回复时间排序（最新的在前）
+      result.sort((a, b) {
+        final aTime =
+            a.$1.preview?.lastReplyCreatedAt ??
+            a.$1.originalMessage?.createdAt ??
+            DateTime(2000);
+        final bTime =
+            b.$1.preview?.lastReplyCreatedAt ??
+            b.$1.originalMessage?.createdAt ??
+            DateTime(2000);
+        return bTime.compareTo(aTime);
+      });
+
+      return result;
+    });
+
 /// ============================================================================
 /// 3. 未读统计 Provider
 /// ============================================================================
@@ -983,7 +1064,8 @@ final chatUnreadProvider = Provider<int>((ref) {
 
   for (final entry in channelsState.tracking.entries) {
     total += (entry.value['unread_count'] as num?)?.toInt() ?? 0;
-    total += (entry.value['mention_count'] as num?)?.toInt() ??
+    total +=
+        (entry.value['mention_count'] as num?)?.toInt() ??
         (entry.value['unread_mentions'] as num?)?.toInt() ??
         0;
   }
@@ -998,22 +1080,19 @@ final chatUnreadProvider = Provider<int>((ref) {
 ///
 /// [usernames]：对方用户名列表（不含自己；服务端会并入当前用户）。
 /// [name]：群聊可选名称（多人时建议填写）。
-typedef CreateDirectMessageParams = ({
-  List<String> usernames,
-  String? name,
-});
+typedef CreateDirectMessageParams = ({List<String> usernames, String? name});
 
 final createDirectMessageProvider =
     FutureProvider.family<int, CreateDirectMessageParams>((ref, params) async {
-  final service = ref.read(discourseServiceProvider);
-  final channelId = await service.createDirectMessageChannel(
-    params.usernames,
-    name: params.name,
-  );
-  // 创建后刷新频道列表
-  ref.invalidate(chatChannelsProvider);
-  return channelId;
-});
+      final service = ref.read(discourseServiceProvider);
+      final channelId = await service.createDirectMessageChannel(
+        params.usernames,
+        name: params.name,
+      );
+      // 创建后刷新频道列表
+      ref.invalidate(chatChannelsProvider);
+      return channelId;
+    });
 
 /// 创建公开（分类）频道参数
 typedef CreateChatChannelParams = ({
@@ -1028,49 +1107,53 @@ typedef CreateChatChannelParams = ({
 
 /// 创建公开频道（需 staff）
 final createChatChannelProvider =
-    FutureProvider.family<ChatChannel, CreateChatChannelParams>(
-        (ref, params) async {
-  final service = ref.read(discourseServiceProvider);
-  final raw = await service.createChannel(
-    name: params.name,
-    chatableId: params.chatableId,
-    slug: params.slug,
-    description: params.description,
-    emoji: params.emoji,
-    autoJoinUsers: params.autoJoinUsers,
-    threadingEnabled: params.threadingEnabled,
-  );
-  ref.invalidate(chatChannelsProvider);
-  return ChatChannel.fromJson(raw);
-});
+    FutureProvider.family<ChatChannel, CreateChatChannelParams>((
+      ref,
+      params,
+    ) async {
+      final service = ref.read(discourseServiceProvider);
+      final raw = await service.createChannel(
+        name: params.name,
+        chatableId: params.chatableId,
+        slug: params.slug,
+        description: params.description,
+        emoji: params.emoji,
+        autoJoinUsers: params.autoJoinUsers,
+        threadingEnabled: params.threadingEnabled,
+      );
+      ref.invalidate(chatChannelsProvider);
+      return ChatChannel.fromJson(raw);
+    });
 
 /// 单个频道详情（含 status，浏览未 following 的关闭频道时用于只读判断）
-final chatChannelDetailProvider =
-    FutureProvider.autoDispose.family<ChatChannel?, int>((ref, channelId) async {
-  // 先从已加载的 me/channels 取
-  final channelsState = ref.watch(chatChannelsProvider).value;
-  if (channelsState != null) {
-    for (final c in [
-      ...channelsState.publicChannels,
-      ...channelsState.directMessageChannels,
-    ]) {
-      if (c.id == channelId) return c;
-    }
-  }
-  final service = ref.read(discourseServiceProvider);
-  final raw = await service.getChatChannel(channelId);
-  final channelJson = raw['channel'] is Map
-      ? Map<String, dynamic>.from(raw['channel'] as Map)
-      : raw;
-  return ChatChannel.fromJson(channelJson);
-});
+final chatChannelDetailProvider = FutureProvider.autoDispose
+    .family<ChatChannel?, int>((ref, channelId) async {
+      // 先从已加载的 me/channels 取
+      final channelsState = ref.watch(chatChannelsProvider).value;
+      if (channelsState != null) {
+        for (final c in [
+          ...channelsState.publicChannels,
+          ...channelsState.directMessageChannels,
+        ]) {
+          if (c.id == channelId) return c;
+        }
+      }
+      final service = ref.read(discourseServiceProvider);
+      final raw = await service.getChatChannel(channelId);
+      final channelJson = raw['channel'] is Map
+          ? Map<String, dynamic>.from(raw['channel'] as Map)
+          : raw;
+      return ChatChannel.fromJson(channelJson);
+    });
 
 /// ============================================================================
 /// 5. 搜索 Chat 可提及用户
 /// ============================================================================
 
-final chatSearchProvider =
-    FutureProvider.family<List<Chatable>, String>((ref, filter) async {
+final chatSearchProvider = FutureProvider.family<List<Chatable>, String>((
+  ref,
+  filter,
+) async {
   final service = ref.read(discourseServiceProvider);
   final raw = await service.searchChatables(filter);
   final users = raw['users'] as List<dynamic>? ?? [];
@@ -1117,60 +1200,66 @@ typedef ChatMessageSearchParams = ({
 });
 
 /// 在指定频道内搜索消息（默认 latest）
-final chatChannelSearchProvider = FutureProvider.family<
-    ChatMessageSearchResult,
-    ({int channelId, String query})>((ref, params) async {
-  return ref.watch(chatMessageSearchProvider((
-    query: params.query,
-    channelId: params.channelId,
-    sort: 'latest',
-    offset: 0,
-    limit: 20,
-  )).future);
-});
+final chatChannelSearchProvider =
+    FutureProvider.family<
+      ChatMessageSearchResult,
+      ({int channelId, String query})
+    >((ref, params) async {
+      return ref.watch(
+        chatMessageSearchProvider((
+          query: params.query,
+          channelId: params.channelId,
+          sort: 'latest',
+          offset: 0,
+          limit: 20,
+        )).future,
+      );
+    });
 
 /// 全局 / 频道消息搜索（支持 relevance / latest）
-final chatMessageSearchProvider =
-    FutureProvider.autoDispose.family<ChatMessageSearchResult, ChatMessageSearchParams>(
-        (ref, params) async {
-  final query = params.query.trim();
-  if (query.isEmpty) {
-    return const ChatMessageSearchResult(messages: []);
-  }
-  final service = ref.read(discourseServiceProvider);
-  final raw = await service.searchChannelMessages(
-    query: query,
-    channelId: params.channelId,
-    sort: params.sort,
-    offset: params.offset,
-    limit: params.limit,
-  );
-  final list = raw['messages'] as List? ?? [];
-  final messages = <ChatMessage>[];
-  for (final e in list) {
-    if (e is! Map) continue;
-    try {
-      final map = Map<String, dynamic>.from(e);
-      // 搜索 API 可能把 channel 嵌在 message 上；尽量补全 chat_channel_id
-      if (map['chat_channel_id'] == null && map['channel'] is Map) {
-        final ch = Map<String, dynamic>.from(map['channel'] as Map);
-        map['chat_channel_id'] = ch['id'];
+final chatMessageSearchProvider = FutureProvider.autoDispose
+    .family<ChatMessageSearchResult, ChatMessageSearchParams>((
+      ref,
+      params,
+    ) async {
+      final query = params.query.trim();
+      if (query.isEmpty) {
+        return const ChatMessageSearchResult(messages: []);
       }
-      // 保留 channel 标题供全局搜索展示（塞进 threadTitle 不合适，用 uploads 也不行）
-      // 用 message 字段旁路：后续 UI 从 raw 取 channel；这里解析 message 本体即可
-      messages.add(ChatMessage.fromJson(map));
-    } catch (_) {}
-  }
-  final meta = raw['meta'] is Map
-      ? Map<String, dynamic>.from(raw['meta'] as Map)
-      : const <String, dynamic>{};
-  return ChatMessageSearchResult(
-    messages: messages,
-    hasMore: meta['has_more'] as bool? ?? false,
-    limit: (meta['limit'] as num?)?.toInt() ?? params.limit,
-    offset: (meta['offset'] as num?)?.toInt() ?? params.offset,
-  );
-});
+      final service = ref.read(discourseServiceProvider);
+      final raw = await service.searchChannelMessages(
+        query: query,
+        channelId: params.channelId,
+        sort: params.sort,
+        offset: params.offset,
+        limit: params.limit,
+      );
+      final list = raw['messages'] as List? ?? [];
+      final messages = <ChatMessage>[];
+      for (final e in list) {
+        if (e is! Map) continue;
+        try {
+          final map = Map<String, dynamic>.from(e);
+          // 搜索 API 可能把 channel 嵌在 message 上；尽量补全 chat_channel_id
+          if (map['chat_channel_id'] == null && map['channel'] is Map) {
+            final ch = Map<String, dynamic>.from(map['channel'] as Map);
+            map['chat_channel_id'] = ch['id'];
+          }
+          // 保留 channel 标题供全局搜索展示（塞进 threadTitle 不合适，用 uploads 也不行）
+          // 用 message 字段旁路：后续 UI 从 raw 取 channel；这里解析 message 本体即可
+          messages.add(ChatMessage.fromJson(map));
+        } catch (_) {}
+      }
+      final meta = raw['meta'] is Map
+          ? Map<String, dynamic>.from(raw['meta'] as Map)
+          : const <String, dynamic>{};
+      return ChatMessageSearchResult(
+        messages: messages,
+        hasMore: meta['has_more'] as bool? ?? false,
+        limit: (meta['limit'] as num?)?.toInt() ?? params.limit,
+        offset: (meta['offset'] as num?)?.toInt() ?? params.offset,
+      );
+    });
 
 /// 全局搜索单条结果（含频道标题，便于列表展示）
 class ChatGlobalSearchHit {
@@ -1205,58 +1294,65 @@ class ChatGlobalSearchResult {
 
 /// 全局聊天搜索（解析嵌套 channel）
 final chatGlobalSearchProvider = FutureProvider.autoDispose
-    .family<ChatGlobalSearchResult, ({String query, String sort, int offset})>(
-        (ref, params) async {
-  final query = params.query.trim();
-  if (query.isEmpty) {
-    return const ChatGlobalSearchResult(hits: []);
-  }
-  final service = ref.read(discourseServiceProvider);
-  final raw = await service.searchChannelMessages(
-    query: query,
-    sort: params.sort,
-    offset: params.offset,
-    limit: 20,
-  );
-  final list = raw['messages'] as List? ?? [];
-  final hits = <ChatGlobalSearchHit>[];
-  for (final e in list) {
-    if (e is! Map) continue;
-    try {
-      final map = Map<String, dynamic>.from(e);
-      final channelMap = map['channel'] is Map
-          ? Map<String, dynamic>.from(map['channel'] as Map)
-          : null;
-      final channelId = (map['chat_channel_id'] as num?)?.toInt() ??
-          (channelMap?['id'] as num?)?.toInt() ??
-          0;
-      if (channelId == 0) continue;
-      if (map['chat_channel_id'] == null) {
-        map['chat_channel_id'] = channelId;
+    .family<ChatGlobalSearchResult, ({String query, String sort, int offset})>((
+      ref,
+      params,
+    ) async {
+      final query = params.query.trim();
+      if (query.isEmpty) {
+        return const ChatGlobalSearchResult(hits: []);
       }
-      final message = ChatMessage.fromJson(map);
-      final title = channelMap?['title']?.toString() ??
-          channelMap?['name']?.toString() ??
-          '频道 $channelId';
-      hits.add(ChatGlobalSearchHit(
-        message: message,
-        channelId: channelId,
-        channelTitle: title,
-        channelEmoji: channelMap?['emoji']?.toString(),
-        threadTitle: map['thread_title']?.toString() ?? message.threadTitle,
-      ));
-    } catch (_) {}
-  }
-  final meta = raw['meta'] is Map
-      ? Map<String, dynamic>.from(raw['meta'] as Map)
-      : const <String, dynamic>{};
-  return ChatGlobalSearchResult(
-    hits: hits,
-    hasMore: meta['has_more'] as bool? ?? false,
-    offset: (meta['offset'] as num?)?.toInt() ?? params.offset,
-    limit: (meta['limit'] as num?)?.toInt() ?? 20,
-  );
-});
+      final service = ref.read(discourseServiceProvider);
+      final raw = await service.searchChannelMessages(
+        query: query,
+        sort: params.sort,
+        offset: params.offset,
+        limit: 20,
+      );
+      final list = raw['messages'] as List? ?? [];
+      final hits = <ChatGlobalSearchHit>[];
+      for (final e in list) {
+        if (e is! Map) continue;
+        try {
+          final map = Map<String, dynamic>.from(e);
+          final channelMap = map['channel'] is Map
+              ? Map<String, dynamic>.from(map['channel'] as Map)
+              : null;
+          final channelId =
+              (map['chat_channel_id'] as num?)?.toInt() ??
+              (channelMap?['id'] as num?)?.toInt() ??
+              0;
+          if (channelId == 0) continue;
+          if (map['chat_channel_id'] == null) {
+            map['chat_channel_id'] = channelId;
+          }
+          final message = ChatMessage.fromJson(map);
+          final title =
+              channelMap?['title']?.toString() ??
+              channelMap?['name']?.toString() ??
+              '频道 $channelId';
+          hits.add(
+            ChatGlobalSearchHit(
+              message: message,
+              channelId: channelId,
+              channelTitle: title,
+              channelEmoji: channelMap?['emoji']?.toString(),
+              threadTitle:
+                  map['thread_title']?.toString() ?? message.threadTitle,
+            ),
+          );
+        } catch (_) {}
+      }
+      final meta = raw['meta'] is Map
+          ? Map<String, dynamic>.from(raw['meta'] as Map)
+          : const <String, dynamic>{};
+      return ChatGlobalSearchResult(
+        hits: hits,
+        hasMore: meta['has_more'] as bool? ?? false,
+        offset: (meta['offset'] as num?)?.toInt() ?? params.offset,
+        limit: (meta['limit'] as num?)?.toInt() ?? 20,
+      );
+    });
 
 /// ============================================================================
 /// 6. 频道成员列表与添加成员 Provider（支持分页流式加载）
@@ -1298,8 +1394,9 @@ class ChatChannelMembersState {
       offset: offset ?? this.offset,
       hasMore: hasMore ?? this.hasMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-      loadMoreError:
-          clearLoadMoreError ? null : (loadMoreError ?? this.loadMoreError),
+      loadMoreError: clearLoadMoreError
+          ? null
+          : (loadMoreError ?? this.loadMoreError),
     );
   }
 }
@@ -1311,7 +1408,8 @@ ChatUser? _userFromMembershipMap(Map<String, dynamic> e) {
   } else if (e['user_chat_channel_membership'] is Map &&
       e['user_chat_channel_membership']['user'] is Map) {
     userMap = Map<String, dynamic>.from(
-        e['user_chat_channel_membership']['user'] as Map);
+      e['user_chat_channel_membership']['user'] as Map,
+    );
   } else {
     userMap = Map<String, dynamic>.from(e);
   }
@@ -1367,8 +1465,7 @@ class ChatChannelMembersNotifier
             if (c.id != channelId) continue;
             channelCount = c.membersCount;
             for (final u in c.dmUsers ?? const <ChatUser>[]) {
-              if (u.username.isNotEmpty &&
-                  seen.add(u.username.toLowerCase())) {
+              if (u.username.isNotEmpty && seen.add(u.username.toLowerCase())) {
                 list.add(u);
               }
             }
@@ -1425,7 +1522,8 @@ class ChatChannelMembersNotifier
         existing: current.members,
       );
       // 若服务端本页为空，结束分页，避免死循环
-      final reachedEnd = next.offset <= current.offset ||
+      final reachedEnd =
+          next.offset <= current.offset ||
           (next.members.length <= current.members.length &&
               next.totalRows != null &&
               next.offset >= (next.totalRows ?? 0));
@@ -1450,19 +1548,23 @@ class ChatChannelMembersNotifier
   }
 }
 
-final chatChannelMembersProvider = AsyncNotifierProvider.family<
-    ChatChannelMembersNotifier, ChatChannelMembersState, int>(
-  ChatChannelMembersNotifier.new,
-);
+final chatChannelMembersProvider =
+    AsyncNotifierProvider.family<
+      ChatChannelMembersNotifier,
+      ChatChannelMembersState,
+      int
+    >(ChatChannelMembersNotifier.new);
 
 final addChannelMemberProvider =
-    FutureProvider.family<void, ({int channelId, String username})>(
-        (ref, params) async {
-  final service = ref.read(discourseServiceProvider);
-  await service.addChannelMember(params.channelId, params.username);
-  // 刷新分页成员列表
-  ref.invalidate(chatChannelMembersProvider(params.channelId));
-});
+    FutureProvider.family<void, ({int channelId, String username})>((
+      ref,
+      params,
+    ) async {
+      final service = ref.read(discourseServiceProvider);
+      await service.addChannelMember(params.channelId, params.username);
+      // 刷新分页成员列表
+      ref.invalidate(chatChannelMembersProvider(params.channelId));
+    });
 
 /// ============================================================================
 /// 7. Chat 收藏频道 Provider
@@ -1486,7 +1588,8 @@ class ChatFavoritesNotifier extends Notifier<Set<int>> {
         ...channelsState.directMessageChannels,
       ];
       for (final channel in allChannels) {
-        final isServerFav = channel.starred ||
+        final isServerFav =
+            channel.starred ||
             (channel.userChatChannelMembership?['starred'] == true);
 
         if (isServerFav) {
@@ -1522,8 +1625,7 @@ class ChatFavoritesNotifier extends Notifier<Set<int>> {
   bool isFavorite(int channelId) => state.contains(channelId);
 }
 
-final chatFavoritesProvider =
-    NotifierProvider<ChatFavoritesNotifier, Set<int>>(
+final chatFavoritesProvider = NotifierProvider<ChatFavoritesNotifier, Set<int>>(
   ChatFavoritesNotifier.new,
 );
 
@@ -1554,22 +1656,26 @@ class BrowseChannelsParams {
 ///
 /// 获取论坛中所有公开频道（支持 status 过滤和搜索）
 final browseChannelsProvider =
-    FutureProvider.family<List<ChatChannel>, BrowseChannelsParams>(
-        (ref, params) async {
-  final service = ref.read(discourseServiceProvider);
-  final raw = await service.browseChannels(
-    status: params.status,
-    filter: params.filter,
-  );
-  final channels = raw['channels'] as List? ?? [];
-  return channels
-      .map((e) => ChatChannel.fromJson(Map<String, dynamic>.from(e as Map)))
-      .toList();
-});
+    FutureProvider.family<List<ChatChannel>, BrowseChannelsParams>((
+      ref,
+      params,
+    ) async {
+      final service = ref.read(discourseServiceProvider);
+      final raw = await service.browseChannels(
+        status: params.status,
+        filter: params.filter,
+      );
+      final channels = raw['channels'] as List? ?? [];
+      return channels
+          .map((e) => ChatChannel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    });
 
 /// 加入频道 Provider
-final joinChannelProvider =
-    FutureProvider.family<void, int>((ref, channelId) async {
+final joinChannelProvider = FutureProvider.family<void, int>((
+  ref,
+  channelId,
+) async {
   final service = ref.read(discourseServiceProvider);
   await service.joinChannel(channelId);
   // 刷新我的频道 + 浏览列表
@@ -1578,8 +1684,10 @@ final joinChannelProvider =
 });
 
 /// 离开频道 Provider（破坏性 leave，移除 membership）
-final leaveChannelProvider =
-    FutureProvider.family<void, int>((ref, channelId) async {
+final leaveChannelProvider = FutureProvider.family<void, int>((
+  ref,
+  channelId,
+) async {
   final service = ref.read(discourseServiceProvider);
   await service.leaveChannel(channelId);
   ref.invalidate(chatChannelsProvider);
@@ -1587,8 +1695,10 @@ final leaveChannelProvider =
 });
 
 /// 取消关注频道 Provider（非破坏性 unfollow，浏览页「退出」用）
-final unfollowChannelProvider =
-    FutureProvider.family<void, int>((ref, channelId) async {
+final unfollowChannelProvider = FutureProvider.family<void, int>((
+  ref,
+  channelId,
+) async {
   final service = ref.read(discourseServiceProvider);
   await service.unfollowChannel(channelId);
   ref.invalidate(chatChannelsProvider);
