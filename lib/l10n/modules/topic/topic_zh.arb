@@ -42,7 +42,7 @@
       }
     }
   },
-  "topicDetail_removeFromReadLater": "移出浮窗",
+  "topicDetail_removeFromReadLater": "从浮窗移除",
   "topicDetail_removeFromReadLaterSuccess": "已从浮窗移除",
   "topicDetail_replyLabel": "回复",
   "topicDetail_scrollToTop": "回到顶部",
@@ -295,8 +295,8 @@
   },
   "@topic_keywordFilter_hiddenCount": {
     "placeholders": {
-      "count": {
-        "type": "int"
+      "username": {
+        "type": "String"
       }
     }
   }
