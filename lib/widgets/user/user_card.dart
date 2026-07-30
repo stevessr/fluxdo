@@ -1086,8 +1086,6 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
   Widget _buildActions(ThemeData theme, User? user) {
     final currentUser = ref.watch(currentUserProvider).value;
     final isLoggedIn = currentUser != null;
-    final isSelf =
-        isLoggedIn && user != null && currentUser.username == user.username;
     final canMessage = isLoggedIn && user?.canSendPrivateMessageToUser == true;
     // Discourse user_card.can_chat_user：站点 chat + 双方可聊等综合判断。
     final canChat = isLoggedIn && user?.canChatUser == true;
