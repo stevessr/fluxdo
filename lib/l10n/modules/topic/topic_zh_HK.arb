@@ -238,5 +238,44 @@
       }
     }
   },
-  "topic_keywordFilter_manage": "管理"
+  "topic_keywordFilter_manage": "管理",
+
+  "topicDetail_addParticipant": "添加成員",
+  "topicDetail_addParticipantHint": "搜索要添加的用戶",
+  "topicDetail_addParticipantTitle": "添加成員",
+  "topicDetail_archivePrivateMessage": "歸檔",
+  "topicDetail_moveToInbox": "移回收件箱",
+  "topicDetail_participantAdded": "已將 {username} 添加到私信",
+  "@topicDetail_participantAdded": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_participantAddFailed": "添加成員失敗: {error}",
+  "@topicDetail_participantAddFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_participantRemoveFailed": "移除成員失敗: {error}",
+  "@topicDetail_participantRemoveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_kickParticipant": "移出 @{username}",
+  "@topicDetail_kickParticipant": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_confirmKickTitle": "移出成員"
 }
