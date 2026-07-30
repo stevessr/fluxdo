@@ -1477,14 +1477,16 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
                         // 连续相同发送者的消息分组：不重复显示昵称和头像
                         // 昵称只显示在第一条（最上面），头像只显示在最后一条
+                        // 自己的消息始终显示头像以保持对齐
                         final bool isFirstInGroup;
                         final bool isLastInGroup;
-                        if (!isOwnMessage && message.user != null) {
+                        if (message.user != null) {
                           final userId = message.user!.id;
                           isFirstInGroup =
                               messageIndex == 0 ||
                               messages[messageIndex - 1].user?.id != userId;
                           isLastInGroup =
+                              isOwnMessage ||
                               messageIndex == messages.length - 1 ||
                               messages[messageIndex + 1].user?.id != userId;
                         } else {
@@ -2402,7 +2404,10 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                       fallbackText: message.user!.username,
                     ),
                   ),
-                ),
+                )
+              else if (message.user != null)
+                // 连续同发送者分组时用占位符保持对齐（对齐 Discourse left-gutter）
+                const SizedBox(width: 40),
 
               // 气泡「按内容自适应宽度」靠的是整条链路都不横向拉伸：
               // Column(crossAxisAlignment != stretch) → 宽度 = 最宽子项自然宽，
@@ -2472,12 +2477,39 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                     if (showSender)
                       Padding(
                         padding: const EdgeInsets.only(left: 4, bottom: 2),
-                        child: Text(
-                          message.user!.name ?? message.user!.username,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              message.user!.name ?? message.user!.username,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Consumer(
+                              builder: (context, ref, _) {
+                                final channelsState = ref
+                                    .watch(chatChannelsProvider)
+                                    .value;
+                                final isOnline =
+                                    message.user != null &&
+                                    channelsState != null &&
+                                    channelsState.onlineUserIds.contains(
+                                      message.user!.id,
+                                    );
+                                if (!isOnline) return const SizedBox.shrink();
+                                return Padding(
+                                  padding: const EdgeInsets.only(left: 4),
+                                  child: Icon(
+                                    Icons.circle,
+                                    size: 6,
+                                    color: const Color(0xFF10B981),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ),
 
