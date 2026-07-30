@@ -448,8 +448,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
 
   void _onScrollIdle() {
     if (!mounted) return;
-    final scrolling =
-        _idleFlushPosition?.isScrollingNotifier.value ?? true;
+    final scrolling = _idleFlushPosition?.isScrollingNotifier.value ?? true;
     if (scrolling) return;
     if (_deferredPostUpdates.isEmpty) return;
     // 推迟一帧回放:isScrollingNotifier 翻 false 发生在惯性最后一个 tick
@@ -1382,6 +1381,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         _isNestedView;
     final bool subscribed =
         detail.notificationLevel.value >= TopicNotificationLevel.tracking.value;
+    final currentUser = ref.read(currentUserProvider).value;
 
     void doBookmark() {
       final traceTarget = _bookmarkEditTarget(detail);
@@ -1468,6 +1468,51 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             icon: Symbols.link_rounded,
             tooltip: context.l10n.topicDetail_shareLink,
             onTap: _shareTopic,
+          ),
+        // 私信：归档/移回收件箱 + 成员管理
+        if (detail.isPrivateMessage)
+          MenuQuickAction(
+            icon: detail.archived
+                ? Symbols.inbox_rounded
+                : Symbols.archive_rounded,
+            tooltip: detail.archived
+                ? context.l10n.topicDetail_moveToInbox
+                : context.l10n.topicDetail_archivePrivateMessage,
+            onTap: detail.archived
+                ? () => _handleMoveToInbox(notifier)
+                : () => _handleArchive(notifier),
+          ),
+        if (detail.isPrivateMessage)
+          MenuQuickAction(
+            icon: Symbols.people_rounded,
+            tooltip: context.l10n.topic_participants,
+            active: detail.allowedUsers.isNotEmpty,
+            submenu: MenuQuickActionSubmenu(
+              icon: Symbols.people_rounded,
+              label: context.l10n.topic_participants,
+              iconColor: Theme.of(context).colorScheme.primary,
+              children: [
+                // 添加成员
+                MenuQuickActionSubmenuChild(
+                  icon: Symbols.person_add_rounded,
+                  label: context.l10n.topicDetail_addParticipant,
+                  onTap: () => _handleAddParticipant(detail, notifier),
+                ),
+                // 成员列表
+                for (final user in detail.allowedUsers)
+                  MenuQuickActionSubmenuChild(
+                    icon: Symbols.person_rounded,
+                    label: user.displayName,
+                    subtitle: _getParticipantActionLabel(
+                      user,
+                      detail,
+                      currentUser,
+                    ),
+                    selected: currentUser?.id == user.id,
+                    onTap: () => _handleRemovePrivateMessageParticipant(user),
+                  ),
+              ],
+            ),
           ),
         MenuQuickAction(
           icon: Symbols.filter_list_rounded,
@@ -1683,6 +1728,90 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         ),
       ],
     );
+  }
+
+  /// 归档当前私信
+  Future<void> _handleArchive(TopicDetailNotifier notifier) async {
+    final detail = ref.read(topicDetailProvider(_params)).value;
+    if (detail == null || !detail.isPrivateMessage) return;
+
+    try {
+      await notifier.archivePrivateMessage();
+      if (!mounted) return;
+      ToastService.showSuccess(context.l10n.topicDetail_archivePrivateMessage);
+      ref.invalidate(pmInboxProvider);
+      ref.invalidate(pmArchiveProvider);
+    } catch (error) {
+      if (mounted) {
+        ToastService.showError(context.l10n.common_operationFailed('$error'));
+      }
+    }
+  }
+
+  /// 将私信移回收件箱（取消归档）
+  Future<void> _handleMoveToInbox(TopicDetailNotifier notifier) async {
+    final detail = ref.read(topicDetailProvider(_params)).value;
+    if (detail == null || !detail.isPrivateMessage) return;
+
+    try {
+      await notifier.movePrivateMessageToInbox();
+      if (!mounted) return;
+      ToastService.showSuccess(context.l10n.topicDetail_moveToInbox);
+      ref.invalidate(pmInboxProvider);
+      ref.invalidate(pmArchiveProvider);
+    } catch (error) {
+      if (mounted) {
+        ToastService.showError(context.l10n.common_operationFailed('$error'));
+      }
+    }
+  }
+
+  /// 打开添加私信成员对话框
+  Future<void> _handleAddParticipant(
+    TopicDetail detail,
+    TopicDetailNotifier notifier,
+  ) async {
+    final username = await showAppDialog<String>(
+      context: context,
+      builder: (dialogContext) => _AddParticipantDialog(),
+    );
+    if (username == null || username.isEmpty || !mounted) return;
+
+    try {
+      await notifier.inviteToPrivateMessage(username);
+      if (!mounted) return;
+      ToastService.showSuccess(
+        context.l10n.topicDetail_participantAdded(username),
+      );
+    } catch (error) {
+      if (mounted) {
+        ToastService.showError(
+          context.l10n.topicDetail_participantAddFailed('$error'),
+        );
+      }
+    }
+  }
+
+  /// 获取参与者菜单项的操作标签
+  String? _getParticipantActionLabel(
+    TopicUser user,
+    TopicDetail detail,
+    User? currentUser,
+  ) {
+    if (currentUser == null) return null;
+    final isSelf = user.id == currentUser.id;
+    if (isSelf) {
+      // 自己能退出
+      if (detail.canRemoveSelfId == user.id) {
+        return context.l10n.common_exit;
+      }
+      return context.l10n.topic_participants;
+    }
+    // 是否可以移除他人
+    if (detail.canRemoveAllowedUsers) {
+      return context.l10n.topicDetail_kickParticipant(user.username);
+    }
+    return null;
   }
 
   void _showTimelineSheet(TopicDetail detail) {
@@ -2204,8 +2333,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
                 _KeepAlivePage(
                   child: Consumer(
                     builder: (context, ref, _) {
-                      final detail =
-                          ref.watch(topicDetailProvider(params)).value;
+                      final detail = ref
+                          .watch(topicDetailProvider(params))
+                          .value;
                       return AiChatPage(
                         topicId: widget.topicId,
                         detail: detail,
@@ -2389,7 +2519,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
 
     // Stack 组装
     return Stack(
-        children: [
+      children: [
         // 使用 Offstage 保持帖子列表存在但在搜索模式下隐藏，保留滚动位置
         Offstage(offstage: isSearchMode, child: content),
 
@@ -2476,7 +2606,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               );
             },
           ),
-        ],
+      ],
     );
   }
 
@@ -2695,8 +2825,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
                 onJumpToPost: _scrollToPost,
               ),
               onWithdrawPendingPost: isLoggedIn ? _handleWithdrawPending : null,
-              onWithdrawAndEditPendingPost:
-                  isLoggedIn ? _handleWithdrawAndEditPending : null,
+              onWithdrawAndEditPendingPost: isLoggedIn
+                  ? _handleWithdrawAndEditPending
+                  : null,
             );
           },
         );
@@ -2772,5 +2903,67 @@ class _KeepAlivePageState extends State<_KeepAlivePage>
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
+  }
+}
+
+/// 添加私信成员对话框
+class _AddParticipantDialog extends StatefulWidget {
+  @override
+  State<_AddParticipantDialog> createState() => _AddParticipantDialogState();
+}
+
+class _AddParticipantDialogState extends State<_AddParticipantDialog> {
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: Text(context.l10n.topicDetail_addParticipantTitle),
+      content: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        decoration: InputDecoration(
+          hintText: context.l10n.topicDetail_addParticipantHint,
+          prefixIcon: const Icon(Symbols.search_rounded),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+          fillColor: theme.colorScheme.surfaceContainerHighest,
+        ),
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => Navigator.pop(context, _controller.text.trim()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.l10n.common_cancel),
+        ),
+        FilledButton(
+          onPressed: () {
+            final username = _controller.text.trim();
+            if (username.isNotEmpty) {
+              Navigator.pop(context, username);
+            }
+          },
+          child: Text(context.l10n.topicDetail_addParticipant),
+        ),
+      ],
+    );
   }
 }

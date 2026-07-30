@@ -142,8 +142,7 @@ extension _UserActions on _TopicDetailPageState {
                     : () async {
                         setState(() => isDeleting = true);
                         try {
-                          await DiscourseService()
-                              .deleteReviewable(pending.id);
+                          await DiscourseService().deleteReviewable(pending.id);
                           if (dialogContext.mounted) {
                             Navigator.pop(dialogContext, true);
                           }
@@ -891,8 +890,13 @@ extension _UserActions on _TopicDetailPageState {
     final isSelf = participant.id == currentUser.id;
     final canRemove = isSelf
         ? detail.canRemoveSelfId == participant.id
-        : currentUser.admin && detail.canRemoveAllowedUsers;
-    if (!canRemove) return;
+        : detail.canRemoveAllowedUsers;
+    if (!canRemove) {
+      // 不是所有者，不能踢人
+      if (!isSelf) return;
+      // 也不能退出（针对 canRemoveSelfId 不匹配的情况）
+      return;
+    }
 
     final confirmed = await showAppDialog<bool>(
       context: context,
@@ -946,9 +950,7 @@ extension _UserActions on _TopicDetailPageState {
       }
     } catch (error) {
       if (mounted) {
-        ToastService.showError(
-          context.l10n.common_operationFailed('$error'),
-        );
+        ToastService.showError(context.l10n.common_operationFailed('$error'));
       }
     } finally {
       if (mounted) {
@@ -1294,7 +1296,7 @@ extension _UserActions on _TopicDetailPageState {
       FrameJankMonitor.logEvent(
         'MSGBUS',
         '积压批量 ${updates.length} 条(${networkPostIds.length} 帖需刷新),'
-        '坍缩为一次整流刷新',
+            '坍缩为一次整流刷新',
       );
       // 旧积压全部作废:整流刷新拉回的就是最终态
       _deferredPostUpdates.clear();

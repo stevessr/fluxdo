@@ -369,6 +369,43 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     );
   }
 
+  /// 归档私信
+  Future<void> archivePrivateMessage(int topicId) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/archive-message.json',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 将私信移回收件箱（取消归档）
+  Future<void> movePrivateMessageToInbox(int topicId) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/move-to-inbox.json',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 邀请用户加入私信
+  Future<void> inviteToPrivateMessage(int topicId, String username) async {
+    try {
+      await _dio.post(
+        '/t/$topicId/invite.json',
+        data: {'user': username},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
   /// 将用户移出私信；移除自己时等价于退出该私信。
   Future<void> removePrivateMessageParticipant(
     int topicId,

@@ -71,9 +71,9 @@
   "topic_filterLatest": "Latest",
   "topic_filterNew": "New",
   "topic_filterNewAllShort": "All",
-  "topic_filterNewReplies": "New · Replies",
+  "topic_filterNewReplies": "New \u00b7 Replies",
   "topic_filterNewRepliesShort": "Replies",
-  "topic_filterNewTopics": "New · Topics",
+  "topic_filterNewTopics": "New \u00b7 Topics",
   "topic_filterNewTopicsShort": "Topics",
   "topic_filterTooltip": "Filter: {label}",
   "topic_filterTop": "Top",
@@ -131,5 +131,44 @@
   "topics_unreadTopics": "Unread topics",
   "topics_viewNewTopics": "View {count} new or updated topics",
   "topic_keywordFilter_hiddenCount": "{count} topics hidden",
-  "topic_keywordFilter_manage": "Manage"
+  "topic_keywordFilter_manage": "Manage",
+
+  "topicDetail_addParticipant": "Add participant",
+  "topicDetail_addParticipantHint": "Search user to add",
+  "topicDetail_addParticipantTitle": "Add participant",
+  "topicDetail_archivePrivateMessage": "Archive",
+  "topicDetail_moveToInbox": "Move to inbox",
+  "topicDetail_participantAdded": "Added {username} to the private message",
+  "@topicDetail_participantAdded": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_participantAddFailed": "Failed to add participant: {error}",
+  "@topicDetail_participantAddFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_participantRemoveFailed": "Failed to remove participant: {error}",
+  "@topicDetail_participantRemoveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_kickParticipant": "Remove @{username}",
+  "@topicDetail_kickParticipant": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_confirmKickTitle": "Remove participant"
 }
