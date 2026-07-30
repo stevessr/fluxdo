@@ -48,6 +48,7 @@ class ChatChannelSettingsSheet extends ConsumerStatefulWidget {
 class _ChatChannelSettingsSheetState
     extends ConsumerState<ChatChannelSettingsSheet> {
   bool _isSaving = false;
+
   /// 本地乐观覆盖的通知级别（避免 invalidate 前 UI 不刷新）
   String? _localNotificationLevel;
   bool? _localMuted;
@@ -65,16 +66,16 @@ class _ChatChannelSettingsSheetState
       );
       ref.invalidate(chatChannelsProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(newMuted ? '已开启免打扰' : '已关闭免打扰')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(newMuted ? '已开启免打扰' : '已关闭免打扰')));
       }
     } catch (e) {
       if (mounted) {
         setState(() => _localMuted = channel.muted);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('设置失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('设置失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -117,16 +118,16 @@ class _ChatChannelSettingsSheetState
           'always' => '全部消息',
           _ => '仅提及',
         };
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('通知级别已设为「$label」')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('通知级别已设为「$label」')));
       }
     } catch (e) {
       if (mounted) {
         setState(() => _localNotificationLevel = channel.notificationLevel);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('设置失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('设置失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -209,11 +210,14 @@ class _ChatChannelSettingsSheetState
       // 失败回滚
       ref
           .read(chatChannelsProvider.notifier)
-          .setThreadingEnabledLocally(widget.channelId, channel.threadingEnabled);
+          .setThreadingEnabledLocally(
+            widget.channelId,
+            channel.threadingEnabled,
+          );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('设置失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('设置失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -221,8 +225,9 @@ class _ChatChannelSettingsSheetState
   }
 
   void _showEditChannelDialog(ChatChannel? channel) {
-    final titleController =
-        TextEditingController(text: channel?.title ?? widget.channelTitle);
+    final titleController = TextEditingController(
+      text: channel?.title ?? widget.channelTitle,
+    );
     final slugController = TextEditingController(text: channel?.slug ?? '');
     var selectedEmoji = ChatChannel.normalizeEmojiShortcode(channel?.emoji);
 
@@ -244,8 +249,9 @@ class _ChatChannelSettingsSheetState
                     onEmojiSelected: (Emoji emoji) {
                       Navigator.pop(sheetCtx);
                       setDialogState(() {
-                        selectedEmoji =
-                            ChatChannel.normalizeEmojiShortcode(emoji.name);
+                        selectedEmoji = ChatChannel.normalizeEmojiShortcode(
+                          emoji.name,
+                        );
                       });
                     },
                     onStickerSelected: (_) {},
@@ -306,9 +312,9 @@ class _ChatChannelSettingsSheetState
                                       )
                                     : Icon(
                                         Icons.add_reaction_outlined,
-                                        color: Theme.of(ctx)
-                                            .colorScheme
-                                            .onPrimaryContainer,
+                                        color: Theme.of(
+                                          ctx,
+                                        ).colorScheme.onPrimaryContainer,
                                       ),
                               ),
                             ),
@@ -357,9 +363,9 @@ class _ChatChannelSettingsSheetState
                       }
                     } catch (e) {
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('更新失败: $e')),
-                        );
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('更新失败: $e')));
                       }
                     } finally {
                       if (mounted) setState(() => _isSaving = false);
@@ -469,9 +475,9 @@ class _ChatChannelSettingsSheetState
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.chat_leave_failed('$e'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.chat_leave_failed('$e'))));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -480,8 +486,6 @@ class _ChatChannelSettingsSheetState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isFavorite =
-        ref.watch(chatFavoritesProvider).contains(widget.channelId);
     final currentUser = ref.watch(currentUserProvider).value;
     final isStaff = currentUser is User ? currentUser.isStaff : false;
 
@@ -516,8 +520,9 @@ class _ChatChannelSettingsSheetState
                   height: 4,
                   margin: const EdgeInsets.only(top: 4, bottom: 12),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant
-                        .withValues(alpha: 0.4),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.4,
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -587,23 +592,6 @@ class _ChatChannelSettingsSheetState
 
               SwitchListTile(
                 secondary: Icon(
-                  isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: isFavorite ? Colors.amber : null,
-                ),
-                title: const Text('收藏频道'),
-                subtitle: const Text('与云端收藏实时同步，置顶在频道列表'),
-                value: isFavorite,
-                onChanged: _isSaving
-                    ? null
-                    : (_) {
-                        ref
-                            .read(chatFavoritesProvider.notifier)
-                            .toggleFavorite(widget.channelId);
-                      },
-              ),
-
-              SwitchListTile(
-                secondary: Icon(
                   mutedValue
                       ? Icons.notifications_off_rounded
                       : Icons.notifications_none_rounded,
@@ -620,14 +608,12 @@ class _ChatChannelSettingsSheetState
               ListTile(
                 leading: const Icon(Icons.notifications_active_outlined),
                 title: const Text('通知级别'),
-                subtitle: Text(
-                  switch (notifLevel) {
-                    'never' => '从不',
-                    'always' => '全部消息',
-                    'mention' => '仅提及',
-                    _ => '仅提及（默认）',
-                  },
-                ),
+                subtitle: Text(switch (notifLevel) {
+                  'never' => '从不',
+                  'always' => '全部消息',
+                  'mention' => '仅提及',
+                  _ => '仅提及（默认）',
+                }),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: _isSaving || channel == null
                     ? null
@@ -671,9 +657,10 @@ class _ChatChannelSettingsSheetState
                   final channelDays =
                       (settings['chat_channel_retention_days'] as num?)
                           ?.toInt();
-                  final dmDays =
-                      (settings['chat_dm_retention_days'] as num?)?.toInt();
-                  final text = channel?.retentionDisplay(
+                  final dmDays = (settings['chat_dm_retention_days'] as num?)
+                      ?.toInt();
+                  final text =
+                      channel?.retentionDisplay(
                         channelRetentionDays: channelDays,
                         dmRetentionDays: dmDays,
                       ) ??
@@ -693,15 +680,18 @@ class _ChatChannelSettingsSheetState
                 },
               ),
 
-              // 仅有编辑权限时显示「编辑频道属性」入口
-              if (canEdit)
+              // 仅有编辑权限时显示「编辑频道属性」入口；双人私聊无修改权限,不显示
+              if (canEdit &&
+                  !(channel?.isDirectMessage == true &&
+                      channel?.isGroupDm != true))
                 ListTile(
                   leading: const Icon(Icons.tune_rounded),
                   title: const Text('编辑频道属性'),
                   subtitle: const Text('修改频道名称、缩略名及自定义图标'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap:
-                      _isSaving ? null : () => _showEditChannelDialog(channel),
+                  onTap: _isSaving
+                      ? null
+                      : () => _showEditChannelDialog(channel),
                 )
               else
                 ListTile(
@@ -720,13 +710,11 @@ class _ChatChannelSettingsSheetState
               ListTile(
                 leading: const Icon(Icons.group_outlined),
                 title: Text(context.l10n.chat_channel_members),
-                subtitle: Text(
-                  () {
-                    final count = channel?.membersCount;
-                    if (count != null) return '$count 位成员';
-                    return '查看并管理频道成员';
-                  }(),
-                ),
+                subtitle: Text(() {
+                  final count = channel?.membersCount;
+                  if (count != null) return '$count 位成员';
+                  return '查看并管理频道成员';
+                }()),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () {
                   Navigator.pop(context);
