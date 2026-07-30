@@ -6,9 +6,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 import '../../providers/account_providers.dart';
 import '../../providers/discourse_providers.dart';
 import '../../services/account_manager.dart';
-import '../../services/auth_session.dart';
 import '../../services/discourse/discourse_service.dart';
-import '../../services/network/cookie/cookie_jar_service.dart';
 import '../../services/toast_service.dart';
 import '../../utils/dialog_utils.dart';
 import '../common/smart_avatar.dart';
@@ -70,34 +68,6 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
     }
   }
 
-  Future<void> _addAccount() async {
-    final service = DiscourseService();
-    final oldToken = service.tToken;
-    final oldUsername = service.currentUsername;
-
-    debugPrint('[AccountManage] 保存旧会话准备添加账号: $oldUsername');
-
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const LoginPage(saveOnly: true)),
-    );
-
-    if (result == true && mounted) {
-      // 账号已由 LoginPage saveOnly 模式保存到 AccountManager
-      // 恢复旧会话，避免白屏
-      if (oldToken != null && oldToken.isNotEmpty) {
-        await CookieJarService().setCookie('_t', oldToken);
-        service.setToken(oldToken);
-        if (oldUsername != null) {
-          await service.saveUsername(oldUsername);
-        }
-        AuthSession().advance();
-        ref.invalidate(currentUserProvider);
-        debugPrint('[AccountManage] 已恢复旧会话: $oldUsername');
-      }
-      ref.invalidate(accountListProvider);
-    }
-  }
-
   Future<void> _logoutCurrent() async {
     final confirmed = await showAppDialog<bool>(
       context: context,
@@ -150,7 +120,15 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
           IconButton(
             icon: const Icon(Symbols.person_add_rounded),
             tooltip: '添加账号',
-            onPressed: _switching ? null : _addAccount,
+            onPressed: _switching
+                ? null
+                : () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const _LoginPageForwarder(),
+                      ),
+                    );
+                  },
           ),
         ],
       ),
@@ -184,7 +162,13 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
                     ),
                     const SizedBox(height: 24),
                     FilledButton.icon(
-                      onPressed: _addAccount,
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const _LoginPageForwarder(),
+                          ),
+                        );
+                      },
                       icon: const Icon(Symbols.add_rounded, size: 20),
                       label: const Text('添加账号'),
                     ),
@@ -227,7 +211,15 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: OutlinedButton.icon(
-                  onPressed: _switching ? null : _addAccount,
+                  onPressed: _switching
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const _LoginPageForwarder(),
+                            ),
+                          );
+                        },
                   icon: const Icon(Symbols.add_rounded, size: 20),
                   label: const Text('添加账号'),
                 ),
@@ -323,11 +315,7 @@ class _AccountTile extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return ListTile(
-      leading: SmartAvatar(
-        radius: 20,
-        fallbackText: account.username,
-        imageUrl: account.avatarUrl,
-      ),
+      leading: SmartAvatar(radius: 20, fallbackText: account.username),
       title: Text(
         account.username,
         style: theme.textTheme.bodyLarge?.copyWith(

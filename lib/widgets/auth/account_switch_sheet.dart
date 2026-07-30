@@ -267,9 +267,9 @@ class _LoginPageForwarderState extends State<_LoginPageForwarder> {
     // 用 post-frame 确保 sheet 关闭动画首帧无卡顿、路由不会中间态闪现
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginPage(saveOnly: true)),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginPage()));
     });
   }
 
@@ -278,12 +278,6 @@ class _LoginPageForwarderState extends State<_LoginPageForwarder> {
     return const SizedBox.shrink();
   }
 }
-
-/// 从底部切换面板添加账号后的恢复逻辑。
-/// 与 [AccountManagePage._addAccount] 不同，此处的 _LoginPageForwarder
-/// 先 pop 关闭面板再 push LoginPage，无法直接 await 结果。
-/// 这里不恢复旧会话——面板关闭后用户已返回上级页面，
-/// 由 _syncCurrentToManager 在下一次用户数据加载时修正。
 
 class _AccountTile extends StatelessWidget {
   final StoredAccount account;

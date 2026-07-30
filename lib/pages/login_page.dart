@@ -40,9 +40,7 @@ import 'webview_login_page.dart';
 const String _kLinuxDoHcaptchaSiteKey = 'a776b4ac-8c4c-441e-986a-c6ee9ed8cf08';
 
 class LoginPage extends StatefulWidget {
-  final bool saveOnly;
-
-  const LoginPage({super.key, this.saveOnly = false});
+  const LoginPage({super.key});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -223,29 +221,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     }
 
     if (result.status == WebViewLoginStatus.success) {
-      if (widget.saveOnly) {
-        // saveOnly 模式：仅保存账号凭证到管理器，不切换当前会话。
-        // 当前会话由调用方（AccountManagePage）负责恢复。
-        try {
-          final accountToken = await CookieJarService().getTToken();
-          if (accountToken != null && accountToken.isNotEmpty) {
-            await AccountManager().addAccount(
-              StoredAccount(
-                username: identifier,
-                token: accountToken,
-                lastLoginAt: DateTime.now(),
-              ),
-            );
-          }
-        } catch (e) {
-          debugPrint('[LoginPage] 保存账号到多账号管理器失败: $e');
-        }
-        if (!mounted) return true;
-        ToastService.showSuccess('账号已添加');
-        Navigator.of(context).pop(true);
-        return true;
-      }
-
       // dialog 已把会话 cookie (_t/_forum_session) 同步落 jar,
       // 这里复用收尾: AuthSession.advance → setToken → 预加载数据 → 登录广播。
       await service.finalizeNativeLoginSuccess(identifier);
@@ -553,9 +528,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   /// 扫码登录:跳转扫码页,成功后 pop 登录页
   Future<void> _loginWithQrScan() async {
-    final result = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const QrLoginScanPage()));
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const QrLoginScanPage()),
+    );
     if (result == true && mounted) {
       Navigator.of(context).pop(true);
     }

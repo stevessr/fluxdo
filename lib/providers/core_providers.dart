@@ -167,7 +167,6 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
           username: user.username,
           token: token,
           lastLoginAt: DateTime.now(),
-          avatarUrl: user.getAvatarUrl(size: 120),
         ),
       );
     } catch (e) {
