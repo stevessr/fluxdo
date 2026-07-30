@@ -8,8 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../services/discourse/discourse_service.dart';
 import '../services/preloaded_data_service.dart';
-import '../services/account_manager.dart';
-import '../services/network/cookie/cookie_jar_service.dart';
 
 /// Discourse 服务 Provider
 final discourseServiceProvider = Provider((ref) => DiscourseService());
@@ -73,7 +71,6 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       final user = await _loadUser(service);
       if (user != null) {
         _saveCache(prefs, user);
-        _syncCurrentToManager(service);
         return user;
       }
       // 网络返回 null 但本地有缓存时，保守处理：保留缓存返回，
@@ -113,7 +110,6 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
         final prefs = await SharedPreferences.getInstance();
         _saveCache(prefs, user);
         state = AsyncValue.data(user);
-        _syncCurrentToManager(service);
       } else {
         state = AsyncValue.data(previous);
       }
@@ -137,7 +133,6 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
         final prefs = await SharedPreferences.getInstance();
         _saveCache(prefs, merged);
         state = AsyncValue.data(merged);
-        _syncCurrentToManager(service);
       } catch (_) {
         // 后台刷新失败时静默忽略，refreshSilently 会负责设置错误状态
       }
@@ -153,25 +148,6 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       seenNotificationId: preloadedUser.seenNotificationId,
       notificationChannelPosition: preloadedUser.notificationChannelPosition,
     );
-  }
-
-  /// 确保当前登录账号已记录到 AccountManager
-  Future<void> _syncCurrentToManager(DiscourseService service) async {
-    try {
-      final token = await CookieJarService().getTToken();
-      if (token == null || token.isEmpty) return;
-      final user = state.value;
-      if (user == null) return;
-      await AccountManager().addAccount(
-        StoredAccount(
-          username: user.username,
-          token: token,
-          lastLoginAt: DateTime.now(),
-        ),
-      );
-    } catch (e) {
-      debugPrint('[CurrentUserNotifier] 同步账号到管理器失败: $e');
-    }
   }
 
   void _saveCache(SharedPreferences prefs, User user) {

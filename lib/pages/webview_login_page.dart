@@ -19,7 +19,6 @@ import '../services/network/cookie/boundary_sync_service.dart';
 import '../services/network/cookie/cookie_jar_service.dart';
 import '../services/network/cookie/csrf_token_service.dart';
 import '../services/network/cookie/webview_cookie_priming.dart';
-import '../services/account_manager.dart';
 import '../services/toast_service.dart';
 import '../services/webview_settings.dart';
 import '../services/webview_session_cookie_refresh_service.dart';
@@ -560,22 +559,6 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
         pageHtml: pageHtml,
         browserSessionSynced: browserSessionSynced,
       );
-
-      // 保存账号到多账号管理器
-      try {
-        final jarToken = await _cookieJar.getTToken();
-        if (jarToken != null && jarToken.isNotEmpty) {
-          await AccountManager().addAccount(
-            StoredAccount(
-              username: username,
-              token: jarToken,
-              lastLoginAt: DateTime.now(),
-            ),
-          );
-        }
-      } catch (e) {
-        debugPrint('[WebViewLogin] 保存账号到多账号管理器失败: $e');
-      }
 
       if (mounted) {
         ToastService.showSuccess(S.current.webviewLogin_loginSuccess);
