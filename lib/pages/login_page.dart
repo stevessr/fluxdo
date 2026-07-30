@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/s.dart';
 import '../services/auth_session.dart';
 import '../services/cf_challenge_service.dart';
-import '../services/account_manager.dart';
 import '../services/credential_store_service.dart';
 import '../services/discourse/discourse_service.dart';
 import '../services/network/cookie/boundary_sync_service.dart';
@@ -38,7 +37,6 @@ import 'webview_login_page.dart';
 ///
 /// linux.do 的 hcaptcha sitekey 写死, 后续可从 PreloadedDataService 动态拿。
 const String _kLinuxDoHcaptchaSiteKey = 'a776b4ac-8c4c-441e-986a-c6ee9ed8cf08';
-
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -46,7 +44,8 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage>
+    with TickerProviderStateMixin {
   String? _savedUsername;
   String? _savedPassword;
   bool _credentialsLoaded = false;
@@ -94,10 +93,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    if (identical(
-      UserApiKeyLoginFlow.instance.onFlowFinished,
-      _onBrowserAuthFinished,
-    )) {
+    if (identical(UserApiKeyLoginFlow.instance.onFlowFinished, _onBrowserAuthFinished)) {
       UserApiKeyLoginFlow.instance.onFlowFinished = null;
     }
     _entryController.dispose();
@@ -211,7 +207,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       hcaptchaCreateEndpoint: hcaptchaEndpoint,
       onNeedSecondFactor: (need) => showTwoFactorDialog(
         context,
-        hint: need.totpEnabled ? '请输入身份验证器 App 显示的 6 位验证码' : '此账号需要二步验证',
+        hint: need.totpEnabled
+            ? '请输入身份验证器 App 显示的 6 位验证码'
+            : '此账号需要二步验证',
         onUseBackupCode: () => _loginWithWebView(),
       ),
     );
@@ -224,23 +222,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       // dialog 已把会话 cookie (_t/_forum_session) 同步落 jar,
       // 这里复用收尾: AuthSession.advance → setToken → 预加载数据 → 登录广播。
       await service.finalizeNativeLoginSuccess(identifier);
-
-      // 保存账号到多账号管理器
-      try {
-        final accountToken = await CookieJarService().getTToken();
-        if (accountToken != null && accountToken.isNotEmpty) {
-          await AccountManager().addAccount(
-            StoredAccount(
-              username: identifier,
-              token: accountToken,
-              lastLoginAt: DateTime.now(),
-            ),
-          );
-        }
-      } catch (e) {
-        debugPrint('[LoginPage] 保存账号到多账号管理器失败: $e');
-      }
-
       // 保存账号密码 (可选)
       if (rememberCredentials) {
         try {
@@ -269,7 +250,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     final msg = switch (f.kind) {
       LoginErrorKind.invalidCredentials => '用户名或密码错误',
       LoginErrorKind.secondFactorRequired => f.message ?? '二步验证失败',
-      LoginErrorKind.notActivated => '账号未激活,请到邮箱 ${f.sentToEmail ?? ''} 完成激活',
+      LoginErrorKind.notActivated =>
+        '账号未激活,请到邮箱 ${f.sentToEmail ?? ''} 完成激活',
       LoginErrorKind.notApproved => '账号尚未通过审核',
       LoginErrorKind.passwordExpired => '密码已过期,请用浏览器登录重设密码',
       LoginErrorKind.network => f.message ?? '网络异常',
