@@ -9,6 +9,7 @@ import '../../services/account_manager.dart';
 import '../../services/toast_service.dart';
 import '../../utils/dialog_utils.dart';
 import '../common/smart_avatar.dart';
+import '../../pages/login_page.dart';
 
 /// 多账号切换底部弹出面板
 ///
@@ -179,8 +180,12 @@ class _AccountSwitchSheetState extends ConsumerState<_AccountSwitchSheet> {
             onPressed: _switching
                 ? null
                 : () {
-                    Navigator.of(context).pop(true);
-                    // 由调用方决定如何触发登录页
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const _LoginPageForwarder(),
+                      ),
+                    );
                   },
             icon: const Icon(Symbols.add_rounded, size: 20),
             label: const Text('添加账号'),
@@ -193,6 +198,7 @@ class _AccountSwitchSheetState extends ConsumerState<_AccountSwitchSheet> {
               onPressed: _switching
                   ? null
                   : () async {
+                      final navigator = Navigator.of(context);
                       final confirmed = await showAppDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
@@ -212,9 +218,19 @@ class _AccountSwitchSheetState extends ConsumerState<_AccountSwitchSheet> {
                       );
                       if (confirmed == true && mounted) {
                         final service = ref.read(discourseServiceProvider);
+                        final currentUser = ref.read(currentUserProvider).value;
+                        if (currentUser?.username != null) {
+                          try {
+                            await AccountManager().removeAccount(
+                              currentUser!.username,
+                            );
+                          } catch (e) {
+                            debugPrint('[AccountSwitch] 移除账号失败: $e');
+                          }
+                        }
                         await service.logout();
                         if (mounted) {
-                          Navigator.of(context).pop();
+                          navigator.pop();
                         }
                       }
                     },
@@ -234,6 +250,40 @@ class _AccountSwitchSheetState extends ConsumerState<_AccountSwitchSheet> {
     );
   }
 }
+
+/// 添加账号的跳板 widget —— 渲染后立即 push LoginPage，
+/// 让底栏弹出的切换面板先关闭，再由同一 Navigator 打开登录页。
+class _LoginPageForwarder extends StatefulWidget {
+  const _LoginPageForwarder();
+
+  @override
+  State<_LoginPageForwarder> createState() => _LoginPageForwarderState();
+}
+
+class _LoginPageForwarderState extends State<_LoginPageForwarder> {
+  @override
+  void initState() {
+    super.initState();
+    // 用 post-frame 确保 sheet 关闭动画首帧无卡顿、路由不会中间态闪现
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginPage(saveOnly: true)),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink();
+  }
+}
+
+/// 从底部切换面板添加账号后的恢复逻辑。
+/// 与 [AccountManagePage._addAccount] 不同，此处的 _LoginPageForwarder
+/// 先 pop 关闭面板再 push LoginPage，无法直接 await 结果。
+/// 这里不恢复旧会话——面板关闭后用户已返回上级页面，
+/// 由 _syncCurrentToManager 在下一次用户数据加载时修正。
 
 class _AccountTile extends StatelessWidget {
   final StoredAccount account;

@@ -7,31 +7,40 @@ class StoredAccount {
   final String username;
   final String token;
   final DateTime lastLoginAt;
+  final String? avatarUrl;
 
   const StoredAccount({
     required this.username,
     required this.token,
     required this.lastLoginAt,
+    this.avatarUrl,
   });
 
   Map<String, dynamic> toJson() => {
     'username': username,
     'token': token,
     'lastLoginAt': lastLoginAt.toIso8601String(),
+    if (avatarUrl != null) 'avatarUrl': avatarUrl,
   };
 
   factory StoredAccount.fromJson(Map<String, dynamic> json) => StoredAccount(
     username: json['username'] as String,
     token: json['token'] as String,
     lastLoginAt: DateTime.parse(json['lastLoginAt'] as String),
+    avatarUrl: json['avatarUrl'] as String?,
   );
 
-  StoredAccount copyWith({String? username, String? token, DateTime? lastLoginAt}) =>
-      StoredAccount(
-        username: username ?? this.username,
-        token: token ?? this.token,
-        lastLoginAt: lastLoginAt ?? this.lastLoginAt,
-      );
+  StoredAccount copyWith({
+    String? username,
+    String? token,
+    DateTime? lastLoginAt,
+    String? avatarUrl,
+  }) => StoredAccount(
+    username: username ?? this.username,
+    token: token ?? this.token,
+    lastLoginAt: lastLoginAt ?? this.lastLoginAt,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+  );
 }
 
 /// 多账号管理服务（单例）
@@ -109,6 +118,15 @@ class AccountManager {
   Future<bool> hasAccounts() async {
     final accounts = await getAccounts();
     return accounts.isNotEmpty;
+  }
+
+  /// 更新指定账号的 token（账号已存在时更新 token，不改变位置/登录时间）
+  Future<void> updateToken(String username, String newToken) async {
+    final accounts = await getAccounts();
+    final idx = accounts.indexWhere((a) => a.username == username);
+    if (idx < 0) return;
+    accounts[idx] = accounts[idx].copyWith(token: newToken);
+    await _saveAccounts(accounts);
   }
 
   /// 清除所有账号
