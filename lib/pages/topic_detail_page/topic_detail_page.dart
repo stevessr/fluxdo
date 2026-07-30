@@ -87,6 +87,7 @@ import '../../widgets/common/app_bottom_sheet.dart';
 import '../../utils/platform_utils.dart';
 import '../../models/shortcut_binding.dart';
 import '../../providers/shortcut_provider.dart';
+import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
 import '../../widgets/topic/assign_sheet.dart';
 
@@ -1507,8 +1508,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     final isOtherUserFilter = userFilter != null && !isAuthorFilter;
     final bool subscribed =
         detail.notificationLevel.value >= TopicNotificationLevel.tracking.value;
-    final currentUser = ref.read(currentUserProvider).value;
-
     void doBookmark() {
       final traceTarget = _bookmarkEditTarget(detail);
       final traceId = createBookmarkEditTraceId();
@@ -1613,32 +1612,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             icon: Symbols.people_rounded,
             tooltip: context.l10n.topic_participants,
             active: detail.allowedUsers.isNotEmpty,
-            submenu: MenuQuickActionSubmenu(
-              icon: Symbols.people_rounded,
-              label: context.l10n.topic_participants,
-              iconColor: Theme.of(context).colorScheme.primary,
-              children: [
-                // 添加成员
-                MenuQuickActionSubmenuChild(
-                  icon: Symbols.person_add_rounded,
-                  label: context.l10n.topicDetail_addParticipant,
-                  onTap: () => _handleAddParticipant(detail, notifier),
-                ),
-                // 成员列表
-                for (final user in detail.allowedUsers)
-                  MenuQuickActionSubmenuChild(
-                    icon: Symbols.person_rounded,
-                    label: user.displayName,
-                    subtitle: _getParticipantActionLabel(
-                      user,
-                      detail,
-                      currentUser,
-                    ),
-                    selected: currentUser?.id == user.id,
-                    onTap: () => _handleRemovePrivateMessageParticipant(user),
-                  ),
-              ],
-            ),
+            onTap: () => _showParticipantsDialog(detail, notifier),
           ),
         MenuQuickAction(
           icon: Symbols.filter_list_rounded,
@@ -1992,26 +1966,32 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     }
   }
 
-  /// 获取参与者菜单项的操作标签
-  String? _getParticipantActionLabel(
-    TopicUser user,
+  /// 打开私信参与者管理对话框
+  void _showParticipantsDialog(
     TopicDetail detail,
-    User? currentUser,
+    TopicDetailNotifier notifier,
   ) {
-    if (currentUser == null) return null;
-    final isSelf = user.id == currentUser.id;
-    if (isSelf) {
-      // 自己能退出
-      if (detail.canRemoveSelfId == user.id) {
-        return context.l10n.common_exit;
-      }
-      return context.l10n.topic_participants;
-    }
-    // 是否可以移除他人
-    if (detail.canRemoveAllowedUsers) {
-      return context.l10n.topicDetail_kickParticipant(user.username);
-    }
-    return null;
+    final parentContext = context;
+    showAppDialog(
+      context: parentContext,
+      builder: (dialogContext) => _PrivateMessageParticipantsDialog(
+        participants: detail.allowedUsers,
+        currentUserId: ref.read(currentUserProvider).value?.id,
+        canRemoveOtherParticipants:
+            (ref.read(currentUserProvider).value?.admin ?? false) &&
+            detail.canRemoveAllowedUsers,
+        removableSelfId: detail.canRemoveSelfId,
+        removingParticipantId: _removingPrivateMessageParticipantId,
+        onRemoveParticipant: (user) {
+          Navigator.pop(dialogContext);
+          _handleRemovePrivateMessageParticipant(user);
+        },
+        onAddParticipant: () {
+          Navigator.pop(dialogContext);
+          _handleAddParticipant(detail, notifier);
+        },
+      ),
+    );
   }
 
   void _showTimelineSheet(TopicDetail detail) {
@@ -3358,6 +3338,172 @@ class _AddParticipantDialogState extends State<_AddParticipantDialog> {
           child: Text(context.l10n.topicDetail_addParticipant),
         ),
       ],
+    );
+  }
+}
+
+/// 私信参与者管理对话框
+class _PrivateMessageParticipantsDialog extends StatelessWidget {
+  const _PrivateMessageParticipantsDialog({
+    required this.participants,
+    this.currentUserId,
+    required this.canRemoveOtherParticipants,
+    this.removableSelfId,
+    this.removingParticipantId,
+    this.onRemoveParticipant,
+    this.onAddParticipant,
+  });
+
+  final List<TopicUser> participants;
+  final int? currentUserId;
+  final bool canRemoveOtherParticipants;
+  final int? removableSelfId;
+  final int? removingParticipantId;
+  final ValueChanged<TopicUser>? onRemoveParticipant;
+  final VoidCallback? onAddParticipant;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(
+            Icons.lock_outline_rounded,
+            size: 20,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Text(context.l10n.topic_participants),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '${participants.length}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSecondaryContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onAddParticipant != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Symbols.person_add_rounded, size: 18),
+                    label: Text(context.l10n.topicDetail_addParticipant),
+                    onPressed: onAddParticipant,
+                  ),
+                ),
+              ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final participant in participants)
+                    _buildParticipantTile(context, participant),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.l10n.common_close),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildParticipantTile(BuildContext context, TopicUser participant) {
+    final theme = Theme.of(context);
+    final isSelf =
+        participant.id == currentUserId || participant.id == removableSelfId;
+    final canRemoveSelf = isSelf && participant.id == removableSelfId;
+    final canRemoveOther = !isSelf && canRemoveOtherParticipants;
+    final canRemove =
+        onRemoveParticipant != null && (canRemoveSelf || canRemoveOther);
+    final isRemoving = removingParticipantId == participant.id;
+    final controlsLocked = removingParticipantId != null;
+    final showUsername = participant.displayName != participant.username;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SmartAvatar(
+            imageUrl: participant.getAvatarUrl(size: 48),
+            radius: 18,
+            fallbackText: participant.username,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  participant.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (showUsername)
+                  Text(
+                    '@${participant.username}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (canRemove)
+            SizedBox.square(
+              dimension: 36,
+              child: isRemoving
+                  ? const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : IconButton(
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      tooltip: isSelf
+                          ? context.l10n.common_exit
+                          : context.l10n.common_remove,
+                      color: theme.colorScheme.error,
+                      onPressed: controlsLocked
+                          ? null
+                          : () => onRemoveParticipant!(participant),
+                      icon: Icon(
+                        isSelf
+                            ? Icons.logout_rounded
+                            : Icons.person_remove_alt_1_rounded,
+                        size: 20,
+                      ),
+                    ),
+            ),
+        ],
+      ),
     );
   }
 }
