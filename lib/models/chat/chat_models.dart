@@ -158,7 +158,7 @@ class ChatChannelsState {
 
   static Map<String, int>? _parseMessageBusIds(dynamic ids) {
     if (ids is! Map) return null;
-    return (ids as Map).map(
+    return ids.map(
       (k, v) => MapEntry(k.toString(), (v as num).toInt()),
     );
   }

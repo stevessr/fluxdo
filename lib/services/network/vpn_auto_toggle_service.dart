@@ -69,6 +69,7 @@ class VpnAutoToggleService {
   /// - 订阅 [SystemProxyService.version](其内部已有 10s 注册表节拍);
   /// - 低频异步兜底重检网卡。检测本身是异步枚举,不落在 UI 帧上,
   ///   与曾导致周期性卡顿的 3s 同步轮询不同。
+  // ignore: unused_field — 持有引用避免 Timer 被 GC；非 Windows 平台不创建
   Timer? _windowsFallbackTimer;
   static const _windowsFallbackInterval = Duration(seconds: 15);
   bool _windowsSignalWatchStarted = false;
@@ -234,7 +235,8 @@ class VpnAutoToggleService {
       resolveVpnActive(
         connectivityResults: _lastConnectivityResults,
         hasWindowsVpnAdapter: _lastHasWindowsVpnAdapter,
-        systemProxyEnabled: Platform.isWindows &&
+        systemProxyEnabled:
+            Platform.isWindows &&
             SystemProxyService.instance.effectiveProxyUrl != null,
       ),
       shouldSuppress: shouldAutoSuppress(_lastConnectivityResults),
@@ -252,7 +254,8 @@ class VpnAutoToggleService {
     final hasVpn = resolveVpnActive(
       connectivityResults: results,
       hasWindowsVpnAdapter: hasWindowsVpnAdapter,
-      systemProxyEnabled: Platform.isWindows &&
+      systemProxyEnabled:
+          Platform.isWindows &&
           SystemProxyService.instance.effectiveProxyUrl != null,
     );
     final mode = detectionMode;

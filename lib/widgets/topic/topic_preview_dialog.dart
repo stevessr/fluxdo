@@ -16,7 +16,6 @@ import '../../pages/topic_detail_page/topic_detail_page.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import '../common/relative_time_text.dart';
 import '../../utils/dialog_utils.dart';
-import '../../utils/number_utils.dart';
 import '../common/emoji_text.dart';
 import '../common/smart_avatar.dart';
 import '../common/topic_badges.dart';
