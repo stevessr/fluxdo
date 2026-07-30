@@ -368,7 +368,11 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
               alignment: PlaceholderAlignment.middle,
               child: Padding(
                 padding: const EdgeInsets.only(right: 6),
-                child: Icon(Symbols.check_box_rounded, size: 20, color: Colors.green),
+                child: Icon(
+                  Symbols.check_box_rounded,
+                  size: 20,
+                  color: Colors.green,
+                ),
               ),
             ),
           ...EmojiText.buildEmojiSpans(
@@ -603,9 +607,7 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
               child: _buildStatItem(
                 context,
                 Symbols.favorite_border_rounded,
-                S.current.topic_likeCount(
-                  NumberUtils.formatCount(topic.likeCount),
-                ),
+                S.current.topic_likeCount(topic.likeCount),
               ),
             ),
           ],
@@ -617,7 +619,7 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
               child: _buildStatItem(
                 context,
                 Symbols.visibility_rounded,
-                S.current.topic_viewCount(NumberUtils.formatCount(topic.views)),
+                S.current.topic_viewCount(topic.views),
               ),
             ),
             Expanded(

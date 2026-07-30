@@ -71,9 +71,9 @@
   "topic_filterLatest": "Latest",
   "topic_filterNew": "New",
   "topic_filterNewAllShort": "All",
-  "topic_filterNewReplies": "New \u00b7 Replies",
+  "topic_filterNewReplies": "New · Replies",
   "topic_filterNewRepliesShort": "Replies",
-  "topic_filterNewTopics": "New \u00b7 Topics",
+  "topic_filterNewTopics": "New · Topics",
   "topic_filterNewTopicsShort": "Topics",
   "topic_filterTooltip": "Filter: {label}",
   "topic_filterTop": "Top",
@@ -132,7 +132,6 @@
   "topics_viewNewTopics": "View {count} new or updated topics",
   "topic_keywordFilter_hiddenCount": "{count} topics hidden",
   "topic_keywordFilter_manage": "Manage",
-
   "topicDetail_addParticipant": "Add participant",
   "topicDetail_addParticipantHint": "Search user to add",
   "topicDetail_addParticipantTitle": "Add participant",
@@ -170,5 +169,113 @@
       }
     }
   },
-  "topicDetail_confirmKickTitle": "Remove participant"
+  "topicDetail_confirmKickTitle": "Remove participant",
+  "@topicDetail_readLaterFull": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "@topicDetail_setToLevel": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "@topicDetail_showHiddenReplies": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_filterTooltip": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "@topic_likeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_minTagsRequired": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_newRepliesSinceSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_remainingTags": {
+    "placeholders": {
+      "remaining": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_replyCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_sortTooltip": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "@topic_tagGroupRequirement": {
+    "placeholders": {
+      "minCount": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@topic_viewCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topics_dismissConfirmContent": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "@topics_viewNewTopics": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_keywordFilter_hiddenCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

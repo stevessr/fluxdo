@@ -130,7 +130,7 @@
   "@topic_likeCount": {
     "placeholders": {
       "count": {
-        "type": "String"
+        "type": "int"
       }
     }
   },
@@ -196,7 +196,7 @@
   "@topic_viewCount": {
     "placeholders": {
       "count": {
-        "type": "String"
+        "type": "int"
       }
     }
   },

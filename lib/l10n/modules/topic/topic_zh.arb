@@ -1,5 +1,13 @@
 {
   "@@locale": "zh",
+  "topicDetail_browseMoreInCategory": "想阅读更多？浏览 {category} 分类",
+  "@topicDetail_browseMoreInCategory": {
+    "placeholders": {
+      "category": {
+        "type": "String"
+      }
+    }
+  },
   "topicDetail_addToReadLater": "添加到浮窗",
   "topicDetail_addToReadLaterSuccess": "已添加到浮窗",
   "topicDetail_aiAssistant": "AI 助手",
@@ -124,7 +132,6 @@
   "topics_viewNewTopics": "查看 {count} 个新的或更新的话题",
   "topic_keywordFilter_hiddenCount": "已隐藏 {count} 条话题",
   "topic_keywordFilter_manage": "管理",
-
   "topicDetail_addParticipant": "添加成员",
   "topicDetail_addParticipantHint": "搜索要添加的用户",
   "topicDetail_addParticipantTitle": "添加成员",
@@ -135,7 +142,6 @@
   "topicDetail_participantRemoveFailed": "移除成员失败: {error}",
   "topicDetail_kickParticipant": "移出 @{username}",
   "topicDetail_confirmKickTitle": "移出成员",
-
   "@topicDetail_participantAdded": {
     "placeholders": {
       "username": {
@@ -161,6 +167,114 @@
     "placeholders": {
       "username": {
         "type": "String"
+      }
+    }
+  },
+  "@topicDetail_readLaterFull": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "@topicDetail_setToLevel": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "@topicDetail_showHiddenReplies": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_filterTooltip": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "@topic_likeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_minTagsRequired": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_newRepliesSinceSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_remainingTags": {
+    "placeholders": {
+      "remaining": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_replyCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_sortTooltip": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "@topic_tagGroupRequirement": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "minCount": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_viewCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topics_dismissConfirmContent": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "@topics_viewNewTopics": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@topic_keywordFilter_hiddenCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
       }
     }
   }

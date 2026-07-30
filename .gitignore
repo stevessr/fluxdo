@@ -1,3 +1,6 @@
+# Agent worktrees — never tracked
+.claude/worktrees/
+
 # Miscellaneous
 *.class
 *.log
