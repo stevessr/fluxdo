@@ -20,7 +20,8 @@ class ChatMessageReaction {
     return ChatMessageReaction(
       emoji: json['emoji']?.toString() ?? json['id']?.toString() ?? '',
       count: (json['count'] as num?)?.toInt() ?? 1,
-      reacted: json['reacted'] as bool? ?? json['user_reacted'] as bool? ?? false,
+      reacted:
+          json['reacted'] as bool? ?? json['user_reacted'] as bool? ?? false,
       users: (json['users'] as List?)
           ?.map((e) => ChatUser.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
@@ -28,11 +29,11 @@ class ChatMessageReaction {
   }
 
   Map<String, dynamic> toJson() => {
-        'emoji': emoji,
-        'count': count,
-        'reacted': reacted,
-        if (users != null) 'users': users!.map((u) => u.toJson()).toList(),
-      };
+    'emoji': emoji,
+    'count': count,
+    'reacted': reacted,
+    if (users != null) 'users': users!.map((u) => u.toJson()).toList(),
+  };
 }
 
 /// Chat 消息数据模型
@@ -44,6 +45,9 @@ class ChatMessage {
   final int chatChannelId;
   final ChatUser? user;
   final int? inReplyToId;
+
+  /// 消息摘要（Discourse excerpt，用于 in_reply_to 预览）
+  final String? excerpt;
 
   /// Discourse 嵌套的被回复消息摘要（可能不在当前消息窗口内）。
   /// 仅作预览；完整消息以列表内查找结果为准。
@@ -94,13 +98,16 @@ class ChatMessage {
     this.bookmarkId,
     this.pinned = false,
     this.availableFlags,
+    this.excerpt,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     // Discourse message serializer 在有书签时返回 bookmark 对象（含 id）
-    final bookmarkObj =
-        json['bookmark'] is Map ? Map<String, dynamic>.from(json['bookmark'] as Map) : null;
-    final parsedBookmarkId = (bookmarkObj?['id'] as num?)?.toInt() ??
+    final bookmarkObj = json['bookmark'] is Map
+        ? Map<String, dynamic>.from(json['bookmark'] as Map)
+        : null;
+    final parsedBookmarkId =
+        (bookmarkObj?['id'] as num?)?.toInt() ??
         (json['bookmark_id'] as num?)?.toInt();
 
     // 嵌套 in_reply_to 只解析一层，避免循环引用
@@ -123,7 +130,9 @@ class ChatMessage {
       id: (json['id'] as num?)?.toInt() ?? 0,
       message: json['message']?.toString() ?? '',
       cooked: json['cooked']?.toString(),
-      createdAt: TimeUtils.parseUtcTime(json['created_at']?.toString()) ?? DateTime.now(),
+      createdAt:
+          TimeUtils.parseUtcTime(json['created_at']?.toString()) ??
+          DateTime.now(),
       chatChannelId: (json['chat_channel_id'] as num?)?.toInt() ?? 0,
       user: json['user'] is Map
           ? ChatUser.fromJson(Map<String, dynamic>.from(json['user'] as Map))
@@ -138,7 +147,11 @@ class ChatMessage {
           ?.map((e) => Map<String, dynamic>.from(e as Map))
           .toList(),
       reactions: (json['reactions'] as List?)
-          ?.map((e) => ChatMessageReaction.fromJson(Map<String, dynamic>.from(e as Map)))
+          ?.map(
+            (e) => ChatMessageReaction.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
           .toList(),
       edited: json['edited'] as bool? ?? false,
       // Discourse 用 deleted_at 表示删除，没有单独的 deleted 布尔字段
@@ -147,13 +160,15 @@ class ChatMessage {
           ? TimeUtils.parseUtcTime(json['deleted_at']?.toString())
           : null,
       deletedById: (json['deleted_by_id'] as num?)?.toInt(),
-      bookmarked: (json['bookmarked'] as bool?) ??
+      bookmarked:
+          (json['bookmarked'] as bool?) ??
           (bookmarkObj != null || parsedBookmarkId != null),
       bookmarkId: parsedBookmarkId,
       pinned: json['pinned'] as bool? ?? false,
       availableFlags: (json['available_flags'] as List?)
           ?.map((e) => e.toString())
           .toList(),
+      excerpt: json['excerpt']?.toString(),
     );
   }
 
@@ -180,6 +195,7 @@ class ChatMessage {
     bool clearBookmarkId = false,
     bool? pinned,
     List<String>? availableFlags,
+    String? excerpt,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -203,6 +219,7 @@ class ChatMessage {
       bookmarkId: clearBookmarkId ? null : (bookmarkId ?? this.bookmarkId),
       pinned: pinned ?? this.pinned,
       availableFlags: availableFlags ?? this.availableFlags,
+      excerpt: excerpt ?? this.excerpt,
     );
   }
 }
