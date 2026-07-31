@@ -741,10 +741,23 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
           _replyToMessage!.user?.name ??
           _replyToMessage!.user?.username ??
           '用户';
-      final preview = _replyToMessage!.message;
+      final preview =
+          _replyToMessage!.excerpt ??
+          _stripMarkdownForPreview(_replyToMessage!.message);
       return '正在回复 $name: $preview';
     }
     return '正在回复消息串中的消息';
+  }
+
+  /// 预览用纯文本：剥离 markdown 记号，避免回复条里出现 `**`/`[链接](url)`。
+  static String _stripMarkdownForPreview(String raw) {
+    var text = raw
+        .replaceAll(RegExp(r'```[\s\S]*?```'), ' ')
+        .replaceAll(RegExp(r'!\[[^\]]*\]\([^)]*\)'), '')
+        .replaceAll(RegExp(r'\[([^\]]*)\]\([^)]*\)'), r'$1')
+        .replaceAll(RegExp(r'^\s*>+\s?', multiLine: true), '')
+        .replaceAll(RegExp(r'[*_~`]'), '');
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   @override

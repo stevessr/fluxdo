@@ -387,6 +387,14 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         await ref
             .read(chatMessagesProvider(widget.channelId).notifier)
             .jumpToMessage(messageId);
+        // 加载目标消息之后的新消息，确保跳转后能看到后续内容
+        if (!mounted) return;
+        final notifier = ref.read(
+          chatMessagesProvider(widget.channelId).notifier,
+        );
+        if (notifier.canLoadMoreFuture) {
+          await notifier.loadMoreFuture();
+        }
       }
       if (!mounted) return;
       // reverse 列表：index 0 = 最新；按「距最新的距离」粗略定位
@@ -434,6 +442,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     // reverse 列表顶部（历史方向）靠近 maxScrollExtent
     if (maxScroll > 0 && currentScroll >= maxScroll - 240) {
       _loadMoreMessages();
+    }
+
+    // 底部且仍可向未来方向加载（跳转定位后停在历史中段时）→ 向下加载新消息
+    if (atBottom) {
+      _loadMoreFutureMessages();
     }
   }
 
@@ -483,6 +496,16 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     // reverse ListView 在 trailing 端插入更旧消息时，会增大 maxScrollExtent，
     // 同时保持相对底部的 pixels，无需额外锚点补偿。
     await notifier.loadMore();
+  }
+
+  /// 向更新方向加载（跳转定位后停在历史中段时，滚到视觉底部继续加载新消息）。
+  ///
+  /// reverse ListView 在 leading 端（index 0）插入更新消息时，新内容出现在
+  /// 视口下方，当前可见区域不漂移，同样无需锚点补偿。
+  Future<void> _loadMoreFutureMessages() async {
+    final notifier = ref.read(chatMessagesProvider(widget.channelId).notifier);
+    if (!notifier.canLoadMoreFuture || notifier.isLoadingMore) return;
+    await notifier.loadMoreFuture();
   }
 
   /// 监听输入框变化，触发 @ 用户联想
@@ -1445,145 +1468,157 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     return _buildEmptyState(theme);
                   }
 
-                  return NotificationListener<ScrollNotification>(
-                    onNotification: (notification) {
-                      if (notification.metrics.axis != Axis.vertical) {
+                  return RefreshIndicator(
+                    onRefresh: _scrollToLatest,
+                    // reverse 列表在 scopeBottom（scroll position 0 =
+                    // 视觉最新消息）响应下拉刷新，检查并加载新消息。
+                    displacement: 48,
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (notification) {
+                        if (notification.metrics.axis != Axis.vertical) {
+                          return false;
+                        }
+                        final metrics = notification.metrics;
+                        // reverse：靠近 maxScrollExtent = 更旧历史
+                        if (metrics.maxScrollExtent > 0 &&
+                            metrics.pixels >= metrics.maxScrollExtent - 300) {
+                          _loadMoreMessages();
+                        }
+                        // reverse：靠近 0（视觉底部）且仍有未来消息 → 向下加载
+                        if (metrics.pixels <= 300) {
+                          _loadMoreFutureMessages();
+                        }
                         return false;
-                      }
-                      final metrics = notification.metrics;
-                      // reverse：靠近 maxScrollExtent = 更旧历史
-                      if (metrics.maxScrollExtent > 0 &&
-                          metrics.pixels >= metrics.maxScrollExtent - 300) {
-                        _loadMoreMessages();
-                      }
-                      return false;
-                    },
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      // reverse：index 0 贴在视觉底部 = 最新消息，
-                      // 首屏无需再等 jump，从根上消除「数据在但屏幕空白」。
-                      reverse: true,
-                      scrollCacheExtent: const ScrollCacheExtent.pixels(800),
-                      // reverse 会翻转 padding：top 落在视觉底部（靠近输入框）
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                      // +1：最旧一侧的「加载更多」指示器
-                      itemCount: messages.length + 1,
-                      itemBuilder: (context, index) {
-                        // reverse 下最大 index 在视觉顶部
-                        if (index == messages.length) {
-                          return _buildLoadMoreIndicator();
-                        }
-
-                        // messages 仍为时间升序；reverse 映射最新到 index 0
-                        final messageIndex = messages.length - 1 - index;
-                        final message = messages[messageIndex];
-                        final isOwnMessage =
-                            currentUser != null &&
-                            message.user != null &&
-                            message.user!.id == currentUser.id;
-
-                        // 日期分割：相对时间序上一条（更旧）
-                        bool showDateHeader = false;
-                        if (messageIndex == 0) {
-                          showDateHeader = true;
-                        } else {
-                          final prevMessage = messages[messageIndex - 1];
-                          showDateHeader = !_isSameDay(
-                            message.createdAt,
-                            prevMessage.createdAt,
-                          );
-                        }
-
-                        // 连续相同发送者的消息分组：不重复显示昵称和头像
-                        // 昵称只显示在第一条（最上面），头像只显示在最后一条
-                        // 自己的消息始终显示头像以保持对齐
-                        final bool isFirstInGroup;
-                        final bool isLastInGroup;
-                        if (message.user != null) {
-                          final userId = message.user!.id;
-                          isFirstInGroup =
-                              messageIndex == 0 ||
-                              messages[messageIndex - 1].user?.id != userId;
-                          isLastInGroup =
-                              isOwnMessage ||
-                              messageIndex == messages.length - 1 ||
-                              messages[messageIndex + 1].user?.id != userId;
-                        } else {
-                          isFirstInGroup = false;
-                          isLastInGroup = false;
-                        }
-
-                        // 查找关联回复消息：优先用当前窗口内完整消息，
-                        // 找不到则回退到服务端嵌套的 in_reply_to 摘要。
-                        // 消息串开启时对齐 Discourse hideReplyToInfo：
-                        // 不展示频道内引用条，改走消息串指示器。
-                        final threadingOn =
-                            currentChannel?.threadingEnabled == true ||
-                            message.thread?.force == true;
-                        ChatMessage? replyToMsg;
-                        if (!threadingOn && message.inReplyToId != null) {
-                          for (final m in messages) {
-                            if (m.id == message.inReplyToId) {
-                              replyToMsg = m;
-                              break;
-                            }
-                          }
-                          replyToMsg ??= message.inReplyTo;
-                        }
-
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (showDateHeader)
-                              _buildDateHeader(theme, message.createdAt),
-                            _ChatMessageBubble(
-                              message: message,
-                              replyToMessage: replyToMsg,
-                              isOwnMessage: isOwnMessage,
-                              showSender: isFirstInGroup,
-                              showAvatar: isLastInGroup,
-                              avatarUrl: _buildAvatarUrl(message.user),
-                              theme: theme,
-                              threadingEnabled: threadingOn,
-                              isMultiSelectMode: _isMultiSelectMode,
-                              isSelected: _selectedMessageIds.contains(
-                                message.id,
-                              ),
-                              onToggleSelect: (id) => _toggleSelectMessage(id),
-                              onLongPress: () => _showMessageActionSheet(
-                                message,
-                                isOwnMessage,
-                              ),
-                              onRestore: message.deleted
-                                  ? () => _restoreMessage(message)
-                                  : null,
-                              onToggleReaction: (emoji) {
-                                ref
-                                    .read(
-                                      chatMessagesProvider(
-                                        widget.channelId,
-                                      ).notifier,
-                                    )
-                                    .toggleReaction(message.id, emoji);
-                              },
-                              onReactButtonTap: () =>
-                                  _showQuickReactionPicker(message),
-                              onReplyTap: message.inReplyToId != null
-                                  ? () => _jumpToMessage(message.inReplyToId!)
-                                  : null,
-                              onThreadTap:
-                                  (message.thread != null &&
-                                      message.thread!.hasVisibleReplies)
-                                  ? () => _openThreadFromIndicator(message)
-                                  : null,
-                              onMessageVisible: (messageId) {
-                                // 当消息进入视口时触发延迟已读检查
-                                _markAsReadDelayed(messageId);
-                              },
-                            ),
-                          ],
-                        );
                       },
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        // reverse：index 0 贴在视觉底部 = 最新消息，
+                        // 首屏无需再等 jump，从根上消除「数据在但屏幕空白」。
+                        reverse: true,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        scrollCacheExtent: const ScrollCacheExtent.pixels(800),
+                        // reverse 会翻转 padding：top 落在视觉底部（靠近输入框）
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                        // +1：最旧一侧的「加载更多」指示器
+                        itemCount: messages.length + 1,
+                        itemBuilder: (context, index) {
+                          // reverse 下最大 index 在视觉顶部
+                          if (index == messages.length) {
+                            return _buildLoadMoreIndicator();
+                          }
+
+                          // messages 仍为时间升序；reverse 映射最新到 index 0
+                          final messageIndex = messages.length - 1 - index;
+                          final message = messages[messageIndex];
+                          final isOwnMessage =
+                              currentUser != null &&
+                              message.user != null &&
+                              message.user!.id == currentUser.id;
+
+                          // 日期分割：相对时间序上一条（更旧）
+                          bool showDateHeader = false;
+                          if (messageIndex == 0) {
+                            showDateHeader = true;
+                          } else {
+                            final prevMessage = messages[messageIndex - 1];
+                            showDateHeader = !_isSameDay(
+                              message.createdAt,
+                              prevMessage.createdAt,
+                            );
+                          }
+
+                          // 连续相同发送者的消息分组：不重复显示昵称和头像
+                          // 昵称只显示在第一条（最上面），头像只显示在最后一条
+                          // 自己的消息始终显示头像以保持对齐
+                          final bool isFirstInGroup;
+                          final bool isLastInGroup;
+                          if (message.user != null) {
+                            final userId = message.user!.id;
+                            isFirstInGroup =
+                                messageIndex == 0 ||
+                                messages[messageIndex - 1].user?.id != userId;
+                            isLastInGroup =
+                                isOwnMessage ||
+                                messageIndex == messages.length - 1 ||
+                                messages[messageIndex + 1].user?.id != userId;
+                          } else {
+                            isFirstInGroup = false;
+                            isLastInGroup = false;
+                          }
+
+                          // 查找关联回复消息：优先用当前窗口内完整消息，
+                          // 找不到则回退到服务端嵌套的 in_reply_to 摘要。
+                          // 消息串开启时对齐 Discourse hideReplyToInfo：
+                          // 不展示频道内引用条，改走消息串指示器。
+                          final threadingOn =
+                              currentChannel?.threadingEnabled == true ||
+                              message.thread?.force == true;
+                          ChatMessage? replyToMsg;
+                          if (!threadingOn && message.inReplyToId != null) {
+                            for (final m in messages) {
+                              if (m.id == message.inReplyToId) {
+                                replyToMsg = m;
+                                break;
+                              }
+                            }
+                            replyToMsg ??= message.inReplyTo;
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (showDateHeader)
+                                _buildDateHeader(theme, message.createdAt),
+                              _ChatMessageBubble(
+                                message: message,
+                                replyToMessage: replyToMsg,
+                                isOwnMessage: isOwnMessage,
+                                showSender: isFirstInGroup,
+                                showAvatar: isLastInGroup,
+                                avatarUrl: _buildAvatarUrl(message.user),
+                                theme: theme,
+                                threadingEnabled: threadingOn,
+                                isMultiSelectMode: _isMultiSelectMode,
+                                isSelected: _selectedMessageIds.contains(
+                                  message.id,
+                                ),
+                                onToggleSelect: (id) =>
+                                    _toggleSelectMessage(id),
+                                onLongPress: () => _showMessageActionSheet(
+                                  message,
+                                  isOwnMessage,
+                                ),
+                                onRestore: message.deleted
+                                    ? () => _restoreMessage(message)
+                                    : null,
+                                onToggleReaction: (emoji) {
+                                  ref
+                                      .read(
+                                        chatMessagesProvider(
+                                          widget.channelId,
+                                        ).notifier,
+                                      )
+                                      .toggleReaction(message.id, emoji);
+                                },
+                                onReactButtonTap: () =>
+                                    _showQuickReactionPicker(message),
+                                onReplyTap: message.inReplyToId != null
+                                    ? () => _jumpToMessage(message.inReplyToId!)
+                                    : null,
+                                onThreadTap:
+                                    (message.thread != null &&
+                                        message.thread!.hasVisibleReplies)
+                                    ? () => _openThreadFromIndicator(message)
+                                    : null,
+                                onMessageVisible: (messageId) {
+                                  // 当消息进入视口时触发延迟已读检查
+                                  _markAsReadDelayed(messageId);
+                                },
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
                   );
                 },
@@ -2225,6 +2260,40 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
     return const SizedBox.shrink();
   }
 
+  /// 回复预览文本：显示被回复消息发送者 + 前 ~40 字摘要。
+  ///
+  /// 优先服务端下发的 excerpt（干净纯文本摘要，对齐 Discourse reply
+  /// indicator），其次 message（剥离 markdown 记号），最后从 cooked
+  /// 剥离 HTML 取纯文本。
+  String _replyPreviewText(ChatMessage msg) {
+    final name = msg.user?.name ?? msg.user?.username ?? '未知用户';
+    String? text;
+    final excerpt = msg.excerpt;
+    if (excerpt != null && excerpt.trim().isNotEmpty) {
+      text = excerpt.trim();
+    } else if (msg.message.isNotEmpty) {
+      text = _stripMarkdown(msg.message);
+    } else if (msg.cooked != null) {
+      text = msg.cooked!.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+    }
+    if (text == null || text.isEmpty) return name;
+    const int maxLen = 40;
+    final preview = text.length > maxLen
+        ? '${text.substring(0, maxLen)}…'
+        : text;
+    return '$name: $preview';
+  }
+
+  static String _stripMarkdown(String raw) {
+    var text = raw
+        .replaceAll(RegExp(r'```[\s\S]*?```'), ' ')
+        .replaceAll(RegExp(r'!\[[^\]]*\]\([^)]*\)'), '')
+        .replaceAll(RegExp(r'\[([^\]]*)\]\([^)]*\)'), r'$1')
+        .replaceAll(RegExp(r'^\s*>+\s?', multiLine: true), '')
+        .replaceAll(RegExp(r'[*_~`]'), '');
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
   List<String> _extractImageUrls() {
     final urls = <String>[];
     final seen = <String>{};
@@ -2490,7 +2559,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                               const SizedBox(width: 4),
                               Flexible(
                                 child: Text(
-                                  '${replyToMessage!.user?.name ?? replyToMessage!.user?.username ?? '未知用户'}: ${replyToMessage!.message}',
+                                  _replyPreviewText(replyToMessage!),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.bodySmall?.copyWith(
