@@ -36,8 +36,8 @@ class User {
   final DateTime? lastPostedAt;
   final DateTime? lastSeenAt;
   final DateTime? createdAt;
-  final int? timeRead;        // 总阅读时长（秒）
-  final int? recentTimeRead;  // 近 60 天阅读时长（秒）
+  final int? timeRead; // 总阅读时长（秒）
+  final int? recentTimeRead; // 近 60 天阅读时长（秒）
   final String? location;
   final String? website;
   final String? websiteName;
@@ -50,38 +50,45 @@ class User {
   final int? flairGroupId;
 
   // 关注相关 (discourse-follow 插件)
-  final bool? canFollow;           // 是否可以关注该用户
-  final bool? isFollowed;          // 当前用户是否已关注该用户
-  final int? totalFollowers;       // 粉丝数
-  final int? totalFollowing;       // 关注数
+  final bool? canFollow; // 是否可以关注该用户
+  final bool? isFollowed; // 当前用户是否已关注该用户
+  final int? totalFollowers; // 粉丝数
+  final int? totalFollowing; // 关注数
 
   // 私信相关
-  final bool? canSendPrivateMessages;        // 当前用户是否可以发送私信
-  final bool? canSendPrivateMessageToUser;   // 是否可以给该用户发私信
-  final bool? canChatUser;                   // 是否可与该用户聊天(chat 插件 user_card 注入)
+  final bool? canSendPrivateMessages; // 当前用户是否可以发送私信
+  final bool? canSendPrivateMessageToUser; // 是否可以给该用户发私信
+  final bool? canChatUser; // 是否可与该用户聊天(chat 插件 user_card 注入)
 
   // Discourse Chat 相关
   /// 当前用户是否具备 chat 能力（站点开启且在允许组内）
   final bool? canChat;
+
   /// 当前用户是否已开启个人 chat（can_chat && user_option.chat_enabled）
   final bool? hasChatEnabled;
+
   /// 当前用户是否可创建直接消息
   final bool? canDirectMessage;
+
+  /// 该用户在某话题内的发帖数(card.json 带 include_post_count_for=topicId
+  /// 时 serializer 注入,形如 {topic_id: count};官方用它决定用户卡片
+  /// 是否显示「过滤到该用户的 N 帖」按钮)
+  final Map<int, int> topicPostCount;
 
   // 积分相关
   final int? gamificationScore;
 
   // 订阅级别相关
-  final bool? muted;           // 当前用户是否已静音该用户
-  final bool? ignored;         // 当前用户是否已忽略该用户
-  final bool? canMuteUser;     // 是否可以静音
-  final bool? canIgnoreUser;   // 是否可以忽略
+  final bool? muted; // 当前用户是否已静音该用户
+  final bool? ignored; // 当前用户是否已忽略该用户
+  final bool? canMuteUser; // 是否可以静音
+  final bool? canIgnoreUser; // 是否可以忽略
 
   // 封禁/禁言相关
-  final String? suspendReason;    // 封禁原因
-  final DateTime? suspendedTill;  // 封禁截止时间
-  final String? silenceReason;    // 禁言原因
-  final DateTime? silencedTill;   // 禁言截止时间
+  final String? suspendReason; // 封禁原因
+  final DateTime? suspendedTill; // 封禁截止时间
+  final String? silenceReason; // 禁言原因
+  final DateTime? silencedTill; // 禁言截止时间
 
   // 角色（来自 /session/current.json 的 current_user）
   final bool admin;
@@ -100,7 +107,6 @@ class User {
   /// 聊天草稿(current_user.chat_drafts,最近 20 条原始 JSON:
   /// {channel_id, data, thread_id});chat 层自行解析,登录会话期有效
   final List<Map<String, dynamic>> chatDrafts;
-
 
   User({
     required this.id,
@@ -144,6 +150,7 @@ class User {
     this.canChat,
     this.hasChatEnabled,
     this.canDirectMessage,
+    this.topicPostCount = const {},
     this.gamificationScore,
     this.muted,
     this.ignored,
@@ -173,6 +180,7 @@ class User {
     bool? canChat,
     bool? hasChatEnabled,
     bool? canDirectMessage,
+    Map<int, int>? topicPostCount,
     bool? canChatUser,
   }) {
     return User(
@@ -190,7 +198,8 @@ class User {
       profileBackgroundUploadUrl: profileBackgroundUploadUrl,
       unreadNotifications: unreadNotifications ?? this.unreadNotifications,
       unreadHighPriorityNotifications:
-          unreadHighPriorityNotifications ?? this.unreadHighPriorityNotifications,
+          unreadHighPriorityNotifications ??
+          this.unreadHighPriorityNotifications,
       allUnreadNotificationsCount:
           allUnreadNotificationsCount ?? this.allUnreadNotificationsCount,
       seenNotificationId: seenNotificationId ?? this.seenNotificationId,
@@ -221,6 +230,7 @@ class User {
       canChat: canChat ?? this.canChat,
       hasChatEnabled: hasChatEnabled ?? this.hasChatEnabled,
       canDirectMessage: canDirectMessage ?? this.canDirectMessage,
+      topicPostCount: topicPostCount ?? this.topicPostCount,
       gamificationScore: gamificationScore,
       muted: muted ?? this.muted,
       ignored: ignored ?? this.ignored,
@@ -239,15 +249,16 @@ class User {
   }
 
   factory User.fromJson(Map<String, dynamic> json) {
-    String? resolve(String? url) => url != null ? UrlHelper.resolveUrlWithCdn(url) : null;
-    
+    String? resolve(String? url) =>
+        url != null ? UrlHelper.resolveUrlWithCdn(url) : null;
+
     // 简单的 HTML 图片路径修复
     String? fixHtml(String? html) {
       if (html == null) return null;
       // 替换 src="/... 为 src="https://linux.do/...
       return html.replaceAllMapped(
-        RegExp(r'''src=["'](/[^"']+)["']'''), 
-        (match) => 'src="${UrlHelper.resolveUrlWithCdn(match.group(1)!)}"'
+        RegExp(r'''src=["'](/[^"']+)["']'''),
+        (match) => 'src="${UrlHelper.resolveUrlWithCdn(match.group(1)!)}"',
       );
     }
 
@@ -258,18 +269,30 @@ class User {
       avatarTemplate: resolve(json['avatar_template'] as String?),
       animatedAvatar: resolve(json['animated_avatar'] as String?),
       trustLevel: json['trust_level'] as int? ?? 0,
-      bio: fixHtml(json['bio_cooked'] as String?) ?? json['bio_excerpt'] as String? ?? json['bio_raw'] as String?,
+      bio:
+          fixHtml(json['bio_cooked'] as String?) ??
+          json['bio_excerpt'] as String? ??
+          json['bio_raw'] as String?,
       bioCooked: fixHtml(json['bio_cooked'] as String?),
       bioRaw: json['bio_raw'] as String?,
-      cardBackgroundUploadUrl: resolve(json['card_background_upload_url'] as String?),
-      profileBackgroundUploadUrl: resolve(json['profile_background_upload_url'] as String?),
+      cardBackgroundUploadUrl: resolve(
+        json['card_background_upload_url'] as String?,
+      ),
+      profileBackgroundUploadUrl: resolve(
+        json['profile_background_upload_url'] as String?,
+      ),
       unreadNotifications: json['unread_notifications'] as int? ?? 0,
-      unreadHighPriorityNotifications: json['unread_high_priority_notifications'] as int? ?? 0,
-      allUnreadNotificationsCount: json['all_unread_notifications_count'] as int? ?? 0,
+      unreadHighPriorityNotifications:
+          json['unread_high_priority_notifications'] as int? ?? 0,
+      allUnreadNotificationsCount:
+          json['all_unread_notifications_count'] as int? ?? 0,
       seenNotificationId: json['seen_notification_id'] as int? ?? 0,
-      notificationChannelPosition: json['notification_channel_position'] as int? ?? -1,
+      notificationChannelPosition:
+          json['notification_channel_position'] as int? ?? -1,
       pendingPostsCount: json['pending_posts_count'] as int? ?? 0,
-      status: json['status'] != null ? UserStatus.fromJson(json['status']) : null,
+      status: json['status'] != null
+          ? UserStatus.fromJson(json['status'])
+          : null,
       lastPostedAt: TimeUtils.parseUtcTime(json['last_posted_at'] as String?),
       lastSeenAt: TimeUtils.parseUtcTime(json['last_seen_at'] as String?),
       createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
@@ -288,11 +311,19 @@ class User {
       totalFollowers: json['total_followers'] as int?,
       totalFollowing: json['total_following'] as int?,
       canSendPrivateMessages: json['can_send_private_messages'] as bool?,
-      canSendPrivateMessageToUser: json['can_send_private_message_to_user'] as bool?,
+      canSendPrivateMessageToUser:
+          json['can_send_private_message_to_user'] as bool?,
       canChatUser: json['can_chat_user'] as bool?,
       canChat: json['can_chat'] as bool?,
       hasChatEnabled: json['has_chat_enabled'] as bool?,
       canDirectMessage: json['can_direct_message'] as bool?,
+      topicPostCount: {
+        for (final e
+            in (json['topic_post_count'] as Map<String, dynamic>? ?? const {})
+                .entries)
+          if (int.tryParse(e.key) != null && e.value is int)
+            int.parse(e.key): e.value as int,
+      },
       gamificationScore: json['gamification_score'] as int?,
       muted: json['muted'] as bool?,
       ignored: json['ignored'] as bool?,
@@ -307,8 +338,8 @@ class User {
       canAssign: json['can_assign'] as bool? ?? false,
       hidePresence:
           (json['user_option'] as Map<String, dynamic>?)?['hide_presence']
-                  as bool? ??
-              false,
+              as bool? ??
+          false,
       chatDrafts: (json['chat_drafts'] as List<dynamic>? ?? [])
           .whereType<Map<String, dynamic>>()
           .toList(),
@@ -323,7 +354,9 @@ class User {
     'avatar_template': avatarTemplate,
     'animated_avatar': animatedAvatar,
     'trust_level': trustLevel,
-    'status': status != null ? {'description': status!.description, 'emoji': status!.emoji} : null,
+    'status': status != null
+        ? {'description': status!.description, 'emoji': status!.emoji}
+        : null,
     'flair_url': flairUrl,
     'flair_name': flairName,
     'flair_bg_color': flairBgColor,
@@ -343,7 +376,9 @@ class User {
       avatarTemplate: json['avatar_template'] as String?,
       animatedAvatar: json['animated_avatar'] as String?,
       trustLevel: json['trust_level'] as int? ?? 0,
-      status: json['status'] != null ? UserStatus.fromJson(json['status'] as Map<String, dynamic>) : null,
+      status: json['status'] != null
+          ? UserStatus.fromJson(json['status'] as Map<String, dynamic>)
+          : null,
       flairUrl: json['flair_url'] as String?,
       flairName: json['flair_name'] as String?,
       flairBgColor: json['flair_bg_color'] as String?,
@@ -356,17 +391,21 @@ class User {
   }
 
   /// 是否被封禁（suspended_till 在当前时间之后）
-  bool get isSuspended => suspendedTill != null && suspendedTill!.isAfter(DateTime.now());
+  bool get isSuspended =>
+      suspendedTill != null && suspendedTill!.isAfter(DateTime.now());
 
   /// 是否被永久封禁（超过 100 年）
-  bool get isSuspendedForever => suspendedTill != null &&
+  bool get isSuspendedForever =>
+      suspendedTill != null &&
       suspendedTill!.difference(DateTime.now()).inDays > 36500;
 
   /// 是否被禁言（silenced_till 在当前时间之后）
-  bool get isSilenced => silencedTill != null && silencedTill!.isAfter(DateTime.now());
+  bool get isSilenced =>
+      silencedTill != null && silencedTill!.isAfter(DateTime.now());
 
   /// 是否被永久禁言（超过 100 年）
-  bool get isSilencedForever => silencedTill != null &&
+  bool get isSilencedForever =>
+      silencedTill != null &&
       silencedTill!.difference(DateTime.now()).inDays > 36500;
 
   /// 是否为站点 staff（admin 或 moderator）。
@@ -374,7 +413,8 @@ class User {
   bool get isStaff => admin || moderator;
 
   /// 获取背景图 URL（优先 profile，其次 card）
-  String? get backgroundUrl => profileBackgroundUploadUrl ?? cardBackgroundUploadUrl;
+  String? get backgroundUrl =>
+      profileBackgroundUploadUrl ?? cardBackgroundUploadUrl;
 
   /// 获取信任等级描述
   String get trustLevelString {
@@ -393,7 +433,7 @@ class User {
         return S.current.user_trustLevelUnknown(trustLevel);
     }
   }
-  
+
   /// 获取头像 URL，优先使用动画头像（GIF）
   String getAvatarUrl({int size = 120}) {
     if (animatedAvatar != null && animatedAvatar!.isNotEmpty) {
@@ -409,9 +449,9 @@ class User {
 class UserStatus {
   final String? description;
   final String? emoji;
-  
+
   UserStatus({this.description, this.emoji});
-  
+
   factory UserStatus.fromJson(Map<String, dynamic> json) {
     return UserStatus(
       description: json['description'] as String?,
@@ -479,7 +519,8 @@ class UserSummary {
     // 解析链接列表
     final linksJson = summary['links'] as List<dynamic>? ?? [];
     // 解析用户列表
-    final mostRepliedTo = summary['most_replied_to_users'] as List<dynamic>? ?? [];
+    final mostRepliedTo =
+        summary['most_replied_to_users'] as List<dynamic>? ?? [];
     final mostLikedBy = summary['most_liked_by_users'] as List<dynamic>? ?? [];
     final mostLiked = summary['most_liked_users'] as List<dynamic>? ?? [];
     // 解析分类列表
@@ -499,13 +540,29 @@ class UserSummary {
       topicsEntered: summary['topics_entered'] as int? ?? 0,
       recentTimeRead: summary['recent_time_read'] as int? ?? 0,
       topics: topics,
-      replies: repliesJson.map((e) => SummaryReply.fromJson(e as Map<String, dynamic>, topicMap)).toList(),
-      links: linksJson.map((e) => SummaryLink.fromJson(e as Map<String, dynamic>, topicMap)).toList(),
-      mostRepliedToUsers: mostRepliedTo.map((e) => SummaryUserWithCount.fromJson(e as Map<String, dynamic>)).toList(),
-      mostLikedByUsers: mostLikedBy.map((e) => SummaryUserWithCount.fromJson(e as Map<String, dynamic>)).toList(),
-      mostLikedUsers: mostLiked.map((e) => SummaryUserWithCount.fromJson(e as Map<String, dynamic>)).toList(),
-      topCategories: topCats.map((e) => SummaryCategory.fromJson(e as Map<String, dynamic>)).toList(),
-      badges: badgesJson.map((e) => Badge.fromJson(e as Map<String, dynamic>)).toList(),
+      replies: repliesJson
+          .map(
+            (e) => SummaryReply.fromJson(e as Map<String, dynamic>, topicMap),
+          )
+          .toList(),
+      links: linksJson
+          .map((e) => SummaryLink.fromJson(e as Map<String, dynamic>, topicMap))
+          .toList(),
+      mostRepliedToUsers: mostRepliedTo
+          .map((e) => SummaryUserWithCount.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      mostLikedByUsers: mostLikedBy
+          .map((e) => SummaryUserWithCount.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      mostLikedUsers: mostLiked
+          .map((e) => SummaryUserWithCount.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      topCategories: topCats
+          .map((e) => SummaryCategory.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      badges: badgesJson
+          .map((e) => Badge.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -594,7 +651,10 @@ class SummaryReply {
     this.topic,
   });
 
-  factory SummaryReply.fromJson(Map<String, dynamic> json, Map<int, SummaryTopic> topicMap) {
+  factory SummaryReply.fromJson(
+    Map<String, dynamic> json,
+    Map<int, SummaryTopic> topicMap,
+  ) {
     final topicId = json['topic_id'] as int?;
     // 优先从嵌套的 topic 对象解析，其次从 sideload 映射中查找
     final topicJson = json['topic'] as Map<String, dynamic>?;
@@ -629,7 +689,10 @@ class SummaryLink {
     this.topic,
   });
 
-  factory SummaryLink.fromJson(Map<String, dynamic> json, Map<int, SummaryTopic> topicMap) {
+  factory SummaryLink.fromJson(
+    Map<String, dynamic> json,
+    Map<int, SummaryTopic> topicMap,
+  ) {
     final topicId = json['topic_id'] as int?;
     final topicJson = json['topic'] as Map<String, dynamic>?;
     final topic = topicJson != null
@@ -713,18 +776,15 @@ class SummaryCategory {
 class CurrentUser {
   final User user;
   final bool isLoggedIn;
-  
+
   CurrentUser({required this.user, required this.isLoggedIn});
-  
+
   factory CurrentUser.fromJson(Map<String, dynamic> json) {
     final currentUser = json['current_user'] as Map<String, dynamic>?;
     if (currentUser == null) {
       throw Exception('Not logged in');
     }
-    return CurrentUser(
-      user: User.fromJson(currentUser),
-      isLoggedIn: true,
-    );
+    return CurrentUser(user: User.fromJson(currentUser), isLoggedIn: true);
   }
 }
 

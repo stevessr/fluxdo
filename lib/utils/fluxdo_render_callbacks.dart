@@ -155,6 +155,7 @@ class FluxdoRenderCallbacks {
     int chunkIndex = 0,
     bool trimTopMargin = false,
     bool trimBottomMargin = false,
+
     /// 块级是否横向拉满可用宽。聊天气泡等「按内容收缩」场景传 false。
     bool stretchBlocks = true,
     QuoteRequestCallback? onQuoteRequest,
@@ -177,7 +178,8 @@ class FluxdoRenderCallbacks {
       chunkIndex: chunkIndex,
       trimTopMargin: trimTopMargin,
       trimBottomMargin: trimBottomMargin,
-      stretchBlocks: stretchBlocks,
+      // 上游渲染器改用 shrinkWrapWidth(按内容收缩);语义取反映射
+      shrinkWrapWidth: !stretchBlocks,
       onQuoteRequest: onQuoteRequest,
       onCopyQuoteRequest: onCopyQuoteRequest,
       onCopyToast: onCopyToast,
@@ -284,13 +286,15 @@ class FluxdoRenderCallbacks {
     )) {
       return;
     }
-    Navigator.of(ctx).push(MaterialPageRoute(
-      builder: (_) => TopicDetailPage(
-        topicId: topicId,
-        initialTitle: topicSlug,
-        scrollToPostNumber: postNumber,
+    Navigator.of(ctx).push(
+      MaterialPageRoute(
+        builder: (_) => TopicDetailPage(
+          topicId: topicId,
+          initialTitle: topicSlug,
+          scrollToPostNumber: postNumber,
+        ),
       ),
-    ));
+    );
   }
 
   // ==========================================================================
@@ -483,9 +487,7 @@ class FluxdoRenderCallbacks {
           errorBuilder: (c, failedUrl, error) =>
               _VideoErrorFallback(url: failedUrl, error: error),
           loadingBuilder: (c, _, child) => Center(
-            child: posterUrl != null
-                ? child
-                : const LoadingSpinner(size: 24),
+            child: posterUrl != null ? child : const LoadingSpinner(size: 24),
           ),
         ),
       ),
@@ -753,7 +755,8 @@ class FluxdoRenderCallbacks {
   /// 端渲染等价;解码纹理量不变(ResizeImage 仍按显示宽 × dpr cap)。
   static String? _pickSrcsetUrl(ImageRun image, double dpr) {
     if (image.srcset.isEmpty) return null;
-    final sorted = [...image.srcset]..sort((a, b) => a.scale.compareTo(b.scale));
+    final sorted = [...image.srcset]
+      ..sort((a, b) => a.scale.compareTo(b.scale));
     for (final c in sorted) {
       if (c.scale >= dpr - 0.01) return c.url;
     }
@@ -1251,8 +1254,7 @@ class FluxdoRenderCallbacks {
               // 档位影响。
               final srcsetUrl = DiscourseImageUtils.isUploadUrl(image.src)
                   ? null
-                  : _pickSrcsetUrl(
-                      image, MediaQuery.devicePixelRatioOf(ctx));
+                  : _pickSrcsetUrl(image, MediaQuery.devicePixelRatioOf(ctx));
               final displayUrl = srcsetUrl == null
                   ? resolvedUrl
                   : UrlHelper.resolveUrlWithCdn(srcsetUrl);
@@ -1290,14 +1292,14 @@ class FluxdoRenderCallbacks {
                   // 风险,能不用就不用)。
                   final hasLightbox = image.lightboxUrl != null;
                   final fullUrl = image.lightboxUrl ?? resolvedUrl;
-                  var resolvedFullUrl =
-                      DiscourseImageUtils.isUploadUrl(fullUrl)
+                  var resolvedFullUrl = DiscourseImageUtils.isUploadUrl(fullUrl)
                       ? (DiscourseImageUtils.getCachedUploadUrl(fullUrl) ??
                             fullUrl)
                       : UrlHelper.resolveUrlWithCdn(fullUrl);
                   if (!hasLightbox) {
-                    resolvedFullUrl =
-                        DiscourseImageUtils.getOriginalUrl(resolvedFullUrl);
+                    resolvedFullUrl = DiscourseImageUtils.getOriginalUrl(
+                      resolvedFullUrl,
+                    );
                   }
                   // 画廊数据在点击时才解析(长帖懒解析场景首次点图会触发
                   // 全 chunk parse,离散动作可接受;之后命中缓存)。
@@ -1464,7 +1466,8 @@ class FluxdoRenderCallbacks {
     final base62Sha1 = image.base62Sha1;
     if (base62Sha1 != null && base62Sha1.isNotEmpty) {
       src = 'upload://$base62Sha1';
-      final ext = HtmlToMarkdown.extensionFromUrl(image.src) ??
+      final ext =
+          HtmlToMarkdown.extensionFromUrl(image.src) ??
           HtmlToMarkdown.extensionFromUrl(image.lightboxUrl) ??
           HtmlToMarkdown.extensionFromUrl(image.origSrc);
       if (ext != null) src = '$src.$ext';
