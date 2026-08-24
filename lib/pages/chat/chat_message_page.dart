@@ -69,8 +69,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   // 上下文状态：回复/编辑/附件/mention
   ChatMessage? _replyToMessage;
   ChatMessage? _editingMessage;
-  List<int> _uploadIds = [];
-  String? _uploadPreviewPath;
+
+  /// 待发送的图片附件（支持一次多选）；uploadId 为 null 表示该张仍在上传中
+  final List<({String path, int? uploadId})> _pendingUploads = [];
   bool _isUploadingImage = false;
 
   List<Chatable> _mentionSuggestions = [];
@@ -594,51 +595,81 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     setState(() => _showMentionSuggestions = false);
   }
 
-  /// 选择并上传图片附件
+  /// 多选并逐张上传图片附件；每张选完立即进预览条（uploadId 为 null 表示上传中）
   Future<void> _pickAndUploadImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile == null) return;
+    final images = await ImagePicker().pickMultiImage();
+    if (images.isEmpty || !mounted) return;
 
-    setState(() {
-      _isUploadingImage = true;
-      _uploadPreviewPath = pickedFile.path;
-    });
+    setState(() => _isUploadingImage = true);
 
-    try {
-      final service = ref.read(discourseServiceProvider);
-      final uploadResult = await service.uploadFile(pickedFile.path);
+    final service = ref.read(discourseServiceProvider);
+    var failedCount = 0;
+
+    for (final image in images) {
       if (!mounted) return;
+      final index = _pendingUploads.length;
       setState(() {
+        _pendingUploads.add((path: image.path, uploadId: null));
+      });
+      try {
+        final uploadResult = await service.uploadFile(image.path);
+        if (!mounted) return;
         final uploadId = uploadResult.id;
-        if (uploadId != null) _uploadIds.add(uploadId);
-        _isUploadingImage = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isUploadingImage = false;
-        _uploadPreviewPath = null;
-      });
+        setState(() {
+          if (uploadId != null) {
+            _pendingUploads[index] = (path: image.path, uploadId: uploadId);
+          } else {
+            // 无 id 的结果无法随消息发送，直接从预览中移除
+            _pendingUploads.removeAt(index);
+            failedCount++;
+          }
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          if (index < _pendingUploads.length &&
+              _pendingUploads[index].path == image.path) {
+            _pendingUploads.removeAt(index);
+          }
+          failedCount++;
+        });
+      }
+    }
+
+    if (!mounted) return;
+    setState(() => _isUploadingImage = false);
+    if (failedCount > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.chat_upload_failed(e.toString()))),
+        SnackBar(
+          content: Text(
+            context.l10n.chat_upload_failed('$failedCount/${images.length}'),
+          ),
+        ),
       );
     }
   }
 
-  /// 清除附件
-  void _clearUpload() {
+  /// 移除单张待发送附件
+  void _removeUpload(int index) {
     setState(() {
-      _uploadIds.clear();
-      _uploadPreviewPath = null;
+      if (index >= 0 && index < _pendingUploads.length) {
+        _pendingUploads.removeAt(index);
+      }
     });
   }
+
+  /// 是否存在已就绪（拿到 upload id）可随消息发送的附件
+  bool get _hasAttachedUploads =>
+      _pendingUploads.any((u) => u.uploadId != null);
 
   /// 发送或更新消息
   Future<void> _sendMessageOrUpdate() async {
     final text = _textController.text.trim();
-    if ((text.isEmpty && _uploadIds.isEmpty) || _isSending || _isUploadingImage)
+    if ((text.isEmpty && !_hasAttachedUploads) ||
+        _isSending ||
+        _isUploadingImage) {
       return;
+    }
 
     setState(() => _isSending = true);
     try {
@@ -651,7 +682,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         await notifier.sendMessage(
           text,
           inReplyToId: _replyToMessage?.id,
-          uploadIds: _uploadIds.isNotEmpty ? _uploadIds : null,
+          uploadIds: _hasAttachedUploads
+              ? _pendingUploads.map((u) => u.uploadId).whereType<int>().toList()
+              : null,
         );
       }
 
@@ -749,8 +782,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     setState(() {
       _replyToMessage = null;
       _editingMessage = null;
-      _uploadIds.clear();
-      _uploadPreviewPath = null;
+      _pendingUploads.clear();
       _showMentionSuggestions = false;
     });
   }
@@ -1909,7 +1941,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                   _buildContextBanner(theme),
 
                 // 图片附件预览
-                if (canSend && _uploadPreviewPath != null)
+                if (canSend && _pendingUploads.isNotEmpty)
                   _buildUploadPreview(theme),
 
                 // 输入框与操作按钮
@@ -2080,57 +2112,69 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     );
   }
 
+  /// 待发送附件预览条：每张缩略图带独立移除按钮，上传中的显示加载圈
   Widget _buildUploadPreview(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(8),
       alignment: Alignment.centerLeft,
-      child: Stack(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.file(
-              File(_uploadPreviewPath!),
-              width: 64,
-              height: 64,
-              fit: BoxFit.cover,
-            ),
+          for (var i = 0; i < _pendingUploads.length; i++) _buildUploadThumb(i),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUploadThumb(int index) {
+    final upload = _pendingUploads[index];
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(
+            File(upload.path),
+            width: 64,
+            height: 64,
+            fit: BoxFit.cover,
           ),
-          if (_isUploadingImage)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black38,
-                child: const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
+        ),
+        if (upload.uploadId == null)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black38,
+              child: const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
                   ),
                 ),
               ),
             ),
-          Positioned(
-            top: 2,
-            right: 2,
-            child: GestureDetector(
-              onTap: _clearUpload,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.close_rounded,
-                  size: 16,
-                  color: Colors.white,
-                ),
+          ),
+        Positioned(
+          top: 2,
+          right: 2,
+          child: GestureDetector(
+            onTap: () => _removeUpload(index),
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: Colors.white,
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
