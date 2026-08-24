@@ -102,5 +102,8 @@
   "toolbar_spoilerTooltip": "劇透",
   "toolbar_calloutPlaceholder": "內容",
   "toolbar_calloutTooltip": "插入標注",
-  "toolbar_strikethroughPlaceholder": "刪除線文本"
+  "toolbar_strikethroughPlaceholder": "刪除線文本",
+  "toolbar_textColor": "文字顏色",
+  "toolbar_customColor": "自訂顏色值",
+  "toolbar_invalidColorValue": "無效的顏色值（hex 如 #e45735 或命名色）"
 }

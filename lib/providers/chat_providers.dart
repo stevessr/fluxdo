@@ -1727,9 +1727,21 @@ final markAllChatChannelsReadProvider = FutureProvider<void>((ref) async {
 /// ============================================================================
 
 /// 获取频道置顶消息列表
+///
+/// Discourse 返回 `{pinned_messages: [{id(置顶记录), chat_message_id,
+/// pinned_at, excerpt, pinned_by, message(完整 Chat::MessageSerializer)},
+/// ...], membership}` —— 完整消息嵌在每项的 message 字段里,顶层没有
+/// messages/chat_messages 键,不能直接走 _parseChatMessageList(raw)。
 final chatPinnedMessagesProvider = FutureProvider.autoDispose
     .family<List<ChatMessage>, int>((ref, channelId) async {
       final service = ref.read(discourseServiceProvider);
       final raw = await service.getPinnedMessages(channelId);
-      return _parseChatMessageList(raw);
+      final list = raw['pinned_messages'];
+      if (list is! List) return const [];
+      final messages = <Map<String, dynamic>>[
+        for (final e in list)
+          if (e is Map && e['message'] is Map)
+            Map<String, dynamic>.from(e['message'] as Map)..['pinned'] = true,
+      ];
+      return _parseChatMessageList({'messages': messages});
     });

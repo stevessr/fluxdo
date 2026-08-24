@@ -74,5 +74,8 @@
   "toolbar_spoilerTooltip": "Spoiler",
   "toolbar_calloutPlaceholder": "Content",
   "toolbar_calloutTooltip": "Insert callout",
-  "toolbar_strikethroughPlaceholder": "Strikethrough text"
+  "toolbar_strikethroughPlaceholder": "Strikethrough text",
+  "toolbar_textColor": "Text color",
+  "toolbar_customColor": "Custom color",
+  "toolbar_invalidColorValue": "Invalid value (hex like #e45735 or a named color)"
 }
