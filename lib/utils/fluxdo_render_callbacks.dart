@@ -927,6 +927,7 @@ class FluxdoRenderCallbacks {
       final galleryUrls = <String>[];
       final galleryThumbs = <String>[];
       final galleryHeroTags = <String>[];
+      final galleryFilenames = <String?>[];
       final galleryIndexByImageIndex = <int, int>{};
       for (var i = 0; i < galleryImages.length; i++) {
         final img = galleryImages[i];
@@ -940,12 +941,14 @@ class FluxdoRenderCallbacks {
         galleryUrls.add(DiscourseImageUtils.getOriginalUrl(resolvedFull));
         galleryThumbs.add(resolvedThumb);
         galleryHeroTags.add('${heroNamespace}_img_${img.indexInPost}');
+        galleryFilenames.add(img.filename);
         galleryIndexByImageIndex[img.indexInPost] = i;
       }
       return galleryCache = (
         urls: galleryUrls,
         thumbs: galleryThumbs,
         heroTags: galleryHeroTags,
+        filenames: galleryFilenames,
         indexByImageIndex: galleryIndexByImageIndex,
       );
     }
@@ -1324,6 +1327,7 @@ class FluxdoRenderCallbacks {
                     galleryImages: hasGallery ? gallery.urls : null,
                     thumbnailUrls: hasGallery ? gallery.thumbs : null,
                     heroTags: hasGallery ? gallery.heroTags : null,
+                    filenames: hasGallery ? gallery.filenames : [image.filename],
                     initialIndex: hasGallery ? galleryIndex : 0,
                     heroSourceFit: inGridTile ? BoxFit.cover : null,
                     heroSourceRadius: inGridTile ? 4 : 0,
@@ -1451,6 +1455,7 @@ class FluxdoRenderCallbacks {
       quoteMarkdown: _uploadMarkdownForImage(image),
       heroTag: heroTag,
       lift: lift,
+      fileName: image.filename,
     );
   }
 
@@ -1555,6 +1560,7 @@ typedef _GalleryData = ({
   List<String> urls,
   List<String> thumbs,
   List<String> heroTags,
+  List<String?> filenames,
   Map<int, int> indexByImageIndex,
 });
 

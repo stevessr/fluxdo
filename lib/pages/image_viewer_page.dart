@@ -16,7 +16,6 @@ import '../utils/hero_visibility_controller.dart';
 import '../utils/screenshot_utils.dart';
 import '../utils/svg_utils.dart';
 import '../widgets/content/animated_svg_view.dart';
-import 'package:cross_file/cross_file.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/shortcut_binding.dart';
@@ -399,6 +398,19 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
                 coverSource: coverSource,
                 zoomed: zoomed,
               );
+              // 源端缩略图盒子的固定宽高比:push 时源在 from,pop(divert)时
+              // 沿用 push 建的 shuttle 仍是 from。cover 裁窗须按它算,不按飞行
+              // 途中变化的画布比例(否则两端完整、中间帧被裁,见
+              // CoverContainFlightImage.sourceAspect)。
+              final BuildContext srcContext =
+                  direction == HeroFlightDirection.pop
+                      ? toContext
+                      : fromContext;
+              double? sourceAspect;
+              final ro = srcContext.findRenderObject();
+              if (ro is RenderBox && ro.hasSize && ro.size.height > 0) {
+                sourceAspect = ro.size.width / ro.size.height;
+              }
               return CoverContainFlightImage(
                 image: _thumbnailProvider(thumbUrl),
                 animation:
@@ -409,6 +421,7 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
                 // Image(fit:cover) 的可见区域对齐,否则落地瞬间「裁切一条」
                 // 突变成完整图(聊天气泡因 clamp 夹高最明显)
                 coverSource: coverSource,
+                sourceAspect: sourceAspect,
                 fallback: child,
               );
             },
@@ -653,6 +666,7 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
       context: context,
       imageUrl: _currentImageUrl,
       showViewFullImage: false,
+      fileName: _currentFilename,
       position: position,
       onClose: () => Navigator.of(context).pop(),
     );
@@ -757,12 +771,12 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
         throw Exception(S.current.image_fetchFailed);
       }
 
-      // 使用 putImageBytes 直接保存字节数据到相册
-      final ext = _getExtensionFromUrl(imageUrl);
-      await Gal.putImageBytes(
-        imageBytes,
-        name: 'fluxdo_${DateTime.now().millisecondsSinceEpoch}.$ext',
-      );
+      // 使用 putImageBytes 直接保存字节数据到相册;命名与分享同口径
+      // (原始文件名优先,回退时间戳)。
+      final ext = BlobImageCache.httpUrlExtension(imageUrl);
+      final name = ShareUtils.safeFileBaseName(_currentFilename) ??
+          'fluxdo_${DateTime.now().millisecondsSinceEpoch}';
+      await Gal.putImageBytes(imageBytes, name: '$name.$ext');
 
       if (mounted) {
         ToastService.showSuccess(S.current.imageViewer_imageSaved);
@@ -933,19 +947,6 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
     );
   }
 
-  /// 从 URL 中获取文件扩展名
-  String _getExtensionFromUrl(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final path = uri.path;
-      final lastDot = path.lastIndexOf('.');
-      if (lastDot != -1 && lastDot < path.length - 1) {
-        return path.substring(lastDot + 1).toLowerCase();
-      }
-    } catch (_) {}
-    return 'jpg'; // 默认返回 jpg
-  }
-
   /// 分享当前图片
   Future<void> _shareImage() async {
     if (_isSharing) return;
@@ -959,12 +960,14 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
         imageUrl,
       );
 
-      // 分享文件
-      final xFile = XFile(
-        file.path,
-        mimeType: 'image/${_getExtensionFromUrl(imageUrl)}',
+      // 复制为可读文件名的临时文件再分享（缓存文件按 md5 寻址）：
+      // 原始文件名(接口/cooked) → URL 末段 → 时间戳,逐级回退。
+      await ShareUtils.shareImageFile(
+        file,
+        ext: BlobImageCache.httpUrlExtension(imageUrl),
+        fileName: _currentFilename,
+        urlHint: imageUrl,
       );
-      await ShareUtils.shareOrSaveFile(xFile);
     } catch (e) {
       debugPrint('Share image error: $e');
       if (mounted) {
