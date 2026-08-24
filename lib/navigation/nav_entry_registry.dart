@@ -10,6 +10,7 @@ import '../pages/drafts_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/chat/chat_page.dart';
 import '../pages/seeking_page.dart';
+import '../pages/private_messages_page.dart';
 import '../pages/topics_screen.dart';
 import '../providers/discourse_providers.dart';
 import '../widgets/common/smart_avatar.dart';
@@ -48,6 +49,16 @@ class NavEntryRegistry {
         requiresLogin: true,
       ),
       NavEntry(
+        id: NavEntryIds.messages,
+        kind: NavEntryKind.page,
+        iconData: Symbols.mail_rounded,
+        selectedIconData: Symbols.mail_rounded,
+        label: (ctx) => ctx.l10n.privateMessages_title,
+        pageBuilder: (ctx, isActive) => PrivateMessagesPage(isActive: isActive),
+        defaultInBottomNav: false,
+        requiresLogin: true,
+      ),
+      NavEntry(
         id: NavEntryIds.profile,
         kind: NavEntryKind.page,
         iconData: Symbols.person_rounded,
@@ -77,8 +88,7 @@ class NavEntryRegistry {
         iconData: Symbols.history_rounded,
         selectedIconData: Symbols.history_rounded,
         label: (ctx) => ctx.l10n.nav_history,
-        pageBuilder: (ctx, isActive) =>
-            BrowsingHistoryPage(isActive: isActive),
+        pageBuilder: (ctx, isActive) => BrowsingHistoryPage(isActive: isActive),
         requiresLogin: true,
       ),
       NavEntry(
