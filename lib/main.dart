@@ -35,6 +35,7 @@ import 'services/network/cookie/cookie_jar_service.dart';
 import 'services/network/cookie/cookie_store_observer.dart';
 import 'services/network/adapters/cronet_fallback_service.dart';
 import 'services/local_notification_service.dart';
+import 'services/account_manager.dart';
 import 'services/data_management/cache_size_service.dart';
 import 'services/discourse_cache_manager.dart';
 import 'services/toast_service.dart';
@@ -969,6 +970,8 @@ class _MainPageState extends ConsumerState<MainPage>
           debugPrint('[MainPage] 启动 UI 任务失败: $e\n$s');
         }),
       );
+      // 多账号后台快照:周期固化当前会话的 _t,防止切走的账号过期
+      AccountManager().ensureAutoSnapshot();
     });
     // 监听登录失效事件
     _authErrorSub = ref.listenManual<AsyncValue<String>>(authErrorProvider, (
@@ -1225,6 +1228,9 @@ class _MainPageState extends ConsumerState<MainPage>
     }
 
     if (state == AppLifecycleState.hidden) {
+      // 多账号快照:hidden 比 paused 早,赶在系统挂起 isolate 前把最新 _t
+      // 固化下来(尽力而为,失败静默)
+      unawaited(AccountManager().syncCurrentAccount());
       // hidden 比 paused 更早触发，在系统挂起 Dart isolate 之前启动前台服务
       // 取消待执行的 resume 操作（防止配置变更等假 resume）
       _resumeDebounceTimer?.cancel();
@@ -1325,9 +1331,7 @@ class _MainPageState extends ConsumerState<MainPage>
         // 窄屏没有「写栈 → 推详情」的桥（同通知入口的窄屏问题），
         // 和解析失败一样退回深链通道全屏打开
         onAction: () {
-          final topic = DiscourseUrlParser.parseTopic(
-            candidate.uri.toString(),
-          );
+          final topic = DiscourseUrlParser.parseTopic(candidate.uri.toString());
           if (topic != null &&
               MasterDetailLayout.canShowBothPanesFor(context)) {
             ref

@@ -231,6 +231,28 @@ class AccountManager {
     }
   }
 
+  // ========== 后台快照刷新 ==========
+
+  Timer? _autoSnapshotTimer;
+  bool _autoSnapshotInFlight = false;
+
+  /// 启动周期性后台快照刷新。
+  ///
+  /// Discourse 会在响应里轮换 `_t`，切走后留存的快照会随时间失效。
+  /// 除登录/切换时机外，这里按 [interval] 周期固化当前会话，保证随时
+  /// 切回都有可用的 `_t`。未登录时 [syncCurrentAccount] 自行跳过，
+  /// 定时器无需感知登录态。重复调用只启动一次。
+  void ensureAutoSnapshot({Duration interval = const Duration(minutes: 15)}) {
+    if (_autoSnapshotTimer != null) return;
+    _autoSnapshotTimer = Timer.periodic(interval, (_) {
+      if (_autoSnapshotInFlight) return;
+      _autoSnapshotInFlight = true;
+      unawaited(
+        syncCurrentAccount().whenComplete(() => _autoSnapshotInFlight = false),
+      );
+    });
+  }
+
   /// 移除某个账号的本机记录与快照（登出/主动删除时调用）
   Future<void> removeAccount(String username) async {
     final accounts = [...await listAccounts()];
