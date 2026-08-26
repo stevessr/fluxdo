@@ -24,6 +24,7 @@ import 'services/auth_issue_notice_service.dart';
 import 'providers/app_state_refresher.dart';
 import 'services/highlighter_service.dart';
 import 'widgets/common/notification_icon_button.dart';
+import 'widgets/common/anchor_guard_sliver.dart';
 import 'widgets/user/account_switcher_sheet.dart';
 import 'widgets/common/fullscreen_swipe_back.dart';
 import 'package:common_ui/common_ui.dart';
