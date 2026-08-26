@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
@@ -608,38 +610,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
     setState(() => _isUploadingImage = true);
 
-    final service = ref.read(discourseServiceProvider);
     var failedCount = 0;
-
     for (final image in images) {
       if (!mounted) return;
-      final index = _pendingUploads.length;
-      setState(() {
-        _pendingUploads.add((path: image.path, uploadId: null));
-      });
-      try {
-        final uploadResult = await service.uploadFile(image.path);
-        if (!mounted) return;
-        final uploadId = uploadResult.id;
-        setState(() {
-          if (uploadId != null) {
-            _pendingUploads[index] = (path: image.path, uploadId: uploadId);
-          } else {
-            // 无 id 的结果无法随消息发送，直接从预览中移除
-            _pendingUploads.removeAt(index);
-            failedCount++;
-          }
-        });
-      } catch (e) {
-        if (!mounted) return;
-        setState(() {
-          if (index < _pendingUploads.length &&
-              _pendingUploads[index].path == image.path) {
-            _pendingUploads.removeAt(index);
-          }
-          failedCount++;
-        });
-      }
+      final ok = await _uploadAndTrackImage(image.path);
+      if (!ok) failedCount++;
     }
 
     if (!mounted) return;
@@ -651,6 +626,68 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             context.l10n.chat_upload_failed('$failedCount/${images.length}'),
           ),
         ),
+      );
+    }
+  }
+
+  /// 上传单张图片并进入待发送附件预览；失败（异常或无 id）返回 false。
+  Future<bool> _uploadAndTrackImage(String imagePath) async {
+    final service = ref.read(discourseServiceProvider);
+    final index = _pendingUploads.length;
+    setState(() {
+      _pendingUploads.add((path: imagePath, uploadId: null));
+    });
+    try {
+      final uploadResult = await service.uploadFile(imagePath);
+      if (!mounted) return false;
+      final uploadId = uploadResult.id;
+      setState(() {
+        if (uploadId != null) {
+          _pendingUploads[index] = (path: imagePath, uploadId: uploadId);
+        } else {
+          // 无 id 的结果无法随消息发送，直接从预览中移除
+          _pendingUploads.removeAt(index);
+        }
+      });
+      return uploadId != null;
+    } catch (e) {
+      if (!mounted) return false;
+      setState(() {
+        if (index < _pendingUploads.length &&
+            _pendingUploads[index].path == imagePath) {
+          _pendingUploads.removeAt(index);
+        }
+      });
+      return false;
+    }
+  }
+
+  /// 处理输入法（GBoard 等）直接粘贴进输入框的图片内容：
+  /// 落盘临时文件后走与选图相同的上传通道。
+  Future<void> _handleImeContentInserted(
+    KeyboardInsertedContent content,
+  ) async {
+    if (!content.hasData) return;
+    final data = content.data;
+    if (data == null || data.isEmpty) return;
+
+    // apng 本质是 png，按 png 扩展名落盘以便服务端识别
+    final ext = content.mimeType == 'image/apng'
+        ? 'png'
+        : content.mimeType.split('/').last;
+    final fileName = 'ime_paste_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final tempDir = await getTemporaryDirectory();
+    final tempFile = File(p.join(tempDir.path, fileName));
+    await tempFile.writeAsBytes(data);
+
+    if (!mounted) return;
+    setState(() => _isUploadingImage = true);
+    final ok = await _uploadAndTrackImage(tempFile.path);
+    if (!mounted) return;
+    setState(() => _isUploadingImage = false);
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.chat_upload_failed('1/1'))),
       );
     }
   }
@@ -1971,7 +2008,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           onPressed: () {
                             if (_showEmojiPicker) {
                               setState(() => _showEmojiPicker = false);
-                              _inputFocusNode.requestFocus();
                             } else {
                               _inputFocusNode.unfocus();
                               setState(() => _showEmojiPicker = true);
@@ -1992,6 +2028,21 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             controller: _textController,
                             focusNode: _inputFocusNode,
                             textInputAction: TextInputAction.send,
+                            contentInsertionConfiguration:
+                                ContentInsertionConfiguration(
+                                  allowedMimeTypes: const [
+                                    'image/png',
+                                    'image/jpeg',
+                                    'image/gif',
+                                    'image/webp',
+                                    'image/avif',
+                                    'image/apng',
+                                    'image/bmp',
+                                    'image/heic',
+                                    'image/heif',
+                                  ],
+                                  onContentInserted: _handleImeContentInserted,
+                                ),
                             maxLines: 5,
                             minLines: 1,
                             onTap: () {
