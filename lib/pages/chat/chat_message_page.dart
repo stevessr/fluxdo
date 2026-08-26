@@ -194,7 +194,13 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => _PinnedMessagesSheet(channelId: widget.channelId),
+      builder: (ctx) => _PinnedMessagesSheet(
+        channelId: widget.channelId,
+        onMessageTap: (msg) {
+          Navigator.pop(ctx);
+          _jumpToMessage(msg.id);
+        },
+      ),
     );
   }
 
@@ -3409,8 +3415,12 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
 /// 置顶消息底部面板
 class _PinnedMessagesSheet extends ConsumerWidget {
   final int channelId;
+  const _PinnedMessagesSheet({
+    required this.channelId,
+    required this.onMessageTap,
+  });
 
-  const _PinnedMessagesSheet({required this.channelId});
+  final void Function(ChatMessage message) onMessageTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -3503,61 +3513,65 @@ class _PinnedMessagesSheet extends ConsumerWidget {
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2, right: 10),
-                            child: OnlineStatusAvatar(
-                              userId: msg.user?.id ?? 0,
-                              imageUrl: avatarUrl,
-                              radius: 16,
-                              fallbackText: username,
+                      child: InkWell(
+                        onTap: () => onMessageTap(msg),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2, right: 10),
+                              child: OnlineStatusAvatar(
+                                userId: msg.user?.id ?? 0,
+                                imageUrl: avatarUrl,
+                                radius: 16,
+                                fallbackText: username,
+                              ),
                             ),
-                          ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      username,
-                                      style: theme.textTheme.labelSmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            color: theme
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                          ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      TimeUtils.formatCompactTime(
-                                        msg.createdAt,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        username,
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
                                       ),
-                                      style: theme.textTheme.labelSmall
-                                          ?.copyWith(
-                                            fontSize: 10,
-                                            color: theme
-                                                .colorScheme
-                                                .onSurfaceVariant
-                                                .withValues(alpha: 0.6),
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  msg.message,
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodyMedium,
-                                ),
-                              ],
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        TimeUtils.formatCompactTime(
+                                          msg.createdAt,
+                                        ),
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                              fontSize: 10,
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant
+                                                  .withValues(alpha: 0.6),
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    msg.message,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },
