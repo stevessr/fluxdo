@@ -52,6 +52,8 @@ import '../services/emoji_handler.dart';
 import '../services/log/log_writer.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/layout/master_detail_layout.dart';
+import '../services/account_manager.dart';
+import '../services/auth_session.dart';
 
 /// 个人页面
 class ProfilePage extends ConsumerStatefulWidget {
@@ -111,19 +113,35 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   /// AppBar 指示只留给无下拉指示器的静默刷新(tab 切回等)。
   Future<void> _refreshData({bool showAppBarIndicator = true}) async {
     if (!mounted) return;
+    final generation = AuthSession().generation;
     if (showAppBarIndicator) setState(() => _isRefreshing = true);
     try {
       // LDC/CDK provider 现在只 watch currentUser.username，
       // refreshSilently 不会再连带触发它们 rebuild，需要显式刷新
       final prefs = ref.read(sharedPreferencesProvider);
-      final ldcEnabled = prefs.getBool('ldc_enabled') ?? false;
-      final cdkEnabled = prefs.getBool('cdk_enabled') ?? false;
+      final username = await ref
+          .read(discourseServiceProvider)
+          .getCurrentUsername();
+      if (!AuthSession().isValid(generation)) return;
+      final ldcEnabled = username != null
+          ? prefs.getBool(
+                  AccountManager.accountScopedKey('ldc_enabled', username),
+                ) ??
+                false
+          : false;
+      final cdkEnabled = username != null
+          ? prefs.getBool(
+                  AccountManager.accountScopedKey('cdk_enabled', username),
+                ) ??
+                false
+          : false;
       await Future.wait([
         ref.read(currentUserProvider.notifier).refreshSilently(force: true),
         ref.read(userSummaryProvider.notifier).refresh(),
         if (ldcEnabled) ref.read(ldcUserInfoProvider.notifier).refresh(),
         if (cdkEnabled) ref.read(cdkUserInfoProvider.notifier).refresh(),
       ]);
+      if (!AuthSession().isValid(generation)) return;
     } finally {
       if (mounted && showAppBarIndicator) {
         setState(() => _isRefreshing = false);
@@ -294,32 +312,34 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _reauthorizeLdc() async {
+    final generation = AuthSession().generation;
     final service = LdcOAuthService();
     if (!mounted) return;
     try {
       final result = await service.reauthorize(context);
-      if (result && mounted) {
+      if (result && mounted && AuthSession().isValid(generation)) {
         ref.read(ldcUserInfoProvider.notifier).refresh();
         ToastService.showSuccess(S.current.profile_ldcReauthSuccess);
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && AuthSession().isValid(generation)) {
         ToastService.showError(S.current.metaverse_authFailed(e.toString()));
       }
     }
   }
 
   Future<void> _reauthorizeCdk() async {
+    final generation = AuthSession().generation;
     final service = CdkOAuthService();
     if (!mounted) return;
     try {
       final result = await service.reauthorize(context);
-      if (result && mounted) {
+      if (result && mounted && AuthSession().isValid(generation)) {
         ref.read(cdkUserInfoProvider.notifier).refresh();
         ToastService.showSuccess(S.current.profile_cdkReauthSuccess);
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && AuthSession().isValid(generation)) {
         ToastService.showError(S.current.metaverse_authFailed(e.toString()));
       }
     }
@@ -657,8 +677,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     return Consumer(
       builder: (context, ref, _) {
         final prefs = ref.watch(sharedPreferencesProvider);
-        final ldcEnabled = prefs.getBool('ldc_enabled') ?? false;
-        final cdkEnabled = prefs.getBool('cdk_enabled') ?? false;
+        final username = ref.watch(
+          currentUserProvider.select((value) => value.value?.username),
+        );
+        final ldcEnabled = username != null
+            ? prefs.getBool(
+                    AccountManager.accountScopedKey('ldc_enabled', username),
+                  ) ??
+                  false
+            : false;
+        final cdkEnabled = username != null
+            ? prefs.getBool(
+                    AccountManager.accountScopedKey('cdk_enabled', username),
+                  ) ??
+                  false
+            : false;
 
         if (!ldcEnabled && !cdkEnabled) return const SizedBox.shrink();
 
@@ -1149,6 +1182,9 @@ class _ProfileAvatarSection extends ConsumerWidget {
     final avatarUrl = ref.watch(
       currentUserProvider.select((value) => value.value?.getAvatarUrl() ?? ''),
     );
+    final username = ref.watch(
+      currentUserProvider.select((value) => value.value?.username),
+    );
     final flairUrl = ref.watch(
       currentUserProvider.select((value) => value.value?.flairUrl),
     );
@@ -1163,7 +1199,7 @@ class _ProfileAvatarSection extends ConsumerWidget {
     );
 
     return _ProfileAvatar(
-      key: ValueKey('profile-avatar-$userId'),
+      key: ValueKey('profile-avatar-$username-$userId-$avatarUrl'),
       userId: userId,
       avatarUrl: avatarUrl,
       isLoggedIn: isLoggedIn,
