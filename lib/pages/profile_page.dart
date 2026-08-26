@@ -33,7 +33,7 @@ import 'topic_detail_page/topic_detail_page.dart';
 import 'drafts_page.dart';
 import 'pending_posts_page.dart';
 import 'private_messages_page.dart';
-import 'chat_list_page.dart';
+import 'chat/chat_page.dart';
 import 'invite_links_page.dart';
 import '../providers/ldc_providers.dart';
 import '../widgets/ldc_balance_card.dart';
@@ -930,7 +930,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           title: context.l10n.chat_title,
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const ChatListPage()),
+            MaterialPageRoute(builder: (_) => const ChatPage()),
           ),
         ),
         _buildOptionTile(
@@ -1175,7 +1175,12 @@ class _ProfileHeader extends ConsumerWidget {
                 message: context.l10n.login_qrShowCode,
                 child: GestureDetector(
                   // 独立手势:在竞技场胜出,不冒泡到外层跳 UserProfilePage
-                  onTap: () => showQrLoginSheet(context, username: username),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => QrLoginDisplayPage(username: username),
+                    ),
+                  ),
                   child: CircleAvatar(
                     radius: 16,
                     backgroundColor: Theme.of(
