@@ -1,5 +1,6 @@
 import 'dart:io';
-
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -395,6 +396,49 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     try {
       final service = ref.read(discourseServiceProvider);
       final uploadResult = await service.uploadFile(pickedFile.path);
+      setState(() {
+        final uploadId = uploadResult.id;
+        if (uploadId != null) _uploadIds.add(uploadId);
+        _isUploadingImage = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isUploadingImage = false;
+        _uploadPreviewPath = null;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('上传失败: $e')));
+    }
+  }
+
+  /// 处理输入法（GBoard 等）直接粘贴进输入框的图片内容：
+  /// 落盘临时文件后走与选图相同的上传通道。
+  Future<void> _handleImeContentInserted(
+    KeyboardInsertedContent content,
+  ) async {
+    if (!content.hasData) return;
+    final data = content.data;
+    if (data == null || data.isEmpty) return;
+
+    // apng 本质是 png，按 png 扩展名落盘以便服务端识别
+    final ext = content.mimeType == 'image/apng'
+        ? 'png'
+        : content.mimeType.split('/').last;
+    final fileName = 'ime_paste_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final tempDir = await getTemporaryDirectory();
+    final tempFile = File(p.join(tempDir.path, fileName));
+    await tempFile.writeAsBytes(data);
+
+    if (!mounted) return;
+    setState(() {
+      _isUploadingImage = true;
+      _uploadPreviewPath = tempFile.path;
+    });
+    try {
+      final service = ref.read(discourseServiceProvider);
+      final uploadResult = await service.uploadFile(tempFile.path);
       setState(() {
         final uploadId = uploadResult.id;
         if (uploadId != null) _uploadIds.add(uploadId);
@@ -1011,6 +1055,21 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                             minLines: 1,
                             maxLines: 4,
                             textInputAction: TextInputAction.send,
+                            contentInsertionConfiguration:
+                                ContentInsertionConfiguration(
+                                  allowedMimeTypes: const [
+                                    'image/png',
+                                    'image/jpeg',
+                                    'image/gif',
+                                    'image/webp',
+                                    'image/avif',
+                                    'image/apng',
+                                    'image/bmp',
+                                    'image/heic',
+                                    'image/heif',
+                                  ],
+                                  onContentInserted: _handleImeContentInserted,
+                                ),
                             onSubmitted: (_) => _send(),
                             onTap: () {
                               if (_showEmojiPicker) {
