@@ -1977,9 +1977,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       builder: (dialogContext) => _PrivateMessageParticipantsDialog(
         participants: detail.allowedUsers,
         currentUserId: ref.read(currentUserProvider).value?.id,
-        canRemoveOtherParticipants:
-            (ref.read(currentUserProvider).value?.admin ?? false) &&
-            detail.canRemoveAllowedUsers,
+        // 服务端已判定房主/管理员权限，客户端无需再叠加 admin 校验。
+        canRemoveOtherParticipants: detail.canRemoveAllowedUsers,
         removableSelfId: detail.canRemoveSelfId,
         removingParticipantId: _removingPrivateMessageParticipantId,
         onRemoveParticipant: (user) {

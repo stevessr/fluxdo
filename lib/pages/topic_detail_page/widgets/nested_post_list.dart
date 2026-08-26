@@ -199,8 +199,9 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
       location: location,
       participants: widget.detail.allowedUsers,
       currentUserId: widget.currentUserId,
-      canRemoveOtherParticipants:
-          widget.currentUserIsAdmin && widget.detail.canRemoveAllowedUsers,
+      // 服务端 can_remove_allowed_users 已包含「房主(TL2+)或管理员」判定，
+      // 客户端不再叠加 admin 门槛，否则非管理员的房主看不到移除按钮。
+      canRemoveOtherParticipants: widget.detail.canRemoveAllowedUsers,
       removableSelfId: widget.detail.canRemoveSelfId,
       removingParticipantId: widget.removingPrivateMessageParticipantId,
       onRemoveParticipant: widget.onRemovePrivateMessageParticipant,

@@ -975,12 +975,7 @@ extension _UserActions on _TopicDetailPageState {
     final canRemove = isSelf
         ? detail.canRemoveSelfId == participant.id
         : detail.canRemoveAllowedUsers;
-    if (!canRemove) {
-      // 不是所有者，不能踢人
-      if (!isSelf) return;
-      // 也不能退出（针对 canRemoveSelfId 不匹配的情况）
-      return;
-    }
+    if (!canRemove) return;
 
     final confirmed = await showAppDialog<bool>(
       context: context,
@@ -1546,8 +1541,9 @@ extension _UserActions on _TopicDetailPageState {
       _resolvedViewportPostNumber,
     );
     final posts = updated.postStream.posts;
-    final effectiveAnchor =
-        posts.any((p) => p.postNumber == currentAnchor) ? currentAnchor : anchor;
+    final effectiveAnchor = posts.any((p) => p.postNumber == currentAnchor)
+        ? currentAnchor
+        : anchor;
     if (posts.any((p) => p.postNumber == effectiveAnchor)) {
       _controller.prepareRefresh(effectiveAnchor, skipHighlight: true);
     } else {

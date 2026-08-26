@@ -258,8 +258,8 @@ class _TopicPostListState extends State<TopicPostList> {
       location: location,
       participants: detail.allowedUsers,
       currentUserId: widget.currentUserId,
-      canRemoveOtherParticipants:
-          widget.currentUserIsAdmin && detail.canRemoveAllowedUsers,
+      // 同上：信任服务端权限位，避免非管理员房主按钮不显示。
+      canRemoveOtherParticipants: detail.canRemoveAllowedUsers,
       removableSelfId: detail.canRemoveSelfId,
       removingParticipantId: widget.removingPrivateMessageParticipantId,
       onRemoveParticipant: widget.onRemovePrivateMessageParticipant,
