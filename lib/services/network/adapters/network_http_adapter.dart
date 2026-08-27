@@ -239,6 +239,8 @@ class NetworkHttpAdapter implements HttpClientAdapter {
   bool get _shouldUseLocalGateway {
     final settings = _settings.current;
     return settings.proxyPort != null &&
-        (settings.dohEnabled || _proxySettings.current.isValid);
+        (settings.dohEnabled ||
+            settings.customHosts.isNotEmpty ||
+            _proxySettings.current.isValid);
   }
 }

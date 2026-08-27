@@ -21,6 +21,7 @@ import '../rhttp/rhttp_settings_service.dart';
 import '../system_proxy_service.dart';
 import '../webview/webview_adapter_settings_service.dart';
 import '../../windows_webview_environment_service.dart';
+import 'custom_hosts_service.dart';
 import 'doh_resolver.dart';
 import 'webview_mitm_policy.dart';
 
@@ -31,6 +32,9 @@ class NetworkSettings {
     this.echServerUrl,
     required this.customServers,
     required this.proxyPort,
+    this.customHosts = const {},
+    this.customHostsSource,
+    this.customHostsSourceUrl,
     this.preferIPv6 = false,
     this.serverIp,
     this.gatewayEnabled = true,
@@ -45,6 +49,15 @@ class NetworkSettings {
   /// ECH 配置服务器（HTTPS 记录查询），null = 与 DNS 相同
   final String? echServerUrl;
   final List<DohServer> customServers;
+
+  /// Static host -> IP mappings imported from a system-style hosts file.
+  final Map<String, List<String>> customHosts;
+
+  /// Display name or URL of the currently imported hosts file.
+  final String? customHostsSource;
+
+  /// Source URL, when the current hosts file was imported from the network.
+  final String? customHostsSourceUrl;
 
   /// 代理端口（Rust 代理统一处理 DOH + ECH）
   final int? proxyPort;
@@ -67,6 +80,9 @@ class NetworkSettings {
     String? Function()? echServerUrl,
     List<DohServer>? customServers,
     int? proxyPort,
+    Map<String, List<String>>? customHosts,
+    String? Function()? customHostsSource,
+    String? Function()? customHostsSourceUrl,
     bool? preferIPv6,
     String? Function()? serverIp,
     bool? gatewayEnabled,
@@ -78,6 +94,13 @@ class NetworkSettings {
       echServerUrl: echServerUrl != null ? echServerUrl() : this.echServerUrl,
       customServers: customServers ?? this.customServers,
       proxyPort: proxyPort ?? this.proxyPort,
+      customHosts: customHosts ?? this.customHosts,
+      customHostsSource: customHostsSource != null
+          ? customHostsSource()
+          : this.customHostsSource,
+      customHostsSourceUrl: customHostsSourceUrl != null
+          ? customHostsSourceUrl()
+          : this.customHostsSourceUrl,
       preferIPv6: preferIPv6 ?? this.preferIPv6,
       gatewayEnabled: gatewayEnabled ?? this.gatewayEnabled,
       serverIp: serverIp != null ? serverIp() : this.serverIp,
@@ -198,6 +221,9 @@ class NetworkSettingsService {
   static const _dohEnabledKey = 'doh_enabled';
   static const _dohSelectedKey = 'doh_selected';
   static const _dohCustomKey = 'doh_custom';
+  static const _customHostsKey = 'doh_custom_hosts';
+  static const _customHostsSourceKey = 'doh_custom_hosts_source';
+  static const _customHostsSourceUrlKey = 'doh_custom_hosts_source_url';
   static const _proxyPortKey = 'doh_proxy_port';
   static const _preferIPv6Key = 'doh_prefer_ipv6';
   static const _serverIpKey = 'doh_server_ip';
@@ -234,6 +260,7 @@ class NetworkSettingsService {
   final Set<String> _backgroundRefreshingHosts = <String>{};
   final Map<String, Map<String, DateTime>> _hostIpPenaltyCache = {};
   String? _resolvedHostCacheSignature;
+  int _customHostsVersion = 0;
 
   final ValueNotifier<bool> isApplying = ValueNotifier(false);
 
@@ -249,6 +276,15 @@ class NetworkSettingsService {
 
   NetworkSettings get current => notifier.value;
 
+  Map<String, List<String>> get customHosts => current.customHosts;
+
+  int get customHostCount => current.customHosts.length;
+
+  int get customHostAddressCount => current.customHosts.values.fold<int>(
+    0,
+    (total, addresses) => total + addresses.length,
+  );
+
   /// 当前是否使用 gateway（反向代理）模式
   /// Gateway 模式：DOH 开启 + 用户开关开启 + 代理运行中
   bool get isGatewayMode =>
@@ -263,7 +299,9 @@ class NetworkSettingsService {
   // Rust 代理始终为 WebView 提供 DOH/代理支持，不受 rhttp 影响
   // rhttp 只改变 Dio 用哪个适配器，不改变代理生命周期
   bool get shouldRunLocalProxy =>
-      current.dohEnabled || _proxyService.current.isValid;
+      current.dohEnabled ||
+      _proxyService.current.isValid ||
+      current.customHosts.isNotEmpty;
 
   List<DohServer> get servers => [
     ..._defaultServers,
@@ -278,6 +316,13 @@ class NetworkSettingsService {
         prefs.getString(_dohSelectedKey) ?? _defaultServers.first.url;
     final customRaw = prefs.getString(_dohCustomKey);
     final custom = _decodeServers(customRaw);
+    final customHosts = _decodeCustomHosts(prefs.getString(_customHostsKey));
+    final customHostsSource = _nonEmptyString(
+      prefs.getString(_customHostsSourceKey),
+    );
+    final customHostsSourceUrl = _nonEmptyString(
+      prefs.getString(_customHostsSourceUrlKey),
+    );
     final proxyPort = prefs.getInt(_proxyPortKey);
     await prefs.remove('doh_multi_ip');
     final preferIPv6 = prefs.getBool(_preferIPv6Key) ?? false;
@@ -292,11 +337,15 @@ class NetworkSettingsService {
       echServerUrl: echServer,
       customServers: custom,
       proxyPort: proxyPort,
+      customHosts: customHosts,
+      customHostsSource: customHostsSource,
+      customHostsSourceUrl: customHostsSourceUrl,
       preferIPv6: preferIPv6,
       serverIp: serverIp,
       gatewayEnabled: gatewayEnabled,
       h2Mitm: h2Mitm,
     );
+    _customHostsVersion = customHosts.isEmpty ? 0 : 1;
     _resolver = DohResolver(
       serverUrl: notifier.value.selectedServerUrl,
       bootstrapIps: _getBootstrapIps(notifier.value.selectedServerUrl),
@@ -345,6 +394,92 @@ class NetworkSettingsService {
       _dohCustomKey,
       jsonEncode(updated.map((e) => e.toJson()).toList()),
     );
+    _touch();
+  }
+
+  /// Import and persist a system-style hosts file from a URL.
+  Future<CustomHostsParseResult> importCustomHostsFromUrl(String rawUrl) async {
+    final url = rawUrl.trim();
+    final content = await CustomHostsService.downloadFromUrl(url);
+    return importCustomHostsText(content, source: url, sourceUrl: url);
+  }
+
+  /// Import and persist hosts text selected from a local file.
+  Future<CustomHostsParseResult> importCustomHostsText(
+    String content, {
+    required String source,
+    String? sourceUrl,
+  }) async {
+    final parsed = CustomHostsService.parse(content);
+    if (parsed.hosts.isEmpty) {
+      throw const FormatException('没有找到有效的 hosts 记录');
+    }
+    await _saveCustomHosts(
+      parsed.hosts,
+      source: source.trim(),
+      sourceUrl: sourceUrl?.trim(),
+    );
+    return parsed;
+  }
+
+  Future<void> clearCustomHosts() async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    await prefs.remove(_customHostsKey);
+    await prefs.remove(_customHostsSourceKey);
+    await prefs.remove(_customHostsSourceUrlKey);
+    _customHostsVersion++;
+    notifier.value = notifier.value.copyWith(
+      customHosts: const {},
+      customHostsSource: () => null,
+      customHostsSourceUrl: () => null,
+    );
+    _clearResolvedHostCache();
+    _scheduleApplyProxyState();
+    _touch();
+  }
+
+  Future<CustomHostsParseResult?> refreshCustomHosts() async {
+    final sourceUrl = current.customHostsSourceUrl;
+    if (sourceUrl == null) return null;
+    return importCustomHostsFromUrl(sourceUrl);
+  }
+
+  Future<void> _saveCustomHosts(
+    Map<String, List<String>> hosts, {
+    required String source,
+    String? sourceUrl,
+  }) async {
+    final prefs = _prefs;
+    if (prefs == null) {
+      throw StateError('网络设置尚未初始化');
+    }
+
+    await prefs.setString(_customHostsKey, jsonEncode(hosts));
+    if (source.isEmpty) {
+      await prefs.remove(_customHostsSourceKey);
+    } else {
+      await prefs.setString(_customHostsSourceKey, source);
+    }
+    final trimmedSourceUrl = sourceUrl?.trim();
+    final normalizedSourceUrl =
+        trimmedSourceUrl == null || trimmedSourceUrl.isEmpty
+        ? null
+        : trimmedSourceUrl;
+    if (normalizedSourceUrl == null) {
+      await prefs.remove(_customHostsSourceUrlKey);
+    } else {
+      await prefs.setString(_customHostsSourceUrlKey, normalizedSourceUrl);
+    }
+
+    _customHostsVersion++;
+    notifier.value = notifier.value.copyWith(
+      customHosts: hosts,
+      customHostsSource: () => source.isEmpty ? null : source,
+      customHostsSourceUrl: () => normalizedSourceUrl,
+    );
+    _clearResolvedHostCache();
+    _scheduleApplyProxyState();
     _touch();
   }
 
@@ -624,6 +759,7 @@ class NetworkSettingsService {
         caKeyPem: caKeyPem,
         mitmConnect: mitmConnect,
         h2Mitm: current.h2Mitm,
+        hostOverrides: current.customHosts,
       );
 
       if (!success) {
@@ -890,6 +1026,29 @@ class NetworkSettingsService {
       return const ResolvedHostConfig.empty();
     }
 
+    final customHosts = current.customHosts[normalizedHost];
+    if (customHosts != null && customHosts.isNotEmpty) {
+      final entry = await _resolveHostEntry(
+        normalizedHost,
+        forceRefresh: forceRefresh,
+      );
+      final orderedIps = _applyHostIpPenalties(
+        normalizedHost,
+        entry?.ips ?? customHosts,
+        preferredIp: entry?.preferredIp,
+      );
+      final stickyIp = _selectUsablePreferredIp(
+        normalizedHost,
+        entry?.preferredIp,
+        orderedIps,
+      );
+      return ResolvedHostConfig(
+        dnsOverrides: orderedIps,
+        preferredIp: stickyIp,
+        echConfig: entry?.echConfig,
+      );
+    }
+
     final serverIpOverride = _parseServerIpOverride();
     if (!current.dohEnabled) {
       _clearResolvedHostCache();
@@ -932,6 +1091,11 @@ class NetworkSettingsService {
     if (normalizedHost == null || normalizedIp == null) {
       return;
     }
+    // Imported mappings are static. Do not create a separate sticky-IP entry
+    // in the dynamic DoH resolver for a host already pinned by hosts.
+    if (current.customHosts.containsKey(normalizedHost)) {
+      return;
+    }
 
     _evictExpiredHostIpPenalties();
     final penalties = _hostIpPenaltyCache.putIfAbsent(
@@ -957,6 +1121,9 @@ class NetworkSettingsService {
     final normalizedHost = _normalizeHost(host);
     final normalizedIp = _normalizeSingleIp(ip);
     if (normalizedHost == null || normalizedIp == null) {
+      return;
+    }
+    if (current.customHosts.containsKey(normalizedHost)) {
       return;
     }
 
@@ -1132,6 +1299,33 @@ class NetworkSettingsService {
     String host, {
     required bool forceRefresh,
   }) async {
+    final customHosts = current.customHosts[host];
+    if (customHosts != null && customHosts.isNotEmpty) {
+      Uint8List? echConfig;
+      if (current.dohEnabled) {
+        final dohServerEch =
+            _effectiveEchServerUrl ?? current.selectedServerUrl;
+        try {
+          echConfig = await _rustProxyService.lookupEchConfig(
+            host,
+            dohServerEch,
+          );
+        } catch (e) {
+          debugPrint('[DOH] Custom hosts ECH lookup failed for $host: $e');
+        }
+      }
+      final entry = _ResolvedHostEntry(
+        ips: customHosts,
+        preferredIp: null,
+        echConfig: echConfig,
+        ttl: const Duration(days: 365),
+        resolvedAt: DateTime.now(),
+      );
+      _resolvedHostCache[host] = entry;
+      _updateLocalDnsCacheStats();
+      return entry;
+    }
+
     final dohServer = current.selectedServerUrl;
     final dohServerEch = _effectiveEchServerUrl ?? current.selectedServerUrl;
     final resolvedAt = DateTime.now();
@@ -1295,7 +1489,10 @@ class NetworkSettingsService {
   }
 
   String? _normalizeHost(String host) {
-    final normalizedHost = host.trim().toLowerCase();
+    var normalizedHost = host.trim().toLowerCase();
+    while (normalizedHost.endsWith('.')) {
+      normalizedHost = normalizedHost.substring(0, normalizedHost.length - 1);
+    }
     if (normalizedHost.isEmpty ||
         InternetAddress.tryParse(normalizedHost) != null) {
       return null;
@@ -1325,7 +1522,7 @@ class NetworkSettingsService {
   }
 
   String? get _currentResolvedHostCacheSignature => current.dohEnabled
-      ? '${current.selectedServerUrl}|${_effectiveEchServerUrl ?? ""}|${current.preferIPv6 ? "v6" : "v4"}'
+      ? '${current.selectedServerUrl}|${_effectiveEchServerUrl ?? ""}|${current.preferIPv6 ? "v6" : "v4"}|hosts=$_customHostsVersion'
       : null;
 
   List<String> _collectCommonHosts() {
@@ -1501,6 +1698,22 @@ class NetworkSettingsService {
       }
     } catch (_) {}
     return const [];
+  }
+
+  Map<String, List<String>> _decodeCustomHosts(String? raw) {
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return CustomHostsService.normalizeOverrides(decoded);
+      }
+    } catch (_) {}
+    return const {};
+  }
+
+  String? _nonEmptyString(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   String get testHost {

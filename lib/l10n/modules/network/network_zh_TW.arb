@@ -54,6 +54,44 @@
   "networkSettings_maxPerWindow": "限流閾值",
   "networkSettings_maxPerWindowDesc": "每個時間視窗內最多發出的請求數",
   "networkSettings_proxy": "網路代理",
+  "customHosts_title": "自訂 Hosts",
+  "customHosts_subtitle": "匯入系統格式的 hosts 檔案，覆蓋網域解析",
+  "customHosts_empty": "尚未匯入 hosts 對映",
+  "customHosts_loaded": "已載入 {hosts} 個網域、{addresses} 個位址",
+  "@customHosts_loaded": {
+    "placeholders": {
+      "hosts": { "type": "int" },
+      "addresses": { "type": "int" }
+    }
+  },
+  "customHosts_source": "來源：{source}",
+  "@customHosts_source": {
+    "placeholders": {
+      "source": { "type": "String" }
+    }
+  },
+  "customHosts_importUrl": "從網址匯入",
+  "customHosts_importFile": "從檔案匯入",
+  "customHosts_refresh": "重新整理 hosts",
+  "customHosts_clear": "清除 hosts",
+  "customHosts_urlTitle": "匯入 hosts 檔案",
+  "customHosts_urlHint": "HTTPS hosts 檔案網址",
+  "customHosts_imported": "已匯入 {hosts} 個網域、{addresses} 個位址",
+  "@customHosts_imported": {
+    "placeholders": {
+      "hosts": { "type": "int" },
+      "addresses": { "type": "int" }
+    }
+  },
+  "customHosts_importFailed": "匯入失敗：{error}",
+  "@customHosts_importFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "customHosts_clearTitle": "清除自訂 hosts",
+  "customHosts_clearConfirm": "確定清除目前匯入的 hosts 對映嗎？",
+  "customHosts_cleared": "自訂 hosts 已清除",
   "networkSettings_title": "網路設定",
   "networkSettings_windowSeconds": "時間視窗",
   "networkSettings_windowSecondsDesc": "限流統計的時間長度",

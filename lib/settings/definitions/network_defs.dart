@@ -3,6 +3,7 @@ import 'package:app_icons/app_icons.dart';
 
 import '../../l10n/s.dart';
 import '../../pages/network_settings_page/widgets/cf_verify_card.dart';
+import '../../pages/network_settings_page/widgets/custom_hosts_card.dart';
 import '../../pages/network_settings_page/widgets/debug_tools_card.dart';
 import '../../pages/network_settings_page/widgets/doh_settings_card.dart';
 import '../../pages/network_settings_page/widgets/engine_card.dart';
@@ -42,6 +43,12 @@ List<SettingsGroup> buildNetworkGroups(BuildContext context) {
           title: 'DNS over HTTPS',
           subtitle: l10n.networkSettings_proxy,
           builder: (context, ref) => const DohSettingsCard(),
+        ),
+        CustomModel(
+          id: 'customHosts',
+          title: l10n.customHosts_title,
+          subtitle: l10n.customHosts_subtitle,
+          builder: (context, ref) => const CustomHostsCard(),
         ),
         CustomModel(
           id: 'httpProxy',

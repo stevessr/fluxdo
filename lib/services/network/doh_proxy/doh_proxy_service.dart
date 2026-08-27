@@ -37,6 +37,8 @@ class DohProxyService {
   bool? _currentMitmConnect;
   bool? _currentH2Mitm;
   String? _currentUpstreamSignature;
+  String? _currentHostOverridesSignature;
+  String? _hostsFilePath;
   String? _lastError;
   // ignore: unused_field
   Isolate? _ffiIsolate; // 保持引用防止 GC
@@ -75,6 +77,7 @@ class DohProxyService {
     String? caKeyPem,
     bool mitmConnect = true,
     bool h2Mitm = false,
+    Map<String, List<String>>? hostOverrides,
   }) async {
     final upstreamSignature = _buildUpstreamSignature(
       protocol: upstreamProtocol,
@@ -84,6 +87,7 @@ class DohProxyService {
       password: upstreamPassword,
       cipher: upstreamCipher,
     );
+    final hostOverridesSignature = _buildHostOverridesSignature(hostOverrides);
     if (_isRunning) {
       final sameConfig =
           _currentEnableDoh == enableDoh &&
@@ -95,7 +99,8 @@ class DohProxyService {
           _currentServerIp == serverIp &&
           _currentMitmConnect == mitmConnect &&
           _currentH2Mitm == h2Mitm &&
-          _currentUpstreamSignature == upstreamSignature;
+          _currentUpstreamSignature == upstreamSignature &&
+          _currentHostOverridesSignature == hostOverridesSignature;
       if (sameConfig) {
         NetworkLogger.log('[DOH] 代理已在运行，端口: $_port');
         return true;
@@ -126,6 +131,7 @@ class DohProxyService {
         caKeyPem,
         mitmConnect,
         h2Mitm,
+        hostOverrides,
       );
       // 桌面平台 FFI 加载失败时，回退到进程模式
       if (!result && DohProxyFfi.canFallbackToProcess) {
@@ -147,6 +153,7 @@ class DohProxyService {
           upstreamCipher,
           mitmConnect,
           h2Mitm,
+          hostOverrides,
         );
       }
       return result;
@@ -167,6 +174,7 @@ class DohProxyService {
         upstreamCipher,
         mitmConnect,
         h2Mitm,
+        hostOverrides,
       );
     }
   }
@@ -190,6 +198,7 @@ class DohProxyService {
     String? caKeyPem,
     bool mitmConnect,
     bool h2Mitm,
+    Map<String, List<String>>? hostOverrides,
   ) async {
     try {
       return await _enqueueFfiOp(() async {
@@ -217,6 +226,7 @@ class DohProxyService {
           caKeyPem: caKeyPem,
           mitmConnect: mitmConnect,
           h2Mitm: h2Mitm,
+          hostOverrides: hostOverrides,
         );
         if (resultPort <= 0) {
           // _callFfiStart 已设置更详细的 _lastError，仅在未设置时补充
@@ -243,6 +253,9 @@ class DohProxyService {
           username: upstreamUsername,
           password: upstreamPassword,
           cipher: upstreamCipher,
+        );
+        _currentHostOverridesSignature = _buildHostOverridesSignature(
+          hostOverrides,
         );
         NetworkLogger.log('[DOH] FFI 代理已启动，端口: $_port');
         return true;
@@ -271,6 +284,7 @@ class DohProxyService {
     String? upstreamCipher,
     bool mitmConnect,
     bool h2Mitm,
+    Map<String, List<String>>? hostOverrides,
   ) async {
     try {
       final executablePath = await _getExecutablePath();
@@ -284,6 +298,19 @@ class DohProxyService {
         '[DOH] 启动代理进程: $executablePath, 模式: ${enableDoh ? "DoH 网关" : "纯上游代理"}',
       );
 
+      String? hostsFilePath;
+      if (hostOverrides != null && hostOverrides.isNotEmpty) {
+        final hostsFile = File(
+          p.join(
+            Directory.systemTemp.path,
+            'fluxdo-hosts-${DateTime.now().microsecondsSinceEpoch}.json',
+          ),
+        );
+        await hostsFile.writeAsString(jsonEncode(hostOverrides), flush: true);
+        hostsFilePath = hostsFile.path;
+        _hostsFilePath = hostsFilePath;
+      }
+
       // 构建命令行参数
       final args = <String>[
         preferredPort.toString(),
@@ -291,6 +318,7 @@ class DohProxyService {
         if (gatewayMode) '--gateway',
         if (!mitmConnect) '--tunnel-connect',
         if (h2Mitm) '--h2-mitm',
+        if (hostsFilePath != null) ...['--hosts-file', hostsFilePath],
         if (preferIPv6) '--ipv6',
         if (dohServer != null && dohServer.isNotEmpty) ...['--doh', dohServer],
         if (dohServerEch != null && dohServerEch.isNotEmpty) ...[
@@ -359,6 +387,9 @@ class DohProxyService {
             username: upstreamUsername,
             password: upstreamPassword,
             cipher: upstreamCipher,
+          );
+          _currentHostOverridesSignature = _buildHostOverridesSignature(
+            hostOverrides,
           );
           NetworkLogger.log('[DOH] 代理已启动，端口: $_port');
           completed = true;
@@ -465,6 +496,19 @@ class DohProxyService {
     _currentMitmConnect = null;
     _currentH2Mitm = null;
     _currentUpstreamSignature = null;
+    _currentHostOverridesSignature = null;
+    final hostsFilePath = _hostsFilePath;
+    _hostsFilePath = null;
+    final path = hostsFilePath;
+    if (path != null) {
+      unawaited(() async {
+        try {
+          await File(path).delete();
+        } catch (_) {
+          // The temporary file may already have been removed.
+        }
+      }());
+    }
     // 注意：不清除 _lastError，保留用于 UI 展示
   }
 
@@ -793,6 +837,7 @@ class DohProxyService {
     String? caKeyPem,
     bool mitmConnect = true,
     bool h2Mitm = false,
+    Map<String, List<String>>? hostOverrides,
   }) async {
     final sendPort = await _ensureFfiIsolate();
     final response = ReceivePort();
@@ -815,6 +860,7 @@ class DohProxyService {
       'caCertPem': caCertPem,
       'caKeyPem': caKeyPem,
       'mitmConnect': mitmConnect,
+      'hostOverrides': hostOverrides,
       'preferredPort': port,
       'replyTo': response.sendPort,
     });
@@ -1056,6 +1102,14 @@ class DohProxyService {
     });
   }
 
+  String? _buildHostOverridesSignature(
+    Map<String, List<String>>? hostOverrides,
+  ) {
+    if (hostOverrides == null || hostOverrides.isEmpty) return null;
+    final keys = hostOverrides.keys.toList()..sort();
+    return jsonEncode({for (final key in keys) key: hostOverrides[key]});
+  }
+
   Future<SendPort> _ensureFfiIsolate() async {
     if (_ffiSendPort != null) return _ffiSendPort!;
     final readyPort = ReceivePort();
@@ -1103,6 +1157,18 @@ void _ffiIsolateEntry(SendPort mainSendPort) {
           final caCertPem = message['caCertPem'] as String?;
           final caKeyPem = message['caKeyPem'] as String?;
           final mitmConnect = message['mitmConnect'] as bool? ?? true;
+          final hostOverrides = <String, List<String>>{};
+          final rawHostOverrides = message['hostOverrides'];
+          if (rawHostOverrides is Map) {
+            for (final entry in rawHostOverrides.entries) {
+              final values = entry.value;
+              if (values is List) {
+                hostOverrides[entry.key.toString()] = values
+                    .map((value) => value.toString())
+                    .toList();
+              }
+            }
+          }
           var resultPort = DohProxyFfi.instance.start(
             port: portValue,
             enableDoh: enableDoh,
@@ -1121,6 +1187,7 @@ void _ffiIsolateEntry(SendPort mainSendPort) {
             caKeyPem: caKeyPem,
             mitmConnect: mitmConnect,
             h2Mitm: h2Mitm,
+            hostOverrides: hostOverrides,
           );
           if (resultPort <= 0 && preferredPort != 0) {
             resultPort = DohProxyFfi.instance.start(
@@ -1141,6 +1208,7 @@ void _ffiIsolateEntry(SendPort mainSendPort) {
               caKeyPem: caKeyPem,
               mitmConnect: mitmConnect,
               h2Mitm: h2Mitm,
+              hostOverrides: hostOverrides,
             );
           }
           if (resultPort <= 0) {

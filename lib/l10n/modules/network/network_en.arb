@@ -54,6 +54,44 @@
   "networkSettings_maxPerWindow": "Rate limit",
   "networkSettings_maxPerWindowDesc": "Max requests within each time window",
   "networkSettings_proxy": "Network Proxy",
+  "customHosts_title": "Custom hosts",
+  "customHosts_subtitle": "Import a system-style hosts file to override DNS resolution",
+  "customHosts_empty": "No hosts mappings imported",
+  "customHosts_loaded": "Loaded {hosts} hosts and {addresses} addresses",
+  "@customHosts_loaded": {
+    "placeholders": {
+      "hosts": { "type": "int" },
+      "addresses": { "type": "int" }
+    }
+  },
+  "customHosts_source": "Source: {source}",
+  "@customHosts_source": {
+    "placeholders": {
+      "source": { "type": "String" }
+    }
+  },
+  "customHosts_importUrl": "Import from URL",
+  "customHosts_importFile": "Import from file",
+  "customHosts_refresh": "Refresh hosts",
+  "customHosts_clear": "Clear hosts",
+  "customHosts_urlTitle": "Import hosts file",
+  "customHosts_urlHint": "HTTPS hosts file URL",
+  "customHosts_imported": "Imported {hosts} hosts and {addresses} addresses",
+  "@customHosts_imported": {
+    "placeholders": {
+      "hosts": { "type": "int" },
+      "addresses": { "type": "int" }
+    }
+  },
+  "customHosts_importFailed": "Import failed: {error}",
+  "@customHosts_importFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "customHosts_clearTitle": "Clear custom hosts",
+  "customHosts_clearConfirm": "Clear the currently imported hosts mappings?",
+  "customHosts_cleared": "Custom hosts cleared",
   "networkSettings_title": "Network Settings",
   "networkSettings_windowSeconds": "Time window",
   "networkSettings_windowSecondsDesc": "Length of the rate-limit window",

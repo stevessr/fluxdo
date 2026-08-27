@@ -312,6 +312,14 @@ class RhttpAdapter implements HttpClientAdapter {
     NetworkSettings ns,
     ProxySettings ps,
   ) {
+    // A hosts mapping must be applied before an HTTP/SOCKS upstream gets a
+    // chance to resolve the hostname. The local Rust proxy receives the same
+    // upstream settings and can connect to the pinned address instead.
+    final localProxyPort = ns.proxyPort;
+    if (ns.customHosts.isNotEmpty && localProxyPort != null) {
+      return rhttp.ProxySettings.proxy('http://127.0.0.1:$localProxyPort');
+    }
+
     if (!ps.isValid) {
       // 未配置上游代理时,Windows 下跟随注册表系统代理,与 WebView2
       // (默认走系统代理)保持同一出口。出口不一致时验证 WebView 铸出的
