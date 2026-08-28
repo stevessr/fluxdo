@@ -116,7 +116,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
   int? _trackingPointer;
   bool _loading = true;
   bool _finishing = false;
-  bool _sawNonTouchPointer = false;
 
   @override
   void initState() {
@@ -157,15 +156,14 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     try {
       // 与账号管理页一致：先固化当前登录态，保证切走后还能切回来。
       await _manager.syncCurrentAccount();
-      final results = await Future.wait<dynamic>([
-        _manager.listAccounts(),
-        _manager.getCurrentUsername(),
-      ]);
+      final accountsFuture = _manager.listAccounts();
+      final currentFuture = _manager.getCurrentUsername();
+      final accounts = await accountsFuture;
+      final current = await currentFuture;
       if (!mounted) return;
-      final accounts = results[0] as List<SavedAccount>;
       setState(() {
         _accounts = accounts;
-        _currentUsername = results[1] as String?;
+        _currentUsername = current;
         _accountKeys = {
           for (final account in accounts)
             account.username: GlobalKey(
@@ -183,11 +181,12 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
   void _handlePointerEvent(PointerEvent event) {
     if (_finishing) return;
 
-    // 手机也可能外接鼠标。非触摸长按不应该使用快捷滑选语义：等原指针
-    // 松开后撤掉短暂 Overlay，并回到原来的 bottom sheet。
+    // 手机也可能外接鼠标。桌面平台本来就不会进入这个 Overlay；移动端如果
+    // 真的是鼠标长按，则在它松开时恢复原 bottom sheet。仅在尚未锁定触摸
+    // pointer 时处理，避免外接鼠标的无关事件污染正在滑选的手指。
     if (event.kind != PointerDeviceKind.touch) {
-      _sawNonTouchPointer = true;
-      if (event is PointerUpEvent || event is PointerCancelEvent) {
+      if (_trackingPointer == null &&
+          (event is PointerUpEvent || event is PointerCancelEvent)) {
         unawaited(_finish(null, fallbackToClassic: true));
       }
       return;
@@ -243,6 +242,14 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     return (topLeft & renderObject.size).contains(point);
   }
 
+  SavedAccount? _accountForTarget(String? target) {
+    if (target == null || target == _manageTarget) return null;
+    for (final account in _accounts) {
+      if (account.username == target) return account;
+    }
+    return null;
+  }
+
   Future<void> _finish(
     String? target, {
     bool fallbackToClassic = false,
@@ -254,12 +261,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     final remove = widget.onRemove;
     final complete = widget.onComplete;
     final currentUsername = _currentUsername;
-    final account = target == null || target == _manageTarget
-        ? null
-        : _accounts.cast<SavedAccount?>().firstWhere(
-            (candidate) => candidate?.username == target,
-            orElse: () => null,
-          );
+    final account = _accountForTarget(target);
 
     if (target != null && !fallbackToClassic) {
       unawaited(HapticFeedback.lightImpact());
@@ -273,7 +275,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     remove();
 
     try {
-      if (fallbackToClassic || _sawNonTouchPointer) {
+      if (fallbackToClassic) {
         if (hostContext.mounted) {
           await AccountSwitcherSheet._showClassic(hostContext);
         }
@@ -307,7 +309,8 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     final scheme = Theme.of(context).colorScheme;
     final bottom = media.padding.bottom + 72.0;
     final maxHeight = (media.size.height - media.padding.top - bottom - 12)
-        .clamp(120.0, 520.0);
+        .clamp(120.0, 520.0)
+        .toDouble();
 
     // IgnorePointer 是刻意的：当前长按序列已经在旧 hit-test route 上，快捷
     // 面板只负责绘制；全屏区域既不拦截背景，也不会再生成一个可点击选项框。
