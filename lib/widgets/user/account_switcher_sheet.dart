@@ -48,6 +48,56 @@ abstract final class AccountSwitcherSheet {
   }
 }
 
+/// 在 Overlay 真正 build 之前就开始接收当前长按序列的后续事件。
+///
+/// onLongPress 是 deadline timer 回调，OverlayEntry 插入后通常要到下一帧才
+/// build；如果用户恰好在这 1 帧内松手，等 State.initState 再注册 route 会
+/// 丢掉 PointerUp，导致悬浮层残留。这个 controller 在 show() 同步注册全局
+/// route，并把 build 前最后一条有效事件暂存给 State 重放。
+class _QuickPointerRouteController {
+  PointerRoute? _listener;
+  PointerEvent? _pendingEvent;
+  bool _disposed = false;
+
+  _QuickPointerRouteController() {
+    GestureBinding.instance.pointerRouter.addGlobalRoute(_route);
+  }
+
+  void _route(PointerEvent event) {
+    if (_disposed) return;
+    final listener = _listener;
+    if (listener != null) {
+      listener(event);
+      return;
+    }
+    if (event is PointerMoveEvent ||
+        event is PointerUpEvent ||
+        event is PointerCancelEvent) {
+      _pendingEvent = event;
+    }
+  }
+
+  void attach(PointerRoute listener) {
+    if (_disposed) return;
+    _listener = listener;
+    final pending = _pendingEvent;
+    _pendingEvent = null;
+    if (pending != null) listener(pending);
+  }
+
+  void detach(PointerRoute listener) {
+    if (_listener == listener) _listener = null;
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _listener = null;
+    _pendingEvent = null;
+    GestureBinding.instance.pointerRouter.removeGlobalRoute(_route);
+  }
+}
+
 /// 只负责 OverlayEntry 的装卸；Overlay 本身没有 ModalBarrier，也不会在
 /// 背景构建第二份账号选择 UI。正在进行的长按 pointer 通过 PointerRouter
 /// 的 global route 继续追踪，因此 Overlay 无需接管命中测试。
@@ -59,9 +109,11 @@ abstract final class _TouchAccountSwitcherEntry {
     }
 
     final completer = Completer<void>();
+    final pointerRoute = _QuickPointerRouteController();
     late OverlayEntry entry;
 
     void removeEntry() {
+      pointerRoute.dispose();
       if (entry.mounted) entry.remove();
     }
 
@@ -72,6 +124,7 @@ abstract final class _TouchAccountSwitcherEntry {
     entry = OverlayEntry(
       builder: (_) => _TouchAccountQuickSwitcher(
         hostContext: context,
+        pointerRoute: pointerRoute,
         onRemove: removeEntry,
         onComplete: complete,
       ),
@@ -84,11 +137,13 @@ abstract final class _TouchAccountSwitcherEntry {
 class _TouchAccountQuickSwitcher extends StatefulWidget {
   const _TouchAccountQuickSwitcher({
     required this.hostContext,
+    required this.pointerRoute,
     required this.onRemove,
     required this.onComplete,
   });
 
   final BuildContext hostContext;
+  final _QuickPointerRouteController pointerRoute;
   final VoidCallback onRemove;
   final VoidCallback onComplete;
 
@@ -108,6 +163,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
   late final Animation<double> _opacity;
   late final Animation<double> _scale;
   late final Animation<Offset> _slide;
+  late final PointerRoute _pointerListener;
 
   List<SavedAccount> _accounts = const [];
   Map<String, GlobalKey> _accountKeys = const {};
@@ -137,17 +193,16 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       end: Offset.zero,
     ).animate(curve);
 
-    // onLongPress 触发时原始 PointerDown 已经完成 hit-test。这里注册全局 route
-    // 才能继续收到同一根手指后续的 Move / Up，而不需要在背景铺一个可交互
-    // 的弹窗或 ModalBarrier。
-    GestureBinding.instance.pointerRouter.addGlobalRoute(_handlePointerEvent);
+    _pointerListener = _handlePointerEvent;
+    widget.pointerRoute.attach(_pointerListener);
     unawaited(_controller.forward());
     unawaited(_reload());
   }
 
   @override
   void dispose() {
-    GestureBinding.instance.pointerRouter.removeGlobalRoute(_handlePointerEvent);
+    widget.pointerRoute.detach(_pointerListener);
+    widget.pointerRoute.dispose();
     _controller.dispose();
     super.dispose();
   }
