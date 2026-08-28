@@ -1171,38 +1171,6 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
         ),
       );
     }
-    if (canMessage) {
-      primary.add(Expanded(
-        child: canChat
-            ? FilledButton.tonalIcon(
-                onPressed: _composeMessage,
-                icon: const Icon(Symbols.mail_rounded, size: 18),
-                label: Text(S.current.userProfile_message),
-              )
-            : FilledButton.icon(
-                onPressed: _composeMessage,
-                icon: const Icon(Symbols.mail_rounded, size: 18),
-                label: Text(S.current.userProfile_message),
-              ),
-      ));
-    }
-    if (canMessage) {
-      primary.add(
-        Expanded(
-          child: canChat
-              ? FilledButton.tonalIcon(
-                  onPressed: _composeMessage,
-                  icon: const Icon(Symbols.mail_rounded, size: 18),
-                  label: Text(S.current.userProfile_message),
-                )
-              : FilledButton.icon(
-                  onPressed: _composeMessage,
-                  icon: const Icon(Symbols.mail_rounded, size: 18),
-                  label: Text(S.current.userProfile_message),
-                ),
-        ),
-      );
-    }
     if (canFollow) {
       primary.add(
         Expanded(
