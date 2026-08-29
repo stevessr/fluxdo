@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 path = Path("lib/widgets/post/reply_sheet.dart")
 s = path.read_text()
@@ -21,25 +22,24 @@ replace_once(
     "  String _currentComposerActionLabel(BuildContext context) {\n",
 )
 
-replace_once(
-    """                                onSwitchToRich: ref
-                                        .watch(preferencesProvider)
-                                        .useRichComposer
-                                    ? () {
-                                        if (mounted) {
-                                          setState(
-                                            () => _richFallback = false,
-                                          );
-                                        }
-                                      }
-                                    : null,
-""",
-    """                                onSwitchToRich: ref
-                                        .watch(preferencesProvider)
-                                        .useRichComposer
-                                    ? _switchSourceToRichComposer
-                                    : null,
-""",
+pattern = re.compile(
+    r"                                onSwitchToRich: ref\n"
+    r"                                        \.watch\(preferencesProvider\)\n"
+    r"                                        \.useRichComposer\n"
+    r"                                    \? \(\) \{\n"
+    r".*?"
+    r"                                    : null,\n",
+    re.DOTALL,
 )
+replacement = (
+    "                                onSwitchToRich: ref\n"
+    "                                        .watch(preferencesProvider)\n"
+    "                                        .useRichComposer\n"
+    "                                    ? _switchSourceToRichComposer\n"
+    "                                    : null,\n"
+)
+s, count = pattern.subn(replacement, s, count=1)
+if count != 1:
+    raise SystemExit(f"expected one onSwitchToRich block, got {count}")
 
 path.write_text(s)
