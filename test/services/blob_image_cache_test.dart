@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/blob_image_cache.dart';
+import 'package:fluxdo/services/discourse_cache_manager.dart'
+    show discourseImageProvider;
 
 void main() {
   // 与 Telegram ImageLoader.getHttpUrlExtension 同款的规则:
@@ -94,6 +96,41 @@ void main() {
       );
 
       expect(content, isNot(equals(avatar)));
+    });
+  });
+
+  group('avatar alpha-safe provider routing', () {
+    test('Discourse 动图头像走标准 encoded codec 并自动进入 avatar bucket', () {
+      final provider = discourseImageProvider(
+        'https://linux.do/user_avatar/linux.do/example/96/123_2.gif',
+      );
+
+      expect(provider, isA<BlobImageProvider>());
+      expect(
+        (provider as BlobImageProvider).bucket,
+        BlobImageCache.avatarBucket,
+      );
+    });
+
+    test('显式 avatar bucket 的透明 WebP 也不进入 raw RGBA native 路径', () {
+      final provider = discourseImageProvider(
+        'https://cdn.example.com/custom/avatar.webp',
+        bucket: BlobImageCache.avatarBucket,
+      );
+
+      expect(provider, isA<BlobImageProvider>());
+      expect(
+        (provider as BlobImageProvider).bucket,
+        BlobImageCache.avatarBucket,
+      );
+    });
+
+    test('正文动图继续保留 native 路由，不扩大 GIF disposal 回归面', () {
+      final provider = discourseImageProvider(
+        'https://linux.do/uploads/default/original/2X/a/animation.gif',
+      );
+
+      expect(provider, isNot(isA<BlobImageProvider>()));
     });
   });
 }
