@@ -29,13 +29,14 @@ String topicCardEmojiUrlResolver(String name) =>
 ///
 /// 图片(头像/标题 emoji)经 [TopicCardImages] 全局解码缓存:命中
 /// 同步画;miss 发起解码,完成后 markNeedsPaint 补画。
-class PaintedTopicCard extends StatelessWidget {
+class PaintedTopicCard extends StatefulWidget {
   const PaintedTopicCard({
     super.key,
     required this.layout,
     this.onTap,
     this.onLongPress,
     this.onMiddleClick,
+    this.onPreviewIntent,
     this.isSelected = false,
     this.highlightColor,
   });
@@ -45,6 +46,9 @@ class PaintedTopicCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onMiddleClick;
 
+  /// 预览意图回调(预加载正文),见 TopicCardInteractiveSurface
+  final VoidCallback? onPreviewIntent;
+
   /// 双栏选中态(与 widget 版 TopicCard 同款:primaryContainer 0.4 底
   /// + primary 0.5 描边)
   final bool isSelected;
@@ -53,24 +57,45 @@ class PaintedTopicCard extends StatelessWidget {
   final Color? highlightColor;
 
   @override
+  State<PaintedTopicCard> createState() => _PaintedTopicCardState();
+}
+
+class _PaintedTopicCardState extends State<PaintedTopicCard> {
+  /// 已就绪在播的动图 URL:与当前 layout.animatedAvatarUrl 一致时画布
+  /// 停画静态头像(透明 gif 的帧挡不住底图,静态层继续画会从透明像素
+  /// 后面透出成"静态+动态双影");对不上(开关切换/换头像/出错回退/
+  /// 无 key 复用元素换了话题)自动恢复画静态兜底
+  String? _readyAnimatedUrl;
+
+  @override
   Widget build(BuildContext context) {
+    final layout = widget.layout;
     final cardRadius = BorderRadius.circular(10);
     final theme = Theme.of(context);
-    final bgColor = isSelected
+    final bgColor = widget.isSelected
         ? theme.colorScheme.primaryContainer.withValues(alpha: 0.4)
-        : (highlightColor ?? layout.cardColor);
+        : (widget.highlightColor ?? layout.cardColor);
     // 动图头像混合岛:layout.animatedAvatarUrl 非空(开关开启且用户有
-    // 动图)时挂播放 overlay 钉在 avatarRect,画布仍照常画静态模板
-    // 小图(几 KB 秒出)—— 感知上先见静态首帧,ready 后原位开始动
+    // 动图)时挂播放 overlay 钉在 avatarRect,画布先画静态模板小图
+    // (几 KB 秒出)顶住观感;overlay 首帧就绪后画布停画静态层,防
+    // 透明 gif 透出底下的静态首帧
     final animatedUrl = layout.animatedAvatarUrl;
     final Widget? avatarOverlay = animatedUrl != null
-        ? AnimatedAvatarOverlay(url: animatedUrl)
+        ? AnimatedAvatarOverlay(
+            url: animatedUrl,
+            onReadyChanged: (ready) {
+              final value = ready ? animatedUrl : null;
+              if (value != _readyAnimatedUrl) {
+                setState(() => _readyAnimatedUrl = value);
+              }
+            },
+          )
         : null;
     Widget card = DecoratedBox(
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: cardRadius,
-        border: isSelected
+        border: widget.isSelected
             ? Border.all(
                 color: theme.colorScheme.primary.withValues(alpha: 0.5),
               )
@@ -78,10 +103,16 @@ class PaintedTopicCard extends StatelessWidget {
       ),
       child: TopicCardInteractiveSurface(
         borderRadius: cardRadius,
-        onTap: onTap,
-        onLongPress: onLongPress,
-        onMiddleClick: onMiddleClick,
-        child: _PaintedTopicCardLeaf(layout: layout, child: avatarOverlay),
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        onPreviewIntent: widget.onPreviewIntent,
+        onMiddleClick: widget.onMiddleClick,
+        child: _PaintedTopicCardLeaf(
+          layout: layout,
+          paintStaticAvatar:
+              animatedUrl == null || animatedUrl != _readyAnimatedUrl,
+          child: avatarOverlay,
+        ),
       ),
     );
     if (layout.band != null) {
@@ -92,13 +123,24 @@ class PaintedTopicCard extends StatelessWidget {
 }
 
 class _PaintedTopicCardLeaf extends SingleChildRenderObjectWidget {
-  const _PaintedTopicCardLeaf({required this.layout, super.child});
+  const _PaintedTopicCardLeaf({
+    required this.layout,
+    required this.paintStaticAvatar,
+    super.child,
+  });
 
   final TopicCardLayout layout;
 
+  /// 动图 overlay 已就绪在播时为 false:画布停画静态头像,防透明 gif
+  /// 从透明像素后透出静态层成"双影"
+  final bool paintStaticAvatar;
+
   @override
   RenderObject createRenderObject(BuildContext context) {
-    return _RenderTopicCard(layout: layout);
+    return _RenderTopicCard(
+      layout: layout,
+      paintStaticAvatar: paintStaticAvatar,
+    );
   }
 
   @override
@@ -106,13 +148,19 @@ class _PaintedTopicCardLeaf extends SingleChildRenderObjectWidget {
     BuildContext context,
     covariant _RenderTopicCard renderObject,
   ) {
-    renderObject.layoutData = layout;
+    renderObject
+      ..layoutData = layout
+      ..paintStaticAvatar = paintStaticAvatar;
   }
 }
 
 class _RenderTopicCard extends RenderBox
     with RenderObjectWithChildMixin<RenderBox> {
-  _RenderTopicCard({required TopicCardLayout layout}) : _layout = layout;
+  _RenderTopicCard({
+    required TopicCardLayout layout,
+    required bool paintStaticAvatar,
+  }) : _layout = layout,
+       _paintStaticAvatar = paintStaticAvatar;
 
   TopicCardLayout _layout;
   int _seenRevision = 0;
@@ -121,6 +169,13 @@ class _RenderTopicCard extends RenderBox
     _layout = v;
     _seenRevision = v.revision;
     markNeedsLayout();
+  }
+
+  bool _paintStaticAvatar;
+  set paintStaticAvatar(bool v) {
+    if (v == _paintStaticAvatar) return;
+    _paintStaticAvatar = v;
+    markNeedsPaint();
   }
 
   /// 在屏订阅分钟心跳:跳一次即原地重排本卡(时间串换新)并重绘。
@@ -194,8 +249,11 @@ class _RenderTopicCard extends RenderBox
       canvas.drawParagraph(icon, rect.topLeft + offset + l.titleOffset);
     }
     for (final (rect, url) in l.titleEmojis) {
-      final img = TopicCardImages.lookup(url, this,
-          bucket: BlobImageCache.emojiBucket);
+      final img = TopicCardImages.lookup(
+        url,
+        this,
+        bucket: BlobImageCache.emojiBucket,
+      );
       if (img != null) {
         canvas.drawImageRect(
           img,
@@ -210,39 +268,46 @@ class _RenderTopicCard extends RenderBox
       canvas.drawParagraph(l.excerpt!, offset + l.excerptOffset);
     }
 
-    // 头像:画布始终画静态首帧(TopicCardImages 单帧,未到则灰底),
-    // 动图 overlay 子节点 ready 前透明,ready 后原位盖住此层开始播放
-    final avatarRect = l.avatarRect.shift(offset);
-    final avatar = l.avatarUrl == null
-        ? null
-        : TopicCardImages.lookup(l.avatarUrl!, this,
-            bucket: BlobImageCache.avatarBucket);
-    if (avatar != null) {
-      canvas.save();
-      // linux.do 站点定制:个别账号头像方形化,画布直绘不走 SmartAvatar,
-      // 得同一份 isSquareAvatarUrl 判断,不然图是方的、这里裁切还是圆的。
-      final clipPath = isSquareAvatarUrl(l.avatarUrl)
-          ? (Path()
-              ..addRRect(
+    // 头像:动图 overlay 未就绪时画静态首帧(TopicCardImages 单帧,
+    // 未到则灰底)顶住观感;overlay 首帧就绪后停画 —— 透明 gif 的帧
+    // 挡不住底图,继续画会从透明像素后透出"静态+动态双影"
+    if (_paintStaticAvatar) {
+      final avatarRect = l.avatarRect.shift(offset);
+      final avatar = l.avatarUrl == null
+          ? null
+          : TopicCardImages.lookup(
+              l.avatarUrl!,
+              this,
+              bucket: BlobImageCache.avatarBucket,
+            );
+      if (avatar != null) {
+        canvas.save();
+        // linux.do 站点定制:个别账号头像方形化,画布直绘不走 SmartAvatar,
+        // 得同一份 isSquareAvatarUrl 判断,不然图是方的、这里裁切还是圆的。
+        final clipPath = isSquareAvatarUrl(l.avatarUrl)
+            ? (Path()..addRRect(
                 RRect.fromRectAndRadius(
                   avatarRect,
                   Radius.circular(avatarRect.shortestSide * 0.1),
                 ),
               ))
-          : (Path()..addOval(avatarRect));
-      canvas.clipPath(clipPath);
-      canvas.drawImageRect(
-        avatar,
-        Rect.fromLTWH(0, 0, avatar.width.toDouble(), avatar.height.toDouble()),
-        avatarRect,
-        Paint()..filterQuality = FilterQuality.low,
-      );
-      canvas.restore();
-    } else {
-      canvas.drawOval(
-        avatarRect,
-        Paint()..color = const Color(0x14888888),
-      );
+            : (Path()..addOval(avatarRect));
+        canvas.clipPath(clipPath);
+        canvas.drawImageRect(
+          avatar,
+          Rect.fromLTWH(
+            0,
+            0,
+            avatar.width.toDouble(),
+            avatar.height.toDouble(),
+          ),
+          avatarRect,
+          Paint()..filterQuality = FilterQuality.low,
+        );
+        canvas.restore();
+      } else {
+        canvas.drawOval(avatarRect, Paint()..color = const Color(0x14888888));
+      }
     }
 
     // 署名/时间可被字段开关关闭(layout 中为 null)
@@ -338,6 +403,18 @@ class TopicCardImages {
     return null;
   }
 
+  /// 空闲预解码(TopicCardPrewarmScope):无发起方 RenderObject,命中
+  /// /在途都免费返回;miss 时登记空 waiter 集发起解码 —— 后续真实
+  /// 挂载若在解码完成前 lookup,会并入同一份 waiter 正常收到补画。
+  static void prewarm(
+    String url, {
+    String bucket = BlobImageCache.avatarBucket,
+  }) {
+    if (_images.containsKey(url) || _waiters.containsKey(url)) return;
+    _waiters[url] = {};
+    unawaited(_load(url, bucket));
+  }
+
   static Future<void> _load(String url, String bucket) async {
     try {
       final bytes = await BlobImageCache.fetch(bucket, url);
@@ -347,20 +424,20 @@ class TopicCardImages {
       }
       final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
       // 头像显示 32dp、emoji ~19dp;96px 解码对两者都双倍富余
-      final codec =
-          await PaintingBinding.instance.instantiateImageCodecWithSize(
-        buffer,
-        getTargetSize: (w, h) {
-          if (w <= 96 && h <= 96) {
-            return ui.TargetImageSize(width: w, height: h);
-          }
-          final ratio = 96 / (w > h ? w : h);
-          return ui.TargetImageSize(
-            width: (w * ratio).round(),
-            height: (h * ratio).round(),
+      final codec = await PaintingBinding.instance
+          .instantiateImageCodecWithSize(
+            buffer,
+            getTargetSize: (w, h) {
+              if (w <= 96 && h <= 96) {
+                return ui.TargetImageSize(width: w, height: h);
+              }
+              final ratio = 96 / (w > h ? w : h);
+              return ui.TargetImageSize(
+                width: (w * ratio).round(),
+                height: (h * ratio).round(),
+              );
+            },
           );
-        },
-      );
       final frame = await codec.getNextFrame();
       codec.dispose();
       if (_images.length >= _cap) {

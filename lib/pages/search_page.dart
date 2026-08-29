@@ -14,10 +14,12 @@ import '../widgets/search/search_filter_panel.dart';
 import '../widgets/search/search_list_skeleton.dart';
 import '../widgets/search/search_post_card.dart';
 import '../widgets/search/search_preview_dialog.dart';
+import '../widgets/topic/topic_preview_dialog.dart' show topicCardAnchorRect;
 import '../providers/preferences_provider.dart';
 import '../providers/selected_topic_provider.dart';
 import '../providers/shortcut_provider.dart';
 import '../widgets/layout/master_detail_layout.dart';
+import '../utils/responsive.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 import 'package:dio/dio.dart';
 import '../services/app_error_handler.dart';
@@ -29,7 +31,6 @@ import '../utils/blocked_user_filter.dart';
 import '../utils/discourse_url_parser.dart';
 import '../widgets/common/search_capsule.dart';
 import '../utils/link_launcher.dart';
-import 'drafts_page.dart';
 import 'settings_page.dart';
 
 /// 搜索框中的站内直达链接标准化。支持完整 URL、`linux.do/...` 和相对路径；
@@ -49,8 +50,9 @@ String normalizeDirectSearchLink(String rawValue) {
 
 /// 搜索页面
 class SearchPage extends ConsumerStatefulWidget {
-  static const double parallelMasterWidth = 440;
-  static const double parallelMinDetailWidth = 480;
+  static const double parallelMasterWidth = PaneBreakpoints.wideMasterWidth;
+  static const double parallelMinDetailWidth =
+      PaneBreakpoints.wideMinDetailWidth;
 
   final String? initialQuery;
   final SearchFilter? initialFilter;
@@ -67,11 +69,16 @@ class SearchPage extends ConsumerStatefulWidget {
     this.stackProvider,
     this.onClose,
     this.heroCapsule = false,
+    this.parentActive = true,
   });
 
   final bool embeddedMaster;
   final SelectedTopicProvider? stackProvider;
   final VoidCallback? onClose;
+
+  /// 宿主 tab 是否活跃(嵌入首页左栏时传入:IndexedStack 常驻页共享
+  /// 根路由,非活跃 tab 的 surface 注册会截胡活跃 tab 的按键)。
+  final bool parentActive;
 
   @visibleForTesting
   static bool canShowParallelFor(BuildContext context) {
@@ -101,6 +108,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         kind: ShortcutSurfaceKind.route,
         repeatBehavior: ShortcutSurfaceRepeatBehavior.reveal,
         passthroughActions: ShortcutSurfaceActionSets.globalRoutePassthrough,
+        // 嵌入首页左栏(embeddedMaster)时挂在 IndexedStack 常驻 tab 里,
+        // 宿主不活跃则不参与分发,否则拦掉其他 tab 的按键。
+        enabled: () => !widget.embeddedMaster || widget.parentActive,
       );
   ModalRoute<dynamic>? _route;
 
@@ -748,26 +758,47 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     return MasterDetailLayout(
       masterWidth: SearchPage.parallelMasterWidth,
       minDetailWidth: SearchPage.parallelMinDetailWidth,
-      minMasterRatio: 0.32,
+      // 列表态与其他双栏页同语义:初始=masterWidth(440,结果卡片比首页
+      // 话题卡宽一点),比例只在超大窗口放宽。旧参数(min 0.32/preferred
+      // 0.4)让搜索初始就占四成屏宽,明显宽于其他页。
       maxMasterRatio: selected.isStacked ? 0.8 : 0.52,
-      preferredMasterRatio: selected.isStacked ? 0.5 : 0.4,
-      master: _buildParallelMaster(selected, master),
-      detail: selected.hasSelection
-          ? _buildParallelPane(
-              selected.topEntry!,
+      preferredMasterRatio: selected.isStacked ? 0.5 : null,
+      // 胶片带:搜索列表也在带上,压栈被顶出左侧,倒二层格作预览。
+      pinMaster: false,
+      master: master,
+      panes: [
+        for (var i = 0; i < selected.stack.length; i++)
+          KeyedSubtree(
+            key: _cellKey(selected.stack[i]),
+            child: _buildParallelPane(
+              selected.stack[i],
+              truncateOnPush: i < selected.stack.length - 1,
+              // 回调内重读 provider:嵌入面板在注册 ESC 时会捕获这个闭包
+              // 且不随宿主 rebuild 刷新,捕获 build 快照的 selected 会让
+              // 后续按键用过期的 isStacked 判断 pop/clear。
               onBack: () {
                 final notifier = ref.read(_stackProvider.notifier);
-                if (selected.isStacked) {
+                if (ref.read(_stackProvider).isStacked) {
                   notifier.pop();
                 } else {
                   notifier.clear();
                 }
               },
-            )
-          : null,
-      emptyDetail: _buildParallelEmptyState(theme),
+            ),
+          ),
+      ],
+      emptyDetail: MasterDetailEmptyState(
+        icon: Symbols.preview_rounded,
+        iconSize: 56,
+        message: context.l10n.search_selectResultHint,
+      ),
     );
   }
+
+  Key _cellKey(PaneEntry entry) => ValueKey(
+    'search_cell_${entry.kind}_'
+    '${entry.instanceId ?? entry.username ?? entry.topicId}',
+  );
 
   Widget _buildSearchScaffold(ThemeData theme) {
     final searchField = TextField(
@@ -809,6 +840,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final Widget titleField = widget.heroCapsule
         ? Hero(
             tag: kSearchCapsuleHeroTag,
+            // 预测返回(user gesture)时胶囊也要 morph 回首页
+            transitionOnUserGestures: true,
             flightShuttleBuilder: searchCapsuleFlightShuttle,
             child: MediaQuery.withClampedTextScaling(
               maxScaleFactor: 1.2,
@@ -919,20 +952,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     );
   }
 
-  Widget _buildParallelMaster(SelectedTopicState selected, Widget searchPage) {
-    if (!selected.isStacked) return searchPage;
-    final previous = selected.stack[selected.stack.length - 2];
-    return Stack(
-      children: [
-        ExcludeFocus(
-          excluding: true,
-          child: Offstage(offstage: true, child: searchPage),
-        ),
-        _buildParallelPane(previous, truncateOnPush: true),
-      ],
-    );
-  }
-
   Widget _buildParallelPane(
     PaneEntry entry, {
     VoidCallback? onBack,
@@ -961,58 +980,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             username: entry.username!,
             embeddedMode: true,
             onEmbeddedBack: onBack,
+            parentActive: widget.parentActive,
           ),
         );
       case PaneKind.settings:
         return EmbeddedStackScope(
           stackProvider: _stackProvider,
           truncateOnPush: truncateOnPush,
-          child: SettingsPage(embeddedMode: true, onEmbeddedBack: onBack),
-        );
-      case PaneKind.drafts:
-        return EmbeddedStackScope(
-          stackProvider: _stackProvider,
-          truncateOnPush: truncateOnPush,
-          child: Consumer(
-            builder: (context, ref, _) => DraftsPage(
-              embeddedMode: true,
-              autoCloseWhenEmpty: truncateOnPush,
-              onEmbeddedBack: onBack,
-              // 草稿处理完 → 抽掉草稿这一层（不是 pop，右边的话题要留着）
-              onAllHandled: () => ref
-                  .read(_stackProvider.notifier)
-                  .removeEntriesOfKind(PaneKind.drafts),
-            ),
+          child: SettingsPage(
+            embeddedMode: true,
+            onEmbeddedBack: onBack,
+            parentActive: widget.parentActive,
           ),
         );
     }
-  }
-
-  Widget _buildParallelEmptyState(ThemeData theme) {
-    // 右侧空详情没有 Scaffold，若不显式铺底会透出 MaterialApp 默认
-    // canvasColor，和左侧搜索 Scaffold 的主题背景形成灰蓝/暖色断层。
-    return ColoredBox(
-      color: theme.scaffoldBackgroundColor,
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Symbols.preview_rounded,
-              size: 56,
-              color: theme.colorScheme.outlineVariant,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              context.l10n.search_selectResultHint,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildEmptyState(ThemeData theme) {
@@ -1278,66 +1259,77 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             ),
           ),
         Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(16),
-            itemCount:
-                posts.length + (users.isNotEmpty ? users.length + 1 : 0) + 1,
-            itemBuilder: (context, index) {
-              // 帖子结果（标准 + AI 混合）
-              if (index < posts.length) {
-                final searchPost = posts[index];
-                final enableLongPress = ref
-                    .watch(preferencesProvider)
-                    .longPressPreview;
-                return SearchPostCard(
-                  post: searchPost,
-                  onTap: () => _openTopicResult(searchPost),
-                  onLongPress: enableLongPress
-                      ? () => SearchPreviewDialog.show(
-                          context,
-                          post: searchPost,
-                          onOpen: () => _openTopicResult(searchPost),
-                        )
-                      : null,
-                );
-              }
-
-              // 用户标题
-              final userStartIndex = posts.length;
-              if (users.isNotEmpty && index == userStartIndex) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 16, bottom: 8),
-                  child: _buildSectionHeader(
-                    context.l10n.search_users,
-                    users.length,
-                    _hasMoreUsers,
-                  ),
-                );
-              }
-
-              // 用户结果
-              if (users.isNotEmpty && index > userStartIndex) {
-                final userIndex = index - userStartIndex - 1;
-                if (userIndex < users.length) {
-                  return _SearchUserCard(
-                    user: users[userIndex],
-                    onTap: () => _openUserResult(users[userIndex]),
+          child: SearchPostPrewarmScope(
+            posts: posts,
+            child: ListView.builder(
+              controller: _scrollController,
+              addAutomaticKeepAlives: false,
+              padding: const EdgeInsets.all(16),
+              itemCount:
+                  posts.length + (users.isNotEmpty ? users.length + 1 : 0) + 1,
+              itemBuilder: (context, index) {
+                // 帖子结果（标准 + AI 混合）
+                if (index < posts.length) {
+                  final searchPost = posts[index];
+                  final enableLongPress = ref
+                      .watch(preferencesProvider)
+                      .longPressPreview;
+                  // Builder 紧贴卡片:一镜到底要卡片自身的屏幕 rect 作
+                  // 起点(外层 context 在桌面端 Center 包装下是满宽);
+                  // bottomGap 8 裁掉外壳底部间距
+                  return Builder(
+                    builder: (cardContext) => SearchPostCard(
+                      post: searchPost,
+                      onTap: () => _openTopicResult(searchPost),
+                      onLongPress: enableLongPress
+                          ? () => SearchPreviewDialog.show(
+                              context,
+                              post: searchPost,
+                              onOpen: () => _openTopicResult(searchPost),
+                              anchorRect: topicCardAnchorRect(cardContext),
+                            )
+                          : null,
+                    ),
                   );
                 }
-              }
 
-              return PagedListFooter(
-                hasMore: _hasMorePosts,
-                isLoadingMore: _loadMoreCoordinator.isRunning && _isLoadingMore,
-                isLoadMoreFailed: _isLoadMoreFailed,
-                onRetry: () {
-                  _loadMoreCoordinator.resetCooldown();
-                  setState(() => _isLoadMoreFailed = false);
-                  _loadMore();
-                },
-              );
-            },
+                // 用户标题
+                final userStartIndex = posts.length;
+                if (users.isNotEmpty && index == userStartIndex) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 8),
+                    child: _buildSectionHeader(
+                      context.l10n.search_users,
+                      users.length,
+                      _hasMoreUsers,
+                    ),
+                  );
+                }
+
+                // 用户结果
+                if (users.isNotEmpty && index > userStartIndex) {
+                  final userIndex = index - userStartIndex - 1;
+                  if (userIndex < users.length) {
+                    return _SearchUserCard(
+                      user: users[userIndex],
+                      onTap: () => _openUserResult(users[userIndex]),
+                    );
+                  }
+                }
+
+                return PagedListFooter(
+                  hasMore: _hasMorePosts,
+                  isLoadingMore:
+                      _loadMoreCoordinator.isRunning && _isLoadingMore,
+                  isLoadMoreFailed: _isLoadMoreFailed,
+                  onRetry: () {
+                    _loadMoreCoordinator.resetCooldown();
+                    setState(() => _isLoadMoreFailed = false);
+                    _loadMore();
+                  },
+                );
+              },
+            ),
           ),
         ),
       ],

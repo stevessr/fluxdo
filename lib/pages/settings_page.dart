@@ -9,7 +9,9 @@ import '../providers/theme_provider.dart';
 import '../settings/search/settings_search_index.dart';
 import '../utils/appearance_warmup.dart';
 import '../utils/platform_utils.dart';
+import '../utils/responsive.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+import '../widgets/esc_fallback_observer.dart';
 import '../widgets/layout/master_detail_layout.dart';
 import 'about_page.dart';
 import 'appearance_page.dart';
@@ -22,8 +24,9 @@ import 'reading_settings_page.dart';
 import 'shortcut_settings_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
-  static const double parallelMasterWidth = 380;
-  static const double parallelMinDetailWidth = 480;
+  static const double parallelMasterWidth = PaneBreakpoints.settingsMasterWidth;
+  static const double parallelMinDetailWidth =
+      PaneBreakpoints.settingsMinDetailWidth;
 
   /// 平行视界嵌入模式：AppBar 用 [onEmbeddedBack] 关闭当前层，而不是
   /// Navigator pop（嵌入面板不在 Navigator 路由栈里）。页面自身宽度
@@ -31,10 +34,15 @@ class SettingsPage extends ConsumerStatefulWidget {
   final bool embeddedMode;
   final VoidCallback? onEmbeddedBack;
 
+  /// 宿主 tab 是否活跃(嵌入模式下用于 surface 注册失活:IndexedStack
+  /// 常驻页共享根路由,非活跃 tab 的注册会截胡活跃 tab 的按键)。
+  final bool parentActive;
+
   const SettingsPage({
     super.key,
     this.embeddedMode = false,
     this.onEmbeddedBack,
+    this.parentActive = true,
   });
 
   @visibleForTesting
@@ -62,6 +70,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         kind: ShortcutSurfaceKind.route,
         repeatBehavior: ShortcutSurfaceRepeatBehavior.reveal,
         passthroughActions: ShortcutSurfaceActionSets.globalRoutePassthrough,
+        // 嵌入在 IndexedStack 常驻 tab 里时,宿主不活跃则本 surface 不
+        // 参与分发(否则 blocksShortcuts 会拦掉其他 tab 的按键)。
+        enabled: () => !widget.embeddedMode || widget.parentActive,
       );
   ModalRoute<dynamic>? _route;
   String _query = '';
@@ -119,6 +130,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       master: master,
       detail: Navigator(
         key: _detailNavigatorKey,
+        // 内栏子页登记 ESC 兜底(共享全局登记表):有子页时 ESC 先退
+        // 子页;退到内栏基层(isFirst 不登记)后落回设置页自身 surface
+        // 关整页——修掉"宽屏设置 ESC 直接关整页"的旧行为。
+        observers: [EscFallbackObserver()],
         onGenerateRoute: (_) => MaterialPageRoute(
           settings: const RouteSettings(name: 'settings-detail-empty'),
           builder: (_) => _buildDetailEmptyState(theme),

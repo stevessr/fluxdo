@@ -42,6 +42,13 @@ sealed class SettingsModel {
     return title.toLowerCase().contains(q) ||
         (subtitle?.toLowerCase().contains(q) ?? false);
   }
+
+  /// 分组渲染前的可见性判断。
+  ///
+  /// 分段卡片组（SegmentedCardGroup）按位置决定首尾大圆角，隐藏项必须在
+  /// 组装 children 前过滤掉——否则隐藏项以零高占位占走组尾位置，可见的
+  /// 最后一项拿不到大圆角。默认恒可见。
+  bool isVisible(WidgetRef ref) => true;
 }
 
 /// 布尔开关
@@ -50,6 +57,10 @@ final class SwitchModel extends SettingsModel {
   final bool Function(WidgetRef ref) getValue;
   final void Function(WidgetRef ref, bool value) onChanged;
 
+  /// 依赖前置开关:返回 false 时本项整行隐藏(如「即时渲染」依赖
+  /// 「富文本编辑器」开启才有意义,前置关闭时展示无意义)。null = 恒显示。
+  final bool Function(WidgetRef ref)? enabledWhen;
+
   const SwitchModel({
     required super.id,
     required super.title,
@@ -57,7 +68,11 @@ final class SwitchModel extends SettingsModel {
     required this.icon,
     required this.getValue,
     required this.onChanged,
+    this.enabledWhen,
   });
+
+  @override
+  bool isVisible(WidgetRef ref) => enabledWhen?.call(ref) ?? true;
 }
 
 /// 浮点滑块（字体缩放等）
@@ -150,4 +165,7 @@ final class PlatformConditionalModel extends SettingsModel {
   }) : super(id: inner.id, title: inner.title, subtitle: inner.subtitle);
 
   bool get shouldShow => condition();
+
+  @override
+  bool isVisible(WidgetRef ref) => shouldShow && inner.isVisible(ref);
 }
