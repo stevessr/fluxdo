@@ -166,6 +166,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     with SingleTickerProviderStateMixin {
   static const _manageTarget = '__fluxdo_manage_accounts__';
   static const _dwellDuration = Duration(milliseconds: 320);
+  static const _switchCoverMinDuration = Duration(milliseconds: 320);
 
   final AccountManager _manager = AccountManager();
   final GlobalKey _manageKey = GlobalKey(debugLabel: 'quick-account-manage');
@@ -359,6 +360,8 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     final complete = widget.onComplete;
     final currentUsername = _currentUsername;
     final account = _accountForTarget(target);
+    OverlayEntry? switchCover;
+    Stopwatch? switchCoverStopwatch;
 
     if (target != null && !fallbackToClassic) {
       unawaited(HapticFeedback.lightImpact());
@@ -392,9 +395,38 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
 
       if (account == null || account.username == currentUsername) return;
       if (hostContext.mounted) {
+        // 快速切换需要给整棵界面一个稳定的重载窗口：先盖住并吞掉全部触摸，
+        // 让 cover 确实绘制一帧后再开始 session / provider 切换。
+        final overlay = Overlay.maybeOf(hostContext, rootOverlay: true);
+        if (overlay != null) {
+          switchCover = OverlayEntry(
+            builder: (_) => _QuickAccountSwitchCover(account: account),
+          );
+          switchCoverStopwatch = Stopwatch()..start();
+          overlay.insert(switchCover);
+          await WidgetsBinding.instance.endOfFrame;
+        }
+
         await _performAccountSwitch(hostContext, _manager, account);
+
+        // resetForAccountSwitch 完成后再给新账号的 provider / 页面一帧 rebuild，
+        // 然后才移除 cover，避免用户看到半更新状态或在组件重建时误触。
+        if (switchCover != null) {
+          await WidgetsBinding.instance.endOfFrame;
+          final elapsed = switchCoverStopwatch?.elapsed ?? Duration.zero;
+          final remaining = _switchCoverMinDuration - elapsed;
+          if (remaining > Duration.zero) {
+            await Future<void>.delayed(remaining);
+          }
+        }
       }
     } finally {
+      final cover = switchCover;
+      if (cover != null) {
+        switchCoverStopwatch?.stop();
+        if (cover.mounted) cover.remove();
+        cover.dispose();
+      }
       complete();
     }
   }
@@ -575,6 +607,73 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
                   : null,
             ),
             child: Semantics(label: semanticLabel, child: Center(child: child)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickAccountSwitchCover extends StatelessWidget {
+  const _QuickAccountSwitchCover({required this.account});
+
+  final SavedAccount account;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Positioned.fill(
+      child: AbsorbPointer(
+        absorbing: true,
+        child: Material(
+          color: scheme.surface.withValues(alpha: 0.96),
+          child: SafeArea(
+            child: Center(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.94, end: 1),
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, child) => Opacity(
+                  opacity: value,
+                  child: Transform.scale(
+                    scale: 0.94 + (value - 0.94),
+                    child: child,
+                  ),
+                ),
+                child: Semantics(
+                  liveRegion: true,
+                  label: context.l10n.accountManage_switching,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _AccountAvatar(account: account, radius: 30),
+                      const SizedBox(height: 20),
+                      const SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2.6),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        context.l10n.accountManage_switching,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '@${account.username}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
