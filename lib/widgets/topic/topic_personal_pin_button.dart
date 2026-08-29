@@ -152,7 +152,11 @@ class _TopicPersonalPinButtonState
   void didUpdateWidget(covariant TopicPersonalPinButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.topicId != widget.topicId) {
+      // 旧话题的异步请求可能仍在路上；先为新话题重置本地探测状态。
+      // 旧请求完成时会因为 requestedTopicId 不匹配而被丢弃。
       _state = null;
+      _loading = false;
+      _mutating = false;
       _loadFailed = false;
       _loadScheduled = false;
       _scheduleLoadState();
