@@ -1239,58 +1239,6 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
-                children: [
-                  TextButton(
-                    onPressed: _isCreating
-                        ? null
-                        : () => Navigator.of(context).pop(),
-                    child: Text(l10n.chat_cancel),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: _isCreating || _selected.isEmpty
-                        ? null
-                        : _create,
-                    child: _isCreating
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(createLabel),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
-                children: [
-                  TextButton(
-                    onPressed: _isCreating
-                        ? null
-                        : () => Navigator.of(context).pop(),
-                    child: Text(l10n.chat_cancel),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: _isCreating || _selected.isEmpty
-                        ? null
-                        : _create,
-                    child: _isCreating
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(createLabel),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
