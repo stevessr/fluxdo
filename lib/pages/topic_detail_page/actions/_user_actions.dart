@@ -59,6 +59,12 @@ extension _UserActions on _TopicDetailPageState {
       replyToPost: replyToPost,
       initialContent: initialContent,
       topicTitle: detail?.title,
+      privateMessageRecipients: detail == null
+          ? const <String>[]
+          : <String>{
+              ...detail.allowedUsers.map((user) => user.username),
+              ...detail.allowedGroups,
+            }.toList(growable: false),
       preloadedDraftFuture: preloadedDraftFuture,
       isPrivateMessageTopic: detail?.isPrivateMessage ?? false,
       isPmWithNonHumanUser: detail?.pmWithNonHumanUser ?? false,
