@@ -30,6 +30,7 @@ import '../../services/preloaded_data_service.dart';
 import '../common/smart_avatar.dart';
 import '../../l10n/s.dart';
 import '../../utils/dialog_utils.dart';
+import '../../utils/url_helper.dart';
 import '../../providers/shortcut_provider.dart';
 import '../ai/ai_post_review_button.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -49,12 +50,7 @@ Future<void> _waitForEmbeddedBrowserTeardown() async {
   }
 }
 
-enum _ComposerAction {
-  replyToTopic,
-  replyToPost,
-  newTopic,
-  newPrivateMessage,
-}
+enum _ComposerAction { replyToTopic, replyToPost, newTopic, newPrivateMessage }
 
 /// 显示回复底部弹框
 /// [topicId] 话题 ID (回复话题/帖子时必需)
@@ -74,6 +70,7 @@ Future<Post?> showReplySheet({
   int? categoryId,
   Post? replyToPost,
   String? targetUsername,
+
   /// 新建私信（可无预设收件人）：收件人由用户在编辑器内搜索增删
   bool composePrivateMessage = false,
   String? draftKey,
@@ -427,6 +424,62 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     _onContentChanged();
   }
 
+  String _escapeDiscourseLinkText(String value) {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+  }
+
+  String? _continuedDiscussionText() {
+    final topicId = widget.topicId;
+    final title = widget.topicTitle?.trim();
+    if (topicId == null || title == null || title.isEmpty) return null;
+
+    // 对齐 Discourse ComposerActionState#continuedFromText：如果最初是
+    // 回复某楼，优先回链该楼；否则链接到话题首帖。Discourse 原生支持
+    // /t/:topic_id/:post_number 的无 slug 短路由。
+    final postNumber = widget.replyToPost?.postNumber ?? 1;
+    final url = UrlHelper.resolveUrl('/t/$topicId/$postNumber');
+    final link = '[${_escapeDiscourseLinkText(title)}]($url)';
+    return context.l10n.post_continueDiscussion(link);
+  }
+
+  String _withContinuedDiscussionPrefix(String content) {
+    final prefix = _continuedDiscussionText();
+    // Discourse composer.open 同样用 includes 防重复 prepend。
+    if (prefix == null || prefix.isEmpty || content.contains(prefix)) {
+      return content;
+    }
+    final normalized = prefix.trim();
+    return content.isEmpty ? normalized : '$normalized\n\n$content';
+  }
+
+  Future<void> _replaceComposerContent(String content) async {
+    final restoreRich =
+        ref.read(preferencesProvider).useRichComposer && !_richFallback;
+    if (restoreRich) {
+      // RichComposer 初始导入是一次性的。先卸载让它在 dispose 时 flush
+      // 当前文档，再改 controller，随后重挂以重新导入转换后的 Markdown。
+      _richKey.currentState?.flushToController();
+      setState(() => _richFallback = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+    }
+
+    _contentController.value = TextEditingValue(
+      text: content,
+      selection: TextSelection.collapsed(offset: content.length),
+    );
+
+    if (restoreRich && mounted) {
+      setState(() => _richFallback = false);
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
   Future<void> _dropCurrentDraftForConversion() async {
     final previous = _draftController;
     _draftController = null;
@@ -450,9 +503,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     setState(() {
       _composePrivateMessage = false;
       _replyToPost = target;
-      _recipients = [
-        if (widget.targetUsername != null) widget.targetUsername!,
-      ];
+      _recipients = [if (widget.targetUsername != null) widget.targetUsername!];
       _draftController = DraftController(
         draftKey: Draft.replyKey(
           widget.topicId!,
@@ -468,7 +519,13 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   Future<void> _switchToPrivateMessage() async {
     if (_isEditMode || widget.topicId == null) return;
     _richKey.currentState?.flushToController();
+    final convertedContent = _withContinuedDiscussionPrefix(
+      _contentController.text,
+    );
     await _dropCurrentDraftForConversion();
+    if (!mounted) return;
+
+    await _replaceComposerContent(convertedContent);
     if (!mounted) return;
 
     setState(() {
@@ -490,7 +547,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   Future<void> _convertToNewTopic() async {
     if (_isEditMode) return;
     _richKey.currentState?.flushToController();
-    final content = _contentController.text;
+    final content = _withContinuedDiscussionPrefix(_contentController.text);
     await _dropCurrentDraftForConversion();
     if (!mounted) return;
 
@@ -607,9 +664,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
 
     final data = response.data;
     if (data is Map && data['post'] is Map) {
-      return Post.fromJson(
-        Map<String, dynamic>.from(data['post'] as Map),
-      );
+      return Post.fromJson(Map<String, dynamic>.from(data['post'] as Map));
     }
     throw Exception(S.current.error_updatePostFailed);
   }
@@ -718,14 +773,13 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
       _submitted = true;
       if (!mounted) return;
       final pending = e.pendingPost;
-      if (pending != null && widget.editPost == null && widget.topicId != null) {
+      if (pending != null &&
+          widget.editPost == null &&
+          widget.topicId != null) {
         // enqueued 响应的 pending_post 只有 {id, raw, created_at},回复目标
         // 服务端 payload 存了但本人可见接口都不吐;趁 composer 还知道上下文
         // 记入注册表,「撤回并重新编辑」才能恢复"回复某楼"而非退化为直接回复话题
-        PendingReplyTargetRegistry.record(
-          pending.id,
-          _replyToPost?.postNumber,
-        );
+        PendingReplyTargetRegistry.record(pending.id, _replyToPost?.postNumber);
       }
       if (widget.onEnqueued != null && pending != null) {
         // 宿主接管展示(如主题页底部待审块),轻提示即可
@@ -828,9 +882,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
           child: ListTile(
             dense: true,
             leading: const Icon(Icons.reply_rounded),
-            title: Text(
-              context.l10n.post_replyToUser(originalTarget.username),
-            ),
+            title: Text(context.l10n.post_replyToUser(originalTarget.username)),
             contentPadding: EdgeInsets.zero,
           ),
         ),
@@ -1141,76 +1193,83 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                         child: ComposerSwitchFade(
                           child:
                               (ref.watch(
-                                  preferencesProvider.select(
-                                    (p) => p.useRichComposer,
-                                  ),
-                                ) &&
-                                !_richFallback)
-                            // 富文本的初始导入是一次性的(不监听 controller
-                            // 后续变化)——编辑原帖 raw / 草稿加载完成前挂载
-                            // 会用空 controller 建空文档,之后镜像回写覆盖
-                            // 真内容(毁帖)。内容源就绪后才挂;占位留空,
-                            // 加载视觉由草稿遮罩/RichComposer 自身统一提供
-                            // (双 spinner 叠影)。
-                            ? ((_isLoadingRaw || _isLoadingDraft)
-                                  ? const SizedBox.shrink()
-                                  : RichComposerEditor(
-                                      key: _richKey,
-                                      controller: _contentController,
-                                      focusNode: _contentFocusNode,
-                                      hintText: context.l10n.editor_hintText,
-                                      emojiPanelHeight: _emojiPanelHeight,
-                                      onEmojiPanelChanged: (show) {
-                                        setState(() => _showEmojiPanel = show);
-                                      },
-                                      mentionDataSource: (term) =>
-                                          DiscourseService().searchUsers(
-                                            term: term,
-                                            topicId: widget.topicId,
-                                            categoryId: widget.categoryId,
-                                            includeGroups:
-                                                !_isInPrivateMessageContext,
-                                          ),
-                                      onFallbackToPlain: () {
-                                        if (mounted) {
-                                          setState(() => _richFallback = true);
-                                        }
-                                      },
-                                      // 主动切源码:会话内单向(重开恢复
-                                      // 富文本并重跑导入门禁)
-                                      onSwitchToSource: () {
-                                        if (mounted) {
-                                          setState(() => _richFallback = true);
-                                        }
-                                      },
-                                    ))
-                            : MarkdownEditor(
-                                key: _editorKey,
-                                controller: _contentController,
-                                focusNode: _contentFocusNode,
-                                hintText: context.l10n.editor_hintText,
-                                expands: true,
-                                emojiPanelHeight: _emojiPanelHeight,
-                                onEmojiPanelChanged: (show) {
-                                  setState(() => _showEmojiPanel = show);
-                                },
-                                // 源码 → 富文本(仅富文本开关开着且当前
-                                // 处于主动切换态;门禁降级也允许重试 ——
-                                // 内容可能已改到可导入)
-                                onSwitchToRich: ref
-                                        .watch(preferencesProvider)
-                                        .useRichComposer
-                                    ? _switchSourceToRichComposer
-                                    : null,
-                                mentionDataSource: (term) =>
-                                    DiscourseService().searchUsers(
-                                      term: term,
-                                      topicId: widget.topicId,
-                                      categoryId: widget.categoryId,
-                                      includeGroups:
-                                          !_isInPrivateMessageContext, // 私信不允许提及群组
+                                    preferencesProvider.select(
+                                      (p) => p.useRichComposer,
                                     ),
-                              ),
+                                  ) &&
+                                  !_richFallback)
+                              // 富文本的初始导入是一次性的(不监听 controller
+                              // 后续变化)——编辑原帖 raw / 草稿加载完成前挂载
+                              // 会用空 controller 建空文档,之后镜像回写覆盖
+                              // 真内容(毁帖)。内容源就绪后才挂;占位留空,
+                              // 加载视觉由草稿遮罩/RichComposer 自身统一提供
+                              // (双 spinner 叠影)。
+                              ? ((_isLoadingRaw || _isLoadingDraft)
+                                    ? const SizedBox.shrink()
+                                    : RichComposerEditor(
+                                        key: _richKey,
+                                        controller: _contentController,
+                                        focusNode: _contentFocusNode,
+                                        hintText: context.l10n.editor_hintText,
+                                        emojiPanelHeight: _emojiPanelHeight,
+                                        onEmojiPanelChanged: (show) {
+                                          setState(
+                                            () => _showEmojiPanel = show,
+                                          );
+                                        },
+                                        mentionDataSource: (term) =>
+                                            DiscourseService().searchUsers(
+                                              term: term,
+                                              topicId: widget.topicId,
+                                              categoryId: widget.categoryId,
+                                              includeGroups:
+                                                  !_isInPrivateMessageContext,
+                                            ),
+                                        onFallbackToPlain: () {
+                                          if (mounted) {
+                                            setState(
+                                              () => _richFallback = true,
+                                            );
+                                          }
+                                        },
+                                        // 主动切源码:会话内单向(重开恢复
+                                        // 富文本并重跑导入门禁)
+                                        onSwitchToSource: () {
+                                          if (mounted) {
+                                            setState(
+                                              () => _richFallback = true,
+                                            );
+                                          }
+                                        },
+                                      ))
+                              : MarkdownEditor(
+                                  key: _editorKey,
+                                  controller: _contentController,
+                                  focusNode: _contentFocusNode,
+                                  hintText: context.l10n.editor_hintText,
+                                  expands: true,
+                                  emojiPanelHeight: _emojiPanelHeight,
+                                  onEmojiPanelChanged: (show) {
+                                    setState(() => _showEmojiPanel = show);
+                                  },
+                                  // 源码 → 富文本(仅富文本开关开着且当前
+                                  // 处于主动切换态;门禁降级也允许重试 ——
+                                  // 内容可能已改到可导入)
+                                  onSwitchToRich:
+                                      ref
+                                          .watch(preferencesProvider)
+                                          .useRichComposer
+                                      ? _switchSourceToRichComposer
+                                      : null,
+                                  mentionDataSource: (term) =>
+                                      DiscourseService().searchUsers(
+                                        term: term,
+                                        topicId: widget.topicId,
+                                        categoryId: widget.categoryId,
+                                        includeGroups:
+                                            !_isInPrivateMessageContext, // 私信不允许提及群组
+                                      ),
+                                ),
                         ),
                       ),
                     ],

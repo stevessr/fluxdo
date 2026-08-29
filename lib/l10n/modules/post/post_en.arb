@@ -105,6 +105,14 @@
   "post_replySentAction": "View",
   "post_replyTo": "Reply to",
   "post_replyToTopic": "Reply to topic",
+  "post_continueDiscussion": "Continuing the discussion from {postLink}:",
+  "@post_continueDiscussion": {
+    "placeholders": {
+      "postLink": {
+        "type": "String"
+      }
+    }
+  },
   "post_replyToUser": "Reply to @{username}",
   "post_returningUserNotice": "Welcome back {username} — their last post was {timeText}.",
   "pm_recipientHint": "Search users or groups",

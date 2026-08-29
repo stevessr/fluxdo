@@ -154,6 +154,14 @@
   "post_replySentAction": "查看",
   "post_replyTo": "回复给",
   "post_replyToTopic": "回复话题",
+  "post_continueDiscussion": "从{postLink}继续讨论：",
+  "@post_continueDiscussion": {
+    "placeholders": {
+      "postLink": {
+        "type": "String"
+      }
+    }
+  },
   "post_replyToUser": "回复 @{username}",
   "@post_replyToUser": {
     "placeholders": {

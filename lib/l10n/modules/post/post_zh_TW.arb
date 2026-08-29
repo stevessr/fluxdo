@@ -101,6 +101,14 @@
   "post_replySentAction": "檢視",
   "post_replyTo": "回覆給",
   "post_replyToTopic": "回覆話題",
+  "post_continueDiscussion": "繼續 {postLink} 的討論:",
+  "@post_continueDiscussion": {
+    "placeholders": {
+      "postLink": {
+        "type": "String"
+      }
+    }
+  },
   "post_replyToUser": "回覆 @{username}",
   "@post_replyToUser": {
     "placeholders": {
