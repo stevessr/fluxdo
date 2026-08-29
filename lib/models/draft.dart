@@ -30,6 +30,12 @@ class DraftData {
   final String? action; // 操作类型
   final List<String>? recipients; // 私信接收人（私信时）
   final String? archetypeId; // 'regular' 或 'private_message'
+
+  /// 新建话题 composer 的客户端一级类型：regular / poll / post_voting。
+  /// Discourse draft data 会原样保存未知字段，因此可安全用于恢复 UI 状态，
+  /// 不改变最终 Posts API 的 archetype 语义。
+  final String? topicType;
+
   final int? composerTime; // 编辑器打开时长（毫秒）
   final int? typingTime; // 输入时长（毫秒）
 
@@ -42,6 +48,7 @@ class DraftData {
     this.action,
     this.recipients,
     this.archetypeId,
+    this.topicType,
     this.composerTime,
     this.typingTime,
   });
@@ -59,6 +66,7 @@ class DraftData {
           ?.map((e) => e.toString())
           .toList(),
       archetypeId: json['archetypeId'] as String?,
+      topicType: json['topicType'] as String?,
       composerTime: json['composerTime'] as int?,
       typingTime: json['typingTime'] as int?,
     );
@@ -79,6 +87,7 @@ class DraftData {
       json['recipients'] = recipients;
     }
     if (archetypeId != null) json['archetypeId'] = archetypeId;
+    if (topicType != null) json['topicType'] = topicType;
     if (composerTime != null) json['composerTime'] = composerTime;
     if (typingTime != null) json['typingTime'] = typingTime;
     return json;
@@ -103,6 +112,7 @@ class DraftData {
     String? action,
     List<String>? recipients,
     String? archetypeId,
+    String? topicType,
     int? composerTime,
     int? typingTime,
   }) {
@@ -115,6 +125,7 @@ class DraftData {
       action: action ?? this.action,
       recipients: recipients ?? this.recipients,
       archetypeId: archetypeId ?? this.archetypeId,
+      topicType: topicType ?? this.topicType,
       composerTime: composerTime ?? this.composerTime,
       typingTime: typingTime ?? this.typingTime,
     );
