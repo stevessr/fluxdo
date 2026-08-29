@@ -414,6 +414,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
             20)
         .clamp(120.0, 520.0)
         .toDouble();
+    final showManageDivider = _loading || _accounts.isNotEmpty;
 
     final switcher = FadeTransition(
       opacity: _opacity,
@@ -447,17 +448,11 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildManageTarget(context),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 3,
-                        ),
-                        child: Divider(
-                          height: 1,
-                          color: scheme.outlineVariant.withValues(alpha: 0.55),
-                        ),
-                      ),
+                      // 管理按钮始终放在触发入口的远端：底部入口向上展开时
+                      // 管理在顶部；顶部入口向下展开时管理在底部。
+                      if (!fromTop) _buildManageTarget(context),
+                      if (!fromTop && showManageDivider)
+                        _buildManageDivider(scheme),
                       if (_loading)
                         const SizedBox(
                           height: 58,
@@ -472,6 +467,9 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
                       else
                         for (final account in _accounts)
                           _buildAccountTarget(context, account),
+                      if (fromTop && showManageDivider)
+                        _buildManageDivider(scheme),
+                      if (fromTop) _buildManageTarget(context),
                     ],
                   ),
                 ),
@@ -495,6 +493,16 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
               Positioned(right: 12, bottom: edgeInset, child: switcher),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildManageDivider(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+      child: Divider(
+        height: 1,
+        color: scheme.outlineVariant.withValues(alpha: 0.55),
       ),
     );
   }
