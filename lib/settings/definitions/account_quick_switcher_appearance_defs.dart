@@ -1,4 +1,3 @@
-import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,7 +9,7 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
   final copy = _AccountQuickSwitcherCopy.of(context);
   return SettingsGroup(
     title: copy.groupTitle,
-    icon: Symbols.manage_accounts_rounded,
+    icon: Icons.manage_accounts_outlined,
     wrapInCard: false,
     items: [
       CustomModel(
@@ -30,7 +29,7 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
               children: [
                 SwitchListTile(
                   secondary: Icon(
-                    Symbols.hub_rounded,
+                    Icons.account_tree_outlined,
                     color: preferences.radialEnabled
                         ? scheme.primary
                         : scheme.onSurfaceVariant,
@@ -54,8 +53,8 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
                   ListTile(
                     leading: Icon(
                       preferences.trigger == AccountQuickSwitchTrigger.release
-                          ? Symbols.touch_app_rounded
-                          : Symbols.timer_rounded,
+                          ? Icons.touch_app_outlined
+                          : Icons.timer_outlined,
                       color: scheme.primary,
                     ),
                     title: Text(copy.triggerTitle),
@@ -64,7 +63,7 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
                           ? copy.releaseTitle
                           : copy.dwellTitle,
                     ),
-                    trailing: const Icon(Symbols.chevron_right_rounded),
+                    trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _showTriggerPicker(
                       context,
                       current: preferences.trigger,
@@ -107,13 +106,13 @@ void _showTriggerPicker(
           children: [
             RadioListTile<AccountQuickSwitchTrigger>(
               value: AccountQuickSwitchTrigger.release,
-              secondary: const Icon(Symbols.touch_app_rounded),
+              secondary: const Icon(Icons.touch_app_outlined),
               title: Text(copy.releaseTitle),
               subtitle: Text(copy.releaseDescription),
             ),
             RadioListTile<AccountQuickSwitchTrigger>(
               value: AccountQuickSwitchTrigger.dwellFiveSeconds,
-              secondary: const Icon(Symbols.timer_rounded),
+              secondary: const Icon(Icons.timer_outlined),
               title: Text(copy.dwellTitle),
               subtitle: Text(copy.dwellDescription),
             ),
