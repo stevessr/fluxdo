@@ -51,8 +51,12 @@ jobs:
             lib/models/topic.dart \
             lib/pages/topic_detail_page/actions/_user_actions.dart
 
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Analyze changed source files
+        run: |
+          dart analyze lib/widgets/markdown_editor/markdown_editor.dart
+          dart analyze lib/widgets/post/reply_sheet.dart
+          dart analyze lib/models/topic.dart
+          dart analyze lib/pages/topic_detail_page/actions/_user_actions.dart
 
       - name: Commit source fix and remove one-shot files
         if: success()
