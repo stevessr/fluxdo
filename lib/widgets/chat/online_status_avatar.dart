@@ -5,7 +5,7 @@ import '../../providers/chat_providers.dart';
 
 /// 带在线状态指示的头像组件
 ///
-/// 包裹 SmartAvatar，根据用户 ID 和全局在线状态显示绿色指示圆点。
+/// 包裹 SmartAvatar，根据用户 ID 和全局在线状态显示环绕头像的绿色细环。
 class OnlineStatusAvatar extends ConsumerWidget {
   final int? userId;
   final String? imageUrl;
@@ -29,9 +29,12 @@ class OnlineStatusAvatar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final channelsState = ref.watch(chatChannelsProvider).value;
-    final isOnline = userId != null &&
+    final isOnline =
+        userId != null &&
         channelsState != null &&
         channelsState.onlineUserIds.contains(userId);
+    final ringWidth = (radius * 0.09).clamp(1.5, 2.5).toDouble();
+    final isSquare = isSquareAvatarUrl(imageUrl);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -46,17 +49,21 @@ class OnlineStatusAvatar extends ConsumerWidget {
         ),
         if (isOnline)
           Positioned(
-            right: 0,
-            bottom: 0,
-            child: Container(
-              width: radius * 0.4,
-              height: radius * 0.4,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF10B981), // emerald-500
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.surface,
-                  width: radius * 0.08,
+            left: -ringWidth,
+            top: -ringWidth,
+            right: -ringWidth,
+            bottom: -ringWidth,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: isSquare ? BoxShape.rectangle : BoxShape.circle,
+                  borderRadius: isSquare
+                      ? BorderRadius.circular((radius + ringWidth) * 0.2)
+                      : null,
+                  border: Border.all(
+                    color: const Color(0xFF10B981), // emerald-500
+                    width: ringWidth,
+                  ),
                 ),
               ),
             ),
