@@ -11,6 +11,7 @@ import 'package:fluxdo/providers/preferences_provider.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_shortcuts.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_switch_fade.dart';
 import 'package:fluxdo/widgets/markdown_editor/markdown_editor.dart';
+import 'package:fluxdo/widgets/markdown_editor/poll_builder_dialog.dart';
 import 'package:fluxdo/widgets/markdown_editor/rich_composer/rich_composer_editor.dart';
 import 'package:fluxdo/models/category.dart';
 import 'package:fluxdo/models/draft.dart';
@@ -34,6 +35,8 @@ import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/discourse_url_parser.dart';
 import 'pending_posts_page.dart';
+
+enum _TopicComposeType { regular, poll, postVoting }
 
 class CreateTopicPage extends ConsumerStatefulWidget {
   final int? initialCategoryId;
@@ -88,7 +91,13 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   String? _templateContent;
   bool _isLoadingDraft = false;
   bool _showEmojiPanel = false;
-  bool _createAsPostVoting = false; // post-voting(问答)模式
+
+  /// 创建话题的客户端一级类型。Discourse 服务端的 poll 仍然存储在
+  /// 首帖 raw 中，但 composer 不再把它当“正文里可选插入的组件”：
+  /// poll 类型由本页持有一个主 [PollSpec]，正文编辑器只编辑投票说明。
+  _TopicComposeType _topicType = _TopicComposeType.regular;
+  PollSpec? _pollSpec;
+
   Timer? _featuredLinkDebounce;
   int _titleChangeGeneration = 0;
   bool _isResolvingFeaturedLink = false;
@@ -100,6 +109,21 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
   // 草稿控制器
   late final DraftController _draftController;
+
+  bool get _isPollTopic => _topicType == _TopicComposeType.poll;
+  bool get _createAsPostVoting =>
+      _topicType == _TopicComposeType.postVoting;
+
+  /// 官方 poll 插件通过 current_user.can_create_poll 做最终权限判断，
+  /// poll_enabled 是 client:true 的插件总开关。两者都满足才展示投票类型。
+  bool get _canCreatePoll {
+    final preloaded = PreloadedDataService();
+    return preloaded.siteSettingsSync?['poll_enabled'] == true &&
+        preloaded.currentUserSync?['can_create_poll'] == true;
+  }
+
+  bool get _isChinese =>
+      Localizations.localeOf(context).languageCode.toLowerCase().startsWith('zh');
 
   @override
   void initState() {
@@ -123,7 +147,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
         _titleController.text = widget.initialTitle!;
       }
       if (widget.initialContent != null) {
-        _contentController.text = widget.initialContent!;
+        _loadComposerRaw(widget.initialContent!);
       }
     } else {
       // 加载现有草稿
@@ -200,17 +224,49 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     );
   }
 
+  /// 从 raw 中识别“首个且位于正文开头”的主投票。这样 poll 类型草稿
+  /// 仍完全兼容 Discourse 原生 draft data，不需要私有扩展字段；普通正文
+  /// 中间插入的附加投票不会被误判成话题类型。
+  (PollSpec, String)? _splitPrimaryPoll(String raw) {
+    final match = RegExp(
+      r'^\s*(\[poll(?:\s[^\]]*)?\][\s\S]*?\[/poll\])(?:\s*\n\s*\n)?([\s\S]*)$',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (match == null) return null;
+    final spec = PollSpec.tryParse(match.group(1)!);
+    if (spec == null) return null;
+    return (spec, match.group(2)?.trimLeft() ?? '');
+  }
+
+  /// 将服务端/草稿 raw 映射回 composer 模型。投票帖把主 poll 从正文
+  /// controller 拆出来，正文编辑器只保留说明文字。
+  void _loadComposerRaw(String raw) {
+    final parsed = _splitPrimaryPoll(raw);
+    if (parsed != null) {
+      _topicType = _TopicComposeType.poll;
+      _pollSpec = parsed.$1;
+      _contentController.text = parsed.$2;
+      _templateContent = null;
+      return;
+    }
+    _topicType = _TopicComposeType.regular;
+    _pollSpec = null;
+    _contentController.text = raw;
+  }
+
   /// 恢复草稿内容
   void _restoreDraft(Draft draft) {
     if (draft.data.title != null) {
       _titleController.text = draft.data.title!;
     }
     if (draft.data.reply != null) {
-      _contentController.text = draft.data.reply!;
-      _templateContent = null; // 恢复草稿后清除模板标记
+      _loadComposerRaw(draft.data.reply!);
     }
     if (draft.data.tags != null && draft.data.tags!.isNotEmpty) {
       setState(() => _selectedTags = List.from(draft.data.tags!));
+    } else {
+      // _loadComposerRaw 会改变一级帖子类型；即使没有标签也要刷新类型 UI。
+      setState(() {});
     }
     // 分类需要在 categories 加载后设置，通过 _applyCurrentFilter 中处理
     if (draft.data.categoryId != null) {
@@ -236,17 +292,28 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     }, fireImmediately: true);
   }
 
+  /// 将当前 composer 模型序列化成真正提交给 Discourse 的首帖 raw。
+  /// poll 类型固定“主投票在前、说明正文在后”，不把投票块塞进正文编辑器。
+  String _serializedContent() {
+    if (!_isPollTopic || _pollSpec == null) return _contentController.text;
+    final poll = _pollSpec!.toBBCode(existingPollCount: 0);
+    final body = _contentController.text.trim();
+    if (body.isEmpty) return poll;
+    return '$poll\n\n${_contentController.text.trimLeft()}';
+  }
+
+  DraftData _currentDraftData() => DraftData(
+    title: _titleController.text,
+    reply: _serializedContent(),
+    categoryId: _selectedCategory?.id,
+    tags: _selectedTags.isNotEmpty ? _selectedTags : null,
+    action: 'createTopic',
+    archetypeId: 'regular',
+  );
+
   /// 草稿内容变化时触发保存
   void _onDraftContentChanged() {
-    final data = DraftData(
-      title: _titleController.text,
-      reply: _contentController.text,
-      categoryId: _selectedCategory?.id,
-      tags: _selectedTags.isNotEmpty ? _selectedTags : null,
-      action: 'createTopic',
-      archetypeId: 'regular',
-    );
-    _draftController.scheduleSave(data);
+    _draftController.scheduleSave(_currentDraftData());
   }
 
   /// 舍弃草稿
@@ -316,19 +383,12 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     _titleController.removeListener(_onDraftContentChanged);
     _contentController.removeListener(_onDraftContentChanged);
 
-    // 关闭时处理草稿：已提交则跳过，有内容则保存，无内容则删除
+    // 关闭时处理草稿：已提交则跳过，有标题/正文/主投票则保存。
     if (!_submitted && !_discarded) {
       if (_titleController.text.trim().isNotEmpty ||
-          _contentController.text.trim().isNotEmpty) {
-        final data = DraftData(
-          title: _titleController.text,
-          reply: _contentController.text,
-          categoryId: _selectedCategory?.id,
-          tags: _selectedTags.isNotEmpty ? _selectedTags : null,
-          action: 'createTopic',
-          archetypeId: 'regular',
-        );
-        _draftController.saveNow(data);
+          _contentController.text.trim().isNotEmpty ||
+          (_isPollTopic && _pollSpec != null)) {
+        _draftController.saveNow(_currentDraftData());
       } else {
         // 内容为空，删除草稿
         _draftController.deleteDraft();
@@ -474,11 +534,12 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   void _onCategorySelected(Category category) {
     setState(() {
       _selectedCategory = category;
-      // 分类联动问答默认值:强制分类锁定开;默认分类预勾选;
-      // 切到普通分类保留用户当前选择
+      // 分类强制问答时一级类型必须同步为问答；“默认问答”只在当前
+      // 仍是普通帖子时应用，不覆盖用户已经显式选择的投票类型。
       if (category.onlyPostVotingInThisCategory ||
-          category.createAsPostVotingDefault) {
-        _createAsPostVoting = true;
+          (category.createAsPostVotingDefault &&
+              _topicType == _TopicComposeType.regular)) {
+        _topicType = _TopicComposeType.postVoting;
       }
     });
 
@@ -523,6 +584,303 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     }
   }
 
+  String _topicTypeLabel(_TopicComposeType type) {
+    return switch (type) {
+      _TopicComposeType.regular => _isChinese ? '普通帖子' : 'Regular topic',
+      _TopicComposeType.poll => _isChinese ? '投票帖子' : 'Poll topic',
+      _TopicComposeType.postVoting => context.l10n.createTopic_postVoting,
+    };
+  }
+
+  IconData _topicTypeIcon(_TopicComposeType type) {
+    return switch (type) {
+      _TopicComposeType.regular => Icons.article_outlined,
+      _TopicComposeType.poll => Icons.poll_outlined,
+      _TopicComposeType.postVoting => Icons.thumbs_up_down_outlined,
+    };
+  }
+
+  Future<void> _editPrimaryPoll() async {
+    final spec = await showPollBuilderDialog(
+      context,
+      existingPollCount: 0,
+      initial: _pollSpec,
+    );
+    if (spec == null || !mounted) return;
+    setState(() {
+      _topicType = _TopicComposeType.poll;
+      _pollSpec = spec;
+    });
+    _onDraftContentChanged();
+  }
+
+  Future<void> _selectTopicType(
+    _TopicComposeType type, {
+    required bool sitePostVoting,
+  }) async {
+    final postVotingLocked =
+        _selectedCategory?.onlyPostVotingInThisCategory ?? false;
+    if (postVotingLocked && type != _TopicComposeType.postVoting) {
+      ToastService.showInfo(
+        _isChinese
+            ? '当前分类只允许创建问答帖子'
+            : 'This category only allows Q&A topics.',
+      );
+      return;
+    }
+
+    if (type == _TopicComposeType.poll) {
+      if (!_canCreatePoll) {
+        ToastService.showInfo(
+          _isChinese
+              ? '当前账号没有创建投票的权限'
+              : 'Your account cannot create polls on this site.',
+        );
+        return;
+      }
+      await _editPrimaryPoll();
+      return;
+    }
+
+    if (type == _TopicComposeType.postVoting && !sitePostVoting) return;
+
+    if (!mounted) return;
+    setState(() => _topicType = type);
+    _onDraftContentChanged();
+  }
+
+  Widget _buildTopicTypePicker({required bool sitePostVoting}) {
+    final theme = Theme.of(context);
+    final locked = _selectedCategory?.onlyPostVotingInThisCategory ?? false;
+    final current = locked ? _TopicComposeType.postVoting : _topicType;
+    return PopupMenuButton<_TopicComposeType>(
+      tooltip: _isChinese ? '帖子类型' : 'Topic type',
+      onSelected: (type) {
+        unawaited(_selectTopicType(type, sitePostVoting: sitePostVoting));
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: _TopicComposeType.regular,
+          enabled: !locked,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.article_outlined, size: 20),
+            title: Text(_topicTypeLabel(_TopicComposeType.regular)),
+            trailing: current == _TopicComposeType.regular
+                ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
+                : null,
+          ),
+        ),
+        if (_canCreatePoll)
+          PopupMenuItem(
+            value: _TopicComposeType.poll,
+            enabled: !locked,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.poll_outlined, size: 20),
+              title: Text(_topicTypeLabel(_TopicComposeType.poll)),
+              trailing: current == _TopicComposeType.poll
+                  ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
+                  : null,
+            ),
+          ),
+        if (sitePostVoting)
+          PopupMenuItem(
+            value: _TopicComposeType.postVoting,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.thumbs_up_down_outlined, size: 20),
+              title: Text(_topicTypeLabel(_TopicComposeType.postVoting)),
+              trailing: current == _TopicComposeType.postVoting
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (locked) ...[
+                          Icon(
+                            Icons.lock_outline_rounded,
+                            size: 16,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Icon(
+                          Icons.check_rounded,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ],
+                    )
+                  : null,
+            ),
+          ),
+      ],
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color: current == _TopicComposeType.regular
+                ? theme.colorScheme.outlineVariant
+                : theme.colorScheme.primary.withValues(alpha: 0.55),
+          ),
+          color: current == _TopicComposeType.regular
+              ? Colors.transparent
+              : theme.colorScheme.primaryContainer.withValues(alpha: 0.22),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _topicTypeIcon(current),
+              size: 15,
+              color: current == _TopicComposeType.regular
+                  ? theme.colorScheme.onSurfaceVariant
+                  : theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              _topicTypeLabel(current),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: current == _TopicComposeType.regular
+                    ? theme.colorScheme.onSurfaceVariant
+                    : theme.colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _pollTypeDescription(PollSpec spec) {
+    return switch (spec.type) {
+      kPollTypeRegular => _isChinese
+          ? '${spec.options.length} 个选项 · 单选'
+          : '${spec.options.length} options · single choice',
+      kPollTypeMultiple => _isChinese
+          ? '${spec.options.length} 个选项 · 可选 ${spec.min ?? 1}–${spec.max ?? spec.options.length} 项'
+          : '${spec.options.length} options · choose ${spec.min ?? 1}–${spec.max ?? spec.options.length}',
+      kPollTypeNumber => _isChinese
+          ? '评分 ${spec.min ?? 1}–${spec.max ?? 10} · 步长 ${spec.step ?? 1}'
+          : 'Rating ${spec.min ?? 1}–${spec.max ?? 10} · step ${spec.step ?? 1}',
+      _ => spec.type,
+    };
+  }
+
+  Widget _buildPrimaryPollCard(ThemeData theme) {
+    final spec = _pollSpec;
+    if (!_isPollTopic || spec == null) return const SizedBox.shrink();
+    final title = spec.title.trim().isEmpty
+        ? (_isChinese ? '主投票' : 'Primary poll')
+        : spec.title.trim();
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Material(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.38),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: () => unawaited(_editPrimaryPoll()),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.poll_outlined,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _pollTypeDescription(spec),
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: _isChinese ? '编辑投票' : 'Edit poll',
+                      onPressed: () => unawaited(_editPrimaryPoll()),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                    ),
+                  ],
+                ),
+                if (spec.type != kPollTypeNumber && spec.options.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  for (final option in spec.options.take(4))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Row(
+                        children: [
+                          Icon(
+                            spec.type == kPollTypeMultiple
+                                ? Icons.check_box_outline_blank_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                            size: 16,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              option,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (spec.options.length > 4)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5, left: 23),
+                      child: Text(
+                        _isChinese
+                            ? '还有 ${spec.options.length - 4} 个选项…'
+                            : '${spec.options.length - 4} more options…',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     // 富文本模式:先强制序列化镜像
     _richKey.currentState?.flushToController();
@@ -538,9 +896,19 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       return;
     }
 
-    // 手动验证内容
+    if (_isPollTopic && _pollSpec == null) {
+      if (_showPreview) _togglePreview();
+      ToastService.showInfo(
+        _isChinese ? '请先配置投票' : 'Configure the poll before publishing.',
+      );
+      return;
+    }
+
+    // poll 类型的主投票属于首帖内容，因此允许说明正文为空；长度校验按
+    // 最终序列化 raw 计算，而不是只看说明编辑器。
     final minContentLength = ref.read(minFirstPostLengthProvider).value ?? 20;
-    final contentText = _contentController.text.trim();
+    final serializedContent = _serializedContent();
+    final contentText = serializedContent.trim();
     if (contentText.isEmpty) {
       if (_showPreview) _togglePreview();
       ToastService.showInfo(S.current.createTopic_enterContent);
@@ -597,7 +965,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       final service = ref.read(discourseServiceProvider);
       final topicId = await service.createTopic(
         title: _titleController.text.trim(),
-        raw: _contentController.text,
+        raw: serializedContent,
         categoryId: _selectedCategory!.id,
         tags: _selectedTags.isNotEmpty ? _selectedTags : null,
         featuredLink: _featuredLink,
@@ -635,67 +1003,76 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     }
   }
 
-  /// 滚动头部:顶部透明 AppBar 避让 + 标题输入。写作流只留标题+正文
-  /// (分类/标签/字数在底部 ComposerMetaBar 常驻);标题与正文同滚,
-  /// 写正文时自然滚出屏,想改标题滚回顶部即可。
-  Widget _buildComposerHeader(ThemeData theme, int minTitleLength) {
+  /// 滚动头部:顶部透明 AppBar 避让 + 一级帖子类型 + 标题 + 主投票。
+  /// poll 类型的投票配置是 composer 元数据，不进入正文编辑器；正文只写
+  /// 说明文字。分类/标签/字数仍在底部 ComposerMetaBar 常驻。
+  Widget _buildComposerHeader(
+    ThemeData theme,
+    int minTitleLength, {
+    required bool sitePostVoting,
+  }) {
     // extendBodyBehindAppBar 后滚动内容从屏顶开始,首屏让出渐变模糊层
-    // 全高(含消散尾巴 —— 初始态标题不被尾巴遮,滚动上移时才进入
-    // 消散区被渐次溶解)
     final topInset = ProgressiveTopBlur.heightFor(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(20, topInset + 10, 20, 0),
-      child: TextFormField(
-        controller: _titleController,
-        decoration: InputDecoration(
-          hintText: context.l10n.createTopic_titleHint,
-          hintStyle: TextStyle(
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-            fontWeight: FontWeight.normal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTopicTypePicker(sitePostVoting: sitePostVoting),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _titleController,
+            decoration: InputDecoration(
+              hintText: context.l10n.createTopic_titleHint,
+              hintStyle: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                fontWeight: FontWeight.normal,
+              ),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+              isDense: true,
+            ),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+            maxLines: null,
+            maxLength: _featuredLinkEnabled ? null : 200,
+            buildCounter:
+                (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) => null,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return context.l10n.createTopic_enterTitle;
+              }
+              if (value.trim().length < minTitleLength) {
+                return context.l10n.createTopic_minTitleLength(minTitleLength);
+              }
+              return null;
+            },
+            onTap: () {
+              _editorKey.currentState?.closeEmojiPanel();
+              _richKey.currentState?.closeEmojiPanel();
+            },
           ),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
-          isDense: true,
-        ),
-        style: theme.textTheme.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w900,
-          letterSpacing: -0.5,
-        ),
-        maxLines: null,
-        maxLength: _featuredLinkEnabled ? null : 200,
-        buildCounter:
-            (
-              context, {
-              required currentLength,
-              required isFocused,
-              maxLength,
-            }) => null,
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return context.l10n.createTopic_enterTitle;
-          }
-          if (value.trim().length < minTitleLength) {
-            return context.l10n.createTopic_minTitleLength(minTitleLength);
-          }
-          return null;
-        },
-        onTap: () {
-          _editorKey.currentState?.closeEmojiPanel();
-          _richKey.currentState?.closeEmojiPanel();
-        },
+          _buildPrimaryPollCard(theme),
+          if (_isPollTopic) const SizedBox(height: 8),
+        ],
       ),
     );
   }
 
-  /// 底部属性条:分类/标签/字数(编辑区与工具栏之间,常驻可改)
+  /// 底部属性条:分类/标签/字数。问答不再作为一个独立 toggle 混在
+  /// 元数据条里，它与普通/投票一起由顶部“帖子类型”统一管理。
   Widget _buildMetaBar(
     List<Category> categories,
     bool canTagTopics,
     AsyncValue<List<String>> tagsAsync,
   ) {
-    // 站点是否装 post-voting 插件:从分类 JSON 是否下发插件字段派生
-    final sitePostVoting = categories.any((c) => c.hasPostVotingFields);
-    final locked = _selectedCategory?.onlyPostVotingInThisCategory ?? false;
     return ComposerMetaBar(
       category: _selectedCategory,
       categories: categories,
@@ -705,10 +1082,6 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       allTags: tagsAsync.value ?? const [],
       onTagsChanged: _onTagsChanged,
       charCount: _contentLength,
-      showPostVotingToggle: sitePostVoting,
-      postVotingEnabled: _createAsPostVoting || locked,
-      postVotingLocked: locked,
-      onPostVotingChanged: (v) => setState(() => _createAsPostVoting = v),
     );
   }
 
@@ -800,7 +1173,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
             // popover 的锚
             AiPostReviewButton(
               titleBuilder: () => _titleController.text,
-              contentBuilder: () => _contentController.text,
+              contentBuilder: _serializedContent,
               target: AiPostReviewTarget.topic,
               enabled: !_isSubmitting,
               categoryNameBuilder: () => _selectedCategory?.name,
@@ -852,6 +1225,14 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
           children: [
             categoriesAsync.when(
               data: (categories) {
+                final sitePostVoting = categories.any(
+                  (c) => c.hasPostVotingFields,
+                );
+                final editorHint = _isPollTopic
+                    ? (_isChinese
+                          ? '补充投票说明（可选）'
+                          : 'Add context for the poll (optional)')
+                    : context.l10n.createTopic_contentHint;
                 return Stack(
                   children: [
                     Column(
@@ -871,17 +1252,9 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                               }
                             },
                             children: [
-                              // Page 0: 编辑模式 —— 标题/标签/字数打包为
-                              // header 注入编辑器滚动流,与正文同滚(手机
-                              // 写正文时头部随内容滚出屏,编辑区满格;分类
-                              // 已上收 AppBar)。
-                              // 双模切换 = 无并存直切 + 新编辑器淡入:
-                              // AnimatedSwitcher 会让富/源并存 150ms ——
-                              // 共享 focusNode + 输入模型异构(自管 IME
-                              // vs TextField),并存窗口里 TextInput 交接
-                              // 必然竞态(切后无法删除/快捷键失灵反复
-                              // 复发)。ComposerSwitchFade 旧编辑器同帧
-                              // dispose,新的从透明淡入(丝滑不并存)。
+                              // Page 0: 编辑模式 —— 一级类型/标题/主投票/正文
+                              // 处在同一滚动流；分类/标签/字数常驻底部。
+                              // 双模切换 = 无并存直切 + 新编辑器淡入。
                               Form(
                                 key: _formKey,
                                 child: ComposerSwitchFade(
@@ -892,8 +1265,6 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                           !_richFallback)
                                       // 草稿加载完成前不挂富 composer:初始导入
                                       // 一次性,提前挂会以空文档镜像覆盖草稿。
-                                      // 占位留空 —— 加载视觉由页面级草稿遮罩
-                                      // 统一提供(双 spinner 叠影)
                                       ? (_isLoadingDraft
                                             ? const SizedBox.shrink()
                                             : RichComposerEditor(
@@ -901,6 +1272,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                                 header: _buildComposerHeader(
                                                   theme,
                                                   minTitleLength,
+                                                  sitePostVoting:
+                                                      sitePostVoting,
                                                 ),
                                                 metaBar: _buildMetaBar(
                                                   categories,
@@ -909,9 +1282,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                                 ),
                                                 controller: _contentController,
                                                 focusNode: _contentFocusNode,
-                                                hintText: context
-                                                    .l10n
-                                                    .createTopic_contentHint,
+                                                hintText: editorHint,
                                                 emojiPanelHeight: 350,
                                                 onEmojiPanelChanged: (show) {
                                                   setState(
@@ -953,6 +1324,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                           header: _buildComposerHeader(
                                             theme,
                                             minTitleLength,
+                                            sitePostVoting: sitePostVoting,
                                           ),
                                           metaBar: _buildMetaBar(
                                             categories,
@@ -961,9 +1333,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                           ),
                                           controller: _contentController,
                                           focusNode: _contentFocusNode,
-                                          hintText: context
-                                              .l10n
-                                              .createTopic_contentHint,
+                                          hintText: editorHint,
                                           expands: true,
                                           emojiPanelHeight: 350,
                                           onTogglePreview: _togglePreview,
@@ -1000,7 +1370,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                 ),
                               ),
 
-                              // Page 1: 预览模式
+                              // Page 1: 预览模式。poll 类型使用真正提交的 raw，
+                              // 因而预览里主投票与发布结果一致。
                               SingleChildScrollView(
                                 padding: EdgeInsets.fromLTRB(
                                   24,
@@ -1009,64 +1380,99 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                   24,
                                   MediaQuery.paddingOf(context).bottom + 80,
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _titleController.text.isEmpty
-                                          ? context.l10n.createTopic_noTitle
-                                          : _titleController.text,
-                                      style: theme.textTheme.headlineSmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: -0.5,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
+                                child: Builder(
+                                  builder: (context) {
+                                    final previewRaw = _serializedContent();
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        if (_selectedCategory != null)
-                                          CategoryTrigger(
-                                            category: _selectedCategory,
-                                            categories: categories,
-                                            onSelected: _onCategorySelected,
-                                          ),
-                                        PreviewTagsList(tags: _selectedTags),
-                                      ],
-                                    ),
-                                    const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 24,
-                                      ),
-                                      child: Divider(height: 1),
-                                    ),
-                                    if (_contentController.text.isEmpty)
-                                      Text(
-                                        context.l10n.createTopic_noContent,
-                                        style: TextStyle(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
+                                        Text(
+                                          _titleController.text.isEmpty
+                                              ? context.l10n.createTopic_noTitle
+                                              : _titleController.text,
+                                          style: theme.textTheme.headlineSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w900,
+                                                letterSpacing: -0.5,
+                                              ),
                                         ),
-                                      )
-                                    else
-                                      MarkdownBody(
-                                        data: _contentController.text,
-                                        onImageScaleChanged: (image, scale) {
-                                          final next = applyImageScaleToRaw(
-                                            _contentController.text,
-                                            image,
-                                            scale,
-                                          );
-                                          if (next != null) {
-                                            _contentController.text = next;
-                                            setState(() {});
-                                          }
-                                        },
-                                      ),
-                                  ],
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              _topicTypeIcon(_topicType),
+                                              size: 15,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              _topicTypeLabel(_topicType),
+                                              style: theme.textTheme.labelMedium
+                                                  ?.copyWith(
+                                                    color: theme
+                                                        .colorScheme
+                                                        .primary,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: [
+                                            if (_selectedCategory != null)
+                                              CategoryTrigger(
+                                                category: _selectedCategory,
+                                                categories: categories,
+                                                onSelected:
+                                                    _onCategorySelected,
+                                              ),
+                                            PreviewTagsList(
+                                              tags: _selectedTags,
+                                            ),
+                                          ],
+                                        ),
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 24,
+                                          ),
+                                          child: Divider(height: 1),
+                                        ),
+                                        if (previewRaw.trim().isEmpty)
+                                          Text(
+                                            context.l10n.createTopic_noContent,
+                                            style: TextStyle(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                          )
+                                        else
+                                          MarkdownBody(
+                                            data: previewRaw,
+                                            onImageScaleChanged:
+                                                (image, scale) {
+                                                  // 主投票不在正文 controller，
+                                                  // 图片缩放只修改说明正文。
+                                                  final next =
+                                                      applyImageScaleToRaw(
+                                                        _contentController.text,
+                                                        image,
+                                                        scale,
+                                                      );
+                                                  if (next != null) {
+                                                    _contentController.text =
+                                                        next;
+                                                    setState(() {});
+                                                  }
+                                                },
+                                          ),
+                                      ],
+                                    );
+                                  },
                                 ),
                               ),
                             ],
