@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import re
 
 reply_path = Path("lib/widgets/post/reply_sheet.dart")
 s = reply_path.read_text()
@@ -140,23 +141,26 @@ translations = {
     "lib/l10n/modules/post/post_zh_HK.arb": "繼續 {postLink} 的討論：",
 }
 
+anchor_pattern = re.compile(r'(?m)^(  "post_replyToTopic": .+,\n)')
 for filename, value in translations.items():
     path = Path(filename)
-    data = json.loads(path.read_text())
-    if "post_continueDiscussion" in data:
+    text = path.read_text()
+    if '"post_continueDiscussion"' in text:
         raise SystemExit(f"translation already exists: {filename}")
-
-    rebuilt = {}
-    inserted = False
-    for key, item in data.items():
-        rebuilt[key] = item
-        if key == "post_replyToTopic":
-            rebuilt["post_continueDiscussion"] = value
-            rebuilt["@post_continueDiscussion"] = {
-                "placeholders": {"postLink": {"type": "String"}}
-            }
-            inserted = True
-    if not inserted:
-        raise SystemExit(f"post_replyToTopic anchor missing: {filename}")
-
-    path.write_text(json.dumps(rebuilt, ensure_ascii=False, indent=2) + "\n")
+    matches = anchor_pattern.findall(text)
+    if len(matches) != 1:
+        raise SystemExit(
+            f"expected one post_replyToTopic anchor, got {len(matches)}: {filename}"
+        )
+    payload = (
+        f'  "post_continueDiscussion": {json.dumps(value, ensure_ascii=False)},\n'
+        '  "@post_continueDiscussion": {\n'
+        '    "placeholders": {\n'
+        '      "postLink": {\n'
+        '        "type": "String"\n'
+        '      }\n'
+        '    }\n'
+        '  },\n'
+    )
+    text = anchor_pattern.sub(lambda match: match.group(1) + payload, text, count=1)
+    path.write_text(text)
