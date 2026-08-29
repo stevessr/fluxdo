@@ -787,6 +787,11 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     }
   }
 
+  void _switchSourceToRichComposer() {
+    if (!mounted) return;
+    setState(() => _richFallback = false);
+  }
+
   String _currentComposerActionLabel(BuildContext context) {
     if (_isPrivateMessage) {
       return _recipients.isEmpty
@@ -1195,12 +1200,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                                 onSwitchToRich: ref
                                         .watch(preferencesProvider)
                                         .useRichComposer
-                                    ? () {
-                                        if (mounted) {
-                                          setState(
-                                              () => _richFallback = false,
-                                        );
-                                      }
+                                    ? _switchSourceToRichComposer
                                     : null,
                                 mentionDataSource: (term) =>
                                     DiscourseService().searchUsers(
