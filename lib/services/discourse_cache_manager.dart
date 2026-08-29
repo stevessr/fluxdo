@@ -34,6 +34,19 @@ bool _isAvifUrl(String url) {
   }
 }
 
+/// Discourse 头像通常位于 `/user_avatar/<host>/<username>/...`。
+///
+/// 头像是 UI 里透明像素最常见的一类图片；把这个识别集中在 provider
+/// router 中，避免每个头像组件各自猜格式/路径。调用方显式传
+/// [BlobImageCache.avatarBucket] 时不依赖 URL 形状，也会进入头像路径。
+bool _isAvatarUrl(String url) {
+  try {
+    return Uri.parse(url).path.toLowerCase().contains('/user_avatar/');
+  } catch (_) {
+    return url.toLowerCase().contains('/user_avatar/');
+  }
+}
+
 /// 检查 URL 是否指向需要走 native 解码器的动图(GIF / APNG / 动画 WebP)
 ///
 /// 走 native_animated_image 的 Rust pipeline,绕开 Flutter Skia
@@ -59,7 +72,15 @@ bool _isNativeAnimatedUrl(String url) {
 /// - AVIF URL → AvifImageProvider (flutter_avif libavif + dav1d)
 /// - GIF / APNG / 动画 WebP → NativeAnimatedImageProvider (Rust pipeline,
 ///   绕 Skia multi_frame_codec 的 #85831 bug)
+/// - **头像**动图例外：使用 [BlobImageProvider] 的标准 encoded-image codec。
+///   native_animated_image 的 Rust 路径把 straight RGBA 原始像素交给
+///   `decodeImageFromPixels`;在部分透明/半透明头像上会出现透明区被黑色
+///   污染或黑边。标准 codec 从原始编码直接解码，alpha / premultiply
+///   语义由 Flutter engine 统一处理，透明像素可正确透出下层 UI。
 /// - 其他静态格式 → BlobImageProvider(content bucket,零 sqlite 寻址)
+///
+/// 头像例外只影响 avatar，不把正文动图重新暴露给旧的 GIF disposal bug；
+/// [MultiFrameImageStreamCompleter] 仍会让 GIF/APNG/WebP 正常播放。
 ///
 /// 需要限制解码尺寸时在外层包 decode-time 的 `ResizeImage(policy: fit)`。
 ImageProvider discourseImageProvider(
@@ -68,19 +89,36 @@ ImageProvider discourseImageProvider(
   String bucket = BlobImageCache.contentBucket,
   DownloadPriority priority = DownloadPriority.normal,
 }) {
+  // SmartAvatar 历史调用没有显式传 avatar bucket。按 Discourse 头像 URL
+  // 自动纠正到全局 avatar bucket：既保证跨 profile 共用唯一头像缓存，
+  // 也让下面的 alpha-safe 路由稳定生效。
+  final effectiveBucket =
+      bucket == BlobImageCache.contentBucket && _isAvatarUrl(url)
+      ? BlobImageCache.avatarBucket
+      : bucket;
+
   if (_isAvifUrl(url)) {
-    return AvifImageProvider(url, scale: scale, bucket: bucket);
+    return AvifImageProvider(url, scale: scale, bucket: effectiveBucket);
   }
   if (_isNativeAnimatedUrl(url)) {
+    if (effectiveBucket == BlobImageCache.avatarBucket) {
+      return BlobImageProvider(
+        url,
+        bucket: effectiveBucket,
+        scale: scale,
+        priority: priority,
+      );
+    }
     return NativeAnimatedImageProvider.fromBytesProvider(
-      loader: () => BlobImageCache.fetch(bucket, url, priority: priority),
+      loader: () =>
+          BlobImageCache.fetch(effectiveBucket, url, priority: priority),
       tag: url,
       scale: scale,
     );
   }
   return BlobImageProvider(
     url,
-    bucket: bucket,
+    bucket: effectiveBucket,
     scale: scale,
     priority: priority,
   );
