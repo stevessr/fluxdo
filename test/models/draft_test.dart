@@ -32,6 +32,18 @@ void main() {
       expect(draft.data.tags, ['linux']);
     });
 
+    test('恢复网页端草稿时对象标签会按 name 解析', () {
+      final draft = Draft.fromJson({
+        'draft_key': 'new_topic_object_tag',
+        'data':
+            '{"action":"createTopic","title":"转载测试","reply":"正文","tags":[{"id":1498,"name":"转载"}]}',
+      });
+
+      expect(draft.data.tags, ['转载']);
+      expect(draft.data.tags!.single, isNot(contains('{id:')));
+      expect(draft.data.toJson()['tags'], ['转载']);
+    });
+
     test('非 topic key 但 action 为 createTopic 时兜底识别为新话题草稿', () {
       final draft = Draft.fromJson({
         'draft_key': 'composer_draft_abc',

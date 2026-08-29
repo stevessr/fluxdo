@@ -46,13 +46,34 @@ class DraftData {
     this.typingTime,
   });
 
+  /// Discourse 的草稿标签既可能是字符串，也可能是网页端序列化的
+  /// `{id, name}` 对象。Composer 内部统一使用标签名，不能直接对 Map
+  /// 调用 toString()，否则恢复后会显示成 `{id: 1498, name: 转载}`。
+  static List<String>? _parseTags(dynamic rawTags) {
+    if (rawTags is! List) return null;
+
+    final tags = <String>[];
+    for (final tag in rawTags) {
+      String? name;
+      if (tag is Map) {
+        final rawName = tag['name'];
+        if (rawName != null) name = rawName.toString();
+      } else if (tag != null) {
+        name = tag.toString();
+      }
+
+      if (name != null) tags.add(name);
+    }
+    return tags;
+  }
+
   /// 从 JSON 解析
   factory DraftData.fromJson(Map<String, dynamic> json) {
     return DraftData(
       reply: json['reply'] as String?,
       title: json['title'] as String?,
       categoryId: json['categoryId'] as int?,
-      tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      tags: _parseTags(json['tags']),
       replyToPostNumber: json['replyToPostNumber'] as int?,
       action: json['action'] as String?,
       recipients: (json['recipients'] as List<dynamic>?)
