@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../constants.dart';
@@ -67,6 +68,10 @@ class _PasskeyLoginDialog extends StatefulWidget {
 }
 
 class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
+  static const MethodChannel _webAuthnChannel = MethodChannel(
+    'com.fluxdo/webauthn',
+  );
+
   InAppWebViewController? _controller;
   bool _started = false;
   bool _finished = false;
@@ -316,10 +321,18 @@ class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
       await WebViewCookiePriming.instance.prime(AppConstants.baseUrl);
       if (_finished) return;
 
-      // WebAuthn support 已在这个 InAppWebView 创建时直接写入其 WebSettings，
-      // 不再依赖 MainActivity 扫描 Flutter PlatformView 的原生 View 树。
+      // 官方 flutter_inappwebview 6.2.0-beta.3 尚未暴露 Android
+      // setWebAuthenticationSupport；复用 MainActivity 已有原生通道，在页面
+      // 完成装载、PlatformView 已挂入 View 树后为当前 WebView 开启 WebAuthn。
       await Future<void>.delayed(const Duration(milliseconds: 80));
       if (_finished) return;
+      final webAuthnEnabled = await _webAuthnChannel.invokeMethod<bool>(
+        'enableWebAuthentication',
+      );
+      if (webAuthnEnabled != true) {
+        _finishFailure('当前 Android System WebView 不支持 Passkey');
+        return;
+      }
       if (mounted) setState(() => _statusText = '请使用系统 Passkey 验证身份');
       await controller.evaluateJavascript(
         source: 'window.__fluxdoPasskeyLogin();',
@@ -477,9 +490,8 @@ class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // WebAuthn support 必须写到这个具体 WebView 的 WebSettings；不能再
-              // 依赖 Activity View 树扫描，因为 Flutter PlatformView 组合模式下
-              // 原生 WebView 不保证能从 window.decorView 稳定遍历到。
+              // 使用官方 flutter_inappwebview 设置；Android WebAuthn support 在
+              // _startFlow 中通过 MainActivity 的原生 MethodChannel 开启。
               SizedBox(
                 width: 1,
                 height: 1,
@@ -497,8 +509,6 @@ class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
                     sharedCookiesEnabled: true,
                     thirdPartyCookiesEnabled: true,
                     userAgent: AppConstants.webViewUserAgentOverride,
-                    webAuthenticationSupport:
-                        WebAuthenticationSupport.FOR_BROWSER,
                   ),
                   initialUserScripts: WebViewSettings.compatPolyfillScripts,
                   onReceivedServerTrustAuthRequest: (_, challenge) =>
