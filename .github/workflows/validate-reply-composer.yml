@@ -24,3 +24,5 @@ jobs:
         run: flutter pub get
       - name: Analyze reply composer
         run: flutter analyze lib/widgets/post/reply_sheet.dart
+
+# validation-only workflow; removed before merge
