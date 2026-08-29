@@ -39,6 +39,21 @@ bool _bytesLookLikeAvif(Uint8List bytes) {
   return false;
 }
 
+/// GIF87a / GIF89a magic bytes。
+///
+/// 缩略图只需要首帧。GIF 在这里单独分流到 Flutter codec，避免调用
+/// native_animated_image 的“全动画 → 全帧 RGBA → 只取第一帧”路径：
+/// 后者既浪费 CPU/内存，又多了一次 raw RGBA 到 ui.Image 的颜色转换。
+bool _bytesLookLikeGif(Uint8List bytes) {
+  if (bytes.length < 6) return false;
+  return bytes[0] == 0x47 && // G
+      bytes[1] == 0x49 && // I
+      bytes[2] == 0x46 && // F
+      bytes[3] == 0x38 && // 8
+      (bytes[4] == 0x37 || bytes[4] == 0x39) && // 7 / 9
+      bytes[5] == 0x61; // a
+}
+
 /// 通用 sticker thumbnail provider — 单帧解码 + 缩放 + PNG cache。
 ///
 /// 这是 fluxdo sticker 面板的"地板": 30 张同屏的 grid 场景下,任何格式
@@ -102,10 +117,6 @@ class StickerThumbnailProvider
 
   /// 批量预热缩略图缓存(sticker 面板打开时一次性 30 张这种场景)。
   ///
-  /// 关键优化:把 30 个 `Isolate.run` 调用换成 chunked batch(默认 8 张一组),
-  /// spawn 开销从 30× 摊到 ~4×。每个 chunk 之前调一次 [shouldContinue],
-  /// 用户切组 / 关 panel 时立即停下后续 chunk,避免无效 CPU。
-  ///
   /// 已在 cache 或正在解的 URL 自动跳过,主 isolate 只做轻量 IO + ui.Image 创建。
   static Future<void> precacheBatch(
     List<String> urls, {
@@ -113,18 +124,10 @@ class StickerThumbnailProvider
     String bucket = BlobImageCache.stickerOriginalBucket,
     bool Function()? shouldContinue,
   }) async {
-    // 全程流水线:每张图「下载 → magic 分流 → 解码 → 写缩略图」独立
-    // 链式推进,不再是"全部下载完才开始解码"的两段式 —— 旧形态下载
-    // 串行(30 张 × 数百 ms = 十几秒)且总时长 = 下载总和 + 解码总和;
-    // 现在下载并发由 sticker 通道(3 槽)限,解码并发由 AVIF(4)/
-    // 非 AVIF worker pool 各自限,总时长 ≈ max(下载, 解码)。
-    //
-    // 分流关键不变:用**实际 magic bytes** 而不是 URL 后缀。CDN 给的
-    // .gif/.webp URL 实际内容可能是 AVIF,后缀分流会让 AVIF bytes 进
-    // Rust → crash。
-    //
-    // shouldContinue 在每张的下载前与解码前各检查一次,切组/关 panel
-    // 后在途任务自然收敛(已发起的单张下载/解码不可中断,跑完即停)。
+    // 全程流水线:每张图「下载 → magic 分流 → 解码 → 写缩略图」独立。
+    // AVIF 走专用 decoder；GIF 缩略图走 Flutter codec 惰性取首帧；
+    // WebP/APNG 继续走 Rust worker pool。所有分流均看实际 magic bytes，
+    // 不信 URL 后缀（CDN 可能改写容器）。
     Future<void> one(String url) async {
       if (!supports(url)) return;
       final thumbKey = _thumbnailCacheKey(url, targetSize);
@@ -143,8 +146,27 @@ class StickerThumbnailProvider
           // AVIF → precache(_pendingThumbnailTasks 去重,与 grid 现场
           // 解码互不重复;_avifSemaphore(4) 限流)
           await precache(url, targetSize: targetSize, bucket: bucket);
+        } else if (_bytesLookLikeGif(bytes)) {
+          // GIF thumbnail 只需要首帧。Flutter codec 的 getNextFrame 是
+          // 惰性的，不会像 Rust FFI decode() 一样先把整段动画解成 RGBA。
+          // 同时直接在 codec 阶段等比降采样，避免 full-size 纹理上传。
+          await _nonAvifSemaphore.acquire();
+          ui.Image? image;
+          try {
+            if (shouldContinue != null && !shouldContinue()) return;
+            image = await _decodeFirstFrameViaFlutterCodec(
+              bytes,
+              targetSize: targetSize,
+            );
+            if (shouldContinue != null && !shouldContinue()) return;
+            await _cacheThumbnail(thumbKey, image);
+            _knownThumbnailKeys.add(thumbKey);
+          } finally {
+            image?.dispose();
+            _nonAvifSemaphore.release();
+          }
         } else {
-          // 非 AVIF → Rust worker pool(池内并发限流)
+          // animated WebP / APNG → Rust worker pool
           final reply = await _DecoderWorkerPool.instance.decode(bytes);
           if (reply == null) return;
           if (shouldContinue != null && !shouldContinue()) return;
@@ -178,7 +200,10 @@ class StickerThumbnailProvider
       } else if (reply.unsupported) {
         // Rust 不识别 → Flutter codec(静态 webp / png / jpeg)
         try {
-          srcImage = await _decodeFirstFrameViaFlutterCodec(bytes);
+          srcImage = await _decodeFirstFrameViaFlutterCodec(
+            bytes,
+            targetSize: targetSize,
+          );
         } catch (e) {
           debugPrint('[StickerThumbnail] both decoders failed $url: $e');
           return;
@@ -321,11 +346,8 @@ class StickerThumbnailProvider
 /// 的约束已不存在,放开到 4 让首开 30 张 AVIF 从串行 3-9s 变成秒级。
 final _avifSemaphore = _Semaphore(4);
 
-/// 非 AVIF (GIF / WebP / APNG) 解码并发。decode 走 `_DecoderWorkerPool`
-/// (long-lived worker isolate)在后台串行,主 isolate 只做轻量 ui.Image
-/// 创建,可以放开并发到 8。
-///
-/// 关键:跟 AVIF 用**独立** semaphore,AVIF 慢不会阻塞 GIF/WebP/APNG 解码。
+/// 非 AVIF 解码并发。GIF 的 Flutter codec 首帧路径和 WebP/APNG 的
+/// Rust worker 路径共用这层入口限流；AVIF 有独立 semaphore。
 final _nonAvifSemaphore = _Semaphore(8);
 
 /// in-flight prefetch task,去重避免重复解
@@ -356,8 +378,12 @@ class _ThumbnailCancelled implements Exception {
   String toString() => 'sticker thumbnail decode cancelled';
 }
 
+// v2: v1 可能已经把颜色异常的 GIF 首帧永久写成 PNG。升级 key 后旧缓存
+// 自动失效，用户更新后无需手动清缓存即可拿到新解码结果。
+const int _thumbnailCacheVersion = 2;
+
 String _thumbnailCacheKey(String url, int targetSize) {
-  return 'sticker_thumb:$targetSize:$url';
+  return 'sticker_thumb:v$_thumbnailCacheVersion:$targetSize:$url';
 }
 
 /// 缩略图 PNG 走 [BlobImageCache](零 sqlite 寻址):30 张同屏的 grid
@@ -454,13 +480,12 @@ Future<ui.Image> _decodeFirstFrameImage({
 
 /// 解第一帧。按**实际 magic bytes** dispatch backend:
 ///
-/// - **AVIF**(magic ftyp/avif/avis/mif1/msf1):走 `flutter_avif`(libavif + dav1d,
-///   C 实现,工业标准稳定)。不进 native_animated_image 的 Rust pipeline。
-///
-/// - **GIF / animated WebP / APNG**:走 [_DecoderWorkerPool](long-lived worker
-///   isolate),解码在 background isolate 串行,**主线程零 spawn 开销**。
-///
-/// - **其它 / 静态格式**:worker 返 unsupported → Flutter 内置 codec fallback。
+/// - **AVIF**:走 `flutter_avif`。
+/// - **GIF**:走 Flutter 内置 codec，只调用一次 `getNextFrame()`；这是缩略图
+///   专用路径，不进入 Rust 全动画解码，因此既避免颜色转换链路，也避免
+///   为了一个首帧把整段 GIF 解码成 RGBA。
+/// - **animated WebP / APNG**:继续走 [_DecoderWorkerPool]。
+/// - **其它 / 静态格式**:worker 返 unsupported → Flutter codec fallback。
 Future<ui.Image> _decodeFirstFrame(
   String url,
   Uint8List bytes, {
@@ -470,13 +495,16 @@ Future<ui.Image> _decodeFirstFrame(
   if (_bytesLookLikeAvif(bytes)) {
     return _decodeAvifFirstFrame(bytes, url, targetSize: targetSize);
   }
+  if (_bytesLookLikeGif(bytes)) {
+    return _decodeFirstFrameViaFlutterCodec(bytes, targetSize: targetSize);
+  }
 
   final reply = await _DecoderWorkerPool.instance.decode(bytes);
   if (reply == null) {
     throw StateError('decode cancelled: $url');
   }
   if (reply.unsupported) {
-    return _decodeFirstFrameViaFlutterCodec(bytes);
+    return _decodeFirstFrameViaFlutterCodec(bytes, targetSize: targetSize);
   }
   if (reply.rgba == null) {
     throw StateError('decode failed: $url (${reply.error})');
@@ -495,11 +523,35 @@ Future<ui.Image> _decodeAvifFirstFrame(
   return AvifImageProvider.decodeFirstFrame(bytes, maxDim: targetSize);
 }
 
-/// Flutter 内置 codec fallback:Rust pipeline 不识别的格式走这条
-/// (主要是静态 webp / png / jpeg)。只取第一帧,丢弃多余 codec 资源。
-Future<ui.Image> _decodeFirstFrameViaFlutterCodec(Uint8List bytes) async {
+/// Flutter codec 的单帧路径。只拉取第一帧，并在 codec 阶段按最长边
+/// [targetSize] 等比降采样；不会触发后续帧的 disposal 逻辑，所以不涉及
+/// Flutter multi_frame_codec 在特定后续帧上的历史问题。
+Future<ui.Image> _decodeFirstFrameViaFlutterCodec(
+  Uint8List bytes, {
+  int? targetSize,
+}) async {
   final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-  final codec = await ui.instantiateImageCodecFromBuffer(buffer);
+  final codec = targetSize == null
+      ? await ui.instantiateImageCodecFromBuffer(buffer)
+      : await PaintingBinding.instance.instantiateImageCodecWithSize(
+          buffer,
+          getTargetSize: (int intrinsicWidth, int intrinsicHeight) {
+            final longest = intrinsicWidth > intrinsicHeight
+                ? intrinsicWidth
+                : intrinsicHeight;
+            if (longest <= targetSize) {
+              return ui.TargetImageSize(
+                width: intrinsicWidth,
+                height: intrinsicHeight,
+              );
+            }
+            final ratio = targetSize / longest;
+            return ui.TargetImageSize(
+              width: (intrinsicWidth * ratio).round().clamp(1, targetSize),
+              height: (intrinsicHeight * ratio).round().clamp(1, targetSize),
+            );
+          },
+        );
   try {
     final frame = await codec.getNextFrame();
     return frame.image;
@@ -527,7 +579,10 @@ Future<void> _cacheThumbnail(String key, ui.Image image) async {
       await BlobImageCache.write(
         BlobImageCache.stickerThumbBucket,
         key,
-        byteData.buffer.asUint8List(),
+        byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        ),
       );
     }
   } catch (_) {
