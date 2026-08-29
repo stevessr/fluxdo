@@ -64,4 +64,36 @@ void main() {
       );
     });
   });
+
+  group('BlobImageProvider global identity', () {
+    test('同 URL / bucket 跨 profile 始终复用同一图片身份', () {
+      // profile/session 刻意不进入 BlobImageProvider key。账号切换只更换
+      // cookie/session；相同图片 URL 必须命中同一 Flutter ImageCache 项，
+      // 磁盘层也由 BlobImageCache 的 bucket + md5(url) 唯一寻址。
+      const firstProfile = BlobImageProvider(
+        'https://linux.do/user_avatar/example/shared/96/1.png',
+        bucket: BlobImageCache.avatarBucket,
+      );
+      const secondProfile = BlobImageProvider(
+        'https://linux.do/user_avatar/example/shared/96/1.png',
+        bucket: BlobImageCache.avatarBucket,
+      );
+
+      expect(secondProfile, equals(firstProfile));
+      expect(secondProfile.hashCode, firstProfile.hashCode);
+    });
+
+    test('不同 bucket 仍保持用途隔离', () {
+      const avatar = BlobImageProvider(
+        'https://example.com/image.png',
+        bucket: BlobImageCache.avatarBucket,
+      );
+      const content = BlobImageProvider(
+        'https://example.com/image.png',
+        bucket: BlobImageCache.contentBucket,
+      );
+
+      expect(content, isNot(equals(avatar)));
+    });
+  });
 }
