@@ -79,6 +79,16 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="http" android:host="linux.do" android:pathPrefix="/u/" />
             </intent-filter>
+            <!-- Deep Links for linux.do - Google OAuth callback。
+                 FluxDO 发起 OmniAuth 后只把 accounts.google.com 交给系统浏览器；
+                 Google 回到此 HTTPS callback 时直接唤起 App，由 Dart/Dio 完成
+                 callback HTTP 请求，绝不把 callback 导航到 linux.do WebView。 -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="linux.do" android:pathPrefix="/auth/google_oauth2/callback" />
+            </intent-filter>
             <!-- Deep Links for linux.do - 邮箱链接登录 -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />

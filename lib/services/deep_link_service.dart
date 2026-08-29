@@ -8,6 +8,7 @@ import '../pages/webview_page.dart';
 import '../constants.dart';
 import '../utils/discourse_url_parser.dart';
 import 'discourse/discourse_service.dart';
+import 'google_oauth_login_flow.dart';
 import 'user_api_key_login_flow.dart';
 import 'user_api_key_service.dart';
 
@@ -80,10 +81,14 @@ class DeepLinkService {
     }
 
     final context = _navigatorContext!;
-    final url = uri.toString();
+    final isGoogleOAuthCallback = GoogleOAuthLoginFlow.instance.isCallback(uri);
+    // OAuth callback 带一次性 code/state，绝不能原样写日志。
+    final displayUrl = isGoogleOAuthCallback
+        ? '${uri.scheme}://${uri.host}${uri.path}'
+        : uri.toString();
 
     if (!_canHandleUri(uri)) {
-      debugPrint('DeepLinkService: 未知链接类型 $url');
+      debugPrint('DeepLinkService: 未知链接类型 $displayUrl');
       return;
     }
 
@@ -92,13 +97,22 @@ class DeepLinkService {
     if (_lastHandledUri == uri &&
         _lastHandledTime != null &&
         now.difference(_lastHandledTime!).inSeconds < 1) {
-      debugPrint('DeepLinkService: 忽略重复链接 $uri');
+      debugPrint('DeepLinkService: 忽略重复链接 $displayUrl');
       return;
     }
     _lastHandledUri = uri;
     _lastHandledTime = now;
 
-    debugPrint('DeepLinkService: 收到链接 $url');
+    debugPrint('DeepLinkService: 收到链接 $displayUrl');
+
+    // Google OAuth callback 必须在任何 linux.do WebView 兜底之前截获。
+    // App 只把 callback 作为 HTTP endpoint 交给同一 CookieJar，不展示站点网页。
+    if (isGoogleOAuthCallback) {
+      GoogleOAuthLoginFlow.instance.handleCallback(uri);
+      return;
+    }
+
+    final url = uri.toString();
 
     // 浏览器授权登录回调:discourse://auth_redirect?payload=...
     // (discourse:// 是站点 auth_redirect 默认白名单 scheme,App 已注册)
