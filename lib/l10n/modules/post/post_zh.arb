@@ -154,6 +154,16 @@
   "post_replySentAction": "查看",
   "post_replyTo": "回复给",
   "post_replyToTopic": "回复话题",
+  "post_replyAsNewTopic": "作为链接话题回复",
+  "post_replyAsNewPrivateMessage": "作为新消息回复给相同的收件人",
+  "post_continueDiscussion": "从{postLink}继续讨论：",
+  "@post_continueDiscussion": {
+    "placeholders": {
+      "postLink": {
+        "type": "String"
+      }
+    }
+  },
   "post_replyToUser": "回复 @{username}",
   "@post_replyToUser": {
     "placeholders": {

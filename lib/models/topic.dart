@@ -274,8 +274,7 @@ class TopicPoster {
     // 内嵌在 poster 里,没有 user_id,也没有顶层 users 表。列表接口则相反
     // (user_id + 顶层 users)。两种形状都要吃下。
     final embeddedUser = json['user'] as Map<String, dynamic>?;
-    final userId =
-        json['user_id'] as int? ?? embeddedUser?['id'] as int? ?? 0;
+    final userId = json['user_id'] as int? ?? embeddedUser?['id'] as int? ?? 0;
     return TopicPoster(
       userId: userId,
       description: json['description'] as String? ?? '',
@@ -1295,8 +1294,7 @@ class Post {
       postVotingVoteCount: postVotingVoteCount ?? this.postVotingVoteCount,
       postVotingUserVotedDirection: clearPostVotingDirection
           ? null
-          : (postVotingUserVotedDirection ??
-              this.postVotingUserVotedDirection),
+          : (postVotingUserVotedDirection ?? this.postVotingUserVotedDirection),
       postVotingHasVotes: postVotingHasVotes ?? this.postVotingHasVotes,
       postVotingComments: postVotingComments ?? this.postVotingComments,
       postVotingCommentsCount:
@@ -1814,6 +1812,7 @@ class TopicDetail {
 
   // 私信成员与移除权限（来自 details）
   final List<TopicUser> allowedUsers;
+  final List<String> allowedGroups;
   final bool canRemoveAllowedUsers;
   final int? canRemoveSelfId;
 
@@ -1895,6 +1894,7 @@ class TopicDetail {
     this.isPostVoting = false,
     this.canEdit = false,
     this.allowedUsers = const [],
+    this.allowedGroups = const [],
     this.canRemoveAllowedUsers = false,
     this.canRemoveSelfId,
     this.bookmarked = false,
@@ -2087,6 +2087,11 @@ class TopicDetail {
           .whereType<Map>()
           .map((user) => TopicUser.fromJson(Map<String, dynamic>.from(user)))
           .toList(growable: false),
+      allowedGroups: (details['allowed_groups'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((group) => group['name']?.toString().trim() ?? '')
+          .where((name) => name.isNotEmpty)
+          .toList(growable: false),
       canRemoveAllowedUsers: details['can_remove_allowed_users'] == true,
       canRemoveSelfId: (details['can_remove_self_id'] as num?)?.toInt(),
       bookmarked: topicBookmarked,
@@ -2204,6 +2209,7 @@ class TopicDetail {
     bool? isPostVoting,
     bool? canEdit,
     List<TopicUser>? allowedUsers,
+    List<String>? allowedGroups,
     bool? canRemoveAllowedUsers,
     int? canRemoveSelfId,
     bool clearCanRemoveSelfId = false,
@@ -2253,6 +2259,7 @@ class TopicDetail {
       isPostVoting: isPostVoting ?? this.isPostVoting,
       canEdit: canEdit ?? this.canEdit,
       allowedUsers: allowedUsers ?? this.allowedUsers,
+      allowedGroups: allowedGroups ?? this.allowedGroups,
       canRemoveAllowedUsers:
           canRemoveAllowedUsers ?? this.canRemoveAllowedUsers,
       canRemoveSelfId: clearCanRemoveSelfId

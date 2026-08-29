@@ -993,10 +993,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
             }
             switch (panelType) {
               case ChatBottomPanelType.keyboard:
-                return _KeyboardPlaceholder(
-                  color: theme.colorScheme.surface,
-                  nativeKeyboardHeight: _panelController.keyboardHeight,
-                );
+                return _KeyboardPlaceholder(color: theme.colorScheme.surface);
               case ChatBottomPanelType.other:
                 if (data == EditorPanelType.emoji) {
                   return ColoredBox(
@@ -1021,21 +1018,22 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   }
 }
 
-/// 键盘占位组件：使用原生键盘高度，不使用 AnimatedSize，
-/// 与表情面板共用同一高度源（nativeKeyboardHeight），确保切换时等高
+/// 键盘占位只订阅 Flutter 的 viewInsets。
+///
+/// IME 动画的 viewInsets 与 Flutter 帧同步；原生插件上报的 keyboardHeight
+/// 会经过平台通道再触发 setState，快速动画时会落后于系统键盘，视觉上就像
+/// 回复框“追着键盘”缓慢上升。这里只让这个极小占位组件逐帧跟随 Insets，
+/// 避免整块 Composer 使用滞后的原生高度。
 class _KeyboardPlaceholder extends StatelessWidget {
   final Color color;
-  final double nativeKeyboardHeight;
 
-  const _KeyboardPlaceholder({
-    required this.color,
-    required this.nativeKeyboardHeight,
-  });
+  const _KeyboardPlaceholder({required this.color});
 
   @override
   Widget build(BuildContext context) {
+    final insetBottom = MediaQuery.viewInsetsOf(context).bottom;
     final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
-    final height = max(nativeKeyboardHeight, safeBottom);
+    final height = insetBottom > 0 ? insetBottom : safeBottom;
     return ColoredBox(
       color: color,
       child: SizedBox(width: double.infinity, height: height),
