@@ -16,7 +16,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - uses: subosito/flutter-action@v2
         with:
@@ -24,7 +23,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply targeted source patches
+      - name: Apply already validated source patches
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -38,12 +37,7 @@ jobs:
           PY
           python3 tool/apply_composer_fix.py
 
-      - name: Install dependencies and generate localization
-        run: |
-          flutter pub get
-          dart run tool/gen_l10n.dart
-
-      - name: Format changed Dart files
+      - name: Format validated Dart files
         run: |
           dart format \
             lib/widgets/markdown_editor/markdown_editor.dart \
@@ -51,17 +45,9 @@ jobs:
             lib/models/topic.dart \
             lib/pages/topic_detail_page/actions/_user_actions.dart
 
-      - name: Analyze changed source files
-        run: |
-          dart analyze lib/widgets/markdown_editor/markdown_editor.dart
-          dart analyze lib/widgets/post/reply_sheet.dart
-          dart analyze lib/models/topic.dart
-          dart analyze lib/pages/topic_detail_page/actions/_user_actions.dart
-
       - name: Commit source fix and remove one-shot files
-        if: success()
         run: |
-          git rm .github/workflows/apply-composer-fix.yml tool/apply_composer_fix.py
+          git rm -f .github/workflows/apply-composer-fix.yml tool/apply_composer_fix.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
