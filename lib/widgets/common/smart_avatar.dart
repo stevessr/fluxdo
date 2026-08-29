@@ -8,7 +8,9 @@ import '../../utils/svg_utils.dart';
 ///
 /// 静态头像走 [BlobImageProvider](Telegram 式 MD5 直寻址,零 sqlite
 /// 索引,且不再与正文大图挤 DiscourseCacheManager 的 500 条 LRU);
-/// 动图头像走 discourseImageProvider 的 Rust pipeline。
+/// 动图头像也固定使用 avatar bucket，并由 discourseImageProvider 的
+/// alpha-safe avatar 路由选择标准 encoded-image codec，避免透明像素被
+/// raw RGBA 动图管线错误合成为黑色。
 /// 静态头像会先检测内容是否为 SVG，避免伪装成 PNG 的 SVG 进入位图解码器。
 class SmartAvatar extends StatefulWidget {
   final String? imageUrl;
@@ -186,7 +188,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // 默认透明背景，只有在需要 fallback 时才用主题色
+    // 图片层默认绝对透明；fallback 自己负责内容，不给透明像素垫主题色。
     final bgColor = widget.backgroundColor ?? Colors.transparent;
     final fgColor =
         widget.foregroundColor ?? theme.colorScheme.onPrimaryContainer;
@@ -203,13 +205,16 @@ class _SmartAvatarState extends State<SmartAvatar> {
     if (widget.imageUrl == null || widget.imageUrl!.isEmpty) {
       child = _buildFallback(fgColor, innerRadius);
     } else if (isNativeAnimatedUrl(widget.imageUrl!)) {
-      // 动图(GIF/APNG/动画 WebP)走 native_animated_image Rust pipeline,
-      // 绕开 Flutter Skia multi_frame_codec 的 #85831 bug。
-      // RepaintBoundary 将每帧 setImage 触发的重绘限制在头像区域内,
-      // 避免列表中多个动图头像同时连累整个 list item 重绘。
+      // 头像动图必须显式声明 avatar bucket：animated_avatar 并不保证 URL
+      // 含 `/user_avatar/`，不能依赖 URL 猜测。provider router 对 avatar
+      // 使用 Flutter 标准 encoded-image codec，保留透明 alpha；正文动图
+      // 仍走 native Rust pipeline，继续规避旧 multi_frame disposal bug。
       child = RepaintBoundary(
         child: Image(
-          image: discourseImageProvider(widget.imageUrl!),
+          image: discourseImageProvider(
+            widget.imageUrl!,
+            bucket: BlobImageCache.avatarBucket,
+          ),
           width: innerSize,
           height: innerSize,
           fit: BoxFit.cover,
@@ -219,7 +224,6 @@ class _SmartAvatarState extends State<SmartAvatar> {
             return _buildLoading(fgColor, innerRadius);
           },
           errorBuilder: (context, error, stack) {
-            // 动图链路出错(网络 / Rust 解码失败),退化到字母 fallback
             return _buildFallback(fgColor, innerRadius);
           },
         ),
@@ -245,7 +249,6 @@ class _SmartAvatarState extends State<SmartAvatar> {
             return _buildLoading(fgColor, innerRadius);
           }
 
-          // 静态图使用 CachedNetworkImage，解码失败时再次嗅探 SVG 兜底。
           return _buildStaticImage(fgColor, innerRadius, innerSize);
         },
       );
@@ -303,12 +306,10 @@ class _SmartAvatarState extends State<SmartAvatar> {
   }
 
   Widget _buildLoading(Color fgColor, double radius) {
-    // 静态灰底占位 — 头像 loading 时间极短,
-    // 用 CircularProgressIndicator 会带来 60fps 自转 + InheritedTheme 查询,
-    // 在列表多头像同时占位时是热点开销。
-    // 不在这里加自己的 shape:外层 Container 已经按圆形/方形裁切,这里
-    // 铺满矩形即可,否则方形头像 loading 时会露出"圆形补丁"的错位。
-    return Container(color: fgColor.withValues(alpha: 0.08));
+    // 图片本身的背景保持透明。加载态不再铺一层主题灰，避免用户头像的
+    // 透明区域在首帧前后发生“有底色 → 无底色”的闪变，也让 alpha 语义
+    // 从 loading 到最终图片保持一致。
+    return const ColoredBox(color: Colors.transparent);
   }
 
   Widget _buildFallback(Color fgColor, double radius) {
@@ -403,7 +404,7 @@ class _SvgFallbackBuilderState extends State<_SvgFallbackBuilder> {
     }
 
     if (!_checked) {
-      // 检测中，显示空白避免闪烁
+      // 检测中保持透明，避免黑/灰占位污染头像透明背景。
       return const SizedBox.shrink();
     }
 
