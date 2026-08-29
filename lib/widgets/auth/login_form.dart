@@ -3,15 +3,6 @@ import 'package:app_icons/app_icons.dart';
 
 import 'package:m3e_ui/m3e_ui.dart';
 
-import '../../l10n/s.dart';
-import '../../services/auth_session.dart';
-import '../../services/cf_challenge_service.dart';
-import '../../services/discourse/discourse_service.dart';
-import '../../services/network/cookie/boundary_sync_service.dart';
-import '../../services/network/cookie/cookie_jar_service.dart';
-import '../../services/toast_service.dart';
-import 'passkey_login_dialog.dart';
-
 /// username/email + password 输入表单。提交逻辑 (调 DiscourseService 登录 +
 /// 处理 hcaptcha/2FA/跳转) 由父组件持有,form 本身只负责 UI 和数据校验。
 class LoginForm extends StatefulWidget {
@@ -49,9 +40,6 @@ class _LoginFormState extends State<LoginForm> {
   bool _obscure = true;
   bool _remember = false;
   bool _submitting = false;
-  bool _passkeySubmitting = false;
-
-  bool get _busy => _submitting || _passkeySubmitting;
 
   @override
   void initState() {
@@ -72,7 +60,7 @@ class _LoginFormState extends State<LoginForm> {
   }
 
   Future<void> _submit() async {
-    if (_busy) return;
+    if (_submitting) return;
     final identifier = _usernameCtrl.text.trim();
     final password = _passwordCtrl.text;
     if (identifier.isEmpty || password.isEmpty) return;
@@ -90,73 +78,6 @@ class _LoginFormState extends State<LoginForm> {
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  Future<bool> _ensureCfClearance() async {
-    final jar = CookieJarService();
-    var clearance = await jar.getCfClearance();
-    if (clearance != null && clearance.isNotEmpty) return true;
-    if (!mounted) return false;
-
-    final requestGeneration = AuthSession().generation;
-    final ok = await CfChallengeService().showManualVerify(context, true);
-    if (ok != true) return false;
-
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    for (var i = 0; i < 3; i++) {
-      await BoundarySyncService.instance.syncFromWebView(
-        cookieNames: null,
-        excludeCookieNames: CookieJarService.authCookieNames,
-        requestGeneration: requestGeneration,
-      );
-      clearance = await jar.getCfClearance();
-      if (clearance != null && clearance.isNotEmpty) return true;
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-    }
-    return false;
-  }
-
-  /// Passkey 直连登录测试入口。
-  ///
-  /// 不打开 linux.do 登录页面；真正的 WebAuthn ceremony 在轻量同源 WebView
-  /// 中完成，成功后复用现有 CookieJar / native login 收口。
-  Future<void> _loginWithPasskey() async {
-    if (_busy) return;
-    FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _passkeySubmitting = true);
-    try {
-      if (!await _ensureCfClearance()) {
-        if (mounted) {
-          ToastService.showError('Cloudflare 验证未完成,请重试');
-        }
-        return;
-      }
-      if (!mounted) return;
-
-      final result = await showPasskeyLoginDialog(context);
-      if (!mounted ||
-          result == null ||
-          result.status == PasskeyLoginStatus.canceled) {
-        return;
-      }
-
-      if (result.status == PasskeyLoginStatus.success) {
-        final username = result.username;
-        if (username == null || username.isEmpty) {
-          ToastService.showError('Passkey 登录成功但无法读取用户名');
-          return;
-        }
-        await DiscourseService().finalizeNativeLoginSuccess(username);
-        if (!mounted) return;
-        ToastService.showSuccess(S.current.webviewLogin_loginSuccess);
-        Navigator.of(context).pop(true);
-        return;
-      }
-
-      ToastService.showError(result.errorMessage ?? 'Passkey 登录失败');
-    } finally {
-      if (mounted) setState(() => _passkeySubmitting = false);
     }
   }
 
@@ -194,7 +115,7 @@ class _LoginFormState extends State<LoginForm> {
           TextField(
             controller: _usernameCtrl,
             focusNode: _usernameFocus,
-            enabled: !_busy,
+            enabled: !_submitting,
             autofillHints: const [AutofillHints.username, AutofillHints.email],
             textInputAction: TextInputAction.next,
             keyboardType: TextInputType.emailAddress,
@@ -210,7 +131,7 @@ class _LoginFormState extends State<LoginForm> {
           TextField(
             controller: _passwordCtrl,
             focusNode: _passwordFocus,
-            enabled: !_busy,
+            enabled: !_submitting,
             autofillHints: const [AutofillHints.password],
             textInputAction: TextInputAction.go,
             obscureText: _obscure,
@@ -225,9 +146,7 @@ class _LoginFormState extends State<LoginForm> {
                       ? Symbols.visibility_rounded
                       : Symbols.visibility_off_rounded,
                 ),
-                onPressed: _busy
-                    ? null
-                    : () => setState(() => _obscure = !_obscure),
+                onPressed: () => setState(() => _obscure = !_obscure),
               ),
             ),
             onSubmitted: (_) => _submit(),
@@ -237,14 +156,14 @@ class _LoginFormState extends State<LoginForm> {
             children: [
               Checkbox(
                 value: _remember,
-                onChanged: _busy
+                onChanged: _submitting
                     ? null
                     : (v) => setState(() => _remember = v ?? false),
               ),
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: _busy
+                  onTap: _submitting
                       ? null
                       : () => setState(() => _remember = !_remember),
                   child: const Text('记住密码'),
@@ -252,14 +171,14 @@ class _LoginFormState extends State<LoginForm> {
               ),
               if (widget.onForgotPassword != null)
                 TextButton(
-                  onPressed: _busy ? null : widget.onForgotPassword,
+                  onPressed: _submitting ? null : widget.onForgotPassword,
                   child: const Text('忘记密码?'),
                 ),
             ],
           ),
           const SizedBox(height: 12),
           FilledButton(
-            onPressed: _busy ? null : _submit,
+            onPressed: _submitting ? null : _submit,
             style: FilledButton.styleFrom(
               minimumSize: const Size(double.infinity, 56),
               shape: RoundedRectangleBorder(
@@ -278,24 +197,6 @@ class _LoginFormState extends State<LoginForm> {
                       letterSpacing: 1,
                     ),
                   ),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _loginWithPasskey,
-            icon: _passkeySubmitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: LoadingSpinner(size: 20),
-                  )
-                : const Icon(Symbols.fingerprint_rounded, size: 20),
-            label: const Text('Passkey 登录'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 52),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-            ),
           ),
         ],
       ),
