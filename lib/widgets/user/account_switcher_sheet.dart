@@ -10,25 +10,24 @@ import 'package:m3e_ui/m3e_ui.dart';
 
 import '../../l10n/s.dart';
 import '../../pages/account_manage_page.dart';
+import '../../providers/account_quick_switcher_preferences.dart';
 import '../../providers/app_state_refresher.dart';
 import '../../services/account_manager.dart';
 import '../../services/toast_service.dart';
 import '../../utils/url_helper.dart';
 import '../common/app_bottom_sheet.dart';
 import '../common/smart_avatar.dart';
+import 'radial_account_quick_switcher.dart';
 
 /// 快速账号切换悬浮层相对屏幕的入口位置。
 ///
 /// 底栏「我的」从右下向上展开；内置浏览器/帖子详情头像从右上向下展开。
-/// 各入口共享完全相同的账号数据、命中测试、停留切换和真正的 session 切换动作。
 enum AccountQuickSwitcherPlacement { bottomRight, topRight }
 
 /// 账号切换入口。
 ///
-/// - 触摸长按：Telegram 风格纵向悬浮胶囊，滑过账号后短暂停留即切换；
-/// - 鼠标/桌面：沿用普通 bottom sheet；
-/// - 普通点击可以显式调用 [showClassic]，不会误启动需要持续 pointer 的
-///   长按悬浮层。
+/// 触摸设备可在外观设置里选择新的多环伞状切换器；关闭时完整保留原先的
+/// Telegram 风格纵向快捷切换器。桌面端继续使用经典 bottom sheet。
 abstract final class AccountSwitcherSheet {
   static Future<void> show(
     BuildContext context, {
@@ -36,6 +35,16 @@ abstract final class AccountSwitcherSheet {
         AccountQuickSwitcherPlacement.bottomRight,
   }) {
     if (_preferTouchQuickSwitcher) {
+      final container = ProviderScope.containerOf(context, listen: false);
+      final preferences = container.read(accountQuickSwitcherPreferencesProvider);
+      if (preferences.radialEnabled) {
+        return RadialAccountQuickSwitcher.show(
+          context,
+          fromTop: placement == AccountQuickSwitcherPlacement.topRight,
+          trigger: preferences.trigger,
+          showClassic: () => showClassic(context),
+        );
+      }
       return _TouchAccountSwitcherEntry.show(context, placement: placement);
     }
     return showClassic(context);
@@ -105,8 +114,7 @@ class _QuickPointerRouteController {
   }
 }
 
-/// 只负责 OverlayEntry 装卸。没有 ModalBarrier，也不复用 classic sheet，
-/// 因而背景不会再画一层“切换选项框”。
+/// 原有纵向触摸快捷切换器，仅在“伞状账号切换”关闭时使用。
 abstract final class _TouchAccountSwitcherEntry {
   static Future<void> show(
     BuildContext context, {
@@ -226,14 +234,11 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
 
   Future<void> _reload() async {
     try {
-      // 切换前先固化当前登录态，保证切走后仍可无损切回来。
       await _manager.syncCurrentAccount();
       final accountsFuture = _manager.listAccounts();
       final currentFuture = _manager.getCurrentUsername();
       final accounts = await accountsFuture;
       final current = await currentFuture;
-      // 触发入口本身已经展示当前 profile，长按悬浮层只列可切换目标，
-      // 避免同一个当前账号在入口和浮层里重复出现。
       final switchableAccounts = accounts
           .where((account) => account.username != current)
           .toList(growable: false);
@@ -264,7 +269,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
   void _handlePointerEvent(PointerEvent event) {
     if (_finishing) return;
 
-    // 移动端也可能外接鼠标。若真正触发长按的是鼠标，松开后退回经典面板。
     if (event.kind != PointerDeviceKind.touch) {
       if (_trackingPointer == null &&
           (event is PointerUpEvent || event is PointerCancelEvent)) {
@@ -273,8 +277,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       return;
     }
 
-    // Overlay 在长按已经成立后插入；此后出现 PointerDown 是第二根手指，
-    // 不允许它抢走原长按序列。
     if (_trackingPointer == null) {
       if (event is PointerDownEvent) return;
       _trackingPointer = event.pointer;
@@ -306,8 +308,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       unawaited(HapticFeedback.selectionClick());
     }
 
-    // 管理入口只在松手时打开，防止用户从按钮向账号滑动时误进入管理页。
-    // 当前账号也不启动计时器。其余账号停留 320ms 后立即切换，无需松手。
     if (next == null ||
         next == _manageTarget ||
         next == _currentUsername ||
@@ -367,9 +367,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       unawaited(HapticFeedback.lightImpact());
     }
 
-    // 对真正的账号快速切换，先在悬浮层仍存在时把全屏 cover 插到它上方，
-    // 从确认目标这一刻开始就吞掉全部输入。这样悬浮层 reverse/remove 与
-    // session/provider 重载之间不存在一帧可误触窗口。
     final shouldSwitchAccount =
         !fallbackToClassic &&
         target != _manageTarget &&
@@ -384,16 +381,13 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         );
         switchCoverStopwatch = Stopwatch()..start();
         overlay.insert(switchCover);
-        // 确认 cover 已经完成一次绘制后再开始销毁旧悬浮层与切换 session。
         await WidgetsBinding.instance.endOfFrame;
       }
     }
 
     try {
       await _controller.reverse();
-    } catch (_) {
-      // 宿主若同步移除 Overlay，controller 可能已 dispose；仍继续收口。
-    }
+    } catch (_) {}
     remove();
 
     try {
@@ -418,9 +412,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       if (account == null || account.username == currentUsername) return;
       if (hostContext.mounted) {
         await _performAccountSwitch(hostContext, _manager, account);
-
-        // resetForAccountSwitch 完成后再给新账号的 provider / 页面一帧 rebuild，
-        // 然后才移除 cover，避免用户看到半更新状态或在组件重建时误触。
         if (switchCover != null) {
           await WidgetsBinding.instance.endOfFrame;
           final elapsed = switchCoverStopwatch?.elapsed ?? Duration.zero;
@@ -490,8 +481,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 管理按钮始终放在触发入口的远端：底部入口向上展开时
-                      // 管理在顶部；顶部入口向下展开时管理在底部。
                       if (!fromTop) _buildManageTarget(context),
                       if (!fromTop && showManageDivider)
                         _buildManageDivider(scheme),
@@ -522,8 +511,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       ),
     );
 
-    // 当前 pointer 仍沿原 hit-test route 派发；这里纯绘制，不阻断背景，也不
-    // 创建第二份可交互账号框。
     return IgnorePointer(
       child: Material(
         type: MaterialType.transparency,
@@ -647,10 +634,7 @@ class _QuickAccountSwitchCover extends StatelessWidget {
                 curve: Curves.easeOutCubic,
                 builder: (context, value, child) => Opacity(
                   opacity: value,
-                  child: Transform.scale(
-                    scale: value,
-                    child: child,
-                  ),
+                  child: Transform.scale(scale: value, child: child),
                 ),
                 child: Semantics(
                   liveRegion: true,
@@ -696,7 +680,6 @@ Future<bool> _performAccountSwitch(
   AccountManager manager,
   SavedAccount account,
 ) async {
-  // 先取 container，异步切换完成后不再依赖可能变化的 Overlay context。
   final container = ProviderScope.containerOf(context, listen: false);
   try {
     await manager.switchToAccount(account.username);
@@ -799,7 +782,10 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
             children: [
               const LoadingSpinner(),
               const SizedBox(height: 16),
-              Text(l10n.accountManage_switching, style: theme.textTheme.titleMedium),
+              Text(
+                l10n.accountManage_switching,
+                style: theme.textTheme.titleMedium,
+              ),
             ],
           ),
         ),
@@ -932,9 +918,6 @@ class _AccountAvatar extends StatelessWidget {
         ? UrlHelper.resolveUrlWithCdn(template.replaceAll('{size}', '96'))
         : null;
 
-    // 统一走 SmartAvatar → BlobImageProvider。BlobImageCache 的根目录和
-    // ImageProvider key 都不含 profile，因此同一 URL 在所有账号间只有一份
-    // 磁盘文件和一份 Flutter ImageCache 身份；账号 cookie/session 不参与缓存键。
     return SmartAvatar(
       imageUrl: imageUrl,
       radius: radius,
