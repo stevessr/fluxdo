@@ -15,19 +15,38 @@ import '../../services/account_manager.dart';
 import '../../services/toast_service.dart';
 import '../../utils/url_helper.dart';
 import '../common/app_bottom_sheet.dart';
+import '../common/smart_avatar.dart';
 
-/// 长按底栏「我的」弹出的快速切换账号入口。
+/// 快速账号切换悬浮层相对屏幕的入口位置。
 ///
-/// 手机/平板触摸场景使用 Telegram 风格的悬浮纵向胶囊：保持手指按下并
-/// 滑过目标时只高亮，只有松手时才确认切换；桌面端继续使用普通 bottom
-/// sheet。两种展示只共享真正的账号切换动作，不复用彼此的 UI，避免快捷
-/// 入口背后再次渲染一份账号选择框。
+/// 底栏「我的」从右下向上展开；内置浏览器头像从右上向下展开。两处共享
+/// 完全相同的账号数据、命中测试、停留切换和真正的 session 切换动作。
+enum AccountQuickSwitcherPlacement { bottomRight, topRight }
+
+/// 账号切换入口。
+///
+/// - 触摸长按：Telegram 风格纵向悬浮胶囊，滑过账号后短暂停留即切换；
+/// - 鼠标/桌面：沿用普通 bottom sheet；
+/// - 普通点击可以显式调用 [showClassic]，不会误启动需要持续 pointer 的
+///   长按悬浮层。
 abstract final class AccountSwitcherSheet {
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(
+    BuildContext context, {
+    AccountQuickSwitcherPlacement placement =
+        AccountQuickSwitcherPlacement.bottomRight,
+  }) {
     if (_preferTouchQuickSwitcher) {
-      return _TouchAccountSwitcherEntry.show(context);
+      return _TouchAccountSwitcherEntry.show(context, placement: placement);
     }
-    return _showClassic(context);
+    return showClassic(context);
+  }
+
+  static Future<void> showClassic(BuildContext context) {
+    return AppBottomSheet.show(
+      context: context,
+      title: context.l10n.accountManage_title,
+      builder: (_) => const _AccountSwitcherBody(),
+    );
   }
 
   static bool get _preferTouchQuickSwitcher {
@@ -38,22 +57,10 @@ abstract final class AccountSwitcherSheet {
       _ => false,
     };
   }
-
-  static Future<void> _showClassic(BuildContext context) {
-    return AppBottomSheet.show(
-      context: context,
-      title: context.l10n.accountManage_title,
-      builder: (_) => const _AccountSwitcherBody(),
-    );
-  }
 }
 
-/// 在 Overlay 真正 build 之前就开始接收当前长按序列的后续事件。
-///
-/// onLongPress 是 deadline timer 回调，OverlayEntry 插入后通常要到下一帧才
-/// build；如果用户恰好在这 1 帧内松手，等 State.initState 再注册 route 会
-/// 丢掉 PointerUp，导致悬浮层残留。这个 controller 在 show() 同步注册全局
-/// route，并把 build 前最后一条有效事件暂存给 State 重放。
+/// Overlay build 前就接住当前长按 pointer 的后续事件，避免插入 Overlay 的
+/// 一帧窗口里先收到 PointerUp 导致悬浮层残留。
 class _QuickPointerRouteController {
   PointerRoute? _listener;
   PointerEvent? _pendingEvent;
@@ -98,15 +105,15 @@ class _QuickPointerRouteController {
   }
 }
 
-/// 只负责 OverlayEntry 的装卸；Overlay 本身没有 ModalBarrier，也不会在
-/// 背景构建第二份账号选择 UI。正在进行的长按 pointer 通过 PointerRouter
-/// 的 global route 继续追踪，因此 Overlay 无需接管命中测试。
+/// 只负责 OverlayEntry 装卸。没有 ModalBarrier，也不复用 classic sheet，
+/// 因而背景不会再画一层“切换选项框”。
 abstract final class _TouchAccountSwitcherEntry {
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(
+    BuildContext context, {
+    required AccountQuickSwitcherPlacement placement,
+  }) {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
-    if (overlay == null) {
-      return AccountSwitcherSheet._showClassic(context);
-    }
+    if (overlay == null) return AccountSwitcherSheet.showClassic(context);
 
     final completer = Completer<void>();
     final pointerRoute = _QuickPointerRouteController();
@@ -124,6 +131,7 @@ abstract final class _TouchAccountSwitcherEntry {
     entry = OverlayEntry(
       builder: (_) => _TouchAccountQuickSwitcher(
         hostContext: context,
+        placement: placement,
         pointerRoute: pointerRoute,
         onRemove: removeEntry,
         onComplete: complete,
@@ -137,12 +145,14 @@ abstract final class _TouchAccountSwitcherEntry {
 class _TouchAccountQuickSwitcher extends StatefulWidget {
   const _TouchAccountQuickSwitcher({
     required this.hostContext,
+    required this.placement,
     required this.pointerRoute,
     required this.onRemove,
     required this.onComplete,
   });
 
   final BuildContext hostContext;
+  final AccountQuickSwitcherPlacement placement;
   final _QuickPointerRouteController pointerRoute;
   final VoidCallback onRemove;
   final VoidCallback onComplete;
@@ -155,6 +165,7 @@ class _TouchAccountQuickSwitcher extends StatefulWidget {
 class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     with SingleTickerProviderStateMixin {
   static const _manageTarget = '__fluxdo_manage_accounts__';
+  static const _dwellDuration = Duration(milliseconds: 320);
 
   final AccountManager _manager = AccountManager();
   final GlobalKey _manageKey = GlobalKey(debugLabel: 'quick-account-manage');
@@ -169,7 +180,9 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
   Map<String, GlobalKey> _accountKeys = const {};
   String? _currentUsername;
   String? _hoveredTarget;
+  Offset? _lastPointerPosition;
   int? _trackingPointer;
+  Timer? _dwellTimer;
   bool _loading = true;
   bool _finishing = false;
 
@@ -178,8 +191,8 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 180),
-      reverseDuration: const Duration(milliseconds: 110),
+      duration: const Duration(milliseconds: 170),
+      reverseDuration: const Duration(milliseconds: 105),
     );
     final curve = CurvedAnimation(
       parent: _controller,
@@ -187,9 +200,11 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       reverseCurve: Curves.easeInCubic,
     );
     _opacity = curve;
-    _scale = Tween<double>(begin: 0.82, end: 1).animate(curve);
+    _scale = Tween<double>(begin: 0.9, end: 1).animate(curve);
     _slide = Tween<Offset>(
-      begin: const Offset(0, 0.12),
+      begin: widget.placement == AccountQuickSwitcherPlacement.topRight
+          ? const Offset(0, -0.08)
+          : const Offset(0, 0.1),
       end: Offset.zero,
     ).animate(curve);
 
@@ -201,6 +216,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
 
   @override
   void dispose() {
+    _dwellTimer?.cancel();
     widget.pointerRoute.detach(_pointerListener);
     widget.pointerRoute.dispose();
     _controller.dispose();
@@ -209,7 +225,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
 
   Future<void> _reload() async {
     try {
-      // 与账号管理页一致：先固化当前登录态，保证切走后还能切回来。
+      // 切换前先固化当前登录态，保证切走后仍可无损切回来。
       await _manager.syncCurrentAccount();
       final accountsFuture = _manager.listAccounts();
       final currentFuture = _manager.getCurrentUsername();
@@ -227,6 +243,12 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         };
         _loading = false;
       });
+      final pointerPosition = _lastPointerPosition;
+      if (pointerPosition != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _updateHoveredTarget(pointerPosition, haptic: false);
+        });
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -236,9 +258,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
   void _handlePointerEvent(PointerEvent event) {
     if (_finishing) return;
 
-    // 手机也可能外接鼠标。桌面平台本来就不会进入这个 Overlay；移动端如果
-    // 真的是鼠标长按，则在它松开时恢复原 bottom sheet。仅在尚未锁定触摸
-    // pointer 时处理，避免外接鼠标的无关事件污染正在滑选的手指。
+    // 移动端也可能外接鼠标。若真正触发长按的是鼠标，松开后退回经典面板。
     if (event.kind != PointerDeviceKind.touch) {
       if (_trackingPointer == null &&
           (event is PointerUpEvent || event is PointerCancelEvent)) {
@@ -247,9 +267,8 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       return;
     }
 
-    // Overlay 是在长按已经成立后才插入的，因此这里看到的新 PointerDown
-    // 必然是第二根手指，不应抢走原长按 pointer。原指针的下一条事件只能是
-    // Move / Up / Cancel，从其中第一条锁定 pointer id。
+    // Overlay 在长按已经成立后插入；此后出现 PointerDown 是第二根手指，
+    // 不允许它抢走原长按序列。
     if (_trackingPointer == null) {
       if (event is PointerDownEvent) return;
       _trackingPointer = event.pointer;
@@ -257,9 +276,10 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     if (event.pointer != _trackingPointer) return;
 
     if (event is PointerMoveEvent) {
+      _lastPointerPosition = event.position;
       _updateHoveredTarget(event.position);
     } else if (event is PointerUpEvent) {
-      // 即使手指最后一段没有产生 Move，也以松手坐标做最后一次 hit-test。
+      _lastPointerPosition = event.position;
       _updateHoveredTarget(event.position, haptic: false);
       unawaited(_finish(_hoveredTarget));
     } else if (event is PointerCancelEvent) {
@@ -271,16 +291,31 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     if (!mounted || _finishing) return;
     final next = _targetAt(globalPosition);
     if (next == _hoveredTarget) return;
+
+    _dwellTimer?.cancel();
+    _dwellTimer = null;
     setState(() => _hoveredTarget = next);
+
     if (haptic && next != null) {
       unawaited(HapticFeedback.selectionClick());
     }
+
+    // 管理入口只在松手时打开，防止用户从按钮向账号滑动时误进入管理页。
+    // 当前账号也不启动计时器。其余账号停留 320ms 后立即切换，无需松手。
+    if (next == null ||
+        next == _manageTarget ||
+        next == _currentUsername ||
+        _accountForTarget(next) == null) {
+      return;
+    }
+    _dwellTimer = Timer(_dwellDuration, () {
+      if (!mounted || _finishing || _hoveredTarget != next) return;
+      unawaited(_finish(next));
+    });
   }
 
   String? _targetAt(Offset globalPosition) {
-    if (_containsGlobalPoint(_manageKey, globalPosition)) {
-      return _manageTarget;
-    }
+    if (_containsGlobalPoint(_manageKey, globalPosition)) return _manageTarget;
     for (final account in _accounts) {
       final key = _accountKeys[account.username];
       if (key != null && _containsGlobalPoint(key, globalPosition)) {
@@ -311,6 +346,8 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
   }) async {
     if (_finishing) return;
     _finishing = true;
+    _dwellTimer?.cancel();
+    _dwellTimer = null;
 
     final hostContext = widget.hostContext;
     final remove = widget.onRemove;
@@ -325,14 +362,14 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     try {
       await _controller.reverse();
     } catch (_) {
-      // Overlay 被宿主同步移除时 controller 可能已 dispose；收口仍需继续。
+      // 宿主若同步移除 Overlay，controller 可能已 dispose；仍继续收口。
     }
     remove();
 
     try {
       if (fallbackToClassic) {
         if (hostContext.mounted) {
-          await AccountSwitcherSheet._showClassic(hostContext);
+          await AccountSwitcherSheet.showClassic(hostContext);
         }
         return;
       }
@@ -348,7 +385,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         return;
       }
 
-      // 松在当前账号、空白处或数据尚未加载完成时只收起，不产生副作用。
       if (account == null || account.username == currentUsername) return;
       if (hostContext.mounted) {
         await _performAccountSwitch(hostContext, _manager, account);
@@ -362,105 +398,107 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final scheme = Theme.of(context).colorScheme;
-    final bottom = media.padding.bottom + 72.0;
-    final maxHeight = (media.size.height - media.padding.top - bottom - 12)
+    final fromTop = widget.placement == AccountQuickSwitcherPlacement.topRight;
+    final edgeInset = fromTop
+        ? media.padding.top + kToolbarHeight + 8.0
+        : media.padding.bottom + 72.0;
+    final maxHeight = (media.size.height -
+            media.padding.top -
+            media.padding.bottom -
+            kToolbarHeight -
+            20)
         .clamp(120.0, 520.0)
         .toDouble();
 
-    // IgnorePointer 是刻意的：当前长按序列已经在旧 hit-test route 上，快捷
-    // 面板只负责绘制；全屏区域既不拦截背景，也不会再生成一个可点击选项框。
+    final switcher = FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _slide,
+        child: ScaleTransition(
+          scale: _scale,
+          alignment: fromTop ? Alignment.topRight : Alignment.bottomRight,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHigh.withValues(alpha: 0.97),
+                borderRadius: BorderRadius.circular(36),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.55),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: scheme.shadow.withValues(alpha: 0.18),
+                    blurRadius: 22,
+                    offset: Offset(0, fromTop ? 6 : -2),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                width: 72,
+                child: SingleChildScrollView(
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildManageTarget(context),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 3,
+                        ),
+                        child: Divider(
+                          height: 1,
+                          color: scheme.outlineVariant.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      if (_loading)
+                        const SizedBox(
+                          height: 58,
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        )
+                      else if (_accounts.isEmpty)
+                        SizedBox(
+                          height: 52,
+                          child: Center(
+                            child: Icon(
+                              Symbols.person_off_rounded,
+                              size: 22,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      else
+                        for (final account in _accounts)
+                          _buildAccountTarget(context, account),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // 当前 pointer 仍沿原 hit-test route 派发；这里纯绘制，不阻断背景，也不
+    // 创建第二份可交互账号框。
     return IgnorePointer(
       child: Material(
         type: MaterialType.transparency,
         child: Stack(
           children: [
-            Positioned(
-              right: 12,
-              bottom: bottom,
-              child: FadeTransition(
-                opacity: _opacity,
-                child: SlideTransition(
-                  position: _slide,
-                  child: ScaleTransition(
-                    scale: _scale,
-                    alignment: Alignment.bottomRight,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: maxHeight),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHigh.withValues(
-                            alpha: 0.97,
-                          ),
-                          borderRadius: BorderRadius.circular(36),
-                          border: Border.all(
-                            color: scheme.outlineVariant.withValues(alpha: 0.55),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: scheme.shadow.withValues(alpha: 0.18),
-                              blurRadius: 22,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: SizedBox(
-                          width: 72,
-                          child: SingleChildScrollView(
-                            physics: const NeverScrollableScrollPhysics(),
-                            padding: const EdgeInsets.symmetric(vertical: 7),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildManageTarget(context),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 3,
-                                  ),
-                                  child: Divider(
-                                    height: 1,
-                                    color: scheme.outlineVariant.withValues(
-                                      alpha: 0.55,
-                                    ),
-                                  ),
-                                ),
-                                if (_loading)
-                                  const SizedBox(
-                                    height: 58,
-                                    child: Center(
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                else if (_accounts.isEmpty)
-                                  SizedBox(
-                                    height: 52,
-                                    child: Center(
-                                      child: Icon(
-                                        Symbols.person_off_rounded,
-                                        size: 22,
-                                        color: scheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  for (final account in _accounts)
-                                    _buildAccountTarget(context, account),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            if (fromTop)
+              Positioned(right: 12, top: edgeInset, child: switcher)
+            else
+              Positioned(right: 12, bottom: edgeInset, child: switcher),
           ],
         ),
       ),
@@ -487,7 +525,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     final key = _accountKeys[account.username];
     final hovered = _hoveredTarget == account.username;
     final current = account.username == _currentUsername;
-
     return _buildTargetShell(
       key: key,
       hovered: hovered,
@@ -511,11 +548,11 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       height: 58,
       child: Center(
         child: AnimatedScale(
-          scale: hovered ? 1.1 : 1,
-          duration: const Duration(milliseconds: 90),
+          scale: hovered ? 1.08 : 1,
+          duration: const Duration(milliseconds: 100),
           curve: Curves.easeOutCubic,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 90),
+            duration: const Duration(milliseconds: 110),
             curve: Curves.easeOutCubic,
             width: 50,
             height: 50,
@@ -548,7 +585,7 @@ Future<bool> _performAccountSwitch(
   AccountManager manager,
   SavedAccount account,
 ) async {
-  // 先取得 container，避免异步切换完成时再依赖可能已变化的 Overlay context。
+  // 先取 container，异步切换完成后不再依赖可能变化的 Overlay context。
   final container = ProviderScope.containerOf(context, listen: false);
   try {
     await manager.switchToAccount(account.username);
@@ -584,8 +621,6 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
   List<SavedAccount> _accounts = const [];
   String? _currentUsername;
   bool _loading = true;
-
-  /// 正在切换的目标用户名；非 null 时列表被进度态替换。
   String? _switchingUsername;
 
   @override
@@ -595,10 +630,11 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
   }
 
   Future<void> _reload() async {
-    // 与账号管理页一致：先固化当前登录态，保证切走后还能切回来
     await _manager.syncCurrentAccount();
-    final accounts = await _manager.listAccounts();
-    final current = await _manager.getCurrentUsername();
+    final accountsFuture = _manager.listAccounts();
+    final currentFuture = _manager.getCurrentUsername();
+    final accounts = await accountsFuture;
+    final current = await currentFuture;
     if (!mounted) return;
     setState(() {
       _accounts = accounts;
@@ -652,10 +688,7 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
             children: [
               const LoadingSpinner(),
               const SizedBox(height: 16),
-              Text(
-                l10n.accountManage_switching,
-                style: theme.textTheme.titleMedium,
-              ),
+              Text(l10n.accountManage_switching, style: theme.textTheme.titleMedium),
             ],
           ),
         ),
@@ -737,7 +770,6 @@ class _AccountTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = context.l10n;
-
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -784,28 +816,19 @@ class _AccountAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final template = account.avatarTemplate;
-    if (template != null && template.isNotEmpty) {
-      final url = UrlHelper.resolveUrlWithCdn(
-        template.replaceAll('{size}', '96'),
-      );
-      return CircleAvatar(
-        radius: radius,
-        backgroundColor: theme.colorScheme.surfaceContainerHighest,
-        foregroundImage: NetworkImage(url),
-      );
-    }
+    final imageUrl = template != null && template.isNotEmpty
+        ? UrlHelper.resolveUrlWithCdn(template.replaceAll('{size}', '96'))
+        : null;
 
-    return CircleAvatar(
+    // 统一走 SmartAvatar → BlobImageProvider。BlobImageCache 的根目录和
+    // ImageProvider key 都不含 profile，因此同一 URL 在所有账号间只有一份
+    // 磁盘文件和一份 Flutter ImageCache 身份；账号 cookie/session 不参与缓存键。
+    return SmartAvatar(
+      imageUrl: imageUrl,
       radius: radius,
-      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-      child: Text(
-        account.username.isNotEmpty ? account.username[0].toUpperCase() : '?',
-        style: theme.textTheme.titleMedium?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
+      fallbackText: account.username,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
     );
   }
 }
