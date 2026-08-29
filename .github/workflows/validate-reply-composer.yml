@@ -1,0 +1,26 @@
+name: Validate reply composer
+
+on:
+  push:
+    branches: ["feat/discourse-reply-composer"]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/discourse-reply-composer
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.0"
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze reply composer
+        run: flutter analyze lib/widgets/post/reply_sheet.dart
