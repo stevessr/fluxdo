@@ -19,8 +19,8 @@ import '../common/smart_avatar.dart';
 
 /// 快速账号切换悬浮层相对屏幕的入口位置。
 ///
-/// 底栏「我的」从右下向上展开；内置浏览器头像从右上向下展开。两处共享
-/// 完全相同的账号数据、命中测试、停留切换和真正的 session 切换动作。
+/// 底栏「我的」从右下向上展开；内置浏览器/帖子详情头像从右上向下展开。
+/// 各入口共享完全相同的账号数据、命中测试、停留切换和真正的 session 切换动作。
 enum AccountQuickSwitcherPlacement { bottomRight, topRight }
 
 /// 账号切换入口。
@@ -231,12 +231,17 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       final currentFuture = _manager.getCurrentUsername();
       final accounts = await accountsFuture;
       final current = await currentFuture;
+      // 触发入口本身已经展示当前 profile，长按悬浮层只列可切换目标，
+      // 避免同一个当前账号在入口和浮层里重复出现。
+      final switchableAccounts = accounts
+          .where((account) => account.username != current)
+          .toList(growable: false);
       if (!mounted) return;
       setState(() {
-        _accounts = accounts;
+        _accounts = switchableAccounts;
         _currentUsername = current;
         _accountKeys = {
-          for (final account in accounts)
+          for (final account in switchableAccounts)
             account.username: GlobalKey(
               debugLabel: 'quick-account-${account.username}',
             ),
@@ -461,17 +466,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                        )
-                      else if (_accounts.isEmpty)
-                        SizedBox(
-                          height: 52,
-                          child: Center(
-                            child: Icon(
-                              Symbols.person_off_rounded,
-                              size: 22,
-                              color: scheme.onSurfaceVariant,
                             ),
                           ),
                         )
