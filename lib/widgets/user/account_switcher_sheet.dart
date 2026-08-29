@@ -367,6 +367,28 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       unawaited(HapticFeedback.lightImpact());
     }
 
+    // 对真正的账号快速切换，先在悬浮层仍存在时把全屏 cover 插到它上方，
+    // 从确认目标这一刻开始就吞掉全部输入。这样悬浮层 reverse/remove 与
+    // session/provider 重载之间不存在一帧可误触窗口。
+    final shouldSwitchAccount =
+        !fallbackToClassic &&
+        target != _manageTarget &&
+        account != null &&
+        account.username != currentUsername &&
+        hostContext.mounted;
+    if (shouldSwitchAccount) {
+      final overlay = Overlay.maybeOf(hostContext, rootOverlay: true);
+      if (overlay != null) {
+        switchCover = OverlayEntry(
+          builder: (_) => _QuickAccountSwitchCover(account: account),
+        );
+        switchCoverStopwatch = Stopwatch()..start();
+        overlay.insert(switchCover);
+        // 确认 cover 已经完成一次绘制后再开始销毁旧悬浮层与切换 session。
+        await WidgetsBinding.instance.endOfFrame;
+      }
+    }
+
     try {
       await _controller.reverse();
     } catch (_) {
@@ -395,18 +417,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
 
       if (account == null || account.username == currentUsername) return;
       if (hostContext.mounted) {
-        // 快速切换需要给整棵界面一个稳定的重载窗口：先盖住并吞掉全部触摸，
-        // 让 cover 确实绘制一帧后再开始 session / provider 切换。
-        final overlay = Overlay.maybeOf(hostContext, rootOverlay: true);
-        if (overlay != null) {
-          switchCover = OverlayEntry(
-            builder: (_) => _QuickAccountSwitchCover(account: account),
-          );
-          switchCoverStopwatch = Stopwatch()..start();
-          overlay.insert(switchCover);
-          await WidgetsBinding.instance.endOfFrame;
-        }
-
         await _performAccountSwitch(hostContext, _manager, account);
 
         // resetForAccountSwitch 完成后再给新账号的 provider / 页面一帧 rebuild，
@@ -638,7 +648,7 @@ class _QuickAccountSwitchCover extends StatelessWidget {
                 builder: (context, value, child) => Opacity(
                   opacity: value,
                   child: Transform.scale(
-                    scale: 0.94 + (value - 0.94),
+                    scale: value,
                     child: child,
                   ),
                 ),
