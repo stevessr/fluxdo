@@ -12,6 +12,7 @@ import '../services/network/cookie/cookie_jar_service.dart';
 import '../services/toast_service.dart';
 import '../services/user_api_key_login_flow.dart';
 import '../utils/blur_config.dart';
+import '../widgets/auth/passkey_login_dialog.dart';
 import '../widgets/auth/webview_login_dialog.dart';
 import '../widgets/auth/login_form.dart';
 import '../widgets/auth/two_factor_dialog.dart';
@@ -50,6 +51,7 @@ class _LoginPageState extends State<LoginPage>
   String? _savedPassword;
   bool _credentialsLoaded = false;
   bool _browserAuthLaunching = false;
+  bool _passkeyLaunching = false;
 
   late final AnimationController _entryController;
   final List<Animation<double>> _fade = [];
@@ -98,6 +100,51 @@ class _LoginPageState extends State<LoginPage>
     }
     _entryController.dispose();
     super.dispose();
+  }
+
+  /// Passkey 直连登录：不打开 linux.do /login，也不加载 Discourse Ember。
+  ///
+  /// 轻量同源 WebView 只负责保存 https://linux.do 的 WebAuthn origin，
+  /// challenge / assertion / auth 都由 FluxDO 自己驱动，成功后仍复用现有
+  /// cookie/session 收口逻辑。
+  Future<void> _loginWithPasskey() async {
+    if (_passkeyLaunching) return;
+    setState(() => _passkeyLaunching = true);
+    try {
+      // linux.do 前面有 Cloudflare。Passkey 请求也必须复用通过验证后的
+      // WebView cookie store，否则 /session/csrf / challenge 可能直接被拦。
+      if (!await _ensureCfClearance()) {
+        if (mounted) {
+          ToastService.showError('Cloudflare 验证未完成,请重试');
+        }
+        return;
+      }
+      if (!mounted) return;
+
+      final result = await showPasskeyLoginDialog(context);
+      if (!mounted ||
+          result == null ||
+          result.status == PasskeyLoginStatus.canceled) {
+        return;
+      }
+
+      if (result.status == PasskeyLoginStatus.success) {
+        final username = result.username;
+        if (username == null || username.isEmpty) {
+          ToastService.showError('Passkey 登录成功但无法读取用户名');
+          return;
+        }
+        await DiscourseService().finalizeNativeLoginSuccess(username);
+        if (!mounted) return;
+        ToastService.showSuccess(S.current.webviewLogin_loginSuccess);
+        Navigator.of(context).pop(true);
+        return;
+      }
+
+      ToastService.showError(result.errorMessage ?? 'Passkey 登录失败');
+    } finally {
+      if (mounted) setState(() => _passkeyLaunching = false);
+    }
   }
 
   /// 浏览器授权登录:拉起系统浏览器打开 /user-api-key/new,授权后
@@ -438,7 +485,7 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 
-  /// 分割线 + 其他方式登录 (扫码 / 浏览器授权 / OAuth 等)
+  /// 分割线 + 其他方式登录 (扫码 / Passkey / 浏览器授权 / OAuth 等)
   Widget _buildAltLogin(BuildContext context, ColorScheme scheme) {
     final theme = Theme.of(context);
     return Column(
@@ -450,6 +497,27 @@ class _LoginPageState extends State<LoginPage>
           onPressed: _loginWithQrScan,
           icon: const Icon(Symbols.qr_code_scanner_rounded, size: 20),
           label: Text(context.l10n.login_scanToLogin),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 52),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+            ),
+            side: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: _passkeyLaunching ? null : _loginWithPasskey,
+          icon: _passkeyLaunching
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: LoadingSpinner(size: 20),
+                )
+              : const Icon(Symbols.fingerprint_rounded, size: 20),
+          label: const Text('Passkey 登录'),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),
             shape: RoundedRectangleBorder(
@@ -485,7 +553,7 @@ class _LoginPageState extends State<LoginPage>
         OutlinedButton.icon(
           onPressed: () => _loginWithWebView(),
           icon: const Icon(Symbols.open_in_browser_rounded, size: 20),
-          label: const Text('其他方式登录 (OAuth / Passkey / 注册)'),
+          label: const Text('其他方式登录 (OAuth / 注册 / 其他)'),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),
             shape: RoundedRectangleBorder(

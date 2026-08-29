@@ -149,6 +149,10 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("org.json:json:20240303")
     implementation("androidx.webkit:webkit:1.15.0")
+    // WebView Passkey: Jetpack WebKit 负责 WebAuthn surface，Credential Manager
+    // + Play Services provider 负责实际发现/调用系统通行密钥。
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
     // 媒体转码(压缩到 4MB):Transformer 走系统 MediaCodec 硬编
     implementation("androidx.media3:media3-transformer:1.10.1")
     implementation("androidx.media3:media3-effect:1.10.1")
