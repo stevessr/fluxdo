@@ -55,13 +55,15 @@ class _TopicPersonalPinButtonState
   bool _loading = false;
   bool _mutating = false;
   bool _loadFailed = false;
+  bool _loadScheduled = false;
   PersonalTopicPinState? _state;
 
   Future<PersonalTopicPinState> _fetchState() async {
+    final topicId = widget.topicId;
     final response = await ref
         .read(discourseServiceProvider)
         .dio
-        .get<Map<String, dynamic>>('/t/${widget.topicId}.json');
+        .get<Map<String, dynamic>>('/t/$topicId.json');
     final data = response.data ?? const <String, dynamic>{};
 
     return PersonalTopicPinState(
@@ -76,6 +78,7 @@ class _TopicPersonalPinButtonState
 
   Future<void> _loadState() async {
     if (_loading || _mutating || _state != null) return;
+    final requestedTopicId = widget.topicId;
     setState(() {
       _loading = true;
       _loadFailed = false;
@@ -83,15 +86,29 @@ class _TopicPersonalPinButtonState
 
     try {
       final state = await _fetchState();
-      if (!mounted) return;
+      if (!mounted || requestedTopicId != widget.topicId) return;
       setState(() => _state = state);
     } catch (_) {
       // 这是为了决定一个辅助按钮是否显示的后台探测。失败时保持隐藏，
       // 不在用户刚进入话题时主动弹错误；后续重建/切换话题可重新尝试。
-      if (mounted) setState(() => _loadFailed = true);
+      if (mounted && requestedTopicId == widget.topicId) {
+        setState(() => _loadFailed = true);
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && requestedTopicId == widget.topicId) {
+        setState(() => _loading = false);
+      }
     }
+  }
+
+  void _scheduleLoadState() {
+    if (_loadScheduled || _loading || _state != null || _loadFailed) return;
+    _loadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadScheduled = false;
+      if (!mounted || _loading || _state != null || _loadFailed) return;
+      unawaited(_loadState());
+    });
   }
 
   Future<void> _setPinned(bool pinned) async {
@@ -137,9 +154,8 @@ class _TopicPersonalPinButtonState
     if (oldWidget.topicId != widget.topicId) {
       _state = null;
       _loadFailed = false;
-      if (!_loading) {
-        unawaited(_loadState());
-      }
+      _loadScheduled = false;
+      _scheduleLoadState();
     }
   }
 
@@ -150,9 +166,10 @@ class _TopicPersonalPinButtonState
 
     // TopicDetail 目前没有保留 Discourse 顶层的 pinned_at，因此在登录用户
     // 打开话题时只探测一次。结果出来前保持隐藏，不让“取消置顶”按钮在普通
-    // 未置顶话题上短暂闪现。
+    // 未置顶话题上短暂闪现。请求放到当前 frame 结束后启动，避免 build 中
+    // 直接 setState。
     if (_state == null && !_loading && !_loadFailed) {
-      unawaited(_loadState());
+      _scheduleLoadState();
     }
 
     final state = _state;
