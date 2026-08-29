@@ -14,6 +14,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feat/discourse-reply-composer
+          fetch-depth: 0
           submodules: recursive
       - uses: subosito/flutter-action@v2
         with:
@@ -22,6 +23,17 @@ jobs:
           cache: true
       - name: Resolve dependencies
         run: flutter pub get
+      - name: Analyze main baseline
+        continue-on-error: true
+        shell: bash
+        run: |
+          cp lib/widgets/post/reply_sheet.dart /tmp/reply_sheet.branch.dart
+          git checkout origin/main -- lib/widgets/post/reply_sheet.dart
+          flutter analyze lib/widgets/post/reply_sheet.dart
+          cp /tmp/reply_sheet.branch.dart lib/widgets/post/reply_sheet.dart
+      - name: Restore branch source
+        if: always()
+        run: git checkout HEAD -- lib/widgets/post/reply_sheet.dart
       - name: Analyze reply composer
         run: flutter analyze lib/widgets/post/reply_sheet.dart
 
