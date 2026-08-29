@@ -7,7 +7,6 @@ import '../services/auth_session.dart';
 import '../services/cf_challenge_service.dart';
 import '../services/credential_store_service.dart';
 import '../services/discourse/discourse_service.dart';
-import '../services/google_oauth_login_flow.dart';
 import '../services/network/cookie/boundary_sync_service.dart';
 import '../services/network/cookie/cookie_jar_service.dart';
 import '../services/toast_service.dart';
@@ -51,7 +50,6 @@ class _LoginPageState extends State<LoginPage>
   String? _savedPassword;
   bool _credentialsLoaded = false;
   bool _browserAuthLaunching = false;
-  bool _googleAuthLaunching = false;
 
   late final AnimationController _entryController;
   final List<Animation<double>> _fade = [];
@@ -98,35 +96,8 @@ class _LoginPageState extends State<LoginPage>
     if (identical(UserApiKeyLoginFlow.instance.onFlowFinished, _onBrowserAuthFinished)) {
       UserApiKeyLoginFlow.instance.onFlowFinished = null;
     }
-    if (identical(GoogleOAuthLoginFlow.instance.onFlowFinished, _onGoogleAuthFinished)) {
-      GoogleOAuthLoginFlow.instance.onFlowFinished = null;
-    }
     _entryController.dispose();
     super.dispose();
-  }
-
-  /// Google OAuth 无站点网页中转登录。
-  /// FluxDO 只从 linux.do OmniAuth 端点拿 Google 302，系统浏览器只显示
-  /// Google；Google callback 由 App Link 抢回后在 Dio/CookieJar 内完成。
-  Future<void> _loginWithGoogle() async {
-    if (_googleAuthLaunching) return;
-    setState(() => _googleAuthLaunching = true);
-    GoogleOAuthLoginFlow.instance.onFlowFinished = _onGoogleAuthFinished;
-    try {
-      final launched = await GoogleOAuthLoginFlow.instance.start();
-      if (!launched && mounted) {
-        // 具体原因由 flow 自己 toast，这里不再打开任何网页兜底。
-        debugPrint('[LoginPage] Google OAuth 未启动');
-      }
-    } finally {
-      if (mounted) setState(() => _googleAuthLaunching = false);
-    }
-  }
-
-  void _onGoogleAuthFinished(bool success) {
-    if (success && mounted) {
-      Navigator.of(context).pop(true);
-    }
   }
 
   /// 浏览器授权登录:拉起系统浏览器打开 /user-api-key/new,授权后
@@ -467,7 +438,7 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 
-  /// 分割线 + 其他方式登录 (扫码 / Google / 浏览器授权 / OAuth 等)
+  /// 分割线 + 其他方式登录 (扫码 / 浏览器授权 / OAuth 等)
   Widget _buildAltLogin(BuildContext context, ColorScheme scheme) {
     final theme = Theme.of(context);
     return Column(
@@ -479,27 +450,6 @@ class _LoginPageState extends State<LoginPage>
           onPressed: _loginWithQrScan,
           icon: const Icon(Symbols.qr_code_scanner_rounded, size: 20),
           label: Text(context.l10n.login_scanToLogin),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
-            ),
-            side: BorderSide(
-              color: scheme.outlineVariant.withValues(alpha: 0.6),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: _googleAuthLaunching ? null : _loginWithGoogle,
-          icon: _googleAuthLaunching
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: LoadingSpinner(size: 20),
-                )
-              : const Icon(Symbols.account_circle_rounded, size: 20),
-          label: const Text('使用 Google 登录'),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),
             shape: RoundedRectangleBorder(
