@@ -16,11 +16,10 @@ import '../../services/toast_service.dart';
 import '../../utils/url_helper.dart';
 import '../common/smart_avatar.dart';
 
-/// 多环“伞状”账号切换器。
+/// 触摸长按使用的多环“伞状”账号切换器。
 ///
-/// 这个组件只负责触摸长按后的 overlay。账号数量增多时会根据 SafeArea
-/// 可以容纳的最大圆盘半径自动增加环数；当前账号固定在圆心，账号管理固定
-/// 在最外环朝向屏幕内部的一侧正中。
+/// 圆心固定显示当前账号；其它账号会按数量与 SafeArea 自动分配到一层或
+/// 多层圆环；账号管理入口固定在最外环朝屏幕内部的一侧正中。
 abstract final class RadialAccountQuickSwitcher {
   static Future<void> show(
     BuildContext context, {
@@ -60,6 +59,8 @@ abstract final class RadialAccountQuickSwitcher {
   }
 }
 
+/// Overlay 插入前先接住当前长按 pointer 的后续事件，避免 PointerUp 刚好落在
+/// Overlay 创建的帧间隙里而留下悬浮层。
 class _RadialPointerRouteController {
   PointerRoute? _listener;
   PointerEvent? _pendingEvent;
@@ -163,7 +164,7 @@ class _RadialAccountQuickSwitcherOverlayState
       duration: const Duration(milliseconds: 210),
       reverseDuration: const Duration(milliseconds: 125),
     );
-    final curve = CurvedAnimation(
+    final entryCurve = CurvedAnimation(
       parent: _entryController,
       curve: Curves.easeOutBack,
       reverseCurve: Curves.easeInCubic,
@@ -173,7 +174,7 @@ class _RadialAccountQuickSwitcherOverlayState
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
-    _scale = Tween<double>(begin: 0.82, end: 1).animate(curve);
+    _scale = Tween<double>(begin: 0.82, end: 1.0).animate(entryCurve);
     _dwellController = AnimationController(vsync: this, duration: _dwellDuration);
     _pointerListener = _handlePointerEvent;
     widget.pointerRoute.attach(_pointerListener);
@@ -184,15 +185,16 @@ class _RadialAccountQuickSwitcherOverlayState
   @override
   void dispose() {
     _dwellGeneration++;
-    _dwellController.dispose();
     widget.pointerRoute.detach(_pointerListener);
     widget.pointerRoute.dispose();
+    _dwellController.dispose();
     _entryController.dispose();
     super.dispose();
   }
 
   Future<void> _reload() async {
     try {
+      // 与经典快速切换器一致：先把当前 session 固化，保证切走后能切回来。
       await _manager.syncCurrentAccount();
       final accountsFuture = _manager.listAccounts();
       final currentFuture = _manager.getCurrentUsername();
@@ -204,10 +206,11 @@ class _RadialAccountQuickSwitcherOverlayState
         _currentUsername = current;
         _loading = false;
       });
-      final pointerPosition = _lastPointerPosition;
-      if (pointerPosition != null) {
+
+      final pointer = _lastPointerPosition;
+      if (pointer != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _updateHoveredTarget(pointerPosition, haptic: false);
+          if (mounted) _updateHoveredTarget(pointer, haptic: false);
         });
       }
     } catch (_) {
@@ -219,8 +222,7 @@ class _RadialAccountQuickSwitcherOverlayState
   void _handlePointerEvent(PointerEvent event) {
     if (_finishing) return;
 
-    // 外接鼠标触发时仍回退到经典面板，避免把依赖持续触摸 pointer 的交互
-    // 强行套在桌面设备上。
+    // 移动设备也可能接鼠标。真正由非触摸设备触发时回退经典 bottom sheet。
     if (event.kind != PointerDeviceKind.touch) {
       if (_trackingPointer == null &&
           (event is PointerUpEvent || event is PointerCancelEvent)) {
@@ -229,6 +231,8 @@ class _RadialAccountQuickSwitcherOverlayState
       return;
     }
 
+    // Overlay 是在长按已成立后才插入，因此当前序列不会再收到 PointerDown；
+    // 第一条 move/up/cancel 就是原长按手指。之后的 PointerDown 属于第二根手指。
     if (_trackingPointer == null) {
       if (event is PointerDownEvent) return;
       _trackingPointer = event.pointer;
@@ -247,7 +251,7 @@ class _RadialAccountQuickSwitcherOverlayState
       if (widget.trigger == AccountQuickSwitchTrigger.release) {
         unawaited(_finish(_hoveredTarget));
       } else {
-        // 5 秒停留模式下，提前松手就是取消；只有进度走满才会执行。
+        // 5 秒模式只有进度走满才执行；提前松手明确视为取消。
         unawaited(_finish(null));
       }
       return;
@@ -277,7 +281,7 @@ class _RadialAccountQuickSwitcherOverlayState
 
     final generation = ++_dwellGeneration;
     unawaited(
-      _dwellController.forward(from: 0).then((_) {
+      _dwellController.forward(from: 0.0).then((_) {
         if (!mounted ||
             _finishing ||
             generation != _dwellGeneration ||
@@ -293,7 +297,7 @@ class _RadialAccountQuickSwitcherOverlayState
   void _cancelDwell({required bool reset}) {
     _dwellGeneration++;
     _dwellController.stop();
-    if (reset) _dwellController.value = 0;
+    if (reset) _dwellController.value = 0.0;
   }
 
   bool _isActionable(String? target) {
@@ -361,6 +365,7 @@ class _RadialAccountQuickSwitcherOverlayState
         account != null &&
         account.username != currentUsername &&
         hostContext.mounted;
+
     if (shouldSwitchAccount) {
       final overlay = Overlay.maybeOf(hostContext, rootOverlay: true);
       if (overlay != null) {
@@ -376,7 +381,7 @@ class _RadialAccountQuickSwitcherOverlayState
     try {
       await _entryController.reverse();
     } catch (_) {
-      // 宿主同步销毁 overlay 时仍继续收口。
+      // 宿主同步销毁 Overlay 时 controller 可能已经不可用，继续清理即可。
     }
     remove();
 
@@ -434,14 +439,20 @@ class _RadialAccountQuickSwitcherOverlayState
     );
     _layout = layout;
 
+    final alignment = Alignment(
+      media.size.width <= 0.0
+          ? 0.0
+          : layout.center.dx / media.size.width * 2.0 - 1.0,
+      media.size.height <= 0.0
+          ? 0.0
+          : layout.center.dy / media.size.height * 2.0 - 1.0,
+    );
+
     final radialBody = FadeTransition(
       opacity: _opacity,
       child: ScaleTransition(
         scale: _scale,
-        alignment: Alignment(
-          media.size.width == 0 ? 0 : layout.center.dx / media.size.width * 2 - 1,
-          media.size.height == 0 ? 0 : layout.center.dy / media.size.height * 2 - 1,
-        ),
+        alignment: alignment,
         child: Stack(
           children: [
             Positioned.fill(
@@ -456,8 +467,8 @@ class _RadialAccountQuickSwitcherOverlayState
             _buildCenter(context, layout.center),
             if (_loading)
               Positioned(
-                left: layout.center.dx - 10,
-                top: layout.center.dy - 10,
+                left: layout.center.dx - 10.0,
+                top: layout.center.dy - 10.0,
                 child: const SizedBox(
                   width: 20,
                   height: 20,
@@ -472,8 +483,8 @@ class _RadialAccountQuickSwitcherOverlayState
       ),
     );
 
-    // 与旧快捷切换器保持一致：overlay 只绘制，原长按 pointer 继续通过全局
-    // pointer route 跟踪，不额外制造 ModalBarrier 或第二个手势竞争者。
+    // 原 pointer 仍沿原 hit-test route 派发；这里只绘制，不加 ModalBarrier，
+    // 从而不会再次出现背景多渲染一层“切换选项框”的问题。
     return IgnorePointer(
       child: Material(
         type: MaterialType.transparency,
@@ -486,14 +497,14 @@ class _RadialAccountQuickSwitcherOverlayState
     final scheme = Theme.of(context).colorScheme;
     final current = _currentAccount;
     return Positioned(
-      left: center.dx - 29,
-      top: center.dy - 29,
+      left: center.dx - 29.0,
+      top: center.dy - 29.0,
       child: Container(
         width: 58,
         height: 58,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: scheme.surfaceContainerHigh.withValues(alpha: 0.96),
+          color: scheme.surfaceContainerHigh.withValues(alpha: 0.97),
           border: Border.all(color: scheme.primary, width: 2),
           boxShadow: [
             BoxShadow(
@@ -523,7 +534,7 @@ class _RadialAccountQuickSwitcherOverlayState
         widget.trigger == AccountQuickSwitchTrigger.dwellFiveSeconds &&
         _isActionable(target.target);
 
-    final child = target.isManage
+    final targetChild = target.isManage
         ? Icon(
             Symbols.manage_accounts_rounded,
             size: 25,
@@ -532,10 +543,10 @@ class _RadialAccountQuickSwitcherOverlayState
         : _RadialAccountAvatar(account: target.account!, radius: 20);
 
     return Positioned(
-      left: target.center.dx - _nodeSize / 2,
-      top: target.center.dy - _nodeSize / 2,
+      left: target.center.dx - _nodeSize / 2.0,
+      top: target.center.dy - _nodeSize / 2.0,
       child: AnimatedScale(
-        scale: hovered ? 1.12 : 1,
+        scale: hovered ? 1.12 : 1.0,
         duration: const Duration(milliseconds: 110),
         curve: Curves.easeOutCubic,
         child: SizedBox(
@@ -551,16 +562,18 @@ class _RadialAccountQuickSwitcherOverlayState
                   shape: BoxShape.circle,
                   color: hovered
                       ? scheme.primaryContainer
-                      : scheme.surfaceContainerHigh.withValues(alpha: 0.95),
+                      : scheme.surfaceContainerHigh.withValues(alpha: 0.96),
                   border: Border.all(
                     color: hovered
                         ? scheme.primary.withValues(alpha: 0.55)
                         : scheme.outlineVariant.withValues(alpha: 0.62),
-                    width: hovered ? 1.5 : 1,
+                    width: hovered ? 1.5 : 1.0,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: scheme.shadow.withValues(alpha: hovered ? 0.2 : 0.12),
+                      color: scheme.shadow.withValues(
+                        alpha: hovered ? 0.20 : 0.12,
+                      ),
                       blurRadius: hovered ? 14 : 9,
                     ),
                   ],
@@ -569,7 +582,7 @@ class _RadialAccountQuickSwitcherOverlayState
                   label: target.isManage
                       ? context.l10n.accountManage_title
                       : target.account!.username,
-                  child: Center(child: child),
+                  child: Center(child: targetChild),
                 ),
               ),
               if (showProgress)
@@ -591,6 +604,8 @@ class _RadialAccountQuickSwitcherOverlayState
   }
 }
 
+/// 纯几何布局：先由可视区域得出最多能放多少层，再根据账号数量选择“足够
+/// 容纳目标的最少层数”。这样账号少时不会铺满屏幕，账号多时才逐层扩展。
 class _RadialAccountLayout {
   const _RadialAccountLayout({
     required this.center,
@@ -612,96 +627,117 @@ class _RadialAccountLayout {
   }) {
     const outerMargin = 12.0;
     const nodeRadius = 25.0;
-    const minRingRadius = 66.0;
+    const centerAndNodePadding = 4.0;
+    const preferredInnerRadius = 68.0;
     const preferredRingGap = 64.0;
-    const minimumRingGap = 54.0;
-    const preferredNodePitch = 60.0;
+    const minimumRingGap = 52.0;
+    const preferredNodePitch = 58.0;
 
-    final safe = Rect.fromLTRB(
-      padding.left + outerMargin,
-      padding.top + outerMargin,
-      math.max(padding.left + outerMargin, size.width - padding.right - outerMargin),
-      math.max(padding.top + outerMargin, size.height - padding.bottom - outerMargin),
-    );
+    final left = padding.left + outerMargin;
+    final top = padding.top + outerMargin;
+    final right = math.max(left + 1.0, size.width - padding.right - outerMargin);
+    final bottom = math.max(top + 1.0, size.height - padding.bottom - outerMargin);
+    final safe = Rect.fromLTRB(left, top, right, bottom);
 
-    final maxDiskRadius = math.max(
-      minRingRadius + nodeRadius,
-      math.min(safe.width, safe.height) / 2,
-    );
+    // 节点自身也占半径，所以圆环最大半径必须先扣除节点半径与少量留白。
+    final halfMinExtent = math.min(safe.width, safe.height) / 2.0;
     final maxRingRadius = math.max(
-      minRingRadius,
-      maxDiskRadius - nodeRadius - 4,
+      0.0,
+      halfMinExtent - nodeRadius - centerAndNodePadding,
     );
+    final innerRingRadius = math.min(preferredInnerRadius, maxRingRadius);
 
     final switchable = accounts
         .where((account) => account.username != currentUsername)
         .toList(growable: false);
-    final itemCount = switchable.length + 1; // + 账号管理
+    final itemCount = switchable.length + 1; // 最外环还要留账号管理入口。
 
-    int capacityFor(double radius) =>
-        math.max(4, (2 * math.pi * radius / preferredNodePitch).floor());
+    int capacityFor(double radius) {
+      if (radius <= 0.0) return 4;
+      return math.max(
+        4,
+        (2.0 * math.pi * radius / preferredNodePitch).floor(),
+      );
+    }
+
+    final maxRingCount = maxRingRadius <= innerRingRadius
+        ? 1
+        : math.max(
+            1,
+            1 +
+                ((maxRingRadius - innerRingRadius) / minimumRingGap).floor(),
+          );
+
+    List<double> radiiFor(int count) {
+      if (count <= 1) return <double>[innerRingRadius];
+      final preferredOuter =
+          innerRingRadius + preferredRingGap * (count - 1);
+      final outer = math.min(maxRingRadius, preferredOuter);
+      final gap = (outer - innerRingRadius) / (count - 1);
+      return List<double>.generate(
+        count,
+        (index) => innerRingRadius + gap * index,
+      );
+    }
+
+    int totalCapacity(List<double> radii) {
+      var total = 0;
+      for (var i = 0; i < radii.length; i++) {
+        final reserveForManage = i == radii.length - 1 ? 1 : 0;
+        total += math.max(0, capacityFor(radii[i]) - reserveForManage);
+      }
+      return total;
+    }
 
     var ringCount = 1;
-    while (true) {
-      final gap = ringCount <= 1
-          ? 0.0
-          : (maxRingRadius - minRingRadius) / (ringCount - 1);
-      if (ringCount > 1 && gap < minimumRingGap) {
-        ringCount--;
-        break;
-      }
-      final radii = List<double>.generate(
-        ringCount,
-        (index) => ringCount == 1
-            ? math.min(maxRingRadius, math.max(minRingRadius, 78))
-            : minRingRadius + gap * index,
-      );
-      final capacity = radii.fold<int>(0, (sum, r) => sum + capacityFor(r));
-      if (capacity >= itemCount) break;
-      final nextOuter = minRingRadius + preferredRingGap * ringCount;
-      if (nextOuter > maxRingRadius && gap <= preferredRingGap) break;
+    while (ringCount < maxRingCount &&
+        totalCapacity(radiiFor(ringCount)) < itemCount - 1) {
       ringCount++;
-      if (ringCount >= 8) break;
     }
-    ringCount = math.max(1, ringCount);
+    final radii = radiiFor(ringCount);
 
-    final radii = <double>[];
-    if (ringCount == 1) {
-      radii.add(math.min(maxRingRadius, math.max(minRingRadius, 78)));
-    } else {
-      final idealOuter = minRingRadius + preferredRingGap * (ringCount - 1);
-      final outer = math.min(maxRingRadius, idealOuter);
-      final gap = (outer - minRingRadius) / (ringCount - 1);
-      for (var i = 0; i < ringCount; i++) {
-        radii.add(minRingRadius + gap * i);
-      }
-    }
-
-    final diskRadius = radii.last + nodeRadius + 4;
-    final preferred = Offset(
+    final diskRadius = radii.last + nodeRadius + centerAndNodePadding;
+    final preferredCenter = Offset(
       safe.right - diskRadius,
       fromTop ? safe.top + diskRadius : safe.bottom - diskRadius,
     );
+
+    double fitAxis(double preferred, double minValue, double maxValue, double fallback) {
+      if (minValue > maxValue) return fallback;
+      return preferred.clamp(minValue, maxValue).toDouble();
+    }
+
     final center = Offset(
-      preferred.dx.clamp(safe.left + diskRadius, safe.right - diskRadius),
-      preferred.dy.clamp(safe.top + diskRadius, safe.bottom - diskRadius),
+      fitAxis(
+        preferredCenter.dx,
+        safe.left + diskRadius,
+        safe.right - diskRadius,
+        safe.center.dx,
+      ),
+      fitAxis(
+        preferredCenter.dy,
+        safe.top + diskRadius,
+        safe.bottom - diskRadius,
+        safe.center.dy,
+      ),
     );
 
     final targets = <_RadialTarget>[];
     var accountOffset = 0;
-    for (var ring = 0; ring < radii.length; ring++) {
-      final radius = radii[ring];
-      final isOuter = ring == radii.length - 1;
-      final capacity = capacityFor(radius);
-      final reserved = isOuter ? 1 : 0;
+
+    for (var ringIndex = 0; ringIndex < radii.length; ringIndex++) {
+      final radius = radii[ringIndex];
+      final isOuter = ringIndex == radii.length - 1;
+      final reserveForManage = isOuter ? 1 : 0;
       final remaining = switchable.length - accountOffset;
-      final accountCount = math.min(math.max(0, capacity - reserved), remaining);
+      final accountCount = math.min(
+        remaining,
+        math.max(0, capacityFor(radius) - reserveForManage),
+      );
 
       if (isOuter) {
-        // 底部入口向上展开、顶部入口向下展开：管理入口始终位于最外环
-        // 朝屏幕内部的正中，延续旧纵向菜单“管理在远端”的肌肉记忆。
-        final manageAngle = fromTop ? math.pi / 2 : -math.pi / 2;
-        final totalSlots = math.max(1, accountCount + 1);
+        final manageAngle = fromTop ? math.pi / 2.0 : -math.pi / 2.0;
+        final slotCount = math.max(1, accountCount + 1);
         targets.add(
           _RadialTarget(
             target: manageTarget,
@@ -710,7 +746,7 @@ class _RadialAccountLayout {
           ),
         );
         for (var i = 0; i < accountCount; i++) {
-          final angle = manageAngle + 2 * math.pi * (i + 1) / totalSlots;
+          final angle = manageAngle + 2.0 * math.pi * (i + 1) / slotCount;
           final account = switchable[accountOffset + i];
           targets.add(
             _RadialTarget(
@@ -721,9 +757,9 @@ class _RadialAccountLayout {
           );
         }
       } else if (accountCount > 0) {
-        final offset = -math.pi / 2 + math.pi / accountCount;
+        final angleOffset = -math.pi / 2.0 + math.pi / accountCount;
         for (var i = 0; i < accountCount; i++) {
-          final angle = offset + 2 * math.pi * i / accountCount;
+          final angle = angleOffset + 2.0 * math.pi * i / accountCount;
           final account = switchable[accountOffset + i];
           targets.add(
             _RadialTarget(
@@ -737,36 +773,50 @@ class _RadialAccountLayout {
       accountOffset += accountCount;
     }
 
-    // 极端账号数量超出按可视区域估算的舒适容量时仍保证全部账号可达：
-    // 把余项均匀追加到最外环，而不是静默截断。
+    // 极端账号数量超过当前可视区域的舒适容量时不静默丢账号：把最外环
+    // 重新均匀分配为“原外环账号 + 余项 + 管理”。会更密，但仍然全部可达。
     if (accountOffset < switchable.length) {
-      final radius = radii.last;
-      final manageAngle = fromTop ? math.pi / 2 : -math.pi / 2;
-      final remaining = switchable.length - accountOffset;
-      final existingOuterAccounts = targets.where((t) {
-        return !t.isManage && ((t.center - center).distance - radius).abs() < 1;
-      }).length;
-      final total = existingOuterAccounts + remaining + 1;
-      targets.removeWhere((t) => t.isManage || ((t.center - center).distance - radius).abs() < 1);
-      targets.add(
+      final outerRadius = radii.last;
+      final outerAccounts = <SavedAccount>[];
+      final keptTargets = <_RadialTarget>[];
+      for (final target in targets) {
+        final isOnOuter =
+            ((target.center - center).distance - outerRadius).abs() < 0.5;
+        if (isOnOuter) {
+          if (!target.isManage && target.account != null) {
+            outerAccounts.add(target.account!);
+          }
+        } else {
+          keptTargets.add(target);
+        }
+      }
+      outerAccounts.addAll(switchable.skip(accountOffset));
+
+      final manageAngle = fromTop ? math.pi / 2.0 : -math.pi / 2.0;
+      final slotCount = outerAccounts.length + 1;
+      keptTargets.add(
         _RadialTarget(
           target: manageTarget,
-          center: center + Offset.fromDirection(manageAngle, radius),
+          center: center + Offset.fromDirection(manageAngle, outerRadius),
           isManage: true,
         ),
       );
-      final outerAccounts = switchable.skip(accountOffset - existingOuterAccounts).toList();
       for (var i = 0; i < outerAccounts.length; i++) {
-        final angle = manageAngle + 2 * math.pi * (i + 1) / total;
+        final angle = manageAngle + 2.0 * math.pi * (i + 1) / slotCount;
         final account = outerAccounts[i];
-        targets.add(
+        keptTargets.add(
           _RadialTarget(
             target: account.username,
-            center: center + Offset.fromDirection(angle, radius),
+            center: center + Offset.fromDirection(angle, outerRadius),
             account: account,
           ),
         );
       }
+      return _RadialAccountLayout(
+        center: center,
+        radii: radii,
+        targets: keptTargets,
+      );
     }
 
     return _RadialAccountLayout(center: center, radii: radii, targets: targets);
@@ -803,25 +853,20 @@ class _AccountRingPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
+      ..strokeWidth = 1.0;
     for (final radius in radii) {
-      canvas.drawCircle(center, radius, paint);
+      if (radius > 0.0) canvas.drawCircle(center, radius, paint);
     }
   }
 
   @override
   bool shouldRepaint(covariant _AccountRingPainter oldDelegate) {
-    return oldDelegate.center != center ||
-        oldDelegate.color != color ||
-        !_sameRadii(oldDelegate.radii, radii);
-  }
-
-  static bool _sameRadii(List<double> a, List<double> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
+    if (oldDelegate.center != center || oldDelegate.color != color) return true;
+    if (oldDelegate.radii.length != radii.length) return true;
+    for (var i = 0; i < radii.length; i++) {
+      if (oldDelegate.radii[i] != radii[i]) return true;
     }
-    return true;
+    return false;
   }
 }
 
@@ -915,6 +960,7 @@ class _RadialAccountAvatar extends StatelessWidget {
     final imageUrl = template != null && template.isNotEmpty
         ? UrlHelper.resolveUrlWithCdn(template.replaceAll('{size}', '96'))
         : null;
+
     return SmartAvatar(
       imageUrl: imageUrl,
       radius: radius,
