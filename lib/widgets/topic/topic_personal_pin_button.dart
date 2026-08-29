@@ -85,37 +85,33 @@ class _TopicPersonalPinButtonState
       return;
     }
 
-    await showAppBottomSheet<void>(
+    await AppBottomSheet.show<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => AppSheetScaffold(
-        title: '个人置顶',
-        showCloseButton: false,
-        contentPadding: EdgeInsets.zero,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(
-                Symbols.push_pin_rounded,
-                fill: state.pinned ? 1 : 0,
-                color: Theme.of(sheetContext).colorScheme.primary,
-              ),
-              title: Text(state.pinned ? '对我取消置顶' : '恢复置顶'),
-              subtitle: Text(
-                state.pinned
-                    ? '仅影响当前账号，不改变站点或分类的置顶状态'
-                    : '移除当前账号的取消置顶覆盖，重新跟随站点或分类置顶',
-              ),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                unawaited(_setPinned(!state.pinned));
-              },
+      title: '个人置顶',
+      showCloseButton: false,
+      contentPadding: EdgeInsets.zero,
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: Icon(
+              Symbols.push_pin_rounded,
+              fill: state.pinned ? 1 : 0,
+              color: Theme.of(sheetContext).colorScheme.primary,
             ),
-            const SizedBox(height: 4),
-          ],
-        ),
+            title: Text(state.pinned ? '对我取消置顶' : '恢复置顶'),
+            subtitle: Text(
+              state.pinned
+                  ? '仅影响当前账号，不改变站点或分类的置顶状态'
+                  : '移除当前账号的取消置顶覆盖，重新跟随站点或分类置顶',
+            ),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              unawaited(_setPinned(!state.pinned));
+            },
+          ),
+          const SizedBox(height: 4),
+        ],
       ),
     );
   }
