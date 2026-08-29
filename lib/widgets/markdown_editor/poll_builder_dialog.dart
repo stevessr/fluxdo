@@ -263,10 +263,18 @@ class _PollBuilderDialogState extends State<_PollBuilderDialog> {
       _error = '至少需要 1 个选项';
       return null;
     }
+    if (_type != kPollTypeNumber && options.toSet().length != options.length) {
+      _error = '投票选项不能重复';
+      return null;
+    }
     if (_type == kPollTypeMultiple) {
-      if (min == null || max == null || min < 1 || min > max ||
-          max > options.length) {
-        _error = '需满足 1 ≤ 最少 ≤ 最多 ≤ 选项数(${options.length})';
+      if (min == null ||
+          max == null ||
+          min < 1 ||
+          min > max ||
+          max > options.length ||
+          min >= options.length) {
+        _error = '需满足 1 ≤ 最少 ≤ 最多 ≤ 选项数，且最少 < 选项数(${options.length})';
         return null;
       }
     }
