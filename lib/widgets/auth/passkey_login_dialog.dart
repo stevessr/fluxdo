@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../constants.dart';
@@ -44,7 +43,7 @@ class PasskeyLoginDialogResult {
 Future<PasskeyLoginDialogResult?> showPasskeyLoginDialog(
   BuildContext context,
 ) async {
-  // 当前 Android 已有 androidx.webkit WEB_AUTHENTICATION 浏览器模式桥接。
+  // 当前实现依赖 Android WebView 的 WebAuthentication support level。
   // 其他平台的嵌入式 WebView 是否能代表 linux.do RP 取决于平台 entitlement /
   // associated-domain 策略，第一版不做未经验证的跨平台承诺。
   if (!Platform.isAndroid) {
@@ -68,10 +67,6 @@ class _PasskeyLoginDialog extends StatefulWidget {
 }
 
 class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
-  static const MethodChannel _webAuthnChannel = MethodChannel(
-    'com.fluxdo/webauthn',
-  );
-
   InAppWebViewController? _controller;
   bool _started = false;
   bool _finished = false;
@@ -137,7 +132,10 @@ class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
 
   window.__fluxdoPasskeyLogin = async function () {
     if (!window.PublicKeyCredential || !navigator.credentials) {
-      return done({ phase: 'unsupported', message: 'PublicKeyCredential unavailable' });
+      return done({
+        phase: 'unsupported',
+        message: 'PublicKeyCredential unavailable in embedded WebView'
+      });
     }
 
     try {
@@ -200,6 +198,7 @@ class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
         }
         return done({
           phase: 'credential',
+          errorName: name,
           message: error && error.message ? String(error.message) : String(error)
         });
       }
@@ -317,17 +316,8 @@ class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
       await WebViewCookiePriming.instance.prime(AppConstants.baseUrl);
       if (_finished) return;
 
-      if (mounted) setState(() => _statusText = '正在启用系统 Passkey…');
-      final enabled =
-          await _webAuthnChannel.invokeMethod<bool>('enableWebAuthentication') ??
-          false;
-      if (!enabled) {
-        _finishFailure('当前 Android System WebView 不支持 Passkey');
-        return;
-      }
-
-      // setWebAuthenticationSupport 作用于已挂载的原生 WebView；给平台线程一个
-      // 很短的收敛窗口，再开始 navigator.credentials.get ceremony。
+      // WebAuthn support 已在这个 InAppWebView 创建时直接写入其 WebSettings，
+      // 不再依赖 MainActivity 扫描 Flutter PlatformView 的原生 View 树。
       await Future<void>.delayed(const Duration(milliseconds: 80));
       if (_finished) return;
       if (mounted) setState(() => _statusText = '请使用系统 Passkey 验证身份');
@@ -367,12 +357,16 @@ class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
 
     final status = (payload['status'] as num?)?.toInt();
     final detail = _shortMessage(payload['message']?.toString());
+    final errorName = payload['errorName']?.toString();
     final suffix = status == null ? '' : ' (HTTP $status)';
     final message = switch (phase) {
-      'unsupported' => '当前系统 WebView 不支持 Passkey',
+      'unsupported' =>
+        '嵌入式 Android WebView 未暴露 WebAuthn；浏览器可用不代表 WebView 可用，请确认 Android System WebView/Chrome 已更新',
       'csrf' => 'Cloudflare/CSRF 验证失败$suffix',
       'challenge' => '无法获取 Passkey challenge$suffix',
-      'credential' => detail ?? '系统 Passkey 验证失败',
+      'credential' => errorName == 'SecurityError'
+          ? '系统拒绝 WebView 代表 linux.do 请求 Passkey：${detail ?? 'SecurityError'}'
+          : detail ?? '系统 Passkey 验证失败',
       'auth' => detail ?? 'Passkey 凭据校验失败$suffix',
       'session' => detail ?? 'Passkey 已验证，但会话建立失败$suffix',
       'exception' => detail ?? 'Passkey 请求异常',
@@ -483,9 +477,9 @@ class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 必须保持一个已 attach 的真实 WebView：AndroidX WebKit 的
-              // WEB_AUTHENTICATION 配置是逐 WebSettings 设置，Offstage/未挂载
-              // 都可能让 MainActivity 的 View 树扫描找不到目标。
+              // WebAuthn support 必须写到这个具体 WebView 的 WebSettings；不能再
+              // 依赖 Activity View 树扫描，因为 Flutter PlatformView 组合模式下
+              // 原生 WebView 不保证能从 window.decorView 稳定遍历到。
               SizedBox(
                 width: 1,
                 height: 1,
@@ -503,6 +497,8 @@ class _PasskeyLoginDialogState extends State<_PasskeyLoginDialog> {
                     sharedCookiesEnabled: true,
                     thirdPartyCookiesEnabled: true,
                     userAgent: AppConstants.webViewUserAgentOverride,
+                    webAuthenticationSupport:
+                        WebAuthenticationSupport.FOR_BROWSER,
                   ),
                   initialUserScripts: WebViewSettings.compatPolyfillScripts,
                   onReceivedServerTrustAuthRequest: (_, challenge) =>
