@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/s.dart';
+import '../settings/definitions/account_quick_switcher_appearance_defs.dart';
 import '../settings/definitions/appearance_defs.dart';
+import '../settings/settings_model.dart';
 import '../widgets/settings/settings_group_page.dart';
 
 class AppearancePage extends StatelessWidget {
@@ -13,8 +15,15 @@ class AppearancePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return SettingsGroupPage(
       title: context.l10n.appearance_title,
-      groupsBuilder: buildAppearanceGroups,
+      groupsBuilder: _buildGroups,
       highlightId: highlightId,
     );
+  }
+
+  List<SettingsGroup> _buildGroups(BuildContext context) {
+    return [
+      ...buildAppearanceGroups(context),
+      buildAccountQuickSwitcherAppearanceGroup(context),
+    ];
   }
 }
