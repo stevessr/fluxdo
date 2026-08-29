@@ -88,6 +88,7 @@ import '../../utils/platform_utils.dart';
 import '../../models/shortcut_binding.dart';
 import '../../providers/shortcut_provider.dart';
 import '../../widgets/common/smart_avatar.dart';
+import '../../widgets/user/account_switcher_sheet.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
 import '../../widgets/topic/assign_sheet.dart';
 
@@ -1143,6 +1144,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
 
     // 搜索模式下的 AppBar
     if (searchState.isSearchMode) {
+      final profileAction = _buildProfileSwitcherAction();
       return AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: theme.colorScheme.surface,
@@ -1168,6 +1170,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             icon: const Icon(Symbols.close_rounded),
             onPressed: _exitSearchMode,
           ),
+          if (profileAction != null) profileAction,
         ],
       );
     }
@@ -1328,6 +1331,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     required TopicDetailNotifier notifier,
     required double elevation,
   }) {
+    final profileAction = _buildProfileSwitcherAction();
     return MobileTopicWorkspaceAppBar(
       backButtonKey: const ValueKey('bookmark-workspace-mobile-back'),
       closeButtonKey: const ValueKey('bookmark-workspace-mobile-close'),
@@ -1355,6 +1359,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             notifier: notifier,
             canEditTopic: _canEditTopic(detail),
           ),
+        if (profileAction != null) profileAction,
       ],
     );
   }
@@ -1436,6 +1441,40 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     );
   }
 
+  Widget? _buildProfileSwitcherAction() {
+    final currentUser = ref.watch(currentUserProvider).value;
+    if (currentUser == null) return null;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Tooltip(
+        message: context.l10n.accountManage_title,
+        child: Material(
+          type: MaterialType.transparency,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => unawaited(AccountSwitcherSheet.showClassic(context)),
+            onLongPress: () => unawaited(
+              AccountSwitcherSheet.show(
+                context,
+                placement: AccountQuickSwitcherPlacement.topRight,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: SmartAvatar(
+                imageUrl: currentUser.getAvatarUrl(),
+                radius: 14,
+                fallbackText: currentUser.username,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// 构建 AppBar Actions
   List<Widget> _buildAppBarActions({
     required TopicDetail? detail,
@@ -1443,8 +1482,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     required bool shouldShowTitle,
     required double expandProgress,
   }) {
+    final profileAction = _buildProfileSwitcherAction();
     if (detail == null) {
-      return [];
+      return [if (profileAction != null) profileAction];
     }
 
     final canEditTopic = _canEditTopic(detail);
@@ -1475,6 +1515,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         notifier: notifier,
         canEditTopic: canEditTopic,
       ),
+      if (profileAction != null) profileAction,
     ];
   }
 
