@@ -14,12 +14,21 @@ mixin _NotificationsMixin on _DiscourseServiceBase {
   }
 
   /// 获取通知列表（默认模式，支持完整分页）
-  Future<NotificationListResponse> getNotifications({int? offset}) async {
+  ///
+  /// Discourse 原生支持 filter=read / filter=unread；all 不传 filter，
+  /// 与 Web 端通知历史页行为保持一致。
+  Future<NotificationListResponse> getNotifications({
+    int? offset,
+    String? filter,
+  }) async {
     final queryParams = <String, dynamic>{
       'limit': 60,
     };
     if (offset != null) {
       queryParams['offset'] = offset;
+    }
+    if (filter != null && filter.isNotEmpty && filter != 'all') {
+      queryParams['filter'] = filter;
     }
 
     final response = await _dio.get(
