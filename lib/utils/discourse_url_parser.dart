@@ -21,6 +21,22 @@ class GroupLinkInfo {
   const GroupLinkInfo({required this.name});
 }
 
+/// 徽章链接解析结果：/badges/:id/:slug
+class BadgeLinkInfo {
+  final int badgeId;
+  final String? slug;
+
+  const BadgeLinkInfo({required this.badgeId, this.slug});
+}
+
+/// discourse-cakeday 链接解析结果。
+class CakedayLinkInfo {
+  final bool birthdays;
+  final String? filter;
+
+  const CakedayLinkInfo({required this.birthdays, this.filter});
+}
+
 /// 分类链接解析结果。
 class CategoryLinkInfo {
   const CategoryLinkInfo({required this.categoryId});
@@ -73,6 +89,18 @@ class DiscourseUrlParser {
   /// 群组链接格式：/g/group-name、/g/group-name/members 等。
   static final _groupRegex = RegExp(
     r'/g/([^/?#]+)(?:[/?#]|$)',
+    caseSensitive: false,
+  );
+
+  /// 徽章链接格式：/badges/128/-、/badges/128/devotee、/badges/128
+  static final _badgeRegex = RegExp(
+    r'/badges/(\d+)(?:/([^/?#]+))?(?:[/?#]|$)',
+    caseSensitive: false,
+  );
+
+  /// discourse-cakeday：/cakeday/birthdays[/today]、anniversaries 同理。
+  static final _cakedayRegex = RegExp(
+    r'/cakeday/(birthdays|anniversaries)(?:/(today|tomorrow|upcoming|month))?(?:[/?#]|$)',
     caseSensitive: false,
   );
 
@@ -150,6 +178,39 @@ class DiscourseUrlParser {
     final encoded = match?.group(1);
     if (encoded == null || encoded.isEmpty) return null;
     return GroupLinkInfo(name: Uri.decodeComponent(encoded));
+  }
+
+  /// 解析徽章详情链接。slug 为 `-` 时按 Discourse 占位符处理为 null。
+  static BadgeLinkInfo? parseBadge(String url) {
+    final match = _badgeRegex.firstMatch(url);
+    if (match == null) return null;
+    final id = int.tryParse(match.group(1) ?? '');
+    if (id == null) return null;
+    final rawSlug = match.group(2);
+    return BadgeLinkInfo(
+      badgeId: id,
+      slug: rawSlug == null || rawSlug == '-'
+          ? null
+          : Uri.decodeComponent(rawSlug),
+    );
+  }
+
+  /// 解析生日/周年纪念日页面链接。
+  static CakedayLinkInfo? parseCakeday(String url) {
+    final match = _cakedayRegex.firstMatch(url);
+    if (match == null) return null;
+    return CakedayLinkInfo(
+      birthdays: match.group(1)!.toLowerCase() == 'birthdays',
+      filter: match.group(2)?.toLowerCase(),
+    );
+  }
+
+  /// discourse-events 的原生近期活动页面。
+  static bool isUpcomingEvents(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final path = uri.path.toLowerCase();
+    return path == '/upcoming-events' || path.startsWith('/upcoming-events/');
   }
 
   static CategoryLinkInfo? parseCategory(String url) {
