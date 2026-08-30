@@ -24,6 +24,7 @@ class NotificationsPage extends ConsumerStatefulWidget {
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   final ScrollController _scrollController = ScrollController();
   final LoadMoreCoordinator _loadMoreCoordinator = LoadMoreCoordinator();
+  NotificationReadFilter _filter = NotificationReadFilter.all;
 
   @override
   void initState() {
@@ -62,6 +63,27 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     await ref.read(notificationListProvider.notifier).refresh();
   }
 
+  Future<void> _setFilter(NotificationReadFilter filter) async {
+    if (_filter == filter) return;
+    setState(() => _filter = filter);
+    _loadMoreCoordinator.resetCooldown();
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    await ref.read(notificationListProvider.notifier).setFilter(filter);
+  }
+
+  String _filterLabel(BuildContext context, NotificationReadFilter filter) {
+    switch (filter) {
+      case NotificationReadFilter.all:
+        return context.l10n.notification_filterAll;
+      case NotificationReadFilter.read:
+        return context.l10n.notification_filterRead;
+      case NotificationReadFilter.unread:
+        return context.l10n.notification_filterUnread;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final notificationsAsync = ref.watch(notificationListProvider);
@@ -84,84 +106,116 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           ),
         ],
       ),
-      body: DesktopRefreshIndicator(
-        onRefresh: _onRefresh,
-        child: notificationsAsync.when(
-          data: (notifications) {
-            final blockedUsernames = ref.watch(
-              preferencesProvider.select((p) => p.normalizedBlockedUsernames),
-            );
-            final visibleNotifications = notifications
-                .where(
-                  (notification) => !BlockedUserFilter.isBlockedNotification(
-                    notification,
-                    blockedUsernames,
-                  ),
-                )
-                .toList(growable: false);
-            final notifier = ref.read(notificationListProvider.notifier);
-            // 已加载页全部被本地屏蔽时列表不可滚，滚动触发的翻页永远不会
-            // 发生；主动补载下一页（coordinator 自带冷却，不会打转）
-            if (visibleNotifications.isEmpty &&
-                notifications.isNotEmpty &&
-                notifier.hasMore) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) _loadMore();
-              });
-            }
-            if (visibleNotifications.isEmpty &&
-                (notifications.isEmpty || !notifier.hasMore)) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Symbols.notifications_rounded,
-                      size: 64,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      context.l10n.notification_empty,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            return ListView.builder(
-              controller: _scrollController,
-              itemCount: visibleNotifications.length + 1,
-              itemBuilder: (context, index) {
-                if (index == visibleNotifications.length) {
-                  final notifier = ref.read(notificationListProvider.notifier);
-                  return PagedListFooter(
-                    hasMore: notifier.hasMore,
-                    isLoadingMore: notifier.isLoadingMore,
-                    isLoadMoreFailed: notifier.isLoadMoreFailed,
-                    onRetry: notifier.retryLoadMore,
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: SegmentedButton<NotificationReadFilter>(
+                segments: NotificationReadFilter.values
+                    .map(
+                      (filter) => ButtonSegment<NotificationReadFilter>(
+                        value: filter,
+                        label: Text(_filterLabel(context, filter)),
+                      ),
+                    )
+                    .toList(growable: false),
+                selected: {_filter},
+                showSelectedIcon: false,
+                onSelectionChanged: (selection) {
+                  if (selection.isNotEmpty) {
+                    _setFilter(selection.first);
+                  }
+                },
+              ),
+            ),
+          ),
+          Expanded(
+            child: DesktopRefreshIndicator(
+              onRefresh: _onRefresh,
+              child: notificationsAsync.when(
+                data: (notifications) {
+                  final blockedUsernames = ref.watch(
+                    preferencesProvider.select((p) => p.normalizedBlockedUsernames),
                   );
-                }
-                final notification = visibleNotifications[index];
-                return NotificationItem(
-                  notification: notification,
-                  systemAvatarTemplate: systemAvatarTemplate,
-                  // siblings = 当前已加载列表,大屏弹窗内可上一条/下一条
-                  onTap: () => handleNotificationTap(
-                    context,
-                    ref,
-                    notification,
-                    siblings: visibleNotifications,
-                  ),
-                );
-              },
-            );
-          },
-          loading: () => const NotificationListSkeleton(),
-          error: (error, stack) =>
-              ErrorView(error: error, stackTrace: stack, onRetry: _onRefresh),
-        ),
+                  final visibleNotifications = notifications
+                      .where(
+                        (notification) => !BlockedUserFilter.isBlockedNotification(
+                          notification,
+                          blockedUsernames,
+                        ),
+                      )
+                      .toList(growable: false);
+                  final notifier = ref.read(notificationListProvider.notifier);
+                  // 已加载页全部被本地屏蔽时列表不可滚，滚动触发的翻页永远不会
+                  // 发生；主动补载下一页（coordinator 自带冷却，不会打转）
+                  if (visibleNotifications.isEmpty &&
+                      notifications.isNotEmpty &&
+                      notifier.hasMore) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _loadMore();
+                    });
+                  }
+                  if (visibleNotifications.isEmpty &&
+                      (notifications.isEmpty || !notifier.hasMore)) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Symbols.notifications_rounded,
+                            size: 64,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            context.l10n.notification_empty,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    controller: _scrollController,
+                    itemCount: visibleNotifications.length + 1,
+                    itemBuilder: (context, index) {
+                      if (index == visibleNotifications.length) {
+                        final notifier = ref.read(notificationListProvider.notifier);
+                        return PagedListFooter(
+                          hasMore: notifier.hasMore,
+                          isLoadingMore: notifier.isLoadingMore,
+                          isLoadMoreFailed: notifier.isLoadMoreFailed,
+                          onRetry: notifier.retryLoadMore,
+                        );
+                      }
+                      final notification = visibleNotifications[index];
+                      return NotificationItem(
+                        notification: notification,
+                        systemAvatarTemplate: systemAvatarTemplate,
+                        // siblings = 点击前的当前已加载列表，大屏弹窗内可继续翻页。
+                        onTap: () {
+                          notifier.markAsRead(notification.id);
+                          handleNotificationTap(
+                            context,
+                            ref,
+                            notification,
+                            siblings: visibleNotifications,
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+                loading: () => const NotificationListSkeleton(),
+                error: (error, stack) =>
+                    ErrorView(error: error, stackTrace: stack, onRetry: _onRefresh),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
