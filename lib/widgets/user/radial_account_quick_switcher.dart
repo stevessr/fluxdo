@@ -695,9 +695,11 @@ class _RadialAccountLayout {
         : inwardDistance;
     final maxRadius = math.max(0.0, rawMaxRadius - 2.0);
     final defaultInnerRadius = math.min(preferredInnerRadius, maxRadius);
-    final switchable = accounts
-        .where((account) => account.username != currentUsername)
-        .toList(growable: false);
+
+    // Slot geometry is derived from the complete saved-account registry. The
+    // active account keeps its original slot but is not rendered there, so
+    // switching the active account cannot make the remaining targets reflow.
+    final slotAccounts = accounts;
 
     ({double startAngle, double sweepAngle}) accountArcFor(double radius) =>
         _accountTargetArc(
@@ -719,7 +721,7 @@ class _RadialAccountLayout {
       );
     }
 
-    final hasAccounts = switchable.isNotEmpty;
+    final hasAccounts = slotAccounts.isNotEmpty;
     final maxAccountRadius = hasAccounts
         ? math.max(0.0, maxRadius - minimumRingGap)
         : defaultInnerRadius;
@@ -759,12 +761,12 @@ class _RadialAccountLayout {
     var accountRingCount = hasAccounts && maxAccountRingCount > 0 ? 1 : 0;
     while (accountRingCount < maxAccountRingCount &&
         comfortableAccountCapacity(accountRadiiFor(accountRingCount)) <
-            switchable.length) {
+            slotAccounts.length) {
       accountRingCount++;
     }
     final accountRadii = accountRadiiFor(accountRingCount).toList();
     if (accountRadii.length > 1 &&
-        comfortableAccountCapacity(accountRadii) < switchable.length) {
+        comfortableAccountCapacity(accountRadii) < slotAccounts.length) {
       final stretchedGap =
           (maxAccountRadius - accountInnerRadius) / (accountRadii.length - 1);
       for (var index = 0; index < accountRadii.length; index++) {
@@ -772,7 +774,7 @@ class _RadialAccountLayout {
       }
     }
     final overflowed =
-        comfortableAccountCapacity(accountRadii) < switchable.length;
+        comfortableAccountCapacity(accountRadii) < slotAccounts.length;
     final manageRadius = accountRadii.isEmpty
         ? defaultInnerRadius
         : math.min(maxRadius, accountRadii.last + preferredRingGap);
@@ -780,10 +782,10 @@ class _RadialAccountLayout {
     final targets = <_RadialTarget>[];
     var accountOffset = 0;
     for (final radius in accountRadii) {
-      final remaining = switchable.length - accountOffset;
+      final remaining = slotAccounts.length - accountOffset;
       if (remaining <= 0) break;
       final accountCount = math.min(remaining, capacityFor(radius));
-      final ringAccounts = switchable
+      final ringAccounts = slotAccounts
           .skip(accountOffset)
           .take(accountCount)
           .toList(growable: false);
@@ -796,6 +798,7 @@ class _RadialAccountLayout {
       );
       for (var i = 0; i < ringAccounts.length; i++) {
         final account = ringAccounts[i];
+        if (account.username == currentUsername) continue;
         targets.add(
           _RadialTarget(
             target: account.username,
