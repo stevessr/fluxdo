@@ -117,17 +117,18 @@ class _UserPortfolioTabState extends ConsumerState<UserPortfolioTab> {
     }
 
     final topics = _topics ?? const <Topic>[];
-    final localPrefs = ref.watch(localPreferencesProvider);
-    final enableLongPress = localPrefs.enableTopicLongPressPreview;
+    final enableLongPress = ref.watch(
+      preferencesProvider.select((p) => p.longPressPreview),
+    );
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        final metrics = notification.metrics;
-        if (_loadMoreCoordinator.shouldTriggerForDistance(
-          pixels: metrics.pixels,
-          maxScrollExtent: metrics.maxScrollExtent,
-        )) {
-          _loadMore();
+        if (notification.metrics.axis == Axis.vertical) {
+          final distance =
+              notification.metrics.maxScrollExtent - notification.metrics.pixels;
+          if (_loadMoreCoordinator.shouldTriggerForDistance(distance)) {
+            _loadMore();
+          }
         }
         return false;
       },
