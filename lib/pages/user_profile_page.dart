@@ -37,6 +37,7 @@ import '../utils/fluxdo_render_callbacks.dart';
 import '../widgets/post/reply_sheet.dart';
 import '../widgets/user/user_profile_skeleton.dart';
 import '../widgets/user/ignore_duration_picker.dart';
+import '../widgets/user/user_portfolio_tab.dart';
 import '../widgets/topic/topic_item_builder.dart';
 import '../widgets/topic/topic_list_skeleton.dart';
 import '../widgets/post/post_boost/boost_content.dart';
@@ -213,11 +214,12 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
   bool _solvedLoadMoreFailed = false;
   final LoadMoreCoordinator _solvedLoadMoreCoordinator = LoadMoreCoordinator();
 
-  // tab 对应的 filter: summary=总结, 4,5=全部(话题+回复), 4=话题, 5=回复, 1=点赞,
-  // reactions=回应, boosts=Boost, votes=投票, solved=已解决
+  // tab 对应的 filter: summary=总结, 4,5=全部(话题+回复), portfolio=作品集,
+  // 4=话题, 5=回复, 1=点赞, reactions=回应, boosts=Boost, votes=投票, solved=已解决
   static const List<String> _tabFilters = [
     'summary',
     '4,5',
+    'portfolio',
     '4',
     '5',
     '1',
@@ -261,8 +263,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
     _tabController.addListener(_onTabChanged);
     // 预先为所有 tab 设置 loading 状态，避免切换时闪现空状态
     for (final filter in _tabFilters) {
-      if (filter == 'summary') {
-        // 总结 tab 数据随 _summary 加载，无需单独标记
+      if (filter == 'summary' || filter == 'portfolio') {
+        // 总结随 _summary 加载；作品集由独立组件按需加载。
       } else if (filter == 'reactions') {
         _reactionsLoading = true;
       } else if (filter == 'boosts') {
@@ -291,6 +293,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       final filter = _tabFilters[_tabController.index];
       if (filter == 'summary') {
         // 总结 tab - 数据随用户信息一起加载
+      } else if (filter == 'portfolio') {
+        // 作品集由 UserPortfolioTab 自行加载和分页。
       } else if (filter == 'reactions') {
         // 回应列表
         if (_reactionsCache == null) {
@@ -1480,6 +1484,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
               tabs: [
                 Tab(height: 36, text: context.l10n.userProfile_tabSummary),
                 Tab(height: 36, text: context.l10n.userProfile_tabActivity),
+                const Tab(height: 36, text: '作品集'),
                 Tab(height: 36, text: context.l10n.userProfile_tabTopics),
                 Tab(height: 36, text: context.l10n.userProfile_tabReplies),
                 Tab(height: 36, text: context.l10n.userProfile_tabLikes),
@@ -2192,6 +2197,17 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
     // 总结 tab
     if (filter == 'summary') {
       return _buildSummaryTab();
+    }
+    // 作品集使用标准话题卡，由独立组件管理刷新与分页。
+    if (filter == 'portfolio') {
+      return UserPortfolioTab(
+        username: widget.username,
+        onOpenTopic: (topic) => _openTopic(
+          topicId: topic.id,
+          initialTitle: topic.title,
+          scrollToPostNumber: topic.lastReadPostNumber,
+        ),
+      );
     }
     // 回应列表使用单独的逻辑
     if (filter == 'reactions') {
