@@ -154,6 +154,13 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
           order: order,
           ascending: ascending,
         );
+      case TopicListFilter.read:
+        return service.getFilteredTopics(
+          filter: filter.filterName,
+          page: page,
+          order: order,
+          ascending: ascending,
+        );
       case TopicListFilter.unseen:
         return service.getUnseenTopics(
           page: page,
