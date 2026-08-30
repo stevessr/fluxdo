@@ -8,6 +8,7 @@ enum TopicListFilter {
   latest,
   newTopics,
   unread,
+  read,
   unseen,
   top,
   hot,
@@ -45,6 +46,8 @@ extension TopicListFilterX on TopicListFilter {
         return 'new';
       case TopicListFilter.unread:
         return 'unread';
+      case TopicListFilter.read:
+        return 'read';
       case TopicListFilter.unseen:
         return 'unseen';
       case TopicListFilter.top:
