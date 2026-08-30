@@ -24,6 +24,7 @@ import '../../models/invite_link.dart';
 import '../../models/template.dart';
 import '../../models/post_revision.dart';
 import '../../models/pending_post.dart';
+import '../../models/group.dart';
 
 import '../../constants.dart';
 import '../../providers/message_bus_providers.dart';
@@ -78,6 +79,7 @@ part '_onebox.dart';
 part '_reviewables.dart';
 part '_assign.dart';
 part '_chat.dart';
+part '_groups.dart';
 part '_ai_bot.dart';
 
 /// 基类，包含所有共享字段
@@ -150,6 +152,7 @@ class DiscourseService extends _DiscourseServiceBase
         _ReviewablesMixin,
         _AssignMixin,
         _ChatMixin,
+        _GroupsMixin,
         _AiBotMixin {
   static const String baseUrl = AppConstants.baseUrl;
   static const String _usernameKey = 'linux_do_username';

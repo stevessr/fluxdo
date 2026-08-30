@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/site_customization.dart';
 import '../constants.dart';
+import '../pages/group_page.dart';
 import '../pages/image_viewer_page.dart';
 import '../pages/webview_page.dart';
 import '../providers/preferences_provider.dart';
@@ -120,6 +121,7 @@ Future<void> launchExternalLink(BuildContext context, String url) async {
 ///
 /// 处理所有类型的链接：
 /// - 用户链接 /u/username → 打开用户页面
+/// - 群组链接 /g/name → 打开原生群组页面
 /// - 话题链接 /t/topic/123 → 调用 onInternalLinkTap 或用 WebView 打开
 /// - 图片直链（站点域名/CDN/S3 CDN）→ 内置查看器直接打开，对齐网页端
 /// - 附件链接 /uploads/ → 外部浏览器打开
@@ -144,6 +146,15 @@ Future<void> launchContentLink(
   final userInfo = DiscourseUrlParser.parseUser(url);
   if (userInfo != null && isInternalUrlString(url)) {
     EmbeddedStackScope.openProfile(context, userInfo.username);
+    return;
+  }
+
+  // 1.5 识别群组链接 /g/name，避免内部群组页落回 WebView。
+  final groupInfo = DiscourseUrlParser.parseGroup(url);
+  if (groupInfo != null && isInternalUrlString(url)) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => GroupPage(groupName: groupInfo.name)),
+    );
     return;
   }
 

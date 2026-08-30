@@ -8,6 +8,7 @@ import '../pages/ai_bot_conversations_page.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/browsing_history_page.dart';
 import '../pages/drafts_page.dart';
+import '../pages/groups_page.dart';
 import '../pages/leaderboard_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/chat/chat_page.dart';
@@ -95,6 +96,15 @@ class NavEntryRegistry {
         defaultInBottomNav: false,
       ),
       NavEntry(
+        id: 'groups',
+        kind: NavEntryKind.page,
+        iconData: Symbols.groups_rounded,
+        selectedIconData: Symbols.groups_rounded,
+        label: _groupsLabel,
+        pageBuilder: (ctx, isActive) => GroupsPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
         id: NavEntryIds.bookmarks,
         kind: NavEntryKind.page,
         iconData: Symbols.bookmark_rounded,
@@ -173,6 +183,11 @@ class NavEntryRegistry {
 String _leaderboardLabel(BuildContext context) {
   final locale = Localizations.localeOf(context);
   return locale.languageCode == 'zh' ? '排行榜' : 'Leaderboard';
+}
+
+String _groupsLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '群组' : 'Groups';
 }
 
 String _aiBotLabel(BuildContext context) {
