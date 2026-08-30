@@ -80,17 +80,50 @@ class _AccountSwitcherHoldTriggerState
     _accepted = true;
     _progressController.value = 1.0;
 
-    final renderObject = context.findRenderObject();
-    if (renderObject is RenderBox && renderObject.hasSize) {
-      AccountQuickSwitcherTriggerState.setAnchor(
-        renderObject.localToGlobal(renderObject.size.center(Offset.zero)),
-      );
-    } else {
-      AccountQuickSwitcherTriggerState.setAnchor(details.globalPosition);
-    }
+    AccountQuickSwitcherTriggerState.setAnchor(
+      _resolveNavigationItemAnchor(details.globalPosition),
+    );
 
     unawaited(HapticFeedback.heavyImpact());
     widget.onLongPress();
+  }
+
+  /// The recognizer is intentionally wrapped around the icon so the progress
+  /// ring does not disturb NavigationBar layout. Using that icon's RenderBox as
+  /// the radial origin, however, makes the bottom-right profile entry visibly
+  /// too high whenever the destination also has a label (and in the floating
+  /// capsule layout). Walk upward through render ancestors and use the largest
+  /// plausible navigation-item box containing the finger instead.
+  Offset _resolveNavigationItemAnchor(Offset globalPosition) {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return globalPosition;
+    }
+
+    final viewSize = MediaQuery.sizeOf(context);
+    final maxTargetWidth = math.min(160.0, viewSize.width * 0.5);
+    RenderBox? best;
+    RenderObject? current = renderObject;
+
+    while (current != null) {
+      if (current is RenderBox && current.hasSize) {
+        final size = current.size;
+        if (size.width >= 44.0 &&
+            size.height >= 40.0 &&
+            size.width <= maxTargetWidth &&
+            size.height <= 96.0) {
+          final rect = current.localToGlobal(Offset.zero) & size;
+          if (rect.inflate(1.0).contains(globalPosition)) {
+            best = current;
+          }
+        }
+      }
+      final parent = current.parent;
+      current = parent is RenderObject ? parent : null;
+    }
+
+    final target = best ?? renderObject;
+    return target.localToGlobal(target.size.center(Offset.zero));
   }
 
   void _handleEnd(LongPressEndDetails details) {
