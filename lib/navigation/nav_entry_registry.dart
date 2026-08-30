@@ -7,6 +7,7 @@ import '../models/user.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/browsing_history_page.dart';
 import '../pages/drafts_page.dart';
+import '../pages/leaderboard_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/chat/chat_page.dart';
 import '../pages/seeking_page.dart';
@@ -72,6 +73,15 @@ class NavEntryRegistry {
             _profileIcon(ctx, ref, selected: false),
         customSelectedIconBuilder: (ctx, ref) =>
             _profileIcon(ctx, ref, selected: true),
+      ),
+      NavEntry(
+        id: 'leaderboard',
+        kind: NavEntryKind.page,
+        iconData: Symbols.leaderboard_rounded,
+        selectedIconData: Symbols.leaderboard_rounded,
+        label: _leaderboardLabel,
+        pageBuilder: (ctx, isActive) => LeaderboardPage(isActive: isActive),
+        defaultInBottomNav: false,
       ),
       NavEntry(
         id: NavEntryIds.bookmarks,
@@ -147,6 +157,11 @@ class NavEntryRegistry {
   static List<String> lockedIds() {
     return buildAll().where((e) => e.locked).map((e) => e.id).toList();
   }
+}
+
+String _leaderboardLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '排行榜' : 'Leaderboard';
 }
 
 Widget _profileIcon(
