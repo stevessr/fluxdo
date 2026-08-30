@@ -21,7 +21,7 @@ import 'account_quick_switcher_trigger_state.dart';
 ///
 /// 这里的“伞状”不是完整同心圆：触发按钮本身就是圆心，只向屏幕内部展开
 /// 约 90° 的多层圆弧。当前账号覆盖在触发按钮圆心；账号管理固定在最外层
-/// 圆弧正中，其余账号根据数量与可视空间自动分层。
+/// 专用圆弧正中，其余账号只使用它以内的圆弧，避免管理入口与账号重叠。
 abstract final class RadialAccountQuickSwitcher {
   static Future<void> show(
     BuildContext context, {
@@ -682,7 +682,7 @@ class _RadialAccountLayout {
         ? math.min(size.width, size.height) * 0.45
         : rayDistances.reduce((a, b) => math.min(a, b));
     final maxRadius = math.max(48.0, rawMaxRadius - nodeRadius - 6.0);
-    final innerRadius = math.min(preferredInnerRadius, maxRadius);
+    final defaultInnerRadius = math.min(preferredInnerRadius, maxRadius);
 
     final switchable = accounts
         .where((account) => account.username != currentUsername)
@@ -694,65 +694,93 @@ class _RadialAccountLayout {
       return math.max(2, (radius * sweep / preferredNodePitch).floor() + 1);
     }
 
-    final maxRingCount = maxRadius <= innerRadius
-        ? 1
+    // “管理”永远使用账号之外的最外层圆弧。先从可用半径里预留至少一层
+    // 的径向间距，再在剩余区域布置账号。这样账号再多也不会被最后一层
+    // 的兜底逻辑硬塞到管理节点附近。
+    final hasAccounts = switchable.isNotEmpty;
+    final maxAccountRadius = hasAccounts
+        ? math.max(48.0, maxRadius - minimumRingGap)
+        : defaultInnerRadius;
+    final accountInnerRadius = math.min(
+      preferredInnerRadius,
+      maxAccountRadius,
+    );
+
+    final maxAccountRingCount = !hasAccounts || maxAccountRadius <= accountInnerRadius
+        ? (hasAccounts ? 1 : 0)
         : math.max(
             1,
-            1 + ((maxRadius - innerRadius) / minimumRingGap).floor(),
+            1 +
+                ((maxAccountRadius - accountInnerRadius) / minimumRingGap)
+                    .floor(),
           );
 
-    List<double> radiiFor(int count) {
-      if (count <= 1) return <double>[innerRadius];
-      final preferredOuter = innerRadius + preferredRingGap * (count - 1);
-      final outer = math.min(maxRadius, preferredOuter);
-      final gap = (outer - innerRadius) / (count - 1);
+    List<double> accountRadiiFor(int count) {
+      if (count <= 0) return const <double>[];
+      if (count == 1) return <double>[accountInnerRadius];
+      final preferredOuter =
+          accountInnerRadius + preferredRingGap * (count - 1);
+      final outer = math.min(maxAccountRadius, preferredOuter);
+      final gap = (outer - accountInnerRadius) / (count - 1);
       return List<double>.generate(
         count,
-        (index) => innerRadius + gap * index,
+        (index) => accountInnerRadius + gap * index,
       );
     }
 
     int comfortableAccountCapacity(List<double> radii) {
       var total = 0;
-      for (var i = 0; i < radii.length; i++) {
-        final isOuter = i == radii.length - 1;
-        total += math.max(0, capacityFor(radii[i]) - (isOuter ? 1 : 0));
+      for (final radius in radii) {
+        total += capacityFor(radius);
       }
       return total;
     }
 
-    var ringCount = 1;
-    while (ringCount < maxRingCount &&
-        comfortableAccountCapacity(radiiFor(ringCount)) < switchable.length) {
-      ringCount++;
+    var accountRingCount = hasAccounts ? 1 : 0;
+    while (accountRingCount < maxAccountRingCount &&
+        comfortableAccountCapacity(accountRadiiFor(accountRingCount)) <
+            switchable.length) {
+      accountRingCount++;
     }
-    final radii = radiiFor(ringCount);
+
+    final accountRadii = accountRadiiFor(accountRingCount).toList();
+
+    // 极端账号数量下宁可继续新增账号环并把管理环向外推，也绝不把剩余账号
+    // 全塞到最后一环造成头像与“管理”重叠。正常手机尺寸下不会越过 maxRadius；
+    // 此兜底只处理账号数量超过可视舒适容量的情况。
+    while (hasAccounts &&
+        comfortableAccountCapacity(accountRadii) < switchable.length) {
+      final nextRadius = accountRadii.isEmpty
+          ? accountInnerRadius
+          : accountRadii.last + minimumRingGap;
+      accountRadii.add(nextRadius);
+    }
+
+    final manageRadius = accountRadii.isEmpty
+        ? defaultInnerRadius
+        : math.max(
+            accountRadii.last + minimumRingGap,
+            math.min(maxRadius, accountRadii.last + preferredRingGap),
+          );
+    final radii = <double>[...accountRadii, manageRadius];
 
     final targets = <_RadialTarget>[];
     var accountOffset = 0;
-    for (var ringIndex = 0; ringIndex < radii.length; ringIndex++) {
-      final radius = radii[ringIndex];
-      final isOuter = ringIndex == radii.length - 1;
+    for (final radius in accountRadii) {
       final remaining = switchable.length - accountOffset;
-
-      // 内层按舒适容量吃账号；最后一层兜走全部剩余项，账号再多也不丢。
-      final accountCount = isOuter
-          ? remaining
-          : math.min(remaining, capacityFor(radius));
+      if (remaining <= 0) break;
+      final accountCount = math.min(remaining, capacityFor(radius));
       final ringAccounts = switchable
           .skip(accountOffset)
           .take(accountCount)
           .toList(growable: false);
-
       final angles = _accountAngles(
         count: ringAccounts.length,
-        radius: radius,
         startAngle: startAngle,
         sweepAngle: sweep,
         inwardAngle: inwardAngle,
-        reserveCenter: isOuter,
-        preferredNodePitch: preferredNodePitch,
       );
+
       for (var i = 0; i < ringAccounts.length; i++) {
         final account = ringAccounts[i];
         targets.add(
@@ -763,18 +791,18 @@ class _RadialAccountLayout {
           ),
         );
       }
-
-      if (isOuter) {
-        targets.add(
-          _RadialTarget(
-            target: manageTarget,
-            center: center + Offset.fromDirection(inwardAngle, radius),
-            isManage: true,
-          ),
-        );
-      }
       accountOffset += accountCount;
     }
+
+    // 管理入口独占最外层中轴。账号环不再为它“留一个角度槽”，而是与其
+    // 保持至少 minimumRingGap 的径向距离，因此不会发生径向/角向重叠。
+    targets.add(
+      _RadialTarget(
+        target: manageTarget,
+        center: center + Offset.fromDirection(inwardAngle, manageRadius),
+        isManage: true,
+      ),
+    );
 
     return _RadialAccountLayout(
       center: center,
@@ -810,45 +838,16 @@ class _RadialAccountLayout {
 
   static List<double> _accountAngles({
     required int count,
-    required double radius,
     required double startAngle,
     required double sweepAngle,
     required double inwardAngle,
-    required bool reserveCenter,
-    required double preferredNodePitch,
   }) {
     if (count <= 0) return const <double>[];
-    final endAngle = startAngle + sweepAngle;
-
-    if (!reserveCenter) {
-      if (count == 1) return <double>[inwardAngle];
-      return List<double>.generate(
-        count,
-        (index) => startAngle + sweepAngle * index / (count - 1),
-      );
-    }
-
-    // 最外层中轴必须完整留给“账号管理”。账号分列中轴两侧；角度间隙按
-    // 头像期望间距换算，并限制上限以免账号少时空洞过大。
-    final centerHalfGap = math.min(
-      sweepAngle * 0.16,
-      math.max(0.08, preferredNodePitch / math.max(radius, 1.0) / 2.0),
+    if (count == 1) return <double>[inwardAngle];
+    return List<double>.generate(
+      count,
+      (index) => startAngle + sweepAngle * index / (count - 1),
     );
-    final leftCount = (count + 1) ~/ 2;
-    final rightCount = count - leftCount;
-    final leftEnd = inwardAngle - centerHalfGap;
-    final rightStart = inwardAngle + centerHalfGap;
-    final result = <double>[];
-
-    for (var i = 0; i < leftCount; i++) {
-      final t = leftCount == 1 ? 0.5 : i / (leftCount - 1);
-      result.add(startAngle + (leftEnd - startAngle) * t);
-    }
-    for (var i = 0; i < rightCount; i++) {
-      final t = rightCount == 1 ? 0.5 : i / (rightCount - 1);
-      result.add(rightStart + (endAngle - rightStart) * t);
-    }
-    return result;
   }
 
   static double _distanceToRectEdge(Offset origin, double angle, Rect rect) {
