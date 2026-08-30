@@ -70,52 +70,98 @@ enum NotificationType {
 
   String get label {
     switch (this) {
-      case NotificationType.mentioned: return S.current.notification_typeMentioned;
-      case NotificationType.replied: return S.current.notification_typeReplied;
-      case NotificationType.quoted: return S.current.notification_typeQuoted;
-      case NotificationType.edited: return S.current.notification_typeEdited;
-      case NotificationType.liked: return S.current.notification_typeLiked;
-      case NotificationType.privateMessage: return S.current.notification_typePrivateMessage;
-      case NotificationType.invitedToPrivateMessage: return S.current.notification_typeInvitedToPM;
-      case NotificationType.inviteeAccepted: return S.current.notification_typeInviteeAccepted;
-      case NotificationType.posted: return S.current.notification_typePosted;
-      case NotificationType.movedPost: return S.current.notification_typeMovedPost;
-      case NotificationType.linked: return S.current.notification_typeLinked;
-      case NotificationType.grantedBadge: return S.current.notification_typeGrantedBadge;
-      case NotificationType.invitedToTopic: return S.current.notification_typeInvitedToTopic;
-      case NotificationType.custom: return S.current.notification_typeCustom;
-      case NotificationType.groupMentioned: return S.current.notification_typeGroupMentioned;
-      case NotificationType.groupMessageSummary: return S.current.notification_typeGroupMessageSummary;
-      case NotificationType.watchingFirstPost: return S.current.notification_typeWatchingFirstPost;
-      case NotificationType.topicReminder: return S.current.notification_typeTopicReminder;
-      case NotificationType.likedConsolidated: return S.current.notification_typeLikedConsolidated;
-      case NotificationType.postApproved: return S.current.notification_typePostApproved;
-      case NotificationType.codeReviewCommitApproved: return S.current.notification_typeCodeReviewApproved;
-      case NotificationType.membershipRequestAccepted: return S.current.notification_typeMembershipAccepted;
-      case NotificationType.membershipRequestConsolidated: return S.current.notification_typeMembershipConsolidated;
-      case NotificationType.bookmarkReminder: return S.current.notification_typeBookmarkReminder;
-      case NotificationType.reaction: return S.current.notification_typeReaction;
-      case NotificationType.votesReleased: return S.current.notification_typeVotesReleased;
-      case NotificationType.eventReminder: return S.current.notification_typeEventReminder;
-      case NotificationType.eventInvitation: return S.current.notification_typeEventInvitation;
-      case NotificationType.chatMention: return S.current.notification_typeChatMention;
-      case NotificationType.chatMessage: return S.current.notification_typeChatMessage;
-      case NotificationType.chatInvitation: return S.current.notification_typeChatInvitation;
-      case NotificationType.chatGroupMention: return S.current.notification_typeChatGroupMention;
-      case NotificationType.chatQuotedPost: return S.current.notification_typeChatQuotedPost;
-      case NotificationType.assignedTopic: return S.current.notification_typeAssignedTopic;
-      case NotificationType.questionAnswerUserCommented: return S.current.notification_typeQACommented;
-      case NotificationType.watchingCategoryOrTag: return S.current.notification_typeWatchingCategoryOrTag;
-      case NotificationType.newFeatures: return S.current.notification_typeNewFeatures;
-      case NotificationType.adminProblems: return S.current.notification_typeAdminProblems;
-      case NotificationType.linkedConsolidated: return S.current.notification_typeLinkedConsolidated;
-      case NotificationType.chatWatchedThread: return S.current.notification_typeChatWatchedThread;
-      case NotificationType.boost: return S.current.notification_typeBoost;
-      case NotificationType.following: return S.current.notification_typeFollowing;
-      case NotificationType.followingCreatedTopic: return S.current.notification_typeFollowingCreatedTopic;
-      case NotificationType.followingReplied: return S.current.notification_typeFollowingReplied;
-      case NotificationType.circlesActivity: return S.current.notification_typeCirclesActivity;
-      case NotificationType.unknown: return S.current.notification_typeUnknown;
+      case NotificationType.mentioned:
+        return S.current.notification_typeMentioned;
+      case NotificationType.replied:
+        return S.current.notification_typeReplied;
+      case NotificationType.quoted:
+        return S.current.notification_typeQuoted;
+      case NotificationType.edited:
+        return S.current.notification_typeEdited;
+      case NotificationType.liked:
+        return S.current.notification_typeLiked;
+      case NotificationType.privateMessage:
+        return S.current.notification_typePrivateMessage;
+      case NotificationType.invitedToPrivateMessage:
+        return S.current.notification_typeInvitedToPM;
+      case NotificationType.inviteeAccepted:
+        return S.current.notification_typeInviteeAccepted;
+      case NotificationType.posted:
+        return S.current.notification_typePosted;
+      case NotificationType.movedPost:
+        return S.current.notification_typeMovedPost;
+      case NotificationType.linked:
+        return S.current.notification_typeLinked;
+      case NotificationType.grantedBadge:
+        return S.current.notification_typeGrantedBadge;
+      case NotificationType.invitedToTopic:
+        return S.current.notification_typeInvitedToTopic;
+      case NotificationType.custom:
+        return S.current.notification_typeCustom;
+      case NotificationType.groupMentioned:
+        return S.current.notification_typeGroupMentioned;
+      case NotificationType.groupMessageSummary:
+        return S.current.notification_typeGroupMessageSummary;
+      case NotificationType.watchingFirstPost:
+        return S.current.notification_typeWatchingFirstPost;
+      case NotificationType.topicReminder:
+        return S.current.notification_typeTopicReminder;
+      case NotificationType.likedConsolidated:
+        return S.current.notification_typeLikedConsolidated;
+      case NotificationType.postApproved:
+        return S.current.notification_typePostApproved;
+      case NotificationType.codeReviewCommitApproved:
+        return S.current.notification_typeCodeReviewApproved;
+      case NotificationType.membershipRequestAccepted:
+        return S.current.notification_typeMembershipAccepted;
+      case NotificationType.membershipRequestConsolidated:
+        return S.current.notification_typeMembershipConsolidated;
+      case NotificationType.bookmarkReminder:
+        return S.current.notification_typeBookmarkReminder;
+      case NotificationType.reaction:
+        return S.current.notification_typeReaction;
+      case NotificationType.votesReleased:
+        return S.current.notification_typeVotesReleased;
+      case NotificationType.eventReminder:
+        return S.current.notification_typeEventReminder;
+      case NotificationType.eventInvitation:
+        return S.current.notification_typeEventInvitation;
+      case NotificationType.chatMention:
+        return S.current.notification_typeChatMention;
+      case NotificationType.chatMessage:
+        return S.current.notification_typeChatMessage;
+      case NotificationType.chatInvitation:
+        return S.current.notification_typeChatInvitation;
+      case NotificationType.chatGroupMention:
+        return S.current.notification_typeChatGroupMention;
+      case NotificationType.chatQuotedPost:
+        return S.current.notification_typeChatQuotedPost;
+      case NotificationType.assignedTopic:
+        return S.current.notification_typeAssignedTopic;
+      case NotificationType.questionAnswerUserCommented:
+        return S.current.notification_typeQACommented;
+      case NotificationType.watchingCategoryOrTag:
+        return S.current.notification_typeWatchingCategoryOrTag;
+      case NotificationType.newFeatures:
+        return S.current.notification_typeNewFeatures;
+      case NotificationType.adminProblems:
+        return S.current.notification_typeAdminProblems;
+      case NotificationType.linkedConsolidated:
+        return S.current.notification_typeLinkedConsolidated;
+      case NotificationType.chatWatchedThread:
+        return S.current.notification_typeChatWatchedThread;
+      case NotificationType.boost:
+        return S.current.notification_typeBoost;
+      case NotificationType.following:
+        return S.current.notification_typeFollowing;
+      case NotificationType.followingCreatedTopic:
+        return S.current.notification_typeFollowingCreatedTopic;
+      case NotificationType.followingReplied:
+        return S.current.notification_typeFollowingReplied;
+      case NotificationType.circlesActivity:
+        return S.current.notification_typeCirclesActivity;
+      case NotificationType.unknown:
+        return S.current.notification_typeUnknown;
     }
   }
 
@@ -145,6 +191,12 @@ class NotificationData {
   final String? username2;
   final String? avatarTemplate;
   final String? boostRaw;
+
+  /// custom 通知的语义键。Discourse 插件会通过这两个字段扩展通知，
+  /// 例如 discourse-solved 使用 solved.accepted_notification。
+  final String? message;
+  final String? titleKey;
+
   /// Chat 通知(chat_mention/chat_message 等)落点
   final int? chatChannelId;
   final int? chatMessageId;
@@ -167,6 +219,8 @@ class NotificationData {
     this.username2,
     this.avatarTemplate,
     this.boostRaw,
+    this.message,
+    this.titleKey,
     this.chatChannelId,
     this.chatMessageId,
     this.chatThreadId,
@@ -188,8 +242,12 @@ class NotificationData {
       count: json['count'] as int?,
       username: json['username'] as String?,
       username2: json['username2'] as String?,
-      avatarTemplate: json['acting_user_avatar_template'] as String? ?? json['avatar_template'] as String?,
+      avatarTemplate:
+          json['acting_user_avatar_template'] as String? ??
+          json['avatar_template'] as String?,
       boostRaw: json['boost_raw'] as String?,
+      message: json['message'] as String?,
+      titleKey: json['title'] as String?,
       chatChannelId: json['chat_channel_id'] as int?,
       chatMessageId: json['chat_message_id'] as int?,
       chatThreadId: json['chat_thread_id'] as int?,
@@ -234,7 +292,8 @@ class DiscourseNotification {
       notificationType: NotificationType.fromId(json['notification_type'] as int),
       read: json['read'] as bool? ?? false,
       highPriority: json['high_priority'] as bool? ?? false,
-      createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?) ?? DateTime.now(),
+      createdAt:
+          TimeUtils.parseUtcTime(json['created_at'] as String?) ?? DateTime.now(),
       postNumber: json['post_number'] as int?,
       topicId: json['topic_id'] as int?,
       slug: json['slug'] as String?,
@@ -242,6 +301,14 @@ class DiscourseNotification {
       fancyTitle: json['fancy_title'] as String?,
       actingUserAvatarTemplate: json['acting_user_avatar_template'] as String?,
     );
+  }
+
+  /// discourse-solved 的 accepted notification 仍使用 core custom(14) 类型，
+  /// 语义由 data.message / data.title 携带。不能只按 notification_type 判断。
+  bool get isAcceptedSolutionNotification {
+    if (notificationType != NotificationType.custom) return false;
+    return data.message == 'solved.accepted_notification' ||
+        data.titleKey == 'solved.notification.title';
   }
 
   /// 获取显示用户名
@@ -287,7 +354,8 @@ class DiscourseNotification {
       slug: slug ?? this.slug,
       data: data ?? this.data,
       fancyTitle: fancyTitle ?? this.fancyTitle,
-      actingUserAvatarTemplate: actingUserAvatarTemplate ?? this.actingUserAvatarTemplate,
+      actingUserAvatarTemplate:
+          actingUserAvatarTemplate ?? this.actingUserAvatarTemplate,
     );
   }
 
@@ -302,9 +370,13 @@ class DiscourseNotification {
             ? S.current.notification_grantedBadge(data.badgeName!)
             : notificationType.label;
       case NotificationType.inviteeAccepted:
-        return displayName.isNotEmpty ? S.current.notification_inviteeAccepted(displayName) : notificationType.label;
+        return displayName.isNotEmpty
+            ? S.current.notification_inviteeAccepted(displayName)
+            : notificationType.label;
       case NotificationType.following:
-        return displayName.isNotEmpty ? S.current.notification_followingYou(displayName) : notificationType.label;
+        return displayName.isNotEmpty
+            ? S.current.notification_followingYou(displayName)
+            : notificationType.label;
       case NotificationType.likedConsolidated:
         final count = data.count ?? 0;
         return displayName.isNotEmpty
@@ -317,12 +389,18 @@ class DiscourseNotification {
             : S.current.notification_peopleLinkedPost(count);
       case NotificationType.groupMessageSummary:
         final count = int.tryParse(data.inboxCount ?? '0') ?? 0;
-        return S.current.notification_groupMessageSummary(data.groupName ?? "", count);
+        return S.current.notification_groupMessageSummary(
+          data.groupName ?? '',
+          count,
+        );
       case NotificationType.membershipRequestAccepted:
-        return S.current.notification_membershipAccepted(data.groupName ?? "");
+        return S.current.notification_membershipAccepted(data.groupName ?? '');
       case NotificationType.membershipRequestConsolidated:
         final count = data.count ?? 0;
-        return S.current.notification_membershipPending(count, data.groupName ?? "");
+        return S.current.notification_membershipPending(
+          count,
+          data.groupName ?? '',
+        );
       case NotificationType.newFeatures:
         return S.current.notification_newFeaturesAvailable;
       case NotificationType.adminProblems:
@@ -332,8 +410,15 @@ class DiscourseNotification {
     }
 
     // 话题类通知：使用话题标题
-    if (data.topicTitle != null && data.topicTitle!.isNotEmpty) return data.topicTitle!;
+    if (data.topicTitle != null && data.topicTitle!.isNotEmpty) {
+      return data.topicTitle!;
+    }
     if (fancyTitle != null && fancyTitle!.isNotEmpty) return fancyTitle!;
+
+    // 没有话题标题时，solved 至少仍展示其真实语义，而非“自定义通知”。
+    if (isAcceptedSolutionNotification) {
+      return S.current.notification_solvedAccepted;
+    }
 
     // 兜底使用通知类型
     return notificationType.label;
@@ -342,6 +427,12 @@ class DiscourseNotification {
   /// 获取通知描述
   String get description {
     final username = data.displayUsername ?? data.originalUsername ?? '';
+
+    // discourse-solved 使用 custom(14)，必须在通用 custom 分支之前识别。
+    if (isAcceptedSolutionNotification) {
+      return S.current.notification_solvedAccepted;
+    }
+
     switch (notificationType) {
       // === 话题类通知：描述为 "用户 + 操作" ===
       case NotificationType.mentioned:
@@ -372,7 +463,7 @@ class DiscourseNotification {
       case NotificationType.movedPost:
         return S.current.notification_movedPost(username);
       case NotificationType.groupMentioned:
-        return '$username @${data.groupName ?? ""}';
+        return '$username @${data.groupName ?? ''}';
       case NotificationType.watchingFirstPost:
         return S.current.notification_newTopic;
       case NotificationType.followingCreatedTopic:
@@ -470,9 +561,12 @@ class NotificationListResponse {
     final notificationsList = json['notifications'] as List<dynamic>? ?? [];
     return NotificationListResponse(
       notifications: notificationsList
-          .map((e) => DiscourseNotification.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) => DiscourseNotification.fromJson(e as Map<String, dynamic>),
+          )
           .toList(),
-      totalRowsNotifications: json['total_rows_notifications'] as int? ?? 0,
+      totalRowsNotifications:
+          json['total_rows_notifications'] as int? ?? 0,
       seenNotificationId: json['seen_notification_id'] as int? ?? 0,
       loadMoreNotifications: json['load_more_notifications'] as String?,
     );

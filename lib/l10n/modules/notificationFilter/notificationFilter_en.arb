@@ -1,0 +1,7 @@
+{
+  "@@locale": "en",
+  "notification_filterAll": "All",
+  "notification_filterRead": "Read",
+  "notification_filterUnread": "Unread",
+  "notification_solvedAccepted": "Your post was marked as solution"
+}

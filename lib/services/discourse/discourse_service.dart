@@ -55,6 +55,7 @@ import '../storage/resilient_secure_storage.dart';
 import '../user_api_key_service.dart';
 import '../user_presence_service.dart';
 import '../../l10n/s.dart';
+import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 
 part '_auth.dart';
@@ -77,8 +78,9 @@ part '_revisions.dart';
 part '_onebox.dart';
 part '_reviewables.dart';
 part '_assign.dart';
-part '_groups.dart';
 part '_chat.dart';
+part '_groups.dart';
+part '_ai_bot.dart';
 
 /// 基类，包含所有共享字段
 abstract class _DiscourseServiceBase {
@@ -149,8 +151,9 @@ class DiscourseService extends _DiscourseServiceBase
         _OneboxMixin,
         _ReviewablesMixin,
         _AssignMixin,
+        _ChatMixin,
         _GroupsMixin,
-        _ChatMixin {
+        _AiBotMixin {
   static const String baseUrl = AppConstants.baseUrl;
   static const String _usernameKey = 'linux_do_username';
   static const _summaryCacheDuration = Duration(minutes: 5);
