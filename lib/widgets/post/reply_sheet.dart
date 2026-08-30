@@ -516,7 +516,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
               min: 0,
               max: maxTarget.toDouble(),
               divisions: maxTarget,
-              value: selected.toDouble().clamp(0, maxTarget.toDouble()),
+              value: selected.toDouble().clamp(0.0, maxTarget.toDouble()).toDouble(),
               label: isTopicReply
                   ? context.l10n.post_replyToTopic
                   : '#$selected',
