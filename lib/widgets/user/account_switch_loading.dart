@@ -43,7 +43,9 @@ class AccountSwitchLoading extends StatelessWidget {
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
           builder: (context, value, child) {
-            final opacity = ((value - 0.94) / 0.06).clamp(0.0, 1.0);
+            final opacity = ((value - 0.94) / 0.06)
+                .clamp(0.0, 1.0)
+                .toDouble();
             return Opacity(
               opacity: opacity,
               child: Transform.scale(scale: value, child: child),
