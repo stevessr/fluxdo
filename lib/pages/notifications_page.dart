@@ -195,13 +195,16 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       return NotificationItem(
                         notification: notification,
                         systemAvatarTemplate: systemAvatarTemplate,
-                        // siblings = 当前已加载列表,大屏弹窗内可上一条/下一条
-                        onTap: () => handleNotificationTap(
-                          context,
-                          ref,
-                          notification,
-                          siblings: visibleNotifications,
-                        ),
+                        // siblings = 点击前的当前已加载列表，大屏弹窗内可继续翻页。
+                        onTap: () {
+                          notifier.markAsRead(notification.id);
+                          handleNotificationTap(
+                            context,
+                            ref,
+                            notification,
+                            siblings: visibleNotifications,
+                          );
+                        },
                       );
                     },
                   );
