@@ -10,6 +10,7 @@ import '../l10n/s.dart';
 import '../providers/app_state_refresher.dart';
 import '../services/toast_service.dart';
 import '../utils/url_helper.dart';
+import '../widgets/user/account_switch_loading.dart';
 import 'login_page.dart';
 
 /// 账号管理页：多账号列表、切换、移除、添加账号。
@@ -72,9 +73,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
     );
     if (confirmed != true || !mounted) return;
 
-    // 全屏进度遮罩：切换涉及预加载刷新，秒级耗时
-    // M3E 进度遮罩：LoadingSpinner 是项目内 Material 3 Expressive
-    // 不定态指示器（morph 形状 + 弹簧节奏），替代裸 CircularProgressIndicator。
+    // 切换涉及会话恢复和全量缓存刷新，统一展示目标账号身份与进度。
     unawaited(
       showDialog(
         context: context,
@@ -84,19 +83,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
         ).colorScheme.scrim.withValues(alpha: 0.4),
         builder: (_) => PopScope(
           canPop: false,
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const LoadingSpinner(),
-                const SizedBox(height: 24),
-                Text(
-                  context.l10n.accountManage_switching,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ],
-            ),
-          ),
+          child: Center(child: AccountSwitchLoading(account: account)),
         ),
       ),
     );
