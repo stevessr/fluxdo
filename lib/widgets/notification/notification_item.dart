@@ -35,6 +35,9 @@ class NotificationItem extends StatelessWidget {
   });
 
   IconData _getNotificationIcon() {
+    if (notification.isAcceptedSolutionNotification) {
+      return Symbols.check_circle_rounded;
+    }
     switch (notification.notificationType) {
       case NotificationType.mentioned:
         return Symbols.alternate_email_rounded;
@@ -150,6 +153,9 @@ class NotificationItem extends StatelessWidget {
 
   Color _getNotificationColor(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    if (notification.isAcceptedSolutionNotification) {
+      return Colors.green;
+    }
     switch (notification.notificationType) {
       case NotificationType.liked:
       case NotificationType.likedConsolidated:
