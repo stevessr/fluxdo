@@ -14,6 +14,22 @@ class UserLinkInfo {
   const UserLinkInfo({required this.username});
 }
 
+/// 徽章链接解析结果：/badges/:id/:slug
+class BadgeLinkInfo {
+  final int badgeId;
+  final String? slug;
+
+  const BadgeLinkInfo({required this.badgeId, this.slug});
+}
+
+/// discourse-cakeday 链接解析结果。
+class CakedayLinkInfo {
+  final bool birthdays;
+  final String? filter;
+
+  const CakedayLinkInfo({required this.birthdays, this.filter});
+}
+
 /// 分类链接解析结果。
 class CategoryLinkInfo {
   const CategoryLinkInfo({required this.categoryId});
@@ -63,6 +79,18 @@ class DiscourseUrlParser {
   /// 用户链接格式：/u/username
   static final _userRegex = RegExp(r'/u/([^/?#]+)', caseSensitive: false);
 
+  /// 徽章链接格式：/badges/128/-、/badges/128/devotee、/badges/128
+  static final _badgeRegex = RegExp(
+    r'/badges/(\d+)(?:/([^/?#]+))?(?:[/?#]|$)',
+    caseSensitive: false,
+  );
+
+  /// discourse-cakeday：/cakeday/birthdays[/today]、anniversaries 同理。
+  static final _cakedayRegex = RegExp(
+    r'/cakeday/(birthdays|anniversaries)(?:/(today|tomorrow|upcoming))?(?:[/?#]|$)',
+    caseSensitive: false,
+  );
+
   static final _categoryRegex = RegExp(
     r'/c/(?:[^/?#]+/)?(\d+)(?:[/?#]|$)',
     caseSensitive: false,
@@ -90,7 +118,6 @@ class DiscourseUrlParser {
   /// - `/t/topic-slug/12345` → topicId=12345, slug=topic-slug
   /// - `/t/topic-slug/12345/1` → topicId=12345, slug=topic-slug, postNumber=1
   static TopicLinkInfo? parseTopic(String url) {
-    // 优先匹配纯数字 ID 格式
     final idOnlyMatch = _topicIdOnlyRegex.firstMatch(url);
     if (idOnlyMatch != null) {
       return TopicLinkInfo(
@@ -99,7 +126,6 @@ class DiscourseUrlParser {
       );
     }
 
-    // 匹配带 slug 格式
     final withSlugMatch = _topicWithSlugRegex.firstMatch(url);
     if (withSlugMatch != null) {
       final slugStr = withSlugMatch.group(1)!;
@@ -114,9 +140,6 @@ class DiscourseUrlParser {
   }
 
   /// 解析仅含 slug 的话题链接（/t/some-slug），返回 slug 或 null
-  ///
-  /// 注意：此方法仅匹配没有数字 ID 的 slug 链接，
-  /// 带 ID 的链接应使用 [parseTopic]。
   static String? parseTopicSlug(String url) {
     final match = _topicSlugOnlyRegex.firstMatch(url);
     return match?.group(1);
@@ -129,6 +152,37 @@ class DiscourseUrlParser {
       return UserLinkInfo(username: match.group(1)!);
     }
     return null;
+  }
+
+  /// 解析徽章详情链接。slug 为 `-` 时按 Discourse 占位符处理为 null。
+  static BadgeLinkInfo? parseBadge(String url) {
+    final match = _badgeRegex.firstMatch(url);
+    if (match == null) return null;
+    final id = int.tryParse(match.group(1) ?? '');
+    if (id == null) return null;
+    final rawSlug = match.group(2);
+    return BadgeLinkInfo(
+      badgeId: id,
+      slug: rawSlug == null || rawSlug == '-' ? null : Uri.decodeComponent(rawSlug),
+    );
+  }
+
+  /// 解析生日/周年纪念日页面链接。
+  static CakedayLinkInfo? parseCakeday(String url) {
+    final match = _cakedayRegex.firstMatch(url);
+    if (match == null) return null;
+    return CakedayLinkInfo(
+      birthdays: match.group(1)!.toLowerCase() == 'birthdays',
+      filter: match.group(2)?.toLowerCase(),
+    );
+  }
+
+  /// discourse-events 的原生近期活动页面。
+  static bool isUpcomingEvents(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final path = uri.path.toLowerCase();
+    return path == '/upcoming-events' || path.startsWith('/upcoming-events/');
   }
 
   static CategoryLinkInfo? parseCategory(String url) {
@@ -144,9 +198,6 @@ class DiscourseUrlParser {
   }
 
   /// 解析标题中的单独 HTTP(S) URL。
-  ///
-  /// Discourse 只有在标题内容本身就是 URL 时才会触发行内 onebox，
-  /// 因此带有空格或其它文字的标题不应被当作 URL 处理。
   static TitleUrlInfo? parseTitleUrl(String value) {
     final url = value.trim();
     if (url.isEmpty || RegExp(r'\s').hasMatch(url)) return null;
