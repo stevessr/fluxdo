@@ -6,6 +6,7 @@ void main() {
     Map<String, dynamic> notificationJson({
       required int id,
       required dynamic data,
+      int? postNumber,
     }) {
       return {
         'id': id,
@@ -15,7 +16,7 @@ void main() {
         'high_priority': true,
         'created_at': '2026-08-31T00:00:00.000Z',
         'topic_id': 42,
-        'post_number': id,
+        'post_number': postNumber ?? id,
         'data': data,
       };
     }
@@ -35,24 +36,26 @@ void main() {
       expect(notification.isAcceptedSolutionNotification, isTrue);
     });
 
-    test('多条 solution 通知分别保留 solved 语义', () {
+    test('同一主题的多条 solution 通知分别保留楼层落点', () {
       final response = NotificationListResponse.fromJson({
         'notifications': [
           notificationJson(
-            id: 2,
+            id: 201,
+            postNumber: 2,
             data: {
               'message': 'solved.accepted_notification',
               'display_username': 'alice',
-              'topic_title': 'topic A',
+              'topic_title': 'same topic',
               'title': 'solved.notification.title',
             },
           ),
           notificationJson(
-            id: 3,
+            id: 202,
+            postNumber: 9,
             data: {
               'message': 'solved.accepted_notification',
               'display_username': 'bob',
-              'topic_title': 'topic B',
+              'topic_title': 'same topic',
               'title': 'solved.notification.title',
             },
           ),
@@ -66,7 +69,9 @@ void main() {
         response.notifications.every((n) => n.isAcceptedSolutionNotification),
         isTrue,
       );
-      expect(response.notifications.map((n) => n.id), [2, 3]);
+      expect(response.notifications.map((n) => n.id), [201, 202]);
+      expect(response.notifications.map((n) => n.topicId), [42, 42]);
+      expect(response.notifications.map((n) => n.postNumber), [2, 9]);
     });
 
     test('普通 custom 通知仍保留 custom 语义', () {
