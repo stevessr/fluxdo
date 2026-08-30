@@ -4,10 +4,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter_avif/flutter_avif.dart' as fa;
 import 'package:image/image.dart' as img;
 import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageFfi, NativeAnimatedImageException;
 
+import 'avif_fast_bridge.dart';
 import 'avif_image_provider.dart';
 import 'blob_image_cache.dart';
 
@@ -37,6 +39,39 @@ bool _bytesLookLikeAvif(Uint8List bytes) {
   if (b8 == 0x6D && b9 == 0x69 && b10 == 0x66 && b11 == 0x31) return true;
   // 'msf1'
   if (b8 == 0x6D && b9 == 0x73 && b10 == 0x66 && b11 == 0x31) return true;
+  return false;
+}
+
+/// ftyp 的 major / compatible brand 是否表明这是 AVIF sequence。
+///
+/// 对动画 AVIF，缩略图必须和完整动画使用同一个 libavif 后端。Android
+/// ImageDecoder / Flutter 平台 codec 对 AVIF sequence 的首帧支持并不一致：
+/// 有些文件会“成功”返回图像但颜色转换错误（典型表现就是整张偏紫），
+/// 因而不能用“平台 codec 成功”作为颜色正确的判据。
+bool _bytesLookLikeAnimatedAvif(Uint8List bytes) {
+  if (bytes.length < 16) return false;
+  if (bytes[4] != 0x66 || bytes[5] != 0x74 || bytes[6] != 0x79 || bytes[7] != 0x70) {
+    return false;
+  }
+
+  bool isAnimationBrand(int offset) {
+    if (offset < 0 || offset + 4 > bytes.length) return false;
+    final b0 = bytes[offset];
+    final b1 = bytes[offset + 1];
+    final b2 = bytes[offset + 2];
+    final b3 = bytes[offset + 3];
+    return (b0 == 0x61 && b1 == 0x76 && b2 == 0x69 && b3 == 0x73) || // avis
+        (b0 == 0x6D && b1 == 0x73 && b2 == 0x66 && b3 == 0x31); // msf1
+  }
+
+  if (isAnimationBrand(8)) return true;
+
+  final boxSize =
+      (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+  final end = boxSize.clamp(16, bytes.length);
+  for (var offset = 16; offset + 4 <= end; offset += 4) {
+    if (isAnimationBrand(offset)) return true;
+  }
   return false;
 }
 
@@ -347,6 +382,10 @@ class StickerThumbnailProvider
 /// 的约束已不存在,放开到 4 让首开 30 张 AVIF 从串行 3-9s 变成秒级。
 final _avifSemaphore = _Semaphore(4);
 
+/// sticker 动画 AVIF 首帧 decoder key。和 AvifImageProvider 自己的私有
+/// key 序列分开命名，避免共享 flutter_avif Rust decoder registry 时碰撞。
+int _stickerAvifCodecKeySeq = 0;
+
 /// 非 AVIF 解码并发。GIF 的 Flutter codec 首帧路径和 WebP/APNG 的
 /// Rust worker 路径共用这层入口限流；AVIF 有独立 semaphore。
 final _nonAvifSemaphore = _Semaphore(8);
@@ -379,10 +418,11 @@ class _ThumbnailCancelled implements Exception {
   String toString() => 'sticker thumbnail decode cancelled';
 }
 
-// v3: v2 仍经 `ui.Image.toByteData(png)` 走 Flutter/Impeller 的 PNG encoder。
-// 对 AVIF / HEIF / wide-gamut 类图片，这条 GPU image → PNG 路径存在过颜色
-// 空间与像素格式回读异常；升级 key 后让旧的偏紫 PNG 自动失效。
-const int _thumbnailCacheVersion = 3;
+// v4: v3 虽已绕开 Flutter/Impeller PNG encoder，但 AVIF sequence 的首帧
+// 仍会先尝试 Android / Flutter 平台 AVIF codec；完整动画却明确走 libavif。
+// 对部分动画 AVIF，系统 codec 会“成功”解出首帧但发生严重偏紫。v4 强制
+// 动画 AVIF 缩略图与完整播放共用 libavif，并让已有 v3 偏紫缓存自动失效。
+const int _thumbnailCacheVersion = 4;
 
 String _thumbnailCacheKey(String url, int targetSize) {
   return 'sticker_thumb:v$_thumbnailCacheVersion:$targetSize:$url';
@@ -519,9 +559,40 @@ Future<ui.Image> _decodeAvifFirstFrame(
   String url, {
   int? targetSize,
 }) async {
-  // 平台 codec 可用时 targetSize 直接 decode-time 降采样出小图;
-  // Rust 回落 = 增量解码:只解第 1 帧立即 dispose,不像 fa.decodeAvif
-  // 全帧解完丢 N-1 帧
+  if (_bytesLookLikeAnimatedAvif(bytes)) {
+    // 完整动画路径本来就会绕开平台 codec，走 flutter_avif/libavif。
+    // 缩略图也必须使用同一颜色转换链路，否则 Android ImageDecoder 对
+    // 某些 AVIF sequence 的首帧会出现“解码成功但严重偏紫”的静默错误。
+    if (AvifFastBridge.available) {
+      final key = 'sticker-ff${_stickerAvifCodecKeySeq++}';
+      try {
+        await AvifFastBridge.initDecoder(key, bytes);
+        final frame = await AvifFastBridge.getNextFrame(
+          key,
+          maxDim: targetSize,
+        );
+        return frame.image;
+      } finally {
+        unawaited(AvifFastBridge.disposeDecoder(key));
+      }
+    }
+
+    // web / 无 fast bridge 时也不要回到平台 codec；官方逐帧 codec 同样
+    // 使用 flutter_avif 的动画解码后端。只拉第一帧后立即 dispose。
+    final codec = fa.MultiFrameAvifCodec(
+      key: _stickerAvifCodecKeySeq++,
+      avifBytes: bytes,
+    );
+    try {
+      await codec.ready();
+      final frame = await codec.getNextFrame();
+      return frame.image;
+    } finally {
+      codec.dispose();
+    }
+  }
+
+  // 静态 AVIF 保留平台 codec 的 decode-time 降采样性能优势。
   return AvifImageProvider.decodeFirstFrame(bytes, maxDim: targetSize);
 }
 
