@@ -98,9 +98,11 @@ class DiscourseUrlParser {
     caseSensitive: false,
   );
 
-  /// discourse-cakeday：/cakeday/birthdays[/today]、anniversaries 同理。
+  /// discourse-cakeday：原生支持 root / today / tomorrow / upcoming。
+  /// 官方 `all` 还带 month query/月份切换，本页尚未完整复刻该路由，因此
+  /// 不在这里误拦截，继续让 WebView 处理。
   static final _cakedayRegex = RegExp(
-    r'/cakeday/(birthdays|anniversaries)(?:/(today|tomorrow|upcoming|month))?(?:[/?#]|$)',
+    r'/cakeday/(birthdays|anniversaries)(?:/(today|tomorrow|upcoming))?(?:[/?#]|$)',
     caseSensitive: false,
   );
 
