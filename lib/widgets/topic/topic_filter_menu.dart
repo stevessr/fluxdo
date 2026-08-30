@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:common_ui/common_ui.dart';
+import '../../pages/bookmarks_page.dart';
 import '../../providers/topic_list/filter_provider.dart';
 import '../../providers/topic_list/sort_provider.dart';
 import '../../providers/topic_list/tab_state_provider.dart';
@@ -14,6 +15,9 @@ const _dismissAllValue = #topicFilterMenuDismissAll;
 
 /// 「添加标签」动作哨兵
 const _selectTagsValue = #topicFilterMenuSelectTags;
+
+/// 「书签」导航动作哨兵
+const _bookmarksValue = #topicFilterMenuBookmarks;
 
 /// 聚合筛选菜单：一颗按钮收编原「筛选下拉 + 新话题子过滤下拉 + 排序
 /// 下拉 + 忽略按钮」四个分立控件，是首页头部三行瘦身为两行的支点。
@@ -137,6 +141,10 @@ class _TopicFilterMenuButtonState extends ConsumerState<TopicFilterMenuButton> {
           widget.onDismissAll?.call();
         } else if (value == _selectTagsValue) {
           widget.onSelectTags?.call();
+        } else if (value == _bookmarksValue) {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const BookmarksPage()),
+          );
         }
       },
       offset: const Offset(0, 36),
@@ -151,6 +159,7 @@ class _TopicFilterMenuButtonState extends ConsumerState<TopicFilterMenuButton> {
               widget.isLoggedIn ||
               (option.$1 != TopicListFilter.newTopics &&
                   option.$1 != TopicListFilter.unread &&
+                  option.$1 != TopicListFilter.read &&
                   option.$1 != TopicListFilter.unseen),
         );
         for (final option in visibleFilters) {
@@ -169,6 +178,27 @@ class _TopicFilterMenuButtonState extends ConsumerState<TopicFilterMenuButton> {
                     const SizedBox(width: 16),
                   const SizedBox(width: 8),
                   Text(optionLabel(option.$1, option.$2)),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // 书签与 Discourse 的话题列表筛选不是同一种数据源：直接进入现有
+        // 书签工作区，不把它伪装成 TopicListFilter，也不依赖底栏是否配置书签。
+        if (widget.isLoggedIn) {
+          items.add(
+            PopupMenuItem<Object>(
+              value: _bookmarksValue,
+              child: Row(
+                children: [
+                  Icon(
+                    Symbols.bookmark_rounded,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(S.current.nav_bookmarks),
                 ],
               ),
             ),
