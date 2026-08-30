@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:common_ui/common_ui.dart';
-import '../../navigation/nav_action_bus.dart';
+import '../../pages/bookmarks_page.dart';
 import '../../providers/topic_list/filter_provider.dart';
 import '../../providers/topic_list/sort_provider.dart';
 import '../../providers/topic_list/tab_state_provider.dart';
@@ -142,7 +142,9 @@ class _TopicFilterMenuButtonState extends ConsumerState<TopicFilterMenuButton> {
         } else if (value == _selectTagsValue) {
           widget.onSelectTags?.call();
         } else if (value == _bookmarksValue) {
-          ref.requestNavDestination(NavEntryIds.bookmarks);
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const BookmarksPage()),
+          );
         }
       },
       offset: const Offset(0, 36),
@@ -182,8 +184,8 @@ class _TopicFilterMenuButtonState extends ConsumerState<TopicFilterMenuButton> {
           );
         }
 
-        // 书签与 Discourse 的话题列表筛选不是同一种数据源：复用现有
-        // 稳定导航 ID 进入书签工作区，不把它伪装成 TopicListFilter。
+        // 书签与 Discourse 的话题列表筛选不是同一种数据源：直接进入现有
+        // 书签工作区，不把它伪装成 TopicListFilter，也不依赖底栏是否配置书签。
         if (widget.isLoggedIn) {
           items.add(
             PopupMenuItem<Object>(
