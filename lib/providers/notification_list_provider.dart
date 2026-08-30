@@ -121,7 +121,7 @@ class NotificationListNotifier
       if (_filter == NotificationReadFilter.unread) {
         final nextList = list.where((n) => n.id != notificationId).toList();
         if (nextList.length != list.length) {
-          _totalRows = (_totalRows - 1).clamp(0, _totalRows);
+          _totalRows = (_totalRows - 1).clamp(0, _totalRows).toInt();
           state = AsyncValue.data(nextList);
         }
         return;
