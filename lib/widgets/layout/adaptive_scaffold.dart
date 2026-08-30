@@ -10,7 +10,6 @@ import '../../utils/nav_chrome_metrics.dart';
 import '../../utils/responsive.dart';
 import '../../l10n/s.dart';
 import '../notification/notification_quick_panel.dart';
-import '../user/account_switcher_hold_trigger.dart';
 import 'adaptive_navigation.dart';
 import 'category_shortcuts.dart';
 import '../topic/category_tab_manager_sheet.dart';
@@ -67,29 +66,6 @@ class AdaptiveScaffold extends ConsumerWidget {
         activeSidebarCategoryId != null && selectedIndex == 0
         ? -1
         : selectedIndex;
-
-    // NavigationDestination itself does not expose a configurable long-press
-    // recognizer. On mobile, wrap only destinations that already have a
-    // long-press action (currently the account/profile entry), then clear the
-    // outer callback so there is only one recognizer in the gesture arena.
-    final mobileDestinations = [
-      for (final destination in destinations)
-        if (destination.onLongPress == null)
-          destination
-        else
-          AdaptiveDestination(
-            id: destination.id,
-            icon: AccountSwitcherHoldTrigger(
-              onLongPress: destination.onLongPress!,
-              child: destination.icon,
-            ),
-            selectedIcon: AccountSwitcherHoldTrigger(
-              onLongPress: destination.onLongPress!,
-              child: destination.selectedIcon,
-            ),
-            label: destination.label,
-          ),
-    ];
 
     final hasAcrylic = Platform.isMacOS || Platform.isWindows;
     final useAcrylicRail = showRail && hasAcrylic;
@@ -204,7 +180,7 @@ class AdaptiveScaffold extends ConsumerWidget {
               : _AnimatedBottomNav(
                   selectedIndex: selectedIndex,
                   onDestinationSelected: onDestinationSelected,
-                  destinations: mobileDestinations,
+                  destinations: destinations,
                   forceHidden: hideBottomNavigation,
                 ),
         ),
