@@ -213,7 +213,11 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   final _contentFocusNode = FocusNode();
   final _editorKey = GlobalKey<MarkdownEditorState>();
   final _editReplyTargetController = TextEditingController();
+  final Map<int, Post> _editReplyTargetPreviewCache = <int, Post>{};
 
+  Post? _editReplyTargetPreview;
+  bool _isLoadingEditReplyTargetPreview = false;
+  int _editReplyTargetPreviewGeneration = 0;
   bool _isSubmitting = false;
   bool _submitted = false; // 提交成功标志，防止 dispose 重新保存草稿
   bool _discarded = false; // 用户明确舍弃，防止 dispose 重新保存草稿
@@ -256,6 +260,9 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
       !_isInPrivateMessageContext &&
       widget.topicId != null;
 
+  int get _editReplyTargetNumber =>
+      int.tryParse(_editReplyTargetController.text.trim()) ?? 0;
+
   @override
   void initState() {
     super.initState();
@@ -266,6 +273,9 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     if (_isEditMode) {
       final replyTarget = widget.editPost!.replyToPostNumber;
       _editReplyTargetController.text = replyTarget > 0 ? '$replyTarget' : '';
+      if (replyTarget > 0) {
+        _scheduleEditReplyTargetPreview(replyTarget, notify: false);
+      }
     }
 
     // 编辑模式：加载帖子原始内容
@@ -306,6 +316,238 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
         }
       });
     }
+  }
+
+  void _setEditReplyTargetNumber(int target) {
+    if (!_isEditMode || widget.editPost!.postNumber <= 1) return;
+    final maxTarget = widget.editPost!.postNumber - 1;
+    final normalized = target < 0
+        ? 0
+        : target > maxTarget
+        ? maxTarget
+        : target;
+    if (_editReplyTargetNumber == normalized) return;
+    _editReplyTargetController.text = normalized == 0 ? '' : '$normalized';
+    _scheduleEditReplyTargetPreview(normalized);
+  }
+
+  void _scheduleEditReplyTargetPreview(
+    int target, {
+    bool notify = true,
+  }) {
+    final generation = ++_editReplyTargetPreviewGeneration;
+    if (target <= 0 || widget.topicId == null) {
+      _editReplyTargetPreview = null;
+      _isLoadingEditReplyTargetPreview = false;
+      if (notify && mounted) setState(() {});
+      return;
+    }
+
+    final cached = _editReplyTargetPreviewCache[target];
+    if (cached != null) {
+      _editReplyTargetPreview = cached;
+      _isLoadingEditReplyTargetPreview = false;
+      if (notify && mounted) setState(() {});
+      return;
+    }
+
+    _editReplyTargetPreview = null;
+    _isLoadingEditReplyTargetPreview = true;
+    if (notify && mounted) setState(() {});
+
+    Future<void>.delayed(const Duration(milliseconds: 120), () async {
+      if (!mounted || generation != _editReplyTargetPreviewGeneration) return;
+      try {
+        final post = await DiscourseService().getPostByNumber(
+          widget.topicId!,
+          target,
+        );
+        if (!mounted ||
+            generation != _editReplyTargetPreviewGeneration ||
+            _editReplyTargetNumber != target) {
+          return;
+        }
+        _editReplyTargetPreviewCache[target] = post;
+        setState(() {
+          _editReplyTargetPreview = post;
+          _isLoadingEditReplyTargetPreview = false;
+        });
+      } catch (_) {
+        if (!mounted ||
+            generation != _editReplyTargetPreviewGeneration ||
+            _editReplyTargetNumber != target) {
+          return;
+        }
+        setState(() {
+          _editReplyTargetPreview = null;
+          _isLoadingEditReplyTargetPreview = false;
+        });
+      }
+    });
+  }
+
+  String _editReplyTargetPreviewText(Post post) {
+    return post.cooked
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'</p\s*>', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'<[^>]+>'), ' ')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  Widget _buildEditReplyTargetSelector(ThemeData theme) {
+    final maxTarget = widget.editPost!.postNumber - 1;
+    final selected = _editReplyTargetNumber;
+    final preview = _editReplyTargetPreview;
+    final isTopicReply = selected == 0;
+    final previewText = preview == null
+        ? ''
+        : _editReplyTargetPreviewText(preview);
+    final previewName = preview == null
+        ? null
+        : ((preview.name?.trim().isNotEmpty ?? false)
+              ? preview.name!.trim()
+              : preview.username);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.45,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 140),
+              child: Row(
+                key: ValueKey<int>(selected),
+                children: [
+                  if (isTopicReply)
+                    CircleAvatar(
+                      radius: 17,
+                      backgroundColor: theme.colorScheme.secondaryContainer,
+                      child: Icon(
+                        Icons.reply_all_rounded,
+                        size: 18,
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
+                    )
+                  else if (preview != null)
+                    SmartAvatar(
+                      imageUrl: preview.getAvatarUrl().isNotEmpty
+                          ? preview.getAvatarUrl()
+                          : null,
+                      radius: 17,
+                      fallbackText: preview.username,
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                    )
+                  else
+                    CircleAvatar(
+                      radius: 17,
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      child: _isLoadingEditReplyTargetPreview
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.onPrimaryContainer,
+                              ),
+                            )
+                          : Icon(
+                              Icons.reply_rounded,
+                              size: 18,
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                    ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isTopicReply
+                              ? context.l10n.post_replyToTopic
+                              : preview == null
+                              ? '${context.l10n.post_replyTo} · #$selected'
+                              : '@${preview.username} · #$selected',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (!isTopicReply && preview != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            previewText.isEmpty
+                                ? previewName!
+                                : '$previewName · $previewText',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Slider(
+              min: 0,
+              max: maxTarget.toDouble(),
+              divisions: maxTarget,
+              value: selected.toDouble().clamp(0, maxTarget.toDouble()),
+              label: isTopicReply
+                  ? context.l10n.post_replyToTopic
+                  : '#$selected',
+              onChanged: _isSubmitting
+                  ? null
+                  : (value) => _setEditReplyTargetNumber(value.round()),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                children: [
+                  Text(
+                    context.l10n.post_replyToTopic,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '#$maxTarget',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// 初始化草稿控制器
@@ -665,6 +907,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     // 释放 Presence 服务（会自动离开频道）
     _presenceService?.dispose();
 
+    _editReplyTargetPreviewGeneration++;
     _titleController.dispose();
     _contentController.dispose();
     _editReplyTargetController.dispose();
@@ -1152,6 +1395,9 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                             ),
                           ),
 
+                          if (_isEditMode && widget.editPost!.postNumber > 1)
+                            _buildEditReplyTargetSelector(theme),
+
                           Divider(
                             height: 1,
                             color: theme.colorScheme.outlineVariant.withValues(
@@ -1160,29 +1406,6 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                           ),
                         ],
                       ),
-
-                      // 编辑普通回复时允许调整其回复目标楼层。留空 = 回复话题。
-                      if (_isEditMode && widget.editPost!.postNumber > 1)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
-                          child: TextField(
-                            controller: _editReplyTargetController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              isDense: true,
-                              labelText:
-                                  '${context.l10n.post_replyTo} (#1 - #${widget.editPost!.postNumber - 1})',
-                              hintText: context.l10n.post_replyToTopic,
-                              prefixText: '#',
-                              border: const OutlineInputBorder(),
-                              suffixIcon: IconButton(
-                                tooltip: context.l10n.post_replyToTopic,
-                                icon: const Icon(Icons.clear_rounded),
-                                onPressed: _editReplyTargetController.clear,
-                              ),
-                            ),
-                          ),
-                        ),
 
                       // 新建私信：所有入口都可增删收件人，预设对象保留为首个 chip。
                       if (_canEditRecipients)
