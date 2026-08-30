@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/site_customization.dart';
 import '../constants.dart';
+import '../pages/badge_page.dart';
+import '../pages/community_events_page.dart';
 import '../pages/group_page.dart';
 import '../pages/image_viewer_page.dart';
 import '../pages/webview_page.dart';
@@ -39,6 +41,11 @@ bool isInternalUrl(Uri uri) {
 
 /// 检查 URL 是否属于站点内部链接（字符串版本，支持相对路径）
 bool isInternalUrlString(String url) {
+  // `//host/path` 是协议相对绝对 URL，不应因为首字符是 `/` 就被当站内。
+  if (url.startsWith('//')) {
+    final uri = Uri.tryParse('https:$url');
+    return uri != null && isInternalUrl(uri);
+  }
   if (url.startsWith('/')) return true;
   final uri = Uri.tryParse(url);
   if (uri == null) return false;
@@ -123,6 +130,8 @@ Future<void> launchExternalLink(BuildContext context, String url) async {
 /// - 用户链接 /u/username → 打开用户页面
 /// - 群组链接 /g/name → 打开原生群组页面
 /// - 话题链接 /t/topic/123 → 调用 onInternalLinkTap 或用 WebView 打开
+/// - 徽章链接 /badges/:id/:slug → 原生徽章详情
+/// - /upcoming-events、/cakeday/... → 原生近期活动 / 生日 / 周年纪念日
 /// - 图片直链（站点域名/CDN/S3 CDN）→ 内置查看器直接打开，对齐网页端
 /// - 附件链接 /uploads/ → 外部浏览器打开
 /// - 站点内部链接（主域名或子域名）→ 内置浏览器
@@ -142,16 +151,18 @@ Future<void> launchContentLink(
     if (!context.mounted) return;
   }
 
+  final internal = isInternalUrlString(url);
+
   // 1. 识别用户链接 /u/username
   final userInfo = DiscourseUrlParser.parseUser(url);
-  if (userInfo != null && isInternalUrlString(url)) {
+  if (userInfo != null && internal) {
     EmbeddedStackScope.openProfile(context, userInfo.username);
     return;
   }
 
   // 1.5 识别群组链接 /g/name，避免内部群组页落回 WebView。
   final groupInfo = DiscourseUrlParser.parseGroup(url);
-  if (groupInfo != null && isInternalUrlString(url)) {
+  if (groupInfo != null && internal) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => GroupPage(groupName: groupInfo.name)),
     );
@@ -161,7 +172,7 @@ Future<void> launchContentLink(
   // 首页平行视界中的站点首页、分类和标签链接直接替换左栏，不再打开
   // WebView。正文链接与话题头部 Badge 使用同一套行为。
   final workspace = HomeWorkspaceScope.maybeOf(context);
-  if (workspace != null && isInternalUrlString(url)) {
+  if (workspace != null && internal) {
     if (DiscourseUrlParser.isHomepage(url)) {
       workspace.onShowFeed();
       return;
@@ -186,7 +197,7 @@ Future<void> launchContentLink(
 
   // 2. 解析话题链接
   final topicInfo = DiscourseUrlParser.parseTopic(url);
-  if (topicInfo != null && isInternalUrlString(url)) {
+  if (topicInfo != null && internal) {
     if (onInternalLinkTap != null) {
       onInternalLinkTap(
         topicInfo.topicId,
@@ -201,22 +212,67 @@ Future<void> launchContentLink(
     return;
   }
 
-  // 3. 图片直链(站点自己的域名/CDN/S3 CDN)→ 直接用内置查看器打开,
+  // 3. 徽章链接走已有原生 BadgePage。
+  // 必须先通过 internal 校验，避免把外站伪造的 /badges/128/- 当站内页面。
+  final badgeInfo = DiscourseUrlParser.parseBadge(url);
+  if (badgeInfo != null && internal) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BadgePage(
+          badgeId: badgeInfo.badgeId,
+          badgeSlug: badgeInfo.slug,
+        ),
+      ),
+    );
+    return;
+  }
+
+  // 4. discourse-events / discourse-cakeday 原生站点页。
+  if (internal && DiscourseUrlParser.isUpcomingEvents(url)) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const CommunityEventsPage(
+          view: CommunityEventsView.upcoming,
+        ),
+      ),
+    );
+    return;
+  }
+
+  final cakedayInfo = DiscourseUrlParser.parseCakeday(url);
+  if (cakedayInfo != null && internal) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CommunityEventsPage(
+          view: cakedayInfo.birthdays
+              ? CommunityEventsView.birthdays
+              : CommunityEventsView.anniversaries,
+          initialFilter: cakedayInfo.filter,
+        ),
+      ),
+    );
+    return;
+  }
+
+  // 5. 图片直链(站点自己的域名/CDN/S3 CDN)→ 直接用内置查看器打开,
   //    与网页端一致(点图直接看大图,不当"外部链接"走离站确认弹窗)。
   //    只信任站点自己配置的域名——不是随便一个图片后缀的外链都放行。
   if (_isImageLinkUrl(url)) {
     final fullUrl = UrlHelper.resolveUrlWithCdn(
-      isInternalUrlString(url) ? UrlHelper.resolveUrl(url) : url,
+      internal ? UrlHelper.resolveUrl(url) : url,
     );
     final uri = Uri.tryParse(fullUrl);
     if (uri != null && UrlHelper.isTrustedImageHost(uri)) {
-      await ImageViewerPage.open(context, DiscourseImageUtils.getOriginalUrl(fullUrl));
+      await ImageViewerPage.open(
+        context,
+        DiscourseImageUtils.getOriginalUrl(fullUrl),
+      );
       return;
     }
   }
 
-  // 4. 附件链接：优先使用内置下载，回退外部浏览器
-  if (_isUploadLink(url) && isInternalUrlString(url)) {
+  // 6. 附件链接：优先使用内置下载，回退外部浏览器
+  if (_isUploadLink(url) && internal) {
     final fullUrl = UrlHelper.resolveUrl(url);
     if (onDownloadAttachment != null) {
       onDownloadAttachment(fullUrl);
@@ -229,7 +285,7 @@ Future<void> launchContentLink(
     return;
   }
 
-  // 5. Email 链接
+  // 7. Email 链接
   if (url.startsWith('mailto:')) {
     final uri = Uri.tryParse(url);
     if (uri != null && await canLaunchUrl(uri)) {
@@ -238,14 +294,14 @@ Future<void> launchContentLink(
     return;
   }
 
-  // 6. 站点内部链接（主域名或子域名、相对路径）→ 内置浏览器
-  if (isInternalUrlString(url)) {
+  // 8. 其他站点内部链接（主域名或子域名、相对路径）→ 内置浏览器
+  if (internal) {
     final fullUrl = UrlHelper.resolveUrl(url);
     WebViewPage.open(context, fullUrl);
     return;
   }
 
-  // 7. 外部链接 → 根据用户偏好决定
+  // 9. 外部链接 → 根据用户偏好决定
   await launchExternalLink(context, url);
 }
 
