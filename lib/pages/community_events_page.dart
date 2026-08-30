@@ -20,16 +20,26 @@ class CommunityEventsPage extends StatefulWidget {
   const CommunityEventsPage({
     super.key,
     required this.view,
+    this.initialFilter,
   });
 
   final CommunityEventsView view;
+
+  /// 来自 `/cakeday/.../:filter` 的初始过滤器。
+  /// 只接受 today / tomorrow / upcoming；其它值按 today 处理。
+  final String? initialFilter;
 
   @override
   State<CommunityEventsPage> createState() => _CommunityEventsPageState();
 }
 
 class _CommunityEventsPageState extends State<CommunityEventsPage> {
-  static const _cakedayFilters = <String>['today', 'tomorrow', 'upcoming', 'month'];
+  static const _cakedayFilters = <String>[
+    'today',
+    'tomorrow',
+    'upcoming',
+    'month',
+  ];
 
   final _service = DiscourseService();
 
@@ -37,7 +47,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   Object? _error;
   List<Map<String, dynamic>> _items = const [];
   String _filter = 'today';
-  int _page = 0;
   String? _loadMorePath;
   bool _loadingMore = false;
 
@@ -46,14 +55,16 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   @override
   void initState() {
     super.initState();
+    _filter = _normalizeFilter(widget.initialFilter);
     _load();
   }
 
   @override
   void didUpdateWidget(covariant CommunityEventsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.view != widget.view) {
-      _filter = 'today';
+    if (oldWidget.view != widget.view ||
+        oldWidget.initialFilter != widget.initialFilter) {
+      _filter = _normalizeFilter(widget.initialFilter);
       _load();
     }
   }
@@ -63,7 +74,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       setState(() {
         _loading = true;
         _error = null;
-        _page = 0;
         _loadMorePath = null;
       });
     } else {
@@ -77,9 +87,14 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         final response = await _service.dio.get<dynamic>(
           '/discourse-post-event/events',
           queryParameters: {
+            // 官方 upcoming-events-list 默认向后看 180 天；原生页提高上限，
+            // 仍让服务端按权限过滤可见事件。
             'limit': 100,
             'after': now.toUtc().toIso8601String(),
-            'before': now.add(const Duration(days: 180)).toUtc().toIso8601String(),
+            'before': now
+                .add(const Duration(days: 180))
+                .toUtc()
+                .toIso8601String(),
             'include_ongoing': true,
           },
         );
@@ -104,8 +119,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       final path = append
           ? _loadMorePath!
           : _filter == 'month'
-              ? '/cakeday/$segment'
-              : '/cakeday/$segment/$_filter';
+          ? '/cakeday/$segment'
+          : '/cakeday/$segment/$_filter';
       final response = await _service.dio.get<dynamic>(
         path,
         queryParameters: append
@@ -126,7 +141,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       if (!mounted) return;
       setState(() {
         _items = append ? [..._items, ...loaded] : loaded;
-        _page = append ? _page + 1 : 0;
         _loadMorePath = data[moreKey] as String?;
         _loading = false;
         _loadingMore = false;
@@ -221,8 +235,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         child: Text(
           _emptyLabel(context),
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -234,7 +248,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
           itemCount: _items.length,
           separatorBuilder: (_, _) => const SizedBox(height: 4),
-          itemBuilder: (context, index) => _buildEventTile(context, _items[index]),
+          itemBuilder: (context, index) =>
+              _buildEventTile(context, _items[index]),
         ),
       );
     }
@@ -267,7 +282,9 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   Widget _buildEventTile(BuildContext context, Map<String, dynamic> event) {
     final post = _asMap(event['post']);
     final topic = _asMap(post['topic']);
-    final name = _string(event['name']) ?? _string(topic['title']) ??
+    final name =
+        _string(event['name']) ??
+        _string(topic['title']) ??
         (_zh(context) ? '未命名活动' : 'Untitled event');
     final url = _string(post['url']);
     final startsAt = _parseEventDate(event['starts_at']);
@@ -299,22 +316,22 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '${local.month}',
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
+          Text('${local.month}', style: Theme.of(context).textTheme.labelSmall),
           Text(
             '${local.day}',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCakedayUserTile(BuildContext context, Map<String, dynamic> user) {
+  Widget _buildCakedayUserTile(
+    BuildContext context,
+    Map<String, dynamic> user,
+  ) {
     final username = _string(user['username']) ?? '';
     final name = _string(user['name']);
     final title = _string(user['title']);
@@ -322,7 +339,9 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     final avatarTemplate = _string(user['avatar_template']);
     final avatar = avatarTemplate == null
         ? null
-        : UrlHelper.resolveUrlWithCdn(avatarTemplate.replaceAll('{size}', '96'));
+        : UrlHelper.resolveUrlWithCdn(
+            avatarTemplate.replaceAll('{size}', '96'),
+          );
 
     return ListTile(
       leading: SmartAvatar(
@@ -351,7 +370,10 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       ),
       onTap: username.isEmpty
           ? null
-          : () => launchContentLink(context, '/u/${Uri.encodeComponent(username)}'),
+          : () => launchContentLink(
+              context,
+              '/u/${Uri.encodeComponent(username)}',
+            ),
     );
   }
 
@@ -407,7 +429,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     return switch (_filter) {
       'today' => zh ? '今天没有用户庆祝' : 'Nobody to celebrate today',
       'tomorrow' => zh ? '明天没有用户庆祝' : 'Nobody to celebrate tomorrow',
-      'upcoming' => zh ? '接下来 7 天没有用户庆祝' : 'Nobody to celebrate in the next 7 days',
+      'upcoming' =>
+        zh ? '接下来 7 天没有用户庆祝' : 'Nobody to celebrate in the next 7 days',
       _ => zh ? '本月没有用户庆祝' : 'Nobody to celebrate this month',
     };
   }
@@ -420,18 +443,26 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
 
   static List<Map<String, dynamic>> _asMapList(dynamic value) {
     if (value is! List) return const [];
-    return value.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    return value
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
-  static String? _string(dynamic value) => value is String && value.isNotEmpty ? value : null;
+  static String? _string(dynamic value) =>
+      value is String && value.isNotEmpty ? value : null;
 
   static DateTime? _parseEventDate(dynamic value) {
     if (value is! String || value.isEmpty) return null;
     // discourse-events 的全天事件可能返回 YYYY-MM-DD；显式按本地日历构造，
     // 避免把 date-only 当 UTC 导致西半球日期前移一天。
     if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
-      final p = value.split('-').map(int.parse).toList();
-      return DateTime(p[0], p[1], p[2]);
+      final parts = value.split('-');
+      final year = int.tryParse(parts[0]);
+      final month = int.tryParse(parts[1]);
+      final day = int.tryParse(parts[2]);
+      if (year == null || month == null || day == null) return null;
+      return DateTime(year, month, day);
     }
     return DateTime.tryParse(value);
   }
@@ -440,6 +471,13 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     final x = a.toLocal();
     final y = b.toLocal();
     return x.year == y.year && x.month == y.month && x.day == y.day;
+  }
+
+  static String _normalizeFilter(String? value) {
+    if (value == 'today' || value == 'tomorrow' || value == 'upcoming') {
+      return value!;
+    }
+    return 'today';
   }
 
   static bool _zh(BuildContext context) =>
