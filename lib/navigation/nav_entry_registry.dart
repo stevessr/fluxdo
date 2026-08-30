@@ -6,6 +6,7 @@ import '../l10n/s.dart';
 import '../models/user.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/browsing_history_page.dart';
+import '../pages/community_events_page.dart';
 import '../pages/drafts_page.dart';
 import '../pages/leaderboard_page.dart';
 import '../pages/profile_page.dart';
@@ -82,6 +83,42 @@ class NavEntryRegistry {
         label: _leaderboardLabel,
         pageBuilder: (ctx, isActive) => LeaderboardPage(isActive: isActive),
         defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'upcoming_events',
+        kind: NavEntryKind.page,
+        iconData: Symbols.calendar_today_rounded,
+        selectedIconData: Symbols.calendar_today_rounded,
+        label: (ctx) => _communityEventLabel(ctx, CommunityEventsView.upcoming),
+        pageBuilder: (ctx, isActive) => const CommunityEventsPage(
+          view: CommunityEventsView.upcoming,
+        ),
+        defaultInBottomNav: false,
+        requiresLogin: true,
+      ),
+      NavEntry(
+        id: 'anniversaries',
+        kind: NavEntryKind.page,
+        iconData: Symbols.celebration_rounded,
+        selectedIconData: Symbols.celebration_rounded,
+        label: (ctx) => _communityEventLabel(ctx, CommunityEventsView.anniversaries),
+        pageBuilder: (ctx, isActive) => const CommunityEventsPage(
+          view: CommunityEventsView.anniversaries,
+        ),
+        defaultInBottomNav: false,
+        requiresLogin: true,
+      ),
+      NavEntry(
+        id: 'birthdays',
+        kind: NavEntryKind.page,
+        iconData: Symbols.cake_rounded,
+        selectedIconData: Symbols.cake_rounded,
+        label: (ctx) => _communityEventLabel(ctx, CommunityEventsView.birthdays),
+        pageBuilder: (ctx, isActive) => const CommunityEventsPage(
+          view: CommunityEventsView.birthdays,
+        ),
+        defaultInBottomNav: false,
+        requiresLogin: true,
       ),
       NavEntry(
         id: NavEntryIds.bookmarks,
@@ -162,6 +199,15 @@ class NavEntryRegistry {
 String _leaderboardLabel(BuildContext context) {
   final locale = Localizations.localeOf(context);
   return locale.languageCode == 'zh' ? '排行榜' : 'Leaderboard';
+}
+
+String _communityEventLabel(BuildContext context, CommunityEventsView view) {
+  final zh = Localizations.localeOf(context).languageCode == 'zh';
+  return switch (view) {
+    CommunityEventsView.upcoming => zh ? '近期活动' : 'Upcoming events',
+    CommunityEventsView.anniversaries => zh ? '周年纪念日' : 'Anniversaries',
+    CommunityEventsView.birthdays => zh ? '生日' : 'Birthdays',
+  };
 }
 
 Widget _profileIcon(
