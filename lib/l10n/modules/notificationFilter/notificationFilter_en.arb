@@ -3,5 +3,11 @@
   "notification_filterAll": "All",
   "notification_filterRead": "Read",
   "notification_filterUnread": "Unread",
+  "notification_categoryAll": "All",
+  "notification_categoryReplies": "Replies & mentions",
+  "notification_categoryLikes": "Likes",
+  "notification_categoryMessages": "Messages",
+  "notification_categoryBookmarks": "Bookmarks",
+  "notification_categoryOther": "Other",
   "notification_solvedAccepted": "Your post was marked as solution"
 }
