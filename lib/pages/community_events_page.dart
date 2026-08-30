@@ -404,10 +404,13 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       MaterialLocalizations.of(context).formatMediumDate(value.toLocal());
 
   String _formatCakedate(BuildContext context, String value) {
-    final parts = value.split('-');
-    if (parts.length < 3) return value;
-    final month = int.tryParse(parts[1]);
-    final day = int.tryParse(parts[2]);
+    // anniversaries 的 cakedate 来自 users.created_at，序列化时可能是
+    // `YYYY-MM-DDTHH:mm:ss...`；birthdays 则通常是纯 `YYYY-MM-DD`。
+    // 两者都只显示服务端已按用户时区筛选后的月/日，不把周年时间戳再次
+    // 转时区，避免跨日。
+    if (value.length < 10) return value;
+    final month = int.tryParse(value.substring(5, 7));
+    final day = int.tryParse(value.substring(8, 10));
     if (month == null || day == null) return value;
     return _zh(context) ? '$month月$day日' : '$month/$day';
   }
