@@ -12,6 +12,7 @@ import 'package:native_animated_image/native_animated_image.dart'
 import 'avif_fast_bridge.dart';
 import 'avif_image_provider.dart';
 import 'blob_image_cache.dart';
+import 'sticker_thumbnail_cache_policy.dart';
 
 // 与 native_animated_image 内部定义的错误码保持一致(Rust 端 ERR_UNSUPPORTED = -2),
 // dart 端没单独 export 这个常量,我们直接复用数字 — 这是 stable FFI contract。
@@ -96,6 +97,10 @@ bool _bytesLookLikeGif(Uint8List bytes) {
 /// (.avif / .gif / .webp / .apng) 都走同一个 thumbnail PNG cache 路径,
 /// 首次解码后写 PNG 到磁盘,后续直接 Flutter 内置 codec 读 PNG
 /// (毫秒级,完全跳过 AV1 / GIF disposal 这类慢路径)。
+///
+/// 缓存身份与 decoder 版本彻底解耦：资源 key 永远是无版本号的
+/// `sticker_thumb:<targetSize>:<url>`；格式和 schema version 存在缓存记录
+/// envelope 里。未来只升级某个格式的 schema 时，其它格式继续命中。
 ///
 /// 之前架构错误:`AvifImageProvider` 只覆盖 AVIF,GIF/WebP sticker group
 /// 直接走 `CachedNetworkImageProvider` 没任何优化 → 30 个 GIF 同屏卡死。
@@ -195,7 +200,11 @@ class StickerThumbnailProvider
               targetSize: targetSize,
             );
             if (shouldContinue != null && !shouldContinue()) return;
-            await _cacheThumbnail(thumbKey, image);
+            await _cacheThumbnail(
+              thumbKey,
+              image,
+              format: StickerThumbnailFormat.gif,
+            );
             _knownThumbnailKeys.add(thumbKey);
           } finally {
             image?.dispose();
@@ -252,11 +261,13 @@ class StickerThumbnailProvider
           (srcImage.width > targetSize || srcImage.height > targetSize)
               ? await _resize(srcImage, targetSize)
               : srcImage;
+      final thumbKey = _thumbnailCacheKey(url, targetSize);
       await _cacheThumbnail(
-        _thumbnailCacheKey(url, targetSize),
+        thumbKey,
         displayImage,
+        format: StickerThumbnailCachePolicy.detectFormat(bytes, url),
       );
-      _knownThumbnailKeys.add(_thumbnailCacheKey(url, targetSize));
+      _knownThumbnailKeys.add(thumbKey);
       if (displayImage != srcImage) displayImage.dispose();
     } finally {
       srcImage?.dispose();
@@ -326,7 +337,7 @@ class StickerThumbnailProvider
   Future<ImageInfo> _loadThumbnail(StickerThumbnailProvider key) async {
     final thumbKey = _thumbnailCacheKey(key.url, key.targetSize);
 
-    // 快速路径:PNG 缓存命中 → Flutter 内置 PNG codec(毫秒级)
+    // 快速路径:格式 envelope 校验通过 → Flutter 内置 PNG codec(毫秒级)
     final cachedBytes = await _readCachedThumbnailBytes(thumbKey);
     if (cachedBytes != null) {
       return _decodeThumbnailBytes(cachedBytes, key.scale);
@@ -344,13 +355,19 @@ class StickerThumbnailProvider
     }
 
     // 缓存写入失败兜底:现场解 + 显示,不让用户看到空白
-    final displayImage = await _decodeFirstFrameImage(
+    final decoded = await _decodeFirstFrameImage(
       bucket: key.bucket,
       url: key.url,
       targetSize: key.targetSize,
     );
-    unawaited(_cacheThumbnail(thumbKey, displayImage));
-    return ImageInfo(image: displayImage, scale: key.scale);
+    unawaited(
+      _cacheThumbnail(
+        thumbKey,
+        decoded.image,
+        format: decoded.format,
+      ),
+    );
+    return ImageInfo(image: decoded.image, scale: key.scale);
   }
 
   @override
@@ -393,7 +410,8 @@ final _nonAvifSemaphore = _Semaphore(8);
 /// in-flight prefetch task,去重避免重复解
 final _pendingThumbnailTasks = <String, Future<void>>{};
 
-/// 已知 PNG cache 命中(进程级 in-memory 索引,跳过磁盘查询)
+/// 已知 cache 命中(进程级 in-memory 索引,跳过磁盘查询)。key 本身永远
+/// 不携带 schema version；格式版本只由 cache envelope 校验。
 final _knownThumbnailKeys = <String>{};
 
 /// 生成号 — 每次 [StickerThumbnailProvider.cancelInflight] 调用 ++,
@@ -418,27 +436,30 @@ class _ThumbnailCancelled implements Exception {
   String toString() => 'sticker thumbnail decode cancelled';
 }
 
-// v4: v3 虽已绕开 Flutter/Impeller PNG encoder，但 AVIF sequence 的首帧
-// 仍会先尝试 Android / Flutter 平台 AVIF codec；完整动画却明确走 libavif。
-// 对部分动画 AVIF，系统 codec 会“成功”解出首帧但发生严重偏紫。v4 强制
-// 动画 AVIF 缩略图与完整播放共用 libavif，并让已有 v3 偏紫缓存自动失效。
-const int _thumbnailCacheVersion = 4;
+class _DecodedThumbnail {
+  const _DecodedThumbnail({required this.image, required this.format});
 
-String _thumbnailCacheKey(String url, int targetSize) {
-  return 'sticker_thumb:v$_thumbnailCacheVersion:$targetSize:$url';
+  final ui.Image image;
+  final StickerThumbnailFormat format;
 }
 
-/// 缩略图 PNG 走 [BlobImageCache](零 sqlite 寻址):30 张同屏的 grid
-/// 场景下,cache_manager 的每 key 一次 SELECT 是纯浪费。原图字节仍走
-/// cache manager(下载进度/大文件语义)。
+String _thumbnailCacheKey(String url, int targetSize) {
+  return StickerThumbnailCachePolicy.key(url, targetSize);
+}
+
+/// 缩略图仍共用 BlobImageCache 的 stickerThumb 物理池，但 record 自带
+/// source-format/schema envelope。这样资源 key 稳定、格式版本彼此独立，
+/// 且继续复用现有 90 天 retention / 清缓存 / sweep 逻辑。
 Future<Uint8List?> _readCachedThumbnailBytes(String thumbKey) async {
-  final bytes = await BlobImageCache.read(
+  final record = await BlobImageCache.read(
     BlobImageCache.stickerThumbBucket,
     thumbKey,
   );
-  if (bytes == null) return null;
+  if (record == null) return null;
+  final pngBytes = StickerThumbnailCachePolicy.unwrap(record);
+  if (pngBytes == null) return null;
   _knownThumbnailKeys.add(thumbKey);
-  return bytes;
+  return pngBytes;
 }
 
 Future<ImageInfo> _decodeThumbnailBytes(
@@ -458,25 +479,30 @@ Future<void> _warmThumbnail({
   required int targetSize,
   required String thumbKey,
 }) async {
-  ui.Image? displayImage;
+  _DecodedThumbnail? decoded;
   try {
-    displayImage = await _decodeFirstFrameImage(
+    decoded = await _decodeFirstFrameImage(
       bucket: bucket,
       url: url,
       targetSize: targetSize,
     );
-    await _cacheThumbnail(thumbKey, displayImage);
+    await _cacheThumbnail(
+      thumbKey,
+      decoded.image,
+      format: decoded.format,
+    );
     _knownThumbnailKeys.add(thumbKey);
   } finally {
-    displayImage?.dispose();
+    decoded?.image.dispose();
   }
 }
 
 /// 从 cache 拿 bytes → backend dispatch 解第一帧 → 必要时缩放到 targetSize。
 ///
 /// 用 magic bytes 决定走 AVIF semaphore 还是非 AVIF semaphore。两者**独立**
-/// 限流,AVIF 慢不阻塞 GIF/WebP/APNG。
-Future<ui.Image> _decodeFirstFrameImage({
+/// 限流,AVIF 慢不阻塞 GIF/WebP/APNG。同时把真实 container format 带回
+/// cache writer，保证 CDN 改后缀时仍使用正确格式的 schema version。
+Future<_DecodedThumbnail> _decodeFirstFrameImage({
   required String bucket,
   required String url,
   required int targetSize,
@@ -492,6 +518,7 @@ Future<ui.Image> _decodeFirstFrameImage({
   final bytes = await BlobImageCache.fetch(bucket, url);
   checkCancel();
 
+  final format = StickerThumbnailCachePolicy.detectFormat(bytes, url);
   final isAvif = _bytesLookLikeAvif(bytes);
   final semaphore = isAvif ? _avifSemaphore : _nonAvifSemaphore;
 
@@ -515,9 +542,9 @@ Future<ui.Image> _decodeFirstFrameImage({
   if (srcImage.width > targetSize || srcImage.height > targetSize) {
     final resized = await _resize(srcImage, targetSize);
     srcImage.dispose();
-    return resized;
+    return _DecodedThumbnail(image: resized, format: format);
   }
-  return srcImage;
+  return _DecodedThumbnail(image: srcImage, format: format);
 }
 
 /// 解第一帧。按**实际 magic bytes** dispatch backend:
@@ -652,7 +679,14 @@ Future<ui.Image> _rgbaToUiImage(Uint8List rgba, int width, int height) {
 /// 失真的问题。这里先请求 straight RGBA，再交给纯 Dart `image` 库在 CPU
 /// 上编码 PNG：GPU 只负责一次 raw readback，PNG 编码本身完全不经过
 /// Impeller/Skia 的 image encoder，避免把正确首帧永久缓存成偏紫 PNG。
-Future<void> _cacheThumbnail(String key, ui.Image image) async {
+///
+/// PNG 编码后再由 [StickerThumbnailCachePolicy] 加上格式/schema envelope；
+/// version 不再污染 BlobImageCache 的资源 key。
+Future<void> _cacheThumbnail(
+  String key,
+  ui.Image image, {
+  required StickerThumbnailFormat format,
+}) async {
   try {
     final byteData = await image.toByteData(
       format: ui.ImageByteFormat.rawStraightRgba,
@@ -682,10 +716,11 @@ Future<void> _cacheThumbnail(String key, ui.Image image) async {
       return Uint8List.fromList(img.encodePng(cpuImage));
     }, debugName: 'StickerThumbnail.pngEncode');
 
+    final cacheRecord = StickerThumbnailCachePolicy.wrap(format, pngBytes);
     await BlobImageCache.write(
       BlobImageCache.stickerThumbBucket,
       key,
-      pngBytes,
+      cacheRecord,
     );
   } catch (_) {
     // 缓存写入失败不影响显示
