@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:image/image.dart' as img;
 import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageFfi, NativeAnimatedImageException;
 
@@ -378,9 +379,10 @@ class _ThumbnailCancelled implements Exception {
   String toString() => 'sticker thumbnail decode cancelled';
 }
 
-// v2: v1 可能已经把颜色异常的 GIF 首帧永久写成 PNG。升级 key 后旧缓存
-// 自动失效，用户更新后无需手动清缓存即可拿到新解码结果。
-const int _thumbnailCacheVersion = 2;
+// v3: v2 仍经 `ui.Image.toByteData(png)` 走 Flutter/Impeller 的 PNG encoder。
+// 对 AVIF / HEIF / wide-gamut 类图片，这条 GPU image → PNG 路径存在过颜色
+// 空间与像素格式回读异常；升级 key 后让旧的偏紫 PNG 自动失效。
+const int _thumbnailCacheVersion = 3;
 
 String _thumbnailCacheKey(String url, int targetSize) {
   return 'sticker_thumb:v$_thumbnailCacheVersion:$targetSize:$url';
@@ -572,19 +574,48 @@ Future<ui.Image> _rgbaToUiImage(Uint8List rgba, int width, int height) {
   return completer.future;
 }
 
+/// 将缩略图持久化为 PNG，但刻意绕开 `ui.Image.toByteData(png)`。
+///
+/// AVIF/HEIF（尤其带 alpha / 非普通 sRGB 元数据的样本）经过 Impeller
+/// raster image 再走 Flutter PNG encoder 时，历史上存在颜色回读/像素格式
+/// 失真的问题。这里先请求 straight RGBA，再交给纯 Dart `image` 库在 CPU
+/// 上编码 PNG：GPU 只负责一次 raw readback，PNG 编码本身完全不经过
+/// Impeller/Skia 的 image encoder，避免把正确首帧永久缓存成偏紫 PNG。
 Future<void> _cacheThumbnail(String key, ui.Image image) async {
   try {
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData != null) {
-      await BlobImageCache.write(
-        BlobImageCache.stickerThumbBucket,
-        key,
-        byteData.buffer.asUint8List(
-          byteData.offsetInBytes,
-          byteData.lengthInBytes,
-        ),
+    final byteData = await image.toByteData(
+      format: ui.ImageByteFormat.rawStraightRgba,
+    );
+    if (byteData == null) return;
+
+    // ByteData 可能只是更大 buffer 的 view，先严格裁出有效 RGBA 区间。
+    final rgba = Uint8List.fromList(
+      byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      ),
+    );
+    final width = image.width;
+    final height = image.height;
+
+    // PNG 压缩属于纯 CPU 工作，放到 isolate，避免一次打开几十张表情时
+    // 把主 isolate 卡在 deflate 上。
+    final pngBytes = await Isolate.run(() {
+      final cpuImage = img.Image.fromBytes(
+        width: width,
+        height: height,
+        bytes: rgba.buffer,
+        numChannels: 4,
+        order: img.ChannelOrder.rgba,
       );
-    }
+      return Uint8List.fromList(img.encodePng(cpuImage));
+    }, debugName: 'StickerThumbnail.pngEncode');
+
+    await BlobImageCache.write(
+      BlobImageCache.stickerThumbBucket,
+      key,
+      pngBytes,
+    );
   } catch (_) {
     // 缓存写入失败不影响显示
   }
