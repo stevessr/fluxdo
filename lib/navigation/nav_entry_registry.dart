@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/s.dart';
 import '../models/user.dart';
+import '../pages/ai_bot_conversations_page.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/browsing_history_page.dart';
 import '../pages/drafts_page.dart';
@@ -46,6 +47,16 @@ class NavEntryRegistry {
         selectedIconData: Symbols.chat_rounded,
         label: (ctx) => ctx.l10n.nav_chat,
         pageBuilder: (ctx, isActive) => const ChatPage(),
+        defaultInBottomNav: true,
+        requiresLogin: true,
+      ),
+      NavEntry(
+        id: NavEntryIds.aiBot,
+        kind: NavEntryKind.page,
+        iconData: Icons.smart_toy_outlined,
+        selectedIconData: Icons.smart_toy_rounded,
+        label: _aiBotLabel,
+        pageBuilder: (ctx, isActive) => const AiBotConversationsPage(),
         defaultInBottomNav: true,
         requiresLogin: true,
       ),
@@ -162,6 +173,11 @@ class NavEntryRegistry {
 String _leaderboardLabel(BuildContext context) {
   final locale = Localizations.localeOf(context);
   return locale.languageCode == 'zh' ? '排行榜' : 'Leaderboard';
+}
+
+String _aiBotLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? 'AI 聊天' : 'AI Chat';
 }
 
 Widget _profileIcon(
