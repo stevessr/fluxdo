@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:app_icons/app_icons.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -32,7 +33,21 @@ abstract final class RadialAccountQuickSwitcher {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return showClassic();
 
-    final anchor = AccountQuickSwitcherTriggerState.takeAnchor();
+    final globalAnchor = AccountQuickSwitcherTriggerState.takeAnchor();
+    final overlayRenderObject = overlay.context.findRenderObject();
+    final overlayBox =
+        overlayRenderObject is RenderBox &&
+            overlayRenderObject.hasSize &&
+            overlayRenderObject.size.width > 0.0 &&
+            overlayRenderObject.size.height > 0.0
+        ? overlayRenderObject
+        : null;
+    final anchor = globalAnchor == null || overlayBox == null
+        ? globalAnchor
+        : overlayBox.globalToLocal(globalAnchor);
+    final globalToOverlay = overlayBox == null
+        ? (Offset position) => position
+        : (Offset position) => overlayBox.globalToLocal(position);
     final completer = Completer<void>();
     final pointerRoute = _RadialPointerRouteController();
     late OverlayEntry entry;
@@ -51,6 +66,8 @@ abstract final class RadialAccountQuickSwitcher {
         hostContext: context,
         fromTop: fromTop,
         anchor: anchor,
+        overlaySize: overlayBox?.size,
+        globalToOverlay: globalToOverlay,
         trigger: trigger,
         pointerRoute: pointerRoute,
         showClassic: showClassic,
@@ -112,6 +129,8 @@ class _RadialAccountQuickSwitcherOverlay extends StatefulWidget {
     required this.hostContext,
     required this.fromTop,
     required this.anchor,
+    required this.overlaySize,
+    required this.globalToOverlay,
     required this.trigger,
     required this.pointerRoute,
     required this.showClassic,
@@ -122,6 +141,8 @@ class _RadialAccountQuickSwitcherOverlay extends StatefulWidget {
   final BuildContext hostContext;
   final bool fromTop;
   final Offset? anchor;
+  final Size? overlaySize;
+  final Offset Function(Offset) globalToOverlay;
   final AccountQuickSwitchTrigger trigger;
   final _RadialPointerRouteController pointerRoute;
   final Future<void> Function() showClassic;
@@ -139,9 +160,6 @@ class _RadialAccountQuickSwitcherOverlayState
   static const _manageTarget = '__fluxdo_manage_accounts__';
   static const _dwellDuration = Duration(seconds: 5);
   static const _switchCoverMinDuration = Duration(milliseconds: 320);
-  static const _nodeSize = 50.0;
-  static const _hitRadius = 31.0;
-
   final AccountManager _manager = AccountManager();
   late final AnimationController _entryController;
   late final Animation<double> _opacity;
@@ -156,6 +174,7 @@ class _RadialAccountQuickSwitcherOverlayState
   _RadialAccountLayout? _layout;
   bool _loading = true;
   bool _finishing = false;
+  bool _fallbackScheduled = false;
   int _dwellGeneration = 0;
 
   @override
@@ -177,7 +196,10 @@ class _RadialAccountQuickSwitcherOverlayState
       reverseCurve: Curves.easeInCubic,
     );
     _scale = Tween<double>(begin: 0.72, end: 1.0).animate(entryCurve);
-    _dwellController = AnimationController(vsync: this, duration: _dwellDuration);
+    _dwellController = AnimationController(
+      vsync: this,
+      duration: _dwellDuration,
+    );
     _pointerListener = _handlePointerEvent;
     widget.pointerRoute.attach(_pointerListener);
     unawaited(_entryController.forward());
@@ -293,11 +315,13 @@ class _RadialAccountQuickSwitcherOverlayState
   String? _targetAt(Offset globalPosition) {
     final layout = _layout;
     if (layout == null || _loading) return null;
+    final localPosition = widget.globalToOverlay(globalPosition);
+    final hitRadius = layout.nodeSize / 2.0 + 6.0;
     _RadialTarget? nearest;
     var nearestDistance = double.infinity;
     for (final target in layout.targets) {
-      final distance = (globalPosition - target.center).distance;
-      if (distance <= _hitRadius && distance < nearestDistance) {
+      final distance = (localPosition - target.center).distance;
+      if (distance <= hitRadius && distance < nearestDistance) {
         nearest = target;
         nearestDistance = distance;
       }
@@ -322,10 +346,7 @@ class _RadialAccountQuickSwitcherOverlayState
     return null;
   }
 
-  Future<void> _finish(
-    String? target, {
-    bool fallbackToClassic = false,
-  }) async {
+  Future<void> _finish(String? target, {bool fallbackToClassic = false}) async {
     if (_finishing) return;
     _finishing = true;
     _cancelDwell(reset: false);
@@ -399,10 +420,11 @@ class _RadialAccountQuickSwitcherOverlayState
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final overlaySize = widget.overlaySize ?? media.size;
     final scheme = Theme.of(context).colorScheme;
     final layout = _RadialAccountLayout.calculate(
-      size: media.size,
-      padding: media.padding,
+      size: overlaySize,
+      padding: media.viewPadding,
       fromTop: widget.fromTop,
       anchor: widget.anchor,
       accounts: _accounts,
@@ -410,13 +432,22 @@ class _RadialAccountQuickSwitcherOverlayState
       manageTarget: _manageTarget,
     );
     _layout = layout;
+    if (layout.overflowed && !_loading && !_finishing && !_fallbackScheduled) {
+      _fallbackScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _finishing || !(_layout?.overflowed ?? false)) return;
+        unawaited(_finish(null, fallbackToClassic: true));
+      });
+    } else if (!layout.overflowed) {
+      _fallbackScheduled = false;
+    }
     final alignment = Alignment(
-      media.size.width <= 0.0
+      overlaySize.width <= 0.0
           ? 0.0
-          : layout.center.dx / media.size.width * 2.0 - 1.0,
-      media.size.height <= 0.0
+          : layout.center.dx / overlaySize.width * 2.0 - 1.0,
+      overlaySize.height <= 0.0
           ? 0.0
-          : layout.center.dy / media.size.height * 2.0 - 1.0,
+          : layout.center.dy / overlaySize.height * 2.0 - 1.0,
     );
     final radialBody = FadeTransition(
       opacity: _opacity,
@@ -448,7 +479,8 @@ class _RadialAccountQuickSwitcherOverlayState
                 ),
               )
             else
-              for (final target in layout.targets) _buildTarget(context, target),
+              for (final target in layout.targets)
+                _buildTarget(context, target, layout.nodeSize),
           ],
         ),
       ),
@@ -490,7 +522,11 @@ class _RadialAccountQuickSwitcherOverlayState
     );
   }
 
-  Widget _buildTarget(BuildContext context, _RadialTarget target) {
+  Widget _buildTarget(
+    BuildContext context,
+    _RadialTarget target,
+    double nodeSize,
+  ) {
     final scheme = Theme.of(context).colorScheme;
     final hovered = _hoveredTarget == target.target;
     final showProgress =
@@ -500,20 +536,23 @@ class _RadialAccountQuickSwitcherOverlayState
     final targetChild = target.isManage
         ? Icon(
             Symbols.manage_accounts_rounded,
-            size: 25,
+            size: (nodeSize * 0.5).clamp(20.0, 25.0).toDouble(),
             color: hovered ? scheme.onPrimaryContainer : scheme.primary,
           )
-        : _RadialAccountAvatar(account: target.account!, radius: 20);
+        : _RadialAccountAvatar(
+            account: target.account!,
+            radius: (nodeSize * 0.4).clamp(15.0, 20.0).toDouble(),
+          );
     return Positioned(
-      left: target.center.dx - _nodeSize / 2.0,
-      top: target.center.dy - _nodeSize / 2.0,
+      left: target.center.dx - nodeSize / 2.0,
+      top: target.center.dy - nodeSize / 2.0,
       child: AnimatedScale(
         scale: hovered ? 1.12 : 1.0,
         duration: const Duration(milliseconds: 110),
         curve: Curves.easeOutCubic,
         child: SizedBox(
-          width: _nodeSize,
-          height: _nodeSize,
+          width: nodeSize,
+          height: nodeSize,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -569,17 +608,23 @@ class _RadialAccountQuickSwitcherOverlayState
 class _RadialAccountLayout {
   const _RadialAccountLayout({
     required this.center,
+    required this.nodeSize,
+    required this.targetCenterBounds,
     required this.radii,
     required this.targets,
     required this.startAngle,
     required this.sweepAngle,
+    required this.overflowed,
   });
 
   final Offset center;
+  final double nodeSize;
+  final Rect targetCenterBounds;
   final List<double> radii;
   final List<_RadialTarget> targets;
   final double startAngle;
   final double sweepAngle;
+  final bool overflowed;
 
   static _RadialAccountLayout calculate({
     required Size size,
@@ -591,7 +636,9 @@ class _RadialAccountLayout {
     required String manageTarget,
   }) {
     const outerMargin = 8.0;
+    const nodeSize = 50.0;
     const nodeRadius = 25.0;
+    const hoveredNodeRadius = nodeRadius * 1.12;
     const preferredInnerRadius = 76.0;
     const preferredRingGap = 64.0;
     const minimumRingGap = 52.0;
@@ -609,40 +656,44 @@ class _RadialAccountLayout {
         size.height - padding.bottom - outerMargin,
       ),
     );
-    final center = anchor ??
+    final targetCenterBounds = safe.deflate(hoveredNodeRadius + 2.0);
+    final rawCenter =
+        anchor ??
         Offset(
           safe.right - 26.0,
           fromTop ? safe.top + 34.0 : safe.bottom - 34.0,
         );
+    final center = Offset(
+      rawCenter.dx.clamp(0.0, size.width).toDouble(),
+      rawCenter.dy.clamp(0.0, size.height).toDouble(),
+    );
 
-    // “我的”位于右下角时，不再用 SafeArea / 最近边推导方向。
-    // 这个入口的交互几何是确定的：从正左(180°)到正上(270°)展开，
-    // 中轴固定在左上 45°(225°)。这避免底栏较高时被误判成“右边缘”，
-    // 从而生成 135°→225°、有一半落在底栏下方的错误扇区。
-    final isBottomRightTrigger =
-        center.dx >= size.width * 0.60 && center.dy >= size.height * 0.60;
-    final inwardAngle = isBottomRightTrigger
-        ? math.pi * 5.0 / 4.0
-        : _inwardAngleForEdge(center, safe);
-    final startAngle = isBottomRightTrigger
-        ? math.pi
-        : inwardAngle - sweep / 2.0;
+    // Placement is already known by the caller. Do not infer it again from a
+    // percentage of the screen: compact/floating navigation bars can place the
+    // profile entry well inside that threshold even though it is still the
+    // bottom-right trigger.
+    final inwardAngle = fromTop ? math.pi * 3.0 / 4.0 : math.pi * 5.0 / 4.0;
+    final startAngle = fromTop ? math.pi / 2.0 : math.pi;
 
     final geometryBounds = Rect.fromLTRB(
-      math.min(safe.left, center.dx),
-      math.min(safe.top, center.dy),
-      math.max(safe.right, center.dx),
-      math.max(safe.bottom, center.dy),
+      math.min(targetCenterBounds.left, center.dx),
+      math.min(targetCenterBounds.top, center.dy),
+      math.max(targetCenterBounds.right, center.dx),
+      math.max(targetCenterBounds.bottom, center.dy),
     );
-    final rayDistances = <double>[
-      _distanceToRectEdge(center, startAngle, geometryBounds),
-      _distanceToRectEdge(center, inwardAngle, geometryBounds),
-      _distanceToRectEdge(center, startAngle + sweep, geometryBounds),
-    ].where((value) => value.isFinite && value > 0.0).toList();
-    final rawMaxRadius = rayDistances.isEmpty
+    // The account arcs below are clipped against [targetCenterBounds], so the
+    // outer radius only needs to fit along the fan's inward centreline. Taking
+    // the minimum of the two cardinal endpoints unnecessarily threw away a
+    // large triangular part of the usable area on compact/floating bars.
+    final inwardDistance = _distanceToRectEdge(
+      center,
+      inwardAngle,
+      geometryBounds,
+    );
+    final rawMaxRadius = !inwardDistance.isFinite || inwardDistance <= 0.0
         ? math.min(size.width, size.height) * 0.45
-        : rayDistances.reduce((a, b) => math.min(a, b));
-    final maxRadius = math.max(48.0, rawMaxRadius - nodeRadius - 6.0);
+        : inwardDistance;
+    final maxRadius = math.max(0.0, rawMaxRadius - 2.0);
     final defaultInnerRadius = math.min(preferredInnerRadius, maxRadius);
     final switchable = accounts
         .where((account) => account.username != currentUsername)
@@ -651,17 +702,17 @@ class _RadialAccountLayout {
     ({double startAngle, double sweepAngle}) accountArcFor(double radius) =>
         _accountTargetArc(
           center: center,
-          rect: safe,
+          rect: targetCenterBounds,
           radius: radius,
           startAngle: startAngle,
           sweepAngle: sweep,
           inwardAngle: inwardAngle,
-          nodeRadius: nodeRadius,
         );
 
     int capacityFor(double radius) {
-      if (radius <= 0.0) return 1;
+      if (radius <= 0.0) return 0;
       final targetArc = accountArcFor(radius);
+      if (targetArc.sweepAngle <= 0.0) return 0;
       return math.max(
         1,
         (radius * targetArc.sweepAngle / preferredNodePitch).floor() + 1,
@@ -670,15 +721,13 @@ class _RadialAccountLayout {
 
     final hasAccounts = switchable.isNotEmpty;
     final maxAccountRadius = hasAccounts
-        ? math.max(48.0, maxRadius - minimumRingGap)
+        ? math.max(0.0, maxRadius - minimumRingGap)
         : defaultInnerRadius;
-    final accountInnerRadius = math.min(
-      preferredInnerRadius,
-      maxAccountRadius,
-    );
-    final maxAccountRingCount =
-        !hasAccounts || maxAccountRadius <= accountInnerRadius
-        ? (hasAccounts ? 1 : 0)
+    final accountInnerRadius = math.min(preferredInnerRadius, maxAccountRadius);
+    final maxAccountRingCount = !hasAccounts || maxAccountRadius <= 0.0
+        ? 0
+        : maxAccountRadius <= accountInnerRadius
+        ? 1
         : math.max(
             1,
             1 +
@@ -707,26 +756,26 @@ class _RadialAccountLayout {
       return total;
     }
 
-    var accountRingCount = hasAccounts ? 1 : 0;
+    var accountRingCount = hasAccounts && maxAccountRingCount > 0 ? 1 : 0;
     while (accountRingCount < maxAccountRingCount &&
         comfortableAccountCapacity(accountRadiiFor(accountRingCount)) <
             switchable.length) {
       accountRingCount++;
     }
     final accountRadii = accountRadiiFor(accountRingCount).toList();
-    while (hasAccounts &&
+    if (accountRadii.length > 1 &&
         comfortableAccountCapacity(accountRadii) < switchable.length) {
-      final nextRadius = accountRadii.isEmpty
-          ? accountInnerRadius
-          : accountRadii.last + minimumRingGap;
-      accountRadii.add(nextRadius);
+      final stretchedGap =
+          (maxAccountRadius - accountInnerRadius) / (accountRadii.length - 1);
+      for (var index = 0; index < accountRadii.length; index++) {
+        accountRadii[index] = accountInnerRadius + stretchedGap * index;
+      }
     }
+    final overflowed =
+        comfortableAccountCapacity(accountRadii) < switchable.length;
     final manageRadius = accountRadii.isEmpty
         ? defaultInnerRadius
-        : math.max(
-            accountRadii.last + minimumRingGap,
-            math.min(maxRadius, accountRadii.last + preferredRingGap),
-          );
+        : math.min(maxRadius, accountRadii.last + preferredRingGap);
     final radii = <double>[...accountRadii, manageRadius];
     final targets = <_RadialTarget>[];
     var accountOffset = 0;
@@ -757,39 +806,32 @@ class _RadialAccountLayout {
       }
       accountOffset += accountCount;
     }
+    final manageArc = accountArcFor(manageRadius);
+    final manageAngle = manageArc.sweepAngle <= 0.0
+        ? inwardAngle
+        : inwardAngle
+              .clamp(
+                manageArc.startAngle,
+                manageArc.startAngle + manageArc.sweepAngle,
+              )
+              .toDouble();
     targets.add(
       _RadialTarget(
         target: manageTarget,
-        center: center + Offset.fromDirection(inwardAngle, manageRadius),
+        center: center + Offset.fromDirection(manageAngle, manageRadius),
         isManage: true,
       ),
     );
     return _RadialAccountLayout(
       center: center,
+      nodeSize: nodeSize,
+      targetCenterBounds: targetCenterBounds,
       radii: radii,
       targets: targets,
       startAngle: startAngle,
       sweepAngle: sweep,
+      overflowed: overflowed,
     );
-  }
-
-  static double _inwardAngleForEdge(Offset center, Rect rect) {
-    final leftDistance = (center.dx - rect.left).abs();
-    final rightDistance = (rect.right - center.dx).abs();
-    final topDistance = (center.dy - rect.top).abs();
-    final bottomDistance = (rect.bottom - center.dy).abs();
-    final horizontalDistance = math.min(leftDistance, rightDistance);
-    final verticalDistance = math.min(topDistance, bottomDistance);
-    const cornerBand = 84.0;
-    if (horizontalDistance <= cornerBand && verticalDistance <= cornerBand) {
-      final dx = leftDistance <= rightDistance ? 1.0 : -1.0;
-      final dy = topDistance <= bottomDistance ? 1.0 : -1.0;
-      return math.atan2(dy, dx);
-    }
-    if (verticalDistance <= horizontalDistance) {
-      return topDistance <= bottomDistance ? math.pi / 2.0 : -math.pi / 2.0;
-    }
-    return leftDistance <= rightDistance ? 0.0 : math.pi;
   }
 
   static ({double startAngle, double sweepAngle}) _accountTargetArc({
@@ -799,37 +841,80 @@ class _RadialAccountLayout {
     required double startAngle,
     required double sweepAngle,
     required double inwardAngle,
-    required double nodeRadius,
   }) {
-    const navigationEdgeBand = 112.0;
-    const nodeEdgeGap = 10.0;
-    const maxClearanceRatio = 0.72;
-    const minimumUsableSweep = math.pi / 6.0;
-    var targetStart = startAngle;
-    var targetEnd = startAngle + sweepAngle;
-    final radiusSafe = math.max(radius, 1.0);
-    final clearanceRatio = ((nodeRadius + nodeEdgeGap) / radiusSafe)
-        .clamp(0.0, maxClearanceRatio)
-        .toDouble();
-    final inset = math.asin(clearanceRatio);
-    final nearBottom = center.dy >= rect.bottom - navigationEdgeBand;
-    final nearTop = center.dy <= rect.top + navigationEdgeBand;
-    if (nearBottom) {
-      if (math.sin(targetStart) > -clearanceRatio) targetStart += inset;
-      if (math.sin(targetEnd) > -clearanceRatio) targetEnd -= inset;
-    } else if (nearTop) {
-      if (math.sin(targetStart) < clearanceRatio) targetStart += inset;
-      if (math.sin(targetEnd) < clearanceRatio) targetEnd -= inset;
+    if (radius <= 0.0 || rect.width <= 0.0 || rect.height <= 0.0) {
+      return (startAngle: inwardAngle, sweepAngle: 0.0);
     }
-    if (targetEnd - targetStart < minimumUsableSweep) {
-      final half = minimumUsableSweep / 2.0;
-      targetStart = inwardAngle - half;
-      targetEnd = inwardAngle + half;
+
+    bool fits(double angle) {
+      final point = center + Offset.fromDirection(angle, radius);
+      const epsilon = 0.01;
+      return point.dx >= rect.left - epsilon &&
+          point.dx <= rect.right + epsilon &&
+          point.dy >= rect.top - epsilon &&
+          point.dy <= rect.bottom + epsilon;
     }
-    return (
-      startAngle: targetStart,
-      sweepAngle: targetEnd - targetStart,
-    );
+
+    // Intersect the requested quadrant with the actual rectangle of legal node
+    // centres. This trims both axes (the former implementation only trimmed the
+    // navigation edge, so the vertical endpoint could still sit beyond the
+    // right edge). Sampling locates the contiguous interval; bisection then
+    // refines its two pixel-safe boundaries.
+    const sampleCount = 192;
+    final step = sweepAngle / sampleCount;
+    var first = -1;
+    var last = -1;
+    for (var index = 0; index <= sampleCount; index++) {
+      if (!fits(startAngle + step * index)) continue;
+      if (first < 0) first = index;
+      last = index;
+    }
+    if (first < 0) {
+      return (startAngle: inwardAngle, sweepAngle: 0.0);
+    }
+
+    var targetStart = startAngle + step * first;
+    var targetEnd = startAngle + step * last;
+    if (first > 0) {
+      var outside = targetStart - step;
+      var inside = targetStart;
+      for (var iteration = 0; iteration < 24; iteration++) {
+        final middle = (outside + inside) / 2.0;
+        if (fits(middle)) {
+          inside = middle;
+        } else {
+          outside = middle;
+        }
+      }
+      targetStart = inside;
+    }
+    if (last < sampleCount) {
+      var inside = targetEnd;
+      var outside = targetEnd + step;
+      for (var iteration = 0; iteration < 24; iteration++) {
+        final middle = (inside + outside) / 2.0;
+        if (fits(middle)) {
+          inside = middle;
+        } else {
+          outside = middle;
+        }
+      }
+      targetEnd = inside;
+    }
+
+    const angularInset = 0.0001;
+    targetStart += angularInset;
+    targetEnd -= angularInset;
+    if (targetEnd <= targetStart) {
+      final preferred = inwardAngle
+          .clamp(
+            math.min(targetStart, targetEnd),
+            math.max(targetStart, targetEnd),
+          )
+          .toDouble();
+      return (startAngle: preferred, sweepAngle: 0.0);
+    }
+    return (startAngle: targetStart, sweepAngle: targetEnd - targetStart);
   }
 
   static List<double> _accountAngles({
@@ -839,7 +924,11 @@ class _RadialAccountLayout {
     required double inwardAngle,
   }) {
     if (count <= 0) return const <double>[];
-    if (count == 1) return <double>[inwardAngle];
+    if (count == 1) {
+      return <double>[
+        inwardAngle.clamp(startAngle, startAngle + sweepAngle).toDouble(),
+      ];
+    }
     return List<double>.generate(
       count,
       (index) => startAngle + sweepAngle * index / (count - 1),
@@ -861,6 +950,7 @@ class _RadialAccountLayout {
         candidates.add(t);
       }
     }
+
     if (dx.abs() > 1e-6) {
       addCandidate((rect.left - origin.dx) / dx);
       addCandidate((rect.right - origin.dx) / dx);
@@ -872,6 +962,65 @@ class _RadialAccountLayout {
     if (candidates.isEmpty) return double.infinity;
     return candidates.reduce((a, b) => math.min(a, b));
   }
+}
+
+/// Geometry snapshot used by regression tests for the edge-constrained fan.
+@immutable
+class RadialAccountQuickSwitcherLayoutSnapshot {
+  const RadialAccountQuickSwitcherLayoutSnapshot({
+    required this.center,
+    required this.nodeSize,
+    required this.targetCenterBounds,
+    required this.accountCenters,
+    required this.manageCenter,
+    required this.overflowed,
+  });
+
+  final Offset center;
+  final double nodeSize;
+  final Rect targetCenterBounds;
+  final List<Offset> accountCenters;
+  final Offset manageCenter;
+  final bool overflowed;
+}
+
+@visibleForTesting
+RadialAccountQuickSwitcherLayoutSnapshot
+calculateRadialAccountQuickSwitcherLayoutForTest({
+  required Size size,
+  required EdgeInsets padding,
+  required Offset anchor,
+  required int switchableAccountCount,
+  bool fromTop = false,
+}) {
+  assert(switchableAccountCount >= 0);
+  final savedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  final accounts = <SavedAccount>[
+    SavedAccount(username: 'current', savedAt: savedAt),
+    for (var index = 0; index < switchableAccountCount; index++)
+      SavedAccount(username: 'account-$index', savedAt: savedAt),
+  ];
+  final layout = _RadialAccountLayout.calculate(
+    size: size,
+    padding: padding,
+    fromTop: fromTop,
+    anchor: anchor,
+    accounts: accounts,
+    currentUsername: 'current',
+    manageTarget: '__test_manage__',
+  );
+  final manageTarget = layout.targets.firstWhere((target) => target.isManage);
+  return RadialAccountQuickSwitcherLayoutSnapshot(
+    center: layout.center,
+    nodeSize: layout.nodeSize,
+    targetCenterBounds: layout.targetCenterBounds,
+    accountCenters: [
+      for (final target in layout.targets)
+        if (!target.isManage) target.center,
+    ],
+    manageCenter: manageTarget.center,
+    overflowed: layout.overflowed,
+  );
 }
 
 class _RadialTarget {
@@ -918,6 +1067,7 @@ class _AccountArcPainter extends CustomPainter {
       );
     }
   }
+
   @override
   bool shouldRepaint(covariant _AccountArcPainter oldDelegate) {
     if (oldDelegate.center != center ||
