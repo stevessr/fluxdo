@@ -78,9 +78,7 @@ class StickerThumbnailCachePolicy {
     }
 
     final formatIndex = cachedBytes[4];
-    if (formatIndex < 0 || formatIndex >= StickerThumbnailFormat.values.length) {
-      return null;
-    }
+    if (formatIndex >= StickerThumbnailFormat.values.length) return null;
     final format = StickerThumbnailFormat.values[formatIndex];
     final storedVersion = (cachedBytes[5] << 8) | cachedBytes[6];
     if (storedVersion != schemaVersion(format)) return null;
@@ -119,7 +117,10 @@ class StickerThumbnailCachePolicy {
       return false;
     }
     final b8 = bytes[8], b9 = bytes[9], b10 = bytes[10], b11 = bytes[11];
-    return (b8 == 0x61 && b9 == 0x76 && b10 == 0x69 && (b11 == 0x66 || b11 == 0x73)) ||
+    return (b8 == 0x61 &&
+            b9 == 0x76 &&
+            b10 == 0x69 &&
+            (b11 == 0x66 || b11 == 0x73)) ||
         (b8 == 0x6d && b9 == 0x69 && b10 == 0x66 && b11 == 0x31) ||
         (b8 == 0x6d && b9 == 0x73 && b10 == 0x66 && b11 == 0x31);
   }
@@ -166,7 +167,7 @@ class StickerThumbnailCachePolicy {
           (bytes[offset + 1] << 16) |
           (bytes[offset + 2] << 8) |
           bytes[offset + 3];
-      if (length < 0 || offset + 12 + length > bytes.length) return false;
+      if (offset + 12 + length > bytes.length) return false;
       final t0 = bytes[offset + 4];
       final t1 = bytes[offset + 5];
       final t2 = bytes[offset + 6];
