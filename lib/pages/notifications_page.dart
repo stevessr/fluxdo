@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/notification_category.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/preferences_provider.dart';
 import '../utils/load_more_coordinator.dart';
@@ -25,6 +26,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   final ScrollController _scrollController = ScrollController();
   final LoadMoreCoordinator _loadMoreCoordinator = LoadMoreCoordinator();
   NotificationReadFilter _filter = NotificationReadFilter.all;
+  NotificationCategory _category = NotificationCategory.all;
 
   @override
   void initState() {
@@ -73,6 +75,15 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     await ref.read(notificationListProvider.notifier).setFilter(filter);
   }
 
+  void _setCategory(NotificationCategory category) {
+    if (_category == category) return;
+    setState(() => _category = category);
+    _loadMoreCoordinator.resetCooldown();
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+  }
+
   String _filterLabel(BuildContext context, NotificationReadFilter filter) {
     switch (filter) {
       case NotificationReadFilter.all:
@@ -82,6 +93,28 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       case NotificationReadFilter.unread:
         return context.l10n.notification_filterUnread;
     }
+  }
+
+  String _categoryLabel(BuildContext context, NotificationCategory category) {
+    return switch (category) {
+      NotificationCategory.all => context.l10n.notification_categoryAll,
+      NotificationCategory.replies => context.l10n.notification_categoryReplies,
+      NotificationCategory.likes => context.l10n.notification_categoryLikes,
+      NotificationCategory.messages => context.l10n.notification_categoryMessages,
+      NotificationCategory.bookmarks => context.l10n.notification_categoryBookmarks,
+      NotificationCategory.other => context.l10n.notification_categoryOther,
+    };
+  }
+
+  IconData _categoryIcon(NotificationCategory category) {
+    return switch (category) {
+      NotificationCategory.all => Symbols.notifications_rounded,
+      NotificationCategory.replies => Symbols.reply_rounded,
+      NotificationCategory.likes => Symbols.favorite_rounded,
+      NotificationCategory.messages => Symbols.mail_rounded,
+      NotificationCategory.bookmarks => Symbols.bookmark_rounded,
+      NotificationCategory.other => Symbols.more_horiz_rounded,
+    };
   }
 
   @override
@@ -108,8 +141,26 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       ),
       body: Column(
         children: [
+          SizedBox(
+            height: 52,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              itemCount: NotificationCategory.values.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final category = NotificationCategory.values[index];
+                return ChoiceChip(
+                  avatar: Icon(_categoryIcon(category), size: 18),
+                  label: Text(_categoryLabel(context, category)),
+                  selected: _category == category,
+                  onSelected: (_) => _setCategory(category),
+                );
+              },
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Align(
               alignment: AlignmentDirectional.centerStart,
               child: SegmentedButton<NotificationReadFilter>(
@@ -141,22 +192,34 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                   );
                   final visibleNotifications = notifications
                       .where(
-                        (notification) => !BlockedUserFilter.isBlockedNotification(
-                          notification,
-                          blockedUsernames,
-                        ),
+                        (notification) =>
+                            _category.matches(notification) &&
+                            !BlockedUserFilter.isBlockedNotification(
+                              notification,
+                              blockedUsernames,
+                            ),
                       )
                       .toList(growable: false);
                   final notifier = ref.read(notificationListProvider.notifier);
-                  // 已加载页全部被本地屏蔽时列表不可滚，滚动触发的翻页永远不会
-                  // 发生；主动补载下一页（coordinator 自带冷却，不会打转）
-                  if (visibleNotifications.isEmpty &&
+
+                  // 历史 notifications 接口只支持 read/unread，不支持
+                  // filter_by_types。类型分类需要本地筛选；当当前已加载历史里
+                  // 匹配项太少时主动继续翻页，避免把“前 60 条没有该类型”
+                  // 错误显示成“没有通知”。
+                  final needsCategoryPrefetch =
+                      _category != NotificationCategory.all &&
+                      visibleNotifications.length < 10 &&
+                      notifier.hasMore;
+                  final needsBlockedUserPrefetch =
+                      visibleNotifications.isEmpty &&
                       notifications.isNotEmpty &&
-                      notifier.hasMore) {
+                      notifier.hasMore;
+                  if (needsCategoryPrefetch || needsBlockedUserPrefetch) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) _loadMore();
                     });
                   }
+
                   if (visibleNotifications.isEmpty &&
                       (notifications.isEmpty || !notifier.hasMore)) {
                     return Center(
@@ -183,7 +246,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                     itemCount: visibleNotifications.length + 1,
                     itemBuilder: (context, index) {
                       if (index == visibleNotifications.length) {
-                        final notifier = ref.read(notificationListProvider.notifier);
                         return PagedListFooter(
                           hasMore: notifier.hasMore,
                           isLoadingMore: notifier.isLoadingMore,
@@ -195,7 +257,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       return NotificationItem(
                         notification: notification,
                         systemAvatarTemplate: systemAvatarTemplate,
-                        // siblings = 点击前的当前已加载列表，大屏弹窗内可继续翻页。
+                        // siblings = 当前筛选后的已加载列表，大屏弹窗可继续翻页。
                         onTap: () {
                           notifier.markAsRead(notification.id);
                           handleNotificationTap(
