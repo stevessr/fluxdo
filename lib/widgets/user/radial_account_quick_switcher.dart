@@ -17,6 +17,7 @@ import '../../services/toast_service.dart';
 import '../../utils/url_helper.dart';
 import '../common/smart_avatar.dart';
 import 'account_quick_switcher_trigger_state.dart';
+import 'account_switch_loading.dart';
 
 /// 触摸长按使用的“伞状”账号切换器。
 ///
@@ -370,7 +371,7 @@ class _RadialAccountQuickSwitcherOverlayState
       final overlay = Overlay.maybeOf(hostContext, rootOverlay: true);
       if (overlay != null) {
         switchCover = OverlayEntry(
-          builder: (_) => _RadialAccountSwitchCover(account: account),
+          builder: (_) => AccountSwitchLoadingCover(account: account),
         );
         switchCoverStopwatch = Stopwatch()..start();
         overlay.insert(switchCover);
@@ -1084,54 +1085,6 @@ class _AccountArcPainter extends CustomPainter {
       if (oldDelegate.radii[i] != radii[i]) return true;
     }
     return false;
-  }
-}
-
-class _RadialAccountSwitchCover extends StatelessWidget {
-  const _RadialAccountSwitchCover({required this.account});
-  final SavedAccount account;
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Positioned.fill(
-      child: AbsorbPointer(
-        absorbing: true,
-        child: Material(
-          color: scheme.surface.withValues(alpha: 0.96),
-          child: SafeArea(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _RadialAccountAvatar(account: account, radius: 30),
-                  const SizedBox(height: 20),
-                  const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(strokeWidth: 2.6),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    context.l10n.accountManage_switching,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '@${account.username}',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
