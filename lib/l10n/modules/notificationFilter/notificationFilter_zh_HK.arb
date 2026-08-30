@@ -3,5 +3,11 @@
   "notification_filterAll": "全部",
   "notification_filterRead": "已讀",
   "notification_filterUnread": "未讀",
+  "notification_categoryAll": "全部",
+  "notification_categoryReplies": "回覆與提及",
+  "notification_categoryLikes": "讚",
+  "notification_categoryMessages": "私訊",
+  "notification_categoryBookmarks": "書籤",
+  "notification_categoryOther": "其他",
   "notification_solvedAccepted": "您的帖子已被標記為解決方案"
 }
