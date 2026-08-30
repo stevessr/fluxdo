@@ -121,4 +121,64 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
     expect(find.text('平行视界内容'), findsOneWidget);
   });
+
+  testWidgets('底栏长按不受伞状切换器触发时长影响', (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+
+    SharedPreferences.setMockInitialValues({
+      'pref_account_switcher_radial_enabled': true,
+      'pref_account_switcher_hold_duration_ms': 2000,
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final container = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
+    addTearDown(container.dispose);
+
+    var longPressCount = 0;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(390, 844)),
+            child: AdaptiveScaffold(
+              selectedIndex: 1,
+              onDestinationSelected: (_) {},
+              destinations: [
+                const AdaptiveDestination(
+                  id: 'home',
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home),
+                  label: '首页',
+                ),
+                AdaptiveDestination(
+                  id: 'profile',
+                  icon: const Icon(Icons.person_outline),
+                  selectedIcon: const Icon(
+                    Icons.person,
+                    key: ValueKey('profile-selected-icon'),
+                  ),
+                  label: '我的',
+                  onLongPress: () => longPressCount++,
+                ),
+              ],
+              body: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('profile-selected-icon'))),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(longPressCount, 1);
+
+    await gesture.up();
+    await tester.pump();
+  });
 }

@@ -277,7 +277,7 @@ class _AccountQuickSwitcherCopy {
   static const _zhHans = _AccountQuickSwitcherCopy(
     groupTitle: '账号快速切换',
     radialTitle: '伞状账号切换',
-    radialDescription: '以长按入口为圆心，只向屏幕内侧展开约 90° 多层圆弧；当前账号固定在圆心，账号管理位于最外层中间。',
+    radialDescription: '仅用于右上角头像入口；右下角「我的」始终使用悬浮账号列表。',
     holdDurationTitle: '长按触发时间',
     holdDurationDescription: '按住时入口外围会显示进度环，并随进度逐级增强振动；松开或手势取消后立即归零。',
     millisecondsUnit: '毫秒',
@@ -292,7 +292,7 @@ class _AccountQuickSwitcherCopy {
   static const _zhHant = _AccountQuickSwitcherCopy(
     groupTitle: '帳號快速切換',
     radialTitle: '傘狀帳號切換',
-    radialDescription: '以長按入口為圓心，只向螢幕內側展開約 90° 多層圓弧；目前帳號固定在圓心，帳號管理位於最外層中間。',
+    radialDescription: '僅用於右上角頭像入口；右下角「我的」一律使用懸浮帳號列表。',
     holdDurationTitle: '長按觸發時間',
     holdDurationDescription: '按住時入口外圍會顯示進度環，並隨進度逐級增強震動；放開或手勢取消後立即歸零。',
     millisecondsUnit: '毫秒',
@@ -307,7 +307,7 @@ class _AccountQuickSwitcherCopy {
   static const _en = _AccountQuickSwitcherCopy(
     groupTitle: 'Account quick switching',
     radialTitle: 'Radial account switcher',
-    radialDescription: 'Use the pressed entry as the pivot and open only an inward-facing ~90° multi-layer arc. The current account stays at the pivot and account management sits at the middle of the outermost arc.',
+    radialDescription: 'Only applies to top-right avatar entries. The bottom-right Profile entry always uses the floating account list.',
     holdDurationTitle: 'Long-press duration',
     holdDurationDescription: 'A progress ring appears around the entry while holding. Haptics become progressively stronger as the hold approaches completion; releasing or cancellation resets it.',
     millisecondsUnit: 'ms',

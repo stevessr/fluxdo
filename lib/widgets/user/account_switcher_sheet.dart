@@ -26,8 +26,9 @@ enum AccountQuickSwitcherPlacement { bottomRight, topRight }
 
 /// 账号切换入口。
 ///
-/// 触摸设备可在外观设置里选择新的多环伞状切换器；关闭时完整保留原先的
-/// Telegram 风格纵向快捷切换器。桌面端继续使用经典 bottom sheet。
+/// 触摸设备的底栏「我的」始终使用 Telegram 风格纵向快捷切换器；右上角
+/// 头像入口仍可在外观设置里选择伞状切换器。桌面端继续使用经典 bottom
+/// sheet。
 abstract final class AccountSwitcherSheet {
   static Future<void> show(
     BuildContext context, {
@@ -35,9 +36,15 @@ abstract final class AccountSwitcherSheet {
         AccountQuickSwitcherPlacement.bottomRight,
   }) {
     if (_preferTouchQuickSwitcher) {
+      if (placement == AccountQuickSwitcherPlacement.bottomRight) {
+        return _TouchAccountSwitcherEntry.show(context, placement: placement);
+      }
       final container = ProviderScope.containerOf(context, listen: false);
       final preferences = container.read(accountQuickSwitcherPreferencesProvider);
-      if (preferences.radialEnabled) {
+      if (shouldUseRadialSwitcher(
+        placement: placement,
+        radialEnabled: preferences.radialEnabled,
+      )) {
         return RadialAccountQuickSwitcher.show(
           context,
           fromTop: placement == AccountQuickSwitcherPlacement.topRight,
@@ -48,6 +55,15 @@ abstract final class AccountSwitcherSheet {
       return _TouchAccountSwitcherEntry.show(context, placement: placement);
     }
     return showClassic(context);
+  }
+
+  /// 底栏「我的」是固定交互，不受伞状开关影响。
+  @visibleForTesting
+  static bool shouldUseRadialSwitcher({
+    required AccountQuickSwitcherPlacement placement,
+    required bool radialEnabled,
+  }) {
+    return radialEnabled && placement == AccountQuickSwitcherPlacement.topRight;
   }
 
   static Future<void> showClassic(BuildContext context) {
@@ -114,7 +130,8 @@ class _QuickPointerRouteController {
   }
 }
 
-/// 原有纵向触摸快捷切换器，仅在“伞状账号切换”关闭时使用。
+/// 纵向触摸快捷切换器。底栏「我的」始终使用；右上角头像入口则在伞状账号
+/// 切换关闭时使用。
 abstract final class _TouchAccountSwitcherEntry {
   static Future<void> show(
     BuildContext context, {
