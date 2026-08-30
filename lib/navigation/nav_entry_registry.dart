@@ -7,6 +7,7 @@ import '../models/user.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/browsing_history_page.dart';
 import '../pages/drafts_page.dart';
+import '../pages/groups_page.dart';
 import '../pages/leaderboard_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/chat/chat_page.dart';
@@ -81,6 +82,15 @@ class NavEntryRegistry {
         selectedIconData: Symbols.leaderboard_rounded,
         label: _leaderboardLabel,
         pageBuilder: (ctx, isActive) => LeaderboardPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'groups',
+        kind: NavEntryKind.page,
+        iconData: Symbols.groups_rounded,
+        selectedIconData: Symbols.groups_rounded,
+        label: _groupsLabel,
+        pageBuilder: (ctx, isActive) => GroupsPage(isActive: isActive),
         defaultInBottomNav: false,
       ),
       NavEntry(
@@ -162,6 +172,11 @@ class NavEntryRegistry {
 String _leaderboardLabel(BuildContext context) {
   final locale = Localizations.localeOf(context);
   return locale.languageCode == 'zh' ? '排行榜' : 'Leaderboard';
+}
+
+String _groupsLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '群组' : 'Groups';
 }
 
 Widget _profileIcon(

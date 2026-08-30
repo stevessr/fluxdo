@@ -14,6 +14,13 @@ class UserLinkInfo {
   const UserLinkInfo({required this.username});
 }
 
+/// 群组链接解析结果（/g/:name）。
+class GroupLinkInfo {
+  final String name;
+
+  const GroupLinkInfo({required this.name});
+}
+
 /// 分类链接解析结果。
 class CategoryLinkInfo {
   const CategoryLinkInfo({required this.categoryId});
@@ -62,6 +69,12 @@ class DiscourseUrlParser {
 
   /// 用户链接格式：/u/username
   static final _userRegex = RegExp(r'/u/([^/?#]+)', caseSensitive: false);
+
+  /// 群组链接格式：/g/group-name、/g/group-name/members 等。
+  static final _groupRegex = RegExp(
+    r'/g/([^/?#]+)(?:[/?#]|$)',
+    caseSensitive: false,
+  );
 
   static final _categoryRegex = RegExp(
     r'/c/(?:[^/?#]+/)?(\d+)(?:[/?#]|$)',
@@ -129,6 +142,14 @@ class DiscourseUrlParser {
       return UserLinkInfo(username: match.group(1)!);
     }
     return null;
+  }
+
+  /// 解析群组链接，返回 [GroupLinkInfo] 或 null。
+  static GroupLinkInfo? parseGroup(String url) {
+    final match = _groupRegex.firstMatch(url);
+    final encoded = match?.group(1);
+    if (encoded == null || encoded.isEmpty) return null;
+    return GroupLinkInfo(name: Uri.decodeComponent(encoded));
   }
 
   static CategoryLinkInfo? parseCategory(String url) {
