@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
+import '../../l10n/s.dart';
 import '../../models/topic.dart';
 import '../../providers/discourse_providers.dart';
 import '../../providers/preferences_provider.dart';
@@ -153,7 +154,7 @@ class _UserPortfolioTabState extends ConsumerState<UserPortfolioTab> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            '暂无作品',
+                            context.l10n.userProfile_noPortfolio,
                             style: Theme.of(context).textTheme.bodyLarge
                                 ?.copyWith(
                                   color: Theme.of(
