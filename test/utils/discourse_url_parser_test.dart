@@ -40,4 +40,53 @@ void main() {
       expect(DiscourseUrlParser.parseTitleUrl('https://'), isNull);
     });
   });
+
+  group('站内插件链接解析', () {
+    test('解析徽章 ID 和 slug，并把 Discourse 的 - 占位符归一化', () {
+      final placeholder = DiscourseUrlParser.parseBadge(
+        'https://linux.do/badges/128/-',
+      );
+      expect(placeholder?.badgeId, 128);
+      expect(placeholder?.slug, isNull);
+
+      final named = DiscourseUrlParser.parseBadge('/badges/42/great-reader');
+      expect(named?.badgeId, 42);
+      expect(named?.slug, 'great-reader');
+
+      expect(DiscourseUrlParser.parseBadge('/badges/not-a-number/-'), isNull);
+    });
+
+    test('解析 cakeday 类型和过滤器', () {
+      final birthday = DiscourseUrlParser.parseCakeday(
+        '/cakeday/birthdays/today',
+      );
+      expect(birthday?.birthdays, isTrue);
+      expect(birthday?.filter, 'today');
+
+      final anniversary = DiscourseUrlParser.parseCakeday(
+        'https://linux.do/cakeday/anniversaries/upcoming',
+      );
+      expect(anniversary?.birthdays, isFalse);
+      expect(anniversary?.filter, 'upcoming');
+
+      final month = DiscourseUrlParser.parseCakeday(
+        '/cakeday/anniversaries/month',
+      );
+      expect(month?.birthdays, isFalse);
+      expect(month?.filter, 'month');
+
+      expect(DiscourseUrlParser.parseCakeday('/cakeday/nope/today'), isNull);
+    });
+
+    test('识别 discourse-events 近期活动页面', () {
+      expect(DiscourseUrlParser.isUpcomingEvents('/upcoming-events'), isTrue);
+      expect(
+        DiscourseUrlParser.isUpcomingEvents(
+          'https://linux.do/upcoming-events/month/2026/8/31',
+        ),
+        isTrue,
+      );
+      expect(DiscourseUrlParser.isUpcomingEvents('/latest'), isFalse);
+    });
+  });
 }
