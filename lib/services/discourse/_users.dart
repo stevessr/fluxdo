@@ -272,6 +272,25 @@ mixin _UsersMixin on _DiscourseServiceBase {
     return TopicListResponse.fromJson(response.data);
   }
 
+  /// 获取用户作品集话题。
+  ///
+  /// LINUX DO 的作品集由用户创建的话题中带有「作品集」标签的内容组成，
+  /// 与网页端作品集主题组件使用相同的 created-by + tags 筛选语义。
+  Future<TopicListResponse> getUserPortfolioTopics(
+    String username, {
+    int page = 0,
+  }) async {
+    final queryParameters = <String, dynamic>{'tags': '作品集'};
+    if (page > 0) {
+      queryParameters['page'] = page;
+    }
+    final response = await _dio.get(
+      '/topics/created-by/$username.json',
+      queryParameters: queryParameters,
+    );
+    return TopicListResponse.fromJson(response.data);
+  }
+
   /// 获取用户被采纳为答案的帖子列表（discourse-solved 插件，offset 分页每页 30）
   Future<SolvedPostsResponse> getUserSolvedPosts(
     String username, {
