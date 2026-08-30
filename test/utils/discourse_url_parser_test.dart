@@ -56,7 +56,7 @@ void main() {
       expect(DiscourseUrlParser.parseBadge('/badges/not-a-number/-'), isNull);
     });
 
-    test('解析 cakeday 类型和过滤器', () {
+    test('解析 cakeday 类型和已原生支持的过滤器', () {
       final birthday = DiscourseUrlParser.parseCakeday(
         '/cakeday/birthdays/today',
       );
@@ -69,12 +69,11 @@ void main() {
       expect(anniversary?.birthdays, isFalse);
       expect(anniversary?.filter, 'upcoming');
 
-      final month = DiscourseUrlParser.parseCakeday(
-        '/cakeday/anniversaries/month',
+      // 官方 all 路由还包含 month query/月切换；未完整原生化前不误拦截。
+      expect(
+        DiscourseUrlParser.parseCakeday('/cakeday/anniversaries/all'),
+        isNull,
       );
-      expect(month?.birthdays, isFalse);
-      expect(month?.filter, 'month');
-
       expect(DiscourseUrlParser.parseCakeday('/cakeday/nope/today'), isNull);
     });
 
