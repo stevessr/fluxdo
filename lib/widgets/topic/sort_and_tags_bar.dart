@@ -6,11 +6,21 @@ import '../common/topic_badges.dart';
 import 'filter_dropdown.dart';
 import '../../l10n/s.dart';
 
+String get _readFilterLabel {
+  final locale = S.current.localeName.replaceAll('-', '_');
+  if (locale.startsWith('zh_HK') || locale.startsWith('zh_TW')) {
+    return '已讀';
+  }
+  if (locale.startsWith('zh')) return '已读';
+  return 'Read';
+}
+
 /// 筛选选项定义
 List<(TopicListFilter, String)> get filterOptions => [
   (TopicListFilter.latest, S.current.topic_filterLatest),
   (TopicListFilter.newTopics, S.current.topic_filterNew),
   (TopicListFilter.unread, S.current.topic_filterUnread),
+  (TopicListFilter.read, _readFilterLabel),
   (TopicListFilter.unseen, S.current.topic_filterUnseen),
   (TopicListFilter.top, S.current.topic_filterTop),
   (TopicListFilter.hot, S.current.topic_filterHot),
