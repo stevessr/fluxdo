@@ -17,6 +17,7 @@ import '../../services/toast_service.dart';
 import '../../utils/url_helper.dart';
 import '../common/app_bottom_sheet.dart';
 import '../common/smart_avatar.dart';
+import 'account_switch_loading.dart';
 import 'radial_account_quick_switcher.dart';
 
 /// 快速账号切换悬浮层相对屏幕的入口位置。
@@ -394,7 +395,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
       final overlay = Overlay.maybeOf(hostContext, rootOverlay: true);
       if (overlay != null) {
         switchCover = OverlayEntry(
-          builder: (_) => _QuickAccountSwitchCover(account: account),
+          builder: (_) => AccountSwitchLoadingCover(account: account),
         );
         switchCoverStopwatch = Stopwatch()..start();
         overlay.insert(switchCover);
@@ -628,70 +629,6 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
   }
 }
 
-class _QuickAccountSwitchCover extends StatelessWidget {
-  const _QuickAccountSwitchCover({required this.account});
-
-  final SavedAccount account;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Positioned.fill(
-      child: AbsorbPointer(
-        absorbing: true,
-        child: Material(
-          color: scheme.surface.withValues(alpha: 0.96),
-          child: SafeArea(
-            child: Center(
-              child: TweenAnimationBuilder<double>(
-                tween: Tween<double>(begin: 0.94, end: 1),
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                builder: (context, value, child) => Opacity(
-                  opacity: value,
-                  child: Transform.scale(scale: value, child: child),
-                ),
-                child: Semantics(
-                  liveRegion: true,
-                  label: context.l10n.accountManage_switching,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _AccountAvatar(account: account, radius: 30),
-                      const SizedBox(height: 20),
-                      const SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(strokeWidth: 2.6),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        context.l10n.accountManage_switching,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '@${account.username}',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 Future<bool> _performAccountSwitch(
   BuildContext context,
   AccountManager manager,
@@ -732,7 +669,7 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
   List<SavedAccount> _accounts = const [];
   String? _currentUsername;
   bool _loading = true;
-  String? _switchingUsername;
+  SavedAccount? _switchingAccount;
 
   @override
   void initState() {
@@ -755,14 +692,14 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
   }
 
   Future<void> _switchTo(SavedAccount account) async {
-    if (_switchingUsername != null) return;
-    setState(() => _switchingUsername = account.username);
+    if (_switchingAccount != null) return;
+    setState(() => _switchingAccount = account);
     final switched = await _performAccountSwitch(context, _manager, account);
     if (!mounted) return;
     if (switched) {
       Navigator.of(context).pop();
     } else {
-      setState(() => _switchingUsername = null);
+      setState(() => _switchingAccount = null);
     }
   }
 
@@ -790,21 +727,12 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
       );
     }
 
-    if (_switchingUsername != null) {
+    final switchingAccount = _switchingAccount;
+    if (switchingAccount != null) {
       return Center(
-        child: Padding(
+        child: AccountSwitchLoading(
+          account: switchingAccount,
           padding: const EdgeInsets.symmetric(vertical: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const LoadingSpinner(),
-              const SizedBox(height: 16),
-              Text(
-                l10n.accountManage_switching,
-                style: theme.textTheme.titleMedium,
-              ),
-            ],
-          ),
         ),
       );
     }
