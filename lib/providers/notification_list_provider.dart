@@ -102,7 +102,7 @@ class NotificationListNotifier
     // 未读筛选下所有项目都已离开当前筛选集合。
     if (_filter == NotificationReadFilter.unread) {
       _totalRows = 0;
-      resetPagingState();
+      resetPagingState(hasMore: false);
       state = const AsyncValue.data([]);
       return;
     }
