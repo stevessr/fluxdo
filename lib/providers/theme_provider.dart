@@ -8,12 +8,14 @@ import '../theme/accent_colors.dart';
 import '../theme/app_background.dart';
 import '../theme/app_palettes.dart';
 
-/// 内置字体选项
+/// 内置字体选项。
+///
+/// [miSans] 仅保留用于兼容旧设置声明；内置字体资产已移除，运行时统一使用系统字体。
 enum AppFontFamily {
   /// 跟随系统默认字体
   system,
 
-  /// 内置 MiSans 字体
+  /// 旧版内置 MiSans 选项（迁移时回退到 system）
   miSans,
 }
 
@@ -100,15 +102,8 @@ class ThemeState {
     AccentSource.custom => seedColor,
   };
 
-  /// 获取实际用于 ThemeData 的 fontFamily 字符串
-  String? get fontFamilyName {
-    switch (fontFamily) {
-      case AppFontFamily.miSans:
-        return 'MiSans';
-      case AppFontFamily.system:
-        return null;
-    }
-  }
+  /// 内置 MiSans 已移除；统一交给系统字体 + 中文 fallback 处理。
+  String? get fontFamilyName => null;
 
   ThemeState copyWith({
     ThemeMode? mode,
@@ -224,12 +219,8 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
         .map((v) => Color(v!))
         .toList();
 
-    // Load Font Family
-    final savedFontFamily = prefs.getString(_fontFamilyKey);
-    AppFontFamily fontFamily = AppFontFamily.system;
-    if (savedFontFamily == 'miSans') {
-      fontFamily = AppFontFamily.miSans;
-    }
+    // 内置 MiSans 已移除：忽略旧偏好并统一迁移到系统字体。
+    const fontFamily = AppFontFamily.system;
 
     // ── 透明模式与背景配置 ──
     final background = AppBackground(
@@ -372,13 +363,9 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
   }
 
   Future<void> setFontFamily(AppFontFamily fontFamily) async {
-    state = state.copyWith(fontFamily: fontFamily);
-    switch (fontFamily) {
-      case AppFontFamily.miSans:
-        await _prefs.setString(_fontFamilyKey, 'miSans');
-      case AppFontFamily.system:
-        await _prefs.setString(_fontFamilyKey, 'system');
-    }
+    // 兼容旧调用：内置字体已移除，所有选择统一收敛到系统字体。
+    state = state.copyWith(fontFamily: AppFontFamily.system);
+    await _prefs.setString(_fontFamilyKey, 'system');
   }
 }
 
