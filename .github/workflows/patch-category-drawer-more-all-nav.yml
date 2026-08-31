@@ -33,90 +33,54 @@ jobs:
           path = Path('lib/widgets/topic/category_drawer.dart')
           text = path.read_text()
 
-          old_ids = """  static const List<String> _moreEntryIds = [
-            'chat',
-            'messages',
-            'ai_bot',
-            'leaderboard',
-            'groups',
-            'upcoming_events',
-          ];
+          ids_start = text.index('  static const List<String> _moreEntryIds = [')
+          ids_end = text.index('  /// 标签搜索词', ids_start)
+          text = text[:ids_start] + text[ids_end:]
 
-"""
-          if old_ids not in text:
-              raise SystemExit('old _moreEntryIds block not found')
-          text = text.replace(old_ids, '', 1)
-
-          old_more = """  /// App-level destinations exposed from the category drawer.
-          Widget _buildMoreList(bool isLoggedIn) {
-            final entries = _moreEntryIds
-                .map(NavEntryRegistry.byId)
-                .whereType<NavEntry>()
-                .where((entry) => !entry.requiresLogin || isLoggedIn)
-                .toList(growable: false);
-
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-              children: [
-                for (final entry in entries)
-                  _MoreNavRow(
-                    icon: entry.iconData,
-                    label: entry.label(context),
-                    onTap: () {
-                      final pageBuilder = entry.pageBuilder;
-                      if (pageBuilder == null) return;
-                      _closeAndPush(pageBuilder(context, true));
-                    },
-                  ),
-              ],
-            );
-          }
-"""
-
-          new_more = """  /// Open any destination supported by the configurable bottom nav.
-          void _openMoreEntry(NavEntry entry) {
-            switch (entry.kind) {
-              case NavEntryKind.page:
-                final pageBuilder = entry.pageBuilder;
-                if (pageBuilder == null) return;
-                _closeAndPush(pageBuilder(context, true));
-              case NavEntryKind.panel:
-                final onPanelTap = entry.onPanelTap;
-                if (onPanelTap == null) return;
-                widget.onRequestClose();
-                onPanelTap(context, ref);
-              case NavEntryKind.action:
-                final onAction = entry.onAction;
-                if (onAction == null) return;
-                widget.onRequestClose();
-                onAction(context, ref);
-            }
-          }
-
-          /// All user-addable bottom-nav destinations exposed from the drawer.
-          Widget _buildMoreList(bool isLoggedIn) {
-            final entries = NavEntryRegistry.buildAll()
-                .where((entry) => !entry.locked)
-                .where((entry) => !entry.requiresLogin || isLoggedIn)
-                .toList(growable: false);
-
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-              children: [
-                for (final entry in entries)
-                  _MoreNavRow(
-                    icon: entry.iconData,
-                    label: entry.label(context),
-                    onTap: () => _openMoreEntry(entry),
-                  ),
-              ],
-            );
-          }
-"""
-
-          if old_more not in text:
-              raise SystemExit('old _buildMoreList block not found')
-          text = text.replace(old_more, new_more, 1)
+          more_start = text.index('  /// App-level destinations exposed from the category drawer.')
+          more_end = text.index('\n  /// 分类页签', more_start)
+          replacement = '\n'.join([
+              '  /// Open any destination supported by the configurable bottom nav.',
+              '  void _openMoreEntry(NavEntry entry) {',
+              '    switch (entry.kind) {',
+              '      case NavEntryKind.page:',
+              '        final pageBuilder = entry.pageBuilder;',
+              '        if (pageBuilder == null) return;',
+              '        _closeAndPush(pageBuilder(context, true));',
+              '      case NavEntryKind.panel:',
+              '        final onPanelTap = entry.onPanelTap;',
+              '        if (onPanelTap == null) return;',
+              '        widget.onRequestClose();',
+              '        onPanelTap(context, ref);',
+              '      case NavEntryKind.action:',
+              '        final onAction = entry.onAction;',
+              '        if (onAction == null) return;',
+              '        widget.onRequestClose();',
+              '        onAction(context, ref);',
+              '    }',
+              '  }',
+              '',
+              '  /// All user-addable bottom-nav destinations exposed from the drawer.',
+              '  Widget _buildMoreList(bool isLoggedIn) {',
+              '    final entries = NavEntryRegistry.buildAll()',
+              '        .where((entry) => !entry.locked)',
+              '        .where((entry) => !entry.requiresLogin || isLoggedIn)',
+              '        .toList(growable: false);',
+              '',
+              '    return ListView(',
+              '      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),',
+              '      children: [',
+              '        for (final entry in entries)',
+              '          _MoreNavRow(',
+              '            icon: entry.iconData,',
+              '            label: entry.label(context),',
+              '            onTap: () => _openMoreEntry(entry),',
+              '          ),',
+              '      ],',
+              '    );',
+              '  }',
+          ])
+          text = text[:more_start] + replacement + text[more_end:]
           path.write_text(text)
           PY
 
