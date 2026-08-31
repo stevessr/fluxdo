@@ -1,0 +1,114 @@
+name: Temporary size audit
+
+on:
+  push:
+    branches:
+      - perf/slim-build-artifacts
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: |
+          flutter pub get
+          dart pub deps --json > /tmp/pub-deps.json
+      - name: Audit Font Awesome, bundled web assets, and stale font state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import urlparse, unquote
+          import json, re
+
+          config = json.loads(Path('.dart_tool/package_config.json').read_text())
+          cfg = {p['name']: p for p in config['packages']}
+          graph = json.loads(Path('/tmp/pub-deps.json').read_text())
+          packages = graph.get('packages', [])
+
+          def package_root(name):
+              item = cfg[name]
+              uri = item['rootUri']
+              parsed = urlparse(uri)
+              return Path(unquote(parsed.path)) if parsed.scheme == 'file' else (Path('.dart_tool') / uri).resolve()
+
+          def parents_of(name):
+              return sorted(p.get('name') for p in packages if name in p.get('dependencies', []))
+
+          files = []
+          names = set()
+          mapping_callers = []
+          stale_font_refs = []
+          for p in Path('.').rglob('*.dart'):
+              if '.dart_tool' in p.parts or 'build' in p.parts:
+                  continue
+              text = p.read_text(encoding='utf-8', errors='ignore')
+              if 'font_awesome_flutter' in text or 'FontAwesomeIcons.' in text or 'faIconNameMapping' in text or 'getIconFromCss' in text:
+                  files.append(str(p))
+                  names.update(re.findall(r'FontAwesomeIcons\.([A-Za-z0-9_]+)', text))
+                  if 'getIconFromCss' in text and p.name != 'font_awesome_name_mapping.dart':
+                      mapping_callers.append(str(p))
+              if any(token in text for token in ('AppFontFamily', 'fontFamilyName', 'setFontFamily(', "font_family")):
+                  stale_font_refs.append(str(p))
+
+          print('=== FONT AWESOME SOURCE FILES ===')
+          for p in sorted(files): print(p)
+          print('\n=== STATIC FONT AWESOME ICON NAMES ===')
+          for name in sorted(names): print(name)
+          print(f'count={len(names)}')
+          print('\n=== DYNAMIC MAPPING CALLERS ===')
+          for p in sorted(mapping_callers): print(p)
+
+          root = package_root('font_awesome_flutter')
+          print('\n=== FONT AWESOME FONT FILES ===')
+          total = 0
+          for p in sorted([*root.rglob('*.ttf'), *root.rglob('*.otf')]):
+              size = p.stat().st_size
+              total += size
+              print(f'{size:>10} {p.relative_to(root)}')
+          print(f'total_font_bytes={total}')
+
+          print('\n=== STALE FONT-SETTING REFERENCES ===')
+          for p in sorted(stale_font_refs): print(p)
+
+          targets = ['flutter_avif_web', 'pro_image_editor', 'media_kit', 'flutter_inappwebview_web']
+          print('\n=== WEB-ASSET PACKAGE DEPENDENCY EDGES ===')
+          for name in targets:
+              if name not in cfg:
+                  print(f'{name}: not resolved')
+                  continue
+              root = package_root(name)
+              print(f'\n--- {name} ---')
+              print(f'parents={parents_of(name)}')
+              ps = root / 'pubspec.yaml'
+              text = ps.read_text(encoding='utf-8', errors='ignore') if ps.exists() else ''
+              print('pubspec relevant lines:')
+              for line in text.splitlines():
+                  if any(token in line for token in ('assets:', 'assets/', '.wasm', '.js', 'plugin:', 'platforms:', 'web:')):
+                      print(line)
+              assets = []
+              for p in root.rglob('*'):
+                  if p.is_file() and ('assets' in p.parts or p.suffix.lower() in {'.wasm','.js'}):
+                      assets.append((p.stat().st_size, p.relative_to(root)))
+              print('largest package asset-like files:')
+              for size, rel in sorted(assets, reverse=True)[:20]:
+                  print(f'{size:>10} {rel}')
+          PY
+      - name: Note existing localization drift
+        continue-on-error: true
+        run: dart tool/gen_l10n.dart --check
+      - name: Analyze Dart code
+        continue-on-error: true
+        timeout-minutes: 10
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings

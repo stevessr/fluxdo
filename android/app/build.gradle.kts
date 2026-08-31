@@ -46,6 +46,13 @@ val hasReleaseSigning =
     (releaseStoreFile?.length() ?: 0L) > 0L
 val releaseBuildSigningName = if (hasReleaseSigning) "release" else "debug"
 
+// Release 默认启用 R8 + Android resource shrink；出现第三方插件兼容问题时可用
+// -Pfluxdo.enableReleaseShrinking=false 临时回退，而不需要改构建脚本。
+val enableReleaseShrinking = providers.gradleProperty("fluxdo.enableReleaseShrinking")
+    .orElse("true")
+    .get()
+    .toBoolean()
+
 println(
     if (hasReleaseSigning) {
         "Android local signing: using ${releaseStoreFile?.path} for debug/profile/release"
@@ -53,6 +60,7 @@ println(
         "Android local signing: incomplete config, debug uses default debug signing and profile/release fallback to debug signing"
     }
 )
+println("Android release shrinking: $enableReleaseShrinking")
 
 android {
     namespace = "com.github.lingyan000.fluxdo"
@@ -78,6 +86,29 @@ android {
         versionName = flutter.versionName
     }
 
+    // Flutter package assets are declared globally, so web implementations can leak
+    // WebAssembly / worker JS into Android APKs even though Android never loads them.
+    // Filter only unique, web-only filenames; keep app JS such as discourse-cook and
+    // compat-polyfill because those are intentionally executed on Android.
+    androidResources {
+        ignoreAssetsPattern = listOf(
+            "!.svn",
+            "!.git",
+            "!.ds_store",
+            "!*.scc",
+            ".*",
+            "<dir>_*",
+            "!CVS",
+            "!thumbs.db",
+            "!picasa.ini",
+            "!*~",
+            "<file>avif_decoder.wasm",
+            "<file>web_worker.dart.js",
+            "<file>hls.js",
+            "<file>web_support.js",
+        ).joinToString(":")
+    }
+
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
@@ -100,10 +131,12 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName(releaseBuildSigningName)
-            // 关闭 R8 代码压缩与资源压缩：开启后 Release 包运行时闪退，
-            // 在定位到具体被裁剪的类之前保持禁用状态。
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = enableReleaseShrinking
+            isShrinkResources = enableReleaseShrinking
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
 
         debug {
@@ -162,7 +195,6 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.14.0"))
     implementation("com.google.firebase:firebase-crashlytics-ndk")
     implementation("com.google.firebase:firebase-analytics")
-    implementation("org.json:json:20240303")
     implementation("androidx.webkit:webkit:1.15.0")
     // 媒体转码(压缩到 4MB):Transformer 走系统 MediaCodec 硬编
     implementation("androidx.media3:media3-transformer:1.10.1")
