@@ -17,6 +17,7 @@ import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/chat/chat_message_flag_sheet.dart';
+import '../../widgets/chat/chat_keyboard_viewport.dart';
 import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
@@ -863,7 +864,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
               ? '回复 ${_replyToMessage!.user?.name ?? _replyToMessage!.user?.username ?? ''}…'
               : '回复消息串…');
 
-    return Column(
+    return ChatKeyboardViewport(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -953,11 +954,10 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
           ),
         ),
         const Divider(height: 1),
-        // 键盘 inset 自适应：获取键盘高度
+        // 键盘高度由 ChatKeyboardViewport 的轻量 spacer 跟随；
+        // 输入区本身不再逐帧订阅 viewInsets。
         Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
+          padding: EdgeInsets.zero,
           child: SafeArea(
             top: false,
             child: Column(
