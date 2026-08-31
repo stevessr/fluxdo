@@ -7,6 +7,8 @@ import 'package:m3e_ui/m3e_ui.dart';
 
 import '../../models/category.dart';
 import '../../models/tag_search_result.dart';
+import '../../navigation/nav_entry.dart';
+import '../../navigation/nav_entry_registry.dart';
 import '../../providers/discourse_providers.dart';
 import '../../providers/pinned_categories_provider.dart';
 import '../../utils/font_awesome_helper.dart';
@@ -237,6 +239,13 @@ class ControlledCategoryDrawerState extends State<ControlledCategoryDrawer>
 /// - 全部分类区：父子分组;带 chevron 的父分类点行=展开/收起，展开
 ///   首行「全部话题」进父分类聚合页;无子分类行点行=进页
 /// - 「编辑」→ 收藏排序页（拖拽调序，复用 PinnedCategoryEditPage）
+enum _DrawerSection { categories, tags, more }
+
+String _drawerMoreLabel(BuildContext context) =>
+    Localizations.localeOf(context).languageCode == 'zh'
+        ? '\u66f4\u591a'
+        : 'More';
+
 class CategoryDrawer extends ConsumerStatefulWidget {
   const CategoryDrawer({
     super.key,
@@ -258,8 +267,17 @@ class _CategoryDrawerState extends ConsumerState<CategoryDrawer> {
   /// 已展开子分类的父分类 id 集合（默认全收起）
   final Set<int> _expandedIds = {};
 
-  /// 当前页签：false = 分类，true = 标签
-  bool _showTags = false;
+  /// Current drawer section.
+  _DrawerSection _section = _DrawerSection.categories;
+
+  static const List<String> _moreEntryIds = [
+    'chat',
+    'messages',
+    'ai_bot',
+    'leaderboard',
+    'groups',
+    'upcoming_events',
+  ];
 
   /// 标签搜索词（本地过滤 /tags.json 全量数据，无需请求）
   final TextEditingController _tagQueryController = TextEditingController();
@@ -497,12 +515,15 @@ class _CategoryDrawerState extends ConsumerState<CategoryDrawer> {
               padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
               child: Row(
                 children: [
-                  _DrawerTabSwitcher(
-                    showTags: _showTags,
-                    onChanged: (v) => setState(() => _showTags = v),
+                  Expanded(
+                    child: _DrawerTabSwitcher(
+                      section: _section,
+                      onChanged: (section) =>
+                          setState(() => _section = section),
+                    ),
                   ),
-                  const Spacer(),
-                  if (!_showTags && pinnedIds.isNotEmpty)
+                  if (_section == _DrawerSection.categories &&
+                      pinnedIds.isNotEmpty)
                     IconButton(
                       icon: const Icon(Symbols.edit_rounded, size: 20),
                       tooltip: S.current.common_edit,
@@ -514,15 +535,46 @@ class _CategoryDrawerState extends ConsumerState<CategoryDrawer> {
               ),
             ),
             Expanded(
-              child: _showTags
-                  ? _buildTagsList()
-                  : _buildCategoriesList(categoriesAsync, pinnedIds, levelFor),
+              child: switch (_section) {
+                _DrawerSection.categories => _buildCategoriesList(
+                  categoriesAsync,
+                  pinnedIds,
+                  levelFor,
+                ),
+                _DrawerSection.tags => _buildTagsList(),
+                _DrawerSection.more => _buildMoreList(isLoggedIn),
+              },
             ),
           ],
         ),
       ),
     );
   }
+
+  /// App-level destinations exposed from the category drawer.
+Widget _buildMoreList(bool isLoggedIn) {
+  final entries = _moreEntryIds
+      .map(NavEntryRegistry.byId)
+      .whereType<NavEntry>()
+      .where((entry) => !entry.requiresLogin || isLoggedIn)
+      .toList(growable: false);
+
+  return ListView(
+    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+    children: [
+      for (final entry in entries)
+        _MoreNavRow(
+          icon: entry.iconData,
+          label: entry.label(context),
+          onTap: () {
+            final pageBuilder = entry.pageBuilder;
+            if (pageBuilder == null) return;
+            _closeAndPush(pageBuilder(context, true));
+          },
+        ),
+    ],
+  );
+}
 
   /// 分类页签：收藏区 + 全部分类父子树（原侧栏主体）
   Widget _buildCategoriesList(
@@ -1164,41 +1216,128 @@ class _TagRow extends StatelessWidget {
   }
 }
 
-/// 抽屉头部的「分类 ⇄ 标签」分段切换（M3 connected button group 简
-/// 化版：胶囊底 + 滑动选中块）
-class _DrawerTabSwitcher extends StatelessWidget {
-  const _DrawerTabSwitcher({required this.showTags, required this.onChanged});
+class _MoreNavRow extends StatelessWidget {
+  const _MoreNavRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
-  final bool showTags;
-  final ValueChanged<bool> onChanged;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer.withValues(
+                        alpha: 0.65,
+                      ),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 18,
+                      color: colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Symbols.chevron_right_rounded,
+                    size: 20,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Three-way drawer switcher: categories / tags / more.
+class _DrawerTabSwitcher extends StatelessWidget {
+  const _DrawerTabSwitcher({
+    required this.section,
+    required this.onChanged,
+  });
+
+  final _DrawerSection section;
+  final ValueChanged<_DrawerSection> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    Widget segment(String label, bool selected, VoidCallback onTap) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-          decoration: BoxDecoration(
-            color: selected ? colorScheme.secondaryContainer : null,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: AnimatedDefaultTextStyle(
+    Widget segment(String label, _DrawerSection value) {
+      final selected = section == value;
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onChanged(value),
+          child: AnimatedContainer(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected
-                  ? colorScheme.onSecondaryContainer
-                  : colorScheme.onSurfaceVariant,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 7,
             ),
-            child: Text(label),
+            decoration: BoxDecoration(
+              color: selected ? colorScheme.secondaryContainer : null,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: selected
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+                color: selected
+                    ? colorScheme.onSecondaryContainer
+                    : colorScheme.onSurfaceVariant,
+              ),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
         ),
       );
@@ -1207,18 +1346,19 @@ class _DrawerTabSwitcher extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        color: colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.45,
+        ),
         borderRadius: BorderRadius.circular(23),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           segment(
             S.current.category_categories,
-            !showTags,
-            () => onChanged(false),
+            _DrawerSection.categories,
           ),
-          segment(S.current.tag_tabTags, showTags, () => onChanged(true)),
+          segment(S.current.tag_tabTags, _DrawerSection.tags),
+          segment(_drawerMoreLabel(context), _DrawerSection.more),
         ],
       ),
     );
