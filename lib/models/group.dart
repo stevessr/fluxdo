@@ -64,6 +64,39 @@ class DiscourseGroup {
   bool get canManageMembers =>
       !automatic && (canAdminGroup || isGroupOwner);
 
+  /// 对齐 Discourse `group-membership-button`：公开准入且当前不是成员时可加入。
+  bool get canJoin => publicAdmission && !isGroupUser;
+
+  /// 对齐 Discourse `group-membership-button`：允许公开退出且当前是成员时可退出。
+  bool get canLeave => publicExit && isGroupUser;
+
+  DiscourseGroup copyWith({
+    int? userCount,
+    bool? isGroupUser,
+    bool? isGroupOwner,
+  }) => DiscourseGroup(
+    id: id,
+    name: name,
+    displayName: displayName,
+    fullName: fullName,
+    userCount: userCount ?? this.userCount,
+    automatic: automatic,
+    visible: visible,
+    canSeeMembers: canSeeMembers,
+    isGroupUser: isGroupUser ?? this.isGroupUser,
+    isGroupOwner: isGroupOwner ?? this.isGroupOwner,
+    canAdminGroup: canAdminGroup,
+    publicAdmission: publicAdmission,
+    publicExit: publicExit,
+    allowMembershipRequests: allowMembershipRequests,
+    bioRaw: bioRaw,
+    bioCooked: bioCooked,
+    flairUrl: flairUrl,
+    flairBackgroundColor: flairBackgroundColor,
+    flairColor: flairColor,
+    title: title,
+  );
+
   factory DiscourseGroup.fromJson(Map<String, dynamic> json) {
     return DiscourseGroup(
       id: (json['id'] as num?)?.toInt() ?? 0,
