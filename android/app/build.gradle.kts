@@ -86,6 +86,29 @@ android {
         versionName = flutter.versionName
     }
 
+    // Flutter package assets are declared globally, so web implementations can leak
+    // WebAssembly / worker JS into Android APKs even though Android never loads them.
+    // Filter only unique, web-only filenames; keep app JS such as discourse-cook and
+    // compat-polyfill because those are intentionally executed on Android.
+    androidResources {
+        ignoreAssetsPattern = listOf(
+            "!.svn",
+            "!.git",
+            "!.ds_store",
+            "!*.scc",
+            ".*",
+            "<dir>_*",
+            "!CVS",
+            "!thumbs.db",
+            "!picasa.ini",
+            "!*~",
+            "<file>avif_decoder.wasm",
+            "<file>web_worker.dart.js",
+            "<file>hls.js",
+            "<file>web_support.js",
+        ).joinToString(":")
+    }
+
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
