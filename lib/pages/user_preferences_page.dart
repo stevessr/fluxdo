@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'discourse_avatar_page.dart';
+import 'discourse_calendar_subscriptions_page.dart';
 import 'discourse_identity_profile_page.dart';
 import 'discourse_interface_advanced_page.dart';
 import 'discourse_language_page.dart';
@@ -8,6 +9,7 @@ import 'discourse_notification_schedule_page.dart';
 import 'discourse_profile_extras_page.dart';
 import 'discourse_security_advanced_page.dart';
 import 'discourse_tracking_selectors_page.dart';
+import 'discourse_user_filters_page.dart';
 import 'user_account_management_page.dart';
 import 'user_preferences_core_page.dart' as core;
 
@@ -159,6 +161,44 @@ class UserPreferencesPage extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => DiscourseTrackingSelectorsPage(
+                          username: username,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.people_outline),
+                  title: Text(zh ? '用户过滤与私信' : 'Users & private messages'),
+                  subtitle: Text(
+                    zh
+                        ? '搜索管理忽略/静音用户、允许私信用户和私信权限'
+                        : 'Search and manage ignored/muted users, allowed PM users, and PM permissions',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseUserFiltersPage(
+                          username: username,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.calendar_month_outlined),
+                  title: Text(zh ? '日历订阅' : 'Calendar subscriptions'),
+                  subtitle: Text(
+                    zh
+                        ? '生成、轮换、复制或撤销 Discourse 私密 ICS feeds'
+                        : 'Generate, rotate, copy, or revoke private Discourse ICS feeds',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseCalendarSubscriptionsPage(
                           username: username,
                         ),
                       ),
