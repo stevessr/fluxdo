@@ -18,6 +18,15 @@ extension UserSecurityExtrasApi on DiscourseService {
       throw Exception(_securityExtrasError(e));
     }
   }
+
+  Future<void> deletePreferenceAccount(String username) async {
+    try {
+      final encoded = Uri.encodeComponent(username);
+      await dio.delete('/u/$encoded');
+    } on DioException catch (e) {
+      throw Exception(_securityExtrasError(e));
+    }
+  }
 }
 
 String _securityExtrasError(DioException error) {
