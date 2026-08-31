@@ -86,19 +86,41 @@ jobs:
           openssl x509 -in "$cert_dir/ca.crt" -outform DER -out "$cert_dir/ca.der"
           cp -f "$cert_dir/ca.crt" assets/certs/proxy_ca.pem
           cp -f "$cert_dir/ca.der" android/app/src/main/res/raw/proxy_ca.der
-      - name: Build arm64 release APK
+      - name: Build and inspect arm64 release APK
         run: |
           set -euo pipefail
           export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
           export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
           dart tool/flutterw.dart build apk --release --target-platform android-arm64 --dart-define=cronetHttpNoPlay=true
-          apk=build/app/outputs/flutter-apk/app-release.apk
-          test -f "$apk"
-          bytes=$(stat -c '%s' "$apk")
-          echo "APK_BYTES=$bytes"
-          echo "APK_MIB=$(python3 -c "print(round($bytes/1024/1024, 2))")"
-          echo '=== largest APK entries ==='
-          unzip -l "$apk" | awk 'NF>=4 && $1 ~ /^[0-9]+$/ {print $1, $4}' | sort -nr | head -40
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          apk = Path('build/app/outputs/flutter-apk/app-release.apk')
+          assert apk.is_file(), apk
+          size = apk.stat().st_size
+          baseline = 93_202_303
+          print(f'APK_BYTES={size}')
+          print(f'APK_MIB={size / 1024 / 1024:.2f}')
+          print(f'BASELINE_BYTES={baseline}')
+          print(f'SAVED_BYTES={baseline - size}')
+          print(f'SAVED_MIB={(baseline - size) / 1024 / 1024:.2f}')
+
+          forbidden = {
+              'avif_decoder.wasm',
+              'web_worker.dart.js',
+              'hls.js',
+              'web_support.js',
+          }
+          with ZipFile(apk) as zf:
+              infos = zf.infolist()
+              leaked = [i.filename for i in infos if Path(i.filename).name in forbidden]
+              print('WEB_ONLY_ASSET_LEAKS=', leaked)
+              assert not leaked, f'web-only assets still packaged: {leaked}'
+              print('=== largest APK entries ===')
+              for info in sorted(infos, key=lambda i: i.file_size, reverse=True)[:40]:
+                  print(f'{info.file_size:>12} {info.compress_size:>12} {info.filename}')
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: slim-arm64-release-${{ github.run_number }}
