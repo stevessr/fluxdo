@@ -273,6 +273,7 @@ Map<String, dynamic> _serializeUserPreferences(
   Map<String, dynamic> attributes,
 ) {
   final payload = Map<String, dynamic>.from(attributes);
+
   if (payload.containsKey('interface_color_mode')) {
     payload['interface_color_mode'] = switch (payload['interface_color_mode']) {
       'auto' => 1,
@@ -281,6 +282,44 @@ Map<String, dynamic> _serializeUserPreferences(
       final value => value,
     };
   }
+
+  // Discourse's UserUpdater treats these values as comma-separated strings and
+  // calls `split(",")` itself. Ember's normal form serialization produces that
+  // shape, while Flutter's JSON requests preserve List<String>, so normalize at
+  // the boundary for every native caller (including the legacy field editor).
+  const commaSeparatedFields = <String>{
+    'watched_tags',
+    'tracked_tags',
+    'watching_first_post_tags',
+    'muted_tags',
+    'muted_usernames',
+    'allowed_pm_usernames',
+  };
+  for (final field in commaSeparatedFields) {
+    final value = payload[field];
+    if (value is Iterable && value is! String) {
+      payload[field] = value.map((e) => e.toString()).join(',');
+    }
+  }
+
+  // UserUpdater uses an empty string as the explicit signal to clear an
+  // existing profile/card background. A JSON null is not equivalent there.
+  for (final field in const <String>{
+    'profile_background_upload_url',
+    'card_background_upload_url',
+  }) {
+    if (payload.containsKey(field) && payload[field] == null) {
+      payload[field] = '';
+    }
+  }
+
+  // The server special-cases the string "-1" to mean "use the site default"
+  // homepage before assigning the integer column. JSON keeps -1 as an int, so
+  // preserve the same semantics explicitly.
+  if (payload['homepage_id'] == -1) {
+    payload['homepage_id'] = '-1';
+  }
+
   return payload;
 }
 
