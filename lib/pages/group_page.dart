@@ -128,29 +128,66 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     _reload();
   }
 
+  Future<bool> _confirmMembershipChange({
+    required bool join,
+    required DiscourseGroup group,
+  }) async {
+    final copy = _copy(context);
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(join ? copy.confirmJoinTitle : copy.confirmLeaveTitle),
+            content: Text(
+              join
+                  ? copy.confirmJoin(group.label)
+                  : copy.confirmLeave(group.label),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(copy.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(join ? copy.join : copy.leave),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Future<void> _changeMembership({required bool join}) async {
     final group = _group;
     if (group == null || _membershipChanging) return;
     if (join ? !group.canJoin : !group.canLeave) return;
 
+    final confirmed = await _confirmMembershipChange(join: join, group: group);
+    if (!confirmed || !mounted) return;
+
+    // 确认框打开期间群组状态可能已刷新，因此执行前再使用最新状态校验一次。
+    final latest = _group;
+    if (latest == null || _membershipChanging) return;
+    if (join ? !latest.canJoin : !latest.canLeave) return;
+
     setState(() => _membershipChanging = true);
     try {
       final service = ref.read(discourseServiceProvider);
       if (join) {
-        await service.joinGroup(group.id);
+        await service.joinGroup(latest.id);
       } else {
-        await service.leaveGroup(group.id);
+        await service.leaveGroup(latest.id);
       }
       if (!mounted) return;
 
-      final currentCount = group.userCount;
+      final currentCount = latest.userCount;
       final nextCount = currentCount == null
           ? null
           : join
               ? currentCount + 1
               : (currentCount > 0 ? currentCount - 1 : 0);
       setState(() {
-        _group = group.copyWith(
+        _group = latest.copyWith(
           userCount: nextCount,
           isGroupUser: join,
           isGroupOwner: false,
@@ -281,141 +318,164 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
     if (group == null) return const SizedBox.shrink();
 
-    return Column(
-      children: [
-        _GroupHeader(
-          group: group,
-          membershipChanging: _membershipChanging,
-          onJoin: () => _changeMembership(join: true),
-          onLeave: () => _changeMembership(join: false),
-        ),
-        if (group.canSeeMembers) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-            child: SearchBar(
-              controller: _memberFilterController,
-              hintText: copy.searchMembers,
-              leading: const Icon(Symbols.search_rounded),
-              trailing: [
-                if (_memberFilterController.text.isNotEmpty ||
-                    _memberFilter.isNotEmpty)
-                  IconButton(
-                    tooltip: copy.clear,
-                    onPressed: () {
-                      _memberFilterController.clear();
-                      if (_memberFilter.isNotEmpty) _applyMemberFilter();
-                      setState(() {});
-                    },
-                    icon: const Icon(Symbols.close_rounded),
-                  ),
-              ],
-              onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => _applyMemberFilter(),
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: _GroupHeader(
+              group: group,
+              membershipChanging: _membershipChanging,
+              onJoin: () => _changeMembership(join: true),
+              onLeave: () => _changeMembership(join: false),
             ),
           ),
-          const Divider(height: 1),
-          Expanded(child: _buildMembers(context, copy)),
-        ] else
-          Expanded(
-            child: Center(
+          if (group.canSeeMembers) ...[
+            SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Symbols.lock_rounded, size: 44),
-                    const SizedBox(height: 12),
-                    Text(copy.membersHidden),
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                child: SearchBar(
+                  controller: _memberFilterController,
+                  hintText: copy.searchMembers,
+                  leading: const Icon(Symbols.search_rounded),
+                  trailing: [
+                    if (_memberFilterController.text.isNotEmpty ||
+                        _memberFilter.isNotEmpty)
+                      IconButton(
+                        tooltip: copy.clear,
+                        onPressed: () {
+                          _memberFilterController.clear();
+                          if (_memberFilter.isNotEmpty) _applyMemberFilter();
+                          setState(() {});
+                        },
+                        icon: const Icon(Symbols.close_rounded),
+                      ),
                   ],
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _applyMemberFilter(),
                 ),
               ),
             ),
-          ),
-      ],
+            const SliverToBoxAdapter(child: Divider(height: 1)),
+            ..._buildMemberSlivers(context, copy),
+          ] else
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Symbols.lock_rounded, size: 44),
+                      const SizedBox(height: 12),
+                      Text(copy.membersHidden),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildMembers(BuildContext context, _GroupCopy copy) {
+  List<Widget> _buildMemberSlivers(BuildContext context, _GroupCopy copy) {
     if (_members.isEmpty && _loading) {
-      return const Center(child: CircularProgressIndicator.adaptive());
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator.adaptive()),
+        ),
+      ];
     }
     if (_members.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _reload,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            const SizedBox(height: 120),
-            const Icon(Symbols.person_rounded, size: 42),
-            const SizedBox(height: 12),
-            Center(child: Text(copy.noMembers)),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _reload,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
-        itemCount: _members.length + 1,
-        separatorBuilder: (_, index) => index < _members.length - 1
-            ? const Divider(height: 1, indent: 64)
-            : const SizedBox.shrink(),
-        itemBuilder: (context, index) {
-          if (index == _members.length) {
-            if (_loadingMore) {
-              return const Padding(
-                padding: EdgeInsets.all(20),
-                child: Center(child: CircularProgressIndicator.adaptive()),
-              );
-            }
-            if (_hasMore) {
-              return Padding(
-                padding: const EdgeInsets.all(12),
-                child: Center(
-                  child: FilledButton.tonal(
-                    onPressed: _loadMore,
-                    child: Text(copy.loadMore),
-                  ),
-                ),
-              );
-            }
-            return const SizedBox(height: 12);
-          }
-
-          final member = _members[index];
-          return ListTile(
-            leading: SmartAvatar(
-              imageUrl: member.avatarUrl,
-              radius: 20,
-              fallbackText: member.username,
-            ),
-            title: Row(
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Flexible(
-                  child: Text(
-                    member.name?.trim().isNotEmpty == true
-                        ? member.name!.trim()
-                        : member.username,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (member.owner) ...[
-                  const SizedBox(width: 8),
-                  _SmallBadge(label: copy.owner),
-                ],
+                const Icon(Symbols.person_rounded, size: 42),
+                const SizedBox(height: 12),
+                Text(copy.noMembers),
               ],
             ),
-            subtitle: Text('@${member.username}'),
-            trailing: const Icon(Symbols.chevron_right_rounded),
-            onTap: () => _openUser(member),
-          );
-        },
+          ),
+        ),
+      ];
+    }
+
+    final memberContentCount = _members.length * 2 - 1;
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              if (index == memberContentCount) {
+                if (_loadingMore) {
+                  return const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Center(
+                      child: CircularProgressIndicator.adaptive(),
+                    ),
+                  );
+                }
+                if (_hasMore) {
+                  return Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Center(
+                      child: FilledButton.tonal(
+                        onPressed: _loadMore,
+                        child: Text(copy.loadMore),
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox(height: 12);
+              }
+
+              if (index.isOdd) {
+                return const Divider(height: 1, indent: 64);
+              }
+
+              final member = _members[index ~/ 2];
+              return ListTile(
+                leading: SmartAvatar(
+                  imageUrl: member.avatarUrl,
+                  radius: 20,
+                  fallbackText: member.username,
+                ),
+                title: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        member.name?.trim().isNotEmpty == true
+                            ? member.name!.trim()
+                            : member.username,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (member.owner) ...[
+                      const SizedBox(width: 8),
+                      _SmallBadge(label: copy.owner),
+                    ],
+                  ],
+                ),
+                subtitle: Text('@${member.username}'),
+                trailing: const Icon(Symbols.chevron_right_rounded),
+                onTap: () => _openUser(member),
+              );
+            },
+            childCount: memberContentCount + 1,
+          ),
+        ),
       ),
-    );
+    ];
   }
 }
 
@@ -458,7 +518,10 @@ class _GroupHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(group.label, style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      group.label,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       '@${group.name}',
@@ -476,7 +539,9 @@ class _GroupHeader extends StatelessWidget {
                       runSpacing: 6,
                       children: [
                         if (group.userCount != null)
-                          _SmallBadge(label: copy.memberCount(group.userCount!)),
+                          _SmallBadge(
+                            label: copy.memberCount(group.userCount!),
+                          ),
                         if (group.automatic)
                           _SmallBadge(label: copy.automatic),
                         if (group.isGroupOwner)
@@ -569,11 +634,11 @@ class _AddMembersDialogState extends State<_AddMembersDialog> {
   }
 
   List<String> get _usernames => LinkedHashSet<String>.from(
-    _controller.text
-        .split(RegExp(r'[\s,;，；]+'))
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty),
-  ).toList(growable: false);
+        _controller.text
+            .split(RegExp(r'[\s,;，；]+'))
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty),
+      ).toList(growable: false);
 
   @override
   Widget build(BuildContext context) {
@@ -650,12 +715,19 @@ class _GroupCopy {
   String get leave => zh ? '退出' : 'Leave';
   String get joined => zh ? '已进入群组' : 'Joined group';
   String get left => zh ? '已退出群组' : 'Left group';
+  String get confirmJoinTitle => zh ? '确认进入群组' : 'Join group?';
+  String get confirmLeaveTitle => zh ? '确认退出群组' : 'Leave group?';
+  String confirmJoin(String group) =>
+      zh ? '确定要进入“$group”吗？' : 'Are you sure you want to join “$group”?';
+  String confirmLeave(String group) =>
+      zh ? '确定要退出“$group”吗？' : 'Are you sure you want to leave “$group”?';
   String memberCount(int value) => zh ? '$value 位成员' : '$value members';
   String addMembersTo(String group) =>
       zh ? '添加成员到 $group' : 'Add members to $group';
   String get usernames => zh ? '用户名' : 'Usernames';
-  String get usernamesHint =>
-      zh ? '可一次填写多个用户名，用逗号、空格或换行分隔' : 'Separate usernames with commas, spaces, or new lines';
+  String get usernamesHint => zh
+      ? '可一次填写多个用户名，用逗号、空格或换行分隔'
+      : 'Separate usernames with commas, spaces, or new lines';
   String get notifyUsers => zh ? '通知被添加的用户' : 'Notify added users';
   String get cancel => zh ? '取消' : 'Cancel';
   String get add => zh ? '添加' : 'Add';
@@ -663,5 +735,5 @@ class _GroupCopy {
 }
 
 _GroupCopy _copy(BuildContext context) => _GroupCopy(
-  zh: Localizations.localeOf(context).languageCode.toLowerCase() == 'zh',
-);
+      zh: Localizations.localeOf(context).languageCode.toLowerCase() == 'zh',
+    );
