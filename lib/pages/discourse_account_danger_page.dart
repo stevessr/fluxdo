@@ -21,6 +21,7 @@ class _DiscourseAccountDangerPageState
   Map<String, dynamic>? _user;
   bool _loading = true;
   bool _deleting = false;
+  bool _revokingSessions = false;
   Object? _error;
 
   bool get _isZh => Localizations.localeOf(context).languageCode == 'zh';
@@ -55,8 +56,73 @@ class _DiscourseAccountDangerPageState
     }
   }
 
+  Future<void> _revokeAllSessions() async {
+    if (_revokingSessions || _deleting) return;
+    final service = ref.read(discourseServiceProvider);
+    final currentUsername = await service.getCurrentUsername();
+    if (currentUsername == null ||
+        currentUsername.toLowerCase() != widget.username.toLowerCase()) {
+      if (mounted) {
+        ToastService.showError(
+          _tr(
+            '只能从个人设置撤销当前登录账户的全部会话',
+            'Only the current account can revoke all sessions from preferences',
+          ),
+        );
+      }
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(_tr('退出所有设备？', 'Sign out all devices?')),
+            content: Text(
+              _tr(
+                '这会按照 Discourse 官方 Security 页的行为撤销全部登录会话，包括当前设备。完成后 Fluxdo 也会清理本地登录状态。',
+                'This follows Discourse Security behavior and revokes every login session, including this device. Fluxdo will also clear its local session afterwards.',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                ),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_tr('全部退出', 'Sign out all')),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    setState(() => _revokingSessions = true);
+    try {
+      // Omitting token_id is the upstream signal for revoking all sessions.
+      await service.revokePreferenceAuthToken(widget.username);
+      await service.logout(callApi: false);
+      if (!mounted) return;
+      ToastService.showSuccess(_tr('所有登录会话已撤销', 'All login sessions revoked'));
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (e) {
+      if (mounted) {
+        ToastService.showError(e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => _revokingSessions = false);
+    }
+  }
+
   Future<void> _deleteAccount() async {
-    if (_deleting || _user?['can_delete_account'] != true) return;
+    if (_deleting || _revokingSessions || _user?['can_delete_account'] != true) {
+      return;
+    }
 
     final typed = TextEditingController();
     final expected = widget.username;
@@ -161,6 +227,49 @@ class _DiscourseAccountDangerPageState
               children: [
                 Row(
                   children: [
+                    const Icon(Icons.logout_outlined),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _tr('撤销全部登录会话', 'Revoke all login sessions'),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _tr(
+                    '与 Discourse Security 页的“退出所有设备”一致。当前设备也会退出。',
+                    'Matches Discourse Security “sign out all devices”. The current device is included.',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: _revokingSessions || _deleting
+                      ? null
+                      : _revokeAllSessions,
+                  icon: _revokingSessions
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.devices_other_outlined),
+                  label: Text(_tr('退出所有设备', 'Sign out all devices')),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
                     Icon(
                       Icons.warning_amber_rounded,
                       color: Theme.of(context).colorScheme.error,
@@ -192,7 +301,9 @@ class _DiscourseAccountDangerPageState
                     backgroundColor: Theme.of(context).colorScheme.error,
                     foregroundColor: Theme.of(context).colorScheme.onError,
                   ),
-                  onPressed: !canDelete || _deleting ? null : _deleteAccount,
+                  onPressed: !canDelete || _deleting || _revokingSessions
+                      ? null
+                      : _deleteAccount,
                   icon: _deleting
                       ? const SizedBox.square(
                           dimension: 18,
