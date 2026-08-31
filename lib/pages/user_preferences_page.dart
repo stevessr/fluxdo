@@ -6,6 +6,7 @@ import 'discourse_interface_advanced_page.dart';
 import 'discourse_language_page.dart';
 import 'discourse_notification_schedule_page.dart';
 import 'discourse_profile_extras_page.dart';
+import 'discourse_tracking_selectors_page.dart';
 import 'user_account_management_page.dart';
 import 'user_preferences_core_page.dart' as core;
 
@@ -138,6 +139,25 @@ class UserPreferencesPage extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => DiscourseNotificationSchedulePage(
+                          username: username,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.track_changes_outlined),
+                  title: Text(zh ? '分类与标签跟踪' : 'Category & tag tracking'),
+                  subtitle: Text(
+                    zh
+                        ? '按名称选择关注、跟踪、首帖关注、静音分类和标签'
+                        : 'Select watched, tracked, first-post, and muted categories/tags by name',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseTrackingSelectorsPage(
                           username: username,
                         ),
                       ),
