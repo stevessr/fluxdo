@@ -302,11 +302,13 @@ Map<String, dynamic> _serializeUserPreferences(
     }
   }
 
-  // UserUpdater uses an empty string as the explicit signal to clear an
-  // existing profile/card background. A JSON null is not equivalent there.
+  // These fields use an empty string as an explicit clear signal in
+  // UserUpdater. JSON null is falsey in Ruby and would skip the clear branch.
   for (final field in const <String>{
     'profile_background_upload_url',
     'card_background_upload_url',
+    'primary_group_id',
+    'flair_group_id',
   }) {
     if (payload.containsKey(field) && payload[field] == null) {
       payload[field] = '';
