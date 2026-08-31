@@ -70,11 +70,50 @@ extension UserPreferencesApi on DiscourseService {
     }
   }
 
-  Future<void> requestPreferencePasswordReset({
-    required String login,
-  }) async {
+  Future<void> addPreferenceEmail(String username, String email) async {
+    try {
+      await dio.post(
+        '/u/${Uri.encodeComponent(username)}/preferences/email',
+        data: {'email': email},
+      );
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<void> setPreferencePrimaryEmail(String username, String email) async {
+    try {
+      await dio.put(
+        '/u/${Uri.encodeComponent(username)}/preferences/primary-email.json',
+        data: {'email': email},
+      );
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<void> deletePreferenceEmail(String username, String email) async {
+    try {
+      await dio.delete(
+        '/u/${Uri.encodeComponent(username)}/preferences/email.json',
+        data: {'email': email},
+      );
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<void> requestPreferencePasswordReset({required String login}) async {
     try {
       await dio.post('/session/forgot_password.json', data: {'login': login});
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<void> removePreferencePassword(String username) async {
+    try {
+      await dio.put('/u/${Uri.encodeComponent(username)}/remove-password');
     } on DioException catch (e) {
       throw Exception(_discoursePreferenceError(e));
     }
@@ -100,6 +139,110 @@ extension UserPreferencesApi on DiscourseService {
         '/u/${Uri.encodeComponent(username)}/preferences/revoke-auth-token',
         data: tokenId == null ? <String, dynamic>{} : {'token_id': tokenId},
       );
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<void> revokePreferenceAssociatedAccount(
+    String username,
+    String providerName,
+  ) async {
+    try {
+      await dio.post(
+        '/u/${Uri.encodeComponent(username)}/preferences/revoke-account',
+        data: {'provider_name': providerName},
+      );
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<void> exportPreferenceUserArchive() async {
+    try {
+      await dio.post(
+        '/export_csv/export_entity.json',
+        data: {'entity': 'user_archive', 'args': null},
+      );
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<Map<String, dynamic>> loadPreferenceSecondFactors() async {
+    try {
+      final response = await dio.post('/u/second_factors.json');
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<Map<String, dynamic>> createPreferenceTotp() async {
+    try {
+      final response = await dio.post('/u/create_second_factor_totp.json');
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<Map<String, dynamic>> enablePreferenceTotp({
+    required String token,
+    required String name,
+  }) async {
+    try {
+      final response = await dio.post(
+        '/u/enable_second_factor_totp.json',
+        data: {'second_factor_token': token, 'name': name},
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<void> updatePreferenceSecondFactor({
+    required int id,
+    required String name,
+    required bool disable,
+    required int targetMethod,
+  }) async {
+    try {
+      await dio.put(
+        '/u/second_factor.json',
+        data: {
+          'second_factor_target': targetMethod,
+          'name': name,
+          'disable': disable,
+          'id': id,
+        },
+      );
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<void> disableAllPreferenceSecondFactors() async {
+    try {
+      await dio.put('/u/disable_second_factor.json');
+    } on DioException catch (e) {
+      throw Exception(_discoursePreferenceError(e));
+    }
+  }
+
+  Future<Map<String, dynamic>> generatePreferenceBackupCodes() async {
+    try {
+      final response = await dio.put('/u/second_factors_backup.json');
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
     } on DioException catch (e) {
       throw Exception(_discoursePreferenceError(e));
     }
