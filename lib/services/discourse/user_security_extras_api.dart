@@ -20,6 +20,14 @@ extension UserSecurityExtrasApi on DiscourseService {
   }
 
   Future<void> deletePreferenceAccount(String username) async {
+    final currentUsername = await getCurrentUsername();
+    if (currentUsername == null ||
+        currentUsername.toLowerCase() != username.toLowerCase()) {
+      throw Exception(
+        'Account deletion from preferences is restricted to the current user',
+      );
+    }
+
     try {
       final encoded = Uri.encodeComponent(username);
       await dio.delete('/u/$encoded');
