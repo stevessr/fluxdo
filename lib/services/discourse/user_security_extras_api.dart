@@ -1,0 +1,34 @@
+import 'package:dio/dio.dart';
+
+import 'discourse_service.dart';
+
+extension UserSecurityExtrasApi on DiscourseService {
+  Future<void> revokePreferenceApiKey(int id) async {
+    try {
+      await dio.post('/user-api-key/revoke', data: {'id': id});
+    } on DioException catch (e) {
+      throw Exception(_securityExtrasError(e));
+    }
+  }
+
+  Future<void> undoRevokePreferenceApiKey(int id) async {
+    try {
+      await dio.post('/user-api-key/undo-revoke', data: {'id': id});
+    } on DioException catch (e) {
+      throw Exception(_securityExtrasError(e));
+    }
+  }
+}
+
+String _securityExtrasError(DioException error) {
+  final data = error.response?.data;
+  if (data is Map) {
+    final errors = data['errors'];
+    if (errors is List && errors.isNotEmpty) {
+      return errors.map((e) => e.toString()).join('\n');
+    }
+    final message = data['message'] ?? data['error'];
+    if (message != null) return message.toString();
+  }
+  return error.message ?? 'Discourse security request failed';
+}
