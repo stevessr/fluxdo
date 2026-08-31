@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'discourse_avatar_page.dart';
 import 'discourse_identity_profile_page.dart';
+import 'discourse_interface_advanced_page.dart';
 import 'discourse_language_page.dart';
 import 'discourse_profile_extras_page.dart';
 import 'user_account_management_page.dart';
@@ -43,101 +44,123 @@ class UserPreferencesPage extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: Text(zh ? '头像' : 'Avatar'),
-                subtitle: Text(
-                  zh
-                      ? '系统头像、自定义上传、Gravatar、站点预设头像'
-                      : 'System, uploaded, Gravatar, and site-provided avatars',
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.account_circle_outlined),
+                  title: Text(zh ? '头像' : 'Avatar'),
+                  subtitle: Text(
+                    zh
+                        ? '系统头像、自定义上传、Gravatar、站点预设头像'
+                        : 'System, uploaded, Gravatar, and site-provided avatars',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseAvatarPage(username: username),
+                      ),
+                    );
+                  },
                 ),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => DiscourseAvatarPage(username: username),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.badge_outlined),
-                title: Text(zh ? '身份与个人资料' : 'Identity & profile'),
-                subtitle: Text(
-                  zh
-                      ? '头衔、资质、主要群组、自定义状态、时区、地点、网站等'
-                      : 'Title, flair, primary group, custom status, timezone, location, website, and more',
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: Text(zh ? '身份与个人资料' : 'Identity & profile'),
+                  subtitle: Text(
+                    zh
+                        ? '头衔、资质、主要群组、自定义状态、时区、地点、网站等'
+                        : 'Title, flair, primary group, custom status, timezone, location, website, and more',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            DiscourseIdentityProfilePage(username: username),
+                      ),
+                    );
+                  },
                 ),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          DiscourseIdentityProfilePage(username: username),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.image_outlined),
-                title: Text(zh ? '资料背景与精选话题' : 'Profile media & featured topic'),
-                subtitle: Text(
-                  zh
-                      ? '个人资料背景、用户卡片背景、个人资料精选话题'
-                      : 'Profile background, user-card background, and featured topic',
+                ListTile(
+                  leading: const Icon(Icons.image_outlined),
+                  title: Text(zh ? '资料背景与精选话题' : 'Profile media & featured topic'),
+                  subtitle: Text(
+                    zh
+                        ? '个人资料背景、用户卡片背景、个人资料精选话题'
+                        : 'Profile background, user-card background, and featured topic',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            DiscourseProfileExtrasPage(username: username),
+                      ),
+                    );
+                  },
                 ),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          DiscourseProfileExtrasPage(username: username),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.language),
-                title: Text(zh ? 'Discourse 语言' : 'Discourse language'),
-                subtitle: Text(
-                  zh
-                      ? '修改论坛账户的界面语言'
-                      : 'Change the forum account interface language',
+                ListTile(
+                  leading: const Icon(Icons.palette_outlined),
+                  title: Text(zh ? '界面高级设置' : 'Advanced interface'),
+                  subtitle: Text(
+                    zh
+                        ? 'Discourse 主题、配色、发送快捷键、书签行为、内容语言'
+                        : 'Discourse theme, palettes, send shortcut, bookmark behavior, and content languages',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseInterfaceAdvancedPage(
+                          username: username,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => DiscourseLanguagePage(username: username),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.manage_accounts_outlined),
-                title: Text(zh ? '账户与安全' : 'Account & security'),
-                subtitle: Text(
-                  zh
-                      ? '邮箱、关联账户、TOTP、备份码、登录设备等'
-                      : 'Email, linked accounts, TOTP, backup codes, sessions, and more',
+                ListTile(
+                  leading: const Icon(Icons.language),
+                  title: Text(zh ? 'Discourse 语言' : 'Discourse language'),
+                  subtitle: Text(
+                    zh
+                        ? '修改论坛账户的界面语言'
+                        : 'Change the forum account interface language',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseLanguagePage(username: username),
+                      ),
+                    );
+                  },
                 ),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          UserAccountManagementPage(username: username),
-                    ),
-                  );
-                },
-              ),
-            ],
+                ListTile(
+                  leading: const Icon(Icons.manage_accounts_outlined),
+                  title: Text(zh ? '账户与安全' : 'Account & security'),
+                  subtitle: Text(
+                    zh
+                        ? '邮箱、关联账户、TOTP、备份码、登录设备等'
+                        : 'Email, linked accounts, TOTP, backup codes, sessions, and more',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            UserAccountManagementPage(username: username),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
