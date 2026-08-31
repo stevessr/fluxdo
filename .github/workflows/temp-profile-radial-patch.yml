@@ -2,191 +2,26 @@ name: Temporary profile radial patch
 
 on:
   push:
-    branches:
-      - experiment/profile-radial-account-switcher
+    branches: [experiment/profile-radial-account-switcher]
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'chore: run profile radial patch'
+    if: github.event.head_commit.message == 'chore: activate profile radial patch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: experiment/profile-radial-account-switcher
           fetch-depth: 0
-
-      - name: Patch account quick switcher
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{path}: expected one match, got {count}: {old[:80]!r}')
-              p.write_text(text.replace(old, new, 1))
-
-          # Capture the actual navigation item center for both stock and floating
-          # bottom bars instead of assuming the Profile entry lives at the right edge.
-          path = 'lib/widgets/layout/adaptive_navigation.dart'
-          replace_once(
-              path,
-              "import '../../utils/platform_utils.dart';\n",
-              "import '../../utils/platform_utils.dart';\nimport '../user/account_quick_switcher_trigger_state.dart';\n",
-          )
-          marker = "}\n\n/// 侧边导航栏组件 (平板/桌面)\n"
-          helper = """}\n\nvoid _recordAccountQuickSwitcherAnchor(\n  BuildContext context, [\n  Offset? fallback,\n]) {\n  AccountQuickSwitcherTriggerState.clear();\n  final renderObject = context.findRenderObject();\n  if (renderObject is RenderBox && renderObject.hasSize) {\n    AccountQuickSwitcherTriggerState.setAnchor(\n      renderObject.localToGlobal(renderObject.size.center(Offset.zero)),\n    );\n  } else if (fallback != null) {\n    AccountQuickSwitcherTriggerState.setAnchor(fallback);\n  }\n}\n\n/// 侧边导航栏组件 (平板/桌面)\n"""
-          replace_once(path, marker, helper)
-          replace_once(
-              path,
-              """        Widget maybeLongPress(Widget child) => d.onLongPress == null\n            ? child\n            : GestureDetector(\n                onLongPress: d.onLongPress,\n                behavior: HitTestBehavior.translucent,\n                child: child,\n              );\n""",
-              """        Widget maybeLongPress(Widget child) {\n          final callback = d.onLongPress;\n          if (callback == null) return child;\n          return Builder(\n            builder: (triggerContext) => GestureDetector(\n              onLongPressStart: (details) {\n                _recordAccountQuickSwitcherAnchor(\n                  triggerContext,\n                  details.globalPosition,\n                );\n                callback();\n              },\n              behavior: HitTestBehavior.translucent,\n              child: child,\n            ),\n          );\n        }\n""",
-          )
-          replace_once(
-              path,
-              """          onTap: onTap,\n          onLongPress: onLongPress,\n          child: labelless\n""",
-              """          onTap: onTap,\n          onLongPress: onLongPress == null\n              ? null\n              : () {\n                  _recordAccountQuickSwitcherAnchor(context);\n                  onLongPress!();\n                },\n          child: labelless\n""",
-          )
-
-          # Restore radial switching for the bottom Profile entry and make the
-          # vertical fallback follow the real horizontal trigger position too.
-          path = 'lib/widgets/user/account_switcher_sheet.dart'
-          replace_once(
-              path,
-              "import 'account_switch_loading.dart';\nimport 'radial_account_quick_switcher.dart';\n",
-              "import 'account_quick_switcher_trigger_state.dart';\nimport 'account_switch_loading.dart';\nimport 'radial_account_quick_switcher.dart';\n",
-          )
-          replace_once(
-              path,
-              """/// 触摸设备的底栏「我的」始终使用 Telegram 风格纵向快捷切换器；右上角\n/// 头像入口仍可在外观设置里选择伞状切换器。桌面端继续使用经典 bottom\n/// sheet。\n""",
-              """/// 触摸设备可在外观设置里选择伞状快捷切换器；伞状布局以真实长按入口\n/// 为圆心并自动朝屏幕内侧展开。关闭时保留 Telegram 风格纵向快捷切换器。\n/// 桌面端继续使用经典 bottom sheet。\n""",
-          )
-          replace_once(
-              path,
-              """    if (_preferTouchQuickSwitcher) {\n      if (placement == AccountQuickSwitcherPlacement.bottomRight) {\n        return _TouchAccountSwitcherEntry.show(context, placement: placement);\n      }\n      final container = ProviderScope.containerOf(context, listen: false);\n""",
-              """    if (_preferTouchQuickSwitcher) {\n      final container = ProviderScope.containerOf(context, listen: false);\n""",
-          )
-          replace_once(
-              path,
-              """  /// 底栏「我的」是固定交互，不受伞状开关影响。\n  @visibleForTesting\n  static bool shouldUseRadialSwitcher({\n    required AccountQuickSwitcherPlacement placement,\n    required bool radialEnabled,\n  }) {\n    return radialEnabled && placement == AccountQuickSwitcherPlacement.topRight;\n  }\n""",
-              """  /// 手机端所有账号快捷入口都遵循伞状开关；具体展开象限由真实锚点决定。\n  @visibleForTesting\n  static bool shouldUseRadialSwitcher({\n    required AccountQuickSwitcherPlacement placement,\n    required bool radialEnabled,\n  }) {\n    return radialEnabled;\n  }\n""",
-          )
-          replace_once(
-              path,
-              """    final completer = Completer<void>();\n    final pointerRoute = _QuickPointerRouteController();\n    late OverlayEntry entry;\n""",
-              """    final globalAnchor = AccountQuickSwitcherTriggerState.takeAnchor();\n    final overlayRenderObject = overlay.context.findRenderObject();\n    final overlayBox = overlayRenderObject is RenderBox && overlayRenderObject.hasSize\n        ? overlayRenderObject\n        : null;\n    final anchor = globalAnchor == null || overlayBox == null\n        ? globalAnchor\n        : overlayBox.globalToLocal(globalAnchor);\n    final completer = Completer<void>();\n    final pointerRoute = _QuickPointerRouteController();\n    late OverlayEntry entry;\n""",
-          )
-          replace_once(
-              path,
-              """        hostContext: context,\n        placement: placement,\n        pointerRoute: pointerRoute,\n""",
-              """        hostContext: context,\n        placement: placement,\n        anchor: anchor,\n        pointerRoute: pointerRoute,\n""",
-          )
-          replace_once(
-              path,
-              """    required this.hostContext,\n    required this.placement,\n    required this.pointerRoute,\n""",
-              """    required this.hostContext,\n    required this.placement,\n    required this.anchor,\n    required this.pointerRoute,\n""",
-          )
-          replace_once(
-              path,
-              """  final BuildContext hostContext;\n  final AccountQuickSwitcherPlacement placement;\n  final _QuickPointerRouteController pointerRoute;\n""",
-              """  final BuildContext hostContext;\n  final AccountQuickSwitcherPlacement placement;\n  final Offset? anchor;\n  final _QuickPointerRouteController pointerRoute;\n""",
-          )
-          replace_once(
-              path,
-              """    final showManageDivider = _loading || _accounts.isNotEmpty;\n\n    final switcher = FadeTransition(\n""",
-              """    final showManageDivider = _loading || _accounts.isNotEmpty;\n    const switcherWidth = 72.0;\n    final maxSwitcherLeft = media.size.width - 12.0 - switcherWidth;\n    final switcherLeft = widget.anchor == null\n        ? null\n        : (widget.anchor!.dx - switcherWidth / 2.0)\n              .clamp(12.0, maxSwitcherLeft < 12.0 ? 12.0 : maxSwitcherLeft)\n              .toDouble();\n\n    final switcher = FadeTransition(\n""",
-          )
-          replace_once(
-              path,
-              "alignment: fromTop ? Alignment.topRight : Alignment.bottomRight,",
-              "alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,",
-          )
-          replace_once(path, "width: 72,", "width: switcherWidth,")
-          replace_once(
-              path,
-              """            if (fromTop)\n              Positioned(right: 12, top: edgeInset, child: switcher)\n            else\n              Positioned(right: 12, bottom: edgeInset, child: switcher),\n""",
-              """            if (fromTop)\n              if (switcherLeft != null)\n                Positioned(left: switcherLeft, top: edgeInset, child: switcher)\n              else\n                Positioned(right: 12, top: edgeInset, child: switcher)\n            else if (switcherLeft != null)\n              Positioned(left: switcherLeft, bottom: edgeInset, child: switcher)\n            else\n              Positioned(right: 12, bottom: edgeInset, child: switcher),\n""",
-          )
-
-          # Radial geometry: derive left/right from actual available space and use
-          # deterministic avatar capacities: 1 at the pivot, then 3/5/7/... .
-          path = 'lib/widgets/user/radial_account_quick_switcher.dart'
-          replace_once(path, "    const preferredNodePitch = 58.0;\n", "")
-          replace_once(
-              path,
-              """    // Placement is already known by the caller. Do not infer it again from a\n    // percentage of the screen: compact/floating navigation bars can place the\n    // profile entry well inside that threshold even though it is still the\n    // bottom-right trigger.\n    final inwardAngle = fromTop ? math.pi * 3.0 / 4.0 : math.pi * 5.0 / 4.0;\n    final startAngle = fromTop ? math.pi / 2.0 : math.pi;\n""",
-              """    // The vertical side is known by the entry kind, but the horizontal side is\n    // deliberately derived from the real trigger position. Configurable/floating\n    // bottom navigation can put Profile at either bottom-left or bottom-right.\n    // Pick the quadrant with more horizontal room and always expand inward.\n    final roomToLeft = center.dx - targetCenterBounds.left;\n    final roomToRight = targetCenterBounds.right - center.dx;\n    final opensRight = roomToRight >= roomToLeft;\n    final double inwardAngle;\n    final double startAngle;\n    if (fromTop) {\n      if (opensRight) {\n        startAngle = 0.0;\n        inwardAngle = math.pi / 4.0;\n      } else {\n        startAngle = math.pi / 2.0;\n        inwardAngle = math.pi * 3.0 / 4.0;\n      }\n    } else {\n      if (opensRight) {\n        startAngle = math.pi * 3.0 / 2.0;\n        inwardAngle = math.pi * 7.0 / 4.0;\n      } else {\n        startAngle = math.pi;\n        inwardAngle = math.pi * 5.0 / 4.0;\n      }\n    }\n""",
-          )
-          replace_once(
-              path,
-              """    // Slot geometry is derived from the complete saved-account registry. The\n    // active account keeps its original slot but is not rendered there, so\n    // switching the active account cannot make the remaining targets reflow.\n    final slotAccounts = accounts;\n""",
-              """    // The active account is the dedicated 1-avatar centre layer. Remaining\n    // avatars fill deterministic odd-capacity arc layers: 3, 5, 7, ... .\n    final slotAccounts = accounts\n        .where((account) => account.username != currentUsername)\n        .toList(growable: false);\n""",
-          )
-          old_capacity = """    int capacityFor(double radius) {\n      if (radius <= 0.0) return 0;\n      final targetArc = accountArcFor(radius);\n      if (targetArc.sweepAngle <= 0.0) return 0;\n      return math.max(\n        1,\n        (radius * targetArc.sweepAngle / preferredNodePitch).floor() + 1,\n      );\n    }\n\n"""
-          new_capacity = """    int capacityForRing(int ringIndex) => ringIndex * 2 + 3;\n\n    var requiredAccountRingCount = 0;\n    var slotsRemaining = slotAccounts.length;\n    while (slotsRemaining > 0) {\n      slotsRemaining -= capacityForRing(requiredAccountRingCount);\n      requiredAccountRingCount++;\n    }\n\n"""
-          replace_once(path, old_capacity, new_capacity)
-          old_ring_selection = """    int comfortableAccountCapacity(List<double> radii) {\n      var total = 0;\n      for (final radius in radii) {\n        total += capacityFor(radius);\n      }\n      return total;\n    }\n\n    var accountRingCount = hasAccounts && maxAccountRingCount > 0 ? 1 : 0;\n    while (accountRingCount < maxAccountRingCount &&\n        comfortableAccountCapacity(accountRadiiFor(accountRingCount)) <\n            slotAccounts.length) {\n      accountRingCount++;\n    }\n    final accountRadii = accountRadiiFor(accountRingCount).toList();\n    if (accountRadii.length > 1 &&\n        comfortableAccountCapacity(accountRadii) < slotAccounts.length) {\n      final stretchedGap =\n          (maxAccountRadius - accountInnerRadius) / (accountRadii.length - 1);\n      for (var index = 0; index < accountRadii.length; index++) {\n        accountRadii[index] = accountInnerRadius + stretchedGap * index;\n      }\n    }\n    final overflowed =\n        comfortableAccountCapacity(accountRadii) < slotAccounts.length;\n"""
-          new_ring_selection = """    final accountRingCount = math.min(\n      requiredAccountRingCount,\n      maxAccountRingCount,\n    );\n    final accountRadii = accountRadiiFor(accountRingCount).toList();\n    final overflowed = requiredAccountRingCount > maxAccountRingCount;\n"""
-          replace_once(path, old_ring_selection, new_ring_selection)
-          replace_once(
-              path,
-              """    var accountOffset = 0;\n    for (final radius in accountRadii) {\n      final remaining = slotAccounts.length - accountOffset;\n      if (remaining <= 0) break;\n      final accountCount = math.min(remaining, capacityFor(radius));\n""",
-              """    var accountOffset = 0;\n    for (var ringIndex = 0; ringIndex < accountRadii.length; ringIndex++) {\n      final radius = accountRadii[ringIndex];\n      final remaining = slotAccounts.length - accountOffset;\n      if (remaining <= 0) break;\n      final accountCount = math.min(\n        remaining,\n        capacityForRing(ringIndex),\n      );\n""",
-          )
-
-          # Appearance copy now matches both bottom-left and bottom-right radial use.
-          path = 'lib/settings/definitions/account_quick_switcher_appearance_defs.dart'
-          replace_once(
-              path,
-              "radialDescription: '仅用于右上角头像入口；右下角「我的」始终使用悬浮账号列表。',",
-              "radialDescription: '以实际长按入口为圆心，自动向屏幕内侧展开；当前账号在圆心，后续头像按 3、5、7… 分层。',",
-          )
-          replace_once(
-              path,
-              "radialDescription: '僅用於右上角頭像入口；右下角「我的」一律使用懸浮帳號列表。',",
-              "radialDescription: '以實際長按入口為圓心，自動向螢幕內側展開；目前帳號在圓心，後續頭像按 3、5、7… 分層。',",
-          )
-          replace_once(
-              path,
-              "radialDescription: 'Only applies to top-right avatar entries. The bottom-right Profile entry always uses the floating account list.',",
-              "radialDescription: 'Use the actual pressed entry as the pivot and expand inward. The active account stays at the center; later avatar rings hold 3, 5, 7, ... accounts.',",
-          )
-
-          # Regression tests: bottom Profile follows the setting, left-side anchors
-          # mirror correctly, and odd ring capacities stay deterministic.
-          path = 'test/widgets/user/account_switcher_sheet_test.dart'
-          replace_once(
-              path,
-              "test('bottom-right account switcher always ignores radial mode', () {",
-              "test('bottom account switcher follows radial mode', () {",
-          )
-          replace_once(
-              path,
-              """      isFalse,\n    );\n  });\n\n  test('top-right account switcher still follows radial mode', () {\n""",
-              """      isTrue,\n    );\n    expect(\n      AccountSwitcherSheet.shouldUseRadialSwitcher(\n        placement: AccountQuickSwitcherPlacement.bottomRight,\n        radialEnabled: false,\n      ),\n      isFalse,\n    );\n  });\n\n  test('top-right account switcher still follows radial mode', () {\n""",
-          )
-
-          path = 'test/widgets/user/radial_account_quick_switcher_layout_test.dart'
-          insertion_point = """  test('top-right placement opens into the lower-left visible quadrant', () {\n"""
-          tests = """  test('bottom-left placement mirrors into the upper-right quadrant', () {\n    final layout = calculateRadialAccountQuickSwitcherLayoutForTest(\n      size: const Size(390, 844),\n      padding: const EdgeInsets.only(top: 47, bottom: 34),\n      anchor: const Offset(40, 760),\n      switchableAccountCount: 8,\n    );\n\n    expect(layout.overflowed, isFalse);\n    expect(layout.accountCenters, hasLength(8));\n    _expectAllTargetsVisible(layout);\n    for (final center in [...layout.accountCenters, layout.manageCenter]) {\n      expect(center.dx, greaterThanOrEqualTo(layout.center.dx - 0.01));\n      expect(center.dy, lessThanOrEqualTo(layout.center.dy + 0.01));\n    }\n  });\n\n  test('avatar arc layers use 3, 5, 7 capacities after the center', () {\n    final layout = calculateRadialAccountQuickSwitcherLayoutForTest(\n      size: const Size(430, 932),\n      padding: const EdgeInsets.only(top: 48, bottom: 34),\n      anchor: const Offset(390, 850),\n      switchableAccountCount: 15,\n    );\n\n    expect(layout.overflowed, isFalse);\n    final countsByRadius = <int, int>{};\n    for (final center in layout.accountCenters) {\n      final radius = (center - layout.center).distance.round();\n      countsByRadius[radius] = (countsByRadius[radius] ?? 0) + 1;\n    }\n    final counts = countsByRadius.entries.toList()\n      ..sort((a, b) => a.key.compareTo(b.key));\n    expect(counts.map((entry) => entry.value).toList(), [3, 5, 7]);\n  });\n\n""" + insertion_point
-          replace_once(path, insertion_point, tests)
-          PY
-
-          git diff --check
-
+      - name: Apply patch
+        run: python3 .github/scripts/profile_radial_patch.py
+      - name: Validate diff
+        run: git diff --check
       - name: Commit patch
-        shell: bash
         run: |
-          if git diff --quiet; then
-            echo 'No changes produced' >&2
-            exit 1
-          fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add lib test
