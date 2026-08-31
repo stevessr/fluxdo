@@ -1,0 +1,77 @@
+name: Finalize category drawer more
+
+on:
+  push:
+    branches: [feat/category-drawer-more]
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Polish comments and declaration placement
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/widgets/topic/category_drawer.dart')
+          text = path.read_text(encoding='utf-8')
+
+          enum_start = text.index('enum _DrawerSection { categories, tags, more }')
+          class_start = text.index('class CategoryDrawer extends ConsumerStatefulWidget {', enum_start)
+          block = text[enum_start:class_start]
+
+          lines_before = text[:enum_start].splitlines(keepends=True)
+          doc_line = len(lines_before) - 1
+          while doc_line >= 0 and lines_before[doc_line].lstrip().startswith('///'):
+              doc_line -= 1
+          doc_start = sum(len(line) for line in lines_before[:doc_line + 1])
+          text = text[:doc_start] + block + text[doc_start:enum_start] + text[class_start:]
+
+          lines = text.splitlines(keepends=True)
+          switcher_line = next(i for i, line in enumerate(lines) if '_DrawerTabSwitcher(' in line)
+          for i in range(switcher_line - 1, max(-1, switcher_line - 12), -1):
+              stripped = lines[i].strip()
+              if stripped.startswith('//') and not stripped.startswith('///'):
+                  indent = lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+                  lines[i] = indent + '// Header: categories / tags / more; edit belongs to categories.\n'
+                  break
+          else:
+              raise SystemExit('drawer header comment not found')
+
+          path.write_text(''.join(lines), encoding='utf-8')
+          PY
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Format
+        run: dart format lib/widgets/topic/category_drawer.dart
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze drawer
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings lib/widgets/topic/category_drawer.dart
+
+      - name: Commit verified result
+        shell: bash
+        run: |
+          rm .github/workflows/finalize-category-drawer-more.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: format and verify category drawer more"
+          git push origin HEAD:feat/category-drawer-more
