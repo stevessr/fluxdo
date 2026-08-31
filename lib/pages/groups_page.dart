@@ -22,6 +22,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   final TextEditingController _filterController = TextEditingController();
 
   List<DiscourseGroup> _groups = const [];
+  final Set<int> _membershipChanging = <int>{};
   String _filter = '';
   int _nextPage = 0;
   int _total = 0;
@@ -110,10 +111,63 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     _load(reset: true);
   }
 
-  void _openGroup(DiscourseGroup group) {
-    Navigator.of(context).push(
+  Future<void> _openGroup(DiscourseGroup group) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => GroupPage(groupName: group.name)),
     );
+    if (mounted) _load(reset: true);
+  }
+
+  Future<void> _changeMembership(
+    DiscourseGroup group, {
+    required bool join,
+  }) async {
+    if (_membershipChanging.contains(group.id)) return;
+    if (join ? !group.canJoin : !group.canLeave) return;
+
+    setState(() => _membershipChanging.add(group.id));
+    try {
+      final service = ref.read(discourseServiceProvider);
+      if (join) {
+        await service.joinGroup(group.id);
+      } else {
+        await service.leaveGroup(group.id);
+      }
+      if (!mounted) return;
+
+      final currentCount = group.userCount;
+      final nextCount = currentCount == null
+          ? null
+          : join
+              ? currentCount + 1
+              : (currentCount > 0 ? currentCount - 1 : 0);
+      final updated = group.copyWith(
+        userCount: nextCount,
+        isGroupUser: join,
+        isGroupOwner: false,
+      );
+      setState(() {
+        _groups = [
+          for (final item in _groups)
+            if (item.id == group.id) updated else item,
+        ];
+      });
+
+      final copy = _copy(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(join ? copy.joined : copy.left)),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _membershipChanging.remove(group.id));
+      }
+    }
   }
 
   @override
@@ -252,22 +306,72 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            trailing: group.userCount == null
-                ? const Icon(Symbols.chevron_right_rounded)
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Symbols.person_rounded, size: 18),
-                      const SizedBox(width: 4),
-                      Text('${group.userCount}'),
-                      const SizedBox(width: 6),
-                      const Icon(Symbols.chevron_right_rounded),
-                    ],
-                  ),
+            trailing: _buildGroupTrailing(context, group, copy),
             onTap: () => _openGroup(group),
           );
         },
       ),
+    );
+  }
+
+  Widget _buildGroupTrailing(
+    BuildContext context,
+    DiscourseGroup group,
+    _GroupsCopy copy,
+  ) {
+    final busy = _membershipChanging.contains(group.id);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (group.canJoin || group.canLeave) ...[
+          SizedBox(
+            height: 34,
+            child: group.canJoin
+                ? FilledButton.tonal(
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    onPressed: busy
+                        ? null
+                        : () => _changeMembership(group, join: true),
+                    child: busy
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator.adaptive(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(copy.join),
+                  )
+                : OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    onPressed: busy
+                        ? null
+                        : () => _changeMembership(group, join: false),
+                    child: busy
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator.adaptive(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(copy.leave),
+                  ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        if (group.userCount != null) ...[
+          const Icon(Symbols.person_rounded, size: 18),
+          const SizedBox(width: 4),
+          Text('${group.userCount}'),
+          const SizedBox(width: 6),
+        ],
+        const Icon(Symbols.chevron_right_rounded),
+      ],
     );
   }
 }
@@ -321,6 +425,10 @@ class _GroupsCopy {
   String get empty => zh ? '没有可见群组' : 'No visible groups';
   String get loadMore => zh ? '加载更多' : 'Load more';
   String get loadFailed => zh ? '群组加载失败' : 'Failed to load groups';
+  String get join => zh ? '进入' : 'Join';
+  String get leave => zh ? '退出' : 'Leave';
+  String get joined => zh ? '已进入群组' : 'Joined group';
+  String get left => zh ? '已退出群组' : 'Left group';
   String total(int value) => zh ? '共 $value 个群组' : '$value groups';
 }
 

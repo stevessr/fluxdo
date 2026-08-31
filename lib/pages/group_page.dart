@@ -30,6 +30,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   bool _loading = false;
   bool _loadingMore = false;
   bool _adding = false;
+  bool _membershipChanging = false;
   Object? _error;
 
   @override
@@ -127,6 +128,51 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     _reload();
   }
 
+  Future<void> _changeMembership({required bool join}) async {
+    final group = _group;
+    if (group == null || _membershipChanging) return;
+    if (join ? !group.canJoin : !group.canLeave) return;
+
+    setState(() => _membershipChanging = true);
+    try {
+      final service = ref.read(discourseServiceProvider);
+      if (join) {
+        await service.joinGroup(group.id);
+      } else {
+        await service.leaveGroup(group.id);
+      }
+      if (!mounted) return;
+
+      final currentCount = group.userCount;
+      final nextCount = currentCount == null
+          ? null
+          : join
+              ? currentCount + 1
+              : (currentCount > 0 ? currentCount - 1 : 0);
+      setState(() {
+        _group = group.copyWith(
+          userCount: nextCount,
+          isGroupUser: join,
+          isGroupOwner: false,
+        );
+      });
+
+      final copy = _copy(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(join ? copy.joined : copy.left)),
+      );
+      await _reload();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _membershipChanging = false);
+    }
+  }
+
   Future<void> _showAddMembers() async {
     final group = _group;
     if (group == null || !group.canManageMembers || _adding) return;
@@ -195,7 +241,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
             ),
           IconButton(
             tooltip: copy.refresh,
-            onPressed: _loading ? null : _reload,
+            onPressed: _loading || _membershipChanging ? null : _reload,
             icon: const Icon(Symbols.refresh_rounded),
           ),
         ],
@@ -237,7 +283,12 @@ class _GroupPageState extends ConsumerState<GroupPage> {
 
     return Column(
       children: [
-        _GroupHeader(group: group),
+        _GroupHeader(
+          group: group,
+          membershipChanging: _membershipChanging,
+          onJoin: () => _changeMembership(join: true),
+          onLeave: () => _changeMembership(join: false),
+        ),
         if (group.canSeeMembers) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
@@ -369,9 +420,17 @@ class _GroupPageState extends ConsumerState<GroupPage> {
 }
 
 class _GroupHeader extends StatelessWidget {
-  const _GroupHeader({required this.group});
+  const _GroupHeader({
+    required this.group,
+    required this.membershipChanging,
+    required this.onJoin,
+    required this.onLeave,
+  });
 
   final DiscourseGroup group;
+  final bool membershipChanging;
+  final VoidCallback onJoin;
+  final VoidCallback onLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -424,6 +483,33 @@ class _GroupHeader extends StatelessWidget {
                           _SmallBadge(label: copy.youAreOwner),
                       ],
                     ),
+                    if (group.canJoin || group.canLeave) ...[
+                      const SizedBox(height: 12),
+                      if (group.canJoin)
+                        FilledButton.tonal(
+                          onPressed: membershipChanging ? null : onJoin,
+                          child: membershipChanging
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator.adaptive(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(copy.join),
+                        )
+                      else
+                        OutlinedButton(
+                          onPressed: membershipChanging ? null : onLeave,
+                          child: membershipChanging
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator.adaptive(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(copy.leave),
+                        ),
+                    ],
                   ],
                 ),
               ),
@@ -560,6 +646,10 @@ class _GroupCopy {
   String get owner => zh ? '所有者' : 'Owner';
   String get automatic => zh ? '自动群组' : 'Automatic group';
   String get youAreOwner => zh ? '你是所有者' : 'You are an owner';
+  String get join => zh ? '进入' : 'Join';
+  String get leave => zh ? '退出' : 'Leave';
+  String get joined => zh ? '已进入群组' : 'Joined group';
+  String get left => zh ? '已退出群组' : 'Left group';
   String memberCount(int value) => zh ? '$value 位成员' : '$value members';
   String addMembersTo(String group) =>
       zh ? '添加成员到 $group' : 'Add members to $group';

@@ -4,7 +4,8 @@ part of 'discourse_service.dart';
 ///
 /// 对齐上游 GroupsController / Group model：目录使用 `/groups.json`，详情
 /// `/groups/:name.json`，成员 `/groups/:name/members.json`，手工加成员使用
-/// `PUT /groups/:id/members.json`。
+/// `PUT /groups/:id/members.json`。自助加入/退出分别使用
+/// `PUT /groups/:id/join.json` 与 `DELETE /groups/:id/leave.json`。
 mixin _GroupsMixin on _DiscourseServiceBase {
   Future<GroupDirectoryResult> fetchGroups({
     int page = 0,
@@ -79,6 +80,26 @@ mixin _GroupsMixin on _DiscourseServiceBase {
       return GroupMembersResult.fromJson(
         Map<String, dynamic>.from(response.data as Map),
       );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 当前用户自助加入群组。入口是否展示由 GroupSerializer 下发的
+  /// `public_admission` / `is_group_user` 决定，最终权限仍由服务端校验。
+  Future<void> joinGroup(int groupId) async {
+    try {
+      await _dio.put('/groups/$groupId/join.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 当前用户自助退出群组。入口是否展示由 GroupSerializer 下发的
+  /// `public_exit` / `is_group_user` 决定，最终权限仍由服务端校验。
+  Future<void> leaveGroup(int groupId) async {
+    try {
+      await _dio.delete('/groups/$groupId/leave.json');
     } on DioException catch (e) {
       _throwApiError(e);
     }
