@@ -17,6 +17,7 @@ import '../../services/toast_service.dart';
 import '../../utils/url_helper.dart';
 import '../common/app_bottom_sheet.dart';
 import '../common/smart_avatar.dart';
+import 'account_quick_switcher_trigger_state.dart';
 import 'account_switch_loading.dart';
 import 'radial_account_quick_switcher.dart';
 
@@ -37,9 +38,6 @@ abstract final class AccountSwitcherSheet {
         AccountQuickSwitcherPlacement.bottomRight,
   }) {
     if (_preferTouchQuickSwitcher) {
-      if (placement == AccountQuickSwitcherPlacement.bottomRight) {
-        return _TouchAccountSwitcherEntry.show(context, placement: placement);
-      }
       final container = ProviderScope.containerOf(context, listen: false);
       final preferences = container.read(accountQuickSwitcherPreferencesProvider);
       if (shouldUseRadialSwitcher(
@@ -64,7 +62,7 @@ abstract final class AccountSwitcherSheet {
     required AccountQuickSwitcherPlacement placement,
     required bool radialEnabled,
   }) {
-    return radialEnabled && placement == AccountQuickSwitcherPlacement.topRight;
+    return radialEnabled;
   }
 
   static Future<void> showClassic(BuildContext context) {
@@ -141,6 +139,14 @@ abstract final class _TouchAccountSwitcherEntry {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return AccountSwitcherSheet.showClassic(context);
 
+    final globalAnchor = AccountQuickSwitcherTriggerState.takeAnchor();
+    final overlayRenderObject = overlay.context.findRenderObject();
+    final overlayBox = overlayRenderObject is RenderBox && overlayRenderObject.hasSize
+        ? overlayRenderObject
+        : null;
+    final anchor = globalAnchor == null || overlayBox == null
+        ? globalAnchor
+        : overlayBox.globalToLocal(globalAnchor);
     final completer = Completer<void>();
     final pointerRoute = _QuickPointerRouteController();
     late OverlayEntry entry;
@@ -158,6 +164,7 @@ abstract final class _TouchAccountSwitcherEntry {
       builder: (_) => _TouchAccountQuickSwitcher(
         hostContext: context,
         placement: placement,
+        anchor: anchor,
         pointerRoute: pointerRoute,
         onRemove: removeEntry,
         onComplete: complete,
@@ -172,6 +179,7 @@ class _TouchAccountQuickSwitcher extends StatefulWidget {
   const _TouchAccountQuickSwitcher({
     required this.hostContext,
     required this.placement,
+    required this.anchor,
     required this.pointerRoute,
     required this.onRemove,
     required this.onComplete,
@@ -179,6 +187,7 @@ class _TouchAccountQuickSwitcher extends StatefulWidget {
 
   final BuildContext hostContext;
   final AccountQuickSwitcherPlacement placement;
+  final Offset? anchor;
   final _QuickPointerRouteController pointerRoute;
   final VoidCallback onRemove;
   final VoidCallback onComplete;
@@ -466,6 +475,13 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         .clamp(120.0, 520.0)
         .toDouble();
     final showManageDivider = _loading || _accounts.isNotEmpty;
+    const switcherWidth = 72.0;
+    final maxSwitcherLeft = media.size.width - 12.0 - switcherWidth;
+    final switcherLeft = widget.anchor == null
+        ? null
+        : (widget.anchor!.dx - switcherWidth / 2.0)
+              .clamp(12.0, maxSwitcherLeft < 12.0 ? 12.0 : maxSwitcherLeft)
+              .toDouble();
 
     final switcher = FadeTransition(
       opacity: _opacity,
@@ -473,7 +489,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         position: _slide,
         child: ScaleTransition(
           scale: _scale,
-          alignment: fromTop ? Alignment.topRight : Alignment.bottomRight,
+          alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight),
             child: DecoratedBox(
@@ -492,7 +508,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
                 ],
               ),
               child: SizedBox(
-                width: 72,
+                width: switcherWidth,
                 child: SingleChildScrollView(
                   physics: const NeverScrollableScrollPhysics(),
                   padding: const EdgeInsets.symmetric(vertical: 7),
@@ -535,7 +551,12 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         child: Stack(
           children: [
             if (fromTop)
-              Positioned(right: 12, top: edgeInset, child: switcher)
+              if (switcherLeft != null)
+                Positioned(left: switcherLeft, top: edgeInset, child: switcher)
+              else
+                Positioned(right: 12, top: edgeInset, child: switcher)
+            else if (switcherLeft != null)
+              Positioned(left: switcherLeft, bottom: edgeInset, child: switcher)
             else
               Positioned(right: 12, bottom: edgeInset, child: switcher),
           ],
