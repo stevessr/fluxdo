@@ -225,6 +225,13 @@ class ControlledCategoryDrawerState extends State<ControlledCategoryDrawer>
   }
 }
 
+enum _DrawerSection { categories, tags, more }
+
+String _drawerMoreLabel(BuildContext context) =>
+    Localizations.localeOf(context).languageCode == 'zh'
+    ? '\u66f4\u591a'
+    : 'More';
+
 /// 首页分类侧栏：分类的管理中枢。
 ///
 /// 宿主以 **DrawerController 挂在 AdaptiveScaffold 顶层**呈现（原生
@@ -239,13 +246,6 @@ class ControlledCategoryDrawerState extends State<ControlledCategoryDrawer>
 /// - 全部分类区：父子分组;带 chevron 的父分类点行=展开/收起，展开
 ///   首行「全部话题」进父分类聚合页;无子分类行点行=进页
 /// - 「编辑」→ 收藏排序页（拖拽调序，复用 PinnedCategoryEditPage）
-enum _DrawerSection { categories, tags, more }
-
-String _drawerMoreLabel(BuildContext context) =>
-    Localizations.localeOf(context).languageCode == 'zh'
-        ? '\u66f4\u591a'
-        : 'More';
-
 class CategoryDrawer extends ConsumerStatefulWidget {
   const CategoryDrawer({
     super.key,
@@ -510,7 +510,7 @@ class _CategoryDrawerState extends ConsumerState<CategoryDrawer> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // —— 头部：分类 ⇄ 标签 页签切换（编辑铅笔只属于分类页）——
+            // Header: categories / tags / more; edit belongs to categories.
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
               child: Row(
@@ -552,29 +552,29 @@ class _CategoryDrawerState extends ConsumerState<CategoryDrawer> {
   }
 
   /// App-level destinations exposed from the category drawer.
-Widget _buildMoreList(bool isLoggedIn) {
-  final entries = _moreEntryIds
-      .map(NavEntryRegistry.byId)
-      .whereType<NavEntry>()
-      .where((entry) => !entry.requiresLogin || isLoggedIn)
-      .toList(growable: false);
+  Widget _buildMoreList(bool isLoggedIn) {
+    final entries = _moreEntryIds
+        .map(NavEntryRegistry.byId)
+        .whereType<NavEntry>()
+        .where((entry) => !entry.requiresLogin || isLoggedIn)
+        .toList(growable: false);
 
-  return ListView(
-    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-    children: [
-      for (final entry in entries)
-        _MoreNavRow(
-          icon: entry.iconData,
-          label: entry.label(context),
-          onTap: () {
-            final pageBuilder = entry.pageBuilder;
-            if (pageBuilder == null) return;
-            _closeAndPush(pageBuilder(context, true));
-          },
-        ),
-    ],
-  );
-}
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+      children: [
+        for (final entry in entries)
+          _MoreNavRow(
+            icon: entry.iconData,
+            label: entry.label(context),
+            onTap: () {
+              final pageBuilder = entry.pageBuilder;
+              if (pageBuilder == null) return;
+              _closeAndPush(pageBuilder(context, true));
+            },
+          ),
+      ],
+    );
+  }
 
   /// 分类页签：收藏区 + 全部分类父子树（原侧栏主体）
   Widget _buildCategoriesList(
@@ -1289,10 +1289,7 @@ class _MoreNavRow extends StatelessWidget {
 
 /// Three-way drawer switcher: categories / tags / more.
 class _DrawerTabSwitcher extends StatelessWidget {
-  const _DrawerTabSwitcher({
-    required this.section,
-    required this.onChanged,
-  });
+  const _DrawerTabSwitcher({required this.section, required this.onChanged});
 
   final _DrawerSection section;
   final ValueChanged<_DrawerSection> onChanged;
@@ -1310,10 +1307,7 @@ class _DrawerTabSwitcher extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 7,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
             decoration: BoxDecoration(
               color: selected ? colorScheme.secondaryContainer : null,
               borderRadius: BorderRadius.circular(20),
@@ -1323,9 +1317,7 @@ class _DrawerTabSwitcher extends StatelessWidget {
               curve: Curves.easeOut,
               style: TextStyle(
                 fontSize: 14,
-                fontWeight: selected
-                    ? FontWeight.w600
-                    : FontWeight.w400,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 color: selected
                     ? colorScheme.onSecondaryContainer
                     : colorScheme.onSurfaceVariant,
@@ -1346,17 +1338,12 @@ class _DrawerTabSwitcher extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.45,
-        ),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(23),
       ),
       child: Row(
         children: [
-          segment(
-            S.current.category_categories,
-            _DrawerSection.categories,
-          ),
+          segment(S.current.category_categories, _DrawerSection.categories),
           segment(S.current.tag_tabTags, _DrawerSection.tags),
           segment(_drawerMoreLabel(context), _DrawerSection.more),
         ],
