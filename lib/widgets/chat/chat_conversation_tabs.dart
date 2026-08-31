@@ -29,8 +29,13 @@ class ChatConversationTabs extends StatefulWidget {
 }
 
 class _ChatConversationTabsState extends State<ChatConversationTabs>
-    with SingleTickerProviderStateMixin {
+    with
+        SingleTickerProviderStateMixin,
+        AutomaticKeepAliveClientMixin<ChatConversationTabs> {
   late final TabController _controller;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -91,6 +96,7 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
 
     return Column(
