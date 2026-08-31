@@ -730,6 +730,7 @@ class _UserPreferencesPageState extends ConsumerState<UserPreferencesPage>
         (60000, _tr('1 分钟', '1 minute')),
         (120000, _tr('2 分钟', '2 minutes')),
         (180000, _tr('3 分钟', '3 minutes')),
+        (240000, _tr('4 分钟', '4 minutes')),
         (300000, _tr('5 分钟', '5 minutes')),
         (600000, _tr('10 分钟', '10 minutes')),
       ]),
@@ -756,13 +757,34 @@ class _UserPreferencesPageState extends ConsumerState<UserPreferencesPage>
     ]),
   ]);
 
-  Widget _usersTab() => _page([
-    _group(_tr('用户过滤', 'User filters'), [
-      _stringListField('muted_usernames', _tr('静音用户', 'Muted users'), hint: 'alice, bob'),
-      _stringListField('ignored_usernames', _tr('忽略用户', 'Ignored users'), hint: 'alice, bob'),
-      _stringListField('allowed_pm_usernames', _tr('允许私信的用户', 'Allowed PM users'), hint: 'alice, bob'),
-    ]),
-  ]);
+  Widget _usersTab() {
+    final ignored = _list('ignored_usernames')
+        .map((e) => e.toString())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    return _page([
+      _group(_tr('用户过滤', 'User filters'), [
+        _stringListField('muted_usernames', _tr('静音用户', 'Muted users'), hint: 'alice, bob'),
+        ListTile(
+          leading: const Icon(Icons.visibility_off_outlined),
+          title: Text(_tr('忽略用户', 'Ignored users')),
+          subtitle: Text(
+            ignored.isEmpty
+                ? _tr(
+                    '当前没有忽略用户。忽略操作需要选择到期时间，请使用“更多设置 → 用户过滤与私信”。',
+                    'No ignored users. Ignoring requires an expiry time; use More settings → Users & private messages.',
+                  )
+                : _tr(
+                    '${ignored.join(', ')}\n忽略有独立的 notification_level / expiring_at 协议，请在“更多设置 → 用户过滤与私信”中管理。',
+                    '${ignored.join(', ')}\nIgnore uses a dedicated notification_level / expiring_at protocol; manage it in More settings → Users & private messages.',
+                  ),
+          ),
+          isThreeLine: ignored.isNotEmpty,
+        ),
+        _stringListField('allowed_pm_usernames', _tr('允许私信的用户', 'Allowed PM users'), hint: 'alice, bob'),
+      ]),
+    ]);
+  }
 
   Widget _interfaceTab() => _page([
     _group(_tr('阅读与交互', 'Reading & interaction'), [
@@ -829,8 +851,8 @@ class _UserPreferencesPageState extends ConsumerState<UserPreferencesPage>
         ('none_selected', _tr('未选择', 'Not selected')),
       ]),
     ], subtitle: _tr(
-      '对应 Discourse 个人资料中的默认日历设置。站点若启用日历订阅插件，订阅本身由插件接口提供。',
-      'Matches Discourse’s default calendar preference. Calendar subscriptions themselves are plugin-provided when enabled.',
+      '这里设置个人资料中的默认日历。Discourse core 的私密 Calendar subscriptions 已在“更多设置 → 日历订阅”中原生管理。',
+      'Sets the default calendar used by your profile. Discourse core private Calendar subscriptions are managed natively in More settings → Calendar subscriptions.',
     )),
   ]);
 }
