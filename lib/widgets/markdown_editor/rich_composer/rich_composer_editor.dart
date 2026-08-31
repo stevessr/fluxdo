@@ -3284,10 +3284,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
             }
             switch (panelType) {
               case ChatBottomPanelType.keyboard:
-                return _KeyboardPlaceholder(
-                  color: surface,
-                  nativeKeyboardHeight: _panelController.keyboardHeight,
-                );
+                return _KeyboardPlaceholder(color: surface);
               case ChatBottomPanelType.other:
                 if (data == _RichPanelType.emoji) {
                   return ColoredBox(color: surface, child: _buildEmojiPanel());
@@ -3314,25 +3311,25 @@ class RichComposerEditorState extends State<RichComposerEditor> {
 /// 富 composer 面板类型(ChatBottomPanelContainer 泛型)。
 enum _RichPanelType { none, keyboard, emoji }
 
-/// 键盘占位:原生键盘高(与表情面板同高度源,切换等高零跳变)。
+/// 键盘占位只订阅 Flutter 的 viewInsets。
+///
+/// 原生 keyboardHeight 经平台通道上报,适合作为键盘⇄表情面板切换时
+/// 的稳定目标高度;直接拿它跟随 IME 动画会比系统帧晚到。这里与
+/// MarkdownEditor 保持一致,只让这个极小占位逐帧跟随 viewInsets,
+/// 避免富文本编辑区“追着键盘”上浮/收起。
 class _KeyboardPlaceholder extends StatelessWidget {
-  const _KeyboardPlaceholder({
-    required this.color,
-    required this.nativeKeyboardHeight,
-  });
+  const _KeyboardPlaceholder({required this.color});
 
   final Color color;
-  final double nativeKeyboardHeight;
 
   @override
   Widget build(BuildContext context) {
+    final insetBottom = MediaQuery.viewInsetsOf(context).bottom;
     final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
+    final height = insetBottom > 0 ? insetBottom : safeBottom;
     return ColoredBox(
       color: color,
-      child: SizedBox(
-        width: double.infinity,
-        height: max(nativeKeyboardHeight, safeBottom),
-      ),
+      child: SizedBox(width: double.infinity, height: height),
     );
   }
 }

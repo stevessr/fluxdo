@@ -29,6 +29,7 @@ import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/chat/online_status_avatar.dart';
+import '../../widgets/chat/chat_keyboard_viewport.dart';
 import '../../widgets/user/user_card.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../image_viewer_page.dart';
@@ -1382,6 +1383,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         currentChannel?.canEditChannel(isStaff: isStaff) ?? false;
 
     return Scaffold(
+      // Chat 自己用轻量 inset spacer 跟随 IME，避免 Scaffold 把整棵消息树
+      // 每帧卷入 viewInsets 布局/MediaQuery 更新。
+      resizeToAvoidBottomInset: false,
       appBar: _isSearchMode
           ? AppBar(
               leading: IconButton(
@@ -1552,7 +1556,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 ),
               ],
             ),
-      body: Column(
+      body: ChatKeyboardViewport(
         children: [
           if (_isSearchMode)
             Expanded(child: _buildSearchPanel(theme))
