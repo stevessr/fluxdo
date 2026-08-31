@@ -6,6 +6,7 @@ import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
 import '../pages/badge_page.dart';
 import '../pages/chat/chat_message_page.dart';
+import '../pages/reaction_notification_target_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page.dart';
 import '../services/local_notification_service.dart';
@@ -84,6 +85,17 @@ Widget? _notificationTargetPage(
         initialRevisionNumber: notification.data.revisionNumber,
       );
 
+    case NotificationType.reaction:
+      // discourse-reactions 会把同一用户对多条帖子的 reaction 合并；
+      // consolidated 通知没有顶层 topic_id/post_number，但仍保留
+      // data.original_post_id。交给专用页面按 post id 回查真实落点，
+      // 私信与普通话题都能精确跳到被 reaction 的帖子。
+      if (notification.topicId == null &&
+          int.tryParse(notification.data.originalPostId ?? '') == null) {
+        return null;
+      }
+      return ReactionNotificationTargetPage(notification: notification);
+
     case NotificationType.chatMention:
     case NotificationType.chatMessage:
     case NotificationType.chatInvitation:
@@ -106,7 +118,7 @@ Widget? _notificationTargetPage(
       );
 
     default:
-      // privateMessage/posted/liked/reaction 等所有话题类落点
+      // privateMessage/posted/liked 等所有话题类落点
       if (notification.topicId == null) return null;
       return TopicDetailPage(
         topicId: notification.topicId!,
