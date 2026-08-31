@@ -1,0 +1,105 @@
+name: Temporary arm64 size build
+
+on:
+  push:
+    branches:
+      - perf/slim-build-artifacts
+
+concurrency:
+  group: tmp-arm64-size-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.44.0'
+  ANDROID_NDK_VERSION: '28.2.13676358'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-cleanup: never
+          build-scan-publish: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Setup native toolchain
+        run: |
+          set -euo pipefail
+          rustup target add aarch64-linux-android
+          if ! command -v cargo-ndk >/dev/null 2>&1; then
+            cargo install cargo-ndk --locked
+          fi
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            ndk;${{ env.ANDROID_NDK_VERSION }}
+            platforms;android-36
+            platforms;android-31
+            cmake;3.22.1
+          log-accepted-android-sdk-licenses: false
+      - name: Configure Android build inputs
+        run: |
+          set -euo pipefail
+          ndk_path="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
+          printf 'sdk.dir=%s\nndk.dir=%s\nflutter.ndkVersion=%s\n' \
+            "$ANDROID_HOME" "$ndk_path" "$ANDROID_NDK_VERSION" > android/local.properties
+          cat > android/app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "fluxdo-dummy",
+              "storage_bucket": "fluxdo-dummy.appspot.com"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:123456789012:android:0000000000000000",
+                "android_client_info": {"package_name": "com.github.lingyan000.fluxdo"}
+              },
+              "oauth_client": [],
+              "api_key": [{"current_key": "AIzaSyDummyKeyForBuildWithoutSecrets0000"}],
+              "services": {"appinvite_service": {"other_platform_oauth_client": []}}
+            }],
+            "configuration_version": "1"
+          }
+          EOF
+          cert_dir="core/doh_proxy/certs"
+          mkdir -p "$cert_dir" assets/certs android/app/src/main/res/raw
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+            -keyout "$cert_dir/ca.key" -out "$cert_dir/ca.crt" -days 3650 -nodes \
+            -subj "/CN=DOH Proxy CA/O=DOH Proxy/C=CN"
+          openssl x509 -in "$cert_dir/ca.crt" -outform DER -out "$cert_dir/ca.der"
+          cp -f "$cert_dir/ca.crt" assets/certs/proxy_ca.pem
+          cp -f "$cert_dir/ca.der" android/app/src/main/res/raw/proxy_ca.der
+      - name: Build arm64 release APK
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          dart tool/flutterw.dart build apk --release --target-platform android-arm64 --dart-define=cronetHttpNoPlay=true
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          test -f "$apk"
+          bytes=$(stat -c '%s' "$apk")
+          echo "APK_BYTES=$bytes"
+          echo "APK_MIB=$(python3 -c "print(round($bytes/1024/1024, 2))")"
+          echo '=== largest APK entries ==='
+          unzip -l "$apk" | awk 'NF>=4 && $1 ~ /^[0-9]+$/ {print $1, $4}' | sort -nr | head -40
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slim-arm64-release-${{ github.run_number }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          compression-level: 0
+          retention-days: 7
