@@ -1,15 +1,27 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
-python3 .github/scripts/profile_radial_patch.py
-git diff --check
+BUILD_ROOT="${1:-}"
+OUTPUT_ARCHIVE="${2:-}"
 
-git config user.name 'github-actions[bot]'
-git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-git checkout -B experiment/profile-radial-account-switcher-v2
-git add lib test
-git commit -m 'feat: restore adaptive profile radial switcher'
-git push --force-with-lease origin HEAD:refs/heads/experiment/profile-radial-account-switcher-v2
+if [[ -z "${BUILD_ROOT}" || -z "${OUTPUT_ARCHIVE}" ]]; then
+  echo "Usage: $0 <flatpak-build-root> <output-archive>" >&2
+  exit 1
+fi
 
-echo 'Experiment branch pushed; stop before artifact/release publishing.' >&2
-exit 1
+FILES_DIR="${BUILD_ROOT}/files"
+
+if [[ ! -d "${FILES_DIR}" ]]; then
+  echo "Missing Flatpak files directory: ${FILES_DIR}" >&2
+  exit 1
+fi
+
+mkdir -p "$(dirname "${OUTPUT_ARCHIVE}")"
+rm -f "${OUTPUT_ARCHIVE}" "${OUTPUT_ARCHIVE}.sha256"
+
+tar -C "${FILES_DIR}" -caf "${OUTPUT_ARCHIVE}" .
+(
+  cd "$(dirname "${OUTPUT_ARCHIVE}")"
+  sha256sum "$(basename "${OUTPUT_ARCHIVE}")" > "$(basename "${OUTPUT_ARCHIVE}").sha256"
+)
