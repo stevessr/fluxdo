@@ -46,6 +46,13 @@ val hasReleaseSigning =
     (releaseStoreFile?.length() ?: 0L) > 0L
 val releaseBuildSigningName = if (hasReleaseSigning) "release" else "debug"
 
+// Release 默认启用 R8 + Android resource shrink；出现第三方插件兼容问题时可用
+// -Pfluxdo.enableReleaseShrinking=false 临时回退，而不需要改构建脚本。
+val enableReleaseShrinking = providers.gradleProperty("fluxdo.enableReleaseShrinking")
+    .orElse("true")
+    .get()
+    .toBoolean()
+
 println(
     if (hasReleaseSigning) {
         "Android local signing: using ${releaseStoreFile?.path} for debug/profile/release"
@@ -53,6 +60,7 @@ println(
         "Android local signing: incomplete config, debug uses default debug signing and profile/release fallback to debug signing"
     }
 )
+println("Android release shrinking: $enableReleaseShrinking")
 
 android {
     namespace = "com.github.lingyan000.fluxdo"
@@ -100,10 +108,12 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName(releaseBuildSigningName)
-            // 关闭 R8 代码压缩与资源压缩：开启后 Release 包运行时闪退，
-            // 在定位到具体被裁剪的类之前保持禁用状态。
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = enableReleaseShrinking
+            isShrinkResources = enableReleaseShrinking
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
 
         debug {
