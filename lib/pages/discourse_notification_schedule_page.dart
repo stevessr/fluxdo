@@ -29,7 +29,6 @@ class _DiscourseNotificationSchedulePageState
     'Sunday',
   ];
 
-  Map<String, dynamic>? _user;
   Map<String, dynamic> _options = const {};
   Map<String, dynamic> _settings = const {};
   Map<String, dynamic> _schedule = {};
@@ -70,7 +69,6 @@ class _DiscourseNotificationSchedulePageState
           : <String, dynamic>{'enabled': false};
       if (!mounted) return;
       setState(() {
-        _user = user;
         _options = options;
         _settings = results[1] is Map
             ? Map<String, dynamic>.from(results[1] as Map)
@@ -265,8 +263,13 @@ class _DiscourseNotificationSchedulePageState
     final startKey = 'day_${day}_start_time';
     final endKey = 'day_${day}_end_time';
     final start = _minute(startKey, -1);
-    var end = _minute(endKey, start >= 0 ? (start + 30).clamp(30, 1440) : 1440);
-    if (start >= 0 && end <= start) end = (start + 30).clamp(30, 1440);
+    final defaultEnd = start >= 0
+        ? (start + 30).clamp(30, 1440).toInt()
+        : 1440;
+    var end = _minute(endKey, defaultEnd);
+    if (start >= 0 && end <= start) {
+      end = (start + 30).clamp(30, 1440).toInt();
+    }
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -303,7 +306,8 @@ class _DiscourseNotificationSchedulePageState
                       if (value >= 0) {
                         final currentEnd = _minute(endKey, value + 30);
                         if (currentEnd <= value) {
-                          _schedule[endKey] = (value + 30).clamp(30, 1440);
+                          _schedule[endKey] =
+                              (value + 30).clamp(30, 1440).toInt();
                         }
                       }
                       _scheduleTouched = true;
