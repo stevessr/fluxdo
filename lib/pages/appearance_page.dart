@@ -22,7 +22,9 @@ class AppearancePage extends StatelessWidget {
 
   List<SettingsGroup> _buildGroups(BuildContext context) {
     return [
-      ...buildAppearanceGroups(context),
+      ...buildAppearanceGroups(
+        context,
+      ).where((group) => !group.items.any((item) => item.id == 'font')),
       buildAccountQuickSwitcherAppearanceGroup(context),
     ];
   }
