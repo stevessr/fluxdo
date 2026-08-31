@@ -12,15 +12,25 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+      - name: Resolve dependency graph
+        run: |
+          flutter pub get
+          dart pub deps --json > /tmp/pub-deps.json
       - name: Audit dependency references and tracked payload
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import os, re, subprocess
+          from urllib.parse import urlparse, unquote
+          import json, os, re, subprocess
 
-          root = Path('.')
+          root = Path('.').resolve()
           pubspec = Path('pubspec.yaml').read_text(encoding='utf-8')
           section = pubspec.split('\ndependencies:\n', 1)[1].split('\ndependency_overrides:\n', 1)[0]
           deps = []
@@ -29,11 +39,11 @@ jobs:
               if m:
                   deps.append(m.group(1))
 
-          dart_files = [p for p in root.rglob('*.dart') if '.dart_tool' not in p.parts and 'build' not in p.parts]
-          texts = {}
+          dart_files = [p for p in Path('.').rglob('*.dart') if '.dart_tool' not in p.parts and 'build' not in p.parts]
+          dart_texts = {}
           for p in dart_files:
               try:
-                  texts[p] = p.read_text(encoding='utf-8')
+                  dart_texts[p] = p.read_text(encoding='utf-8')
               except UnicodeDecodeError:
                   pass
 
@@ -41,31 +51,69 @@ jobs:
           no_import = []
           for dep in deps:
               needle = f'package:{dep}/'
-              hits = [(str(p), t.count(needle)) for p, t in texts.items() if needle in t]
-              count = sum(n for _, n in hits)
+              count = sum(t.count(needle) for t in dart_texts.values())
               print(f'{dep}: {count}')
               if count == 0 and dep not in {'flutter', 'flutter_localizations'}:
                   no_import.append(dep)
-          print('\n=== DIRECT DEPENDENCIES WITH ZERO package: IMPORTS ===')
-          print('\n'.join(no_import) if no_import else '(none)')
 
-          print('\n=== TARGETED STALE-DEPENDENCY STRING CHECK ===')
-          targets = ['font_awesome_flutter', 'google_fonts', 'full_svg_flutter', 'jovial_svg', 'popover']
           all_text_files = []
-          for p in root.rglob('*'):
+          for p in Path('.').rglob('*'):
               if not p.is_file() or '.git' in p.parts or 'build' in p.parts or '.dart_tool' in p.parts:
                   continue
               if p.name in {'pubspec.yaml', 'pubspec.lock', 'tmp-size-audit.yaml'}:
                   continue
-              if p.suffix.lower() not in {'.dart','.kt','.java','.kts','.yaml','.yml','.md','.json','.xml','.sh','.ps1','.cmake','.txt'}:
+              if p.suffix.lower() not in {'.dart','.kt','.java','.kts','.yaml','.yml','.md','.json','.xml','.sh','.ps1','.cmake','.txt','.swift','.m','.mm','.cc','.cpp','.h'}:
                   continue
               try:
                   all_text_files.append((p, p.read_text(encoding='utf-8')))
               except UnicodeDecodeError:
                   pass
-          for dep in targets:
+
+          print('\n=== ZERO-IMPORT DIRECT DEPENDENCIES: REPO STRING REFS ===')
+          for dep in no_import:
               hits = [str(p) for p, t in all_text_files if dep in t]
-              print(f'{dep}: {len(hits)} refs {hits[:8]}')
+              print(f'{dep}: {len(hits)} refs {hits[:12]}')
+
+          graph = json.loads(Path('/tmp/pub-deps.json').read_text())
+          packages = graph.get('packages', [])
+          parents = {d: [] for d in no_import}
+          for pkg in packages:
+              name = pkg.get('name')
+              for child in pkg.get('dependencies', []):
+                  if child in parents:
+                      parents[child].append(name)
+          print('\n=== ZERO-IMPORT DIRECT DEPENDENCIES: REVERSE PUB EDGES ===')
+          for dep in no_import:
+              print(f'{dep}: parents={parents[dep]}')
+
+          config = json.loads(Path('.dart_tool/package_config.json').read_text())
+          cfg = {p['name']: p for p in config['packages']}
+          print('\n=== ZERO-IMPORT DIRECT DEPENDENCIES: PACKAGE METADATA ===')
+          for dep in no_import:
+              item = cfg.get(dep)
+              if not item:
+                  print(f'{dep}: package_config missing')
+                  continue
+              uri = item['rootUri']
+              parsed = urlparse(uri)
+              if parsed.scheme == 'file':
+                  package_root = Path(unquote(parsed.path))
+              else:
+                  package_root = (Path('.dart_tool') / uri).resolve()
+              ps = package_root / 'pubspec.yaml'
+              text = ps.read_text(encoding='utf-8', errors='ignore') if ps.exists() else ''
+              plugin = '\n  plugin:' in text or '\n    plugin:' in text or 'plugin:\n' in text
+              total = 0
+              files = 0
+              if package_root.exists():
+                  for q in package_root.rglob('*'):
+                      if q.is_file():
+                          try:
+                              total += q.stat().st_size
+                              files += 1
+                          except OSError:
+                              pass
+              print(f'{dep}: plugin={plugin} source_bytes={total} files={files} root={package_root}')
 
           print('\n=== ANDROID TARGETED REFERENCE CHECK ===')
           android_sources = []
