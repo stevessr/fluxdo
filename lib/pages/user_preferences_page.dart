@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'discourse_account_danger_page.dart';
 import 'discourse_avatar_page.dart';
 import 'discourse_calendar_subscriptions_page.dart';
+import 'discourse_confirm_access_page.dart';
 import 'discourse_identity_profile_page.dart';
 import 'discourse_interface_advanced_page.dart';
 import 'discourse_language_page.dart';
@@ -244,12 +245,31 @@ class UserPreferencesPage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.key_outlined),
-                  title: Text(zh ? '已有 Passkey' : 'Existing Passkeys'),
+                  leading: const Icon(Icons.verified_user_outlined),
+                  title: Text(zh ? '确认访问' : 'Confirm access'),
                   subtitle: Text(
                     zh
-                        ? '查看、重命名或删除已经注册的 Passkey；不创建新的 Passkey'
-                        : 'View, rename, or delete registered Passkeys without creating new ones',
+                        ? '用当前密码建立 Discourse trusted session，继续敏感安全操作'
+                        : 'Confirm the current Discourse session with your password for sensitive security actions',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseConfirmAccessPage(
+                          username: username,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.key_outlined),
+                  title: Text(zh ? 'Passkey 与安全密钥' : 'Passkeys & security keys'),
+                  subtitle: Text(
+                    zh
+                        ? '查看、重命名或删除已有的一因素 Passkey 与二因素 Security Key；不创建新凭据'
+                        : 'View, rename, or delete existing first-factor Passkeys and two-factor Security Keys without creating new credentials',
                   ),
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -288,8 +308,8 @@ class UserPreferencesPage extends StatelessWidget {
                   title: Text(zh ? '账户危险操作' : 'Account danger zone'),
                   subtitle: Text(
                     zh
-                        ? '按 Discourse 服务器权限永久删除账户'
-                        : 'Permanently delete the account when Discourse allows it',
+                        ? '退出所有设备或按 Discourse 服务器权限永久删除账户'
+                        : 'Sign out all devices or permanently delete the account when Discourse allows it',
                   ),
                   onTap: () {
                     Navigator.pop(sheetContext);
