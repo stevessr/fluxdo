@@ -270,15 +270,6 @@ class _CategoryDrawerState extends ConsumerState<CategoryDrawer> {
   /// Current drawer section.
   _DrawerSection _section = _DrawerSection.categories;
 
-  static const List<String> _moreEntryIds = [
-    'chat',
-    'messages',
-    'ai_bot',
-    'leaderboard',
-    'groups',
-    'upcoming_events',
-  ];
-
   /// 标签搜索词（本地过滤 /tags.json 全量数据，无需请求）
   final TextEditingController _tagQueryController = TextEditingController();
   String _tagQuery = '';
@@ -551,11 +542,30 @@ class _CategoryDrawerState extends ConsumerState<CategoryDrawer> {
     );
   }
 
-  /// App-level destinations exposed from the category drawer.
+  /// Open any destination supported by the configurable bottom nav.
+  void _openMoreEntry(NavEntry entry) {
+    switch (entry.kind) {
+      case NavEntryKind.page:
+        final pageBuilder = entry.pageBuilder;
+        if (pageBuilder == null) return;
+        _closeAndPush(pageBuilder(context, true));
+      case NavEntryKind.panel:
+        final onPanelTap = entry.onPanelTap;
+        if (onPanelTap == null) return;
+        widget.onRequestClose();
+        onPanelTap(context, ref);
+      case NavEntryKind.action:
+        final onAction = entry.onAction;
+        if (onAction == null) return;
+        widget.onRequestClose();
+        onAction(context, ref);
+    }
+  }
+
+  /// All user-addable bottom-nav destinations exposed from the drawer.
   Widget _buildMoreList(bool isLoggedIn) {
-    final entries = _moreEntryIds
-        .map(NavEntryRegistry.byId)
-        .whereType<NavEntry>()
+    final entries = NavEntryRegistry.buildAll()
+        .where((entry) => !entry.locked)
         .where((entry) => !entry.requiresLogin || isLoggedIn)
         .toList(growable: false);
 
@@ -566,11 +576,7 @@ class _CategoryDrawerState extends ConsumerState<CategoryDrawer> {
           _MoreNavRow(
             icon: entry.iconData,
             label: entry.label(context),
-            onTap: () {
-              final pageBuilder = entry.pageBuilder;
-              if (pageBuilder == null) return;
-              _closeAndPush(pageBuilder(context, true));
-            },
+            onTap: () => _openMoreEntry(entry),
           ),
       ],
     );
