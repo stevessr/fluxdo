@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:flutter/foundation.dart';
 
+import 'account_browser_session_policy.dart';
 import 'auth_session.dart';
 import '../constants.dart';
 import 'discourse/discourse_service.dart';
@@ -74,15 +75,6 @@ class AccountManager {
   static String accountScopedKey(String key, String accountId) {
     return '$key::${Uri.encodeComponent(accountId)}';
   }
-
-  /// 内置浏览器里需要随账号保存的 origin。不要把 Cloudflare 设备 cookie
-  /// 放进账号快照；它们由 [DiscourseService.detachSessionLocally] 保留。
-  static const List<String> _browserCookieOrigins = [
-    'https://linux.do/',
-    'https://credit.linux.do/',
-    'https://cdk.linux.do/',
-    'https://connect.linux.do/',
-  ];
 
   static const Set<String> _deviceCookieNames = {'cf_clearance', '__cf_bm'};
 
@@ -213,14 +205,14 @@ class AccountManager {
   }
 
   /// 抓取内置 WebView 的原始 cookie store。WebView cookie 不能依赖 jar
-  /// 回读：某些 LDC/credit cookie 只存在于子域或 HttpOnly store 中。
+  /// 回读：某些 LDC/credit/AnyRouter cookie 只存在于子域或 HttpOnly store 中。
   Future<List<Map<String, dynamic>>> _captureBrowserCookies() async {
     final writer = RawCookieWriter.instance;
     if (!writer.isSupported) return const [];
 
     final captured = <Map<String, dynamic>>[];
     final identities = <String>{};
-    for (final origin in _browserCookieOrigins) {
+    for (final origin in AccountBrowserSessionPolicy.snapshotOrigins) {
       List<CookieFullInfo> infos;
       try {
         infos = await writer.getAllCookieInfos(origin);
@@ -270,6 +262,58 @@ class AccountManager {
     return expiresMillis != null &&
         expiresMillis > 0 &&
         expiresMillis <= DateTime.now().millisecondsSinceEpoch;
+  }
+
+  bool _cookieBelongsToOrigin(CookieFullInfo info, String origin) {
+    final host = Uri.parse(origin).host.toLowerCase();
+    final rawDomain = info.domain?.trim().toLowerCase();
+    if (rawDomain == null || rawDomain.isEmpty) return true;
+    final domain = rawDomain.startsWith('.')
+        ? rawDomain.substring(1)
+        : rawDomain;
+    return host == domain || host.endsWith('.$domain');
+  }
+
+  /// 清掉外部账号绑定站点的用户态 cookie，再回灌目标账号快照。
+  /// Cloudflare 等设备 cookie 必须保留，避免账号切换同时触发重新过盾。
+  Future<void> _clearExternalBrowserSessionCookies() async {
+    final writer = RawCookieWriter.instance;
+    if (!writer.isSupported) return;
+
+    for (final origin in AccountBrowserSessionPolicy.externalAccountOrigins) {
+      List<CookieFullInfo> infos;
+      try {
+        infos = await writer.getAllCookieInfos(origin);
+      } catch (e) {
+        debugPrint('[AccountManager] 清理 $origin WebView cookie 前读取失败: $e');
+        continue;
+      }
+
+      for (final info in infos) {
+        if (_isDeviceCookie(info.name) ||
+            info.name.isEmpty ||
+            !_cookieBelongsToOrigin(info, origin)) {
+          continue;
+        }
+        try {
+          final deleted = await writer.deleteExactCookie(
+            url: origin,
+            name: info.name,
+            domain: info.domain,
+            path: info.path ?? '/',
+          );
+          if (!deleted) {
+            debugPrint(
+              '[AccountManager] 清理 $origin WebView cookie 失败: ${info.name}',
+            );
+          }
+        } catch (e) {
+          debugPrint(
+            '[AccountManager] 清理 $origin WebView cookie ${info.name} 失败: $e',
+          );
+        }
+      }
+    }
   }
 
   /// 把快照里的 Cookie 写回 CookieJar。兼容旧版本的简化字段格式。
@@ -398,9 +442,7 @@ class AccountManager {
   }
 
   bool _isAllowedBrowserOrigin(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null || uri.scheme != 'https') return false;
-    return CookieJarService.matchesAppHost(uri.host);
+    return AccountBrowserSessionPolicy.isAllowedRestoreOrigin(url);
   }
 
   bool _snapshotHasSessionCookie(dynamic cookies) {
@@ -522,8 +564,10 @@ class AccountManager {
       });
 
       // 这一步必须发生在打开 LoginPage / 系统浏览器之前，不能让旧 _t
-      // 被 API key callback 误判成「当前账号补授权」。
+      // 被 API key callback 误判成「当前账号补授权」。外部账号站点也必须
+      // 清到 guest 边界，否则新账号会继承旧账号的 AnyRouter 登录态。
       await DiscourseService().detachSessionLocally();
+      await _clearExternalBrowserSessionCookies();
       WebViewCookiePriming.instance.invalidate();
     });
   }
@@ -547,6 +591,7 @@ class AccountManager {
       }
       // 登录失败可能已经留下部分 cookie，恢复 guest 的干净边界。
       await DiscourseService().detachSessionLocally();
+      await _clearExternalBrowserSessionCookies();
     });
   }
 
@@ -614,6 +659,9 @@ class AccountManager {
 
     await DiscourseService().detachSessionLocally();
     final restoreGeneration = AuthSession().generation;
+    // 外部账号站点必须先清旧态再恢复，不能仅覆盖同名 cookie；否则目标
+    // 快照缺少的旧 cookie 会残留并造成 AnyRouter 串号/看起来“掉登录”。
+    await _clearExternalBrowserSessionCookies();
     await _restoreSessionCookies(cookies, username);
     await _restoreBrowserCookies(snapshot['webview_cookies'], username);
 
