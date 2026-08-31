@@ -7,6 +7,7 @@ import 'discourse_identity_profile_page.dart';
 import 'discourse_interface_advanced_page.dart';
 import 'discourse_language_page.dart';
 import 'discourse_notification_schedule_page.dart';
+import 'discourse_passkeys_management_page.dart';
 import 'discourse_profile_extras_page.dart';
 import 'discourse_security_advanced_page.dart';
 import 'discourse_tracking_selectors_page.dart';
@@ -228,14 +229,33 @@ class UserPreferencesPage extends StatelessWidget {
                   title: Text(zh ? '密码与授权应用' : 'Password & authorized apps'),
                   subtitle: Text(
                     zh
-                        ? '设置或移除密码、重发邮箱验证、管理 User API 授权与已有 Passkey'
-                        : 'Set/remove password, resend email verification, manage User API authorizations and existing Passkeys',
+                        ? '设置或移除密码、重发邮箱验证、管理 User API 授权'
+                        : 'Set/remove password, resend email verification, and manage User API authorizations',
                   ),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => DiscourseSecurityAdvancedPage(
+                          username: username,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.key_outlined),
+                  title: Text(zh ? '已有 Passkey' : 'Existing Passkeys'),
+                  subtitle: Text(
+                    zh
+                        ? '查看、重命名或删除已经注册的 Passkey；不创建新的 Passkey'
+                        : 'View, rename, or delete registered Passkeys without creating new ones',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscoursePasskeysManagementPage(
                           username: username,
                         ),
                       ),
