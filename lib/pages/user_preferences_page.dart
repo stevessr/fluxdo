@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'discourse_account_danger_page.dart';
 import 'discourse_avatar_page.dart';
 import 'discourse_calendar_subscriptions_page.dart';
 import 'discourse_identity_profile_page.dart';
@@ -255,6 +256,28 @@ class UserPreferencesPage extends StatelessWidget {
                       MaterialPageRoute<void>(
                         builder: (_) =>
                             UserAccountManagementPage(username: username),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.warning_amber_rounded,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  title: Text(zh ? '账户危险操作' : 'Account danger zone'),
+                  subtitle: Text(
+                    zh
+                        ? '按 Discourse 服务器权限永久删除账户'
+                        : 'Permanently delete the account when Discourse allows it',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseAccountDangerPage(
+                          username: username,
+                        ),
                       ),
                     );
                   },
