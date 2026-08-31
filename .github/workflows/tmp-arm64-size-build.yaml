@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - perf/slim-build-artifacts
+    paths:
+      - .github/workflows/tmp-arm64-size-build.yaml
 
 concurrency:
   group: tmp-arm64-size-${{ github.ref }}
