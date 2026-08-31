@@ -1,0 +1,98 @@
+name: Temporary size audit
+
+on:
+  push:
+    branches:
+      - perf/slim-build-artifacts
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit dependency references and tracked payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re, subprocess
+
+          root = Path('.')
+          pubspec = Path('pubspec.yaml').read_text(encoding='utf-8')
+          section = pubspec.split('\ndependencies:\n', 1)[1].split('\ndependency_overrides:\n', 1)[0]
+          deps = []
+          for line in section.splitlines():
+              m = re.match(r'^  ([A-Za-z0-9_]+):(?:\s|$)', line)
+              if m:
+                  deps.append(m.group(1))
+
+          dart_files = [p for p in root.rglob('*.dart') if '.dart_tool' not in p.parts and 'build' not in p.parts]
+          texts = {}
+          for p in dart_files:
+              try:
+                  texts[p] = p.read_text(encoding='utf-8')
+              except UnicodeDecodeError:
+                  pass
+
+          print('=== ROOT DIRECT DEPENDENCY PACKAGE IMPORT COUNTS ===')
+          no_import = []
+          for dep in deps:
+              needle = f'package:{dep}/'
+              hits = [(str(p), t.count(needle)) for p, t in texts.items() if needle in t]
+              count = sum(n for _, n in hits)
+              print(f'{dep}: {count}')
+              if count == 0 and dep not in {'flutter', 'flutter_localizations'}:
+                  no_import.append(dep)
+          print('\n=== DIRECT DEPENDENCIES WITH ZERO package: IMPORTS ===')
+          print('\n'.join(no_import) if no_import else '(none)')
+
+          print('\n=== TARGETED STALE-DEPENDENCY STRING CHECK ===')
+          targets = ['font_awesome_flutter', 'google_fonts', 'full_svg_flutter', 'jovial_svg', 'popover']
+          all_text_files = []
+          for p in root.rglob('*'):
+              if not p.is_file() or '.git' in p.parts or 'build' in p.parts or '.dart_tool' in p.parts:
+                  continue
+              if p.name in {'pubspec.yaml', 'pubspec.lock', 'tmp-size-audit.yaml'}:
+                  continue
+              if p.suffix.lower() not in {'.dart','.kt','.java','.kts','.yaml','.yml','.md','.json','.xml','.sh','.ps1','.cmake','.txt'}:
+                  continue
+              try:
+                  all_text_files.append((p, p.read_text(encoding='utf-8')))
+              except UnicodeDecodeError:
+                  pass
+          for dep in targets:
+              hits = [str(p) for p, t in all_text_files if dep in t]
+              print(f'{dep}: {len(hits)} refs {hits[:8]}')
+
+          print('\n=== ANDROID TARGETED REFERENCE CHECK ===')
+          android_sources = []
+          for ext in ('*.kt','*.java'):
+              android_sources += list(Path('android/app/src').rglob(ext))
+          android_text = '\n'.join(p.read_text(encoding='utf-8', errors='ignore') for p in android_sources)
+          for label, needles in {
+              'org.json': ['org.json', 'JSONObject', 'JSONArray'],
+              'androidx.webkit': ['androidx.webkit', 'WebViewFeature', 'CookieManagerCompat', 'WebSettingsCompat'],
+          }.items():
+              found = sorted({n for n in needles if n in android_text})
+              print(f'{label}: {found}')
+
+          print('\n=== BUNDLED-ASSET REFERENCE CHECK ===')
+          for needle in ['compat-polyfill.js', 'assets/polyfill/', 'discourse-cook.js', 'assets/cook/']:
+              hits = [str(p) for p, t in all_text_files if needle in t]
+              print(f'{needle}: {hits[:20]}')
+
+          print('\n=== TOP 60 TRACKED FILES BY SIZE ===')
+          tracked = subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          rows = []
+          for name in tracked:
+              if not name:
+                  continue
+              p = Path(name)
+              if p.exists() and p.is_file():
+                  rows.append((p.stat().st_size, name))
+          for size, name in sorted(rows, reverse=True)[:60]:
+              print(f'{size:>12}  {name}')
+          PY
