@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 
 import '../message_bus_service.dart';
@@ -9,17 +11,39 @@ extension UserProfileExtrasApi on DiscourseService {
     String filePath, {
     required String uploadType,
   }) async {
+    final fileName = filePath.split(RegExp(r'[/\\]')).last;
+    return _uploadUserProfileMultipart(
+      uploadType: uploadType,
+      fileName: fileName,
+      file: await MultipartFile.fromFile(filePath, filename: fileName),
+    );
+  }
+
+  Future<Map<String, dynamic>> uploadUserProfileImageBytes(
+    Uint8List bytes, {
+    required String fileName,
+    required String uploadType,
+  }) => _uploadUserProfileMultipart(
+    uploadType: uploadType,
+    fileName: fileName,
+    file: MultipartFile.fromBytes(bytes, filename: fileName),
+  );
+
+  Future<Map<String, dynamic>> _uploadUserProfileMultipart({
+    required String uploadType,
+    required String fileName,
+    required MultipartFile file,
+  }) async {
     if (uploadType != 'profile_background' &&
         uploadType != 'card_background') {
       throw ArgumentError.value(uploadType, 'uploadType');
     }
 
     try {
-      final fileName = filePath.split(RegExp(r'[/\\]')).last;
       final formData = FormData.fromMap({
         'upload_type': uploadType,
         'synchronous': true,
-        'file': await MultipartFile.fromFile(filePath, filename: fileName),
+        'file': file,
       });
       final response = await dio.post(
         '/uploads.json',
