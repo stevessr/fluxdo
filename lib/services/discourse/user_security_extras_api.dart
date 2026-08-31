@@ -19,6 +19,22 @@ extension UserSecurityExtrasApi on DiscourseService {
     }
   }
 
+  Future<void> renamePreferencePasskey(int id, String name) async {
+    try {
+      await dio.put('/u/rename_passkey/$id', data: {'name': name});
+    } on DioException catch (e) {
+      throw Exception(_securityExtrasError(e));
+    }
+  }
+
+  Future<void> deletePreferencePasskey(int id) async {
+    try {
+      await dio.delete('/u/delete_passkey/$id');
+    } on DioException catch (e) {
+      throw Exception(_securityExtrasError(e));
+    }
+  }
+
   Future<void> deletePreferenceAccount(String username) async {
     final currentUsername = await getCurrentUsername();
     if (currentUsername == null ||
