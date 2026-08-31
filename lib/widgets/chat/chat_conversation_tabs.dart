@@ -4,8 +4,9 @@ import '../../l10n/s.dart';
 
 /// 聊天会话的二级分类标签。
 ///
-/// 顶层「收藏 / 频道 / 直接消息」仍保持可滑动切换，因此二级
-/// TabBarView 禁用滑动，避免两层水平手势争抢。
+/// 顶层「收藏 / 频道 / 直接消息」仍保持可滑动切换；二级分类由同一个
+/// TabController 同时驱动高亮和内容，避免嵌套 TabBarView 在离屏恢复时
+/// 出现「高亮是私聊、内容仍是群聊」的状态漂移。
 class ChatConversationTabs extends StatefulWidget {
   const ChatConversationTabs({
     super.key,
@@ -129,11 +130,17 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
           ),
         ),
         Expanded(
-          child: TabBarView(
-            key: ValueKey('chat-${widget.id}-subtab-view'),
-            controller: _controller,
-            physics: const NeverScrollableScrollPhysics(),
-            children: [widget.privateChild, widget.groupChild],
+          // 二级分类本身不允许滑动，因此无需再维护一个 PageController。
+          // IndexedStack 直接读取 TabController.index，让指示器与可见内容
+          // 始终共享同一个状态源，同时保留两个列表各自的滚动状态。
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) => IndexedStack(
+              key: ValueKey('chat-${widget.id}-subtab-view'),
+              index: _controller.index,
+              sizing: StackFit.expand,
+              children: [widget.privateChild, widget.groupChild],
+            ),
           ),
         ),
       ],
