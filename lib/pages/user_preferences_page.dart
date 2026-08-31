@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'discourse_identity_profile_page.dart';
 import 'discourse_language_page.dart';
+import 'discourse_profile_extras_page.dart';
 import 'user_account_management_page.dart';
 import 'user_preferences_core_page.dart' as core;
 
@@ -61,6 +62,24 @@ class UserPreferencesPage extends StatelessWidget {
                     MaterialPageRoute<void>(
                       builder: (_) =>
                           DiscourseIdentityProfilePage(username: username),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.image_outlined),
+                title: Text(zh ? '资料背景与精选话题' : 'Profile media & featured topic'),
+                subtitle: Text(
+                  zh
+                      ? '个人资料背景、用户卡片背景、个人资料精选话题'
+                      : 'Profile background, user-card background, and featured topic',
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          DiscourseProfileExtrasPage(username: username),
                     ),
                   );
                 },
