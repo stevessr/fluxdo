@@ -23,14 +23,7 @@ jobs:
         run: |
           flutter pub get
           dart pub deps --json > /tmp/pub-deps.json
-      - name: Note existing localization drift
-        continue-on-error: true
-        run: dart tool/gen_l10n.dart --check
-      - name: Analyze Dart code
-        continue-on-error: true
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
-      - name: Audit Font Awesome and bundled web assets
-        if: always()
+      - name: Audit Font Awesome, bundled web assets, and stale font state
         shell: bash
         run: |
           set -euo pipefail
@@ -55,8 +48,8 @@ jobs:
 
           files = []
           names = set()
-          dynamic = []
           mapping_callers = []
+          stale_font_refs = []
           for p in Path('.').rglob('*.dart'):
               if '.dart_tool' in p.parts or 'build' in p.parts:
                   continue
@@ -64,10 +57,10 @@ jobs:
               if 'font_awesome_flutter' in text or 'FontAwesomeIcons.' in text or 'faIconNameMapping' in text or 'getIconFromCss' in text:
                   files.append(str(p))
                   names.update(re.findall(r'FontAwesomeIcons\.([A-Za-z0-9_]+)', text))
-                  if 'faIconNameMapping' in text:
-                      dynamic.append(str(p))
                   if 'getIconFromCss' in text and p.name != 'font_awesome_name_mapping.dart':
                       mapping_callers.append(str(p))
+              if any(token in text for token in ('AppFontFamily', 'fontFamilyName', 'setFontFamily(', "font_family")):
+                  stale_font_refs.append(str(p))
 
           print('=== FONT AWESOME SOURCE FILES ===')
           for p in sorted(files): print(p)
@@ -85,6 +78,9 @@ jobs:
               total += size
               print(f'{size:>10} {p.relative_to(root)}')
           print(f'total_font_bytes={total}')
+
+          print('\n=== STALE FONT-SETTING REFERENCES ===')
+          for p in sorted(stale_font_refs): print(p)
 
           targets = ['flutter_avif_web', 'pro_image_editor', 'media_kit', 'flutter_inappwebview_web']
           print('\n=== WEB-ASSET PACKAGE DEPENDENCY EDGES ===')
@@ -109,3 +105,10 @@ jobs:
               for size, rel in sorted(assets, reverse=True)[:20]:
                   print(f'{size:>10} {rel}')
           PY
+      - name: Note existing localization drift
+        continue-on-error: true
+        run: dart tool/gen_l10n.dart --check
+      - name: Analyze Dart code
+        continue-on-error: true
+        timeout-minutes: 10
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
