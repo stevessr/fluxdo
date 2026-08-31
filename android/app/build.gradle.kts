@@ -172,7 +172,6 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.14.0"))
     implementation("com.google.firebase:firebase-crashlytics-ndk")
     implementation("com.google.firebase:firebase-analytics")
-    implementation("org.json:json:20240303")
     implementation("androidx.webkit:webkit:1.15.0")
     // 媒体转码(压缩到 4MB):Transformer 走系统 MediaCodec 硬编
     implementation("androidx.media3:media3-transformer:1.10.1")
