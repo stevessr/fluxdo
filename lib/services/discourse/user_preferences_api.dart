@@ -215,6 +215,21 @@ extension UserPreferencesApi on DiscourseService {
     required int targetMethod,
   }) async {
     try {
+      // Discourse stores WebAuthn security keys separately from TOTP factors.
+      // SECOND_FACTOR_METHODS.SECURITY_KEY == 3 and must use /u/security_key;
+      // sending it to /u/second_factor silently targets the wrong controller.
+      if (targetMethod == 3) {
+        await dio.put(
+          '/u/security_key',
+          data: {
+            'id': id,
+            if (name.isNotEmpty) 'name': name,
+            'disable': disable ? 'true' : 'false',
+          },
+        );
+        return;
+      }
+
       await dio.put(
         '/u/second_factor.json',
         data: {
