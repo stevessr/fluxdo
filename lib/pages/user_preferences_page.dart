@@ -4,6 +4,7 @@ import 'discourse_avatar_page.dart';
 import 'discourse_identity_profile_page.dart';
 import 'discourse_interface_advanced_page.dart';
 import 'discourse_language_page.dart';
+import 'discourse_notification_schedule_page.dart';
 import 'discourse_profile_extras_page.dart';
 import 'user_account_management_page.dart';
 import 'user_preferences_core_page.dart' as core;
@@ -118,6 +119,25 @@ class UserPreferencesPage extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => DiscourseInterfaceAdvancedPage(
+                          username: username,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.notifications_active_outlined),
+                  title: Text(zh ? '通知时间表' : 'Notification schedule'),
+                  subtitle: Text(
+                    zh
+                        ? '推送范围与周一到周日通知时间窗口'
+                        : 'Push scope and Monday–Sunday notification windows',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseNotificationSchedulePage(
                           username: username,
                         ),
                       ),
