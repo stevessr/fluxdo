@@ -12,6 +12,7 @@ import '../../navigation/nav_action_bus.dart';
 import '../../providers/preferences_provider.dart';
 import '../../utils/blur_config.dart';
 import '../../utils/platform_utils.dart';
+import '../user/account_quick_switcher_trigger_state.dart';
 
 /// 导航目标项配置
 class AdaptiveDestination {
@@ -32,6 +33,18 @@ class AdaptiveDestination {
 
   /// 可选长按动作（如「我的」长按弹账号切换面板）。null 时无长按手势。
   final VoidCallback? onLongPress;
+}
+
+void _recordAccountQuickSwitcherAnchor(BuildContext context, [Offset? fallback]) {
+  AccountQuickSwitcherTriggerState.clear();
+  final renderObject = context.findRenderObject();
+  if (renderObject is RenderBox && renderObject.hasSize) {
+    AccountQuickSwitcherTriggerState.setAnchor(
+      renderObject.localToGlobal(renderObject.size.center(Offset.zero)),
+    );
+  } else if (fallback != null) {
+    AccountQuickSwitcherTriggerState.setAnchor(fallback);
+  }
 }
 
 /// 侧边导航栏组件 (平板/桌面)
@@ -417,13 +430,20 @@ class _AdaptiveBottomNavigationState
       destinations: widget.destinations.map((d) {
         // NavigationDestination 不暴露长按：把手势包在图标上（图标占
         // 条目上半部，长按命中足够；点按仍由内部 InkWell 处理）。
-        Widget maybeLongPress(Widget child) => d.onLongPress == null
-            ? child
-            : GestureDetector(
-                onLongPress: d.onLongPress,
-                behavior: HitTestBehavior.translucent,
-                child: child,
-              );
+        Widget maybeLongPress(Widget child) {
+          final callback = d.onLongPress;
+          if (callback == null) return child;
+          return Builder(
+            builder: (triggerContext) => GestureDetector(
+              onLongPressStart: (details) {
+                _recordAccountQuickSwitcherAnchor(triggerContext, details.globalPosition);
+                callback();
+              },
+              behavior: HitTestBehavior.translucent,
+              child: child,
+            ),
+          );
+        }
         return NavigationDestination(
           icon: maybeLongPress(d.icon),
           selectedIcon: maybeLongPress(
@@ -948,7 +968,12 @@ class _CapsuleNavItem extends StatelessWidget {
           // 墨水跟随 pill 的 stadium 造型（pill 铺满整个条目）
           customBorder: const StadiumBorder(),
           onTap: onTap,
-          onLongPress: onLongPress,
+          onLongPress: onLongPress == null
+              ? null
+              : () {
+                  _recordAccountQuickSwitcherAnchor(context);
+                  onLongPress!();
+                },
           child: labelless
               // 无字态：图标在条目内居中
               ? Center(child: icon)
