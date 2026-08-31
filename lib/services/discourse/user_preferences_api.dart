@@ -256,12 +256,14 @@ Map<String, dynamic> _normalizeUserPreferences(Map<String, dynamic> user) {
   final rawOptions = user['user_option'];
   if (rawOptions is Map) {
     final options = Map<String, dynamic>.from(rawOptions);
-    options['interface_color_mode'] = switch (options['interface_color_mode']) {
-      1 => 'auto',
-      2 => 'light',
-      3 => 'dark',
-      final value => value,
-    };
+    if (options.containsKey('interface_color_mode')) {
+      options['interface_color_mode'] = switch (options['interface_color_mode']) {
+        1 => 'auto',
+        2 => 'light',
+        3 => 'dark',
+        final value => value,
+      };
+    }
     user['user_option'] = options;
   }
   return user;
@@ -271,12 +273,14 @@ Map<String, dynamic> _serializeUserPreferences(
   Map<String, dynamic> attributes,
 ) {
   final payload = Map<String, dynamic>.from(attributes);
-  payload['interface_color_mode'] = switch (payload['interface_color_mode']) {
-    'auto' => 1,
-    'light' => 2,
-    'dark' => 3,
-    final value => value,
-  };
+  if (payload.containsKey('interface_color_mode')) {
+    payload['interface_color_mode'] = switch (payload['interface_color_mode']) {
+      'auto' => 1,
+      'light' => 2,
+      'dark' => 3,
+      final value => value,
+    };
+  }
   return payload;
 }
 
