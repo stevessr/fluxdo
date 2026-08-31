@@ -35,7 +35,7 @@ class UserPreferencesPage extends StatelessWidget {
                       builder: (_) => DiscourseLanguagePage(username: username),
                     ),
                   ),
-                  icon: const Icon(Icons.language_outlined),
+                  icon: const Icon(Icons.language),
                   label: Text(zh ? 'Discourse 语言' : 'Discourse language'),
                 ),
                 const SizedBox(height: 12),
