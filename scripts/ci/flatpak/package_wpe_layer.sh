@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "${GITHUB_WORKSPACE:?}"
 python3 .github/scripts/profile_radial_patch.py
 git diff --check
 
