@@ -37,7 +37,6 @@ dependencies:
   synchronized: ^3.4.0+1
   dio: ^5.11.0
   http: ^1.6.0
-  dio_cookie_manager: ^3.1.1
   cookie_jar: ^4.0.8
   native_dio_adapter: ^1.6.0
   flutter_secure_storage: ^10.3.1
@@ -120,8 +119,6 @@ dependencies:
   # MediaCompatService 本地副本文件名(sha1(url),确定性、重启可复用)
   crypto: ^3.0.7
   hive_ce: ^2.19.3
-  hive_ce_flutter: ^2.3.4
-  dns_client: ^1.3.1
   cronet_http: ^1.8.0
   package_info_plus: ^8.1.2
   pro_image_editor: ^11.18.4
@@ -194,7 +191,6 @@ dependencies:
     git:
       url: https://github.com/Lingyan000/rhttp_plus.git
       path: rhttp
-  dio_compatibility_layer: ^0.1.1
   ffi: any
   # 性能诊断:掉帧时 app 内连接自身 VM Service 抓取当帧 timeline,
   # 自动归并出耗时 widget(debug/profile 有效,release 无 VM Service)
