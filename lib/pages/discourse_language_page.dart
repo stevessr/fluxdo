@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,7 +48,8 @@ class _DiscourseLanguagePageState
           await PreloadedDataService().getSiteSettings() ?? <String, dynamic>{};
       final user = await service.getUserPreferences(widget.username);
 
-      final allowUserLocale = settings['allow_user_locale'] == true;
+      final allowUserLocale = settings['allow_user_locale'] == true ||
+          settings['allow_user_locale']?.toString() == 'true';
       final locales = _parseLocales(settings['available_locales']);
       final currentLocale = user['locale']?.toString();
 
@@ -74,15 +77,25 @@ class _DiscourseLanguagePageState
   }
 
   List<_LocaleOption> _parseLocales(dynamic raw) {
-    final result = <_LocaleOption>[];
-    if (raw is! List) return result;
+    dynamic decoded = raw;
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        decoded = jsonDecode(raw);
+      } catch (_) {
+        return const [];
+      }
+    }
 
-    for (final entry in raw) {
+    final result = <_LocaleOption>[];
+    if (decoded is! List) return result;
+
+    for (final entry in decoded) {
       if (entry is Map) {
         final value = entry['value']?.toString() ?? entry['id']?.toString();
         if (value == null || value.isEmpty) continue;
-        final label = entry['name']?.toString() ??
+        final label = entry['native_name']?.toString() ??
             entry['label']?.toString() ??
+            entry['name']?.toString() ??
             value;
         result.add(_LocaleOption(value, label));
       } else if (entry != null) {
@@ -223,8 +236,8 @@ class _DiscourseLanguagePageState
                   const SizedBox(height: 12),
                   Text(
                     _tr(
-                      '站点没有返回 available_locales，无法安全地提供语言列表。',
-                      'The site did not return available_locales, so no locale list can be offered safely.',
+                      '站点没有返回可用语言列表，无法安全地提供语言选择。',
+                      'The site did not return an available locale list.',
                     ),
                   ),
                 ],
