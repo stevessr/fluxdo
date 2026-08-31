@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'discourse_avatar_page.dart';
 import 'discourse_identity_profile_page.dart';
 import 'discourse_language_page.dart';
 import 'discourse_profile_extras_page.dart';
@@ -48,6 +49,23 @@ class UserPreferencesPage extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: Text(zh ? '头像' : 'Avatar'),
+                subtitle: Text(
+                  zh
+                      ? '系统头像、自定义上传、Gravatar、站点预设头像'
+                      : 'System, uploaded, Gravatar, and site-provided avatars',
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => DiscourseAvatarPage(username: username),
+                    ),
+                  );
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.badge_outlined),
                 title: Text(zh ? '身份与个人资料' : 'Identity & profile'),
