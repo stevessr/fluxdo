@@ -64,6 +64,12 @@ class DiscourseGroup {
   bool get canManageMembers =>
       !automatic && (canAdminGroup || isGroupOwner);
 
+  /// 对齐 Discourse `group-membership-button`：公开准入且当前不是成员时可加入。
+  bool get canJoin => publicAdmission && !isGroupUser;
+
+  /// 对齐 Discourse `group-membership-button`：允许公开退出且当前是成员时可退出。
+  bool get canLeave => publicExit && isGroupUser;
+
   factory DiscourseGroup.fromJson(Map<String, dynamic> json) {
     return DiscourseGroup(
       id: (json['id'] as num?)?.toInt() ?? 0,
