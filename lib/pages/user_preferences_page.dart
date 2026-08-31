@@ -6,6 +6,7 @@ import 'discourse_interface_advanced_page.dart';
 import 'discourse_language_page.dart';
 import 'discourse_notification_schedule_page.dart';
 import 'discourse_profile_extras_page.dart';
+import 'discourse_security_advanced_page.dart';
 import 'discourse_tracking_selectors_page.dart';
 import 'user_account_management_page.dart';
 import 'user_preferences_core_page.dart' as core;
@@ -177,6 +178,25 @@ class UserPreferencesPage extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => DiscourseLanguagePage(username: username),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.security_outlined),
+                  title: Text(zh ? '密码与授权应用' : 'Password & authorized apps'),
+                  subtitle: Text(
+                    zh
+                        ? '设置或移除密码、重发邮箱验证、管理 User API 授权与已有 Passkey'
+                        : 'Set/remove password, resend email verification, manage User API authorizations and existing Passkeys',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DiscourseSecurityAdvancedPage(
+                          username: username,
+                        ),
                       ),
                     );
                   },
