@@ -185,15 +185,11 @@ class _DiscourseIdentityProfilePageState
     return fields;
   }
 
-  bool _isRequiredUserField(Map<String, dynamic> field) =>
-      field['required'] == true ||
-      field['requirement']?.toString() == 'for_all_users';
-
   Future<void> _save() async {
     if (_saving || _user == null) return;
 
     for (final field in _siteUserFields) {
-      if (!_isRequiredUserField(field)) continue;
+      if (field['required'] != true) continue;
       final id = field['id']?.toString();
       if (id == null) continue;
       final value = _userFields[id];
@@ -251,6 +247,7 @@ class _DiscourseIdentityProfilePageState
                   dimension: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
+              ),
             )
           else
             TextButton.icon(
@@ -649,7 +646,7 @@ class _DiscourseIdentityProfilePageState
     final name = field['name']?.toString() ?? id;
     final description = field['description']?.toString();
     final type = field['field_type']?.toString() ?? 'text';
-    final required = _isRequiredUserField(field);
+    final required = field['required'] == true;
     final label = required ? '$name *' : name;
     final value = _userFields[id];
     final options = field['options'] is List
