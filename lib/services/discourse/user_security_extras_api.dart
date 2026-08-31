@@ -19,6 +19,27 @@ extension UserSecurityExtrasApi on DiscourseService {
     }
   }
 
+  /// Matches Discourse's native ConfirmSession password flow.
+  ///
+  /// A successful request marks the current server session as confirmed/trusted
+  /// so sensitive preference actions (2FA, security keys, Passkey deletion,
+  /// password removal, etc.) can proceed without signing out and back in.
+  Future<Map<String, dynamic>> confirmPreferenceSessionWithPassword(
+    String password,
+  ) async {
+    try {
+      final response = await dio.post(
+        '/u/confirm-session.json',
+        data: {'password': password},
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+    } on DioException catch (e) {
+      throw Exception(_securityExtrasError(e));
+    }
+  }
+
   Future<void> renamePreferencePasskey(int id, String name) async {
     try {
       await dio.put('/u/rename_passkey/$id', data: {'name': name});
