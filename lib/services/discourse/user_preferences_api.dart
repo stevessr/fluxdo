@@ -14,7 +14,7 @@ extension UserPreferencesApi on DiscourseService {
       final response = await dio.get('/u/${Uri.encodeComponent(username)}.json');
       final data = Map<String, dynamic>.from(response.data as Map);
       final user = data['user'] is Map ? data['user'] as Map : data;
-      return Map<String, dynamic>.from(user);
+      return _normalizeUserPreferences(Map<String, dynamic>.from(user));
     } on DioException catch (e) {
       throw Exception(_discoursePreferenceError(e));
     }
@@ -25,15 +25,18 @@ extension UserPreferencesApi on DiscourseService {
     Map<String, dynamic> attributes,
   ) async {
     if (attributes.isEmpty) return getUserPreferences(username);
+    final payload = _serializeUserPreferences(attributes);
     try {
       final response = await dio.put(
         '/u/${Uri.encodeComponent(username)}.json',
-        data: attributes,
+        data: payload,
       );
       if (response.data is Map) {
         final data = Map<String, dynamic>.from(response.data as Map);
         if (data['user'] is Map) {
-          return Map<String, dynamic>.from(data['user'] as Map);
+          return _normalizeUserPreferences(
+            Map<String, dynamic>.from(data['user'] as Map),
+          );
         }
       }
       return getUserPreferences(username);
@@ -101,6 +104,37 @@ extension UserPreferencesApi on DiscourseService {
       throw Exception(_discoursePreferenceError(e));
     }
   }
+}
+
+/// Discourse stores interface color mode as 1/2/3. The native page uses the
+/// readable auto/light/dark values internally, so normalize only at this API
+/// boundary and keep the wire format exactly aligned with upstream.
+Map<String, dynamic> _normalizeUserPreferences(Map<String, dynamic> user) {
+  final rawOptions = user['user_option'];
+  if (rawOptions is Map) {
+    final options = Map<String, dynamic>.from(rawOptions);
+    options['interface_color_mode'] = switch (options['interface_color_mode']) {
+      1 => 'auto',
+      2 => 'light',
+      3 => 'dark',
+      final value => value,
+    };
+    user['user_option'] = options;
+  }
+  return user;
+}
+
+Map<String, dynamic> _serializeUserPreferences(
+  Map<String, dynamic> attributes,
+) {
+  final payload = Map<String, dynamic>.from(attributes);
+  payload['interface_color_mode'] = switch (payload['interface_color_mode']) {
+    'auto' => 1,
+    'light' => 2,
+    'dark' => 3,
+    final value => value,
+  };
+  return payload;
 }
 
 String _discoursePreferenceError(DioException error) {
