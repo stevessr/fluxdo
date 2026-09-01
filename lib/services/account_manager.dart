@@ -487,6 +487,7 @@ class AccountManager {
 
   Future<Map<String, dynamic>?> _syncCurrentAccountLocked({
     bool captureBrowserCookies = false,
+    bool updateRegistry = true,
   }) async {
     final generation = AuthSession().generation;
     final username = await getCurrentUsername();
@@ -494,13 +495,16 @@ class AccountManager {
       return null;
     }
 
-    // 三项都是只读操作，可以同时进行。尤其完整 WebView 快照通常比
-    // CookieJar/安全存储读取慢，不应让它们首尾串行阻塞切换入口。
+    // 都是只读操作，可以同时进行。完整 WebView 快照通常最慢；registry
+    // 读取也提前隐藏在这段等待里，避免快照写完后再单独付一次安全存储 RTT。
     final cookiesFuture = _captureSessionCookies();
     final oldSnapshotFuture = _readSnapshot(username);
     final browserCookiesFuture = captureBrowserCookies
         ? _captureBrowserCookies()
         : Future<List<Map<String, dynamic>>>.value(const []);
+    final registryRawFuture = updateRegistry
+        ? _storage.read(key: _registryKey)
+        : Future<String?>.value(null);
 
     final cookies = await cookiesFuture;
     final oldSnapshot = await oldSnapshotFuture;
@@ -528,13 +532,14 @@ class AccountManager {
       'saved_at': savedAt.toIso8601String(),
     };
 
-    // registry 是另一把安全存储 key；读取可与 snapshot 写入重叠。
-    final registryRawFuture = _storage.read(key: _registryKey);
+    // rollback 依赖的是 snapshot 本体，所以它仍然必须在 detach 前持久化。
+    // registry 只保存列表展示元数据，普通切换无需让它阻塞关键路径。
     await _writeSnapshot(username, refreshedSnapshot);
+    if (!updateRegistry) {
+      return refreshedSnapshot;
+    }
 
-    final accounts = [
-      ..._decodeRegistry(await registryRawFuture),
-    ];
+    final accounts = [..._decodeRegistry(await registryRawFuture)];
     final index = accounts.indexWhere((a) => a.username == username);
     final entry = SavedAccount(
       username: username,
@@ -749,6 +754,8 @@ class AccountManager {
     String username, {
     bool notifyAuthState = true,
   }) async {
+    // 目标快照和当前用户名来自不同安全存储 key，先同时发起读取。
+    final currentFuture = getCurrentUsername();
     late final Map<String, dynamic> snapshot;
     try {
       snapshot = await _readRequiredSnapshot(username);
@@ -757,13 +764,14 @@ class AccountManager {
       rethrow;
     }
 
-    final current = await getCurrentUsername();
+    final current = await currentFuture;
     Map<String, dynamic>? previousSnapshot;
     if (current != null && current.isNotEmpty && current != username) {
       // 先把旧账号固化到最新快照，确保目标恢复失败时仍有可回滚边界。
-      // 正常路径直接复用刚写入的 Map，避免立刻再走一次安全存储读取+JSON。
+      // rollback 只需要快照本体；registry 是列表展示元数据，不再阻塞切换。
       final refreshedPreviousSnapshot = await _syncCurrentAccountLocked(
         captureBrowserCookies: true,
+        updateRegistry: false,
       );
       previousSnapshot =
           refreshedPreviousSnapshot ?? await _readSnapshot(current);
