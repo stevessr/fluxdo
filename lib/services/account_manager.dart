@@ -709,9 +709,6 @@ class AccountManager {
     String username, {
     bool notifyAuthState = true,
   }) async {
-    final current = await getCurrentUsername();
-    if (current == username) return;
-
     late final Map<String, dynamic> snapshot;
     try {
       snapshot = await _readRequiredSnapshot(username);
@@ -720,8 +717,9 @@ class AccountManager {
       rethrow;
     }
 
+    final current = await getCurrentUsername();
     Map<String, dynamic>? previousSnapshot;
-    if (current != null && current.isNotEmpty) {
+    if (current != null && current.isNotEmpty && current != username) {
       // 先把旧账号固化到最新快照，确保目标恢复失败时仍有可回滚边界。
       await _syncCurrentAccountLocked(captureBrowserCookies: true);
       previousSnapshot = await _readSnapshot(current);
@@ -735,8 +733,9 @@ class AccountManager {
         snapshot,
         notifyAuthState: notifyAuthState,
       );
-      // 目标账号已经完成服务端校验并提交；完整 WebView 快照无需阻塞 UI。
-      // 轻量快照会在 switchToAccount 返回前排入串行队列，避免与下一次切换竞争。
+      // 目标账号已经完成服务端校验并提交；完整 WebView 快照无需阻塞切换。
+      // 轻量快照排在当前事务尾部，保留 cookie/头像刷新而不延长 UI 等待。
+      unawaited(syncCurrentAccount());
     } catch (error, stackTrace) {
       if (transitionStarted &&
           current != null &&
@@ -775,8 +774,5 @@ class AccountManager {
     await _exclusive(
       () => _switchToAccountLocked(username, notifyAuthState: false),
     );
-    // isLoggedIn/finalize 可能刷新 jar cookie 或头像；只补写轻量快照即可。
-    // WebView cookie 会在下一次切出该账号前同步完整抓取。
-    unawaited(syncCurrentAccount());
   }
 }
