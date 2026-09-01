@@ -180,6 +180,8 @@ class AppStateRefresher {
     }
   }
 
+  /// 刷新话题列表各 tab
+  /// 只刷新当前 tab，非活跃 tab 标记 stale，切换到时才刷新
   static void _refreshTopicTabs(ProviderContainer container) {
     final currentCategoryId = container.read(currentTabCategoryIdProvider);
     container.invalidate(topicListProvider(currentCategoryId));
