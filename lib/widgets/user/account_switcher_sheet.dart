@@ -686,6 +686,8 @@ class _AccountSwitcherBody extends StatefulWidget {
 }
 
 class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
+  static const _switchCoverMinDuration = Duration(milliseconds: 320);
+
   final AccountManager _manager = AccountManager();
   List<SavedAccount> _accounts = const [];
   String? _currentUsername;
@@ -714,13 +716,50 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
 
   Future<void> _switchTo(SavedAccount account) async {
     if (_switchingAccount != null) return;
-    setState(() => _switchingAccount = account);
-    final switched = await _performAccountSwitch(context, _manager, account);
-    if (!mounted) return;
-    if (switched) {
-      Navigator.of(context).pop();
+    _switchingAccount = account;
+
+    final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    final switchContext = overlay?.context ?? context;
+    OverlayEntry? switchCover;
+    Stopwatch? switchCoverStopwatch;
+
+    if (overlay != null) {
+      switchCover = OverlayEntry(
+        builder: (_) => AccountSwitchLoadingCover(account: account),
+      );
+      switchCoverStopwatch = Stopwatch()..start();
+      overlay.insert(switchCover);
+    }
+
+    // Start the foreground switch while the sheet context is still alive, then
+    // destroy the sheet route immediately. The root loading cover remains as
+    // the only switching UI until the account/session refresh is complete.
+    final switchFuture = _performAccountSwitch(switchContext, _manager, account);
+    if (route != null) {
+      navigator.removeRoute(route);
     } else {
-      setState(() => _switchingAccount = null);
+      navigator.pop();
+    }
+
+    try {
+      await switchFuture;
+      if (switchCover != null) {
+        await WidgetsBinding.instance.endOfFrame;
+        final elapsed = switchCoverStopwatch?.elapsed ?? Duration.zero;
+        final remaining = _switchCoverMinDuration - elapsed;
+        if (remaining > Duration.zero) {
+          await Future<void>.delayed(remaining);
+        }
+      }
+    } finally {
+      final cover = switchCover;
+      if (cover != null) {
+        switchCoverStopwatch?.stop();
+        if (cover.mounted) cover.remove();
+        cover.dispose();
+      }
     }
   }
 
