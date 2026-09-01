@@ -26,7 +26,11 @@ class AppStateRefresher {
   /// 调用方用 [ProviderScope.containerOf] 取 container 后传入，
   /// 避免 [Future.delayed] 闭包持有的 [WidgetRef] 在延迟期间随 widget unmount 失效，
   /// 进而抛 StateError 中断后续 invalidate（曾导致登录后 ProfilePage 卡 loading）。
-  static void refreshAll(ProviderContainer container, {bool force = false}) {
+  static void refreshAll(
+    ProviderContainer container, {
+    bool force = false,
+    bool refreshCurrentUser = true,
+  }) {
     // 去抖：2 秒内重复调用直接跳过（如 authStateProvider listener + _goToLogin 同时触发）。
     // 多账号切换等关键路径用 force=true 绕过去抖，确保切换后状态必然刷新。
     final now = DateTime.now();
@@ -38,7 +42,12 @@ class AppStateRefresher {
     _lastRefreshTime = now;
     final refreshEpoch = ++_refreshEpoch;
 
-    // 第一批：主页渲染必需（用户信息 + 分类 + 话题列表）
+    // 第一批：主页渲染必需（用户信息 + 分类 + 话题列表）。账号切换会先
+    // 原子刷新 currentUser，再用 refreshCurrentUser=false 刷其余状态，避免
+    // 第二次 invalidate 把刚提交的目标身份重新打回 loading/游客外观。
+    if (refreshCurrentUser) {
+      container.invalidate(currentUserProvider);
+    }
     for (final refresh in _coreRefreshers) {
       refresh(container);
     }
@@ -67,6 +76,7 @@ class AppStateRefresher {
     container.read(bookmarkSyncControllerProvider.notifier).reset();
     container.invalidate(currentUsernameProvider);
     // 登出时 invalidate 所有（不会发请求，因为数据被清空了）
+    container.invalidate(currentUserProvider);
     for (final refresh in _coreRefreshers) {
       refresh(container);
     }
@@ -94,21 +104,60 @@ class AppStateRefresher {
 
   /// 多账号切换后调用：清掉与「上一个账号」绑定的本地缓存并整体刷新。
   ///
-  /// 与 [resetForLogout] 的差别：不重置筛选/排序、不禁用 LDC/CDK
-  /// （新账号可能仍在用），只做身份缓存清理 + 全量 invalidate。
+  /// 与 [resetForLogout] 的差别：不重置筛选/排序、不禁用 LDC/CDK，也不把
+  /// currentUser 主动清成 null。切换遮罩还在时先把身份原子刷新为目标账号，
+  /// 再重建其余账号级状态，避免导航和“我的”短暂/持续落入游客外观。
   static Future<void> resetForAccountSwitch(ProviderContainer container) async {
     // 清理尚未执行的上一账号延迟刷新；refreshAll 完成后会再建立新 epoch。
     _refreshEpoch++;
     final generation = AuthSession().generation;
-    await Future.wait([
-      container.read(currentUserProvider.notifier).clearCache(),
-      container.read(userSummaryProvider.notifier).clearCache(),
-    ]);
+
+    // currentUser 的持久缓存本身按 username 校验，目标身份刷新成功后也会
+    // 覆盖旧缓存。这里不能调用 clearCache()：它会同步 emit data(null)，
+    // 导航层把 null 当作真实登出，正是切换后出现“游客 UI”的来源。
+    await container.read(userSummaryProvider.notifier).clearCache();
     if (!AuthSession().isValid(generation)) return;
     container.read(bookmarkNameSuggestionsProvider.notifier).clearCache();
     container.read(bookmarkSyncControllerProvider.notifier).reset();
     container.invalidate(currentUsernameProvider);
-    refreshAll(container, force: true);
+
+    await _refreshCurrentUserForAccountSwitch(container, generation);
+    if (!AuthSession().isValid(generation)) return;
+
+    // 身份已经由 refreshSilently 提交，不要再次 invalidate currentUser。
+    refreshAll(container, force: true, refreshCurrentUser: false);
+  }
+
+  static Future<void> _refreshCurrentUserForAccountSwitch(
+    ProviderContainer container,
+    int generation,
+  ) async {
+    final service = container.read(discourseServiceProvider);
+    final expectedUsername = await service.getCurrentUsername();
+    if (!AuthSession().isValid(generation) ||
+        expectedUsername == null ||
+        expectedUsername.isEmpty) {
+      return;
+    }
+
+    final notifier = container.read(currentUserProvider.notifier);
+    await notifier.refreshSilently(force: true);
+    if (!AuthSession().isValid(generation)) return;
+
+    var currentUser = container.read(currentUserProvider).value;
+    if (currentUser?.username == expectedUsername) return;
+
+    // finalizeNativeLoginSuccess 已经验证过目标会话；这里若第一次资料请求
+    // 恰好撞上 preload/网络切换窗口，只重试资料刷新，不再走会清会话的
+    // isLoggedIn() 路径，也不把 UI 降级成游客态。
+    await notifier.refreshSilently(force: true);
+    if (!AuthSession().isValid(generation)) return;
+    currentUser = container.read(currentUserProvider).value;
+    if (currentUser?.username != expectedUsername) {
+      // 保留上一帧已登录身份。后续生命周期/手动刷新仍可继续自愈；比把
+      // 已经通过服务端校验的会话错误呈现成“未登录”更安全。
+      return;
+    }
   }
 
   /// 刷新话题列表各 tab
@@ -128,10 +177,9 @@ class AppStateRefresher {
   }
 
   /// 第一批：主页渲染必需的 provider
-  /// 用户信息、分类列表（tab 栏依赖）
+  /// currentUser 单独处理，便于账号切换时跳过第二次身份 invalidate。
   static final List<void Function(ProviderContainer container)>
   _coreRefreshers = [
-    (c) => c.invalidate(currentUserProvider),
     (c) => c.invalidate(categoriesProvider),
     (c) => c.invalidate(topicTrackingStateMetaProvider),
     (c) => c.invalidate(topicTrackingStateProvider),
