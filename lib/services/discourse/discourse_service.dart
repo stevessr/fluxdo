@@ -59,6 +59,7 @@ import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 
 part '_auth.dart';
+part '_account_switch.dart';
 part '_login.dart';
 part '_topics.dart';
 part '_posts.dart';
@@ -124,6 +125,8 @@ abstract class _DiscourseServiceBase {
   Future<void> finalizeNativeLoginSuccess(
     String identifier, {
     bool notifyAuthState = true,
+    bool refreshPreloadedData = true,
+    bool advanceSession = true,
   });
   Future<void> saveUsername(String username, {int? requestGeneration});
 }
