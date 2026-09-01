@@ -175,6 +175,10 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   /// AuthSession.advance → 从 jar 拿 _t → saveUsername/setToken → LoginReadyCoordinator
   /// →（普通登录时）广播登录成功。
   ///
+  /// [skipPreloadedRefresh] 仅供多账号切换使用：调用方已经在服务端会话校验
+  /// 同时尝试了首页 preload，因此这里不能再串行发第二次首页请求。即使那次
+  /// preload 因网络/CF 失败，后续 CurrentUserNotifier 也会走自己的网络兜底。
+  ///
   /// WebView JS 全流程登录成功后, 由 login_page 在 dialog 已把会话 cookie
   /// syncFromWebView 落 jar 之后显式调用 (public)。dio 版 [loginWithPassword]
   /// 成功路径也复用它。
@@ -182,6 +186,7 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   Future<void> finalizeNativeLoginSuccess(
     String identifier, {
     bool notifyAuthState = true,
+    bool skipPreloadedRefresh = false,
   }) async {
     final loginGeneration = AuthSession().advance();
 
@@ -198,6 +203,15 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     if (token.isNotEmpty) setToken(token);
     final forceBrowserSessionSync = !WebViewSessionCookieRefreshService.instance
         .hasFreshSyncForToken(token);
+
+    if (skipPreloadedRefresh) {
+      onLoginSuccess(
+        token,
+        forceBrowserSessionSync: forceBrowserSessionSync,
+        notifyAuthState: notifyAuthState,
+      );
+      return;
+    }
 
     var loginReadyNotified = false;
     try {
