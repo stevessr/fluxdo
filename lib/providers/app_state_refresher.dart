@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/auth_session.dart';
+import '../services/preloaded_data_service.dart';
 import 'core_providers.dart';
 import 'bookmark_name_suggestions_provider.dart';
 import 'bookmark_sync_controller.dart';
@@ -124,7 +125,7 @@ class AppStateRefresher {
     await _refreshCurrentUserForAccountSwitch(container, generation);
     if (!AuthSession().isValid(generation)) return;
 
-    // 身份已经由 refreshSilently 提交，不要再次 invalidate currentUser。
+    // 身份已经由 preload 快路径或网络兜底提交，不要再次 invalidate currentUser。
     refreshAll(container, force: true, refreshCurrentUser: false);
   }
 
@@ -140,7 +141,25 @@ class AppStateRefresher {
       return;
     }
 
-    final notifier = container.read(currentUserProvider.notifier);
+    // finalizeNativeLoginSuccess 已经等待首页 preload 完成。正常切换时这里
+    // 已经有目标账号 current_user：让 provider 直接从这份内存数据重建，
+    // build 内会立即提交目标身份，并把 /u/... 的完整资料刷新留到后台。
+    // 这样前台切换不再为同一个用户额外等待一次网络 RTT。
+    final preloaded = PreloadedDataService().currentUserSync;
+    final preloadedUsername = preloaded?['username']?.toString();
+    if (preloadedUsername != null &&
+        preloadedUsername.toLowerCase() == expectedUsername.toLowerCase()) {
+      container.invalidate(currentUserProvider);
+      final currentUser = await container.read(currentUserProvider.future);
+      if (!AuthSession().isValid(generation)) return;
+      if (currentUser?.username.toLowerCase() == expectedUsername.toLowerCase()) {
+        return;
+      }
+    }
+
+    // preload 不可用（网络/CF/解析失败）时保留原来的同步网络兜底，确保
+    // 账户切换不会因为性能优化而牺牲身份一致性。
+    var notifier = container.read(currentUserProvider.notifier);
     await notifier.refreshSilently(force: true);
     if (!AuthSession().isValid(generation)) return;
 
@@ -150,6 +169,7 @@ class AppStateRefresher {
     // finalizeNativeLoginSuccess 已经验证过目标会话；这里若第一次资料请求
     // 恰好撞上 preload/网络切换窗口，只重试资料刷新，不再走会清会话的
     // isLoggedIn() 路径，也不把 UI 降级成游客态。
+    notifier = container.read(currentUserProvider.notifier);
     await notifier.refreshSilently(force: true);
     if (!AuthSession().isValid(generation)) return;
     currentUser = container.read(currentUserProvider).value;
@@ -160,8 +180,6 @@ class AppStateRefresher {
     }
   }
 
-  /// 刷新话题列表各 tab
-  /// 只刷新当前 tab，非活跃 tab 标记 stale，切换到时才刷新
   static void _refreshTopicTabs(ProviderContainer container) {
     final currentCategoryId = container.read(currentTabCategoryIdProvider);
     container.invalidate(topicListProvider(currentCategoryId));
