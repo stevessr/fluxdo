@@ -175,14 +175,6 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   /// AuthSession.advance → 从 jar 拿 _t → saveUsername/setToken → LoginReadyCoordinator
   /// →（普通登录时）广播登录成功。
   ///
-  /// [skipPreloadedRefresh] 仅供已经拥有可信首屏身份数据的特殊收口路径使用，
-  /// 例如多账号切换复用 `/session/current.json` 的 current_user。此时首页
-  /// preload 不再是提交条件，后续被 watch 的 Provider 会按需在后台补齐。
-  ///
-  /// [advanceSession] 默认为 true，保持普通登录语义。多账号切换在 detach 时
-  /// 已经 advance 并切断旧请求，因此可传 false；这组参数同时会走专用
-  /// [commitAccountSwitchSession]，避免通用 onLoginSuccess 再排完整账号快照。
-  ///
   /// WebView JS 全流程登录成功后, 由 login_page 在 dialog 已把会话 cookie
   /// syncFromWebView 落 jar 之后显式调用 (public)。dio 版 [loginWithPassword]
   /// 成功路径也复用它。
@@ -190,27 +182,8 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   Future<void> finalizeNativeLoginSuccess(
     String identifier, {
     bool notifyAuthState = true,
-    bool skipPreloadedRefresh = false,
-    bool advanceSession = true,
   }) async {
-    final loginGeneration = advanceSession
-        ? AuthSession().advance()
-        : AuthSession().generation;
-
-    // 多账号切换已经在 detach 时切断旧 generation，并由专用 probe 完成
-    // 服务端身份校验。直接走专用 commit，避免通用登录收口额外排入完整
-    // WebView 多账号快照，拖慢紧接着发生的下一次账户切换。
-    if (skipPreloadedRefresh && !advanceSession) {
-      final committed = await commitAccountSwitchSession(
-        username: identifier,
-        requestGeneration: loginGeneration,
-        notifyAuthState: notifyAuthState,
-      );
-      if (!committed) {
-        debugPrint('[DiscourseLogin] 账户切换提交失败: $identifier');
-      }
-      return;
-    }
+    final loginGeneration = AuthSession().advance();
 
     final token = await _cookieJar.getTToken() ?? '';
     if (token.isEmpty) {
@@ -225,15 +198,6 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     if (token.isNotEmpty) setToken(token);
     final forceBrowserSessionSync = !WebViewSessionCookieRefreshService.instance
         .hasFreshSyncForToken(token);
-
-    if (skipPreloadedRefresh) {
-      onLoginSuccess(
-        token,
-        forceBrowserSessionSync: forceBrowserSessionSync,
-        notifyAuthState: notifyAuthState,
-      );
-      return;
-    }
 
     var loginReadyNotified = false;
     try {
@@ -310,10 +274,10 @@ class LoginFailure extends LoginResult {
   });
 
   final LoginErrorKind kind;
+  final String? message;
   final bool totpEnabled;
   final bool securityKeyEnabled;
   final bool backupEnabled;
-  final String? message;
   final String? sentToEmail;
   final String? currentEmail;
 }
