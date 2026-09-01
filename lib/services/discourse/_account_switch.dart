@@ -16,6 +16,68 @@ class AccountSwitchSessionValidation {
 }
 
 extension AccountSwitchSessionValidationExtension on DiscourseService {
+  /// 多账号切换专用的本地摘除。
+  ///
+  /// 与 [detachSessionLocally] 的认证内存/后台服务边界完全一致，但 WebView
+  /// 不再无条件 `deleteAllCookies()`：先清 CookieJar，再选择性删除 app-owned
+  /// origins 的用户态 cookie 并独立复检。任何失败都会自动回退原来的全量
+  /// WebView 清理，因此快路不会降低账号隔离强度。
+  Future<void> detachSessionForAccountSwitch() async {
+    AuthSession().advance();
+
+    MessageBusService().stopAll();
+    unawaited(CfClearanceRefreshService().stop());
+    WebViewAdapterSettingsService.instance.resetSessionFallback();
+    CfChallengeService().resetSessionCompatibilityDecision();
+    CfClearanceAuthority.instance.reset();
+
+    try {
+      _clearPreviousTTokenFallback();
+      _tToken = null;
+      _username = null;
+      _cachedUserSummary = null;
+      _cachedUserSummaryUsername = null;
+      _userSummaryCacheTime = null;
+      await _enqueueUsernameStorage(
+        () => _storage.delete(key: DiscourseService._usernameKey),
+      );
+      _credentialsLoaded = false;
+      WebViewSessionCookieRefreshService.instance.resetSessionState();
+      WebViewCookiePriming.instance.invalidate();
+
+      await _cookieSync.reset();
+      final cfClearanceCookie = await _cookieJar.getCfClearanceCookie();
+
+      var selectiveClearOk = false;
+      try {
+        // 只清 native CookieJar；WebView 由选择性清理器处理。
+        await _cookieJar.cookieJar.deleteAll();
+        if (cfClearanceCookie != null) {
+          await _cookieJar.restoreCfClearance(cfClearanceCookie);
+        }
+        selectiveClearOk = await AccountSwitchBrowserCookieCleaner.instance
+            .clearAppUserCookies();
+      } catch (e) {
+        debugPrint('[AccountSwitch] selective detach 失败，回退全量清理: $e');
+      }
+
+      if (!selectiveClearOk) {
+        // 与原 detachSessionLocally 的旧路径等价：native + WebView 全量清理，
+        // 然后恢复 native cf_clearance。后续 AccountManager 仍会清 external origin。
+        await _cookieJar.clearAll();
+        if (cfClearanceCookie != null) {
+          await _cookieJar.restoreCfClearance(cfClearanceCookie);
+        }
+        debugPrint('[AccountSwitch] WebView cookie 使用全量清理兜底');
+      }
+
+      PreloadedDataService().reset();
+    } finally {
+      currentUserNotifier.value = null;
+      _resetStrikes();
+    }
+  }
+
   /// 校验待切换快照，并把 `/session/current.json` 已经返回的 current_user
   /// 一并交给切换链路复用。
   ///
@@ -51,9 +113,7 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
       }
 
       final data = response.data;
-      final rawCurrentUser = data is Map<String, dynamic>
-          ? data['current_user']
-          : null;
+      final rawCurrentUser = data is Map ? data['current_user'] : null;
       if (rawCurrentUser is! Map) {
         LogWriter.instance.write({
           'timestamp': DateTime.now().toIso8601String(),
@@ -97,8 +157,6 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
       _username = resolvedUsername;
       _resetStrikes();
 
-      // 先验证模型可解析，再允许调用方跳过首页 preload。若站点字段形态变化，
-      // 会自动退回旧的完整 preload 路径，而不是把半份用户对象提交给 UI。
       try {
         currentUserNotifier.value = User.fromJson(currentUser);
         return AccountSwitchSessionValidation(
