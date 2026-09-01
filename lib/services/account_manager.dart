@@ -66,6 +66,7 @@ class AccountManager {
   static const _currentUsernameKey = 'linux_do_username';
   static const _pendingNewLoginKey = 'multi_account_pending_new_login';
   static const _guestModeKey = 'multi_account_guest_mode';
+  static const _switchPreloadTimeout = Duration(seconds: 8);
 
   /// 没有登录账号时使用的默认 profile。它不展示在账号列表中，只用于
   /// 保证「添加账号」开始前拥有一个干净、可恢复的 cookie/config 边界。
@@ -471,6 +472,19 @@ class AccountManager {
     return avatar is String && avatar.isNotEmpty ? avatar : null;
   }
 
+  Future<void> _prepareSwitchPreload() async {
+    try {
+      await PreloadedDataService().refresh().timeout(_switchPreloadTimeout);
+    } on TimeoutException {
+      debugPrint(
+        '[AccountManager] 账号切换 preload 超时 '
+        '(${_switchPreloadTimeout.inSeconds}s)，后续由用户资料刷新兜底',
+      );
+    } catch (e) {
+      debugPrint('[AccountManager] 账号切换 preload 失败(继续): $e');
+    }
+  }
+
   Future<Map<String, dynamic>?> _syncCurrentAccountLocked({
     bool captureBrowserCookies = false,
   }) async {
@@ -677,7 +691,8 @@ class AccountManager {
       throw AccountSessionExpiredException(username);
     }
 
-    await DiscourseService().detachSessionLocally();
+    final service = DiscourseService();
+    await service.detachSessionLocally();
     final restoreGeneration = AuthSession().generation;
 
     // 外部 WebView 清理与 CookieJar 恢复分属不同存储，可以重叠执行；
@@ -693,10 +708,13 @@ class AccountManager {
     }
 
     // RawCookieWriter 与 Dio 首请求触发的 WebView 会话同步共用浏览器
-    // cookie store。先完整回灌再做服务端校验，避免两条写链并发造成竞态。
+    // cookie store。先完整回灌再做任何网络请求，避免两条写链并发造成竞态。
     await _restoreBrowserCookies(snapshot['webview_cookies'], username);
 
-    final sessionIsValid = await DiscourseService().isLoggedIn(
+    // 首页 preload 与 /session/current.json 都是目标 cookie 就绪后的只读网络
+    // 请求。并发执行可把原先两个串行 RTT 收敛为两者较慢的那一个。
+    final preloadFuture = _prepareSwitchPreload();
+    final sessionIsValid = await service.isLoggedIn(
       requestGeneration: restoreGeneration,
       logoutOnInvalid: false,
       expectedUsername: username,
@@ -704,11 +722,14 @@ class AccountManager {
     if (!sessionIsValid) {
       throw AccountSessionExpiredException(username);
     }
+    await preloadFuture;
 
     WebViewCookiePriming.instance.invalidate();
-    await DiscourseService().finalizeNativeLoginSuccess(
+    await service.finalizeNativeLoginSuccess(
       username,
       notifyAuthState: notifyAuthState,
+      // preload 已经与 session 校验并发尝试过；这里绝不能再串行发一次首页。
+      skipPreloadedRefresh: true,
     );
 
     // finalize 期间可能被旧请求/服务端失效信号打断；不要让这种半恢复
