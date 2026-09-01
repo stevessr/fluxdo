@@ -290,39 +290,57 @@ class AccountManager {
     final writer = RawCookieWriter.instance;
     if (!writer.isSupported) return;
 
-    for (final origin in AccountBrowserSessionPolicy.externalAccountOrigins) {
-      List<CookieFullInfo> infos;
-      try {
-        infos = await writer.getAllCookieInfos(origin);
-      } catch (e) {
-        debugPrint('[AccountManager] 清理 $origin WebView cookie 前读取失败: $e');
-        continue;
-      }
+    final origins = AccountBrowserSessionPolicy.externalAccountOrigins.toList(
+      growable: false,
+    );
+    final infosByOrigin = await Future.wait(
+      origins.map((origin) async {
+        try {
+          return await writer.getAllCookieInfos(origin);
+        } catch (e) {
+          debugPrint('[AccountManager] 清理 $origin WebView cookie 前读取失败: $e');
+          return const <CookieFullInfo>[];
+        }
+      }),
+    );
 
-      for (final info in infos) {
+    final seen = <String>{};
+    final deletions = <ExactCookieDeleteRequest>[];
+    for (var index = 0; index < origins.length; index++) {
+      final origin = origins[index];
+      for (final info in infosByOrigin[index]) {
         if (_isDeviceCookie(info.name) ||
             info.name.isEmpty ||
             !_cookieBelongsToOrigin(info, origin)) {
           continue;
         }
-        try {
-          final deleted = await writer.deleteExactCookie(
-            url: origin,
-            name: info.name,
-            domain: info.domain,
-            path: info.path ?? '/',
-          );
-          if (!deleted) {
-            debugPrint(
-              '[AccountManager] 清理 $origin WebView cookie 失败: ${info.name}',
-            );
-          }
-        } catch (e) {
-          debugPrint(
-            '[AccountManager] 清理 $origin WebView cookie ${info.name} 失败: $e',
-          );
-        }
+        final host = Uri.parse(origin).host.toLowerCase();
+        final rawDomain = info.domain?.trim().toLowerCase();
+        final normalizedDomain = rawDomain == null || rawDomain.isEmpty
+            ? host
+            : rawDomain.replaceFirst(RegExp(r'^\.'), '');
+        final identity = [
+          info.name,
+          normalizedDomain,
+          info.path ?? '/',
+          info.isPartitioned == true ? '1' : '0',
+        ].join('|');
+        if (!seen.add(identity)) continue;
+        deletions.add((
+          url: origin,
+          name: info.name,
+          domain: info.domain,
+          path: info.path ?? '/',
+        ));
       }
+    }
+
+    final deletedCount = await writer.deleteExactCookiesBatch(deletions);
+    if (deletedCount != deletions.length) {
+      debugPrint(
+        '[AccountManager] 外部 WebView cookie batch 清理不完整: '
+        '$deletedCount/${deletions.length}',
+      );
     }
   }
 
@@ -437,6 +455,10 @@ class AccountManager {
     if (rawCookies is! List) return;
     final writer = RawCookieWriter.instance;
     if (!writer.isSupported) return;
+
+    // 旧快照可能含重复 identity。保留“最后一次写入获胜”的原语义，同时
+    // Android 最终只需要一次 native batch / 一次 flush。
+    final writesByIdentity = <String, RawCookieWriteRequest>{};
     for (final raw in rawCookies) {
       if (raw is! Map) continue;
       final map = Map<String, dynamic>.from(raw);
@@ -444,10 +466,29 @@ class AccountManager {
       if (url == null || !_isAllowedBrowserOrigin(url)) continue;
       final header = _rawCookieHeader(map);
       if (header == null) continue;
-      final ok = await writer.setRawCookie(url, header);
-      if (!ok) {
-        debugPrint('[AccountManager] $username 的 WebView cookie 写入失败');
-      }
+      final name = map['name']?.toString();
+      if (name == null || name.isEmpty) continue;
+      final host = Uri.parse(url).host.toLowerCase();
+      final rawDomain = map['domain']?.toString().trim().toLowerCase();
+      final normalizedDomain = rawDomain == null || rawDomain.isEmpty
+          ? host
+          : rawDomain.replaceFirst(RegExp(r'^\.'), '');
+      final identity = [
+        name,
+        normalizedDomain,
+        map['path']?.toString() ?? '/',
+        map['partitioned'] == true ? '1' : '0',
+      ].join('|');
+      writesByIdentity[identity] = (url: url, rawSetCookie: header);
+    }
+
+    final writes = writesByIdentity.values.toList(growable: false);
+    final writtenCount = await writer.setRawCookiesBatch(writes);
+    if (writtenCount != writes.length) {
+      debugPrint(
+        '[AccountManager] $username 的 WebView cookie batch 写入不完整: '
+        '$writtenCount/${writes.length}',
+      );
     }
   }
 
@@ -705,15 +746,21 @@ class AccountManager {
       _restoreSessionCookies(cookies, username),
     ]);
 
-    final restoredToken = await CookieJarService().getTToken();
+    // token 读取只访问 CookieJar；目标 WebView batch 写访问浏览器 store，二者
+    // 可以重叠。但在任何校验/回滚前仍等待两者都结束，绝不让原生写跨事务。
+    final restoredTokenFuture = CookieJarService().getTToken();
+    final browserRestoreFuture = _restoreBrowserCookies(
+      snapshot['webview_cookies'],
+      username,
+    );
+    final restoredToken = await restoredTokenFuture;
+    await browserRestoreFuture;
     if (restoredToken == null || restoredToken.isEmpty) {
       throw AccountSessionExpiredException(username);
     }
 
-    // RawCookieWriter 与网络请求触发的 WebView 会话同步共用浏览器 cookie
-    // store。先完整回灌再校验，避免两条写链并发造成竞态。
-    await _restoreBrowserCookies(snapshot['webview_cookies'], username);
-
+    // 网络请求会触发 WebView 会话同步；必须等整批 WebView 回灌完成后再校验，
+    // 避免与 RawCookieWriter 并发写同一个浏览器 cookie store。
     final validation = await service.validateAccountSwitchSession(
       expectedUsername: username,
       requestGeneration: restoreGeneration,

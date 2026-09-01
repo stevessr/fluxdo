@@ -7,6 +7,14 @@ import 'package:flutter/services.dart';
 import 'cookie_full_info.dart';
 import 'raw_cookie_writer_fallback.dart';
 
+typedef RawCookieWriteRequest = ({String url, String rawSetCookie});
+typedef ExactCookieDeleteRequest = ({
+  String url,
+  String name,
+  String? domain,
+  String path,
+});
+
 /// 通过原生平台通道写入 / 读取 / 删除 WebView cookie store。
 ///
 /// 保留完整的 cookie 语义（host-only / domain / sameSite 等）。
@@ -110,11 +118,58 @@ class RawCookieWriter {
     }
   }
 
-  /// 批量写入多个 raw Set-Cookie 头。
-  Future<int> setRawCookies(String url, List<String> rawSetCookies) async {
+  /// 批量写入同一 URL 的多个 raw Set-Cookie 头。
+  Future<int> setRawCookies(String url, List<String> rawSetCookies) {
+    return setRawCookiesBatch(
+      rawSetCookies.map((raw) => (url: url, rawSetCookie: raw)),
+    );
+  }
+
+  /// 批量写入多个 origin 的 raw Set-Cookie。
+  ///
+  /// Android 走一次原生 MethodChannel batch：一次性向 Chromium cookie store
+  /// 发出整批 setCookie，并且只在批次尾部 flush 一次。其它平台维持原来的
+  /// 串行写入语义，避免扩大 Apple/shared-storage 的行为变化范围。
+  Future<int> setRawCookiesBatch(
+    Iterable<RawCookieWriteRequest> cookies,
+  ) async {
+    final items = cookies.toList(growable: false);
+    if (items.isEmpty) return 0;
+    if (!io.Platform.isAndroid) return _setRawCookiesSerial(items);
+
+    try {
+      final result = await _channel.invokeMethod<int>('setRawCookiesBatch', {
+        'cookies': items
+            .map(
+              (item) => {
+                'url': item.url,
+                'rawSetCookie': item.rawSetCookie,
+              },
+            )
+            .toList(growable: false),
+      });
+      final written = result ?? 0;
+      if (written == items.length) return written;
+      debugPrint(
+        '[RawCookieWriter] setRawCookiesBatch incomplete '
+        '$written/${items.length}, fallback serial',
+      );
+      return _setRawCookiesSerial(items);
+    } on PlatformException catch (e) {
+      debugPrint('[RawCookieWriter] setRawCookiesBatch failed, fallback: $e');
+      return _setRawCookiesSerial(items);
+    } on MissingPluginException {
+      debugPrint(
+        '[RawCookieWriter] setRawCookiesBatch unavailable, fallback serial',
+      );
+      return _setRawCookiesSerial(items);
+    }
+  }
+
+  Future<int> _setRawCookiesSerial(List<RawCookieWriteRequest> items) async {
     var written = 0;
-    for (final raw in rawSetCookies) {
-      if (await setRawCookie(url, raw)) written++;
+    for (final item in items) {
+      if (await setRawCookie(item.url, item.rawSetCookie)) written++;
     }
     return written;
   }
@@ -202,6 +257,67 @@ class RawCookieWriter {
       debugPrint('[RawCookieWriter] Platform channel not available');
       return false;
     }
+  }
+
+  /// 批量精确删除互不相同的 cookie identity。
+  ///
+  /// Android 把所有 `(url,name,domain,path)` 合并为一次平台调用，每个 identity
+  /// 仍覆盖 plain / Secure / SameSite=None / Partitioned 四种删除头，但整批
+  /// 只 flush 一次。其它平台沿用并发的单条删除，保持既有性能与行为。
+  Future<int> deleteExactCookiesBatch(
+    Iterable<ExactCookieDeleteRequest> cookies,
+  ) async {
+    final items = cookies.toList(growable: false);
+    if (items.isEmpty) return 0;
+    if (!io.Platform.isAndroid) return _deleteExactCookiesFallback(items);
+
+    try {
+      final result = await _channel.invokeMethod<int>('deleteExactCookiesBatch', {
+        'cookies': items
+            .map(
+              (item) => {
+                'url': item.url,
+                'name': item.name,
+                'domain': item.domain,
+                'path': item.path,
+              },
+            )
+            .toList(growable: false),
+      });
+      final deleted = result ?? 0;
+      if (deleted == items.length) return deleted;
+      debugPrint(
+        '[RawCookieWriter] deleteExactCookiesBatch incomplete '
+        '$deleted/${items.length}, fallback individual deletes',
+      );
+      return _deleteExactCookiesFallback(items);
+    } on PlatformException catch (e) {
+      debugPrint(
+        '[RawCookieWriter] deleteExactCookiesBatch failed, fallback: $e',
+      );
+      return _deleteExactCookiesFallback(items);
+    } on MissingPluginException {
+      debugPrint(
+        '[RawCookieWriter] deleteExactCookiesBatch unavailable, fallback',
+      );
+      return _deleteExactCookiesFallback(items);
+    }
+  }
+
+  Future<int> _deleteExactCookiesFallback(
+    List<ExactCookieDeleteRequest> items,
+  ) async {
+    final results = await Future.wait<bool>(
+      items.map(
+        (item) => deleteExactCookie(
+          url: item.url,
+          name: item.name,
+          domain: item.domain,
+          path: item.path,
+        ),
+      ),
+    );
+    return results.where((deleted) => deleted).length;
   }
 
   /// 读取指定 url 下所有 cookie 的完整信息。
