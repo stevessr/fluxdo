@@ -125,7 +125,7 @@ abstract class _DiscourseServiceBase {
   Future<void> finalizeNativeLoginSuccess(
     String identifier, {
     bool notifyAuthState = true,
-    bool refreshPreloadedData = true,
+    bool skipPreloadedRefresh = false,
     bool advanceSession = true,
   });
   Future<void> saveUsername(String username, {int? requestGeneration});
