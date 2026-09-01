@@ -180,8 +180,8 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   /// preload 不再是提交条件，后续被 watch 的 Provider 会按需在后台补齐。
   ///
   /// [advanceSession] 默认为 true，保持普通登录语义。多账号切换在 detach 时
-  /// 已经 advance 并切断旧请求，因此可传 false，避免 finalize 再制造一次无意义
-  /// generation 变化，把刚验证完成的目标会话相关异步工作全部判成 stale。
+  /// 已经 advance 并切断旧请求，因此可传 false；这组参数同时会走专用
+  /// [commitAccountSwitchSession]，避免通用 onLoginSuccess 再排完整账号快照。
   ///
   /// WebView JS 全流程登录成功后, 由 login_page 在 dialog 已把会话 cookie
   /// syncFromWebView 落 jar 之后显式调用 (public)。dio 版 [loginWithPassword]
@@ -196,6 +196,21 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     final loginGeneration = advanceSession
         ? AuthSession().advance()
         : AuthSession().generation;
+
+    // 多账号切换已经在 detach 时切断旧 generation，并由专用 probe 完成
+    // 服务端身份校验。直接走专用 commit，避免通用登录收口额外排入完整
+    // WebView 多账号快照，拖慢紧接着发生的下一次账户切换。
+    if (skipPreloadedRefresh && !advanceSession) {
+      final committed = await commitAccountSwitchSession(
+        username: identifier,
+        requestGeneration: loginGeneration,
+        notifyAuthState: notifyAuthState,
+      );
+      if (!committed) {
+        debugPrint('[DiscourseLogin] 账户切换提交失败: $identifier');
+      }
+      return;
+    }
 
     final token = await _cookieJar.getTToken() ?? '';
     if (token.isEmpty) {
@@ -295,10 +310,10 @@ class LoginFailure extends LoginResult {
   });
 
   final LoginErrorKind kind;
-  final String? message;
   final bool totpEnabled;
   final bool securityKeyEnabled;
   final bool backupEnabled;
+  final String? message;
   final String? sentToEmail;
   final String? currentEmail;
 }
