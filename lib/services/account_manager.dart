@@ -680,9 +680,9 @@ class AccountManager {
 
   /// 从快照恢复一个完整会话，并在提交前确认服务端返回的确实是目标账号。
   ///
-  /// [detachSessionLocally] 会清空当前会话且不可逆，因此切换流程必须把
-  /// 「摘除 → 回灌 → 校验 → finalize」包在可回滚的事务里。服务端校验使用
-  /// 专用 account-switch probe，把已经返回的 current_user 一并交给 UI 快路。
+  /// 账户切换使用专用 selective detach；它会清空当前 native 会话，并对
+  /// app-owned WebView cookie 做“选择性删除 + 独立复检 + 全量回退”。切换流程
+  /// 仍把「摘除 → 回灌 → 校验 → commit」包在可回滚事务里。
   Future<void> _restoreAccountSnapshotLocked(
     String username,
     Map<String, dynamic> snapshot, {
@@ -696,11 +696,10 @@ class AccountManager {
     }
 
     final service = DiscourseService();
-    await service.detachSessionLocally();
+    await service.detachSessionForAccountSwitch();
     final restoreGeneration = AuthSession().generation;
 
-    // 外部 WebView 清理与 CookieJar 恢复分属不同存储，可以重叠执行；
-    // 但目标 WebView cookie 仍必须等外部旧态清完后才能回灌，避免竞态。
+    // external WebView 清理与 CookieJar 恢复分属不同存储，可以重叠执行。
     await Future.wait<void>([
       _clearExternalBrowserSessionCookies(),
       _restoreSessionCookies(cookies, username),
@@ -724,24 +723,22 @@ class AccountManager {
     }
 
     // 正常路径已经从 /session/current.json 拿到并解析了 current_user，首页
-    // preload 对提交身份不再是必要条件，直接省掉这一个完整网络 RTT。
-    // 只有网络/CF 不确定导致校验“保守放行”却拿不到用户时，才退回旧 preload。
+    // preload 对提交身份不再是必要条件。仅网络/CF 不确定时才走旧 preload。
     if (validation.currentUser == null) {
       await _prepareSwitchPreload();
     }
 
     WebViewCookiePriming.instance.invalidate();
-    await service.finalizeNativeLoginSuccess(
-      username,
+    final committed = await service.commitAccountSwitchSession(
+      username: username,
+      requestGeneration: restoreGeneration,
       notifyAuthState: notifyAuthState,
-      // verified-user 快路无需 preload；fallback 已经尝试过 preload，也不要重复发。
-      skipPreloadedRefresh: true,
-      // detach 已经 advance 过一次。保持同一 generation，可让刚验证得到的
-      // current_user 与 fallback preload 在 AppStateRefresher 中继续有效。
-      advanceSession: false,
     );
+    if (!committed) {
+      throw AccountSessionExpiredException(username);
+    }
 
-    // finalize 期间可能被旧请求/服务端失效信号打断；不要让这种半恢复
+    // commit 期间可能被旧请求/服务端失效信号打断；不要让这种半恢复
     // 状态提交给 UI，交给上层 catch 回滚到切换前的快照。
     final activeUsernameFuture = getCurrentUsername();
     final activeTokenFuture = CookieJarService().getTToken();
