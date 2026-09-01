@@ -13,6 +13,7 @@ import '../widgets/common/error_view.dart';
 import '../widgets/common/paged_list_footer.dart';
 import '../l10n/s.dart';
 import '../utils/blocked_user_filter.dart';
+import 'bookmarks_page.dart';
 
 /// 通知历史列表页面（独立分页，不受 messageBus 干扰）
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -75,13 +76,25 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     await ref.read(notificationListProvider.notifier).setFilter(filter);
   }
 
-  void _setCategory(NotificationCategory category) {
+  Future<void> _setCategory(NotificationCategory category) async {
+    // Discourse 的“书签”用户菜单不是 bookmark_reminder 通知分类：它通过
+    // /u/:username/user-menu-bookmarks 混合真实书签和提醒。FluxDO 已有完整
+    // 的书签数据源/缓存/分页，因此这里进入真实书签页，避免继续把“书签”
+    // 错做成只有 reminder 的通知列表。
+    if (category == NotificationCategory.bookmarks) {
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const BookmarksPage()));
+      return;
+    }
+
     if (_category == category) return;
     setState(() => _category = category);
     _loadMoreCoordinator.resetCooldown();
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
+    await ref.read(notificationListProvider.notifier).setCategory(category);
   }
 
   String _filterLabel(BuildContext context, NotificationReadFilter filter) {
@@ -188,12 +201,15 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
               child: notificationsAsync.when(
                 data: (notifications) {
                   final blockedUsernames = ref.watch(
-                    preferencesProvider.select((p) => p.normalizedBlockedUsernames),
+                    preferencesProvider.select(
+                      (p) => p.normalizedBlockedUsernames,
+                    ),
                   );
+                  // 类型分类已经在 provider 的数据源层完成，这里只保留本地
+                  // 用户屏蔽过滤，绝不再为了“凑够分类条目”扫描历史分页。
                   final visibleNotifications = notifications
                       .where(
                         (notification) =>
-                            _category.matches(notification) &&
                             !BlockedUserFilter.isBlockedNotification(
                               notification,
                               blockedUsernames,
@@ -202,19 +218,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       .toList(growable: false);
                   final notifier = ref.read(notificationListProvider.notifier);
 
-                  // 历史 notifications 接口只支持 read/unread，不支持
-                  // filter_by_types。类型分类需要本地筛选；当当前已加载历史里
-                  // 匹配项太少时主动继续翻页，避免把“前 60 条没有该类型”
-                  // 错误显示成“没有通知”。
-                  final needsCategoryPrefetch =
-                      _category != NotificationCategory.all &&
-                      visibleNotifications.length < 10 &&
-                      notifier.hasMore;
-                  final needsBlockedUserPrefetch =
+                  // 只有“全部”历史分页可能因为当前页全被本地屏蔽而需要补载。
+                  // 子分类本身是 bounded recent，hasMore=false，不会触发这里。
+                  if (_category == NotificationCategory.all &&
                       visibleNotifications.isEmpty &&
                       notifications.isNotEmpty &&
-                      notifier.hasMore;
-                  if (needsCategoryPrefetch || needsBlockedUserPrefetch) {
+                      notifier.hasMore) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) _loadMore();
                     });
@@ -257,7 +266,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       return NotificationItem(
                         notification: notification,
                         systemAvatarTemplate: systemAvatarTemplate,
-                        // siblings = 当前筛选后的已加载列表，大屏弹窗可继续翻页。
+                        // siblings = 当前数据源已经正确分类后的列表。
                         onTap: () {
                           notifier.markAsRead(notification.id);
                           handleNotificationTap(
@@ -272,8 +281,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                   );
                 },
                 loading: () => const NotificationListSkeleton(),
-                error: (error, stack) =>
-                    ErrorView(error: error, stackTrace: stack, onRetry: _onRefresh),
+                error: (error, stack) => ErrorView(
+                  error: error,
+                  stackTrace: stack,
+                  onRetry: _onRefresh,
+                ),
               ),
             ),
           ),
