@@ -143,4 +143,41 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
       return const AccountSwitchSessionValidation(isValid: true);
     }
   }
+
+  /// 提交一个已经完成 cookie 回灌与服务端校验的账号切换。
+  ///
+  /// 普通登录的 [onLoginSuccess] 会登记 guest 状态并排入一次完整 WebView
+  /// 多账号快照；账户切换本身已经持有目标快照，紧接着还会排一轮轻量刷新，
+  /// 再走那条通用路径只会让下一次连续切换被完整快照挡在串行队列后面。
+  /// 因此这里仅提交当前认证上下文与必要的浏览器 session bootstrap。
+  Future<bool> commitAccountSwitchSession({
+    required String username,
+    required int requestGeneration,
+    required bool notifyAuthState,
+  }) async {
+    if (!AuthSession().isValid(requestGeneration)) return false;
+
+    final token = await _cookieJar.getTToken();
+    if (!AuthSession().isValid(requestGeneration) ||
+        token == null ||
+        token.isEmpty) {
+      return false;
+    }
+
+    await saveUsername(username, requestGeneration: requestGeneration);
+    if (!AuthSession().isValid(requestGeneration)) return false;
+
+    setToken(token);
+    AuthIssueNoticeService.instance.clearSessionCookieRepairHint();
+
+    final forceBrowserSessionSync = !WebViewSessionCookieRefreshService.instance
+        .hasFreshSyncForToken(token);
+    WebViewSessionCookieRefreshService.instance.ensureInBackground(
+      reason: 'account_switch_success',
+      force: forceBrowserSessionSync,
+    );
+
+    if (notifyAuthState) _authStateController.add(null);
+    return true;
+  }
 }
