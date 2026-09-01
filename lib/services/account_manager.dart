@@ -681,9 +681,8 @@ class AccountManager {
   /// 从快照恢复一个完整会话，并在提交前确认服务端返回的确实是目标账号。
   ///
   /// [detachSessionLocally] 会清空当前会话且不可逆，因此切换流程必须把
-  /// 「摘除 → 回灌 → 校验 → finalize」包在可回滚的事务里。校验时禁止
-  /// [DiscourseService.isLoggedIn] 直接 logout；否则一次切换窗口内的 401
-  /// 会把刚保存的旧账号也一起清掉。
+  /// 「摘除 → 回灌 → 校验 → finalize」包在可回滚的事务里。服务端校验使用
+  /// 专用 account-switch probe，把已经返回的 current_user 一并交给 UI 快路。
   Future<void> _restoreAccountSnapshotLocked(
     String username,
     Map<String, dynamic> snapshot, {
@@ -712,29 +711,34 @@ class AccountManager {
       throw AccountSessionExpiredException(username);
     }
 
-    // RawCookieWriter 与 Dio 首请求触发的 WebView 会话同步共用浏览器
-    // cookie store。先完整回灌再做任何网络请求，避免两条写链并发造成竞态。
+    // RawCookieWriter 与网络请求触发的 WebView 会话同步共用浏览器 cookie
+    // store。先完整回灌再校验，避免两条写链并发造成竞态。
     await _restoreBrowserCookies(snapshot['webview_cookies'], username);
 
-    // 首页 preload 与 /session/current.json 都是目标 cookie 就绪后的只读网络
-    // 请求。并发执行可把原先两个串行 RTT 收敛为两者较慢的那一个。
-    final preloadFuture = _prepareSwitchPreload();
-    final sessionIsValid = await service.isLoggedIn(
-      requestGeneration: restoreGeneration,
-      logoutOnInvalid: false,
+    final validation = await service.validateAccountSwitchSession(
       expectedUsername: username,
+      requestGeneration: restoreGeneration,
     );
-    if (!sessionIsValid) {
+    if (!validation.isValid) {
       throw AccountSessionExpiredException(username);
     }
-    await preloadFuture;
+
+    // 正常路径已经从 /session/current.json 拿到并解析了 current_user，首页
+    // preload 对提交身份不再是必要条件，直接省掉这一个完整网络 RTT。
+    // 只有网络/CF 不确定导致校验“保守放行”却拿不到用户时，才退回旧 preload。
+    if (validation.currentUser == null) {
+      await _prepareSwitchPreload();
+    }
 
     WebViewCookiePriming.instance.invalidate();
     await service.finalizeNativeLoginSuccess(
       username,
       notifyAuthState: notifyAuthState,
-      // preload 已经与 session 校验并发尝试过；这里绝不能再串行发一次首页。
+      // verified-user 快路无需 preload；fallback 已经尝试过 preload，也不要重复发。
       skipPreloadedRefresh: true,
+      // detach 已经 advance 过一次。保持同一 generation，可让刚验证得到的
+      // current_user 与 fallback preload 在 AppStateRefresher 中继续有效。
+      advanceSession: false,
     );
 
     // finalize 期间可能被旧请求/服务端失效信号打断；不要让这种半恢复
