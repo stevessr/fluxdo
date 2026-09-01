@@ -210,16 +210,25 @@ class AccountManager {
     final writer = RawCookieWriter.instance;
     if (!writer.isSupported) return const [];
 
+    final origins = AccountBrowserSessionPolicy.snapshotOrigins.toList(
+      growable: false,
+    );
+    final infosByOrigin = await Future.wait(
+      origins.map((origin) async {
+        try {
+          return await writer.getAllCookieInfos(origin);
+        } catch (e) {
+          debugPrint('[AccountManager] 读取 $origin WebView cookie 失败: $e');
+          return const <CookieFullInfo>[];
+        }
+      }),
+    );
+
     final captured = <Map<String, dynamic>>[];
     final identities = <String>{};
-    for (final origin in AccountBrowserSessionPolicy.snapshotOrigins) {
-      List<CookieFullInfo> infos;
-      try {
-        infos = await writer.getAllCookieInfos(origin);
-      } catch (e) {
-        debugPrint('[AccountManager] 读取 $origin WebView cookie 失败: $e');
-        continue;
-      }
+    for (var index = 0; index < origins.length; index++) {
+      final origin = origins[index];
+      final infos = infosByOrigin[index];
       for (final info in infos) {
         if (_isDeviceCookie(info.name) ||
             info.name.isEmpty ||
@@ -724,9 +733,9 @@ class AccountManager {
         snapshot,
         notifyAuthState: notifyAuthState,
       );
-
-      // 头像/快照只允许来自新账号。_currentAvatarFor 会拒绝仍残留的旧 preload。
-      await _syncCurrentAccountLocked(captureBrowserCookies: true);
+      // 目标账号已经完成服务端校验并提交；完整 WebView 快照无需阻塞切换。
+      // 轻量快照排在当前事务尾部，保留 cookie/头像刷新而不延长 UI 等待。
+      unawaited(syncCurrentAccount());
     } catch (error, stackTrace) {
       if (transitionStarted &&
           current != null &&
