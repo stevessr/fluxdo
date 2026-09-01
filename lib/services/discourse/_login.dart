@@ -175,9 +175,13 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   /// AuthSession.advance → 从 jar 拿 _t → saveUsername/setToken → LoginReadyCoordinator
   /// →（普通登录时）广播登录成功。
   ///
-  /// [skipPreloadedRefresh] 仅供多账号切换使用：调用方已经在服务端会话校验
-  /// 同时尝试了首页 preload，因此这里不能再串行发第二次首页请求。即使那次
-  /// preload 因网络/CF 失败，后续 CurrentUserNotifier 也会走自己的网络兜底。
+  /// [skipPreloadedRefresh] 仅供已经拥有可信首屏身份数据的特殊收口路径使用，
+  /// 例如多账号切换复用 `/session/current.json` 的 current_user。此时首页
+  /// preload 不再是提交条件，后续被 watch 的 Provider 会按需在后台补齐。
+  ///
+  /// [advanceSession] 默认为 true，保持普通登录语义。多账号切换在 detach 时
+  /// 已经 advance 并切断旧请求，因此可传 false，避免 finalize 再制造一次无意义
+  /// generation 变化，把刚验证完成的目标会话相关异步工作全部判成 stale。
   ///
   /// WebView JS 全流程登录成功后, 由 login_page 在 dialog 已把会话 cookie
   /// syncFromWebView 落 jar 之后显式调用 (public)。dio 版 [loginWithPassword]
@@ -187,8 +191,11 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     String identifier, {
     bool notifyAuthState = true,
     bool skipPreloadedRefresh = false,
+    bool advanceSession = true,
   }) async {
-    final loginGeneration = AuthSession().advance();
+    final loginGeneration = advanceSession
+        ? AuthSession().advance()
+        : AuthSession().generation;
 
     final token = await _cookieJar.getTToken() ?? '';
     if (token.isEmpty) {
