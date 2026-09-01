@@ -471,51 +471,61 @@ class AccountManager {
     return avatar is String && avatar.isNotEmpty ? avatar : null;
   }
 
-  Future<void> _syncCurrentAccountLocked({
+  Future<Map<String, dynamic>?> _syncCurrentAccountLocked({
     bool captureBrowserCookies = false,
   }) async {
     final generation = AuthSession().generation;
     final username = await getCurrentUsername();
     if (username == null || username.isEmpty || username == guestAccountId) {
-      return;
+      return null;
     }
 
-    final cookies = await _captureSessionCookies();
+    // 三项都是只读操作，可以同时进行。尤其完整 WebView 快照通常比
+    // CookieJar/安全存储读取慢，不应让它们首尾串行阻塞切换入口。
+    final cookiesFuture = _captureSessionCookies();
+    final oldSnapshotFuture = _readSnapshot(username);
+    final browserCookiesFuture = captureBrowserCookies
+        ? _captureBrowserCookies()
+        : Future<List<Map<String, dynamic>>>.value(const []);
+
+    final cookies = await cookiesFuture;
+    final oldSnapshot = await oldSnapshotFuture;
+    final capturedBrowserCookies = await browserCookiesFuture;
+    final browserCookies = captureBrowserCookies
+        ? capturedBrowserCookies
+        : oldSnapshot?['webview_cookies'];
+
     if (!AuthSession().isValid(generation) ||
         await getCurrentUsername() != username ||
         !_snapshotHasSessionCookie(cookies)) {
-      return;
-    }
-
-    final oldSnapshot = await _readSnapshot(username);
-    final browserCookies = captureBrowserCookies
-        ? await _captureBrowserCookies()
-        : oldSnapshot?['webview_cookies'];
-    if (!AuthSession().isValid(generation) ||
-        await getCurrentUsername() != username) {
-      return;
+      return null;
     }
 
     final avatarTemplate =
         _currentAvatarFor(username) ??
         oldSnapshot?['avatar_template'] as String?;
-    await _writeSnapshot(username, {
+    final savedAt = DateTime.now();
+    final refreshedSnapshot = <String, dynamic>{
       'version': 2,
       'profile': username,
       'cookies': cookies,
       if (browserCookies is List) 'webview_cookies': browserCookies,
       'avatar_template': ?avatarTemplate,
-      'saved_at': DateTime.now().toIso8601String(),
-    });
+      'saved_at': savedAt.toIso8601String(),
+    };
+
+    // registry 是另一把安全存储 key；读取可与 snapshot 写入重叠。
+    final registryRawFuture = _storage.read(key: _registryKey);
+    await _writeSnapshot(username, refreshedSnapshot);
 
     final accounts = [
-      ..._decodeRegistry(await _storage.read(key: _registryKey)),
+      ..._decodeRegistry(await registryRawFuture),
     ];
     final index = accounts.indexWhere((a) => a.username == username);
     final entry = SavedAccount(
       username: username,
       avatarTemplate: avatarTemplate,
-      savedAt: DateTime.now(),
+      savedAt: savedAt,
     );
     if (index >= 0) {
       accounts[index] = entry;
@@ -528,6 +538,7 @@ class AccountManager {
       '(${cookies.length} jar cookies, '
       '${browserCookies is List ? browserCookies.length : 0} WebView cookies)',
     );
+    return refreshedSnapshot;
   }
 
   // ========== 对外操作 ==========
@@ -668,16 +679,22 @@ class AccountManager {
 
     await DiscourseService().detachSessionLocally();
     final restoreGeneration = AuthSession().generation;
-    // 外部账号站点必须先清旧态再恢复，不能仅覆盖同名 cookie；否则目标
-    // 快照缺少的旧 cookie 会残留并造成 AnyRouter 串号/看起来“掉登录”。
-    await _clearExternalBrowserSessionCookies();
-    await _restoreSessionCookies(cookies, username);
-    await _restoreBrowserCookies(snapshot['webview_cookies'], username);
+
+    // 外部 WebView 清理与 CookieJar 恢复分属不同存储，可以重叠执行；
+    // 但目标 WebView cookie 仍必须等外部旧态清完后才能回灌，避免竞态。
+    await Future.wait<void>([
+      _clearExternalBrowserSessionCookies(),
+      _restoreSessionCookies(cookies, username),
+    ]);
 
     final restoredToken = await CookieJarService().getTToken();
     if (restoredToken == null || restoredToken.isEmpty) {
       throw AccountSessionExpiredException(username);
     }
+
+    // RawCookieWriter 与 Dio 首请求触发的 WebView 会话同步共用浏览器
+    // cookie store。先完整回灌再做服务端校验，避免两条写链并发造成竞态。
+    await _restoreBrowserCookies(snapshot['webview_cookies'], username);
 
     final sessionIsValid = await DiscourseService().isLoggedIn(
       requestGeneration: restoreGeneration,
@@ -696,8 +713,10 @@ class AccountManager {
 
     // finalize 期间可能被旧请求/服务端失效信号打断；不要让这种半恢复
     // 状态提交给 UI，交给上层 catch 回滚到切换前的快照。
-    final activeUsername = await getCurrentUsername();
-    final activeToken = await CookieJarService().getTToken();
+    final activeUsernameFuture = getCurrentUsername();
+    final activeTokenFuture = CookieJarService().getTToken();
+    final activeUsername = await activeUsernameFuture;
+    final activeToken = await activeTokenFuture;
     if (activeUsername != username ||
         activeToken == null ||
         activeToken.isEmpty) {
@@ -721,8 +740,12 @@ class AccountManager {
     Map<String, dynamic>? previousSnapshot;
     if (current != null && current.isNotEmpty && current != username) {
       // 先把旧账号固化到最新快照，确保目标恢复失败时仍有可回滚边界。
-      await _syncCurrentAccountLocked(captureBrowserCookies: true);
-      previousSnapshot = await _readSnapshot(current);
+      // 正常路径直接复用刚写入的 Map，避免立刻再走一次安全存储读取+JSON。
+      final refreshedPreviousSnapshot = await _syncCurrentAccountLocked(
+        captureBrowserCookies: true,
+      );
+      previousSnapshot =
+          refreshedPreviousSnapshot ?? await _readSnapshot(current);
     }
 
     var transitionStarted = false;
