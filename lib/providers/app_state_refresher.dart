@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/auth_session.dart';
 import '../services/preloaded_data_service.dart';
@@ -125,7 +127,8 @@ class AppStateRefresher {
     await _refreshCurrentUserForAccountSwitch(container, generation);
     if (!AuthSession().isValid(generation)) return;
 
-    // 身份已经由 preload 快路径或网络兜底提交，不要再次 invalidate currentUser。
+    // 身份已经由 session-current / preload 快路径或网络兜底提交，不要再次
+    // invalidate currentUser。
     refreshAll(container, force: true, refreshCurrentUser: false);
   }
 
@@ -141,10 +144,24 @@ class AppStateRefresher {
       return;
     }
 
-    // finalizeNativeLoginSuccess 已经等待首页 preload 完成。正常切换时这里
-    // 已经有目标账号 current_user：让 provider 直接从这份内存数据重建，
-    // build 内会立即提交目标身份，并把 /u/... 的完整资料刷新留到后台。
-    // 这样前台切换不再为同一个用户额外等待一次网络 RTT。
+    // 账户切换的服务端校验本身就是 /session/current.json，并且已经解析出
+    // CurrentUserSerializer。直接把这份被服务端确认过的身份提交给 Riverpod，
+    // 不再为了结束切换遮罩等待首页 HTML 或 /u/...。完整资料仍在后台补齐。
+    final validatedUser = service.currentUserNotifier.value;
+    if (validatedUser != null &&
+        validatedUser.username.toLowerCase() == expectedUsername.toLowerCase()) {
+      final notifier = container.read(currentUserProvider.notifier);
+      // AsyncNotifier.state 是 protected API；这里是账户切换事务的原子提交点，
+      // 必须在其它 provider 刷新前同步替换旧身份，避免出现一帧串号。
+      // ignore: invalid_use_of_protected_member
+      notifier.state = AsyncValue.data(validatedUser);
+      unawaited(notifier.refreshSilently(force: true));
+      return;
+    }
+
+    // 网络/CF 不确定时 validateAccountSwitchSession 会保守放行但拿不到
+    // current_user；此时 finalize 会保留原来的完整 preload 收口。优先复用
+    // preload，仍然避免额外等待一次 /u/... RTT。
     final preloaded = PreloadedDataService().currentUserSync;
     final preloadedUsername = preloaded?['username']?.toString();
     if (preloadedUsername != null &&
@@ -157,8 +174,8 @@ class AppStateRefresher {
       }
     }
 
-    // preload 不可用（网络/CF/解析失败）时保留原来的同步网络兜底，确保
-    // 账户切换不会因为性能优化而牺牲身份一致性。
+    // 两条零额外 RTT 快路都不可用时保留原来的同步网络兜底，确保性能优化
+    // 不牺牲身份一致性。
     var notifier = container.read(currentUserProvider.notifier);
     await notifier.refreshSilently(force: true);
     if (!AuthSession().isValid(generation)) return;
