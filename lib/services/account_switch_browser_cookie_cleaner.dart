@@ -51,6 +51,8 @@ class AccountSwitchBrowserCookieCleaner {
       origins.map((origin) => writer.getAllCookieInfos(origin)),
     );
 
+    // 先按完整 cookie identity 去重。后续只并发删除互不相同的目标，避免
+    // 同一 cookie 的多个 origin 枚举结果同时写平台 cookie store。
     final seen = <String>{};
     final deletions = <({String origin, CookieFullInfo info})>[];
     for (var index = 0; index < origins.length; index++) {
@@ -77,48 +79,65 @@ class AccountSwitchBrowserCookieCleaner {
       }
     }
 
-    var allDeleted = true;
-    for (final item in deletions) {
-      try {
-        final deleted = await writer.deleteExactCookie(
-          url: item.origin,
-          name: item.info.name,
-          domain: item.info.domain,
-          path: item.info.path ?? '/',
-        );
-        if (!deleted) allDeleted = false;
-      } catch (e) {
-        allDeleted = false;
-        debugPrint(
-          '[AccountSwitchCookieCleaner] 删除 ${item.info.name} 失败: $e',
-        );
-      }
-    }
-    if (!allDeleted) return false;
-
-    // RawCookieWriter 的读取 API 为 best-effort，平台通道异常会返回空列表。
-    // 因此成功判定不能只靠它：用 WebView 自身 CookieManager 再做一次独立
-    // 复检，任何异常或残留都回退全量清理。
-    final manager = CookieJarService().webViewCookieManager;
-    try {
-      for (final origin in origins) {
-        final cookies = await manager.getCookies(url: WebUri(origin));
-        final residual = cookies.where(
-          (cookie) =>
-              cookie.name.isNotEmpty && !_isDeviceCookie(cookie.name),
-        );
-        if (residual.isNotEmpty) {
+    // 不同 cookie 的删除相互独立，全部并发发往平台层。每个 future 自己吞掉
+    // 异常并返回 false，确保 Future.wait 会等所有删除完成后再决定是否回退，
+    // 不会因为首个异常提前退出并让残余写操作跨进目标账号恢复阶段。
+    final deletionResults = await Future.wait<bool>(
+      deletions.map((item) async {
+        try {
+          final deleted = await writer.deleteExactCookie(
+            url: item.origin,
+            name: item.info.name,
+            domain: item.info.domain,
+            path: item.info.path ?? '/',
+          );
+          if (!deleted) {
+            debugPrint(
+              '[AccountSwitchCookieCleaner] 删除 ${item.info.name} 失败',
+            );
+          }
+          return deleted;
+        } catch (e) {
           debugPrint(
-            '[AccountSwitchCookieCleaner] $origin 仍有 '
-            '${residual.length} 个用户态 cookie，回退全量清理',
+            '[AccountSwitchCookieCleaner] 删除 ${item.info.name} 失败: $e',
           );
           return false;
         }
-      }
-    } catch (e) {
-      debugPrint('[AccountSwitchCookieCleaner] WebView 复检失败: $e');
-      return false;
-    }
+      }),
+    );
+    if (deletionResults.any((deleted) => !deleted)) return false;
+
+    // RawCookieWriter 的读取 API 为 best-effort，平台通道异常会返回空列表。
+    // 因此成功判定不能只靠它：用 WebView 自身 CookieManager 再做一次独立
+    // 复检。各 origin 互不依赖，可并发读取；任一异常或残留都回退全量清理。
+    final manager = CookieJarService().webViewCookieManager;
+    final verificationResults = await Future.wait<bool>(
+      origins.map((origin) async {
+        try {
+          final cookies = await manager.getCookies(url: WebUri(origin));
+          final residual = cookies
+              .where(
+                (cookie) =>
+                    cookie.name.isNotEmpty && !_isDeviceCookie(cookie.name),
+              )
+              .length;
+          if (residual > 0) {
+            debugPrint(
+              '[AccountSwitchCookieCleaner] $origin 仍有 '
+              '$residual 个用户态 cookie，回退全量清理',
+            );
+            return false;
+          }
+          return true;
+        } catch (e) {
+          debugPrint(
+            '[AccountSwitchCookieCleaner] $origin WebView 复检失败: $e',
+          );
+          return false;
+        }
+      }),
+    );
+    if (verificationResults.any((verified) => !verified)) return false;
 
     debugPrint(
       '[AccountSwitchCookieCleaner] selective clear ok: '
