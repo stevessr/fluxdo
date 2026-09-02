@@ -205,6 +205,81 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                // Android 原生批量写入：整批只跨 MethodChannel 一次，并在所有
+                // setCookie callback 收口后 flush 一次。不同 cookie identity 已由
+                // Dart 层去重，因此无需依赖回调完成顺序来决定最终值。
+                "setRawCookiesBatch" -> {
+                    val rawItems = call.argument<List<Map<*, *>>>("cookies")
+                    if (rawItems != null) {
+                        val items = rawItems.mapNotNull { item ->
+                            val url = item["url"] as? String
+                            val rawSetCookie = item["rawSetCookie"] as? String
+                            if (url.isNullOrEmpty() || rawSetCookie.isNullOrEmpty()) {
+                                null
+                            } else {
+                                Pair(url, rawSetCookie)
+                            }
+                        }
+                        if (items.size != rawItems.size) {
+                            result.error(
+                                "INVALID_ARGS",
+                                "each cookie requires url and rawSetCookie",
+                                null
+                            )
+                        } else if (items.isEmpty()) {
+                            result.success(0)
+                        } else {
+                            onCookieThread {
+                                try {
+                                    val mgr = WebCookieManager.getInstance()
+                                    val remaining = AtomicInteger(items.size)
+                                    val written = AtomicInteger(0)
+                                    fun completeOne(success: Boolean) {
+                                        if (success) written.incrementAndGet()
+                                        if (remaining.decrementAndGet() == 0) {
+                                            try {
+                                                mgr.flush()
+                                            } catch (e: Exception) {
+                                                Log.w(
+                                                    "RawCookie",
+                                                    "batch set flush failed: ${e.message}",
+                                                    e
+                                                )
+                                            }
+                                            mainHandler.post {
+                                                result.success(written.get())
+                                            }
+                                        }
+                                    }
+                                    for ((url, rawSetCookie) in items) {
+                                        try {
+                                            mgr.setCookie(url, rawSetCookie) { success ->
+                                                completeOne(success == true)
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e(
+                                                "RawCookie",
+                                                "batch setCookie failed for $url: ${e.message}",
+                                                e
+                                            )
+                                            completeOne(false)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(
+                                        "RawCookie",
+                                        "setRawCookiesBatch failed: ${e.message}",
+                                        e
+                                    )
+                                    mainHandler.post { result.success(0) }
+                                }
+                            }
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "cookies required", null)
+                    }
+                }
+
                 // 暴力穷举删除指定 name 的所有变体
                 // 依据 §3.3.2: Android 删除变体必须 Domain 属性精确匹配
                 // 依据 §3.3.3: Android 无法精确枚举变体, 只能穷举候选组合
@@ -387,6 +462,104 @@ class MainActivity : FlutterActivity() {
                         }
                     } else {
                         result.error("INVALID_ARGS", "url, name, path required", null)
+                    }
+                }
+
+                // Android 原生批量精确删除。每个 identity 仍发四种属性删除头，
+                // 但整个账号切换批次共用一次 MethodChannel 和一次 flush。
+                "deleteExactCookiesBatch" -> {
+                    val rawItems = call.argument<List<Map<*, *>>>("cookies")
+                    if (rawItems != null) {
+                        val items = rawItems.mapNotNull { item ->
+                            val url = item["url"] as? String
+                            val name = item["name"] as? String
+                            val domain = item["domain"] as? String
+                            val path = item["path"] as? String
+                            if (url.isNullOrEmpty() || name.isNullOrEmpty() || path.isNullOrEmpty()) {
+                                null
+                            } else {
+                                arrayOf(url, name, domain, path)
+                            }
+                        }
+                        if (items.size != rawItems.size) {
+                            result.error(
+                                "INVALID_ARGS",
+                                "each cookie requires url, name and path",
+                                null
+                            )
+                        } else if (items.isEmpty()) {
+                            result.success(0)
+                        } else {
+                            onCookieThread {
+                                try {
+                                    val mgr = WebCookieManager.getInstance()
+                                    val successfulTargets = Array(items.size) {
+                                        java.util.concurrent.atomic.AtomicBoolean(false)
+                                    }
+                                    val remaining = AtomicInteger(items.size * 4)
+                                    fun completeOne(index: Int, success: Boolean) {
+                                        if (success) successfulTargets[index].set(true)
+                                        if (remaining.decrementAndGet() == 0) {
+                                            try {
+                                                mgr.flush()
+                                            } catch (e: Exception) {
+                                                Log.w(
+                                                    "RawCookie",
+                                                    "batch delete flush failed: ${e.message}",
+                                                    e
+                                                )
+                                            }
+                                            val deleted = successfulTargets.count { it.get() }
+                                            mainHandler.post { result.success(deleted) }
+                                        }
+                                    }
+
+                                    for ((index, item) in items.withIndex()) {
+                                        val url = item[0]!!
+                                        val name = item[1]!!
+                                        val domain = item[2]
+                                        val path = item[3]!!
+                                        val base = mutableListOf(
+                                            "$name=",
+                                            "Max-Age=0",
+                                            "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+                                            "Path=$path"
+                                        )
+                                        if (domain != null) base.add("Domain=$domain")
+                                        val plain = base.joinToString("; ")
+                                        val raws = listOf(
+                                            plain,
+                                            "$plain; Secure",
+                                            "$plain; Secure; SameSite=None",
+                                            "$plain; Secure; SameSite=None; Partitioned"
+                                        )
+                                        for (raw in raws) {
+                                            try {
+                                                mgr.setCookie(url, raw) { success ->
+                                                    completeOne(index, success == true)
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e(
+                                                    "RawCookie",
+                                                    "batch delete failed for $name@$url: ${e.message}",
+                                                    e
+                                                )
+                                                completeOne(index, false)
+                                            }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(
+                                        "RawCookie",
+                                        "deleteExactCookiesBatch failed: ${e.message}",
+                                        e
+                                    )
+                                    mainHandler.post { result.success(0) }
+                                }
+                            }
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "cookies required", null)
                     }
                 }
 
