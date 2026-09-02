@@ -5,6 +5,21 @@ import '../models/user_action.dart';
 import 'core_providers.dart';
 import 'user_content_providers.dart';
 
+/// Unread private messages use the same pagination state machine as the
+/// existing Inbox/Sent/Archive views. Keeping this as a notifier (rather than
+/// a one-shot FutureProvider) lets the current PM page reuse refresh/load-more,
+/// bulk selection and navigation behavior unchanged.
+class PmUnreadNotifier extends PrivateMessagesNotifier {
+  @override
+  Future<TopicListResponse> fetch(int page) =>
+      ref.read(discourseServiceProvider).getPrivateMessagesUnread(page: page);
+}
+
+final pmUnreadProvider =
+    AsyncNotifierProvider.autoDispose<PmUnreadNotifier, List<Topic>>(
+      () => PmUnreadNotifier(),
+    );
+
 /// Extra private-message mailboxes exposed by current Discourse but not covered
 /// by the original Inbox/Sent/Archive page model.
 enum ParityPmMailbox { unread, newMessages, warnings }
