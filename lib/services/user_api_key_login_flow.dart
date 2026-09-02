@@ -8,6 +8,7 @@ import 'discourse/discourse_service.dart';
 import 'auth_session.dart';
 import 'account_manager.dart';
 import 'local_notification_service.dart' show navigatorKey;
+import 'login_token_redeemer.dart';
 import 'network/cookie/cookie_jar_service.dart';
 import 'toast_service.dart';
 import 'user_api_key_service.dart';
@@ -138,7 +139,7 @@ class UserApiKeyLoginFlow {
       _showLoading('正在完成登录…');
       try {
         final service = DiscourseService();
-        final token = await userApiKeyService.redeemOtp(
+        final token = await LoginTokenRedeemer.redeemUserApiKeyOtp(
           service.dio,
           otp,
           requestGeneration: requestGeneration,
