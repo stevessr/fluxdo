@@ -127,44 +127,4 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
     }
     return Map<String, dynamic>.from(response.data as Map);
   }
-
-  /// User Activity -> Replies. Discourse UserAction type 5 is `reply`.
-  Future<UserActionResponse> getUserRepliesActivity(
-    String username, {
-    int offset = 0,
-    bool isSilent = false,
-  }) async {
-    final response = await _dio.get(
-      '/user_actions.json',
-      queryParameters: {
-        'username': username,
-        'offset': offset,
-        'filter': '5',
-      },
-      options: isSilent
-          ? Options(extra: const {'isSilent': true})
-          : null,
-    );
-    return UserActionResponse.fromJson(response.data);
-  }
-
-  /// User Activity -> Likes Given. Discourse UserAction type 1 is `like`.
-  Future<UserActionResponse> getUserLikesGivenActivity(
-    String username, {
-    int offset = 0,
-    bool isSilent = false,
-  }) async {
-    final response = await _dio.get(
-      '/user_actions.json',
-      queryParameters: {
-        'username': username,
-        'offset': offset,
-        'filter': '1',
-      },
-      options: isSilent
-          ? Options(extra: const {'isSilent': true})
-          : null,
-    );
-    return UserActionResponse.fromJson(response.data);
-  }
 }
