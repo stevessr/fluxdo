@@ -101,22 +101,22 @@ class GroupActivityQuery {
   const GroupActivityQuery({
     required this.groupName,
     required this.kind,
-    this.offset = 0,
+    this.beforePostId,
   });
 
   final String groupName;
   final GroupActivityKind kind;
-  final int offset;
+  final int? beforePostId;
 
   @override
   bool operator ==(Object other) =>
       other is GroupActivityQuery &&
       other.groupName == groupName &&
       other.kind == kind &&
-      other.offset == offset;
+      other.beforePostId == beforePostId;
 
   @override
-  int get hashCode => Object.hash(groupName, kind, offset);
+  int get hashCode => Object.hash(groupName, kind, beforePostId);
 }
 
 /// Keep the complete serializer payload so plugin fields added by a site are not
@@ -127,11 +127,11 @@ final groupActivityProvider = FutureProvider.autoDispose
       return switch (query.kind) {
         GroupActivityKind.posts => service.getGroupActivityPosts(
           query.groupName,
-          offset: query.offset,
+          beforePostId: query.beforePostId,
         ),
         GroupActivityKind.mentions => service.getGroupActivityMentions(
           query.groupName,
-          offset: query.offset,
+          beforePostId: query.beforePostId,
         ),
       };
     });
