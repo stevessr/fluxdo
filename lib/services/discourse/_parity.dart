@@ -82,7 +82,8 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
       final response = await _dio.post(
         '/groups/$encodedGroup/request_membership.json',
         data: {
-          if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+          if (reason != null && reason.trim().isNotEmpty)
+            'reason': reason.trim(),
         },
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
@@ -125,32 +126,6 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
       throw const FormatException('Invalid group mentions response');
     }
     return Map<String, dynamic>.from(response.data as Map);
-  }
-
-  /// discourse-solved: mark a post as the accepted answer.
-  Future<void> acceptSolution(int postId) async {
-    try {
-      await _dio.post(
-        '/solution/accept.json',
-        data: {'id': postId},
-        options: Options(contentType: Headers.formUrlEncodedContentType),
-      );
-    } on DioException catch (e) {
-      _throwApiError(e);
-    }
-  }
-
-  /// discourse-solved: remove the accepted-answer state from a post.
-  Future<void> unacceptSolution(int postId) async {
-    try {
-      await _dio.post(
-        '/solution/unaccept.json',
-        data: {'id': postId},
-        options: Options(contentType: Headers.formUrlEncodedContentType),
-      );
-    } on DioException catch (e) {
-      _throwApiError(e);
-    }
   }
 
   /// User Activity -> Replies. Discourse UserAction type 5 is `reply`.
