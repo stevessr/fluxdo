@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/group.dart';
 import '../providers/discourse_providers.dart';
 import '../widgets/common/smart_avatar.dart';
+import 'group_activity_page.dart';
+import 'group_messages_page.dart';
 import 'user_profile_page.dart';
 
 /// Discourse 原生群组详情 / 成员页。
@@ -343,6 +345,28 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     );
   }
 
+  void _openActivity(DiscourseGroup group) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GroupActivityPage(
+          groupName: group.name,
+          groupLabel: group.label,
+        ),
+      ),
+    );
+  }
+
+  void _openMessages(DiscourseGroup group) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GroupMessagesPage(
+          groupName: group.name,
+          groupLabel: group.label,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final copy = _copy(context);
@@ -352,6 +376,18 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       appBar: AppBar(
         title: Text(group?.label ?? widget.groupName),
         actions: [
+          if (group?.canSeeMembers == true)
+            IconButton(
+              tooltip: copy.activity,
+              onPressed: () => _openActivity(group!),
+              icon: const Icon(Symbols.article_rounded),
+            ),
+          if (group?.isGroupUser == true)
+            IconButton(
+              tooltip: copy.messages,
+              onPressed: () => _openMessages(group!),
+              icon: const Icon(Symbols.mail_rounded),
+            ),
           if (group?.canManageMembers == true)
             IconButton(
               tooltip: copy.addMembers,
@@ -825,6 +861,8 @@ class _GroupCopy {
   String get retry => zh ? '重试' : 'Retry';
   String get clear => zh ? '清除' : 'Clear';
   String get loadFailed => zh ? '群组加载失败' : 'Failed to load group';
+  String get activity => zh ? '群组动态' : 'Group activity';
+  String get messages => zh ? '群组私信' : 'Group messages';
   String get addMembers => zh ? '添加成员' : 'Add members';
   String get searchMembers => zh ? '搜索成员' : 'Search members';
   String get membersHidden => zh ? '该群组的成员列表不可见' : 'Members are hidden';
