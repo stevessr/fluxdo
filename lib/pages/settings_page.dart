@@ -17,6 +17,7 @@ import 'about_page.dart';
 import 'account_manage_page.dart';
 import 'appearance_page.dart';
 import 'bottom_nav_settings_page.dart';
+import 'custom_settings_page.dart';
 import 'data_management_page.dart';
 import 'network_settings_page/network_settings_page.dart';
 import 'notion_settings_page.dart';
@@ -162,7 +163,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
       body: Column(
         children: [
-          // 搜索栏
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: TextField(
@@ -199,7 +199,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               style: theme.textTheme.bodyMedium,
             ),
           ),
-          // 内容区域
           Expanded(
             child: isSearching
                 ? _buildSearchResults(theme)
@@ -259,7 +258,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  /// 搜索结果（自动从数据声明派生）
   Widget _buildSearchResults(ThemeData theme) {
     final allResults = buildSearchIndex(context);
     final q = _query.toLowerCase();
@@ -337,7 +335,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  /// 默认分类列表
   Widget _buildCategoryList(ThemeData theme, AppLocalizations l10n) {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -362,6 +359,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: l10n.settings_reading,
               onTap: () =>
                   _openSettingsPage((_) => const ReadingSettingsPage()),
+            ),
+            _buildOptionTile(
+              icon: Symbols.dashboard_customize_rounded,
+              iconColor: Colors.indigo,
+              title: CustomSettingsPage.titleFor(context),
+              onTap: () =>
+                  _openSettingsPage((_) => const CustomSettingsPage()),
             ),
             _buildOptionTile(
               icon: Symbols.network_check_rounded,
@@ -395,7 +399,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: l10n.notion_title,
               onTap: () => _openSettingsPage((_) => const NotionSettingsPage()),
             ),
-            // 快捷键（仅桌面端）
             if (PlatformUtils.isDesktop)
               _buildOptionTile(
                 icon: Symbols.keyboard_rounded,

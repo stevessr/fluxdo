@@ -285,8 +285,8 @@ class _AccountQuickSwitcherCopy {
     triggerTitle: '选中账号触发方式',
     releaseTitle: '释放时切换',
     releaseDescription: '滑到目标账号后松手立即切换。',
-    dwellTitle: '停留 5 秒后切换',
-    dwellDescription: '停留时头像外圈显示进度；进度走满才切换，移开或提前松手会取消。',
+    dwellTitle: '停留后切换',
+    dwellDescription: '停留时头像外圈显示进度；达到停留触发条件后切换，移开或提前松手会取消。长按进入切换器的时间可在上方单独设置。',
   );
 
   static const _zhHant = _AccountQuickSwitcherCopy(
@@ -300,8 +300,8 @@ class _AccountQuickSwitcherCopy {
     triggerTitle: '選中帳號觸發方式',
     releaseTitle: '放開時切換',
     releaseDescription: '滑到目標帳號後放開即切換。',
-    dwellTitle: '停留 5 秒後切換',
-    dwellDescription: '停留時頭像外圈會顯示進度；進度完成才切換，移開或提前放開會取消。',
+    dwellTitle: '停留後切換',
+    dwellDescription: '停留時頭像外圈會顯示進度；達到停留觸發條件後切換，移開或提前放開會取消。長按進入切換器的時間可在上方另外設定。',
   );
 
   static const _en = _AccountQuickSwitcherCopy(
@@ -315,7 +315,7 @@ class _AccountQuickSwitcherCopy {
     triggerTitle: 'Account selection trigger',
     releaseTitle: 'Switch on release',
     releaseDescription: 'Slide to an account and release to switch immediately.',
-    dwellTitle: 'Switch after a 5-second dwell',
-    dwellDescription: 'A progress ring appears around the hovered avatar. Moving away or releasing early cancels the switch.',
+    dwellTitle: 'Switch after dwelling',
+    dwellDescription: 'A progress ring appears around the hovered avatar until the dwell trigger completes. Moving away or releasing early cancels the switch. The long-press entry duration is configured separately above.',
   );
 }
