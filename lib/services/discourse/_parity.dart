@@ -96,16 +96,18 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
     }
   }
 
-  /// Raw group activity payload. Upstream can extend the serializer, therefore
-  /// this API intentionally keeps unknown plugin fields instead of dropping them.
+  /// Raw group activity payload. Current Discourse uses `before_post_id` cursor
+  /// pagination and returns at most 20 GroupPostSerializer entries. Preserve the
+  /// complete payload so site/plugin fields can be adapted by the UI later.
   Future<Map<String, dynamic>> getGroupActivityPosts(
     String groupName, {
-    int offset = 0,
+    int? beforePostId,
   }) async {
     final encodedGroup = Uri.encodeComponent(groupName);
     final response = await _dio.get(
       '/groups/$encodedGroup/posts.json',
-      queryParameters: offset > 0 ? {'offset': offset} : null,
+      queryParameters:
+          beforePostId == null ? null : {'before_post_id': beforePostId},
     );
     if (response.data is! Map) {
       throw const FormatException('Invalid group posts response');
@@ -115,12 +117,13 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
 
   Future<Map<String, dynamic>> getGroupActivityMentions(
     String groupName, {
-    int offset = 0,
+    int? beforePostId,
   }) async {
     final encodedGroup = Uri.encodeComponent(groupName);
     final response = await _dio.get(
       '/groups/$encodedGroup/mentions.json',
-      queryParameters: offset > 0 ? {'offset': offset} : null,
+      queryParameters:
+          beforePostId == null ? null : {'before_post_id': beforePostId},
     );
     if (response.data is! Map) {
       throw const FormatException('Invalid group mentions response');
