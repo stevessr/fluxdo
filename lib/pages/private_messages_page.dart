@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../models/topic.dart';
 import '../navigation/nav_action_bus.dart';
+import '../providers/core_providers.dart';
 import '../providers/selected_topic_provider.dart';
 import '../providers/user_content_providers.dart';
 import '../providers/preferences_provider.dart';
@@ -55,6 +56,10 @@ class PrivateMessagesPage extends ConsumerStatefulWidget {
 class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  int _activeTabIndex = 0;
+  bool _selectionMode = false;
+  bool _isArchivingSelection = false;
+  Set<int> _selectedTopicIds = <int>{};
 
   /// 桌面 ESC 两段式:右栏/投影开着→分发落 detail scope(关右栏);空态→
   /// 注册 maybePop。底栏 tab 形态是首路由,maybePop 为 no-op。
@@ -103,13 +108,129 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: _filters.length, vsync: this);
+    _tabController.addListener(_handleTabChanged);
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChanged);
     _escBinding.dispose();
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _handleTabChanged() {
+    final nextIndex = _tabController.index;
+    if (_activeTabIndex == nextIndex) return;
+    setState(() {
+      _activeTabIndex = nextIndex;
+      _selectionMode = false;
+      _isArchivingSelection = false;
+      _selectedTopicIds = <int>{};
+    });
+  }
+
+  AsyncValue<List<Topic>> _watchMessagesFor(PrivateMessageFilter filter) {
+    return switch (filter) {
+      PrivateMessageFilter.inbox => ref.watch(pmInboxProvider),
+      PrivateMessageFilter.sent => ref.watch(pmSentProvider),
+      PrivateMessageFilter.archive => ref.watch(pmArchiveProvider),
+    };
+  }
+
+  void _enterSelectionMode() {
+    ref.read(selectedMessageProvider.notifier).clear();
+    setState(() {
+      _selectionMode = true;
+      _selectedTopicIds = <int>{};
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (_isArchivingSelection) return;
+    setState(() {
+      _selectionMode = false;
+      _selectedTopicIds = <int>{};
+    });
+  }
+
+  void _toggleSelection(int topicId) {
+    if (!_selectionMode || _isArchivingSelection) return;
+    setState(() {
+      final next = Set<int>.of(_selectedTopicIds);
+      if (!next.add(topicId)) {
+        next.remove(topicId);
+      }
+      _selectedTopicIds = next;
+    });
+  }
+
+  void _toggleSelectAll(List<Topic> topics) {
+    if (_isArchivingSelection) return;
+    final allIds = topics.map((topic) => topic.id).toSet();
+    setState(() {
+      final allSelected =
+          allIds.isNotEmpty &&
+          _selectedTopicIds.length == allIds.length &&
+          _selectedTopicIds.containsAll(allIds);
+      _selectedTopicIds = allSelected ? <int>{} : allIds;
+    });
+  }
+
+  Future<void> _ignoreRefreshFailure(Future<void> refresh) async {
+    try {
+      await refresh;
+    } catch (_) {
+      // 归档本身已经成功时，列表刷新失败不应把成功项重新判成归档失败。
+    }
+  }
+
+  Future<void> _refreshPrivateMessageLists() async {
+    await Future.wait<void>([
+      _ignoreRefreshFailure(ref.read(pmInboxProvider.notifier).refresh()),
+      _ignoreRefreshFailure(ref.read(pmSentProvider.notifier).refresh()),
+      _ignoreRefreshFailure(ref.read(pmArchiveProvider.notifier).refresh()),
+    ]);
+  }
+
+  Future<void> _archiveSelectedMessages(PrivateMessageFilter filter) async {
+    if (filter == PrivateMessageFilter.archive ||
+        _selectedTopicIds.isEmpty ||
+        _isArchivingSelection) {
+      return;
+    }
+
+    final selectedIds = List<int>.of(_selectedTopicIds);
+    final failedIds = <int>{};
+    Object? firstError;
+
+    setState(() => _isArchivingSelection = true);
+
+    final service = ref.read(discourseServiceProvider);
+    for (final topicId in selectedIds) {
+      try {
+        await service.archivePrivateMessage(topicId);
+      } catch (error) {
+        failedIds.add(topicId);
+        firstError ??= error;
+      }
+    }
+
+    if (!mounted) return;
+    await _refreshPrivateMessageLists();
+    if (!mounted) return;
+
+    setState(() {
+      _isArchivingSelection = false;
+      _selectedTopicIds = failedIds;
+      _selectionMode = failedIds.isNotEmpty;
+    });
+
+    if (firstError != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(firstError.toString())));
+    }
   }
 
   bool _onScrollNotification(ScrollNotification n) {
@@ -158,35 +279,94 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
       );
     });
 
+    final activeFilter = _filters[_activeTabIndex];
+    final activeTopics = _watchMessagesFor(activeFilter).value ?? const <Topic>[];
+    final canSelect =
+        activeFilter != PrivateMessageFilter.archive && activeTopics.isNotEmpty;
+    final materialL10n = MaterialLocalizations.of(context);
+
     final listScaffold = NotificationListener<ScrollNotification>(
       onNotification: _onScrollNotification,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(context.l10n.privateMessages_title),
-          bottom: TabBar(
-            controller: _tabController,
-            tabs: [
-              Tab(text: context.l10n.privateMessages_inbox),
-              Tab(text: context.l10n.privateMessages_sent),
-              Tab(text: context.l10n.privateMessages_archive),
-            ],
+          leading: _selectionMode
+              ? IconButton(
+                  onPressed: _isArchivingSelection ? null : _exitSelectionMode,
+                  tooltip: materialL10n.closeButtonTooltip,
+                  icon: const Icon(Icons.close_rounded),
+                )
+              : null,
+          title: Text(
+            _selectionMode
+                ? '${_selectedTopicIds.length} · ${context.l10n.privateMessages_title}'
+                : context.l10n.privateMessages_title,
           ),
+          actions: [
+            if (_selectionMode) ...[
+              IconButton(
+                onPressed: _isArchivingSelection
+                    ? null
+                    : () => _toggleSelectAll(activeTopics),
+                tooltip: materialL10n.selectAllButtonLabel,
+                icon: const Icon(Icons.select_all_rounded),
+              ),
+              IconButton(
+                onPressed: _selectedTopicIds.isEmpty || _isArchivingSelection
+                    ? null
+                    : () => _archiveSelectedMessages(activeFilter),
+                tooltip: context.l10n.privateMessages_archive,
+                icon: _isArchivingSelection
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.archive_outlined),
+              ),
+            ] else if (canSelect)
+              IconButton(
+                onPressed: _enterSelectionMode,
+                tooltip: materialL10n.selectAllButtonLabel,
+                icon: const Icon(Icons.checklist_rounded),
+              ),
+          ],
+          bottom: _selectionMode
+              ? null
+              : TabBar(
+                  controller: _tabController,
+                  tabs: [
+                    Tab(text: context.l10n.privateMessages_inbox),
+                    Tab(text: context.l10n.privateMessages_sent),
+                    Tab(text: context.l10n.privateMessages_archive),
+                  ],
+                ),
         ),
         body: TabBarView(
           controller: _tabController,
+          physics: _selectionMode
+              ? const NeverScrollableScrollPhysics()
+              : null,
           children: [
             for (final filter in _filters)
-              _PrivateMessageTabView(filter: filter),
+              _PrivateMessageTabView(
+                filter: filter,
+                selectionMode: _selectionMode && filter == activeFilter,
+                selectedTopicIds: filter == activeFilter
+                    ? _selectedTopicIds
+                    : const <int>{},
+                onToggleSelection: _toggleSelection,
+              ),
           ],
         ),
         // 新建私信：此前只能从某个用户的头像菜单发起，对方没在可见处
         // 发过言就完全没有路径。对齐 Discourse 网页版私信列表的入口。
-        floatingActionButton: FloatingActionButton(
-          heroTag: 'composePm',
-          onPressed: _composeNewMessage,
-          tooltip: context.l10n.pm_newTitle,
-          child: const Icon(Icons.edit_rounded),
-        ),
+        floatingActionButton: _selectionMode
+            ? null
+            : FloatingActionButton(
+                heroTag: 'composePm',
+                onPressed: _composeNewMessage,
+                tooltip: context.l10n.pm_newTitle,
+                child: const Icon(Icons.edit_rounded),
+              ),
       ),
     );
 
@@ -222,8 +402,16 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
 /// 单个 Tab 的私信列表视图
 class _PrivateMessageTabView extends ConsumerStatefulWidget {
   final PrivateMessageFilter filter;
+  final bool selectionMode;
+  final Set<int> selectedTopicIds;
+  final ValueChanged<int> onToggleSelection;
 
-  const _PrivateMessageTabView({required this.filter});
+  const _PrivateMessageTabView({
+    required this.filter,
+    required this.selectionMode,
+    required this.selectedTopicIds,
+    required this.onToggleSelection,
+  });
 
   @override
   ConsumerState<_PrivateMessageTabView> createState() =>
@@ -363,7 +551,7 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
     final (messagesAsync, notifier) = _watchMessages();
 
     return DesktopRefreshIndicator(
-      onRefresh: _onRefresh,
+      onRefresh: widget.selectionMode ? () async {} : _onRefresh,
       child: messagesAsync.when(
         data: (topics) {
           if (topics.isEmpty) {
@@ -386,35 +574,57 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
             topics: topics,
             messageStyle: true,
             child: ListView.builder(
-            controller: _scrollController,
-            // 底部让出 extendBody 注入的底栏高度
-            padding: EdgeInsets.fromLTRB(
-              12,
-              12,
-              12,
-              12 + MediaQuery.paddingOf(context).bottom,
-            ),
-            itemCount: topics.length + 1,
-            itemBuilder: (context, index) {
-              if (index == topics.length) {
-                return _buildPaginationFooter(notifier);
-              }
+              controller: _scrollController,
+              // 底部让出 extendBody 注入的底栏高度
+              padding: EdgeInsets.fromLTRB(
+                12,
+                12,
+                12,
+                12 + MediaQuery.paddingOf(context).bottom,
+              ),
+              itemCount: topics.length + 1,
+              itemBuilder: (context, index) {
+                if (index == topics.length) {
+                  return _buildPaginationFooter(notifier);
+                }
 
-              final topic = topics[index];
-              final enableLongPress = ref
-                  .watch(preferencesProvider)
-                  .longPressPreview;
-              final selectedTopicId = ref.watch(selectedMessageProvider).topicId;
-              return buildTopicItem(
-                context: context,
-                topic: topic,
-                isSelected: selectedTopicId == topic.id,
-                onTap: () => _onItemTap(topic),
-                enableLongPress: enableLongPress,
-                // 私信语义同邮件:发件人优先的 Gmail 式布局
-                messageStyle: true,
-              );
-            },
+                final topic = topics[index];
+                final selectedByBulkMode = widget.selectedTopicIds.contains(
+                  topic.id,
+                );
+                final enableLongPress =
+                    !widget.selectionMode &&
+                    ref.watch(preferencesProvider).longPressPreview;
+                final selectedTopicId = ref.watch(
+                  selectedMessageProvider.select((state) => state.topicId),
+                );
+                final topicItem = buildTopicItem(
+                  context: context,
+                  topic: topic,
+                  isSelected: widget.selectionMode
+                      ? selectedByBulkMode
+                      : selectedTopicId == topic.id,
+                  onTap: widget.selectionMode
+                      ? () => widget.onToggleSelection(topic.id)
+                      : () => _onItemTap(topic),
+                  enableLongPress: enableLongPress,
+                  // 私信语义同邮件:发件人优先的 Gmail 式布局
+                  messageStyle: true,
+                );
+
+                if (!widget.selectionMode) return topicItem;
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Checkbox(
+                      value: selectedByBulkMode,
+                      onChanged: (_) => widget.onToggleSelection(topic.id),
+                    ),
+                    Expanded(child: topicItem),
+                  ],
+                );
+              },
             ),
           );
         },
