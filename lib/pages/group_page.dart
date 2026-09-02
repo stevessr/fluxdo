@@ -31,6 +31,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   bool _loadingMore = false;
   bool _adding = false;
   bool _membershipChanging = false;
+  bool _membershipRequesting = false;
+  bool _membershipRequested = false;
   Object? _error;
 
   @override
@@ -69,6 +71,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
         _members = members?.members ?? const [];
         _nextOffset = members?.nextOffset ?? 0;
         _hasMore = members?.hasMore ?? false;
+        if (group.isGroupUser) _membershipRequested = false;
       });
     } catch (error) {
       if (mounted && requestedFilter == _memberFilter) {
@@ -192,6 +195,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
           isGroupUser: join,
           isGroupOwner: false,
         );
+        _membershipRequested = false;
       });
 
       final copy = _copy(context);
@@ -207,6 +211,89 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       }
     } finally {
       if (mounted) setState(() => _membershipChanging = false);
+    }
+  }
+
+  Future<void> _requestMembership() async {
+    final group = _group;
+    if (group == null ||
+        group.isGroupUser ||
+        group.canJoin ||
+        !group.allowMembershipRequests ||
+        _membershipRequesting ||
+        _membershipRequested) {
+      return;
+    }
+
+    final copy = _copy(context);
+    final controller = TextEditingController();
+    String? reason;
+    try {
+      reason = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(copy.requestMembershipTitle),
+          content: SizedBox(
+            width: 420,
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              minLines: 3,
+              maxLines: 6,
+              decoration: InputDecoration(
+                labelText: copy.requestReason,
+                hintText: copy.requestReasonHint,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(copy.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+              child: Text(copy.sendRequest),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
+    if (reason == null || !mounted) return;
+
+    // Dialog 打开期间权限可能变化，提交前再次使用最新 serializer 状态。
+    final latest = _group;
+    if (latest == null ||
+        latest.isGroupUser ||
+        latest.canJoin ||
+        !latest.allowMembershipRequests ||
+        _membershipRequesting ||
+        _membershipRequested) {
+      return;
+    }
+
+    setState(() => _membershipRequesting = true);
+    try {
+      await ref.read(discourseServiceProvider).requestGroupMembership(
+            latest.name,
+            reason: reason,
+          );
+      if (!mounted) return;
+      setState(() => _membershipRequested = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(copy.requestSent)),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _membershipRequesting = false);
     }
   }
 
@@ -327,8 +414,11 @@ class _GroupPageState extends ConsumerState<GroupPage> {
             child: _GroupHeader(
               group: group,
               membershipChanging: _membershipChanging,
+              membershipRequesting: _membershipRequesting,
+              membershipRequested: _membershipRequested,
               onJoin: () => _changeMembership(join: true),
               onLeave: () => _changeMembership(join: false),
+              onRequestMembership: _requestMembership,
             ),
           ),
           if (group.canSeeMembers) ...[
@@ -483,19 +573,27 @@ class _GroupHeader extends StatelessWidget {
   const _GroupHeader({
     required this.group,
     required this.membershipChanging,
+    required this.membershipRequesting,
+    required this.membershipRequested,
     required this.onJoin,
     required this.onLeave,
+    required this.onRequestMembership,
   });
 
   final DiscourseGroup group;
   final bool membershipChanging;
+  final bool membershipRequesting;
+  final bool membershipRequested;
   final VoidCallback onJoin;
   final VoidCallback onLeave;
+  final VoidCallback onRequestMembership;
 
   @override
   Widget build(BuildContext context) {
     final copy = _copy(context);
     final scheme = Theme.of(context).colorScheme;
+    final canRequestMembership =
+        group.allowMembershipRequests && !group.isGroupUser && !group.canJoin;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
       child: Card(
@@ -574,6 +672,30 @@ class _GroupHeader extends StatelessWidget {
                                 )
                               : Text(copy.leave),
                         ),
+                    ] else if (canRequestMembership) ...[
+                      const SizedBox(height: 12),
+                      FilledButton.tonalIcon(
+                        onPressed: membershipRequesting || membershipRequested
+                            ? null
+                            : onRequestMembership,
+                        icon: membershipRequesting
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator.adaptive(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                membershipRequested
+                                    ? Symbols.check_rounded
+                                    : Symbols.person_add_rounded,
+                              ),
+                        label: Text(
+                          membershipRequested
+                              ? copy.requestSent
+                              : copy.requestMembership,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -715,6 +837,14 @@ class _GroupCopy {
   String get leave => zh ? '退出' : 'Leave';
   String get joined => zh ? '已进入群组' : 'Joined group';
   String get left => zh ? '已退出群组' : 'Left group';
+  String get requestMembership => zh ? '申请加入' : 'Request membership';
+  String get requestMembershipTitle => zh ? '申请加入群组' : 'Request membership';
+  String get requestReason => zh ? '申请理由（可选）' : 'Reason (optional)';
+  String get requestReasonHint => zh
+      ? '可以说明你希望加入这个群组的原因'
+      : 'Tell the group owners why you would like to join';
+  String get sendRequest => zh ? '发送申请' : 'Send request';
+  String get requestSent => zh ? '加入申请已发送' : 'Membership request sent';
   String get confirmJoinTitle => zh ? '确认进入群组' : 'Join group?';
   String get confirmLeaveTitle => zh ? '确认退出群组' : 'Leave group?';
   String confirmJoin(String group) =>
