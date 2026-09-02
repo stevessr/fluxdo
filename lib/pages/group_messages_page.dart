@@ -226,6 +226,9 @@ class _GroupMessageListState extends ConsumerState<_GroupMessageList>
     super.build(context);
     final copy = _copy(context);
     final topics = _topics;
+    final enableLongPress = ref.watch(
+      preferencesProvider.select((preferences) => preferences.longPressPreview),
+    );
 
     if (topics == null && _loading) {
       return const TopicListSkeleton(messageStyle: true);
@@ -297,9 +300,9 @@ class _GroupMessageListState extends ConsumerState<_GroupMessageList>
                   return buildTopicItem(
                     context: context,
                     topic: topic,
+                    isSelected: false,
                     onTap: () => _openTopic(topic),
-                    enableLongPress:
-                        ref.watch(preferencesProvider).longPressPreview,
+                    enableLongPress: enableLongPress,
                     messageStyle: true,
                   );
                 },
