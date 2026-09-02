@@ -83,6 +83,7 @@ part '_assign.dart';
 part '_chat.dart';
 part '_groups.dart';
 part '_ai_bot.dart';
+part '_parity.dart';
 
 /// 基类，包含所有共享字段
 abstract class _DiscourseServiceBase {
@@ -123,6 +124,7 @@ abstract class _DiscourseServiceBase {
   Exception _handleDioError(DioException error);
   Never _throwApiError(DioException e);
   Future<void> _loadStoredCredentials();
+  Future<String?> getUsername();
   Future<void> finalizeNativeLoginSuccess(
     String identifier, {
     bool notifyAuthState = true,
@@ -155,7 +157,8 @@ class DiscourseService extends _DiscourseServiceBase
         _AssignMixin,
         _ChatMixin,
         _GroupsMixin,
-        _AiBotMixin {
+        _AiBotMixin,
+        _DiscourseParityMixin {
   static const String baseUrl = AppConstants.baseUrl;
   static const String _usernameKey = 'linux_do_username';
   static const _summaryCacheDuration = Duration(minutes: 5);
