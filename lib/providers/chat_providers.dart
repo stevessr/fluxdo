@@ -203,10 +203,41 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   /// 同一频道始终只允许一个已读请求在途，避免请求乱序造成水位回退。
   bool _isMarkingRead = false;
 
+  /// 从频道 membership 快照读取服务端已知水位。
+  ///
+  /// Discourse 会拒绝小于现有 last_read_message_id 的 read 请求（400），因此
+  /// 搜索/通知跳到历史消息时必须先用频道快照作为下界，不能从 null 重新起算。
+  int? _knownChannelReadWatermark() {
+    final channelsState = ref.read(chatChannelsProvider).value;
+    if (channelsState == null) return null;
+
+    for (final channel in [
+      ...channelsState.publicChannels,
+      ...channelsState.directMessageChannels,
+    ]) {
+      if (channel.id == channelId) return channel.lastReadMessageId;
+    }
+    return null;
+  }
+
+  void _syncKnownChannelReadWatermark() {
+    final known = _knownChannelReadWatermark();
+    if (known == null) return;
+
+    final committed = _lastMarkedReadId;
+    if (committed == null || known > committed) {
+      _lastMarkedReadId = known;
+    }
+    final pending = _pendingReadId;
+    if (pending != null && pending <= known) {
+      _pendingReadId = null;
+    }
+  }
+
   @override
   Future<List<ChatMessage>> build() async {
     resetPagingState();
-    _lastMarkedReadId = null;
+    _lastMarkedReadId = _knownChannelReadWatermark();
     _pendingReadId = null;
     _isMarkingRead = false;
     _subscribeMessageBus();
@@ -756,6 +787,8 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   Future<void> markAsRead(int messageId) async {
     if (messageId <= 0) return;
 
+    // 频道列表可能刚被 MessageBus/静默刷新推进过；每次提交前都先同步下界。
+    _syncKnownChannelReadWatermark();
     final committed = _lastMarkedReadId;
     if (committed != null && messageId <= committed) return;
 
@@ -775,6 +808,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     try {
       final service = ref.read(discourseServiceProvider);
       while (true) {
+        _syncKnownChannelReadWatermark();
         final messageId = _pendingReadId;
         if (messageId == null) break;
 
@@ -799,7 +833,12 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
           if (pendingAfterFailure == null || messageId > pendingAfterFailure) {
             _pendingReadId = messageId;
           }
-          // 不在这里紧循环重试；下一次可见性/滚动事件会再次触发 flush。
+          // 可能是服务端已有更高水位导致的 400，也可能是临时网络异常。
+          // 静默刷新 membership；后续触发会先同步新的服务端下界再决定是否重试。
+          unawaited(
+            ref.read(chatChannelsProvider.notifier).refreshSilently(),
+          );
+          // 不在这里紧循环重试，避免网络故障时产生请求风暴。
           break;
         }
       }
