@@ -147,28 +147,25 @@ class ParityUserActivityQuery {
 
 final parityUserActivityProvider = FutureProvider.autoDispose
     .family<UserActionResponse, ParityUserActivityQuery>((ref, query) {
-      final service = ref.read(discourseServiceProvider);
-      return switch (query.kind) {
-        ParityUserActivityKind.replies => service.getUserRepliesActivity(
-          query.username,
-          offset: query.offset,
-        ),
-        ParityUserActivityKind.likesGiven => service.getUserLikesGivenActivity(
-          query.username,
-          offset: query.offset,
-        ),
+      final filter = switch (query.kind) {
+        ParityUserActivityKind.replies => UserActionType.reply.toString(),
+        ParityUserActivityKind.likesGiven => UserActionType.like.toString(),
       };
+      return ref.read(discourseServiceProvider).getUserActions(
+            query.username,
+            filter: filter,
+            offset: query.offset,
+          );
     });
 
 /// The bookmark cache already stores Discourse reminder metadata. Expose the
 /// upstream "bookmarks with reminders" view as a derived provider instead of
 /// creating a second network/cache implementation.
-final bookmarksWithRemindersProvider = Provider.autoDispose<AsyncValue<List<Topic>>>(
-  (ref) {
-    return ref.watch(bookmarksProvider).whenData(
-          (topics) => topics
-              .where((topic) => topic.bookmarkReminderAt != null)
-              .toList(growable: false),
-        );
-  },
-);
+final bookmarksWithRemindersProvider =
+    Provider.autoDispose<AsyncValue<List<Topic>>>((ref) {
+      return ref.watch(bookmarksProvider).whenData(
+            (topics) => topics
+                .where((topic) => topic.bookmarkReminderAt != null)
+                .toList(growable: false),
+          );
+    });
