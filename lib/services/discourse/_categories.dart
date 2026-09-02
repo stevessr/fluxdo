@@ -70,7 +70,6 @@ mixin _CategoriesMixin on _DiscourseServiceBase {
       }
 
       final groups = <SiteTagGroup>[];
-      // tag_groups（开启 tags_listed_by_group 的站点大头在分组里）
       final rawGroups =
           (data['extras'] as Map<String, dynamic>?)?['tag_groups'] as List?;
       if (rawGroups != null) {
@@ -84,7 +83,6 @@ mixin _CategoriesMixin on _DiscourseServiceBase {
           }
         }
       }
-      // 顶层未分组标签 → 兜底组（排最后;未开分组的站点即全部）
       final ungrouped = parse(data['tags'] as List?);
       if (ungrouped.isNotEmpty) {
         groups.add(SiteTagGroup(name: null, tags: ungrouped));
@@ -145,6 +143,41 @@ mixin _CategoriesMixin on _DiscourseServiceBase {
       data: {'notification_level': level},
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
+  }
+
+  /// 获取当前用户对标签的通知级别。
+  Future<TopicNotificationLevel> getTagNotificationLevel(String tag) async {
+    final encodedTag = Uri.encodeComponent(tag);
+    final response = await _dio.get('/tags/$encodedTag/notifications');
+    final data = response.data;
+    if (data is Map) {
+      final raw = data['tag_notification'];
+      if (raw is Map) {
+        return TopicNotificationLevel.fromValue(
+          (raw['notification_level'] as num?)?.toInt(),
+        );
+      }
+    }
+    return TopicNotificationLevel.regular;
+  }
+
+  /// 设置标签通知级别，对齐 Discourse TagsController 的嵌套参数。
+  Future<void> setTagNotificationLevel(
+    String tag,
+    TopicNotificationLevel level,
+  ) async {
+    final encodedTag = Uri.encodeComponent(tag);
+    try {
+      await _dio.put(
+        '/tags/$encodedTag/notifications',
+        data: {
+          'tag_notification': {'notification_level': level.value},
+        },
+        options: Options(contentType: Headers.jsonContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
   }
 
   /// 获取首页书签 tab
