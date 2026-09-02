@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../models/topic.dart';
 import '../navigation/nav_action_bus.dart';
 import '../providers/core_providers.dart';
+import '../providers/discourse_parity_providers.dart';
 import '../providers/selected_topic_provider.dart';
 import '../providers/user_content_providers.dart';
 import '../providers/preferences_provider.dart';
@@ -24,6 +25,15 @@ import '../l10n/s.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 import 'topics_screen.dart' show PaneContentWidget;
 
+/// Page-local mailbox identity. The legacy public [PrivateMessageFilter] only
+/// covered Inbox/Sent/Archive; keeping the parity-only Unread state here avoids
+/// coupling unrelated user-content providers to the PM page presentation.
+enum _PmMailbox { inbox, unread, sent, archive }
+
+String _pmUnreadLabel(BuildContext context) {
+  return Localizations.localeOf(context).languageCode == 'zh' ? '未读' : 'Unread';
+}
+
 /// 内部 tab 动作：外层根据当前激活 filter 派发给对应子 widget。
 /// 用 nonce 让连续同类事件也能触发 Riverpod 监听。
 enum _PmTabAction { scrollToTop, refresh }
@@ -36,10 +46,9 @@ class _PmTabEvent {
 
 final _pmTabEventNonceProvider = StateProvider<int>((ref) => 0);
 
-final _pmTabEventProvider =
-    StateProvider.family<_PmTabEvent?, PrivateMessageFilter>(
-      (ref, filter) => null,
-    );
+final _pmTabEventProvider = StateProvider.family<_PmTabEvent?, _PmMailbox>(
+  (ref, filter) => null,
+);
 
 /// 私信列表页面
 class PrivateMessagesPage extends ConsumerStatefulWidget {
@@ -99,9 +108,10 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
   }
 
   static const _filters = [
-    PrivateMessageFilter.inbox,
-    PrivateMessageFilter.sent,
-    PrivateMessageFilter.archive,
+    _PmMailbox.inbox,
+    _PmMailbox.unread,
+    _PmMailbox.sent,
+    _PmMailbox.archive,
   ];
 
   @override
@@ -130,11 +140,12 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
     });
   }
 
-  AsyncValue<List<Topic>> _watchMessagesFor(PrivateMessageFilter filter) {
+  AsyncValue<List<Topic>> _watchMessagesFor(_PmMailbox filter) {
     return switch (filter) {
-      PrivateMessageFilter.inbox => ref.watch(pmInboxProvider),
-      PrivateMessageFilter.sent => ref.watch(pmSentProvider),
-      PrivateMessageFilter.archive => ref.watch(pmArchiveProvider),
+      _PmMailbox.inbox => ref.watch(pmInboxProvider),
+      _PmMailbox.unread => ref.watch(pmUnreadProvider),
+      _PmMailbox.sent => ref.watch(pmSentProvider),
+      _PmMailbox.archive => ref.watch(pmArchiveProvider),
     };
   }
 
@@ -188,13 +199,14 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
   Future<void> _refreshPrivateMessageLists() async {
     await Future.wait<void>([
       _ignoreRefreshFailure(ref.read(pmInboxProvider.notifier).refresh()),
+      _ignoreRefreshFailure(ref.read(pmUnreadProvider.notifier).refresh()),
       _ignoreRefreshFailure(ref.read(pmSentProvider.notifier).refresh()),
       _ignoreRefreshFailure(ref.read(pmArchiveProvider.notifier).refresh()),
     ]);
   }
 
-  Future<void> _archiveSelectedMessages(PrivateMessageFilter filter) async {
-    if (filter == PrivateMessageFilter.archive ||
+  Future<void> _archiveSelectedMessages(_PmMailbox filter) async {
+    if (filter == _PmMailbox.archive ||
         _selectedTopicIds.isEmpty ||
         _isArchivingSelection) {
       return;
@@ -281,8 +293,7 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
 
     final activeFilter = _filters[_activeTabIndex];
     final activeTopics = _watchMessagesFor(activeFilter).value ?? const <Topic>[];
-    final canSelect =
-        activeFilter != PrivateMessageFilter.archive && activeTopics.isNotEmpty;
+    final canSelect = activeFilter != _PmMailbox.archive && activeTopics.isNotEmpty;
     final materialL10n = MaterialLocalizations.of(context);
 
     final listScaffold = NotificationListener<ScrollNotification>(
@@ -335,6 +346,7 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
                   controller: _tabController,
                   tabs: [
                     Tab(text: context.l10n.privateMessages_inbox),
+                    Tab(text: _pmUnreadLabel(context)),
                     Tab(text: context.l10n.privateMessages_sent),
                     Tab(text: context.l10n.privateMessages_archive),
                   ],
@@ -401,7 +413,7 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
 
 /// 单个 Tab 的私信列表视图
 class _PrivateMessageTabView extends ConsumerStatefulWidget {
-  final PrivateMessageFilter filter;
+  final _PmMailbox filter;
   final bool selectionMode;
   final Set<int> selectedTopicIds;
   final ValueChanged<int> onToggleSelection;
@@ -441,15 +453,19 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
   /// 获取当前 tab 对应的数据和 notifier
   (AsyncValue<List<Topic>>, PrivateMessagesNotifier) _watchMessages() {
     return switch (widget.filter) {
-      PrivateMessageFilter.inbox => (
+      _PmMailbox.inbox => (
         ref.watch(pmInboxProvider),
         ref.watch(pmInboxProvider.notifier),
       ),
-      PrivateMessageFilter.sent => (
+      _PmMailbox.unread => (
+        ref.watch(pmUnreadProvider),
+        ref.watch(pmUnreadProvider.notifier),
+      ),
+      _PmMailbox.sent => (
         ref.watch(pmSentProvider),
         ref.watch(pmSentProvider.notifier),
       ),
-      PrivateMessageFilter.archive => (
+      _PmMailbox.archive => (
         ref.watch(pmArchiveProvider),
         ref.watch(pmArchiveProvider.notifier),
       ),
@@ -458,17 +474,19 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
 
   PrivateMessagesNotifier _readNotifier() {
     return switch (widget.filter) {
-      PrivateMessageFilter.inbox => ref.read(pmInboxProvider.notifier),
-      PrivateMessageFilter.sent => ref.read(pmSentProvider.notifier),
-      PrivateMessageFilter.archive => ref.read(pmArchiveProvider.notifier),
+      _PmMailbox.inbox => ref.read(pmInboxProvider.notifier),
+      _PmMailbox.unread => ref.read(pmUnreadProvider.notifier),
+      _PmMailbox.sent => ref.read(pmSentProvider.notifier),
+      _PmMailbox.archive => ref.read(pmArchiveProvider.notifier),
     };
   }
 
   AsyncValue<List<Topic>> _readMessagesAsync() {
     return switch (widget.filter) {
-      PrivateMessageFilter.inbox => ref.read(pmInboxProvider),
-      PrivateMessageFilter.sent => ref.read(pmSentProvider),
-      PrivateMessageFilter.archive => ref.read(pmArchiveProvider),
+      _PmMailbox.inbox => ref.read(pmInboxProvider),
+      _PmMailbox.unread => ref.read(pmUnreadProvider),
+      _PmMailbox.sent => ref.read(pmSentProvider),
+      _PmMailbox.archive => ref.read(pmArchiveProvider),
     };
   }
 
