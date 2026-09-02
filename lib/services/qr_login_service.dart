@@ -5,6 +5,7 @@ import 'package:zxing2/qrcode.dart';
 
 import 'discourse/discourse_service.dart';
 import 'log/log_writer.dart';
+import 'login_token_redeemer.dart';
 import 'user_api_key_service.dart';
 
 /// 扫码登录 payload。
@@ -214,7 +215,10 @@ class QrLoginService {
       await userApiKeyService.persistSharedKey(payload.apiKey);
 
       final service = DiscourseService();
-      final token = await userApiKeyService.redeemOtp(service.dio, payload.otp);
+      final token = await LoginTokenRedeemer.redeemUserApiKeyOtp(
+        service.dio,
+        payload.otp,
+      );
       if (token == null || token.isEmpty) {
         throw const QrLoginException(
           QrLoginError.applyFailed,
