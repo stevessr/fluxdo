@@ -1,0 +1,139 @@
+part of 'discourse_service.dart';
+
+/// Discourse parity APIs that are shared by multiple UI surfaces.
+///
+/// Keep these endpoints close to upstream route names instead of hiding them
+/// behind linux.do-specific assumptions. Capability and permission checks still
+/// belong to serializers/server responses; callers should not infer access from
+/// client-side state alone.
+mixin _DiscourseParityMixin on _DiscourseServiceBase {
+  Future<String> _requireParityUsername() async {
+    final username = await getUsername();
+    if (username == null || username.isEmpty) {
+      throw Exception(S.current.error_notLoggedInNoUsername);
+    }
+    return username;
+  }
+
+  Future<TopicListResponse> getPrivateMessagesUnread({int page = 0}) async {
+    final username = await _requireParityUsername();
+    final response = await _dio.get(
+      '/topics/private-messages-unread/$username.json',
+      queryParameters: page > 0 ? {'page': page} : null,
+    );
+    return TopicListResponse.fromJson(response.data);
+  }
+
+  Future<TopicListResponse> getPrivateMessagesNew({int page = 0}) async {
+    final username = await _requireParityUsername();
+    final response = await _dio.get(
+      '/topics/private-messages-new/$username.json',
+      queryParameters: page > 0 ? {'page': page} : null,
+    );
+    return TopicListResponse.fromJson(response.data);
+  }
+
+  /// Staff-only warning mailbox. The server remains the source of truth for
+  /// whether the current user may access this route.
+  Future<TopicListResponse> getPrivateMessagesWarnings({int page = 0}) async {
+    final username = await _requireParityUsername();
+    final response = await _dio.get(
+      '/topics/private-messages-warnings/$username.json',
+      queryParameters: page > 0 ? {'page': page} : null,
+    );
+    return TopicListResponse.fromJson(response.data);
+  }
+
+  Future<TopicListResponse> getGroupPrivateMessages(
+    String groupName, {
+    int page = 0,
+    bool unreadOnly = false,
+    bool newOnly = false,
+    bool archived = false,
+  }) async {
+    assert(
+      [unreadOnly, newOnly, archived].where((value) => value).length <= 1,
+      'Only one group PM filter can be active at a time.',
+    );
+    final username = await _requireParityUsername();
+    final encodedGroup = Uri.encodeComponent(groupName);
+    final suffix = archived
+        ? '/archive'
+        : unreadOnly
+        ? '/unread'
+        : newOnly
+        ? '/new'
+        : '';
+    final response = await _dio.get(
+      '/topics/private-messages-group/$username/$encodedGroup$suffix.json',
+      queryParameters: page > 0 ? {'page': page} : null,
+    );
+    return TopicListResponse.fromJson(response.data);
+  }
+
+  /// discourse-solved: mark a post as the accepted answer.
+  Future<void> acceptSolution(int postId) async {
+    try {
+      await _dio.post(
+        '/solution/accept.json',
+        data: {'id': postId},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// discourse-solved: remove the accepted-answer state from a post.
+  Future<void> unacceptSolution(int postId) async {
+    try {
+      await _dio.post(
+        '/solution/unaccept.json',
+        data: {'id': postId},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// User Activity -> Replies. Discourse UserAction type 5 is `reply`.
+  Future<UserActionResponse> getUserRepliesActivity(
+    String username, {
+    int offset = 0,
+    bool isSilent = false,
+  }) async {
+    final response = await _dio.get(
+      '/user_actions.json',
+      queryParameters: {
+        'username': username,
+        'offset': offset,
+        'filter': '5',
+      },
+      options: isSilent
+          ? Options(extra: const {'isSilent': true})
+          : null,
+    );
+    return UserActionResponse.fromJson(response.data);
+  }
+
+  /// User Activity -> Likes Given. Discourse UserAction type 1 is `like`.
+  Future<UserActionResponse> getUserLikesGivenActivity(
+    String username, {
+    int offset = 0,
+    bool isSilent = false,
+  }) async {
+    final response = await _dio.get(
+      '/user_actions.json',
+      queryParameters: {
+        'username': username,
+        'offset': offset,
+        'filter': '1',
+      },
+      options: isSilent
+          ? Options(extra: const {'isSilent': true})
+          : null,
+    );
+    return UserActionResponse.fromJson(response.data);
+  }
+}
