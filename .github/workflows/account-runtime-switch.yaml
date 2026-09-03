@@ -40,6 +40,9 @@ jobs:
           flutter-version: '3.44.0'
           cache: true
 
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
       - name: Install dependencies
         run: flutter pub get
 
