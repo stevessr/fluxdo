@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/community_user_preferences.dart';
 import '../models/topic.dart';
 import '../models/user_action.dart';
 import 'core_providers.dart';
@@ -257,4 +258,15 @@ final bookmarksWithRemindersProvider =
                 .where((topic) => topic.bookmarkReminderAt != null)
                 .toList(growable: false),
           );
+    });
+
+/// Native Discourse account preferences. This intentionally bypasses the app's
+/// local preference registry: values here are server-side and synchronize with
+/// the web UI and other clients.
+final communityUserPreferencesProvider =
+    FutureProvider.autoDispose<CommunityUserPreferences>((ref) async {
+      final raw = await ref
+          .read(discourseServiceProvider)
+          .getCommunityUserPreferencesRaw();
+      return CommunityUserPreferences.fromUserJson(raw);
     });
