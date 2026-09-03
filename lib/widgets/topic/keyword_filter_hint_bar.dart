@@ -15,7 +15,10 @@ import '../../settings/definitions/preferences_defs.dart';
 class KeywordFilterHintBar extends ConsumerWidget {
   final int hiddenCount;
 
-  /// [hiddenCount] 中因本地屏蔽名单隐藏的数量（其余为关键词命中）
+  /// [hiddenCount] 中因本地屏蔽名单隐藏的数量（其余为关键词命中）。
+  ///
+  /// `blockedUsernames` is an app-local presentation filter. It is not the
+  /// same thing as Discourse's server-side muted/ignored user state.
   final int hiddenByBlocked;
 
   const KeywordFilterHintBar({
@@ -23,6 +26,12 @@ class KeywordFilterHintBar extends ConsumerWidget {
     required this.hiddenCount,
     this.hiddenByBlocked = 0,
   });
+
+  String _localBlockLabel(BuildContext context) {
+    return Localizations.localeOf(context).languageCode == 'zh'
+        ? '仅本机屏蔽过滤'
+        : 'On-device block filter';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -45,16 +54,17 @@ class KeywordFilterHintBar extends ConsumerWidget {
               : showTopicFilterKeywordsDialog(context, ref),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              runSpacing: 2,
               children: [
                 Icon(
                   Symbols.visibility_off_rounded,
                   size: 14,
                   color: mutedColor,
                 ),
-                const SizedBox(width: 6),
                 Text(
                   l10n.topic_keywordFilter_hiddenCount(hiddenCount),
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -62,15 +72,16 @@ class KeywordFilterHintBar extends ConsumerWidget {
                     fontSize: 12,
                   ),
                 ),
-                Text(
-                  '  ·  ',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: mutedColor.withValues(alpha: 0.5),
-                    fontSize: 12,
+                if (hiddenByBlocked > 0)
+                  Text(
+                    '· ${_localBlockLabel(context)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: mutedColor,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
                 Text(
-                  l10n.topic_keywordFilter_manage,
+                  '· ${l10n.topic_keywordFilter_manage}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.primary,
                     fontSize: 12,
