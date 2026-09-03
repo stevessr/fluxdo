@@ -2,6 +2,8 @@
 
 > 维护目标：持续对齐 Discourse，并优先保证 linux.do 日常使用体验。  
 > 深度审计报告：[`docs/discourse-linuxdo-feature-gap.md`](docs/discourse-linuxdo-feature-gap.md)
+>
+> 说明：本清单以**当前代码事实**为准。发现已有完整实现时应直接勾选并注明，禁止为了“完成 TODO”重复造轮子。
 
 ## P0 — 普通用户替代网页版的关键阻塞
 
@@ -17,50 +19,60 @@
 - [ ] 根据 `site.json` / current user / serializer capability 隐藏站点未启用功能
 - [ ] 验收：网页改设置后 FluxDO 能读到；FluxDO 修改后网页能立即反映
 
+> 当前仍是最明显的 P0：用户资料页“设置”入口仍打开 Discourse WebView。
+
 ### Tracking / Mute / Ignore
 
 - [ ] 建立统一 `NotificationLevel` / tracking model
-- [ ] Topic：regular / tracking / watching / muted
+- [x] Topic：regular / tracking / watching / muted（已有 `TopicNotificationLevel` 与话题状态链，继续做一致性回归）
 - [ ] Category：regular / tracking / watching / watching first post / muted
 - [ ] Tag：regular / tracking / watching / watching first post / muted
-- [ ] User：服务端 muted users
-- [ ] User：服务端 ignored users
+- [x] User：服务端 muted users（用户页已有服务端 mute 状态/操作）
+- [x] User：服务端 ignored users（用户页已有服务端 ignore 状态/操作）
 - [ ] 保留现有本地 `blockedUsernames` 时明确标记“仅本机过滤”
 - [ ] 从话题、分类、标签和用户页提供一致的状态切换入口
 - [ ] 验收跨 Web / FluxDO / 多账号同步
 
 ### Bookmark Reminder
 
-- [ ] 补齐 bookmark model：name / reminder timestamp / reminder type 等上游字段
-- [ ] 新建/编辑书签时支持 reminder presets
-- [ ] 支持自定义 reminder 时间
-- [ ] 支持清除/重设 reminder
-- [ ] 通知跳转到对应书签位置
-- [ ] “我的活动”增加 Bookmarks with reminders
+- [x] bookmark model 已包含 name / reminder timestamp；创建/更新 API 已支持 reminder 与 auto-delete preference
+- [x] 新建/编辑书签支持 reminder presets（现有 BookmarkEditSheet）
+- [x] 支持自定义 reminder 时间
+- [x] 支持清除/重设 reminder
+- [ ] 通知跳转到对应书签位置专项回归
+- [ ] “我的活动”增加 Bookmarks with reminders 独立入口（已有派生 provider，尚需正式 UI）
 - [ ] 验证 timezone 和 DST 行为
 
 ### Content Extension Registry
 
-- [ ] 抽象 `DiscourseContentExtensionRegistry`
-- [ ] 将核心 interactive cooked node 从主 renderer 中逐步注册化
-- [ ] 为 `discourse-local-date` 增加完整时区交互
+- [x] 抽象 `DiscourseContentExtensionRegistry`
+- [x] 登记当前 renderer 已原生支持的核心 interactive cooked roots，防止对子控件误判
+- [x] `discourse-local-date` 已有原生 builder；不再作为缺失项重复实现
 - [ ] 为插件 adapter 提供 capability/site-setting 判定
-- [ ] 检测未知但明显可交互的 cooked node
-- [ ] 未知交互节点禁止静默退化为纯文本
-- [ ] 增加 web fragment / open-in-web fallback
-- [ ] 添加 adapter 单元测试和 fixture
+- [x] 检测未知但明显可交互的 cooked node
+- [x] 未知交互节点禁止静默退化为纯文本：转换为明确 warning callout
+- [x] 未知交互节点保留可用 URL 时提供“Open interactive content”链接
+- [ ] 无直接 URL 的未知插件节点增加“打开当前帖子网页版/片段”的兜底
+- [x] runtime transform adapter 注册/撤销 API
+- [x] registry revision 纳入短帖/长帖解析 LRU 签名，adapter 变化自动失效缓存
+- [x] 短帖与长帖 chunk parser 均接入 registry
+- [x] 添加 registry 单元测试
+- [ ] 为 linux.do 实际插件建立 fixture/adapters，而不是在通用 renderer 写站点硬编码
 
 ### Solved / Accepted Answer
 
-- [ ] 解析 topic solved 状态
-- [ ] 解析 post accepted answer 状态
-- [ ] 解析 `can_accept_answer`
-- [ ] Accept answer
-- [ ] Unaccept answer
-- [ ] 跳转 Accepted Answer
-- [ ] Solved 主题过滤
-- [ ] Solved 通知适配
-- [ ] Cooked marker 原生渲染
+> 重新审计后确认：这不是 P0 缺失模块，核心闭环已经存在。仅保留真正未确认的外围一致性项。
+
+- [x] 解析 topic solved / accepted answer 状态
+- [x] 解析 post accepted answer 状态
+- [x] 解析 `can_accept_answer` / `can_unaccept_answer`
+- [x] Accept answer API + UI
+- [x] Unaccept answer API + UI
+- [x] Accepted Answer 主楼摘要与精确跳楼
+- [x] Accepted Answer 帖子盖章/状态同步
+- [x] 用户资料 Solved 列表
+- [ ] 话题目录中的 Solved / Unsolved 筛选能力与当前 Discourse 对齐
+- [ ] Solved 相关通知类型/icon/action 专项核对
 
 ---
 
@@ -69,24 +81,26 @@
 ### Private Messages
 
 - [x] Inbox
+- [x] Unread mailbox
 - [x] Sent
 - [x] Archive
 - [x] New PM
 - [x] 多选批量归档
-- [ ] Unread mailbox
-- [ ] Warnings mailbox（仅有权限/状态时显示）
-- [ ] Group PM inbox
-- [ ] Group PM archive
+- [ ] Warnings mailbox（service 已具备；仅有权限/状态时接 UI）
+- [x] Group PM inbox
+- [x] Group PM unread
+- [x] Group PM new
+- [x] Group PM archive
 - [ ] PM Tags
 - [ ] PM 搜索/过滤与网页语义核对
 
 ### User Activity
 
 - [x] Topics
-- [ ] Replies：确认并补齐独立完整 activity 入口
-- [ ] Likes Given
+- [x] Replies（资料页已有独立 filter=5）
+- [x] Likes Given（资料页已有独立 filter=1）
 - [x] Bookmarks
-- [ ] Bookmarks with reminders
+- [ ] Bookmarks with reminders 独立入口
 - [x] Drafts
 - [x] Pending（自己的待审核内容）
 - [ ] Read：核对和 Discourse `/activity/read` 的语义一致性
@@ -99,16 +113,19 @@
 - [x] Detail
 - [x] Members
 - [x] Public Join / Leave
+- [x] Request Membership（支持可选 reason）
 - [x] Add member
-- [ ] Membership requests
+- [x] Owner/Admin Membership Requests：requesters / reason / requested_at / approve / reject
 - [ ] Activity / Topics
-- [ ] Activity / Posts
-- [ ] Activity / Mentions
-- [ ] Group messages inbox
-- [ ] Group messages archive
+- [x] Activity / Posts（`before_post_id` cursor）
+- [x] Activity / Mentions（`before_post_id` cursor）
+- [x] Group messages inbox
+- [x] Group messages unread
+- [x] Group messages new
+- [x] Group messages archive
 - [ ] Permissions view
 - [ ] Owner/Admin：Manage profile
-- [ ] Owner/Admin：Manage membership
+- [ ] Owner/Admin：Manage membership（除 requests / add member 外的完整管理项）
 - [ ] Owner/Admin：Manage interaction
 - [ ] Owner/Admin：Manage email
 - [ ] Owner/Admin：Manage categories
@@ -121,7 +138,7 @@
 - [ ] Custom Status 设置 / 清除 / 到期时间
 - [ ] Featured Topic
 - [ ] Profile Header Background
-- [ ] User Card Background
+- [ ] User Card Background 编辑
 - [ ] Primary Group / Flair 编辑
 - [ ] 自定义 user fields 编辑
 
@@ -192,12 +209,12 @@
 ## linux.do / Plugin Compatibility
 
 - [ ] 建立 `Core / Plugin / linux.do-specific` capability matrix
-- [ ] Topic Voting 持续回归测试（当前已有实现）
-- [ ] Solved adapter
+- [x] Topic Voting：已有完整实现，继续回归测试
+- [x] Solved：核心 serializer/API/UI 已实现，不再重复造 adapter
 - [ ] Calendar / Event adapter（站点启用时）
-- [ ] `discourse-local-date` adapter
+- [x] `discourse-local-date`：已有原生 parser/builder
 - [ ] linux.do 新插件上线时记录其 API / cooked markup / post-menu 扩展
-- [ ] linux.do 专属插件优先走 adapter，不在通用 renderer 写站点硬编码
+- [ ] linux.do 专属插件优先走 `DiscourseContentExtensionRegistry` adapter
 - [ ] 每次 linux.do 站点插件变化后跑真实账号 smoke test
 
 ---
@@ -227,9 +244,14 @@
 - [x] Chat 主架构
 - [x] Notifications API 主架构
 - [x] Topic Voting
-- [x] 普通 PM Inbox / Sent / Archive
+- [x] Solved / Accepted Answer 核心闭环
+- [x] `discourse-local-date` 原生渲染
+- [x] 普通 PM Inbox / Unread / Sent / Archive
 - [x] PM 批量归档
-- [x] 群组目录 / 详情 / 成员 / Join / Leave
+- [x] Group PM Inbox / Unread / New / Archive
+- [x] 群组目录 / 详情 / 成员 / Join / Leave / Request Membership
+- [x] 群组 Posts / Mentions / Membership Requests 审核
+- [x] User Activity Replies / Likes Given
 - [x] Badges
 
 ---
@@ -247,4 +269,3 @@
 - [ ] 多账号不会串状态
 - [ ] linux.do 真实验证通过
 - [ ] 标准 Discourse 实例回归通过
-
