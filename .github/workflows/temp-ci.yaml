@@ -1,0 +1,87 @@
+name: Temporary CI
+
+on:
+  push:
+    branches:
+      - feat/discourse-parity-wave1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: temp-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.44.0'
+  SAFE_BASE: f9f301a691c3dff55ee10cf8f75c50b6e7d507cf
+
+jobs:
+  verify:
+    name: format-analyze-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Discourse parity regression tests
+        run: |
+          set -euo pipefail
+          tests=(
+            test/utils/discourse_content_extension_registry_test.dart
+          )
+          existing=()
+          for test_file in "${tests[@]}"; do
+            if [[ -f "$test_file" ]]; then
+              existing+=("$test_file")
+            fi
+          done
+          if (( ${#existing[@]} > 0 )); then
+            flutter test "${existing[@]}"
+          else
+            echo "No dedicated parity regression test files found; full suite will still run."
+          fi
+
+      - name: Full Flutter test suite
+        run: flutter test
+
+      - name: Check patch whitespace
+        run: |
+          set -euo pipefail
+          git cat-file -e "${SAFE_BASE}^{commit}"
+          git diff --check "${SAFE_BASE}..HEAD"
+
+      - name: Verify clean generated/worktree state
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "CI commands left uncommitted changes:"
+            git status --short
+            git diff --stat
+            exit 1
+          fi
