@@ -1,0 +1,603 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../constants.dart';
+import '../models/community_user_preferences.dart';
+import '../providers/core_providers.dart';
+import '../providers/discourse_parity_providers.dart';
+import 'webview_page.dart';
+
+/// Native editor for server-side Discourse preferences.
+///
+/// This page is intentionally separate from FluxDO's local settings. Every
+/// value shown here comes from `/u/:username.json` and writes back through the
+/// same endpoint used by the Discourse web client.
+class CommunityAccountSettingsPage extends ConsumerWidget {
+  const CommunityAccountSettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preferences = ref.watch(communityUserPreferencesProvider);
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(zh ? '社区账户设置' : 'Community settings'),
+      ),
+      body: preferences.when(
+        data: (value) => _CommunityPreferencesForm(
+          key: ValueKey('${value.username}:${value.raw.hashCode}'),
+          preferences: value,
+        ),
+        loading: () => const Center(
+          child: CircularProgressIndicator.adaptive(),
+        ),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 36),
+                const SizedBox(height: 12),
+                Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.tonal(
+                  onPressed: () =>
+                      ref.invalidate(communityUserPreferencesProvider),
+                  child: Text(zh ? '重试' : 'Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommunityPreferencesForm extends ConsumerStatefulWidget {
+  const _CommunityPreferencesForm({
+    super.key,
+    required this.preferences,
+  });
+
+  final CommunityUserPreferences preferences;
+
+  @override
+  ConsumerState<_CommunityPreferencesForm> createState() =>
+      _CommunityPreferencesFormState();
+}
+
+class _CommunityPreferencesFormState
+    extends ConsumerState<_CommunityPreferencesForm> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _bioController;
+  late final TextEditingController _locationController;
+  late final TextEditingController _websiteController;
+  late final TextEditingController _timezoneController;
+
+  late bool _emailDigests;
+  late bool _mailingListMode;
+  late bool _allowPrivateMessages;
+  late bool _hideProfile;
+  late bool _hidePresence;
+  late bool _externalLinksInNewTab;
+  late bool _enableQuoting;
+  late bool _dynamicFavicon;
+  late bool _automaticallyUnpinTopics;
+  late bool _notifyOnLinkedPosts;
+  late bool _sidebarLinkToFilteredList;
+  late bool _sidebarShowCountOfNewItems;
+  late bool _watchedPrecedenceOverMuted;
+  late bool _automaticallyTranslate;
+
+  bool _saving = false;
+
+  CommunityUserPreferences get _initial => widget.preferences;
+  bool get _zh => Localizations.localeOf(context).languageCode == 'zh';
+
+  String _text(String zh, String en) => _zh ? zh : en;
+
+  @override
+  void initState() {
+    super.initState();
+    final value = widget.preferences;
+    _nameController = TextEditingController(text: value.name ?? '');
+    _bioController = TextEditingController(text: value.bioRaw ?? '');
+    _locationController = TextEditingController(text: value.location ?? '');
+    _websiteController = TextEditingController(text: value.website ?? '');
+    _timezoneController = TextEditingController(text: value.timezone ?? '');
+
+    _emailDigests = value.emailDigests;
+    _mailingListMode = value.mailingListMode;
+    _allowPrivateMessages = value.allowPrivateMessages;
+    _hideProfile = value.hideProfile;
+    _hidePresence = value.hidePresence;
+    _externalLinksInNewTab = value.externalLinksInNewTab;
+    _enableQuoting = value.enableQuoting;
+    _dynamicFavicon = value.dynamicFavicon;
+    _automaticallyUnpinTopics = value.automaticallyUnpinTopics;
+    _notifyOnLinkedPosts = value.notifyOnLinkedPosts;
+    _sidebarLinkToFilteredList = value.sidebarLinkToFilteredList;
+    _sidebarShowCountOfNewItems = value.sidebarShowCountOfNewItems;
+    _watchedPrecedenceOverMuted = value.watchedPrecedenceOverMuted;
+    _automaticallyTranslate = value.automaticallyTranslate;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _bioController.dispose();
+    _locationController.dispose();
+    _websiteController.dispose();
+    _timezoneController.dispose();
+    super.dispose();
+  }
+
+  bool _hasOption(String key) => _initial.userOptionRaw.containsKey(key);
+
+  void _addTextChange(
+    Map<String, dynamic> changes,
+    String key,
+    TextEditingController controller,
+    String? initial, {
+    required bool enabled,
+    bool trim = true,
+  }) {
+    if (!enabled) return;
+    final value = trim ? controller.text.trim() : controller.text;
+    final oldValue = trim ? (initial ?? '').trim() : (initial ?? '');
+    if (value != oldValue) changes[key] = value;
+  }
+
+  void _addOptionChange(
+    Map<String, dynamic> changes,
+    String key,
+    bool value,
+    bool initial,
+  ) {
+    if (_initial.canEdit && _hasOption(key) && value != initial) {
+      changes[key] = value;
+    }
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    final changes = <String, dynamic>{};
+
+    _addTextChange(
+      changes,
+      'name',
+      _nameController,
+      _initial.name,
+      enabled: _initial.canEditName,
+    );
+    _addTextChange(
+      changes,
+      'bio_raw',
+      _bioController,
+      _initial.bioRaw,
+      enabled: _initial.canChangeBio,
+      trim: false,
+    );
+    _addTextChange(
+      changes,
+      'location',
+      _locationController,
+      _initial.location,
+      enabled: _initial.canChangeLocation,
+    );
+    _addTextChange(
+      changes,
+      'website',
+      _websiteController,
+      _initial.website,
+      enabled: _initial.canChangeWebsite,
+    );
+    _addTextChange(
+      changes,
+      'timezone',
+      _timezoneController,
+      _initial.timezone,
+      enabled: _initial.canEdit &&
+          (_initial.timezone != null || _hasOption('timezone')),
+    );
+
+    _addOptionChange(
+      changes,
+      'email_digests',
+      _emailDigests,
+      _initial.emailDigests,
+    );
+    _addOptionChange(
+      changes,
+      'mailing_list_mode',
+      _mailingListMode,
+      _initial.mailingListMode,
+    );
+    _addOptionChange(
+      changes,
+      'allow_private_messages',
+      _allowPrivateMessages,
+      _initial.allowPrivateMessages,
+    );
+    _addOptionChange(
+      changes,
+      'hide_profile',
+      _hideProfile,
+      _initial.hideProfile,
+    );
+    _addOptionChange(
+      changes,
+      'hide_presence',
+      _hidePresence,
+      _initial.hidePresence,
+    );
+    _addOptionChange(
+      changes,
+      'external_links_in_new_tab',
+      _externalLinksInNewTab,
+      _initial.externalLinksInNewTab,
+    );
+    _addOptionChange(
+      changes,
+      'enable_quoting',
+      _enableQuoting,
+      _initial.enableQuoting,
+    );
+    _addOptionChange(
+      changes,
+      'dynamic_favicon',
+      _dynamicFavicon,
+      _initial.dynamicFavicon,
+    );
+    _addOptionChange(
+      changes,
+      'automatically_unpin_topics',
+      _automaticallyUnpinTopics,
+      _initial.automaticallyUnpinTopics,
+    );
+    _addOptionChange(
+      changes,
+      'notify_on_linked_posts',
+      _notifyOnLinkedPosts,
+      _initial.notifyOnLinkedPosts,
+    );
+    _addOptionChange(
+      changes,
+      'sidebar_link_to_filtered_list',
+      _sidebarLinkToFilteredList,
+      _initial.sidebarLinkToFilteredList,
+    );
+    _addOptionChange(
+      changes,
+      'sidebar_show_count_of_new_items',
+      _sidebarShowCountOfNewItems,
+      _initial.sidebarShowCountOfNewItems,
+    );
+    _addOptionChange(
+      changes,
+      'watched_precedence_over_muted',
+      _watchedPrecedenceOverMuted,
+      _initial.watchedPrecedenceOverMuted,
+    );
+    _addOptionChange(
+      changes,
+      'automatically_translate',
+      _automaticallyTranslate,
+      _initial.automaticallyTranslate,
+    );
+
+    if (changes.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_text('没有需要保存的修改', 'No changes to save'))),
+        );
+      }
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .updateCommunityUserPreferences(changes);
+      ref.invalidate(communityUserPreferencesProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_text('社区设置已同步', 'Community settings synced'))),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _openWebPreferences() {
+    WebViewPage.open(
+      context,
+      '${AppConstants.baseUrl}/u/${Uri.encodeComponent(_initial.username)}/preferences/account',
+      title: _text('完整社区设置', 'Full community settings'),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+      child: Text(
+        title,
+        style: theme.textTheme.titleSmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _field({
+    required TextEditingController controller,
+    required String label,
+    bool enabled = true,
+    int maxLines = 1,
+    TextInputType? keyboardType,
+    String? hintText,
+  }) {
+    return TextFormField(
+      controller: controller,
+      enabled: enabled && !_saving,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hintText,
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+
+  Widget _toggle({
+    required String keyName,
+    required String title,
+    String? subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    if (!_hasOption(keyName)) return const SizedBox.shrink();
+    return SwitchListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle),
+      value: value,
+      onChanged: _initial.canEdit && !_saving ? onChanged : null,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canEditTimezone = _initial.canEdit &&
+        (_initial.timezone != null || _hasOption('timezone'));
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.cloud_sync_outlined),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _text(
+                      '这里修改的是 Discourse 社区账户设置，会同步到网页版和其他客户端；它与 FluxDO 本地设置彼此独立。',
+                      'These are server-side Discourse account settings. They sync with the web UI and other clients and are separate from FluxDO local settings.',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _sectionTitle(_text('资料', 'Profile')),
+        if (_initial.canEditName) ...[
+          _field(
+            controller: _nameController,
+            label: _text('姓名', 'Name'),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (_initial.canChangeBio) ...[
+          _field(
+            controller: _bioController,
+            label: _text('个人简介', 'About me'),
+            maxLines: 5,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (_initial.canChangeLocation) ...[
+          _field(
+            controller: _locationController,
+            label: _text('位置', 'Location'),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (_initial.canChangeWebsite) ...[
+          _field(
+            controller: _websiteController,
+            label: _text('网站', 'Website'),
+            keyboardType: TextInputType.url,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (canEditTimezone) ...[
+          _field(
+            controller: _timezoneController,
+            label: _text('时区', 'Timezone'),
+            hintText: 'Asia/Shanghai',
+          ),
+          const SizedBox(height: 12),
+        ],
+        _sectionTitle(_text('邮件', 'Email')),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              _toggle(
+                keyName: 'email_digests',
+                title: _text('邮件摘要', 'Email digests'),
+                value: _emailDigests,
+                onChanged: (value) => setState(() => _emailDigests = value),
+              ),
+              _toggle(
+                keyName: 'mailing_list_mode',
+                title: _text('邮件列表模式', 'Mailing list mode'),
+                value: _mailingListMode,
+                onChanged: (value) => setState(() => _mailingListMode = value),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _sectionTitle(_text('通知与隐私', 'Notifications & privacy')),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              _toggle(
+                keyName: 'allow_private_messages',
+                title: _text('允许私信', 'Allow private messages'),
+                value: _allowPrivateMessages,
+                onChanged: (value) =>
+                    setState(() => _allowPrivateMessages = value),
+              ),
+              _toggle(
+                keyName: 'hide_profile',
+                title: _text('隐藏个人资料', 'Hide profile'),
+                value: _hideProfile,
+                onChanged: (value) => setState(() => _hideProfile = value),
+              ),
+              _toggle(
+                keyName: 'hide_presence',
+                title: _text('隐藏在线状态', 'Hide presence'),
+                value: _hidePresence,
+                onChanged: (value) => setState(() => _hidePresence = value),
+              ),
+              _toggle(
+                keyName: 'notify_on_linked_posts',
+                title: _text('链接到我的帖子时通知', 'Notify on linked posts'),
+                value: _notifyOnLinkedPosts,
+                onChanged: (value) =>
+                    setState(() => _notifyOnLinkedPosts = value),
+              ),
+              _toggle(
+                keyName: 'watched_precedence_over_muted',
+                title: _text('关注优先于静音', 'Watched takes precedence over muted'),
+                value: _watchedPrecedenceOverMuted,
+                onChanged: (value) =>
+                    setState(() => _watchedPrecedenceOverMuted = value),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _sectionTitle(_text('界面与阅读', 'Interface & reading')),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              _toggle(
+                keyName: 'external_links_in_new_tab',
+                title: _text('外部链接在新窗口打开', 'Open external links separately'),
+                value: _externalLinksInNewTab,
+                onChanged: (value) =>
+                    setState(() => _externalLinksInNewTab = value),
+              ),
+              _toggle(
+                keyName: 'enable_quoting',
+                title: _text('启用引用', 'Enable quoting'),
+                value: _enableQuoting,
+                onChanged: (value) => setState(() => _enableQuoting = value),
+              ),
+              _toggle(
+                keyName: 'dynamic_favicon',
+                title: _text('动态站点图标', 'Dynamic favicon'),
+                value: _dynamicFavicon,
+                onChanged: (value) => setState(() => _dynamicFavicon = value),
+              ),
+              _toggle(
+                keyName: 'automatically_unpin_topics',
+                title: _text('阅读后自动取消置顶', 'Automatically unpin read topics'),
+                value: _automaticallyUnpinTopics,
+                onChanged: (value) =>
+                    setState(() => _automaticallyUnpinTopics = value),
+              ),
+              _toggle(
+                keyName: 'sidebar_link_to_filtered_list',
+                title: _text('侧栏链接到筛选列表', 'Sidebar links to filtered lists'),
+                value: _sidebarLinkToFilteredList,
+                onChanged: (value) =>
+                    setState(() => _sidebarLinkToFilteredList = value),
+              ),
+              _toggle(
+                keyName: 'sidebar_show_count_of_new_items',
+                title: _text('侧栏显示新项目数量', 'Show new-item counts in sidebar'),
+                value: _sidebarShowCountOfNewItems,
+                onChanged: (value) =>
+                    setState(() => _sidebarShowCountOfNewItems = value),
+              ),
+              _toggle(
+                keyName: 'automatically_translate',
+                title: _text('自动翻译', 'Automatically translate'),
+                value: _automaticallyTranslate,
+                onChanged: (value) =>
+                    setState(() => _automaticallyTranslate = value),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        FilledButton.icon(
+          onPressed: _initial.canEdit && !_saving ? _save : null,
+          icon: _saving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.cloud_upload_outlined),
+          label: Text(_text('保存并同步', 'Save and sync')),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _saving ? null : _openWebPreferences,
+          icon: const Icon(Icons.open_in_browser_rounded),
+          label: Text(_text('打开完整网页设置', 'Open full web preferences')),
+        ),
+        if (!_initial.canEdit) ...[
+          const SizedBox(height: 12),
+          Text(
+            _text(
+              '服务器没有授予当前会话编辑权限；这里只显示可读取的账户状态。',
+              'The server did not grant edit permission to this session; this page is read-only.',
+            ),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
+    );
+  }
+}
