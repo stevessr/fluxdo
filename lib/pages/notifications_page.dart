@@ -108,11 +108,22 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     }
   }
 
+  String _parityLabel(BuildContext context, String zh, String en) {
+    return Localizations.localeOf(context).languageCode == 'zh' ? zh : en;
+  }
+
   String _categoryLabel(BuildContext context, NotificationCategory category) {
     return switch (category) {
       NotificationCategory.all => context.l10n.notification_categoryAll,
-      NotificationCategory.replies => context.l10n.notification_categoryReplies,
-      NotificationCategory.likes => context.l10n.notification_categoryLikes,
+      NotificationCategory.responses => _parityLabel(context, '回复', 'Responses'),
+      NotificationCategory.likes => _parityLabel(
+        context,
+        '收到的赞',
+        'Likes received',
+      ),
+      NotificationCategory.mentions => _parityLabel(context, '提及', 'Mentions'),
+      NotificationCategory.edits => _parityLabel(context, '编辑', 'Edits'),
+      NotificationCategory.links => _parityLabel(context, '链接', 'Links'),
       NotificationCategory.messages => context.l10n.notification_categoryMessages,
       NotificationCategory.bookmarks => context.l10n.notification_categoryBookmarks,
       NotificationCategory.other => context.l10n.notification_categoryOther,
@@ -122,8 +133,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   IconData _categoryIcon(NotificationCategory category) {
     return switch (category) {
       NotificationCategory.all => Symbols.notifications_rounded,
-      NotificationCategory.replies => Symbols.reply_rounded,
+      NotificationCategory.responses => Symbols.reply_rounded,
       NotificationCategory.likes => Symbols.favorite_rounded,
+      NotificationCategory.mentions => Symbols.alternate_email_rounded,
+      NotificationCategory.edits => Symbols.edit_rounded,
+      NotificationCategory.links => Symbols.link_rounded,
       NotificationCategory.messages => Symbols.mail_rounded,
       NotificationCategory.bookmarks => Symbols.bookmark_rounded,
       NotificationCategory.other => Symbols.more_horiz_rounded,
