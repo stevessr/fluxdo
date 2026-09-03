@@ -18,7 +18,9 @@ class AccountSwitchSessionValidation {
 extension AccountSwitchSessionValidationExtension on DiscourseService {
   Future<void> _captureCurrentAccountRuntime() async {
     final username = _username?.trim();
-    if (username == null || username.isEmpty || username == AccountManager.guestAccountId) {
+    if (username == null ||
+        username.isEmpty ||
+        username == AccountManager.guestAccountId) {
       return;
     }
 
@@ -66,7 +68,9 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
       }
 
       final liveToken = await _cookieJar.getTToken();
-      if (liveToken == null || liveToken.isEmpty || liveToken != runtime.sessionToken) {
+      if (liveToken == null ||
+          liveToken.isEmpty ||
+          liveToken != runtime.sessionToken) {
         throw StateError('runtime session token restore mismatch');
       }
 
@@ -88,12 +92,17 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
       debugPrint('[AccountSwitch] native runtime 激活失败，回退磁盘快照: $e');
       try {
         await _cookieJar.cookieJar.deleteAll();
-        await _cookieJar.restoreCanonicalCookies(fallbackCookies, trusted: true);
+        await _cookieJar.restoreCanonicalCookies(
+          fallbackCookies,
+          trusted: true,
+        );
         if (cfClearanceCookie != null) {
           await _cookieJar.restoreCfClearance(cfClearanceCookie);
         }
       } catch (rollbackError) {
-        debugPrint('[AccountSwitch] native runtime 回退 cookie 失败: $rollbackError');
+        debugPrint(
+          '[AccountSwitch] native runtime 回退 cookie 失败: $rollbackError',
+        );
       }
       return null;
     }

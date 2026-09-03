@@ -2,11 +2,7 @@ import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/account_runtime_pool.dart';
 
-CanonicalCookie _cookie(
-  String name,
-  String value, {
-  DateTime? expiresAt,
-}) {
+CanonicalCookie _cookie(String name, String value, {DateTime? expiresAt}) {
   return CanonicalCookie(
     name: name,
     value: value,

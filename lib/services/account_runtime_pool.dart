@@ -90,8 +90,7 @@ class AccountRuntimePool {
         )
         .toList(growable: false);
     final hasMatchingSession = runtimeCookies.any(
-      (cookie) =>
-          cookie.name == '_t' && cookie.value == normalizedToken,
+      (cookie) => cookie.name == '_t' && cookie.value == normalizedToken,
     );
     if (!hasMatchingSession) return;
 
