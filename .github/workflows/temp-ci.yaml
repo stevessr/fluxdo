@@ -19,9 +19,9 @@ env:
 
 jobs:
   verify:
-    name: format-analyze-test
+    name: format-analyze-parity
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -59,7 +59,12 @@ jobs:
         run: |
           set -euo pipefail
           tests=(
+            test/models/bookmark_reminder_test.dart
+            test/models/community_user_preferences_test.dart
+            test/models/notification_category_test.dart
+            test/services/discourse_tracking_level_test.dart
             test/utils/discourse_content_extension_registry_test.dart
+            test/widgets/chat_conversation_tabs_test.dart
           )
           existing=()
           for test_file in "${tests[@]}"; do
@@ -68,15 +73,10 @@ jobs:
             fi
           done
           if (( ${#existing[@]} > 0 )); then
-            flutter test "${existing[@]}"
+            flutter test --reporter expanded "${existing[@]}"
           else
             echo "No dedicated parity regression test files found; full suite will still run."
           fi
-
-      - name: Full Flutter test suite
-        id: full_tests
-        continue-on-error: true
-        run: flutter test
 
       - name: Check patch whitespace
         id: whitespace
@@ -104,7 +104,6 @@ jobs:
           FORMAT_OUTCOME: ${{ steps.format.outcome }}
           ANALYZE_OUTCOME: ${{ steps.analyze.outcome }}
           PARITY_TESTS_OUTCOME: ${{ steps.parity_tests.outcome }}
-          FULL_TESTS_OUTCOME: ${{ steps.full_tests.outcome }}
           WHITESPACE_OUTCOME: ${{ steps.whitespace.outcome }}
           CLEAN_OUTCOME: ${{ steps.clean.outcome }}
         run: |
@@ -113,7 +112,6 @@ jobs:
             'dart format' "$FORMAT_OUTCOME" \
             'flutter analyze' "$ANALYZE_OUTCOME" \
             'parity regression tests' "$PARITY_TESTS_OUTCOME" \
-            'full flutter test' "$FULL_TESTS_OUTCOME" \
             'git diff --check' "$WHITESPACE_OUTCOME" \
             'clean worktree' "$CLEAN_OUTCOME"
 
@@ -122,7 +120,6 @@ jobs:
             "$FORMAT_OUTCOME" \
             "$ANALYZE_OUTCOME" \
             "$PARITY_TESTS_OUTCOME" \
-            "$FULL_TESTS_OUTCOME" \
             "$WHITESPACE_OUTCOME" \
             "$CLEAN_OUTCOME"; do
             if [[ "$outcome" != 'success' ]]; then
@@ -130,3 +127,36 @@ jobs:
             fi
           done
           exit "$failed"
+
+  full-tests:
+    name: flutter-test-${{ matrix.shard }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run Flutter test shard
+        run: >-
+          flutter test
+          --reporter expanded
+          --total-shards 4
+          --shard-index ${{ matrix.shard }}
