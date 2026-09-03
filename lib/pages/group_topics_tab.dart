@@ -163,9 +163,6 @@ class _GroupTopicsTabState extends ConsumerState<GroupTopicsTab> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  subtitle: topic.postsCount > 0
-                      ? Text('${topic.postsCount} posts')
-                      : null,
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => _openTopic(topic),
                 );
