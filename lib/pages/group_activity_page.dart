@@ -13,13 +13,14 @@ import '../widgets/common/relative_time_text.dart';
 import '../widgets/common/smart_avatar.dart';
 import '../widgets/content/collapsed_html_content.dart';
 import 'group_requests_page.dart';
+import 'group_topics_tab.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 
-/// Native Discourse group activity view (`/g/:name/activity/posts|mentions`).
+/// Native Discourse group activity view.
 ///
-/// Upstream uses GroupPostSerializer and cursor pagination via `before_post_id`.
-/// The parser intentionally ignores unknown fields rather than rejecting the
-/// payload, so site/plugin serializer additions remain forward-compatible.
+/// Group topics are server-backed through ListController#group_topics. Posts and
+/// mentions continue to use GroupPostSerializer and `before_post_id` cursor
+/// pagination, so the two different upstream pagination models stay separate.
 class GroupActivityPage extends ConsumerStatefulWidget {
   const GroupActivityPage({
     super.key,
@@ -44,7 +45,7 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
   final Map<GroupActivityKind, Object?> _errors = {};
   int? _manageableGroupId;
 
-  static const _kinds = [
+  static const _activityKinds = [
     GroupActivityKind.posts,
     GroupActivityKind.mentions,
   ];
@@ -52,10 +53,9 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _kinds.length, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onTabChanged);
     Future.microtask(() {
-      _refresh(GroupActivityKind.posts);
       _loadManagementCapability();
     });
   }
@@ -99,7 +99,9 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
 
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
-    final kind = _kinds[_tabController.index];
+    // Tab 0 is the independently paginated GroupTopicsTab.
+    if (_tabController.index == 0) return;
+    final kind = _activityKinds[_tabController.index - 1];
     if (!_entries.containsKey(kind) && _loading[kind] != true) {
       _refresh(kind);
     }
@@ -121,9 +123,11 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
     final rawPosts = payload['posts'] as List? ?? const [];
     return rawPosts
         .whereType<Map>()
-        .map((raw) => _GroupActivityEntry.fromJson(
-              Map<String, dynamic>.from(raw),
-            ))
+        .map(
+          (raw) => _GroupActivityEntry.fromJson(
+            Map<String, dynamic>.from(raw),
+          ),
+        )
         .where((entry) => entry.id > 0 && entry.topicId > 0)
         .toList(growable: false);
   }
@@ -139,7 +143,6 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
       if (!mounted) return;
       setState(() {
         _entries[kind] = next;
-        // GroupsController limits the result to 20 entries.
         _hasMore[kind] = next.length >= 20;
       });
     } catch (error) {
@@ -206,6 +209,7 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
         bottom: TabBar(
           controller: _tabController,
           tabs: [
+            Tab(text: copy.topics),
             Tab(text: copy.posts),
             Tab(text: copy.mentions),
           ],
@@ -214,7 +218,8 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          for (final kind in _kinds) _buildTab(kind, copy),
+          GroupTopicsTab(groupName: widget.groupName),
+          for (final kind in _activityKinds) _buildTab(kind, copy),
         ],
       ),
     );
@@ -225,6 +230,12 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
     final loading = _loading[kind] == true;
     final error = _errors[kind];
 
+    if (entries == null && !loading && error == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh(kind);
+      });
+      return const Center(child: CircularProgressIndicator.adaptive());
+    }
     if (entries == null && loading) {
       return const Center(child: CircularProgressIndicator.adaptive());
     }
@@ -263,14 +274,17 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 24),
               itemCount: data.length + 1,
-              separatorBuilder: (_, index) =>
-                  index < data.length - 1 ? const Divider(height: 1) : const SizedBox.shrink(),
+              separatorBuilder: (_, index) => index < data.length - 1
+                  ? const Divider(height: 1)
+                  : const SizedBox.shrink(),
               itemBuilder: (context, index) {
                 if (index == data.length) {
                   if (_loadingMore[kind] == true) {
                     return const Padding(
                       padding: EdgeInsets.all(20),
-                      child: Center(child: CircularProgressIndicator.adaptive()),
+                      child: Center(
+                        child: CircularProgressIndicator.adaptive(),
+                      ),
                     );
                   }
                   if (_hasMore[kind] == true) {
@@ -408,6 +422,7 @@ class _GroupActivityCopy {
   const _GroupActivityCopy(this.zh);
   final bool zh;
 
+  String get topics => zh ? '话题' : 'Topics';
   String get posts => zh ? '帖子' : 'Posts';
   String get mentions => zh ? '提及' : 'Mentions';
   String get membershipRequests => zh ? '加入申请' : 'Membership requests';
