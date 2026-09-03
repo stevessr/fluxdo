@@ -2,11 +2,11 @@ import '../l10n/s.dart';
 
 /// 书签提醒的快捷选项
 enum BookmarkReminderOption {
-  twoHours,    // 2小时后
-  tomorrow,    // 明天
-  threeDays,   // 3天后
-  nextWeek,    // 下周
-  custom,      // 自定义
+  twoHours, // 2小时后
+  tomorrow, // 明天
+  threeDays, // 3天后
+  nextWeek, // 下周
+  custom, // 自定义
 }
 
 /// 书签自动删除偏好
@@ -37,23 +37,27 @@ extension BookmarkReminderOptionExt on BookmarkReminderOption {
     }
   }
 
-  /// 根据选项计算提醒时间
-  DateTime? toReminderAt() {
-    final now = DateTime.now();
+  /// 根据选项计算提醒时间。
+  ///
+  /// `tomorrow` / `threeDays` / `nextWeek` are calendar reminders: construct a
+  /// new local [DateTime] at 08:00 instead of adding a fixed 24-hour duration.
+  /// That preserves the intended wall-clock time when the device timezone
+  /// crosses a DST boundary. `twoHours` intentionally remains elapsed-time
+  /// semantics. The service converts the resulting instant to UTC before it is
+  /// sent to Discourse.
+  DateTime? toReminderAt({DateTime? now}) {
+    final base = now ?? DateTime.now();
     switch (this) {
       case BookmarkReminderOption.twoHours:
-        return now.add(const Duration(hours: 2));
+        return base.add(const Duration(hours: 2));
       case BookmarkReminderOption.tomorrow:
-        // 明天早上8点
-        final tomorrow = DateTime(now.year, now.month, now.day + 1, 8, 0);
-        return tomorrow;
+        return DateTime(base.year, base.month, base.day + 1, 8);
       case BookmarkReminderOption.threeDays:
-        return DateTime(now.year, now.month, now.day + 3, 8, 0);
+        return DateTime(base.year, base.month, base.day + 3, 8);
       case BookmarkReminderOption.nextWeek:
-        // 下周一早上8点
-        final daysUntilMonday = (DateTime.monday - now.weekday + 7) % 7;
+        final daysUntilMonday = (DateTime.monday - base.weekday + 7) % 7;
         final nextMonday = daysUntilMonday == 0 ? 7 : daysUntilMonday;
-        return DateTime(now.year, now.month, now.day + nextMonday, 8, 0);
+        return DateTime(base.year, base.month, base.day + nextMonday, 8);
       case BookmarkReminderOption.custom:
         return null;
     }
