@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/category.dart';
 import '../models/topic.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/selected_topic_provider.dart';
 import '../providers/preferences_provider.dart';
+import '../services/discourse/discourse_service.dart';
 import '../utils/load_more_coordinator.dart';
 import '../utils/pagination_helper.dart';
 import '../utils/topic_keyword_filter.dart';
@@ -15,6 +17,7 @@ import '../widgets/topic/topic_list_skeleton.dart';
 import '../widgets/topic/sort_and_tags_bar.dart';
 import '../widgets/topic/topic_card_prewarmer.dart';
 import '../widgets/topic/topic_item_builder.dart';
+import '../widgets/topic/topic_notification_button.dart';
 import '../widgets/common/error_view.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 import 'search_page.dart';
@@ -48,6 +51,13 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage> {
   int _page = 0;
   Object? _error;
 
+  // Tag notifications share Category's five visible levels. The service layer
+  // uses DiscourseTrackingLevel so level 4 (watching first post) is never
+  // parsed through TopicNotificationLevel and silently collapsed.
+  CategoryNotificationLevel _tagNotificationLevel =
+      CategoryNotificationLevel.regular;
+  bool _tagNotificationAvailable = false;
+
   // 本地筛选、排序状态（初始值从持久化偏好读取）
   late TopicListFilter _currentFilter;
   late NewSubset _currentSubset;
@@ -70,12 +80,60 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage> {
     _ascending = ref.read(topicSortAscendingProvider);
     _scrollController.addListener(_onScroll);
     _loadTopics();
+    _loadTagNotificationLevel();
+  }
+
+  @override
+  void didUpdateWidget(covariant TagTopicsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tagName == widget.tagName) return;
+    _tagNotificationAvailable = false;
+    _tagNotificationLevel = CategoryNotificationLevel.regular;
+    _loadTagNotificationLevel();
+    _loadTopics();
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadTagNotificationLevel() async {
+    try {
+      final level = await ref
+          .read(discourseServiceProvider)
+          .getTagNotificationLevel(widget.tagName);
+      if (!mounted) return;
+      setState(() {
+        _tagNotificationLevel = CategoryNotificationLevel.fromValue(level.value);
+        // A successful response is the capability signal. Do not infer this
+        // from staff/admin flags or a linux.do-specific role.
+        _tagNotificationAvailable = true;
+      });
+    } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      if (status == 401 || status == 403 || status == 404) return;
+      AppErrorHandler.handleUnexpected(error, error.stackTrace);
+    } catch (error, stack) {
+      AppErrorHandler.handleUnexpected(error, stack);
+    }
+  }
+
+  Future<void> _setTagNotificationLevel(
+    CategoryNotificationLevel level,
+  ) async {
+    final previous = _tagNotificationLevel;
+    setState(() => _tagNotificationLevel = level);
+    try {
+      await ref.read(discourseServiceProvider).setTagNotificationLevel(
+            widget.tagName,
+            DiscourseTrackingLevel.fromValue(level.value),
+          );
+    } catch (error, stack) {
+      if (mounted) setState(() => _tagNotificationLevel = previous);
+      AppErrorHandler.handleUnexpected(error, stack);
+    }
   }
 
   void _onScroll() {
@@ -364,6 +422,12 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage> {
             onToggleAscending: _toggleAscending,
             selectedTags: const [],
             onTagRemoved: (_) {},
+            trailing: isLoggedIn && _tagNotificationAvailable
+                ? CategoryNotificationButton(
+                    level: _tagNotificationLevel,
+                    onChanged: _setTagNotificationLevel,
+                  )
+                : null,
           ),
           // 列表
           Expanded(child: _buildBody(selectedTopicId)),
@@ -426,46 +490,46 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage> {
     return TopicCardPrewarmScope(
       topics: visible,
       child: DesktopRefreshIndicator(
-      onRefresh: _loadTopics,
-      child: ListView.builder(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(12),
-        itemCount: visible.length + hintOffset + 1,
-        itemBuilder: (context, index) {
-          if (hintOffset > 0 && index == 0) {
-            return KeywordFilterHintBar(
-              hiddenCount: hidden,
-              hiddenByBlocked: hiddenByBlocked,
-            );
-          }
-          final topicIndex = index - hintOffset;
-          if (topicIndex >= visible.length) {
-            return PagedListFooter(
-              hasMore: _hasMore,
-              isLoadingMore: _isLoadingMore,
-              isLoadMoreFailed: _isLoadMoreFailed,
-              onRetry: () {
-                setState(() => _isLoadMoreFailed = false);
-                _loadMore();
-              },
-            );
-          }
+        onRefresh: _loadTopics,
+        child: ListView.builder(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(12),
+          itemCount: visible.length + hintOffset + 1,
+          itemBuilder: (context, index) {
+            if (hintOffset > 0 && index == 0) {
+              return KeywordFilterHintBar(
+                hiddenCount: hidden,
+                hiddenByBlocked: hiddenByBlocked,
+              );
+            }
+            final topicIndex = index - hintOffset;
+            if (topicIndex >= visible.length) {
+              return PagedListFooter(
+                hasMore: _hasMore,
+                isLoadingMore: _isLoadingMore,
+                isLoadMoreFailed: _isLoadMoreFailed,
+                onRetry: () {
+                  setState(() => _isLoadMoreFailed = false);
+                  _loadMore();
+                },
+              );
+            }
 
-          final topic = visible[topicIndex];
-          final enableLongPress = ref
-              .watch(preferencesProvider)
-              .longPressPreview;
+            final topic = visible[topicIndex];
+            final enableLongPress = ref
+                .watch(preferencesProvider)
+                .longPressPreview;
 
-          return buildTopicItem(
-            context: context,
-            topic: topic,
-            isSelected: topic.id == selectedTopicId,
-            onTap: () => _openTopic(topic),
-            enableLongPress: enableLongPress,
-          );
-        },
-      ),
+            return buildTopicItem(
+              context: context,
+              topic: topic,
+              isSelected: topic.id == selectedTopicId,
+              onTap: () => _openTopic(topic),
+              enableLongPress: enableLongPress,
+            );
+          },
+        ),
       ),
     );
   }
