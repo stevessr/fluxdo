@@ -120,7 +120,7 @@ class DiscourseContentExtensionRegistry {
     for (final root in roots) {
       _visit(root, context);
     }
-    return fragment.innerHtml;
+    return fragment.outerHtml;
   }
 
   void _visit(
@@ -197,9 +197,6 @@ class DiscourseContentExtensionRegistry {
   }
 
   static void _replaceWithUnsupportedFallback(dom.Element element) {
-    final parent = element.parentNode;
-    if (parent == null) return;
-
     final originalText = element.text.trim().replaceAll(RegExp(r'\s+'), ' ');
     final href = _bestFallbackHref(element);
 
@@ -231,8 +228,7 @@ class DiscourseContentExtensionRegistry {
       fallback.append(paragraph);
     }
 
-    parent.insertBefore(fallback, element);
-    element.remove();
+    element.replaceWith(fallback);
   }
 
   static final List<DiscourseContentExtension> _coreExtensions = [
