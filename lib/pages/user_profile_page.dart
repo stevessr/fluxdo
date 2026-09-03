@@ -2,14 +2,13 @@ import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../constants.dart';
 import '../l10n/s.dart';
 import '../providers/discourse_providers.dart';
 import 'bookmarks_page.dart';
+import 'community_account_settings_page.dart';
 import 'my_badges_page.dart';
 import 'user_invites_page.dart';
 import 'user_profile_overview_page.dart' as overview;
-import 'webview_page.dart';
 
 /// 用户资料页路由壳。
 ///
@@ -94,25 +93,10 @@ class UserProfilePage extends ConsumerWidget {
         ),
       );
       actions.add(
-        () => WebViewPage.open(
-          context,
-          '${AppConstants.baseUrl}/u/$username/preferences/account',
-          title: context.l10n.profile_settings,
-          injectCss: '''
-            .new-user-content-wrapper {
-              position: fixed !important;
-              top: 0 !important;
-              left: 0 !important;
-              width: 100% !important;
-              height: 100% !important;
-              z-index: 100 !important;
-              background: var(--d-content-background, var(--secondary)) !important;
-              overflow-y: auto !important;
-              padding: 20px !important;
-              box-sizing: border-box !important;
-            }
-            .d-header { display: none !important; }
-          ''',
+        () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const CommunityAccountSettingsPage(),
+          ),
         ),
       );
     }
