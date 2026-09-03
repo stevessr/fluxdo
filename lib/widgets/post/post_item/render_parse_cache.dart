@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:fluxdo_render/fluxdo_render.dart';
 
 import '../../../models/topic.dart';
+import '../../../utils/discourse_content_extension_registry.dart';
 import '../../../utils/fluxdo_render_callbacks.dart';
 import '../../../utils/frame_jank_monitor.dart';
 
@@ -16,9 +17,9 @@ import '../../../utils/frame_jank_monitor.dart';
 /// 只缓存**纯数据**(preprocessed html / BlockNode 树 / chunk 切分),
 /// callbacks(闭包持 post/topicId)由调用方每次自建,不进缓存。
 ///
-/// 失效:key 按 post.id,值携带内容签名(cooked + mentions + links,
-/// 注入产物受这三者影响),签名不匹配即重算 —— 帖子编辑/状态 emoji 变化
-/// 自然失效,无需主动清理。
+/// 失效:key 按 post.id,值携带内容签名(cooked + mentions + links +
+/// content-extension registry revision),签名不匹配即重算 —— 帖子编辑、状态
+/// emoji 变化或运行时 adapter 更新都会自然失效,无需主动清理。
 class RenderParseCache {
   RenderParseCache._();
 
@@ -35,8 +36,7 @@ class RenderParseCache {
   /// 长帖:post.id → (签名, LongPostParseData)
   static final _long = <int, _LongEntry>{};
 
-  /// 帖子渲染内容签名:cooked + mention 状态 + 链接点击数
-  /// (preprocessCookedForRender 的全部输入)。
+  /// 帖子渲染内容签名:cooked + mention 状态 + 链接点击数 + registry revision。
   static int signatureOf(Post post) {
     final mentionedUsers = post.mentionedUsers;
     final linkCounts = post.linkCounts;
@@ -60,6 +60,7 @@ class RenderParseCache {
                 l.internal,
                 l.reflection,
               ))),
+      DiscourseContentExtensionRegistry.instance.revision,
     );
   }
 
@@ -79,9 +80,13 @@ class RenderParseCache {
     final parsed = developer.Timeline.timeSync('ParseShortPost', () {
       final preprocessed =
           FluxdoRenderCallbacks.preprocessCookedForRender(post);
-      final nodes = List<BlockNode>.unmodifiable(
-        ParagraphParser().parse(preprocessed),
+      final parser = DiscourseExtensionParagraphParser(
+        context: DiscourseContentExtensionContext(
+          postId: post.id,
+          postNumber: post.postNumber,
+        ),
       );
+      final nodes = List<BlockNode>.unmodifiable(parser.parse(preprocessed));
       return (preprocessed: preprocessed, nodes: nodes);
     });
     watch.stop();
@@ -156,7 +161,7 @@ class LongPostParseData {
     required this.preprocessed,
     required this.chunks,
     required this.footnotesHtml,
-  })  : _parser = ParagraphParser(),
+  })  : _parser = DiscourseExtensionParagraphParser(),
         _parsed = List<List<BlockNode>?>.filled(chunks.length, null),
         _offsets = List<int?>.filled(chunks.length, null);
 
