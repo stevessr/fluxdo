@@ -15,6 +15,8 @@ class ChatConversationTabs extends StatefulWidget {
     required this.groupCount,
     required this.privateChild,
     required this.groupChild,
+    this.privateLabel,
+    this.groupLabel,
   });
 
   /// 同一页内区分「收藏」与「直接消息」，同时用于生成稳定 key。
@@ -23,6 +25,11 @@ class ChatConversationTabs extends StatefulWidget {
   final int groupCount;
   final Widget privateChild;
   final Widget groupChild;
+
+  /// Testability/accessibility overrides. Production callers leave these null
+  /// and use the app localization strings as before.
+  final String? privateLabel;
+  final String? groupLabel;
 
   @override
   State<ChatConversationTabs> createState() => _ChatConversationTabsState();
@@ -122,13 +129,13 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
                 _buildTab(
                   key: ValueKey('chat-${widget.id}-private-tab'),
                   icon: Icons.person_outline_rounded,
-                  label: context.l10n.chat_private_chats,
+                  label: widget.privateLabel ?? context.l10n.chat_private_chats,
                   count: widget.privateCount,
                 ),
                 _buildTab(
                   key: ValueKey('chat-${widget.id}-group-tab'),
                   icon: Icons.groups_outlined,
-                  label: context.l10n.chat_group_chats,
+                  label: widget.groupLabel ?? context.l10n.chat_group_chats,
                   count: widget.groupCount,
                 ),
               ],
