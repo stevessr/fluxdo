@@ -243,3 +243,79 @@ class GroupMembersResult {
     );
   }
 }
+
+/// A pending request to join a group. Upstream `GroupRequesterSerializer`
+/// extends `BasicUserSerializer` with `reason` and `requested_at`.
+class GroupRequester {
+  const GroupRequester({
+    required this.id,
+    required this.username,
+    this.name,
+    this.avatarTemplate,
+    this.reason,
+    this.requestedAt,
+  });
+
+  final int id;
+  final String username;
+  final String? name;
+  final String? avatarTemplate;
+  final String? reason;
+  final DateTime? requestedAt;
+
+  String get displayName {
+    final value = name?.trim();
+    return value == null || value.isEmpty ? username : value;
+  }
+
+  String? get avatarUrl {
+    final template = avatarTemplate;
+    if (template == null || template.isEmpty) return null;
+    return UrlHelper.resolveUrlWithCdn(template.replaceAll('{size}', '96'));
+  }
+
+  factory GroupRequester.fromJson(Map<String, dynamic> json) {
+    return GroupRequester(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      username: json['username']?.toString() ?? '',
+      name: json['name']?.toString(),
+      avatarTemplate: json['avatar_template']?.toString(),
+      reason: json['reason']?.toString(),
+      requestedAt: TimeUtils.parseUtcTime(json['requested_at']?.toString()),
+    );
+  }
+}
+
+class GroupRequestersResult {
+  const GroupRequestersResult({
+    required this.requesters,
+    required this.total,
+    required this.limit,
+    required this.offset,
+  });
+
+  final List<GroupRequester> requesters;
+  final int total;
+  final int limit;
+  final int offset;
+
+  bool get hasMore => offset + requesters.length < total;
+  int get nextOffset => offset + limit;
+
+  factory GroupRequestersResult.fromJson(Map<String, dynamic> json) {
+    final requesters = (json['members'] as List? ?? const [])
+        .whereType<Map>()
+        .map((raw) => GroupRequester.fromJson(Map<String, dynamic>.from(raw)))
+        .where((requester) => requester.id > 0 && requester.username.isNotEmpty)
+        .toList(growable: false);
+    final meta = json['meta'] is Map
+        ? Map<String, dynamic>.from(json['meta'] as Map)
+        : const <String, dynamic>{};
+    return GroupRequestersResult(
+      requesters: requesters,
+      total: (meta['total'] as num?)?.toInt() ?? requesters.length,
+      limit: (meta['limit'] as num?)?.toInt() ?? requesters.length,
+      offset: (meta['offset'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
