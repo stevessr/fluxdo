@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: temp-ci-${{ github.ref }}
@@ -15,18 +15,20 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.44.0'
+  SAFE_BASE: f9f301a691c3dff55ee10cf8f75c50b6e7d507cf
 
 jobs:
-  format-community-preferences:
-    name: apply-targeted-dart-format
+  verify:
+    name: format-analyze-parity
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: feat/discourse-parity-wave1
+          fetch-depth: 0
+          submodules: recursive
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -35,22 +37,93 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply Dart formatter to parity preference files
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check parity preference formatting
+        run: >-
+          dart format
+          --output=none
+          --set-exit-if-changed
+          lib/models/community_user_preferences.dart
+          lib/pages/community_account_settings_page.dart
+          lib/services/discourse/_parity.dart
+          test/models/community_user_preferences_test.dart
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Discourse parity regression tests
         run: |
           set -euo pipefail
-          files=(
-            lib/models/community_user_preferences.dart
-            lib/pages/community_account_settings_page.dart
-            lib/services/discourse/_parity.dart
+          tests=(
+            test/models/bookmark_reminder_test.dart
             test/models/community_user_preferences_test.dart
+            test/models/notification_category_test.dart
+            test/services/discourse_tracking_level_test.dart
+            test/utils/discourse_content_extension_registry_test.dart
+            test/widgets/chat_conversation_tabs_test.dart
           )
-          dart format "${files[@]}"
-          if git diff --quiet -- "${files[@]}"; then
-            echo "Target files are already formatted."
-            exit 0
+          existing=()
+          for test_file in "${tests[@]}"; do
+            if [[ -f "$test_file" ]]; then
+              existing+=("$test_file")
+            fi
+          done
+          if (( ${#existing[@]} > 0 )); then
+            flutter test --reporter expanded "${existing[@]}"
+          else
+            echo "No dedicated parity regression test files found; full suite will still run."
           fi
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -- "${files[@]}"
-          git commit -m "style: format native community preferences"
-          git push origin HEAD:feat/discourse-parity-wave1
+
+      - name: Check patch whitespace
+        run: |
+          set -euo pipefail
+          git cat-file -e "${SAFE_BASE}^{commit}"
+          git diff --check "${SAFE_BASE}..HEAD"
+
+      - name: Verify clean generated/worktree state
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "CI commands left uncommitted changes:"
+            git status --short
+            git diff --stat
+            exit 1
+          fi
+
+  full-tests:
+    name: flutter-test-${{ matrix.shard }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run Flutter test shard
+        run: >-
+          flutter test
+          --reporter expanded
+          --total-shards 4
+          --shard-index ${{ matrix.shard }}
