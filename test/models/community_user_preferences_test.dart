@@ -44,18 +44,8 @@ void main() {
             'automatic': true,
             'title': 'Moderator',
           },
-          {
-            'id': 8,
-            'name': 'builders',
-            'automatic': false,
-            'title': 'Builder',
-          },
-          {
-            'id': 9,
-            'name': 'fish',
-            'automatic': false,
-            'flair_url': 'star',
-          },
+          {'id': 8, 'name': 'builders', 'automatic': false, 'title': 'Builder'},
+          {'id': 9, 'name': 'fish', 'automatic': false, 'flair_url': 'star'},
         ],
       });
 
@@ -64,16 +54,20 @@ void main() {
       expect(preferences.flairGroupId, 9);
       expect(
         preferences.availableTitles,
-        containsAll(['Badge title', 'Extra badge', 'Basic user', 'Moderator', 'Builder']),
+        containsAll([
+          'Badge title',
+          'Extra badge',
+          'Basic user',
+          'Moderator',
+          'Builder',
+        ]),
       );
-      expect(
-        preferences.availablePrimaryGroups.map((group) => group.id),
-        [3, 8, 9],
-      );
-      expect(
-        preferences.availableFlairGroups.map((group) => group.id),
-        [9],
-      );
+      expect(preferences.availablePrimaryGroups.map((group) => group.id), [
+        3,
+        8,
+        9,
+      ]);
+      expect(preferences.availableFlairGroups.map((group) => group.id), [9]);
     });
 
     test('does not expose primary-group choices when the site gate is off', () {

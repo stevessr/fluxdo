@@ -21,17 +21,14 @@ class CommunityAccountSettingsPage extends ConsumerWidget {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(zh ? '社区账户设置' : 'Community settings'),
-      ),
+      appBar: AppBar(title: Text(zh ? '社区账户设置' : 'Community settings')),
       body: preferences.when(
         data: (value) => _CommunityPreferencesForm(
           key: ValueKey('${value.username}:${value.raw.hashCode}'),
           preferences: value,
         ),
-        loading: () => const Center(
-          child: CircularProgressIndicator.adaptive(),
-        ),
+        loading: () =>
+            const Center(child: CircularProgressIndicator.adaptive()),
         error: (error, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -57,10 +54,7 @@ class CommunityAccountSettingsPage extends ConsumerWidget {
 }
 
 class _CommunityPreferencesForm extends ConsumerStatefulWidget {
-  const _CommunityPreferencesForm({
-    super.key,
-    required this.preferences,
-  });
+  const _CommunityPreferencesForm({super.key, required this.preferences});
 
   final CommunityUserPreferences preferences;
 
@@ -258,7 +252,8 @@ class _CommunityPreferencesFormState
       'timezone',
       _timezoneController,
       _initial.timezone,
-      enabled: _initial.canEdit &&
+      enabled:
+          _initial.canEdit &&
           (_initial.timezone != null || _hasOption('timezone')),
     );
 
@@ -407,14 +402,16 @@ class _CommunityPreferencesFormState
       ref.invalidate(communityUserPreferencesProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_text('社区设置已同步', 'Community settings synced'))),
+          SnackBar(
+            content: Text(_text('社区设置已同步', 'Community settings synced')),
+          ),
         );
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -552,8 +549,9 @@ class _CommunityPreferencesFormState
             value: _title ?? '',
             onChanged: _initial.canEdit && !_saving
                 ? (value) => setState(
-                      () => _title = value == null || value.isEmpty ? null : value,
-                    )
+                    () =>
+                        _title = value == null || value.isEmpty ? null : value,
+                  )
                 : null,
             items: items,
           ),
@@ -569,7 +567,9 @@ class _CommunityPreferencesFormState
     required ValueChanged<int?> onChanged,
   }) {
     if (groups.isEmpty && value == null) return const SizedBox.shrink();
-    final labels = <int, String>{for (final group in groups) group.id: group.label};
+    final labels = <int, String>{
+      for (final group in groups) group.id: group.label,
+    };
     if (value != null && !labels.containsKey(value)) {
       labels[value] = _text('当前组 (#$value)', 'Current group (#$value)');
     }
@@ -607,7 +607,8 @@ class _CommunityPreferencesFormState
 
   @override
   Widget build(BuildContext context) {
-    final canEditTimezone = _initial.canEdit &&
+    final canEditTimezone =
+        _initial.canEdit &&
         (_initial.timezone != null || _hasOption('timezone'));
     final emailDeliveryOptions = <int, String>{
       0: _text('始终', 'Always'),
@@ -657,10 +658,7 @@ class _CommunityPreferencesFormState
         const SizedBox(height: 16),
         _sectionTitle(_text('账户', 'Account')),
         if (_initial.canEditName) ...[
-          _field(
-            controller: _nameController,
-            label: _text('姓名', 'Name'),
-          ),
+          _field(controller: _nameController, label: _text('姓名', 'Name')),
           const SizedBox(height: 12),
         ],
         if (_initial.canEdit &&

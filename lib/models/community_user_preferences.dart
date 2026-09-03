@@ -174,9 +174,8 @@ class CommunityUserPreferences {
     );
   }
 
-  List<CommunityPreferenceGroup> get availableFlairGroups => List.unmodifiable(
-        groups.where((group) => group.providesFlair),
-      );
+  List<CommunityPreferenceGroup> get availableFlairGroups =>
+      List.unmodifiable(groups.where((group) => group.providesFlair));
 
   /// Preserve plugin/new-core options so diagnostics and later adapters do not
   /// lose information merely because this client has not exposed the field yet.
@@ -197,13 +196,15 @@ class CommunityUserPreferences {
       return int.tryParse(value?.toString() ?? '');
     }
 
-    final groups = (json['groups'] as List?)
+    final groups =
+        (json['groups'] as List?)
             ?.whereType<Map>()
             .map(CommunityPreferenceGroup.fromJson)
             .where((group) => group.id > 0 && group.name.isNotEmpty)
             .toList(growable: false) ??
         const <CommunityPreferenceGroup>[];
-    final badgeTitles = (json['_fluxdo_available_badge_titles'] as List?)
+    final badgeTitles =
+        (json['_fluxdo_available_badge_titles'] as List?)
             ?.map((value) => value?.toString() ?? '')
             .where((value) => value.isNotEmpty)
             .toSet()
@@ -224,10 +225,9 @@ class CommunityUserPreferences {
       location: json['location']?.toString(),
       website: json['website']?.toString(),
       locale: json['locale']?.toString(),
-      profileBackgroundUploadUrl:
-          json['profile_background_upload_url']?.toString(),
-      cardBackgroundUploadUrl:
-          json['card_background_upload_url']?.toString(),
+      profileBackgroundUploadUrl: json['profile_background_upload_url']
+          ?.toString(),
+      cardBackgroundUploadUrl: json['card_background_upload_url']?.toString(),
       canEdit: json['can_edit'] as bool? ?? false,
       canEditName: json['can_edit_name'] as bool? ?? false,
       canChangeBio: json['can_change_bio'] as bool? ?? false,
@@ -243,34 +243,39 @@ class CommunityUserPreferences {
       timezone: json['timezone']?.toString() ?? option['timezone']?.toString(),
       emailDigests: optionBool('email_digests', false),
       mailingListMode: optionBool('mailing_list_mode', false),
-      externalLinksInNewTab:
-          optionBool('external_links_in_new_tab', false),
+      externalLinksInNewTab: optionBool('external_links_in_new_tab', false),
       enableQuoting: optionBool('enable_quoting', true),
       dynamicFavicon: optionBool('dynamic_favicon', false),
-      automaticallyUnpinTopics:
-          optionBool('automatically_unpin_topics', true),
+      automaticallyUnpinTopics: optionBool('automatically_unpin_topics', true),
       notifyOnLinkedPosts: optionBool('notify_on_linked_posts', true),
       includeTl0InDigests: optionBool('include_tl0_in_digests', false),
       allowPrivateMessages: optionBool('allow_private_messages', true),
       hideProfile: optionBool('hide_profile', false),
       hidePresence: optionBool('hide_presence', false),
       skipNewUserTips: optionBool('skip_new_user_tips', false),
-      sidebarLinkToFilteredList:
-          optionBool('sidebar_link_to_filtered_list', false),
-      sidebarShowCountOfNewItems:
-          optionBool('sidebar_show_count_of_new_items', false),
-      watchedPrecedenceOverMuted:
-          optionBool('watched_precedence_over_muted', false),
-      automaticallyTranslate:
-          optionBool('automatically_translate', false),
-      bookmarkAutoDeletePreference:
-          optionInt('bookmark_auto_delete_preference'),
+      sidebarLinkToFilteredList: optionBool(
+        'sidebar_link_to_filtered_list',
+        false,
+      ),
+      sidebarShowCountOfNewItems: optionBool(
+        'sidebar_show_count_of_new_items',
+        false,
+      ),
+      watchedPrecedenceOverMuted: optionBool(
+        'watched_precedence_over_muted',
+        false,
+      ),
+      automaticallyTranslate: optionBool('automatically_translate', false),
+      bookmarkAutoDeletePreference: optionInt(
+        'bookmark_auto_delete_preference',
+      ),
       emailLevel: optionInt('email_level'),
       emailMessagesLevel: optionInt('email_messages_level'),
       likeNotificationFrequency: optionInt('like_notification_frequency'),
       pushNotificationLevel: optionInt('push_notification_level'),
-      notificationLevelWhenReplying:
-          optionInt('notification_level_when_replying'),
+      notificationLevelWhenReplying: optionInt(
+        'notification_level_when_replying',
+      ),
       userOptionRaw: Map.unmodifiable(option),
       raw: Map.unmodifiable(Map<String, dynamic>.from(json)),
     );

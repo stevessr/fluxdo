@@ -25,7 +25,9 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
     return root;
   }
 
-  Future<List<String>> _getCommunityBadgeTitleChoices(String encodedUser) async {
+  Future<List<String>> _getCommunityBadgeTitleChoices(
+    String encodedUser,
+  ) async {
     final siteSettings = await PreloadedDataService().getSiteSettings();
     if (siteSettings?['enable_badges'] != true) return const [];
 
@@ -271,8 +273,9 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
     final encodedGroup = Uri.encodeComponent(groupName);
     final response = await _dio.get(
       '/groups/$encodedGroup/posts.json',
-      queryParameters:
-          beforePostId == null ? null : {'before_post_id': beforePostId},
+      queryParameters: beforePostId == null
+          ? null
+          : {'before_post_id': beforePostId},
     );
     if (response.data is! Map) {
       throw const FormatException('Invalid group posts response');
@@ -287,8 +290,9 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
     final encodedGroup = Uri.encodeComponent(groupName);
     final response = await _dio.get(
       '/groups/$encodedGroup/mentions.json',
-      queryParameters:
-          beforePostId == null ? null : {'before_post_id': beforePostId},
+      queryParameters: beforePostId == null
+          ? null
+          : {'before_post_id': beforePostId},
     );
     if (response.data is! Map) {
       throw const FormatException('Invalid group mentions response');
