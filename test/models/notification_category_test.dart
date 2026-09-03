@@ -14,23 +14,44 @@ DiscourseNotification notificationOf(NotificationType type, {int id = 1}) {
 }
 
 void main() {
-  test('replies matches Discourse replies and mentions grouping', () {
-    for (final type in [
-      NotificationType.mentioned,
-      NotificationType.groupMentioned,
-      NotificationType.posted,
-      NotificationType.quoted,
-      NotificationType.replied,
-    ]) {
+  test('responses matches only replied and quoted', () {
+    for (final type in [NotificationType.replied, NotificationType.quoted]) {
       expect(
-        NotificationCategory.replies.matches(notificationOf(type)),
+        NotificationCategory.responses.matches(notificationOf(type)),
         isTrue,
-        reason: '$type must be in replies',
+        reason: '$type must be in responses',
       );
     }
+    expect(
+      NotificationCategory.responses.matches(
+        notificationOf(NotificationType.mentioned),
+      ),
+      isFalse,
+    );
+    expect(
+      NotificationCategory.responses.matches(
+        notificationOf(NotificationType.posted),
+      ),
+      isFalse,
+    );
   });
 
-  test('likes matches liked, consolidated likes and reactions', () {
+  test('mentions matches direct and group mentions', () {
+    expect(
+      NotificationCategory.mentions.matches(
+        notificationOf(NotificationType.mentioned),
+      ),
+      isTrue,
+    );
+    expect(
+      NotificationCategory.mentions.matches(
+        notificationOf(NotificationType.groupMentioned),
+      ),
+      isTrue,
+    );
+  });
+
+  test('likes, edits and links match Discourse parity groups', () {
     for (final type in [
       NotificationType.liked,
       NotificationType.likedConsolidated,
@@ -38,9 +59,47 @@ void main() {
     ]) {
       expect(NotificationCategory.likes.matches(notificationOf(type)), isTrue);
     }
+    expect(
+      NotificationCategory.edits.matches(
+        notificationOf(NotificationType.edited),
+      ),
+      isTrue,
+    );
+    expect(
+      NotificationCategory.links.matches(
+        notificationOf(NotificationType.linked),
+      ),
+      isTrue,
+    );
+    expect(
+      NotificationCategory.links.matches(
+        notificationOf(NotificationType.linkedConsolidated),
+      ),
+      isTrue,
+    );
   });
 
-  test('messages and bookmarks match the upstream groups', () {
+  test('server filters use names accepted by filter_by_types', () {
+    expect(
+      NotificationCategory.responses.serverFilterTypeNames,
+      ['replied', 'quoted'],
+    );
+    expect(
+      NotificationCategory.likes.serverFilterTypeNames,
+      ['liked', 'liked_consolidated', 'reaction'],
+    );
+    expect(
+      NotificationCategory.mentions.serverFilterTypeNames,
+      ['mentioned', 'group_mentioned'],
+    );
+    expect(NotificationCategory.edits.serverFilterTypeNames, ['edited']);
+    expect(
+      NotificationCategory.links.serverFilterTypeNames,
+      ['linked', 'linked_consolidated'],
+    );
+  });
+
+  test('messages and bookmarks remain available as dedicated groups', () {
     expect(
       NotificationCategory.messages.matches(
         notificationOf(NotificationType.privateMessage),
@@ -61,7 +120,7 @@ void main() {
     );
   });
 
-  test('other excludes all explicitly grouped notification types', () {
+  test('other is the complement and keeps plugin/custom notifications', () {
     expect(
       NotificationCategory.other.matches(
         notificationOf(NotificationType.grantedBadge),
@@ -71,6 +130,12 @@ void main() {
     expect(
       NotificationCategory.other.matches(
         notificationOf(NotificationType.replied),
+      ),
+      isFalse,
+    );
+    expect(
+      NotificationCategory.other.matches(
+        notificationOf(NotificationType.linkedConsolidated),
       ),
       isFalse,
     );
