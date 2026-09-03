@@ -9,7 +9,7 @@ import 'webview_page.dart';
 
 /// Native editor for server-side Discourse preferences.
 ///
-/// This page is intentionally separate from FluxDO's local settings. Every
+/// This page intentionally stays separate from FluxDO local settings. Every
 /// value shown here comes from `/u/:username.json` and writes back through the
 /// same endpoint used by the Discourse web client.
 class CommunityAccountSettingsPage extends ConsumerWidget {
@@ -40,10 +40,7 @@ class CommunityAccountSettingsPage extends ConsumerWidget {
               children: [
                 const Icon(Icons.error_outline_rounded, size: 36),
                 const SizedBox(height: 12),
-                Text(
-                  error.toString(),
-                  textAlign: TextAlign.center,
-                ),
+                Text(error.toString(), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 FilledButton.tonal(
                   onPressed: () =>
@@ -81,6 +78,7 @@ class _CommunityPreferencesFormState
   late final TextEditingController _timezoneController;
 
   late bool _emailDigests;
+  late bool _includeTl0InDigests;
   late bool _mailingListMode;
   late bool _allowPrivateMessages;
   late bool _hideProfile;
@@ -90,10 +88,17 @@ class _CommunityPreferencesFormState
   late bool _dynamicFavicon;
   late bool _automaticallyUnpinTopics;
   late bool _notifyOnLinkedPosts;
+  late bool _skipNewUserTips;
   late bool _sidebarLinkToFilteredList;
   late bool _sidebarShowCountOfNewItems;
   late bool _watchedPrecedenceOverMuted;
   late bool _automaticallyTranslate;
+
+  late int? _emailLevel;
+  late int? _emailMessagesLevel;
+  late int? _likeNotificationFrequency;
+  late int? _pushNotificationLevel;
+  late int? _notificationLevelWhenReplying;
 
   bool _saving = false;
 
@@ -113,6 +118,7 @@ class _CommunityPreferencesFormState
     _timezoneController = TextEditingController(text: value.timezone ?? '');
 
     _emailDigests = value.emailDigests;
+    _includeTl0InDigests = value.includeTl0InDigests;
     _mailingListMode = value.mailingListMode;
     _allowPrivateMessages = value.allowPrivateMessages;
     _hideProfile = value.hideProfile;
@@ -122,10 +128,17 @@ class _CommunityPreferencesFormState
     _dynamicFavicon = value.dynamicFavicon;
     _automaticallyUnpinTopics = value.automaticallyUnpinTopics;
     _notifyOnLinkedPosts = value.notifyOnLinkedPosts;
+    _skipNewUserTips = value.skipNewUserTips;
     _sidebarLinkToFilteredList = value.sidebarLinkToFilteredList;
     _sidebarShowCountOfNewItems = value.sidebarShowCountOfNewItems;
     _watchedPrecedenceOverMuted = value.watchedPrecedenceOverMuted;
     _automaticallyTranslate = value.automaticallyTranslate;
+
+    _emailLevel = value.emailLevel;
+    _emailMessagesLevel = value.emailMessagesLevel;
+    _likeNotificationFrequency = value.likeNotificationFrequency;
+    _pushNotificationLevel = value.pushNotificationLevel;
+    _notificationLevelWhenReplying = value.notificationLevelWhenReplying;
   }
 
   @override
@@ -154,13 +167,27 @@ class _CommunityPreferencesFormState
     if (value != oldValue) changes[key] = value;
   }
 
-  void _addOptionChange(
+  void _addBoolOptionChange(
     Map<String, dynamic> changes,
     String key,
     bool value,
     bool initial,
   ) {
     if (_initial.canEdit && _hasOption(key) && value != initial) {
+      changes[key] = value;
+    }
+  }
+
+  void _addIntOptionChange(
+    Map<String, dynamic> changes,
+    String key,
+    int? value,
+    int? initial,
+  ) {
+    if (_initial.canEdit &&
+        _hasOption(key) &&
+        value != null &&
+        value != initial) {
       changes[key] = value;
     }
   }
@@ -207,89 +234,132 @@ class _CommunityPreferencesFormState
           (_initial.timezone != null || _hasOption('timezone')),
     );
 
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'email_digests',
       _emailDigests,
       _initial.emailDigests,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
+      changes,
+      'include_tl0_in_digests',
+      _includeTl0InDigests,
+      _initial.includeTl0InDigests,
+    );
+    _addBoolOptionChange(
       changes,
       'mailing_list_mode',
       _mailingListMode,
       _initial.mailingListMode,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'allow_private_messages',
       _allowPrivateMessages,
       _initial.allowPrivateMessages,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'hide_profile',
       _hideProfile,
       _initial.hideProfile,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'hide_presence',
       _hidePresence,
       _initial.hidePresence,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'external_links_in_new_tab',
       _externalLinksInNewTab,
       _initial.externalLinksInNewTab,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'enable_quoting',
       _enableQuoting,
       _initial.enableQuoting,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'dynamic_favicon',
       _dynamicFavicon,
       _initial.dynamicFavicon,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'automatically_unpin_topics',
       _automaticallyUnpinTopics,
       _initial.automaticallyUnpinTopics,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'notify_on_linked_posts',
       _notifyOnLinkedPosts,
       _initial.notifyOnLinkedPosts,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
+      changes,
+      'skip_new_user_tips',
+      _skipNewUserTips,
+      _initial.skipNewUserTips,
+    );
+    _addBoolOptionChange(
       changes,
       'sidebar_link_to_filtered_list',
       _sidebarLinkToFilteredList,
       _initial.sidebarLinkToFilteredList,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'sidebar_show_count_of_new_items',
       _sidebarShowCountOfNewItems,
       _initial.sidebarShowCountOfNewItems,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'watched_precedence_over_muted',
       _watchedPrecedenceOverMuted,
       _initial.watchedPrecedenceOverMuted,
     );
-    _addOptionChange(
+    _addBoolOptionChange(
       changes,
       'automatically_translate',
       _automaticallyTranslate,
       _initial.automaticallyTranslate,
+    );
+
+    _addIntOptionChange(
+      changes,
+      'email_level',
+      _emailLevel,
+      _initial.emailLevel,
+    );
+    _addIntOptionChange(
+      changes,
+      'email_messages_level',
+      _emailMessagesLevel,
+      _initial.emailMessagesLevel,
+    );
+    _addIntOptionChange(
+      changes,
+      'like_notification_frequency',
+      _likeNotificationFrequency,
+      _initial.likeNotificationFrequency,
+    );
+    _addIntOptionChange(
+      changes,
+      'push_notification_level',
+      _pushNotificationLevel,
+      _initial.pushNotificationLevel,
+    );
+    _addIntOptionChange(
+      changes,
+      'notification_level_when_replying',
+      _notificationLevelWhenReplying,
+      _initial.notificationLevelWhenReplying,
     );
 
     if (changes.isEmpty) {
@@ -383,10 +453,78 @@ class _CommunityPreferencesFormState
     );
   }
 
+  Widget _selectOption({
+    required String keyName,
+    required String title,
+    String? subtitle,
+    required int? value,
+    required Map<int, String> options,
+    required ValueChanged<int?> onChanged,
+  }) {
+    if (!_hasOption(keyName) || value == null) {
+      return const SizedBox.shrink();
+    }
+
+    final effectiveOptions = Map<int, String>.from(options);
+    effectiveOptions.putIfAbsent(
+      value,
+      () => _text('未知值 ($value)', 'Unknown value ($value)'),
+    );
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle),
+      trailing: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 190),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<int>(
+            isExpanded: true,
+            value: value,
+            onChanged: _initial.canEdit && !_saving ? onChanged : null,
+            items: effectiveOptions.entries
+                .map(
+                  (entry) => DropdownMenuItem<int>(
+                    value: entry.key,
+                    child: Text(
+                      entry.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final canEditTimezone = _initial.canEdit &&
         (_initial.timezone != null || _hasOption('timezone'));
+    final emailDeliveryOptions = <int, String>{
+      0: _text('始终', 'Always'),
+      1: _text('仅离开时', 'Only when away'),
+      2: _text('从不', 'Never'),
+    };
+    final likeOptions = <int, String>{
+      0: _text('始终', 'Always'),
+      1: _text('首次且每天一次', 'First time & daily'),
+      2: _text('仅首次', 'First time'),
+      3: _text('从不', 'Never'),
+    };
+    final pushOptions = <int, String>{
+      0: _text('无', 'None'),
+      1: _text('全部', 'All'),
+      2: _text('仅聊天', 'Chat only'),
+    };
+    final replyTrackingOptions = <int, String>{
+      3: _text('关注', 'Watching'),
+      2: _text('跟踪', 'Tracking'),
+      1: _text('常规', 'Regular'),
+    };
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
@@ -456,11 +594,33 @@ class _CommunityPreferencesFormState
           clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
+              _selectOption(
+                keyName: 'email_level',
+                title: _text('主题邮件通知', 'Topic email notifications'),
+                value: _emailLevel,
+                options: emailDeliveryOptions,
+                onChanged: (value) => setState(() => _emailLevel = value),
+              ),
+              _selectOption(
+                keyName: 'email_messages_level',
+                title: _text('私信邮件通知', 'Message email notifications'),
+                value: _emailMessagesLevel,
+                options: emailDeliveryOptions,
+                onChanged: (value) =>
+                    setState(() => _emailMessagesLevel = value),
+              ),
               _toggle(
                 keyName: 'email_digests',
                 title: _text('邮件摘要', 'Email digests'),
                 value: _emailDigests,
                 onChanged: (value) => setState(() => _emailDigests = value),
+              ),
+              _toggle(
+                keyName: 'include_tl0_in_digests',
+                title: _text('摘要包含新用户内容', 'Include new users in digests'),
+                value: _includeTl0InDigests,
+                onChanged: (value) =>
+                    setState(() => _includeTl0InDigests = value),
               ),
               _toggle(
                 keyName: 'mailing_list_mode',
@@ -477,6 +637,30 @@ class _CommunityPreferencesFormState
           clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
+              _selectOption(
+                keyName: 'like_notification_frequency',
+                title: _text('点赞通知频率', 'Like notification frequency'),
+                value: _likeNotificationFrequency,
+                options: likeOptions,
+                onChanged: (value) =>
+                    setState(() => _likeNotificationFrequency = value),
+              ),
+              _selectOption(
+                keyName: 'push_notification_level',
+                title: _text('推送通知', 'Push notifications'),
+                value: _pushNotificationLevel,
+                options: pushOptions,
+                onChanged: (value) =>
+                    setState(() => _pushNotificationLevel = value),
+              ),
+              _selectOption(
+                keyName: 'notification_level_when_replying',
+                title: _text('回复后的话题级别', 'Topic level after replying'),
+                value: _notificationLevelWhenReplying,
+                options: replyTrackingOptions,
+                onChanged: (value) =>
+                    setState(() => _notificationLevelWhenReplying = value),
+              ),
               _toggle(
                 keyName: 'allow_private_messages',
                 title: _text('允许私信', 'Allow private messages'),
@@ -544,6 +728,12 @@ class _CommunityPreferencesFormState
                 value: _automaticallyUnpinTopics,
                 onChanged: (value) =>
                     setState(() => _automaticallyUnpinTopics = value),
+              ),
+              _toggle(
+                keyName: 'skip_new_user_tips',
+                title: _text('跳过新用户提示', 'Skip new-user tips'),
+                value: _skipNewUserTips,
+                onChanged: (value) => setState(() => _skipNewUserTips = value),
               ),
               _toggle(
                 keyName: 'sidebar_link_to_filtered_list',
