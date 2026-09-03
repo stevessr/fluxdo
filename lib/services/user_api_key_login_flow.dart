@@ -189,11 +189,15 @@ class UserApiKeyLoginFlow {
         }
 
         if (username.isEmpty) {
-          // _t 已经兑换成功；若只是后续 current_user 被盾挡住，保留会话和 key，
-          // 不把“确认请求被挑战”错误升级成“登录状态/权限失败”。
+          // `_t` 已经成功兑换，后续 current_user 只是为了拿本地显示用户名。
+          // 如果这里仅仅被盾挡住，不能把一个已建立的登录会话回滚成“登录失败”。
+          // 扫码登录已有同样的保守兜底：先用占位 identifier 收口，后续正常
+          // 会话请求/预加载会刷新真实用户信息。
           if (currentUserBlockedByChallenge) {
-            ToastService.showError('登录令牌已兑换,但安全验证仍未完成,请完成验证后重试');
-            onFlowFinished?.call(false);
+            if (!AuthSession().isValid(requestGeneration)) return;
+            await service.finalizeNativeLoginSuccess('user');
+            ToastService.showSuccess('登录成功');
+            onFlowFinished?.call(true);
             return;
           }
           // _t 已落 jar 但确认请求失败;不带空用户名走收口(会写坏本地状态)
