@@ -44,7 +44,27 @@ jobs:
         run: flutter pub get
 
       - name: Check formatting
-        run: dart format --output=none --set-exit-if-changed lib test
+        id: format
+        run: |
+          set -euo pipefail
+          dart format lib test
+          if [[ -n "$(git diff --name-only)" ]]; then
+            git diff --binary > /tmp/dart-format.patch
+            git diff --name-only > /tmp/dart-format-files.txt
+            echo "dart format changed:"
+            cat /tmp/dart-format-files.txt
+            exit 1
+          fi
+
+      - name: Upload formatter diagnostic
+        if: failure() && steps.format.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-format-diagnostic
+          path: |
+            /tmp/dart-format.patch
+            /tmp/dart-format-files.txt
+          if-no-files-found: error
 
       - name: Flutter analyze
         run: flutter analyze
