@@ -1,3 +1,4 @@
+import 'package:fluxdo_render/fluxdo_render.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
@@ -98,8 +99,9 @@ class DiscourseContentExtensionRegistry {
 
   bool unregister(String id) {
     if (_coreExtensionIds.contains(id)) return false;
-    final removed = _extensions.removeWhere((item) => item.id == id);
-    if (removed == 0) return false;
+    final before = _extensions.length;
+    _extensions.removeWhere((item) => item.id == id);
+    if (_extensions.length == before) return false;
     _revision++;
     return true;
   }
@@ -316,4 +318,35 @@ class DiscourseContentExtensionRegistry {
 
   static final Set<String> _coreExtensionIds =
       _coreExtensions.map((extension) => extension.id).toSet();
+}
+
+/// ParagraphParser adapter used by post parse caches. Keeping the registry in a
+/// parser wrapper means both short posts and lazily parsed long-post chunks get
+/// exactly the same extension handling without changing fluxdo_render's sealed
+/// Node ABI.
+class DiscourseExtensionParagraphParser extends ParagraphParser {
+  DiscourseExtensionParagraphParser({
+    this.context = const DiscourseContentExtensionContext(),
+    DiscourseContentExtensionRegistry? registry,
+  }) : registry = registry ?? DiscourseContentExtensionRegistry.instance;
+
+  final DiscourseContentExtensionContext context;
+  final DiscourseContentExtensionRegistry registry;
+
+  @override
+  List<BlockNode> parse(
+    String html, {
+    int imageIndexStart = 0,
+    String? footnotesHtml,
+  }) {
+    final processed = registry.preprocess(html, context: context);
+    final processedFootnotes = footnotesHtml == null
+        ? null
+        : registry.preprocess(footnotesHtml, context: context);
+    return super.parse(
+      processed,
+      imageIndexStart: imageIndexStart,
+      footnotesHtml: processedFootnotes,
+    );
+  }
 }
