@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/discourse_parity_providers.dart';
+import '../providers/discourse_providers.dart';
 import '../utils/time_utils.dart';
 import '../utils/url_helper.dart';
 import '../widgets/common/error_view.dart';
 import '../widgets/common/relative_time_text.dart';
 import '../widgets/common/smart_avatar.dart';
 import '../widgets/content/collapsed_html_content.dart';
+import 'group_requests_page.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 
 /// Native Discourse group activity view (`/g/:name/activity/posts|mentions`).
@@ -40,6 +42,7 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
   final Map<GroupActivityKind, bool> _loadingMore = {};
   final Map<GroupActivityKind, bool> _hasMore = {};
   final Map<GroupActivityKind, Object?> _errors = {};
+  int? _manageableGroupId;
 
   static const _kinds = [
     GroupActivityKind.posts,
@@ -51,7 +54,10 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
     super.initState();
     _tabController = TabController(length: _kinds.length, vsync: this);
     _tabController.addListener(_onTabChanged);
-    Future.microtask(() => _refresh(GroupActivityKind.posts));
+    Future.microtask(() {
+      _refresh(GroupActivityKind.posts);
+      _loadManagementCapability();
+    });
   }
 
   @override
@@ -59,6 +65,36 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadManagementCapability() async {
+    try {
+      final group = await ref.read(discourseServiceProvider).fetchGroup(
+            widget.groupName,
+          );
+      if (!mounted) return;
+      setState(() {
+        _manageableGroupId = group.canManageMembers ? group.id : null;
+      });
+    } catch (_) {
+      // Activity itself may still be visible even when a separate group refresh
+      // fails. Do not turn an optional management capability probe into a page
+      // loading failure.
+    }
+  }
+
+  void _openMembershipRequests() {
+    final groupId = _manageableGroupId;
+    if (groupId == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GroupRequestsPage(
+          groupId: groupId,
+          groupName: widget.groupName,
+          groupLabel: widget.groupLabel,
+        ),
+      ),
+    );
   }
 
   void _onTabChanged() {
@@ -159,6 +195,14 @@ class _GroupActivityPageState extends ConsumerState<GroupActivityPage>
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.groupLabel ?? widget.groupName),
+        actions: [
+          if (_manageableGroupId != null)
+            IconButton(
+              tooltip: copy.membershipRequests,
+              onPressed: _openMembershipRequests,
+              icon: const Icon(Icons.how_to_reg_rounded),
+            ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: [
@@ -366,6 +410,7 @@ class _GroupActivityCopy {
 
   String get posts => zh ? '帖子' : 'Posts';
   String get mentions => zh ? '提及' : 'Mentions';
+  String get membershipRequests => zh ? '加入申请' : 'Membership requests';
   String get empty => zh ? '暂无内容' : 'Nothing here yet';
   String get loadMore => zh ? '加载更多' : 'Load more';
 }
