@@ -85,6 +85,63 @@ mixin _GroupsMixin on _DiscourseServiceBase {
     }
   }
 
+  /// Pending membership requests visible to group owners/admins. Upstream
+  /// reuses `/groups/:name/members.json` with `requesters=true` and guards it
+  /// with `guardian.ensure_can_edit!(group)`.
+  Future<GroupRequestersResult> fetchGroupRequesters(
+    String name, {
+    int offset = 0,
+    String? filter,
+    String order = 'requested_at',
+    bool asc = false,
+  }) async {
+    try {
+      final encoded = Uri.encodeComponent(name);
+      final response = await _dio.get(
+        '/groups/$encoded/members.json',
+        queryParameters: {
+          'requesters': true,
+          'offset': offset,
+          'order': order,
+          'asc': asc,
+          if (filter != null && filter.isNotEmpty) 'filter': filter,
+        },
+      );
+      if (response.data is! Map) {
+        throw const FormatException('Invalid group requesters response');
+      }
+      return GroupRequestersResult.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// Accept or reject one membership request.
+  ///
+  /// Important: Rails checks `if params[:accept]`. Never send the string
+  /// `"false"` for rejection because non-empty strings are truthy in Ruby.
+  /// Rejection therefore omits `accept` completely.
+  Future<void> handleGroupMembershipRequest({
+    required int groupId,
+    required int userId,
+    required bool accept,
+  }) async {
+    try {
+      await _dio.put(
+        '/groups/$groupId/handle_membership_request.json',
+        data: {
+          'user_id': userId,
+          if (accept) 'accept': true,
+        },
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
   /// 当前用户自助加入群组。入口是否展示由 GroupSerializer 下发的
   /// `public_admission` / `is_group_user` 决定，最终权限仍由服务端校验。
   Future<void> joinGroup(int groupId) async {
