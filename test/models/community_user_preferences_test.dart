@@ -22,6 +22,72 @@ void main() {
       expect(preferences.canEdit, isTrue);
     });
 
+    test('parses account title primary-group and flair choices', () {
+      final preferences = CommunityUserPreferences.fromUserJson({
+        'username': 'fish',
+        'title': 'Badge title',
+        'primary_group_id': '8',
+        'flair_group_id': 9,
+        '_fluxdo_user_selected_primary_groups': true,
+        '_fluxdo_available_badge_titles': ['Badge title', 'Extra badge'],
+        'groups': [
+          {
+            'id': 2,
+            'name': 'trust_level_1',
+            'automatic': true,
+            'title': 'Basic user',
+          },
+          {
+            'id': 3,
+            'name': 'moderators',
+            'display_name': 'Moderators',
+            'automatic': true,
+            'title': 'Moderator',
+          },
+          {
+            'id': 8,
+            'name': 'builders',
+            'automatic': false,
+            'title': 'Builder',
+          },
+          {
+            'id': 9,
+            'name': 'fish',
+            'automatic': false,
+            'flair_url': 'star',
+          },
+        ],
+      });
+
+      expect(preferences.title, 'Badge title');
+      expect(preferences.primaryGroupId, 8);
+      expect(preferences.flairGroupId, 9);
+      expect(
+        preferences.availableTitles,
+        containsAll(['Badge title', 'Extra badge', 'Basic user', 'Moderator', 'Builder']),
+      );
+      expect(
+        preferences.availablePrimaryGroups.map((group) => group.id),
+        [3, 8, 9],
+      );
+      expect(
+        preferences.availableFlairGroups.map((group) => group.id),
+        [9],
+      );
+    });
+
+    test('does not expose primary-group choices when the site gate is off', () {
+      final preferences = CommunityUserPreferences.fromUserJson({
+        'username': 'fish',
+        '_fluxdo_user_selected_primary_groups': false,
+        'groups': [
+          {'id': 8, 'name': 'builders', 'automatic': false},
+        ],
+      });
+
+      expect(preferences.availablePrimaryGroups, isEmpty);
+    });
+
     test('parses native email and notification preference values', () {
       final preferences = CommunityUserPreferences.fromUserJson({
         'username': 'fish',
