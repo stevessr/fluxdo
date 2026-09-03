@@ -22,6 +22,30 @@ void main() {
       expect(preferences.canEdit, isTrue);
     });
 
+    test('parses native email and notification preference values', () {
+      final preferences = CommunityUserPreferences.fromUserJson({
+        'username': 'fish',
+        'can_edit': true,
+        'user_option': {
+          'email_level': 1,
+          'email_messages_level': 2,
+          'like_notification_frequency': 3,
+          'push_notification_level': 2,
+          'notification_level_when_replying': 3,
+          'include_tl0_in_digests': true,
+          'skip_new_user_tips': true,
+        },
+      });
+
+      expect(preferences.emailLevel, 1);
+      expect(preferences.emailMessagesLevel, 2);
+      expect(preferences.likeNotificationFrequency, 3);
+      expect(preferences.pushNotificationLevel, 2);
+      expect(preferences.notificationLevelWhenReplying, 3);
+      expect(preferences.includeTl0InDigests, isTrue);
+      expect(preferences.skipNewUserTips, isTrue);
+    });
+
     test('keeps nested timezone fallback and unknown user options', () {
       final preferences = CommunityUserPreferences.fromUserJson({
         'username': 'fish',
