@@ -14,6 +14,7 @@ import '../widgets/common/paged_list_footer.dart';
 import '../l10n/s.dart';
 import '../utils/blocked_user_filter.dart';
 import 'bookmarks_page.dart';
+import 'bookmarks_with_reminders_page.dart';
 
 /// 通知历史列表页面（独立分页，不受 messageBus 干扰）
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -156,6 +157,19 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         title: Text(context.l10n.common_notification),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.notification_add_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const BookmarksWithRemindersPage(),
+              ),
+            ),
+            tooltip: _parityLabel(
+              context,
+              '带提醒的书签',
+              'Bookmarks with reminders',
+            ),
+          ),
           IconButton(
             icon: const Icon(Symbols.done_all_rounded),
             onPressed: () async {
