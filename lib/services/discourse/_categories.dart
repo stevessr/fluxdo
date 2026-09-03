@@ -1,5 +1,36 @@
 part of 'discourse_service.dart';
 
+/// Notification levels shared by Discourse topics, categories and tags.
+///
+/// Topics only expose 0..3. Categories and tags additionally support
+/// [watchingFirstPost] (4), so they must not be parsed through
+/// [TopicNotificationLevel].
+enum DiscourseTrackingLevel {
+  muted(0),
+  regular(1),
+  tracking(2),
+  watching(3),
+  watchingFirstPost(4);
+
+  const DiscourseTrackingLevel(this.value);
+  final int value;
+
+  static DiscourseTrackingLevel fromValue(int? value) {
+    return DiscourseTrackingLevel.values.firstWhere(
+      (level) => level.value == value,
+      orElse: () => DiscourseTrackingLevel.regular,
+    );
+  }
+
+  TopicNotificationLevel? get topicLevel => switch (this) {
+    DiscourseTrackingLevel.muted => TopicNotificationLevel.muted,
+    DiscourseTrackingLevel.regular => TopicNotificationLevel.regular,
+    DiscourseTrackingLevel.tracking => TopicNotificationLevel.tracking,
+    DiscourseTrackingLevel.watching => TopicNotificationLevel.watching,
+    DiscourseTrackingLevel.watchingFirstPost => null,
+  };
+}
+
 /// 分类和标签相关
 mixin _CategoriesMixin on _DiscourseServiceBase {
   /// 获取站点信息（包含所有分类）
@@ -136,7 +167,7 @@ mixin _CategoriesMixin on _DiscourseServiceBase {
     return PreloadedDataService().getMinPmPostLength();
   }
 
-  /// 设置分类通知级别
+  /// 设置分类通知级别。分类支持 0..4（含 Watching First Post）。
   Future<void> setCategoryNotificationLevel(int categoryId, int level) async {
     await _dio.post(
       '/category/$categoryId/notifications',
@@ -145,31 +176,38 @@ mixin _CategoriesMixin on _DiscourseServiceBase {
     );
   }
 
+  Future<void> setCategoryTrackingLevel(
+    int categoryId,
+    DiscourseTrackingLevel level,
+  ) => setCategoryNotificationLevel(categoryId, level.value);
+
   /// 获取当前用户对标签的通知级别。
-  Future<TopicNotificationLevel> getTagNotificationLevel(String tag) async {
+  ///
+  /// Current Discourse's canonical route is `/tag/:tag_id/notifications.json`.
+  Future<DiscourseTrackingLevel> getTagNotificationLevel(String tag) async {
     final encodedTag = Uri.encodeComponent(tag);
-    final response = await _dio.get('/tags/$encodedTag/notifications');
+    final response = await _dio.get('/tag/$encodedTag/notifications.json');
     final data = response.data;
     if (data is Map) {
       final raw = data['tag_notification'];
       if (raw is Map) {
-        return TopicNotificationLevel.fromValue(
+        return DiscourseTrackingLevel.fromValue(
           (raw['notification_level'] as num?)?.toInt(),
         );
       }
     }
-    return TopicNotificationLevel.regular;
+    return DiscourseTrackingLevel.regular;
   }
 
   /// 设置标签通知级别，对齐 Discourse TagsController 的嵌套参数。
   Future<void> setTagNotificationLevel(
     String tag,
-    TopicNotificationLevel level,
+    DiscourseTrackingLevel level,
   ) async {
     final encodedTag = Uri.encodeComponent(tag);
     try {
       await _dio.put(
-        '/tags/$encodedTag/notifications',
+        '/tag/$encodedTag/notifications.json',
         data: {
           'tag_notification': {'notification_level': level.value},
         },
