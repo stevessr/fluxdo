@@ -54,7 +54,18 @@ jobs:
           test/models/community_user_preferences_test.dart
 
       - name: Flutter analyze
-        run: flutter analyze
+        id: analyze
+        run: |
+          set -o pipefail
+          flutter analyze 2>&1 | tee /tmp/flutter-analyze.txt
+
+      - name: Upload analyzer diagnostic
+        if: failure() && steps.analyze.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-analyze-diagnostic
+          path: /tmp/flutter-analyze.txt
+          if-no-files-found: error
 
       - name: Discourse parity regression tests
         run: |
