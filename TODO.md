@@ -19,19 +19,21 @@
 - [ ] 根据 `site.json` / current user / serializer capability 隐藏站点未启用功能
 - [ ] 验收：网页改设置后 FluxDO 能读到；FluxDO 修改后网页能立即反映
 
-> 当前仍是最明显的 P0：用户资料页“设置”入口仍打开 Discourse WebView。
+> 该部分不属于 `feat/discourse-parity-wave1` 原始 4.x 范围。本轮不继续扩展 Security / Email / 2FA / Sessions。
 
 ### Tracking / Mute / Ignore
 
-- [ ] 建立统一 `NotificationLevel` / tracking model
-- [x] Topic：regular / tracking / watching / muted（已有 `TopicNotificationLevel` 与话题状态链，继续做一致性回归）
-- [ ] Category：regular / tracking / watching / watching first post / muted
-- [ ] Tag：regular / tracking / watching / watching first post / muted
+- [x] 建立 Category / Tag 可保留 level 4 的 `DiscourseTrackingLevel`，避免复用仅 0..3 的 Topic enum
+- [x] Topic：regular / tracking / watching / muted（已有 `TopicNotificationLevel` 与话题状态链）
+- [x] Category：regular / tracking / watching / watching first post / muted（已有五档 UI）
+- [x] Tag：regular / tracking / watching / watching first post / muted（本轮补五档 UI，并改用当前 Discourse `/tag/:tag/notifications.json`）
 - [x] User：服务端 muted users（用户页已有服务端 mute 状态/操作）
 - [x] User：服务端 ignored users（用户页已有服务端 ignore 状态/操作）
-- [ ] 保留现有本地 `blockedUsernames` 时明确标记“仅本机过滤”
-- [ ] 从话题、分类、标签和用户页提供一致的状态切换入口
+- [x] 保留现有本地 `blockedUsernames`，并在实际过滤提示中明确标记“仅本机屏蔽过滤”
+- [x] 话题、分类、标签和用户页均有对应状态切换入口；Topic 只暴露 0..3，Category / Tag 暴露 0..4
 - [ ] 验收跨 Web / FluxDO / 多账号同步
+
+> 本地 `blockedUsernames` 只是 FluxDO 展示层过滤，不等于服务端 muted users / ignored users。
 
 ### Bookmark Reminder
 
@@ -39,9 +41,9 @@
 - [x] 新建/编辑书签支持 reminder presets（现有 BookmarkEditSheet）
 - [x] 支持自定义 reminder 时间
 - [x] 支持清除/重设 reminder
-- [ ] 通知跳转到对应书签位置专项回归
-- [ ] “我的活动”增加 Bookmarks with reminders 独立入口（已有派生 provider，尚需正式 UI）
-- [ ] 验证 timezone 和 DST 行为
+- [x] “带提醒的书签”用户可见入口：复用现有账号隔离 bookmark cache/provider，并 hydrate 本地分页后过滤 reminder
+- [x] 点击提醒书签复用现有精确书签楼层解析；Chat bookmark 继续走统一内容链接分发
+- [x] timezone / DST：日历型 preset 以本地 08:00 构造，service 发送前统一转 UTC；已加回归测试
 
 ### Content Extension Registry
 
@@ -70,9 +72,9 @@
 - [x] Unaccept answer API + UI
 - [x] Accepted Answer 主楼摘要与精确跳楼
 - [x] Accepted Answer 帖子盖章/状态同步
-- [x] 用户资料 Solved 列表
+- [x] 用户资料 Solved 列表（`/solution/by_user.json`）
 - [ ] 话题目录中的 Solved / Unsolved 筛选能力与当前 Discourse 对齐
-- [ ] Solved 相关通知类型/icon/action 专项核对
+- [x] Solved accepted notification 已作为 plugin/custom notification 保留，统一 topic/post deep-link 可精确落楼
 
 ---
 
@@ -82,25 +84,26 @@
 
 - [x] Inbox
 - [x] Unread mailbox
+- [x] New mailbox（service 原有，本轮正式接入现有 pagination / selection / bulk archive）
 - [x] Sent
 - [x] Archive
-- [x] New PM
-- [x] 多选批量归档
-- [ ] Warnings mailbox（service 已具备；仅有权限/状态时接 UI）
+- [x] New PM composer
+- [x] 多选批量归档；成功后同步刷新 Inbox / Unread / New / Sent / Archive
+- [x] Warnings mailbox（仅在服务器能力探测成功时显示，不硬编码 staff/admin）
 - [x] Group PM inbox
 - [x] Group PM unread
 - [x] Group PM new
 - [x] Group PM archive
-- [ ] PM Tags
+- [x] PM Tags：使用服务端 `/u/:username/messages/tags/:tag_name`，不在客户端拉全量 PM 过滤
 - [ ] PM 搜索/过滤与网页语义核对
 
 ### User Activity
 
 - [x] Topics
-- [x] Replies（资料页已有独立 filter=5）
-- [x] Likes Given（资料页已有独立 filter=1）
+- [x] Replies（资料页已有独立 `user_actions` filter=5；审计误报）
+- [x] Likes Given（资料页已有独立 `user_actions` filter=1；审计误报）
 - [x] Bookmarks
-- [ ] Bookmarks with reminders 独立入口
+- [x] Bookmarks with reminders 用户可见入口
 - [x] Drafts
 - [x] Pending（自己的待审核内容）
 - [ ] Read：核对和 Discourse `/activity/read` 的语义一致性
@@ -115,8 +118,8 @@
 - [x] Public Join / Leave
 - [x] Request Membership（支持可选 reason）
 - [x] Add member
-- [x] Owner/Admin Membership Requests：requesters / reason / requested_at / approve / reject
-- [ ] Activity / Topics
+- [x] Owner/Admin Membership Requests：requesters / reason / requested_at / approve / reject；reject 不发送字符串 `"false"`
+- [x] Activity / Topics：使用服务端 `/topics/groups/:group_name`，由服务端执行 group/member 可见性检查
 - [x] Activity / Posts（`before_post_id` cursor）
 - [x] Activity / Mentions（`before_post_id` cursor）
 - [x] Group messages inbox
@@ -148,12 +151,19 @@
 - [x] History pagination API
 - [x] Read / unread API
 - [x] Mark one / all read
-- [ ] Responses 子分类完整对齐
-- [ ] Likes Received 子分类完整对齐
-- [ ] Mentions 子分类完整对齐
-- [ ] Edits 子分类完整对齐
-- [ ] Links 子分类完整对齐
-- [ ] Plugin notification icon/action adapter
+- [x] Responses：2 replied / 3 quoted
+- [x] Likes Received：5 liked / 19 liked consolidated / 25 reaction
+- [x] Mentions：1 mentioned / 15 group mentioned
+- [x] Edits：4 edited
+- [x] Links：11 linked / 39 linked consolidated
+- [x] 分类集合与 `filter_by_types` 名称集中在 `NotificationCategory`，Widget 不散落 magic numbers
+- [ ] Plugin notification 专用 icon adapter（无专用 icon 时仍保留 generic/custom notification，不丢动作）
+
+### Chat 状态一致性
+
+- [x] Chat 主架构 / read cursor / read-time synchronization 已存在，不重复重写
+- [x] Direct Messages 二级 Private / Group 高亮与可见内容由同一个 `TabController` 驱动
+- [x] 添加 Direct Messages → Channels → Direct Messages 回归测试，断言高亮状态源与 `IndexedStack` 可见内容一致
 
 ---
 
@@ -241,16 +251,18 @@
 - [x] 发帖 / 回复 / 编辑
 - [x] Draft
 - [x] 上传
-- [x] Chat 主架构
+- [x] Chat 主架构及 Direct/Group 二级 tab 单一状态源
 - [x] Notifications API 主架构
 - [x] Topic Voting
 - [x] Solved / Accepted Answer 核心闭环
 - [x] `discourse-local-date` 原生渲染
-- [x] 普通 PM Inbox / Unread / Sent / Archive
+- [x] Bookmark reminder CRUD / presets / custom time / clear / auto-delete
+- [x] 普通 PM Inbox / Unread / New / Sent / Archive
 - [x] PM 批量归档
+- [x] PM Warnings / PM Tags
 - [x] Group PM Inbox / Unread / New / Archive
 - [x] 群组目录 / 详情 / 成员 / Join / Leave / Request Membership
-- [x] 群组 Posts / Mentions / Membership Requests 审核
+- [x] 群组 Topics / Posts / Mentions / Membership Requests 审核
 - [x] User Activity Replies / Likes Given
 - [x] Badges
 
