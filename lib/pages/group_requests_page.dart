@@ -56,6 +56,15 @@ class _GroupRequestsPageState extends ConsumerState<GroupRequestsPage> {
     super.dispose();
   }
 
+  /// Upstream computes `meta.total` before applying requester search filtering.
+  /// Therefore `result.hasMore` alone can remain true for a short filtered page
+  /// and produce one or more empty load-more requests. A full server page is the
+  /// only safe signal that another filtered page may exist.
+  bool _canLoadMore(GroupRequestersResult result) =>
+      result.hasMore &&
+      result.requesters.isNotEmpty &&
+      (result.limit <= 0 || result.requesters.length >= result.limit);
+
   Future<void> _reload() async {
     if (_loading) return;
     final requestedFilter = _filter;
@@ -74,7 +83,7 @@ class _GroupRequestsPageState extends ConsumerState<GroupRequestsPage> {
         _requesters = result.requesters;
         _total = result.total;
         _nextOffset = result.nextOffset;
-        _hasMore = result.hasMore;
+        _hasMore = _canLoadMore(result);
       });
     } catch (error, stack) {
       if (mounted && requestedFilter == _filter) {
@@ -107,7 +116,7 @@ class _GroupRequestsPageState extends ConsumerState<GroupRequestsPage> {
         _requesters = byId.values.toList(growable: false);
         _total = result.total;
         _nextOffset = result.nextOffset;
-        _hasMore = result.hasMore;
+        _hasMore = _canLoadMore(result);
       });
     } catch (error) {
       if (mounted) {
