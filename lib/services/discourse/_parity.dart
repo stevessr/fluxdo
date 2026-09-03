@@ -33,12 +33,29 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
     return TopicListResponse.fromJson(response.data);
   }
 
-  /// Staff-only warning mailbox. The server remains the source of truth for
-  /// whether the current user may access this route.
+  /// Warning mailbox. Visibility is deliberately decided by the server rather
+  /// than by inferring staff/admin state in the client.
   Future<TopicListResponse> getPrivateMessagesWarnings({int page = 0}) async {
     final username = await _requireParityUsername();
     final response = await _dio.get(
       '/topics/private-messages-warnings/$username.json',
+      queryParameters: page > 0 ? {'page': page} : null,
+    );
+    return TopicListResponse.fromJson(response.data);
+  }
+
+  /// Fetch one PM tag mailbox from the server. Do not emulate this by loading
+  /// every private message and filtering locally: Discourse performs both the
+  /// current-user and `can_tag_pms?` permission checks on this route.
+  Future<TopicListResponse> getPrivateMessagesByTag(
+    String tagName, {
+    int page = 0,
+  }) async {
+    final username = await _requireParityUsername();
+    final encodedUser = Uri.encodeComponent(username);
+    final encodedTag = Uri.encodeComponent(tagName);
+    final response = await _dio.get(
+      '/u/$encodedUser/messages/tags/$encodedTag.json',
       queryParameters: page > 0 ? {'page': page} : null,
     );
     return TopicListResponse.fromJson(response.data);
@@ -66,6 +83,21 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
         : '';
     final response = await _dio.get(
       '/topics/private-messages-group/$username/$encodedGroup$suffix.json',
+      queryParameters: page > 0 ? {'page': page} : null,
+    );
+    return TopicListResponse.fromJson(response.data);
+  }
+
+  /// Topics created by members of [groupName]. Current Discourse exposes this
+  /// through ListController#group_topics under `/topics/groups/:group_name`;
+  /// the server enforces `ensure_can_see_group_and_members!`.
+  Future<TopicListResponse> getGroupTopics(
+    String groupName, {
+    int page = 0,
+  }) async {
+    final encodedGroup = Uri.encodeComponent(groupName);
+    final response = await _dio.get(
+      '/topics/groups/$encodedGroup.json',
       queryParameters: page > 0 ? {'page': page} : null,
     );
     return TopicListResponse.fromJson(response.data);
