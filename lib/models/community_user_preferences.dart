@@ -122,7 +122,10 @@ class CommunityUserPreferences {
           json['can_upload_profile_header'] as bool? ?? false,
       canUploadUserCardBackground:
           json['can_upload_user_card_background'] as bool? ?? false,
-      timezone: option['timezone']?.toString(),
+      // Current Discourse serializes timezone at the user root and its
+      // frontend moves it into user_option after loading. Keep compatibility
+      // with older/plugin serializers that may already nest it.
+      timezone: json['timezone']?.toString() ?? option['timezone']?.toString(),
       emailDigests: optionBool('email_digests', false),
       mailingListMode: optionBool('mailing_list_mode', false),
       externalLinksInNewTab:
