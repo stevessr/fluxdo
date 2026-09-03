@@ -10,8 +10,8 @@ import 'webview_page.dart';
 /// Native editor for server-side Discourse preferences.
 ///
 /// This page intentionally stays separate from FluxDO local settings. Every
-/// value shown here comes from `/u/:username.json` and writes back through the
-/// same endpoint used by the Discourse web client.
+/// value shown here comes from Discourse and writes back through the same user
+/// update path used by the web client.
 class CommunityAccountSettingsPage extends ConsumerWidget {
   const CommunityAccountSettingsPage({super.key});
 
@@ -77,6 +77,10 @@ class _CommunityPreferencesFormState
   late final TextEditingController _websiteController;
   late final TextEditingController _timezoneController;
 
+  late String? _title;
+  late int? _primaryGroupId;
+  late int? _flairGroupId;
+
   late bool _emailDigests;
   late bool _includeTl0InDigests;
   late bool _mailingListMode;
@@ -116,6 +120,10 @@ class _CommunityPreferencesFormState
     _locationController = TextEditingController(text: value.location ?? '');
     _websiteController = TextEditingController(text: value.website ?? '');
     _timezoneController = TextEditingController(text: value.timezone ?? '');
+
+    _title = value.title;
+    _primaryGroupId = value.primaryGroupId;
+    _flairGroupId = value.flairGroupId;
 
     _emailDigests = value.emailDigests;
     _includeTl0InDigests = value.includeTl0InDigests;
@@ -203,6 +211,26 @@ class _CommunityPreferencesFormState
       _initial.name,
       enabled: _initial.canEditName,
     );
+
+    if (_initial.canEdit &&
+        _initial.availableTitles.isNotEmpty &&
+        _title != _initial.title) {
+      changes['title'] = _title ?? '';
+    }
+    if (_initial.canEdit &&
+        _initial.userSelectedPrimaryGroups &&
+        (_initial.availablePrimaryGroups.isNotEmpty ||
+            _initial.primaryGroupId != null) &&
+        _primaryGroupId != _initial.primaryGroupId) {
+      changes['primary_group_id'] = _primaryGroupId?.toString() ?? '';
+    }
+    if (_initial.canEdit &&
+        (_initial.availableFlairGroups.isNotEmpty ||
+            _initial.flairGroupId != null) &&
+        _flairGroupId != _initial.flairGroupId) {
+      changes['flair_group_id'] = _flairGroupId?.toString() ?? '';
+    }
+
     _addTextChange(
       changes,
       'bio_raw',
@@ -500,6 +528,83 @@ class _CommunityPreferencesFormState
     );
   }
 
+  Widget _titleChoice() {
+    final choices = _initial.availableTitles;
+    if (choices.isEmpty) return const SizedBox.shrink();
+    final items = <DropdownMenuItem<String>>[
+      DropdownMenuItem(value: '', child: Text(_text('无', 'None'))),
+      ...choices.map(
+        (title) => DropdownMenuItem<String>(
+          value: title,
+          child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      ),
+    ];
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      title: Text(_text('头衔', 'Title')),
+      trailing: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 190),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            isExpanded: true,
+            value: _title ?? '',
+            onChanged: _initial.canEdit && !_saving
+                ? (value) => setState(
+                      () => _title = value == null || value.isEmpty ? null : value,
+                    )
+                : null,
+            items: items,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _groupChoice({
+    required String title,
+    required int? value,
+    required List<CommunityPreferenceGroup> groups,
+    required ValueChanged<int?> onChanged,
+  }) {
+    if (groups.isEmpty && value == null) return const SizedBox.shrink();
+    final labels = <int, String>{for (final group in groups) group.id: group.label};
+    if (value != null && !labels.containsKey(value)) {
+      labels[value] = _text('当前组 (#$value)', 'Current group (#$value)');
+    }
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      title: Text(title),
+      trailing: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 190),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<int>(
+            isExpanded: true,
+            value: value ?? -1,
+            onChanged: _initial.canEdit && !_saving
+                ? (selected) => onChanged(selected == -1 ? null : selected)
+                : null,
+            items: [
+              DropdownMenuItem(value: -1, child: Text(_text('无', 'None'))),
+              ...labels.entries.map(
+                (entry) => DropdownMenuItem<int>(
+                  value: entry.key,
+                  child: Text(
+                    entry.value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final canEditTimezone = _initial.canEdit &&
@@ -550,7 +655,7 @@ class _CommunityPreferencesFormState
           ),
         ),
         const SizedBox(height: 16),
-        _sectionTitle(_text('资料', 'Profile')),
+        _sectionTitle(_text('账户', 'Account')),
         if (_initial.canEditName) ...[
           _field(
             controller: _nameController,
@@ -558,6 +663,36 @@ class _CommunityPreferencesFormState
           ),
           const SizedBox(height: 12),
         ],
+        if (_initial.canEdit &&
+            (_initial.availableTitles.isNotEmpty ||
+                _initial.availablePrimaryGroups.isNotEmpty ||
+                _initial.primaryGroupId != null ||
+                _initial.availableFlairGroups.isNotEmpty ||
+                _initial.flairGroupId != null))
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                _titleChoice(),
+                if (_initial.userSelectedPrimaryGroups)
+                  _groupChoice(
+                    title: _text('主要群组', 'Primary group'),
+                    value: _primaryGroupId,
+                    groups: _initial.availablePrimaryGroups,
+                    onChanged: (value) =>
+                        setState(() => _primaryGroupId = value),
+                  ),
+                _groupChoice(
+                  title: _text('徽标群组', 'Flair group'),
+                  value: _flairGroupId,
+                  groups: _initial.availableFlairGroups,
+                  onChanged: (value) => setState(() => _flairGroupId = value),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 16),
+        _sectionTitle(_text('资料', 'Profile')),
         if (_initial.canChangeBio) ...[
           _field(
             controller: _bioController,
