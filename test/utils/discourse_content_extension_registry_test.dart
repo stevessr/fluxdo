@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo_render/fluxdo_render.dart';
+import 'package:html/dom.dart' as dom;
 import 'package:fluxdo/utils/discourse_content_extension_registry.dart';
 
 void main() {
@@ -55,7 +56,14 @@ void main() {
         matcher: (element) => element.classes.contains('custom-widget'),
         transform: (element, context) {
           element.classes.remove('custom-widget');
-          element.innerHtml = '<p><a href="/custom">Native adapter</a></p>';
+          element.nodes.clear();
+          final paragraph = dom.Element.tag('p');
+          paragraph.append(
+            dom.Element.tag('a')
+              ..attributes['href'] = '/custom'
+              ..text = 'Native adapter',
+          );
+          element.append(paragraph);
         },
       ),
     );
