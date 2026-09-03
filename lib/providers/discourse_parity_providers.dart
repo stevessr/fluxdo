@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/topic.dart';
@@ -18,6 +19,19 @@ class PmUnreadNotifier extends PrivateMessagesNotifier {
 final pmUnreadProvider =
     AsyncNotifierProvider.autoDispose<PmUnreadNotifier, List<Topic>>(
       () => PmUnreadNotifier(),
+    );
+
+/// New private messages intentionally share the exact same pagination state
+/// machine as Inbox/Unread/Sent/Archive.
+class PmNewNotifier extends PrivateMessagesNotifier {
+  @override
+  Future<TopicListResponse> fetch(int page) =>
+      ref.read(discourseServiceProvider).getPrivateMessagesNew(page: page);
+}
+
+final pmNewProvider =
+    AsyncNotifierProvider.autoDispose<PmNewNotifier, List<Topic>>(
+      () => PmNewNotifier(),
     );
 
 /// Extra private-message mailboxes exposed by current Discourse but not covered
@@ -51,6 +65,43 @@ final parityPmPageProvider = FutureProvider.autoDispose
         ParityPmMailbox.warnings =>
           service.getPrivateMessagesWarnings(page: query.page),
       };
+    });
+
+/// Whether the server exposes the warning mailbox to this account. Do not
+/// infer this from moderator/admin flags: an explicit successful server
+/// response is the capability signal.
+final pmWarningsAvailableProvider = FutureProvider.autoDispose<bool>((ref) async {
+  try {
+    await ref.read(discourseServiceProvider).getPrivateMessagesWarnings();
+    return true;
+  } on DioException catch (error) {
+    final status = error.response?.statusCode;
+    if (status == 403 || status == 404) return false;
+    rethrow;
+  }
+});
+
+class PmTagQuery {
+  const PmTagQuery({required this.tagName, this.page = 0});
+
+  final String tagName;
+  final int page;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PmTagQuery && other.tagName == tagName && other.page == page;
+
+  @override
+  int get hashCode => Object.hash(tagName, page);
+}
+
+/// PM-tag results always come from Discourse's permission-checked server route;
+/// this provider never fetches the entire mailbox to filter client-side.
+final pmTagPageProvider = FutureProvider.autoDispose
+    .family<TopicListResponse, PmTagQuery>((ref, query) {
+      return ref
+          .read(discourseServiceProvider)
+          .getPrivateMessagesByTag(query.tagName, page: query.page);
     });
 
 class GroupPrivateMessageQuery {
@@ -93,6 +144,29 @@ final groupPrivateMessagesProvider = FutureProvider.autoDispose
             newOnly: query.newOnly,
             archived: query.archived,
           );
+    });
+
+class GroupTopicsQuery {
+  const GroupTopicsQuery({required this.groupName, this.page = 0});
+
+  final String groupName;
+  final int page;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GroupTopicsQuery &&
+      other.groupName == groupName &&
+      other.page == page;
+
+  @override
+  int get hashCode => Object.hash(groupName, page);
+}
+
+final groupTopicsProvider = FutureProvider.autoDispose
+    .family<TopicListResponse, GroupTopicsQuery>((ref, query) {
+      return ref
+          .read(discourseServiceProvider)
+          .getGroupTopics(query.groupName, page: query.page);
     });
 
 enum GroupActivityKind { posts, mentions }
