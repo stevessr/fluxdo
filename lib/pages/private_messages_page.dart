@@ -22,16 +22,20 @@ import '../widgets/post/reply_sheet.dart';
 import '../widgets/common/error_view.dart';
 import '../widgets/desktop_refresh_indicator.dart';
 import '../l10n/s.dart';
+import 'pm_special_mailbox_page.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 import 'topics_screen.dart' show PaneContentWidget;
 
-/// Page-local mailbox identity. The legacy public [PrivateMessageFilter] only
-/// covered Inbox/Sent/Archive; keeping the parity-only Unread state here avoids
-/// coupling unrelated user-content providers to the PM page presentation.
-enum _PmMailbox { inbox, unread, sent, archive }
+/// Page-local mailbox identity. New/Unread deliberately use the same
+/// [PrivateMessagesNotifier] pagination machinery as Inbox/Sent/Archive.
+enum _PmMailbox { inbox, unread, newMessages, sent, archive }
 
 String _pmUnreadLabel(BuildContext context) {
   return Localizations.localeOf(context).languageCode == 'zh' ? '未读' : 'Unread';
+}
+
+String _pmNewLabel(BuildContext context) {
+  return Localizations.localeOf(context).languageCode == 'zh' ? '新私信' : 'New';
 }
 
 /// 内部 tab 动作：外层根据当前激活 filter 派发给对应子 widget。
@@ -92,9 +96,6 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
         stackProvider: selectedMessageProvider,
         parentActive: widget.isActive,
         truncateOnPush: !isTop,
-        // 基础层也给 clear：ESC/返回按钮清空右栏回到空态，与
-        // search/seeking 一致（平行视界 ESC 统一）。回调内重读
-        // provider，不闭包捕获 build 时的快照。
         onBack: () {
           final notifier = ref.read(selectedMessageProvider.notifier);
           if (ref.read(selectedMessageProvider).isStacked) {
@@ -110,6 +111,7 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
   static const _filters = [
     _PmMailbox.inbox,
     _PmMailbox.unread,
+    _PmMailbox.newMessages,
     _PmMailbox.sent,
     _PmMailbox.archive,
   ];
@@ -144,6 +146,7 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
     return switch (filter) {
       _PmMailbox.inbox => ref.watch(pmInboxProvider),
       _PmMailbox.unread => ref.watch(pmUnreadProvider),
+      _PmMailbox.newMessages => ref.watch(pmNewProvider),
       _PmMailbox.sent => ref.watch(pmSentProvider),
       _PmMailbox.archive => ref.watch(pmArchiveProvider),
     };
@@ -200,6 +203,7 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
     await Future.wait<void>([
       _ignoreRefreshFailure(ref.read(pmInboxProvider.notifier).refresh()),
       _ignoreRefreshFailure(ref.read(pmUnreadProvider.notifier).refresh()),
+      _ignoreRefreshFailure(ref.read(pmNewProvider.notifier).refresh()),
       _ignoreRefreshFailure(ref.read(pmSentProvider.notifier).refresh()),
       _ignoreRefreshFailure(ref.read(pmArchiveProvider.notifier).refresh()),
     ]);
@@ -217,7 +221,6 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
     Object? firstError;
 
     setState(() => _isArchivingSelection = true);
-
     final service = ref.read(discourseServiceProvider);
     for (final topicId in selectedIds) {
       try {
@@ -267,14 +270,13 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
       composePrivateMessage: true,
     );
     if (!mounted || created == null) return;
-    // 新私信会同时进「收件箱」与「已发送」，两个都刷新
     ref.read(pmInboxProvider.notifier).refresh();
+    ref.read(pmNewProvider.notifier).refresh();
     ref.read(pmSentProvider.notifier).refresh();
   }
 
   @override
   Widget build(BuildContext context) {
-    // 底栏派发的快捷动作：查询当前激活 tab 的 filter，转发到对应子 widget。
     ref.listen(navActionBusProvider, (_, event) {
       if (event == null) return;
       if (event.targetId != NavEntryIds.messages) return;
@@ -339,14 +341,17 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
                 tooltip: materialL10n.selectAllButtonLabel,
                 icon: const Icon(Icons.checklist_rounded),
               ),
+            if (!_selectionMode) const PmParityMenuButton(),
           ],
           bottom: _selectionMode
               ? null
               : TabBar(
                   controller: _tabController,
+                  isScrollable: true,
                   tabs: [
                     Tab(text: context.l10n.privateMessages_inbox),
                     Tab(text: _pmUnreadLabel(context)),
+                    Tab(text: _pmNewLabel(context)),
                     Tab(text: context.l10n.privateMessages_sent),
                     Tab(text: context.l10n.privateMessages_archive),
                   ],
@@ -369,8 +374,6 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
               ),
           ],
         ),
-        // 新建私信：此前只能从某个用户的头像菜单发起，对方没在可见处
-        // 发过言就完全没有路径。对齐 Discourse 网页版私信列表的入口。
         floatingActionButton: _selectionMode
             ? null
             : FloatingActionButton(
@@ -382,14 +385,9 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
       ),
     );
 
-    // 平行视界：宽屏双栏下私信列表跟话题列表一样，走独立的
-    // selectedMessageProvider 导航栈;窄屏栈非空时详情在本页体内全宽
-    // 投影(栈是唯一真相,不 push 合成路由,宽窄切换 State 原地保留)。
     final selectedMessage = ref.watch(selectedMessageProvider);
-    // ESC:栈非空(右栏开着/投影着)都让分发落 detail scope。
     _escBinding.sync(context, paneOpen: selectedMessage.hasSelection);
 
-    // 左栏本质是不是"列表"（私信列表）——决定给窄栏还是对半分。
     final masterIsListLike = !selectedMessage.isStacked;
     return PaneProjectionBackScope(
       stackProvider: selectedMessageProvider,
@@ -461,6 +459,10 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
         ref.watch(pmUnreadProvider),
         ref.watch(pmUnreadProvider.notifier),
       ),
+      _PmMailbox.newMessages => (
+        ref.watch(pmNewProvider),
+        ref.watch(pmNewProvider.notifier),
+      ),
       _PmMailbox.sent => (
         ref.watch(pmSentProvider),
         ref.watch(pmSentProvider.notifier),
@@ -476,6 +478,7 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
     return switch (widget.filter) {
       _PmMailbox.inbox => ref.read(pmInboxProvider.notifier),
       _PmMailbox.unread => ref.read(pmUnreadProvider.notifier),
+      _PmMailbox.newMessages => ref.read(pmNewProvider.notifier),
       _PmMailbox.sent => ref.read(pmSentProvider.notifier),
       _PmMailbox.archive => ref.read(pmArchiveProvider.notifier),
     };
@@ -485,6 +488,7 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
     return switch (widget.filter) {
       _PmMailbox.inbox => ref.read(pmInboxProvider),
       _PmMailbox.unread => ref.read(pmUnreadProvider),
+      _PmMailbox.newMessages => ref.read(pmNewProvider),
       _PmMailbox.sent => ref.read(pmSentProvider),
       _PmMailbox.archive => ref.read(pmArchiveProvider),
     };
@@ -539,7 +543,6 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
   Widget build(BuildContext context) {
     super.build(context);
 
-    // 响应外层派发的快捷动作（只对当前激活 tab 生效：外层按 _tabController.index 派发）
     ref.listen(_pmTabEventProvider(widget.filter), (_, event) {
       if (event == null) return;
       switch (event.action) {
@@ -593,7 +596,6 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
             messageStyle: true,
             child: ListView.builder(
               controller: _scrollController,
-              // 底部让出 extendBody 注入的底栏高度
               padding: EdgeInsets.fromLTRB(
                 12,
                 12,
@@ -626,7 +628,6 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
                       ? () => widget.onToggleSelection(topic.id)
                       : () => _onItemTap(topic),
                   enableLongPress: enableLongPress,
-                  // 私信语义同邮件:发件人优先的 Gmail 式布局
                   messageStyle: true,
                 );
 
