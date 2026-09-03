@@ -16,6 +16,89 @@ class AccountSwitchSessionValidation {
 }
 
 extension AccountSwitchSessionValidationExtension on DiscourseService {
+  Future<void> _captureCurrentAccountRuntime() async {
+    final username = _username?.trim();
+    if (username == null || username.isEmpty || username == AccountManager.guestAccountId) {
+      return;
+    }
+
+    try {
+      final token = await _cookieJar.getTToken();
+      if (token == null || token.isEmpty) return;
+      final cookies = await _cookieJar.loadAllCanonicalCookies();
+      AccountRuntimePool.instance.save(
+        username: username,
+        cookies: cookies,
+        sessionToken: token,
+        csrfToken: _cookieSync.csrfToken,
+        currentUser: currentUserNotifier.value,
+      );
+      debugPrint(
+        '[AccountSwitch] 已缓存 native runtime: $username '
+        '(${cookies.length} cookies, csrf=${_cookieSync.csrfToken != null})',
+      );
+    } catch (e) {
+      // runtime cache 只是快路，失败必须无条件回退原来的持久化快照流程。
+      debugPrint('[AccountSwitch] 缓存 native runtime 失败(继续): $e');
+    }
+  }
+
+  Future<AccountNativeRuntime?> _activateCachedAccountRuntime({
+    required String expectedUsername,
+    required String restoredSessionToken,
+  }) async {
+    final runtime = AccountRuntimePool.instance.findMatching(
+      expectedUsername,
+      restoredSessionToken,
+    );
+    if (runtime == null) return null;
+
+    // AccountManager 已经把磁盘快照回灌到 jar。这里切回进程内 runtime 时先
+    // 保存这份状态作为异常回退，再用 runtime 中更新过的 cookie 覆盖；CF
+    // cookie 属于设备态，不在 runtime 中，始终保留当前最新值。
+    final fallbackCookies = await _cookieJar.loadAllCanonicalCookies();
+    final cfClearanceCookie = await _cookieJar.getCfClearanceCookie();
+    try {
+      await _cookieJar.cookieJar.deleteAll();
+      await _cookieJar.restoreCanonicalCookies(runtime.cookies, trusted: true);
+      if (cfClearanceCookie != null) {
+        await _cookieJar.restoreCfClearance(cfClearanceCookie);
+      }
+
+      final liveToken = await _cookieJar.getTToken();
+      if (liveToken == null || liveToken.isEmpty || liveToken != runtime.sessionToken) {
+        throw StateError('runtime session token restore mismatch');
+      }
+
+      await _cookieSync.reset();
+      final cachedCsrf = runtime.csrfToken;
+      if (cachedCsrf != null && cachedCsrf.isNotEmpty) {
+        _cookieSync.setCsrfToken(cachedCsrf);
+      }
+      _tToken = liveToken;
+      _username = runtime.username;
+
+      final cachedUser = runtime.currentUser;
+      if (cachedUser != null &&
+          cachedUser.username.toLowerCase() == expectedUsername.toLowerCase()) {
+        currentUserNotifier.value = cachedUser;
+      }
+      return runtime;
+    } catch (e) {
+      debugPrint('[AccountSwitch] native runtime 激活失败，回退磁盘快照: $e');
+      try {
+        await _cookieJar.cookieJar.deleteAll();
+        await _cookieJar.restoreCanonicalCookies(fallbackCookies, trusted: true);
+        if (cfClearanceCookie != null) {
+          await _cookieJar.restoreCfClearance(cfClearanceCookie);
+        }
+      } catch (rollbackError) {
+        debugPrint('[AccountSwitch] native runtime 回退 cookie 失败: $rollbackError');
+      }
+      return null;
+    }
+  }
+
   /// 多账号切换专用的本地摘除。
   ///
   /// 与 [detachSessionLocally] 的认证内存/后台服务边界完全一致，但 WebView
@@ -23,6 +106,9 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
   /// origins 的用户态 cookie 并独立复检。任何失败都会自动回退原来的全量
   /// WebView 清理，因此快路不会降低账号隔离强度。
   Future<void> detachSessionForAccountSwitch() async {
+    // 在推进 generation/清空 cookie 之前保存当前账号的进程内 runtime。
+    // 持久化快照仍是恢复真源；runtime 只负责连续切换的低延迟快路。
+    await _captureCurrentAccountRuntime();
     AuthSession().advance();
 
     MessageBusService().stopAll();
@@ -98,6 +184,42 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
     final initialToken = await _cookieJar.getTToken();
     if (!isCurrent() || initialToken == null || initialToken.isEmpty) {
       return const AccountSwitchSessionValidation(isValid: false);
+    }
+
+    // 快路：磁盘快照的 _t 与进程内 runtime 一致时，优先恢复 runtime 中
+    // 最新的 cookie/CSRF/currentUser。短窗口内它刚作为活跃账号运行过，可
+    // 直接复用那次有效性结论，省掉重复的 /session/current.json；超过窗口
+    // 仍保留 runtime 状态，但继续走下面的服务端校验。
+    final cachedRuntime = await _activateCachedAccountRuntime(
+      expectedUsername: expected,
+      restoredSessionToken: initialToken,
+    );
+    if (!isCurrent()) {
+      return const AccountSwitchSessionValidation(isValid: false);
+    }
+    if (cachedRuntime != null) {
+      final cachedUser = cachedRuntime.currentUser;
+      final cachedUserMatches =
+          cachedUser != null &&
+          cachedUser.username.toLowerCase() == expected.toLowerCase();
+      if (cachedUserMatches && cachedRuntime.canReuseValidation()) {
+        _resetStrikes();
+        LogWriter.instance.write({
+          'timestamp': DateTime.now().toIso8601String(),
+          'level': 'info',
+          'type': 'auth',
+          'event': 'account_switch_runtime_reused',
+          'message': '账户切换复用进程内 native runtime，跳过重复 session 校验',
+          'expectedUsername': expected,
+          'runtimeAgeMs': DateTime.now()
+              .difference(cachedRuntime.capturedAt)
+              .inMilliseconds,
+        });
+        return AccountSwitchSessionValidation(
+          isValid: true,
+          currentUser: {'username': cachedUser.username},
+        );
+      }
     }
 
     try {
