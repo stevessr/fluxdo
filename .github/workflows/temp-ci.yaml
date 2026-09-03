@@ -44,18 +44,12 @@ jobs:
         run: flutter pub get
 
       - name: Check formatting
-        id: format
-        continue-on-error: true
         run: dart format --output=none --set-exit-if-changed lib test
 
       - name: Flutter analyze
-        id: analyze
-        continue-on-error: true
         run: flutter analyze
 
       - name: Discourse parity regression tests
-        id: parity_tests
-        continue-on-error: true
         run: |
           set -euo pipefail
           tests=(
@@ -79,16 +73,12 @@ jobs:
           fi
 
       - name: Check patch whitespace
-        id: whitespace
-        continue-on-error: true
         run: |
           set -euo pipefail
           git cat-file -e "${SAFE_BASE}^{commit}"
           git diff --check "${SAFE_BASE}..HEAD"
 
       - name: Verify clean generated/worktree state
-        id: clean
-        continue-on-error: true
         run: |
           set -euo pipefail
           if [[ -n "$(git status --porcelain)" ]]; then
@@ -97,36 +87,6 @@ jobs:
             git diff --stat
             exit 1
           fi
-
-      - name: Verification summary
-        if: always()
-        env:
-          FORMAT_OUTCOME: ${{ steps.format.outcome }}
-          ANALYZE_OUTCOME: ${{ steps.analyze.outcome }}
-          PARITY_TESTS_OUTCOME: ${{ steps.parity_tests.outcome }}
-          WHITESPACE_OUTCOME: ${{ steps.whitespace.outcome }}
-          CLEAN_OUTCOME: ${{ steps.clean.outcome }}
-        run: |
-          set -euo pipefail
-          printf '%-26s %s\n' \
-            'dart format' "$FORMAT_OUTCOME" \
-            'flutter analyze' "$ANALYZE_OUTCOME" \
-            'parity regression tests' "$PARITY_TESTS_OUTCOME" \
-            'git diff --check' "$WHITESPACE_OUTCOME" \
-            'clean worktree' "$CLEAN_OUTCOME"
-
-          failed=0
-          for outcome in \
-            "$FORMAT_OUTCOME" \
-            "$ANALYZE_OUTCOME" \
-            "$PARITY_TESTS_OUTCOME" \
-            "$WHITESPACE_OUTCOME" \
-            "$CLEAN_OUTCOME"; do
-            if [[ "$outcome" != 'success' ]]; then
-              failed=1
-            fi
-          done
-          exit "$failed"
 
   full-tests:
     name: flutter-test-${{ matrix.shard }}
