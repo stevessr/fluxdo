@@ -25,14 +25,51 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
     return root;
   }
 
+  Future<List<String>> _getCommunityBadgeTitleChoices(String encodedUser) async {
+    final siteSettings = await PreloadedDataService().getSiteSettings();
+    if (siteSettings?['enable_badges'] != true) return const [];
+
+    try {
+      final response = await _dio.get('/user-badges/$encodedUser.json');
+      if (response.data is! Map) return const [];
+      final badges = (response.data as Map)['badges'];
+      if (badges is! List) return const [];
+      return badges
+          .whereType<Map>()
+          .where((badge) => badge['allow_title'] == true)
+          .map((badge) => badge['name']?.toString() ?? '')
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+    } on DioException catch (error) {
+      // Badge title choices are additive account metadata. A site that hides or
+      // disables this endpoint should not make the rest of native preferences
+      // unusable; unknown transport/auth failures still surface normally.
+      final status = error.response?.statusCode;
+      if (status == 403 || status == 404) return const [];
+      rethrow;
+    }
+  }
+
   /// Fetch the current account with the full UserSerializer payload used by
   /// Discourse's preferences routes. Keep the response raw at the service
   /// boundary so newer core/plugin user_option fields are not silently lost.
+  ///
+  /// A small `_fluxdo_*` metadata namespace carries client capability facts
+  /// that the official preferences route obtains from preload/site settings or
+  /// follow-up requests. It is never sent back by the update method.
   Future<Map<String, dynamic>> getCommunityUserPreferencesRaw() async {
     final username = await _requireParityUsername();
     final encodedUser = Uri.encodeComponent(username);
     final response = await _dio.get('/u/$encodedUser.json');
-    return _unwrapCommunityUserPayload(response.data);
+    final user = _unwrapCommunityUserPayload(response.data);
+
+    final siteSettings = await PreloadedDataService().getSiteSettings();
+    user['_fluxdo_user_selected_primary_groups'] =
+        siteSettings?['user_selected_primary_groups'] == true;
+    user['_fluxdo_available_badge_titles'] =
+        await _getCommunityBadgeTitleChoices(encodedUser);
+    return user;
   }
 
   /// Update the safe subset of fields exposed by the native community settings
@@ -47,6 +84,9 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
   ) async {
     const allowedFields = <String>{
       'name',
+      'title',
+      'primary_group_id',
+      'flair_group_id',
       'bio_raw',
       'location',
       'website',
@@ -85,6 +125,9 @@ mixin _DiscourseParityMixin on _DiscourseServiceBase {
           'Unsupported community preference field',
         );
       }
+      // Empty strings are meaningful for Discourse account selectors: upstream
+      // UserUpdater uses blank? to clear primary/flair group (and blank title is
+      // likewise a valid reset). Null still means "caller did not supply it".
       if (entry.value != null) data[entry.key] = entry.value;
     }
     if (data.isEmpty) return getCommunityUserPreferencesRaw();
