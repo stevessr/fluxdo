@@ -28,7 +28,10 @@ class NestedPostList extends ConsumerStatefulWidget {
   final int? currentUserId;
   final bool currentUserIsAdmin;
   final int? removingPrivateMessageParticipantId;
+  final String? removingPrivateMessageGroupName;
   final ValueChanged<TopicUser>? onRemovePrivateMessageParticipant;
+  final ValueChanged<TopicGroup>? onRemovePrivateMessageGroup;
+  final VoidCallback? onInvitePrivateMessageParticipants;
   final void Function(Post? replyToPost, {String? initialContent}) onReply;
   final void Function(Post post) onEdit;
   final void Function(int postId) onRefreshPost;
@@ -66,7 +69,10 @@ class NestedPostList extends ConsumerStatefulWidget {
     this.currentUserId,
     this.currentUserIsAdmin = false,
     this.removingPrivateMessageParticipantId,
+    this.removingPrivateMessageGroupName,
     this.onRemovePrivateMessageParticipant,
+    this.onRemovePrivateMessageGroup,
+    this.onInvitePrivateMessageParticipants,
     required this.onReply,
     required this.onEdit,
     required this.onRefreshPost,
@@ -194,17 +200,14 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
   PrivateMessageParticipants _buildPrivateMessageParticipants(
     PrivateMessageParticipantsLocation location,
   ) {
-    return PrivateMessageParticipants(
-      key: ValueKey('pm-participants-${location.name}'),
+    return PrivateMessageParticipants.fromDetail(
       location: location,
-      participants: widget.detail.allowedUsers,
-      currentUserId: widget.currentUserId,
-      // 服务端 can_remove_allowed_users 已包含「房主(TL2+)或管理员」判定，
-      // 客户端不再叠加 admin 门槛，否则非管理员的房主看不到移除按钮。
-      canRemoveOtherParticipants: widget.detail.canRemoveAllowedUsers,
-      removableSelfId: widget.detail.canRemoveSelfId,
+      detail: widget.detail,
       removingParticipantId: widget.removingPrivateMessageParticipantId,
+      removingGroupName: widget.removingPrivateMessageGroupName,
       onRemoveParticipant: widget.onRemovePrivateMessageParticipant,
+      onRemoveGroup: widget.onRemovePrivateMessageGroup,
+      onInvite: widget.onInvitePrivateMessageParticipants,
     );
   }
 

@@ -63,7 +63,10 @@ class TopicPostList extends StatefulWidget {
   final int? currentUserId;
   final bool currentUserIsAdmin;
   final int? removingPrivateMessageParticipantId;
+  final String? removingPrivateMessageGroupName;
   final ValueChanged<TopicUser>? onRemovePrivateMessageParticipant;
+  final ValueChanged<TopicGroup>? onRemovePrivateMessageGroup;
+  final VoidCallback? onInvitePrivateMessageParticipants;
   final bool hasMoreBefore;
   final bool hasMoreAfter;
 
@@ -148,7 +151,10 @@ class TopicPostList extends StatefulWidget {
     this.currentUserId,
     this.currentUserIsAdmin = false,
     this.removingPrivateMessageParticipantId,
+    this.removingPrivateMessageGroupName,
     this.onRemovePrivateMessageParticipant,
+    this.onRemovePrivateMessageGroup,
+    this.onInvitePrivateMessageParticipants,
     required this.hasMoreBefore,
     required this.hasMoreAfter,
     required this.loadingPreviousListenable,
@@ -253,16 +259,14 @@ class _TopicPostListState extends State<TopicPostList> {
   PrivateMessageParticipants _buildPrivateMessageParticipants(
     PrivateMessageParticipantsLocation location,
   ) {
-    return PrivateMessageParticipants(
-      key: ValueKey('pm-participants-${location.name}'),
+    return PrivateMessageParticipants.fromDetail(
       location: location,
-      participants: detail.allowedUsers,
-      currentUserId: widget.currentUserId,
-      // 同上：信任服务端权限位，避免非管理员房主按钮不显示。
-      canRemoveOtherParticipants: detail.canRemoveAllowedUsers,
-      removableSelfId: detail.canRemoveSelfId,
+      detail: detail,
       removingParticipantId: widget.removingPrivateMessageParticipantId,
+      removingGroupName: widget.removingPrivateMessageGroupName,
       onRemoveParticipant: widget.onRemovePrivateMessageParticipant,
+      onRemoveGroup: widget.onRemovePrivateMessageGroup,
+      onInvite: widget.onInvitePrivateMessageParticipants,
     );
   }
 
@@ -1640,8 +1644,7 @@ class _TopicPostListState extends State<TopicPostList> {
     }
 
     final childWithParticipants =
-        detail.isPrivateMessage &&
-            detail.allowedUsers.isNotEmpty &&
+        PrivateMessageParticipants.shouldShow(detail) &&
             post.postNumber == 1 &&
             (segment.type == _PostRenderSegmentType.shortPost ||
                 segment.type == _PostRenderSegmentType.longFooter)

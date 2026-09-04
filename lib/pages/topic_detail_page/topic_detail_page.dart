@@ -214,6 +214,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   bool _isCheckTitleVisibilityScheduled = false;
   bool _isRefreshing = false;
   int? _removingPrivateMessageParticipantId;
+  String? _removingPrivateMessageGroupName;
+  bool _isTogglingArchiveMessage = false;
 
   /// 本地屏蔽名单过滤缓存：provider 状态与名单实例都未变时复用同一份
   /// 过滤结果，保证同一帧内多处读取拿到 identical 的 posts 列表
@@ -3207,6 +3209,13 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           onRemovePrivateMessageParticipant: isLoggedIn
               ? _handleRemovePrivateMessageParticipant
               : null,
+          removingPrivateMessageGroupName: _removingPrivateMessageGroupName,
+          onRemovePrivateMessageGroup: isLoggedIn
+              ? _handleRemovePrivateMessageGroup
+              : null,
+          onInvitePrivateMessageParticipants: isLoggedIn
+              ? _handleInvitePrivateMessageParticipants
+              : null,
           onReply: _handleReply,
           onEdit: _handleEdit,
           onRefreshPost: _handleRefreshPost,
@@ -3264,6 +3273,13 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
                   _removingPrivateMessageParticipantId,
               onRemovePrivateMessageParticipant: isLoggedIn
                   ? _handleRemovePrivateMessageParticipant
+                  : null,
+              removingPrivateMessageGroupName: _removingPrivateMessageGroupName,
+              onRemovePrivateMessageGroup: isLoggedIn
+                  ? _handleRemovePrivateMessageGroup
+                  : null,
+              onInvitePrivateMessageParticipants: isLoggedIn
+                  ? _handleInvitePrivateMessageParticipants
                   : null,
               hasMoreBefore: notifier.hasMoreBefore,
               hasMoreAfter: notifier.hasMoreAfter,
