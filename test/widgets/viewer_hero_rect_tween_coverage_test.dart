@@ -131,13 +131,14 @@ void main() {
     );
   });
 
-  test('六处源端已全部迁到 HeroImage(不再裸用 Hero)', () {
+  test('当前查看器源端已全部迁到 HeroImage(不再裸用 Hero)', () {
     // 迁移完成后的强约束:裸 Hero + 手挂 viewerHeroRectTween 只是过渡形态,
     // 它只保证飞行起点,不保证源端隐藏/飞行占位/裁切插值/圆角同步。
     // 这些文件必须用统一件。
     const migrated = <String>[
-      'lib/pages/chat/channel/_chat_widgets.dart',
-      'lib/pages/user_profile_page.dart',
+      'lib/pages/chat/chat_message_page.dart',
+      'lib/pages/chat/chat_thread_sheet.dart',
+      'lib/pages/user_profile_overview_page.dart',
       'lib/widgets/content/discourse_image.dart',
       'lib/widgets/content/discourse_html_content/builders/image_grid_builder.dart',
       'lib/widgets/content/discourse_html_content/builders/image_carousel_builder.dart',
@@ -167,8 +168,9 @@ void main() {
     // 收口的目的:openViewer 的 heroSource* 不该再出现手写字面量,
     // 否则又会与源端不同步(头像曾源端 12 / 查看器 8)。
     const shouldDerive = <String>[
-      'lib/pages/chat/channel/_chat_widgets.dart',
-      'lib/pages/user_profile_page.dart',
+      'lib/pages/chat/chat_message_page.dart',
+      'lib/pages/chat/chat_thread_sheet.dart',
+      'lib/pages/user_profile_overview_page.dart',
       'lib/widgets/content/discourse_image.dart',
       'lib/widgets/content/discourse_html_content/builders/image_grid_builder.dart',
       'lib/widgets/content/discourse_html_content/builders/image_carousel_builder.dart',

@@ -773,7 +773,7 @@ class _RadialAccountLayout {
 
     final accountRingCount = math.min(requiredAccountRingCount, maxAccountRingCount);
     final accountRadii = accountRadiiFor(accountRingCount).toList();
-    final overflowed = requiredAccountRingCount > maxAccountRingCount;
+    var overflowed = requiredAccountRingCount > maxAccountRingCount;
     final manageRadius = accountRadii.isEmpty
         ? defaultInnerRadius
         : math.min(maxRadius, accountRadii.last + preferredRingGap);
@@ -784,12 +784,21 @@ class _RadialAccountLayout {
       final radius = accountRadii[ringIndex];
       final remaining = slotAccounts.length - accountOffset;
       if (remaining <= 0) break;
-      final accountCount = math.min(remaining, capacityForRing(ringIndex));
+      final targetArc = accountArcFor(radius);
+      final accountCount = math.min(
+        remaining,
+        _capacityForTargetArc(
+          radius: radius,
+          sweepAngle: targetArc.sweepAngle,
+          nodeSize: nodeSize,
+          preferredCapacity: capacityForRing(ringIndex),
+        ),
+      );
+      if (accountCount <= 0) continue;
       final ringAccounts = slotAccounts
           .skip(accountOffset)
           .take(accountCount)
           .toList(growable: false);
-      final targetArc = accountArcFor(radius);
       final angles = _accountAngles(
         count: ringAccounts.length,
         startAngle: targetArc.startAngle,
@@ -809,6 +818,7 @@ class _RadialAccountLayout {
       }
       accountOffset += accountCount;
     }
+    overflowed = overflowed || accountOffset < slotAccounts.length;
     final manageArc = accountArcFor(manageRadius);
     final manageAngle = manageArc.sweepAngle <= 0.0
         ? inwardAngle
@@ -918,6 +928,23 @@ class _RadialAccountLayout {
       return (startAngle: preferred, sweepAngle: 0.0);
     }
     return (startAngle: targetStart, sweepAngle: targetEnd - targetStart);
+  }
+
+  static int _capacityForTargetArc({
+    required double radius,
+    required double sweepAngle,
+    required double nodeSize,
+    required int preferredCapacity,
+  }) {
+    if (preferredCapacity <= 0 || radius <= 0.0) return 0;
+    if (preferredCapacity == 1 || sweepAngle <= 0.0) return 1;
+    final chordRatio = (nodeSize / (2.0 * radius)).clamp(0.0, 1.0);
+    final minimumAngle = 2.0 * math.asin(chordRatio.toDouble());
+    if (!minimumAngle.isFinite || minimumAngle <= 0.0) {
+      return preferredCapacity;
+    }
+    final geometricCapacity = 1 + (sweepAngle / minimumAngle).floor();
+    return math.min(preferredCapacity, math.max(1, geometricCapacity));
   }
 
   static List<double> _accountAngles({

@@ -20,11 +20,13 @@ import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/discourse_cache_manager.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
+import '../../widgets/common/hero_image.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
@@ -2572,6 +2574,11 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
     final thumbnailUrls = cookedHtml.isEmpty
         ? imageUrls
         : imageUrls.where((u) => !_cookedRendersUrl(cookedHtml, u)).toList();
+    final thumbnailHeroTags = List<String>.generate(
+      thumbnailUrls.length,
+      (index) => 'chat_message_${message.id}_attachment_$index',
+    );
+    const thumbnailSourceStyle = ViewerSourceStyle.cover(radius: 8);
 
     // 过滤除去纯图片 markdown 链接后的文本展示
     String displayText = message.message;
@@ -2795,26 +2802,39 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                   ) {
                                     final idx = entry.key;
                                     final url = entry.value;
-                                    return GestureDetector(
-                                      onTap: () {
-                                        ImageViewerPage.open(
-                                          context,
-                                          url,
-                                          galleryImages: thumbnailUrls,
-                                          initialIndex: idx,
-                                          enableShare: true,
+                                    return ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: HeroImage(
+                                            heroTag: thumbnailHeroTags[idx],
+                                            style: thumbnailSourceStyle,
+                                            flightImage: discourseImageProvider(url),
+                                            onTap: () {
+                                              final viewerArgs =
+                                                  thumbnailSourceStyle.openViewerArgs;
+                                              ImageViewerPage.open(
+                                                context,
+                                                url,
+                                                heroTag: thumbnailHeroTags[idx],
+                                                galleryImages: thumbnailUrls,
+                                                heroTags: thumbnailHeroTags,
+                                                initialIndex: idx,
+                                                enableShare: true,
+                                                thumbnailUrl: url,
+                                                thumbnailUrls: thumbnailUrls,
+                                                heroSourceFit: viewerArgs.fit,
+                                                heroSourceRadius: viewerArgs.radius,
+                                                heroSourceCircular:
+                                                    viewerArgs.circular,
+                                              );
+                                            },
+                                            child: CachedImage(
+                                              url: url,
+                                              width: 180,
+                                              height: 120,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
                                         );
-                                      },
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: CachedImage(
-                                          url: url,
-                                          width: 180,
-                                          height: 120,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                    );
                                   }).toList(),
                                 ),
                               ),

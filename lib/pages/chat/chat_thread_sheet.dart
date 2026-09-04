@@ -13,6 +13,7 @@ import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/discourse_cache_manager.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
@@ -21,6 +22,7 @@ import '../../widgets/chat/chat_keyboard_viewport.dart';
 import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
+import '../../widgets/common/hero_image.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../image_viewer_page.dart';
@@ -1313,6 +1315,12 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
     final thumbnailUrls = cookedHtml.isEmpty
         ? imageUrls
         : imageUrls.where((u) => !_cookedRendersUrl(cookedHtml, u)).toList();
+    final thumbnailHeroTags = List<String>.generate(
+      thumbnailUrls.length,
+      (index) =>
+          'chat_thread_${widget.thread.id}_${message.id}_attachment_$index',
+    );
+    const thumbnailSourceStyle = ViewerSourceStyle.cover(radius: 8);
 
     String displayText = message.message;
     for (final url in imageUrls) {
@@ -1444,20 +1452,31 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                                       (entry) {
                                         final idx = entry.key;
                                         final url = entry.value;
-                                        return GestureDetector(
-                                          onTap: () {
-                                            ImageViewerPage.open(
-                                              context,
-                                              url,
-                                              galleryImages: thumbnailUrls,
-                                              initialIndex: idx,
-                                              enableShare: true,
-                                            );
-                                          },
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
+                                        return ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: HeroImage(
+                                            heroTag: thumbnailHeroTags[idx],
+                                            style: thumbnailSourceStyle,
+                                            flightImage: discourseImageProvider(url),
+                                            onTap: () {
+                                              final viewerArgs =
+                                                  thumbnailSourceStyle.openViewerArgs;
+                                              ImageViewerPage.open(
+                                                context,
+                                                url,
+                                                heroTag: thumbnailHeroTags[idx],
+                                                galleryImages: thumbnailUrls,
+                                                heroTags: thumbnailHeroTags,
+                                                initialIndex: idx,
+                                                enableShare: true,
+                                                thumbnailUrl: url,
+                                                thumbnailUrls: thumbnailUrls,
+                                                heroSourceFit: viewerArgs.fit,
+                                                heroSourceRadius: viewerArgs.radius,
+                                                heroSourceCircular:
+                                                    viewerArgs.circular,
+                                              );
+                                            },
                                             child: CachedImage(
                                               url: url,
                                               width: 180,

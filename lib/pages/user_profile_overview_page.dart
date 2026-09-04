@@ -31,6 +31,7 @@ import '../widgets/common/grain_gradient_background.dart';
 import '../widgets/common/error_view.dart';
 import '../widgets/common/paged_list_footer.dart';
 import '../widgets/common/smart_avatar.dart';
+import '../widgets/common/hero_image.dart';
 import '../widgets/user/avatar_action_menu.dart';
 import '../widgets/content/collapsed_html_content.dart';
 import '../utils/fluxdo_render_callbacks.dart';
@@ -1588,14 +1589,18 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                                 // 连续插值(方形化账号走圆角 8 插值)
                                 final thumbUrl = _user!.getAvatarUrl(size: 144);
                                 final isSquare = isSquareAvatarUrl(thumbUrl);
+                                final sourceStyle = isSquare
+                                    ? const ViewerSourceStyle.cover(radius: 8)
+                                    : const ViewerSourceStyle.circular();
+                                final viewerArgs = sourceStyle.openViewerArgs;
                                 ImageViewerPage.open(
                                   context,
                                   avatarUrl,
                                   heroTag: 'user_avatar_${_user!.username}',
                                   thumbnailUrl: thumbUrl,
-                                  heroSourceCircular: !isSquare,
-                                  heroSourceRadius: isSquare ? 8 : 0,
-                                  heroSourceFit: isSquare ? BoxFit.cover : null,
+                                  heroSourceCircular: viewerArgs.circular,
+                                  heroSourceRadius: viewerArgs.radius,
+                                  heroSourceFit: viewerArgs.fit,
                                 );
                               }
                             },
@@ -1608,6 +1613,9 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                                   size: 144,
                                 );
                                 final isSquare = isSquareAvatarUrl(avatarUrl);
+                                final sourceStyle = isSquare
+                                    ? const ViewerSourceStyle.cover(radius: 8)
+                                    : const ViewerSourceStyle.circular();
                                 return Container(
                                   decoration: BoxDecoration(
                                     shape: isSquare
@@ -1629,9 +1637,13 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                                     flairName: _user?.flairName,
                                     flairBgColor: _user?.flairBgColor,
                                     flairColor: _user?.flairColor,
-                                    avatar: Hero(
-                                      tag:
+                                    avatar: HeroImage(
+                                      heroTag:
                                           'user_avatar_${_user?.username ?? ''}',
+                                      style: sourceStyle,
+                                      flightImage: avatarUrl == null
+                                          ? null
+                                          : discourseImageProvider(avatarUrl),
                                       child: SmartAvatar(
                                         imageUrl: avatarUrl,
                                         radius: 36,
