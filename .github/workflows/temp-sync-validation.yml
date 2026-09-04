@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: upstream-sync-validation-v2
+  group: upstream-sync-validation-final-20260905
   cancel-in-progress: true
 
 permissions:
@@ -37,5 +37,3 @@ jobs:
           test/services/shared_media_cache_policy_test.dart
       - name: Run Flutter tests
         run: dart tool/flutterw.dart test
-
-# Trigger after resolving PM/Sticker compile leftovers.
