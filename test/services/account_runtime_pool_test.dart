@@ -46,12 +46,9 @@ void main() {
       validatedAt: now.add(const Duration(seconds: 1)),
     );
 
-    final alice = pool.findMatching('alice', 'alice-token', now: now);
-    final bob = pool.findMatching(
-      'BOB',
-      'bob-token',
-      now: now.add(const Duration(seconds: 1)),
-    );
+    final lookupNow = now.add(const Duration(seconds: 1));
+    final alice = pool.findMatching('alice', 'alice-token', now: lookupNow);
+    final bob = pool.findMatching('BOB', 'bob-token', now: lookupNow);
 
     expect(alice, isNotNull);
     expect(bob, isNotNull);
@@ -62,7 +59,7 @@ void main() {
       alice.cookies.any((cookie) => cookie.name == 'cf_clearance'),
       isFalse,
     );
-    expect(pool.findMatching('Alice', 'bob-token', now: now), isNull);
+    expect(pool.findMatching('Alice', 'bob-token', now: lookupNow), isNull);
   });
 
   test('只有短窗口内允许复用服务端校验结果', () {
