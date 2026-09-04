@@ -1,0 +1,113 @@
+name: Temporary upstream composer conflict resolver
+
+on:
+  push:
+    branches:
+      - sync/upstream-20260905
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+      - name: Reconcile create/reply composer overlaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def method_block(text, marker):
+              start = text.index(marker)
+              brace = text.index('{', start)
+              depth = 0
+              for i in range(brace, len(text)):
+                  if text[i] == '{': depth += 1
+                  elif text[i] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return start, i + 1
+              raise RuntimeError(marker)
+
+          # ================= CreateTopicPage =================
+          path = 'lib/pages/create_topic_page.dart'
+          p = Path(path); text = p.read_text()
+
+          if '_titleController.addListener(_updateTitleLength);' not in text:
+              text = text.replace(
+                  '    _contentController.addListener(_onDraftContentChanged);\n',
+                  '    _contentController.addListener(_onDraftContentChanged);\n    // 标题计数器需要随输入实时重建。\n    _titleController.addListener(_updateTitleLength);\n', 1)
+
+          if 'int _titleLength = 0;' not in text:
+              marker = '  void _updateContentLength() {\n    setState(() => _contentLength = _contentController.text.length);\n  }\n'
+              addition = marker + '''\n  /// 标题长度变化时重建（驱动标题计数器）。\n  int _titleLength = 0;\n  void _updateTitleLength() {\n    final length = _titleController.text.trim().length;\n    if (length == _titleLength) return;\n    setState(() => _titleLength = length);\n  }\n\n  /// 首帖最小字数（含 warden 等插件按分类的改写）。\n  int? _minContentLength;\n\n  Future<void> _refreshMinContentLength() async {\n    final min = await ComposerMinLengthResolver.resolve(\n      category: _selectedCategory,\n      isFirstPost: true,\n      isPrivateMessage: false,\n    );\n    if (!mounted) return;\n    setState(() => _minContentLength = min);\n  }\n'''
+              if marker not in text: raise SystemExit('create topic content-length marker missing')
+              text = text.replace(marker, addition, 1)
+
+          # 标题输入框：保留 fork 的 featured-link maxLength 行为，只增加悬浮计数器。
+          func = '  Widget _buildComposerHeader(ThemeData theme, int minTitleLength) {'
+          s, e = method_block(text, func)
+          old = text[s:e]
+          if 'CharacterCountsOverlay(' not in old:
+              new = '''  Widget _buildComposerHeader(ThemeData theme, int minTitleLength) {\n    final topInset = ProgressiveTopBlur.heightFor(context);\n    return Padding(\n      padding: EdgeInsets.fromLTRB(20, topInset + 10, 20, 0),\n      child: Stack(\n        children: [\n          TextFormField(\n            controller: _titleController,\n            decoration: InputDecoration(\n              hintText: context.l10n.createTopic_titleHint,\n              hintStyle: TextStyle(\n                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),\n                fontWeight: FontWeight.normal,\n              ),\n              border: InputBorder.none,\n              contentPadding: EdgeInsets.zero,\n              isDense: true,\n            ),\n            style: theme.textTheme.headlineSmall?.copyWith(\n              fontWeight: FontWeight.w900,\n              letterSpacing: -0.5,\n            ),\n            maxLines: null,\n            // featured-link 入口允许只输入 URL；沿用 fork 的长度兼容逻辑。\n            maxLength: _featuredLinkEnabled ? null : 200,\n            buildCounter: (\n              context, {\n              required currentLength,\n              required isFocused,\n              maxLength,\n            }) => null,\n            validator: (value) {\n              if (value == null || value.trim().isEmpty) {\n                return context.l10n.createTopic_enterTitle;\n              }\n              if (value.trim().length < minTitleLength) {\n                return context.l10n.createTopic_minTitleLength(minTitleLength);\n              }\n              return null;\n            },\n            onTap: () {\n              _editorKey.currentState?.closeEmojiPanel();\n              _richKey.currentState?.closeEmojiPanel();\n            },\n          ),\n          Positioned(\n            right: 0,\n            bottom: 0,\n            child: CharacterCountsOverlay(\n              length: _titleLength,\n              minimumLength: minTitleLength,\n              showWarning: false,\n            ),\n          ),\n        ],\n      ),\n    );\n  }'''
+              text = text[:s] + new + text[e:]
+
+          if 'Widget _buildCharCountOverlay()' not in text:
+              insert_at = text.index('  /// 底部属性条:', text.index(func))
+              overlay = '''  /// 正文字数不足时悬浮在编辑区右下角。\n  Widget _buildCharCountOverlay() => CharacterCountsOverlay(\n    length: _contentLength,\n    minimumLength: _minContentLength,\n  );\n\n'''
+              text = text[:insert_at] + overlay + text[insert_at:]
+          p.write_text(text)
+
+          # ================= ReplySheet =================
+          path = 'lib/widgets/post/reply_sheet.dart'
+          p = Path(path); text = p.read_text()
+          imports_anchor = "import '../../models/draft.dart';\n"
+          additions = """import '../../plugins/plugins.dart';\nimport '../../providers/category_provider.dart';\nimport '../../services/composer_min_length_resolver.dart';\nimport '../common/character_counts_overlay.dart';\n"""
+          if "import '../../plugins/plugins.dart';" not in text:
+              if imports_anchor not in text: raise SystemExit('reply imports anchor missing')
+              text = text.replace(imports_anchor, imports_anchor + additions, 1)
+
+          if 'int? _minPostLength;' not in text:
+              anchor = '  bool get _isEditMode => widget.editPost != null;\n'
+              fields = anchor + '''\n  /// 当前正文最小字数（含站点插件按分类的改写）。\n  int? _minPostLength;\n  int _contentLength = 0;\n\n  /// 编辑首帖时按首帖规则计算；普通回复永远不是首帖。\n  bool get _isFirstPost => _isEditMode && widget.editPost!.postNumber == 1;\n'''
+              if anchor not in text: raise SystemExit('reply state anchor missing')
+              text = text.replace(anchor, fields, 1)
+
+          old_min = '''    // 最小字数校验\n    final preloaded = PreloadedDataService();\n    final minLength = widget.isPmWithNonHumanUser\n        ? 1\n        : _isInPrivateMessageContext\n        ? await preloaded.getMinPmPostLength()\n        : await preloaded.getMinPostLength();\n'''
+          new_min = '''    // 与悬浮计数器共用同一份最小字数解析结果（含 warden 等插件）。\n    final minLength =\n        _minPostLength ??\n        await ComposerMinLengthResolver.resolve(\n          category: widget.categoryId == null\n              ? null\n              : ref.read(categoryMapProvider).value?[widget.categoryId],\n          isFirstPost: _isFirstPost,\n          isPrivateMessage: _isInPrivateMessageContext,\n          isPmWithNonHumanUser: widget.isPmWithNonHumanUser,\n        );\n'''
+          if old_min in text:
+              text = text.replace(old_min, new_min, 1)
+
+          plugin_anchor = '''    if (_isPrivateMessage && _recipients.isEmpty) {\n      _showError(S.current.pm_noRecipient);\n      return;\n    }\n\n'''
+          if 'PluginRegistry.runBeforeReplySubmit(' not in text:
+              plugin_block = plugin_anchor + '''    // 对齐 Discourse composerBeforeSave：发送前给站点插件一次确认/拦截机会。\n    if (!mounted) return;\n    final pluginAllowed = await PluginRegistry.runBeforeReplySubmit(\n      ReplySubmitContext(\n        context: context,\n        topic: TopicPluginContext(\n          topicId: widget.topicId,\n          topicJson: TopicPluginData.of(widget.topicId),\n        ),\n        isEditing: _isEditMode,\n        isPrivateMessage: _isPrivateMessage,\n      ),\n    );\n    if (!pluginAllowed || !mounted) return;\n\n'''
+              if plugin_anchor not in text: raise SystemExit('reply plugin anchor missing')
+              text = text.replace(plugin_anchor, plugin_block, 1)
+
+          # 两种编辑器都挂同一个计数浮层；不改 fork 的富文本降级/切换流程。
+          rich_anchor = '''                                        hintText: context.l10n.editor_hintText,\n                                        emojiPanelHeight: _emojiPanelHeight,\n'''
+          if 'bodyOverlay: _buildCharCountOverlay(),' not in text:
+              if rich_anchor not in text: raise SystemExit('reply rich editor anchor missing')
+              text = text.replace(
+                  rich_anchor,
+                  '''                                        hintText: context.l10n.editor_hintText,\n                                        bodyOverlay: _buildCharCountOverlay(),\n                                        emojiPanelHeight: _emojiPanelHeight,\n''', 1)
+              md_anchor = '''                                  hintText: context.l10n.editor_hintText,\n                                  expands: true,\n                                  emojiPanelHeight: _emojiPanelHeight,\n'''
+              if md_anchor not in text: raise SystemExit('reply markdown editor anchor missing')
+              text = text.replace(
+                  md_anchor,
+                  '''                                  hintText: context.l10n.editor_hintText,\n                                  expands: true,\n                                  bodyOverlay: _buildCharCountOverlay(),\n                                  emojiPanelHeight: _emojiPanelHeight,\n''', 1)
+          p.write_text(text)
+          PY
+          rm -f .github/workflows/temp-sync-resolve-composer.yml
+          git add -A
+          git commit -m "sync: reconcile upstream composer validation and plugin hooks"
+          git push origin HEAD:sync/upstream-20260905
