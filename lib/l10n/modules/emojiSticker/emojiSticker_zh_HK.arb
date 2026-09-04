@@ -34,6 +34,8 @@
   "sticker_marketSearchEmpty": "未找到相符的表情包",
   "sticker_marketSearchHint": "搜尋表情包...",
   "sticker_marketLoadFailed": "加載市場失敗",
+  "sticker_marketSearchEmpty": "未找到相符的表情包",
+  "sticker_marketSearchHint": "搜尋表情包...",
   "sticker_marketTitle": "表情包市場",
   "sticker_noStickers": "還沒有表情包",
   "sticker_tab": "表情包"
