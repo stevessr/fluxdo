@@ -1,0 +1,31 @@
+name: Temporary upstream sync validation
+
+on:
+  push:
+    branches:
+      - sync/upstream-20260905
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync-validation
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+      - name: Run Flutter tests
+        run: dart tool/flutterw.dart test
