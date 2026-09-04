@@ -124,6 +124,25 @@ ImageProvider discourseImageProvider(
   );
 }
 
+/// 创建站点配置/装饰图片 Provider。
+///
+/// 群组 flair、站点配置中引用的图标/图片等都不属于账号会话状态。
+/// 统一放进全局 [BlobImageCache.externalBucket]（30 天）而不是 7 天的正文
+/// content bucket；缓存身份只由 URL + bucket 构成，账号切换时直接复用，
+/// 也不会随着账号快照保存、迁移或清理。
+ImageProvider siteAssetImageProvider(
+  String url, {
+  double scale = 1.0,
+  DownloadPriority priority = DownloadPriority.normal,
+}) {
+  return discourseImageProvider(
+    url,
+    scale: scale,
+    bucket: BlobImageCache.externalBucket,
+    priority: priority,
+  );
+}
+
 /// 创建 Emoji 图片 Provider
 ///
 /// 走 [BlobImageCache](Telegram 式 MD5 确定性寻址,零 sqlite 索引)。
