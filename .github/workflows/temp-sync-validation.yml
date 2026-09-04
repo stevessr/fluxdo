@@ -7,14 +7,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: upstream-sync-validation-final-20260905
+  group: upstream-sync-validation-diagnostic-20260905
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  flutter-test:
+  merge-sensitive:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -35,5 +35,36 @@ jobs:
           test/services/sticker_market_service_test.dart
           test/services/account_runtime_pool_test.dart
           test/services/shared_media_cache_policy_test.dart
-      - name: Run Flutter tests
-        run: dart tool/flutterw.dart test
+
+  test-groups:
+    name: test ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - test/models
+          - test/modules
+          - test/pages
+          - test/perf
+          - test/plugins
+          - test/providers
+          - test/services
+          - test/settings
+          - test/storage
+          - test/utils
+          - test/widgets
+          - test/paragraph_isolate_spike_test.dart
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+      - name: Run ${{ matrix.target }}
+        run: dart tool/flutterw.dart test ${{ matrix.target }}
