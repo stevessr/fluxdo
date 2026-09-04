@@ -1,8 +1,0 @@
-diff a/lib/l10n/modules/createTopic/createTopic_en.arb b/lib/l10n/modules/createTopic/createTopic_en.arb	(rejected hunks)
-@@ -1,6 +1,5 @@
- {
-   "@@locale": "en",
--  "createTopic_charCount": "{count} characters",
-   "createTopic_postVoting": "Q&A",
-   "createTopic_confirmPublish": "Publish",
-   "createTopic_contentHint": "Content (Markdown supported)...",
