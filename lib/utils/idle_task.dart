@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/scheduler.dart';
 
 /// 空闲任务调度:替代 `SchedulerBinding.scheduleTask(..., Priority.idle)`。
@@ -11,15 +13,23 @@ import 'package:flutter/scheduler.dart';
 ///
 /// 语义:动画进行中每 8ms 探测一次(代价可忽略),动画停止后执行;
 /// 连续礼让超过 [maxDeferral] 后强制执行,避免常驻动画把任务饿死。
-void scheduleIdleTask(
+///
+/// 返回取消回调。页面/预热作用域销毁时应主动调用它,这样不仅逻辑任务
+/// 会被取消,已经排进事件循环的 Timer 也会同步释放,避免测试和页面退出
+/// 后残留定时器。
+void Function() scheduleIdleTask(
   void Function() task, {
   bool Function()? isCanceled,
   Duration maxDeferral = const Duration(seconds: 2),
 }) {
   final deadline = DateTime.now().add(maxDeferral);
+  Timer? pending;
+  var canceledByOwner = false;
+
   void attempt() {
-    Future<void>.delayed(const Duration(milliseconds: 8), () {
-      if (isCanceled?.call() ?? false) return;
+    pending = Timer(const Duration(milliseconds: 8), () {
+      pending = null;
+      if (canceledByOwner || (isCanceled?.call() ?? false)) return;
       if (SchedulerBinding.instance.transientCallbackCount > 0 &&
           DateTime.now().isBefore(deadline)) {
         attempt();
@@ -30,4 +40,10 @@ void scheduleIdleTask(
   }
 
   attempt();
+  return () {
+    if (canceledByOwner) return;
+    canceledByOwner = true;
+    pending?.cancel();
+    pending = null;
+  };
 }
