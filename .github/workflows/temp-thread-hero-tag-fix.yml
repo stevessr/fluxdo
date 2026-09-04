@@ -1,0 +1,41 @@
+name: Temporary thread hero tag resolver
+
+on:
+  push:
+    branches:
+      - sync/upstream-20260905
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: sync/upstream-20260905
+          fetch-depth: 0
+      - name: Fix thread attachment Hero tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/pages/chat/chat_thread_sheet.dart')
+          s = p.read_text()
+          old = "'chat_thread_${widget.thread.id}_${message.id}_attachment_$index',"
+          new = "'chat_thread_${message.id}_attachment_$index',"
+          count = s.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one bad Hero tag marker, found {count}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add lib/pages/chat/chat_thread_sheet.dart
+          git commit -m 'fix: use bubble-local thread attachment hero tags'
+          git rm .github/workflows/temp-thread-hero-tag-fix.yml
+          git commit -m 'ci: remove thread hero tag resolver'
+          git push origin HEAD:sync/upstream-20260905
