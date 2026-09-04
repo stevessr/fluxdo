@@ -89,9 +89,9 @@
   "topic_filterLatest": "Latest",
   "topic_filterNew": "New",
   "topic_filterNewAllShort": "All",
-  "topic_filterNewReplies": "New \u00b7 Replies",
+  "topic_filterNewReplies": "New · Replies",
   "topic_filterNewRepliesShort": "Replies",
-  "topic_filterNewTopics": "New \u00b7 Topics",
+  "topic_filterNewTopics": "New · Topics",
   "topic_filterNewTopicsShort": "Topics",
   "topic_filterTooltip": "Filter: {label}",
   "topic_filterTop": "Top",
@@ -150,7 +150,6 @@
   "topics_viewNewTopics": "View {count} new or updated topics",
   "topic_keywordFilter_hiddenCount": "{count} topics hidden",
   "topic_keywordFilter_manage": "Manage",
-
   "topicDetail_addParticipant": "Add participant",
   "topicDetail_addParticipantHint": "Search user to add",
   "topicDetail_addParticipantTitle": "Add participant",
@@ -188,5 +187,27 @@
       }
     }
   },
-  "topicDetail_confirmKickTitle": "Remove participant"
+  "topicDetail_confirmKickTitle": "Remove participant",
+  "topicDetail_removePrivateMessageGroupConfirm": "Remove group {name} from this private message?",
+  "@topicDetail_removePrivateMessageGroupConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_removedPrivateMessageGroup": "Removed group {name} from the private message",
+  "@topicDetail_removedPrivateMessageGroup": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "topicDetail_archiveMessage": "Archive",
+  "topicDetail_archiveMessageHelp": "Move message to your archive",
+  "topicDetail_moveMessageToInbox": "Move to Inbox",
+  "topicDetail_moveMessageToInboxHelp": "Move message back to Inbox",
+  "topicDetail_messageArchived": "Message archived",
+  "topicDetail_messageMovedToInbox": "Moved back to Inbox"
 }

@@ -1853,11 +1853,15 @@ class TopicDetail {
   // 话题权限（来自 details）
   final bool canEdit; // 是否可以编辑话题元数据（标题、分类、标签）
 
+  /// 该私信是否已被当前用户归档（顶层 message_archived）。
+  final bool messageArchived;
+
   // 私信成员与移除权限（来自 details）
   final List<TopicUser> allowedUsers;
-  final List<String> allowedGroups;
+  final List<TopicGroup> allowedGroups;
   final bool canRemoveAllowedUsers;
   final int? canRemoveSelfId;
+  final bool canInviteTo;
 
   // 话题书签相关
   final bool bookmarked; // 话题是否已被书签（Topic 级别）
@@ -1947,10 +1951,12 @@ class TopicDetail {
     this.pmWithNonHumanUser = false,
     this.isPostVoting = false,
     this.canEdit = false,
+    this.messageArchived = false,
     this.allowedUsers = const [],
     this.allowedGroups = const [],
     this.canRemoveAllowedUsers = false,
     this.canRemoveSelfId,
+    this.canInviteTo = false,
     this.bookmarked = false,
     this.bookmarkId,
     this.bookmarkName,
@@ -2150,17 +2156,18 @@ class TopicDetail {
         details['notification_level'] as int?,
       ),
       canEdit: details['can_edit'] as bool? ?? false,
+      messageArchived: json['message_archived'] as bool? ?? false,
       allowedUsers: (details['allowed_users'] as List<dynamic>? ?? const [])
           .whereType<Map>()
           .map((user) => TopicUser.fromJson(Map<String, dynamic>.from(user)))
           .toList(growable: false),
       allowedGroups: (details['allowed_groups'] as List<dynamic>? ?? const [])
           .whereType<Map>()
-          .map((group) => group['name']?.toString().trim() ?? '')
-          .where((name) => name.isNotEmpty)
+          .map((group) => TopicGroup.fromJson(Map<String, dynamic>.from(group)))
           .toList(growable: false),
       canRemoveAllowedUsers: details['can_remove_allowed_users'] == true,
       canRemoveSelfId: (details['can_remove_self_id'] as num?)?.toInt(),
+      canInviteTo: details['can_invite_to'] == true,
       bookmarked: topicBookmarked,
       bookmarkId: topicBookmarkId,
       bookmarkName: topicBookmarkName,
@@ -2276,11 +2283,13 @@ class TopicDetail {
     bool? pmWithNonHumanUser,
     bool? isPostVoting,
     bool? canEdit,
+    bool? messageArchived,
     List<TopicUser>? allowedUsers,
-    List<String>? allowedGroups,
+    List<TopicGroup>? allowedGroups,
     bool? canRemoveAllowedUsers,
     int? canRemoveSelfId,
     bool clearCanRemoveSelfId = false,
+    bool? canInviteTo,
     bool? bookmarked,
     int? bookmarkId,
     bool clearBookmarkId = false,
@@ -2326,6 +2335,7 @@ class TopicDetail {
       pmWithNonHumanUser: pmWithNonHumanUser ?? this.pmWithNonHumanUser,
       isPostVoting: isPostVoting ?? this.isPostVoting,
       canEdit: canEdit ?? this.canEdit,
+      messageArchived: messageArchived ?? this.messageArchived,
       allowedUsers: allowedUsers ?? this.allowedUsers,
       allowedGroups: allowedGroups ?? this.allowedGroups,
       canRemoveAllowedUsers:
@@ -2333,6 +2343,7 @@ class TopicDetail {
       canRemoveSelfId: clearCanRemoveSelfId
           ? null
           : (canRemoveSelfId ?? this.canRemoveSelfId),
+      canInviteTo: canInviteTo ?? this.canInviteTo,
       bookmarked: bookmarked ?? this.bookmarked,
       bookmarkId: clearBookmarkId ? null : (bookmarkId ?? this.bookmarkId),
       bookmarkName: clearBookmarkName

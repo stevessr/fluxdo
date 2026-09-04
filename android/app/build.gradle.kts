@@ -100,6 +100,11 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName(releaseBuildSigningName)
+            // 上传未剥离 NDK 符号，便于 Crashlytics 归因 native 崩溃。
+            configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
+                nativeSymbolUploadEnabled = true
+                unstrippedNativeLibsDir = file("build/intermediates/merged_native_libs/release/out/lib")
+            }
             // 关闭 R8 代码压缩与资源压缩：开启后 Release 包运行时闪退，
             // 在定位到具体被裁剪的类之前保持禁用状态。
             isMinifyEnabled = false

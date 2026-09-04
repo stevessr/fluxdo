@@ -21,6 +21,7 @@ import 'providers/locale_provider.dart';
 import 'widgets/ai/builtin_presets_factory.dart';
 import 'providers/message_bus_providers.dart';
 import 'services/auth_issue_notice_service.dart';
+import 'services/crash_context_reporter.dart';
 import 'providers/app_state_refresher.dart';
 import 'services/highlighter_service.dart';
 import 'widgets/common/notification_icon_button.dart';
@@ -749,7 +750,11 @@ class MainApp extends ConsumerWidget {
             builder: (context) => MaterialApp(
               navigatorKey: navigatorKey,
               // JankNavObserver 给 [JANK] 日志加导航归因(debug/profile 观测用)
-              navigatorObservers: [appRouteObserver, JankNavObserver()],
+              navigatorObservers: [
+                appRouteObserver,
+                JankNavObserver(),
+                CrashContextNavObserver(),
+              ],
               title: 'FluxDO',
               locale: TranslationProvider.of(context).flutterLocale,
               localizationsDelegates: const [
