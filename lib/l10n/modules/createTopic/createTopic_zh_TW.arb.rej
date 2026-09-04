@@ -1,0 +1,15 @@
+diff a/lib/l10n/modules/createTopic/createTopic_zh_TW.arb b/lib/l10n/modules/createTopic/createTopic_zh_TW.arb	(rejected hunks)
+@@ -1,13 +1,5 @@
+ {
+   "@@locale": "zh_TW",
+-  "createTopic_charCount": "{count} 字元",
+-  "@createTopic_charCount": {
+-    "placeholders": {
+-      "count": {
+-        "type": "int"
+-      }
+-    }
+-  },
+   "createTopic_postVoting": "問答",
+   "createTopic_confirmPublish": "確定釋出",
+   "createTopic_contentHint": "正文內容 (支援 Markdown)...",

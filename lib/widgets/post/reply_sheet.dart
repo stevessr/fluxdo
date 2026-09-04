@@ -26,7 +26,6 @@ import 'package:dio/dio.dart';
 import '../../services/app_error_handler.dart';
 import '../../services/network/exceptions/api_exception.dart';
 import '../../services/toast_service.dart';
-import '../../services/preloaded_data_service.dart';
 import '../common/smart_avatar.dart';
 import '../../l10n/s.dart';
 import '../../utils/dialog_utils.dart';
@@ -307,6 +306,10 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     // 添加内容变化监听以触发草稿自动保存
     _contentController.addListener(_onContentChanged);
     _titleController.addListener(_onContentChanged);
+    // 字数计数器单独监听：编辑模式下 _onContentChanged 会直接 return，
+    // 但计数器在编辑帖子时同样需要实时更新
+    _contentController.addListener(_onContentLengthChanged);
+    _loadMinPostLength();
 
     // 自动聚焦（非编辑模式时立即聚焦，编辑模式在加载完成后聚焦）
     if (!_isEditMode) {
@@ -650,6 +653,29 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   }
 
   /// 内容变化时触发草稿保存
+  /// 同步正文长度到计数器
+  void _onContentLengthChanged() {
+    final length = _contentController.text.length;
+    if (length == _contentLength) return;
+    setState(() => _contentLength = length);
+  }
+
+  /// 解析当前上下文的最小正文字数（含插件按分类的改写）
+  Future<void> _loadMinPostLength() async {
+    final categoryId = widget.categoryId;
+    final category = categoryId == null
+        ? null
+        : ref.read(categoryMapProvider).value?[categoryId];
+    final min = await ComposerMinLengthResolver.resolve(
+      category: category,
+      isFirstPost: _isFirstPost,
+      isPrivateMessage: _isInPrivateMessageContext,
+      isPmWithNonHumanUser: widget.isPmWithNonHumanUser,
+    );
+    if (!mounted) return;
+    setState(() => _minPostLength = min);
+  }
+
   void _onContentChanged() {
     if (_isEditMode || _draftController == null) return;
 
@@ -880,6 +906,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     // 移除监听器
     _contentController.removeListener(_onContentChanged);
     _titleController.removeListener(_onContentChanged);
+    _contentController.removeListener(_onContentLengthChanged);
 
     // 关闭时处理草稿：已提交则跳过，有内容则保存，无内容则删除
     if (_draftController != null && !_submitted && !_discarded) {
@@ -1094,6 +1121,16 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   }
 
   /// 构建草稿保存状态指示器
+  /// 字数不足时悬浮在正文区右下角的提示
+  ///
+  /// 对齐网页端：主题组件只吐一个 `.character-counts` div，悬浮定位由
+  /// 主题 CSS 完成。悬浮而非占独立行，既不挤压顶部标题行（那行已有
+  /// 头像/草稿状态/舍弃/AI 审阅/发送），也不受中英文文案长度差异影响。
+  Widget _buildCharCountOverlay() => CharacterCountsOverlay(
+    length: _contentLength,
+    minimumLength: _minPostLength,
+  );
+
   Widget _buildDraftStatusIndicator(DraftSaveStatus status, ThemeData theme) {
     switch (status) {
       case DraftSaveStatus.idle:

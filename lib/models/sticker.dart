@@ -1,20 +1,23 @@
-/// 表情包市场索引信息
-class StickerMarketIndex {
-  final int totalPages;
-  final int pageSize;
+/// 市场分类（topic）
+class StickerMarketTopic {
+  final String id;
+  final String label;
   final int totalGroups;
+  final int totalPages;
 
-  const StickerMarketIndex({
-    required this.totalPages,
-    required this.pageSize,
+  const StickerMarketTopic({
+    required this.id,
+    required this.label,
     required this.totalGroups,
+    required this.totalPages,
   });
 
-  factory StickerMarketIndex.fromJson(Map<String, dynamic> json) {
-    return StickerMarketIndex(
-      totalPages: json['totalPages'] as int? ?? 0,
-      pageSize: json['pageSize'] as int? ?? 0,
+  factory StickerMarketTopic.fromJson(Map<String, dynamic> json) {
+    return StickerMarketTopic(
+      id: json['id'] as String? ?? '',
+      label: json['label'] as String? ?? '',
       totalGroups: json['totalGroups'] as int? ?? 0,
+      totalPages: json['totalPages'] as int? ?? 0,
     );
   }
 }

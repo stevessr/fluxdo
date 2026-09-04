@@ -294,6 +294,14 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
               ),
             ),
 
+          if (opPost != null &&
+              PrivateMessageParticipants.shouldShow(widget.detail))
+            SliverToBoxAdapter(
+              child: _buildPrivateMessageParticipants(
+                PrivateMessageParticipantsLocation.firstPost,
+              ),
+            ),
+
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

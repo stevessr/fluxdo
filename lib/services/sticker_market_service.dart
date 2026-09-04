@@ -21,6 +21,12 @@ class StickerMarketService {
   static const String _baseUrlKey = 'sticker_market_base_url';
   static const String _cachePrefix = 'sticker_market_';
   static const String _subscribedKey = 'sticker_subscribed_groups';
+
+  /// 已订阅分组的元信息缓存（name/icon/emojiCount）。
+  ///
+  /// 与 [_subscribedKey] 分开两个键而不是把订阅列表整体换成 JSON：订阅列表
+  /// 是用户数据、要能被旧版本读懂（降级不丢订阅），元信息只是可重建的缓存。
+  static const String _subscribedMetaKey = 'sticker_subscribed_group_meta';
   static const String _recentStickersKey = 'sticker_recent_items';
   static const int _maxRecentStickers = 30;
   static const Duration _cacheDuration = Duration(hours: 24);
@@ -166,6 +172,45 @@ class StickerMarketService {
   /// 是否已订阅
   bool isSubscribed(String groupId) {
     return getSubscribedGroupIds().contains(groupId);
+  }
+
+  /// 元信息与本地缓存是否一致（tab 栏只认 name/icon/emojiCount，
+  /// 一致就不写盘、不触发 rebuild）
+  bool isSubscribedMetaFresh(StickerGroup group) {
+    final cached = _readSubscribedMeta()[group.id];
+    return cached != null &&
+        cached.name == group.name &&
+        cached.icon == group.icon &&
+        cached.emojiCount == group.emojiCount;
+  }
+
+  /// 写入/更新已订阅分组的元信息缓存
+  Future<void> cacheSubscribedGroupMeta(StickerGroup group) async {
+    final metaById = _readSubscribedMeta();
+    metaById[group.id] = group;
+    await _writeSubscribedMeta(metaById);
+  }
+
+  Map<String, StickerGroup> _readSubscribedMeta() {
+    final raw = _prefs.getStringList(_subscribedMetaKey) ?? const [];
+    final result = <String, StickerGroup>{};
+    for (final s in raw) {
+      try {
+        final group = StickerGroup.fromJson(
+          json.decode(s) as Map<String, dynamic>,
+        );
+        if (group.id.isNotEmpty) result[group.id] = group;
+      } catch (_) {
+        // 单条坏数据不该让整个 tab 栏退化成占位，跳过即可
+      }
+    }
+    return result;
+  }
+
+  Future<void> _writeSubscribedMeta(Map<String, StickerGroup> metaById) async {
+    await _prefs.setStringList(_subscribedMetaKey, [
+      for (final group in metaById.values) json.encode(group.toJson()),
+    ]);
   }
 
   // ==================== 最近使用 ====================

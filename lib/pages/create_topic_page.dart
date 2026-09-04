@@ -17,6 +17,8 @@ import 'package:fluxdo/models/draft.dart';
 import 'package:fluxdo/models/shortcut_binding.dart';
 
 import 'package:fluxdo/providers/discourse_providers.dart';
+import 'package:fluxdo/services/composer_min_length_resolver.dart';
+import 'package:fluxdo/widgets/common/character_counts_overlay.dart';
 import 'package:fluxdo/services/toast_service.dart';
 import 'package:dio/dio.dart';
 import 'package:fluxdo/services/ai_post_review_service.dart';
@@ -132,6 +134,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
     // 从当前筛选条件自动填入分类和标签
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyCurrentFilter());
+    // 先按站点默认算一版下限，_applyCurrentFilter 选中分类后会再刷新
+    _refreshMinContentLength();
   }
 
   @override
@@ -338,6 +342,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
     _pageController.dispose();
     _contentController.removeListener(_updateContentLength);
+    _titleController.removeListener(_updateTitleLength);
     _titleController.dispose();
     _contentController.dispose();
     _contentFocusNode.dispose();
@@ -481,6 +486,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
         _createAsPostVoting = true;
       }
     });
+    // 分类决定 warden 最小字数，切换后立即重算
+    _refreshMinContentLength();
 
     final currentContent = _contentController.text.trim();
     if (currentContent.isEmpty ||
@@ -539,7 +546,14 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     }
 
     // 手动验证内容
-    final minContentLength = ref.read(minFirstPostLengthProvider).value ?? 20;
+    // 与计数器共用同一份解析结果（含 warden 按分类改写）
+    final minContentLength =
+        _minContentLength ??
+        await ComposerMinLengthResolver.resolve(
+          category: _selectedCategory,
+          isFirstPost: true,
+          isPrivateMessage: false,
+        );
     final contentText = _contentController.text.trim();
     if (contentText.isEmpty) {
       if (_showPreview) _togglePreview();
@@ -571,6 +585,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
     if (_templateContent != null &&
         _contentController.text.trim() == _templateContent!.trim()) {
+      // 上方最小字数解析可能 await 过，用 context 前先确认页面还在
+      if (!mounted) return;
       final confirm = await showAppDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -704,7 +720,6 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       selectedTags: _selectedTags,
       allTags: tagsAsync.value ?? const [],
       onTagsChanged: _onTagsChanged,
-      charCount: _contentLength,
       showPostVotingToggle: sitePostVoting,
       postVotingEnabled: _createAsPostVoting || locked,
       postVotingLocked: locked,
@@ -907,6 +922,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                                   canTagTopics,
                                                   tagsAsync,
                                                 ),
+                                                bodyOverlay:
+                                                    _buildCharCountOverlay(),
                                                 controller: _contentController,
                                                 focusNode: _contentFocusNode,
                                                 hintText: context
@@ -959,6 +976,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                             canTagTopics,
                                             tagsAsync,
                                           ),
+                                          bodyOverlay: _buildCharCountOverlay(),
                                           controller: _contentController,
                                           focusNode: _contentFocusNode,
                                           hintText: context

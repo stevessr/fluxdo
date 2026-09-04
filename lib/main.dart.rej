@@ -1,0 +1,19 @@
+diff a/lib/main.dart b/lib/main.dart	(rejected hunks)
+@@ -22,6 +22,7 @@ import 'widgets/ai/builtin_presets_factory.dart';
+ import 'providers/message_bus_providers.dart';
+ import 'providers/chat/chat_notification_alert_provider.dart';
+ import 'services/auth_issue_notice_service.dart';
++import 'services/crash_context_reporter.dart';
+ import 'providers/app_state_refresher.dart';
+ import 'services/highlighter_service.dart';
+ import 'widgets/common/notification_icon_button.dart';
+@@ -777,6 +780,9 @@ class MainApp extends ConsumerWidget {
+                 keyboardFocusGuard,
+                 JankNavObserver(),
+                 EscFallbackObserver(),
++                // 崩溃/ANR 现场带上当前页面与最近导航轨迹(Crashlytics
++                // custom keys);未开启崩溃采集时内部 no-op。
++                CrashContextNavObserver(),
+               ],
+               title: 'FluxDO',
+               locale: TranslationProvider.of(context).flutterLocale,

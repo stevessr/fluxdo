@@ -1349,6 +1349,18 @@ class _TopicPostListState extends State<TopicPostList> {
                 ),
               ),
 
+            // 对齐 Discourse bottom topic map：帖子流真正到底后再次展示私信成员。
+            if (!hasMoreAfter &&
+                PrivateMessageParticipants.shouldShowAtBottom(detail))
+              SliverToBoxAdapter(
+                child: _wrapContent(
+                  context,
+                  _buildPrivateMessageParticipants(
+                    PrivateMessageParticipantsLocation.bottom,
+                  ),
+                ),
+              ),
+
             SliverPadding(
               padding: EdgeInsets.only(
                 bottom: 80 + MediaQuery.of(context).padding.bottom,
