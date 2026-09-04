@@ -1,0 +1,183 @@
+name: Temporary upstream safe conflict resolver
+
+on:
+  push:
+    branches:
+      - sync/upstream-20260905
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+      - name: Resolve safe semantic overlaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/Lingyan000/fluxdo.git || true
+          git fetch upstream main
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, subprocess
+
+          def upstream(path: str) -> str:
+              return subprocess.check_output(['git','show',f'upstream/main:{path}'], text=True)
+
+          def replace_once(path: str, old: str, new: str):
+              p = Path(path); text = p.read_text()
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(f'pattern not found in {path}: {old[:80]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          def extract_block(text: str, marker: str) -> str:
+              start = text.index(marker)
+              brace = text.index('{', start)
+              depth = 0
+              i = brace
+              while i < len(text):
+                  c = text[i]
+                  if c == '{': depth += 1
+                  elif c == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return text[start:i+1]
+                  i += 1
+              raise RuntimeError(marker)
+
+          # ARB: upstream additions only; never delete/overwrite fork-local keys.
+          arb_paths = [
+              'lib/l10n/modules/createTopic/createTopic_en.arb',
+              'lib/l10n/modules/createTopic/createTopic_zh.arb',
+              'lib/l10n/modules/createTopic/createTopic_zh_HK.arb',
+              'lib/l10n/modules/createTopic/createTopic_zh_TW.arb',
+              'lib/l10n/modules/topic/topic_en.arb',
+              'lib/l10n/modules/topic/topic_zh_HK.arb',
+              'lib/l10n/modules/topic/topic_zh_TW.arb',
+          ]
+          for path in arb_paths:
+              p = Path(path)
+              ours = json.loads(p.read_text())
+              theirs = json.loads(upstream(path))
+              changed = False
+              for k, v in theirs.items():
+                  if k not in ours:
+                      ours[k] = v; changed = True
+              if changed:
+                  p.write_text(json.dumps(ours, ensure_ascii=False, indent=2) + '\n')
+
+          # Crash context: additive only.
+          p = Path('lib/main.dart'); text = p.read_text()
+          if "import 'services/crash_context_reporter.dart';" not in text:
+              text = text.replace(
+                  "import 'services/auth_issue_notice_service.dart';\n",
+                  "import 'services/auth_issue_notice_service.dart';\nimport 'services/crash_context_reporter.dart';\n",
+                  1,
+              )
+          old_nav = 'navigatorObservers: [appRouteObserver, JankNavObserver()],'
+          if 'CrashContextNavObserver()' not in text:
+              if old_nav not in text: raise SystemExit('main.dart navigatorObservers pattern missing')
+              text = text.replace(old_nav, 'navigatorObservers: [\n                appRouteObserver,\n                JankNavObserver(),\n                CrashContextNavObserver(),\n              ],', 1)
+          p.write_text(text)
+
+          p = Path('android/app/build.gradle.kts'); text = p.read_text()
+          if 'nativeSymbolUploadEnabled = true' not in text:
+              marker = '            signingConfig = signingConfigs.getByName(releaseBuildSigningName)\n'
+              if marker not in text: raise SystemExit('android release signing marker missing')
+              addition = marker + '''            // 上传未剥离 NDK 符号，便于 Crashlytics 归因 native 崩溃。\n            configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {\n                nativeSymbolUploadEnabled = true\n                unstrippedNativeLibsDir = file("build/intermediates/merged_native_libs/release/out/lib")\n            }\n'''
+              text = text.replace(marker, addition, 1)
+              p.write_text(text)
+
+          # TopicDetail: preserve fork fields, add upstream PM state/groups/invite semantics.
+          path = 'lib/models/topic.dart'; p = Path(path); text = p.read_text(); up = upstream(path)
+          if 'class TopicGroup {' not in text:
+              block = extract_block(up, 'class TopicGroup {')
+              marker = '/// 话题详情模型\n'
+              text = text.replace(marker, block + '\n\n' + marker, 1)
+          if 'final bool messageArchived;' not in text:
+              text = text.replace(
+                  '  final bool canEdit; // 是否可以编辑话题元数据（标题、分类、标签）\n\n  // 私信成员与移除权限（来自 details）\n',
+                  '  final bool canEdit; // 是否可以编辑话题元数据（标题、分类、标签）\n\n  /// 该私信是否已被当前用户归档（顶层 message_archived）。\n  final bool messageArchived;\n\n  // 私信成员与移除权限（来自 details）\n', 1)
+          text = text.replace('  final List<String> allowedGroups;\n', '  final List<TopicGroup> allowedGroups;\n')
+          if 'final bool canInviteTo;' not in text:
+              text = text.replace('  final int? canRemoveSelfId;\n', '  final int? canRemoveSelfId;\n  final bool canInviteTo;\n', 1)
+          if '    this.messageArchived = false,' not in text:
+              text = text.replace('    this.canEdit = false,\n    this.allowedUsers = const [],\n', '    this.canEdit = false,\n    this.messageArchived = false,\n    this.allowedUsers = const [],\n', 1)
+          if '    this.canInviteTo = false,' not in text:
+              text = text.replace('    this.canRemoveSelfId,\n    this.bookmarked = false,\n', '    this.canRemoveSelfId,\n    this.canInviteTo = false,\n    this.bookmarked = false,\n', 1)
+          if '      messageArchived: json[' not in text:
+              text = text.replace("      canEdit: details['can_edit'] as bool? ?? false,\n      allowedUsers:", "      canEdit: details['can_edit'] as bool? ?? false,\n      messageArchived: json['message_archived'] as bool? ?? false,\n      allowedUsers:", 1)
+          old_groups = """      allowedGroups: (details['allowed_groups'] as List<dynamic>? ?? const [])\n          .whereType<Map>()\n          .map((group) => group['name']?.toString().trim() ?? '')\n          .where((name) => name.isNotEmpty)\n          .toList(growable: false),\n"""
+          new_groups = """      allowedGroups: (details['allowed_groups'] as List<dynamic>? ?? const [])\n          .whereType<Map>()\n          .map((group) => TopicGroup.fromJson(Map<String, dynamic>.from(group)))\n          .toList(growable: false),\n"""
+          if old_groups in text: text = text.replace(old_groups, new_groups, 1)
+          if "      canInviteTo: details['can_invite_to'] == true," not in text:
+              text = text.replace("      canRemoveSelfId: (details['can_remove_self_id'] as num?)?.toInt(),\n      bookmarked:", "      canRemoveSelfId: (details['can_remove_self_id'] as num?)?.toInt(),\n      canInviteTo: details['can_invite_to'] == true,\n      bookmarked:", 1)
+          if '    bool? messageArchived,' not in text:
+              text = text.replace('    bool? canEdit,\n    List<TopicUser>? allowedUsers,\n', '    bool? canEdit,\n    bool? messageArchived,\n    List<TopicUser>? allowedUsers,\n', 1)
+          text = text.replace('    List<String>? allowedGroups,\n', '    List<TopicGroup>? allowedGroups,\n')
+          if '    bool? canInviteTo,' not in text:
+              text = text.replace('    bool clearCanRemoveSelfId = false,\n    bool? bookmarked,\n', '    bool clearCanRemoveSelfId = false,\n    bool? canInviteTo,\n    bool? bookmarked,\n', 1)
+          if '      messageArchived: messageArchived ?? this.messageArchived,' not in text:
+              text = text.replace('      canEdit: canEdit ?? this.canEdit,\n      allowedUsers:', '      canEdit: canEdit ?? this.canEdit,\n      messageArchived: messageArchived ?? this.messageArchived,\n      allowedUsers:', 1)
+          if '      canInviteTo: canInviteTo ?? this.canInviteTo,' not in text:
+              text = text.replace('          : (canRemoveSelfId ?? this.canRemoveSelfId),\n      bookmarked:', '          : (canRemoveSelfId ?? this.canRemoveSelfId),\n      canInviteTo: canInviteTo ?? this.canInviteTo,\n      bookmarked:', 1)
+          p.write_text(text)
+
+          # Discourse service: retain fork aliases; add missing upstream PM endpoints.
+          path = 'lib/services/discourse/_topics.dart'; p = Path(path); text = p.read_text(); up = upstream(path)
+          insert_marker = '  /// 更新话题元数据\n'
+          additions = []
+          for signature in [
+              '  Future<void> removePrivateMessageGroup(',
+              '  Future<TopicUser?> invitePrivateMessageUser(',
+              '  Future<void> invitePrivateMessageGroup(',
+          ]:
+              if signature not in text:
+                  additions.append(extract_block(up, signature))
+          if additions:
+              if insert_marker not in text: raise SystemExit('topics insert marker missing')
+              text = text.replace(insert_marker, '\n\n'.join(additions) + '\n\n' + insert_marker, 1)
+              p.write_text(text)
+
+          # Hunk replay produced a duplicate PM removal method in notifier. Keep the newer
+          # upstream-expanded copy (the second one) and retain all other fork methods.
+          path = 'lib/providers/topic_detail_provider.dart'; p = Path(path); text = p.read_text()
+          sig = '  Future<void> removePrivateMessageParticipant(TopicUser participant) async {'
+          starts = []
+          pos = 0
+          while True:
+              i = text.find(sig, pos)
+              if i < 0: break
+              starts.append(i); pos = i + 1
+          if len(starts) > 1:
+              start = starts[0]
+              comment = text.rfind('  /// 将成员移出当前私信', 0, start)
+              if comment >= 0 and text[comment:start].count('\n\n') <= 1:
+                  start = comment
+              brace = text.index('{', starts[0]); depth = 0; i = brace
+              while i < len(text):
+                  if text[i] == '{': depth += 1
+                  elif text[i] == '}':
+                      depth -= 1
+                      if depth == 0: break
+                  i += 1
+              end = i + 1
+              while end < len(text) and text[end] in '\n': end += 1
+              text = text[:start] + text[end:]
+              p.write_text(text)
+
+          PY
+          rm -f .github/workflows/temp-sync-resolve-safe.yml
+          git add -A
+          git commit -m "sync: resolve safe upstream overlaps"
+          git push origin HEAD:sync/upstream-20260905
