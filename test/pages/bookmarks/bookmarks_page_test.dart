@@ -20,6 +20,7 @@ import 'package:fluxdo/storage/bookmark_cache_dao.dart';
 import 'package:fluxdo/utils/platform_utils.dart';
 import 'package:fluxdo/widgets/bookmark/bookmarks_list_content.dart';
 import 'package:fluxdo/widgets/bookmark/bookmarks_workspace_tab_bar.dart';
+import 'package:fluxdo/widgets/topic/painted_topic_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../storage/bookmark_hive_test_support.dart';
@@ -173,7 +174,11 @@ Future<void> _pumpPage(WidgetTester tester) async {
 Finder _findBookmarkInList(String title) {
   return find.descendant(
     of: find.byType(BookmarksListContent),
-    matching: find.text(title),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is PaintedTopicCard &&
+          widget.layout.semanticsLabel.split(',').first.trim() == title,
+    ),
   );
 }
 

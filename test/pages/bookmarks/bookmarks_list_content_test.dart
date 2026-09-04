@@ -10,7 +10,14 @@ import 'package:fluxdo/providers/category_provider.dart';
 import 'package:fluxdo/providers/theme_provider.dart';
 import 'package:fluxdo/utils/platform_utils.dart';
 import 'package:fluxdo/widgets/bookmark/bookmarks_list_content.dart';
+import 'package:fluxdo/widgets/topic/painted_topic_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+Finder _findPaintedTopic(String title) => find.byWidgetPredicate(
+  (widget) =>
+      widget is PaintedTopicCard &&
+      widget.layout.semanticsLabel.split(',').first.trim() == title,
+);
 
 Topic _topic({required int id, required String title, String? bookmarkName}) {
   return Topic(
@@ -83,16 +90,16 @@ void main() {
     await tester.tap(find.text('codex (2)'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Gamma'), findsOneWidget);
-    expect(find.text('Beta'), findsNothing);
+    expect(_findPaintedTopic('Alpha'), findsOneWidget);
+    expect(_findPaintedTopic('Gamma'), findsOneWidget);
+    expect(_findPaintedTopic('Beta'), findsNothing);
 
     await tester.tap(find.text('全部'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Beta'), findsOneWidget);
-    expect(find.text('Gamma'), findsOneWidget);
+    expect(_findPaintedTopic('Alpha'), findsOneWidget);
+    expect(_findPaintedTopic('Beta'), findsOneWidget);
+    expect(_findPaintedTopic('Gamma'), findsOneWidget);
   });
 
   testWidgets('点击未设置后只显示未命名书签', (tester) async {
@@ -117,9 +124,9 @@ void main() {
     await tester.tap(find.text('未设置 (2)'));
     await tester.pumpAndSettle();
 
-    expect(find.text('No Name 1'), findsOneWidget);
-    expect(find.text('No Name 2'), findsOneWidget);
-    expect(find.text('Alpha'), findsNothing);
+    expect(_findPaintedTopic('No Name 1'), findsOneWidget);
+    expect(_findPaintedTopic('No Name 2'), findsOneWidget);
+    expect(_findPaintedTopic('Alpha'), findsNothing);
   });
 
   testWidgets('隐藏汇总条再恢复后保留之前的筛选状态', (tester) async {
@@ -151,17 +158,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('codex (2)'), findsNothing);
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Gamma'), findsOneWidget);
-    expect(find.text('Beta'), findsNothing);
+    expect(_findPaintedTopic('Alpha'), findsOneWidget);
+    expect(_findPaintedTopic('Gamma'), findsOneWidget);
+    expect(_findPaintedTopic('Beta'), findsNothing);
 
     state.showSummaryBar();
     await tester.pumpAndSettle();
 
     expect(find.text('codex (2)'), findsOneWidget);
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Gamma'), findsOneWidget);
-    expect(find.text('Beta'), findsNothing);
+    expect(_findPaintedTopic('Alpha'), findsOneWidget);
+    expect(_findPaintedTopic('Gamma'), findsOneWidget);
+    expect(_findPaintedTopic('Beta'), findsNothing);
   });
 
   testWidgets('桌面端可以拖动横向滚动顶部书签标签', (tester) async {
@@ -304,31 +311,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(state._selectedBookmarkName, 'codex');
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Gamma'), findsOneWidget);
-    expect(find.text('Beta'), findsNothing);
+    expect(_findPaintedTopic('Alpha'), findsOneWidget);
+    expect(_findPaintedTopic('Gamma'), findsOneWidget);
+    expect(_findPaintedTopic('Beta'), findsNothing);
 
     await tester.drag(swipeRegion, const Offset(-320, 0));
     await tester.pumpAndSettle();
 
     expect(state._selectedBookmarkName, 'beta');
-    expect(find.text('Beta'), findsOneWidget);
-    expect(find.text('Alpha'), findsNothing);
+    expect(_findPaintedTopic('Beta'), findsOneWidget);
+    expect(_findPaintedTopic('Alpha'), findsNothing);
 
     await tester.drag(swipeRegion, const Offset(320, 0));
     await tester.pumpAndSettle();
 
     expect(state._selectedBookmarkName, 'codex');
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Gamma'), findsOneWidget);
+    expect(_findPaintedTopic('Alpha'), findsOneWidget);
+    expect(_findPaintedTopic('Gamma'), findsOneWidget);
 
     await tester.drag(swipeRegion, const Offset(320, 0));
     await tester.pumpAndSettle();
 
     expect(state._selectedBookmarkName, isNull);
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Beta'), findsOneWidget);
-    expect(find.text('Gamma'), findsOneWidget);
+    expect(_findPaintedTopic('Alpha'), findsOneWidget);
+    expect(_findPaintedTopic('Beta'), findsOneWidget);
+    expect(_findPaintedTopic('Gamma'), findsOneWidget);
   });
 
   testWidgets('手机端左右拖动顶部名称标签只滚动标签条不切换筛选项', (tester) async {

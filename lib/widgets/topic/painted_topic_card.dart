@@ -118,6 +118,11 @@ class _PaintedTopicCardState extends State<PaintedTopicCard> {
     if (layout.band != null) {
       card = ClipRRect(borderRadius: cardRadius, child: card);
     }
+    card = Semantics(
+      label: layout.semanticsLabel,
+      button: widget.onTap != null,
+      child: card,
+    );
     return Padding(padding: const EdgeInsets.only(bottom: 8), child: card);
   }
 }
