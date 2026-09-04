@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'ci: add lifecycle resolver'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +29,6 @@ jobs:
                   raise SystemExit(f'{path}: expected exactly one marker, found {count}')
               p.write_text(s.replace(old, new, 1))
 
-          # Card prewarmer owns and cancels the pending idle Timer chain.
           path = 'lib/widgets/topic/topic_card_prewarmer.dart'
           replace_once(path,
               '  Object? _lastSignature;\n\n  static const int _budgetMicros = 4000;',
@@ -42,33 +40,26 @@ jobs:
               '      if (index < limit) {\n        scheduleIdleTask(step, isCanceled: canceled);\n      }\n    }\n\n    scheduleIdleTask(step, isCanceled: canceled);',
               '      if (index < limit) {\n        _cancelIdleTask = scheduleIdleTask(step, isCanceled: canceled);\n      } else {\n        _cancelIdleTask = null;\n      }\n    }\n\n    _cancelIdleTask = scheduleIdleTask(step, isCanceled: canceled);')
 
-          # Layout cache does not own a permanent RelativeTimeClock listener.
           path = 'lib/widgets/topic/topic_card_layout.dart'
-          replace_once(path,
-              "import '../../utils/relative_time_clock.dart';\n",
-              '')
+          replace_once(path, "import '../../utils/relative_time_clock.dart';\n", '')
           replace_once(path,
               '''  static int _minuteEpoch = 0;\n  static bool _clockHooked = false;\n\n  static int _currentMinuteEpoch() {\n    if (!_clockHooked) {\n      _clockHooked = true;\n      RelativeTimeClock.instance.addListener(() => _minuteEpoch++);\n    }\n    return _minuteEpoch;\n  }''',
               '''  static int _currentMinuteEpoch() =>\n      DateTime.now().millisecondsSinceEpoch ~/ Duration.millisecondsPerMinute;''')
 
-          # Shortcut bindings may be disposed after their ProviderScope during
-          # test/app teardown; unregister when live, tolerate already-disposed registry.
           path = 'lib/providers/shortcut_provider.dart'
           replace_once(path,
               '''  void dispose() {\n    if (_disposed) return;\n    _disposed = true;\n    _registry.unregister(scope: scope, owner: _owner);\n  }''',
-              '''  void dispose() {\n    if (_disposed) return;\n    _disposed = true;\n    try {\n      _registry.unregister(scope: scope, owner: _owner);\n    } on StateError {\n      // ProviderScope may already be tearing down; there is no registry state\n      // left to clean in that case.\n    }\n  }''')
+              '''  void dispose() {\n    if (_disposed) return;\n    _disposed = true;\n    try {\n      _registry.unregister(scope: scope, owner: _owner);\n    } on StateError {\n      // ProviderScope may already be tearing down; nothing remains to unregister.\n    }\n  }''')
 
-          # Bookmarks teardown must not enqueue provider writes after disposal.
           path = 'lib/pages/bookmarks_page.dart'
           replace_once(path,
               '''  void dispose() {\n    _shortcutScopeBinding.disposeDeferred();\n    _setMobileBottomBarHidden(false);\n    _scrollController.dispose();\n    Future.microtask(_searchNotifier.exitSearchMode);\n    super.dispose();\n  }''',
-              '''  void dispose() {\n    _shortcutScopeBinding.dispose();\n    _setMobileBottomBarHidden(false);\n    _scrollController.dispose();\n    try {\n      _searchNotifier.exitSearchMode();\n    } on StateError {\n      // ProviderScope can be disposed before this State during test/app teardown.\n    }\n    super.dispose();\n  }''')
+              '''  void dispose() {\n    _shortcutScopeBinding.dispose();\n    _setMobileBottomBarHidden(false);\n    _scrollController.dispose();\n    try {\n      _searchNotifier.exitSearchMode();\n    } on StateError {\n      // ProviderScope can already be disposed during teardown.\n    }\n    super.dispose();\n  }''')
           replace_once(path,
               '''  void _setMobileBottomBarHidden(bool hidden) {\n    final target = hidden ? 0.0 : 1.0;\n    final current = _readBarVisibility();\n    if (current == target) {\n      return;\n    }\n    _writeBarVisibility(target);\n  }''',
-              '''  void _setMobileBottomBarHidden(bool hidden) {\n    final target = hidden ? 0.0 : 1.0;\n    try {\n      final current = _readBarVisibility();\n      if (current == target) {\n        return;\n      }\n      _writeBarVisibility(target);\n    } on StateError {\n      // Teardown can outlive the provider container; the bottom bar no longer\n      // exists in that case, so there is nothing left to restore.\n    }\n  }''')
+              '''  void _setMobileBottomBarHidden(bool hidden) {\n    final target = hidden ? 0.0 : 1.0;\n    try {\n      final current = _readBarVisibility();\n      if (current == target) {\n        return;\n      }\n      _writeBarVisibility(target);\n    } on StateError {\n      // Provider container may already be gone during teardown.\n    }\n  }''')
           PY
           git diff --check
-          git diff --exit-code -- .github/workflows/temp-lifecycle-fix.yml || true
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add lib/widgets/topic/topic_card_prewarmer.dart lib/widgets/topic/topic_card_layout.dart lib/providers/shortcut_provider.dart lib/pages/bookmarks_page.dart
