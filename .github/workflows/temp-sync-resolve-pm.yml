@@ -44,20 +44,51 @@ jobs:
                           return start, i + 1
               raise RuntimeError(marker)
 
-          # 专用 PM 成员组件：上游实现是 fork 现有用户成员面板的严格超集
-          # （用户 + 群组 + 邀请 + 用户卡片 + 正确的短私信底部门禁）。
+          def add_pm_callbacks(text):
+              lines = text.splitlines(keepends=True)
+              out = []
+              inserted = 0
+              i = 0
+              while i < len(lines):
+                  line = lines[i]
+                  out.append(line)
+                  if 'removingPrivateMessageParticipantId:' in line:
+                      indent = line[:len(line) - len(line.lstrip())]
+                      window = ''.join(lines[i:i+8])
+                      if 'onRemovePrivateMessageParticipant:' in window and 'onRemovePrivateMessageGroup:' not in window:
+                          j = i + 1
+                          while j < min(len(lines), i + 8):
+                              out.append(lines[j])
+                              if lines[j].strip() == ': null,':
+                                  out.extend([
+                                      f'{indent}removingPrivateMessageGroupName: _removingPrivateMessageGroupName,\n',
+                                      f'{indent}onRemovePrivateMessageGroup: isLoggedIn\n',
+                                      f'{indent}    ? _handleRemovePrivateMessageGroup\n',
+                                      f'{indent}    : null,\n',
+                                      f'{indent}onInvitePrivateMessageParticipants: isLoggedIn\n',
+                                      f'{indent}    ? _handleInvitePrivateMessageParticipants\n',
+                                      f'{indent}    : null,\n',
+                                  ])
+                                  inserted += 1
+                                  i = j
+                                  break
+                              j += 1
+                  i += 1
+              if inserted != 2:
+                  raise SystemExit(f'expected to insert PM callbacks at 2 call sites, got {inserted}')
+              return ''.join(out)
+
+          # 专用 PM 成员组件：上游实现是 fork 现有用户成员面板的严格超集。
           pm_widget = 'lib/pages/topic_detail_page/widgets/private_message_participants.dart'
           Path(pm_widget).write_text(upstream(pm_widget))
 
-          # 用户操作：保留 fork 的回复收件人编辑，把群组转换为名称；
-          # 成员操作块替换为上游扩展版本。
+          # 用户操作：保留 fork 的回复收件人编辑，把群组转换为名称；成员操作块采用上游扩展版本。
           path = 'lib/pages/topic_detail_page/actions/_user_actions.dart'
           p = Path(path); text = p.read_text(); up = upstream(path)
           text = text.replace('              ...detail.allowedGroups,\n', '              ...detail.allowedGroups.map((group) => group.name),\n')
           marker = '  Future<void> _handleRemovePrivateMessageParticipant('
           if marker in text:
               s, e = method_block(text, marker)
-              # 当前 fork 旧块到 delete handler 之间没有别的独立功能；用上游 PM 超集替换。
               delete_marker = '  Future<void> _handleDeletePost('
               end_region = text.index(delete_marker, e)
               up_start = up.index(marker)
@@ -65,20 +96,15 @@ jobs:
               text = text[:s] + up[up_start:up_end] + text[end_region:]
           p.write_text(text)
 
-          # TopicDetailPage：保留 fork 的 currentUser 参数与其它页面状态，只补群组/邀请/归档状态和回调。
+          # TopicDetailPage：保留 fork 页面逻辑，只补群组/邀请/归档状态与两个列表调用点。
           path = 'lib/pages/topic_detail_page/topic_detail_page.dart'
           p = Path(path); text = p.read_text()
           if 'String? _removingPrivateMessageGroupName;' not in text:
               text = text.replace(
                   '  int? _removingPrivateMessageParticipantId;\n',
                   '  int? _removingPrivateMessageParticipantId;\n  String? _removingPrivateMessageGroupName;\n  bool _isTogglingArchiveMessage = false;\n', 1)
-          callback_old = '''          removingPrivateMessageParticipantId:\n              _removingPrivateMessageParticipantId,\n          onRemovePrivateMessageParticipant: isLoggedIn\n              ? _handleRemovePrivateMessageParticipant\n              : null,\n'''
-          callback_new = callback_old + '''          removingPrivateMessageGroupName: _removingPrivateMessageGroupName,\n          onRemovePrivateMessageGroup: isLoggedIn\n              ? _handleRemovePrivateMessageGroup\n              : null,\n          onInvitePrivateMessageParticipants: isLoggedIn\n              ? _handleInvitePrivateMessageParticipants\n              : null,\n'''
-          # 两个调用点（NestedPostList / TopicPostList）都保留 fork 现有参数。
           if 'onRemovePrivateMessageGroup:' not in text:
-              if text.count(callback_old) != 2:
-                  raise SystemExit(f'unexpected PM callback occurrence count: {text.count(callback_old)}')
-              text = text.replace(callback_old, callback_new)
+              text = add_pm_callbacks(text)
           p.write_text(text)
 
           # 两种帖子列表：新增群组/邀请回调，保留 fork 的 currentUserId/admin 参数。
@@ -98,7 +124,8 @@ jobs:
               helper_marker = '  PrivateMessageParticipants _buildPrivateMessageParticipants('
               if helper_marker in text and 'PrivateMessageParticipants.fromDetail(' not in text:
                   s, e = method_block(text, helper_marker)
-                  replacement = '''  PrivateMessageParticipants _buildPrivateMessageParticipants(\n    PrivateMessageParticipantsLocation location,\n  ) {\n    return PrivateMessageParticipants.fromDetail(\n      location: location,\n      detail: ''' + ('detail' if path.endswith('topic_post_list.dart') else 'widget.detail') + ''',\n      removingParticipantId: widget.removingPrivateMessageParticipantId,\n      removingGroupName: widget.removingPrivateMessageGroupName,\n      onRemoveParticipant: widget.onRemovePrivateMessageParticipant,\n      onRemoveGroup: widget.onRemovePrivateMessageGroup,\n      onInvite: widget.onInvitePrivateMessageParticipants,\n    );\n  }'''
+                  detail_expr = 'detail' if path.endswith('topic_post_list.dart') else 'widget.detail'
+                  replacement = f'''  PrivateMessageParticipants _buildPrivateMessageParticipants(\n    PrivateMessageParticipantsLocation location,\n  ) {{\n    return PrivateMessageParticipants.fromDetail(\n      location: location,\n      detail: {detail_expr},\n      removingParticipantId: widget.removingPrivateMessageParticipantId,\n      removingGroupName: widget.removingPrivateMessageGroupName,\n      onRemoveParticipant: widget.onRemovePrivateMessageParticipant,\n      onRemoveGroup: widget.onRemovePrivateMessageGroup,\n      onInvite: widget.onInvitePrivateMessageParticipants,\n    );\n  }}'''
                   text = text[:s] + replacement + text[e:]
               if path.endswith('topic_post_list.dart'):
                   text = text.replace(
