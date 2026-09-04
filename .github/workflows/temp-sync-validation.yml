@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: upstream-sync-validation-diagnostic-20260905
+  group: upstream-sync-validation-final-widget-20260905
   cancel-in-progress: true
 
 permissions:
