@@ -112,10 +112,14 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
 
   @override
   void dispose() {
-    _shortcutScopeBinding.disposeDeferred();
+    _shortcutScopeBinding.dispose();
     _setMobileBottomBarHidden(false);
     _scrollController.dispose();
-    Future.microtask(_searchNotifier.exitSearchMode);
+    try {
+      _searchNotifier.exitSearchMode();
+    } on StateError {
+      // ProviderScope can already be disposed during teardown.
+    }
     super.dispose();
   }
 
@@ -376,11 +380,15 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
 
   void _setMobileBottomBarHidden(bool hidden) {
     final target = hidden ? 0.0 : 1.0;
-    final current = _readBarVisibility();
-    if (current == target) {
-      return;
+    try {
+      final current = _readBarVisibility();
+      if (current == target) {
+        return;
+      }
+      _writeBarVisibility(target);
+    } on StateError {
+      // Provider container may already be gone during teardown.
     }
-    _writeBarVisibility(target);
   }
 
   Future<void> _showWorkspaceSwitcher() async {

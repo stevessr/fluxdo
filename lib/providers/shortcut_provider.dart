@@ -372,7 +372,11 @@ class ShortcutScopeBinding {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _registry.unregister(scope: scope, owner: _owner);
+    try {
+      _registry.unregister(scope: scope, owner: _owner);
+    } on StateError {
+      // ProviderScope may already be tearing down; nothing remains to unregister.
+    }
   }
 
   void disposeDeferred() {

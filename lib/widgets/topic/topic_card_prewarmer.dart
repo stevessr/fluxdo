@@ -62,6 +62,7 @@ class _CardPrewarmScopeState<T> extends State<CardPrewarmScope<T>> {
   int _generation = 0;
 
   Object? _lastSignature;
+  void Function()? _cancelIdleTask;
 
   static const int _budgetMicros = 4000;
 
@@ -83,10 +84,14 @@ class _CardPrewarmScopeState<T> extends State<CardPrewarmScope<T>> {
   @override
   void dispose() {
     _generation++;
+    _cancelIdleTask?.call();
+    _cancelIdleTask = null;
     super.dispose();
   }
 
   void _restart() {
+    _cancelIdleTask?.call();
+    _cancelIdleTask = null;
     final generation = ++_generation;
     var index = 0;
     bool canceled() => !mounted || generation != _generation;
@@ -119,11 +124,13 @@ class _CardPrewarmScopeState<T> extends State<CardPrewarmScope<T>> {
       }
       _bakeGlyphs(baked);
       if (index < limit) {
-        scheduleIdleTask(step, isCanceled: canceled);
+        _cancelIdleTask = scheduleIdleTask(step, isCanceled: canceled);
+      } else {
+        _cancelIdleTask = null;
       }
     }
 
-    scheduleIdleTask(step, isCanceled: canceled);
+    _cancelIdleTask = scheduleIdleTask(step, isCanceled: canceled);
   }
 
   /// 字形预烤:把本步新排版的段落离屏光栅化一次,字形提前进引擎
