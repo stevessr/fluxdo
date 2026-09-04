@@ -167,6 +167,18 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
       await _manager.completeNewLogin(success: success);
     }
     if (!mounted) return;
+
+    if (success) {
+      // 新账号登录同样跨越了认证身份边界。LoginPage 的 authState 广播只会
+      // 让 profile 等少数监听者先看到新身份；账号级 Riverpod 状态仍可能
+      // 保留旧账号的数据。必须复用普通账号切换的原子 reset，确保话题、
+      // 通知、私信、聊天、LDC/CDK 等都在新 session 上重新建立。
+      await AppStateRefresher.resetForAccountSwitch(
+        ProviderScope.containerOf(context, listen: false),
+      );
+      if (!mounted) return;
+    }
+
     await _reload();
   }
 
