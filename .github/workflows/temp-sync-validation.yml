@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: upstream-sync-validation
+  group: upstream-sync-validation-v2
   cancel-in-progress: true
 
 permissions:
@@ -27,7 +27,13 @@ jobs:
         with:
           flutter-version: '3.44.0'
           cache: true
+      - name: Run merge-sensitive regressions
+        run: >-
+          dart tool/flutterw.dart test
+          test/models/topic_detail_private_message_participants_test.dart
+          test/pages/topic_detail_page/private_message_participants_test.dart
+          test/services/sticker_market_service_test.dart
+          test/services/account_runtime_pool_test.dart
+          test/services/shared_media_cache_policy_test.dart
       - name: Run Flutter tests
         run: dart tool/flutterw.dart test
-
-# Validation trigger after merge-diagnostic cleanup.
