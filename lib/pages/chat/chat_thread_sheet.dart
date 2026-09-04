@@ -1318,7 +1318,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
     final thumbnailHeroTags = List<String>.generate(
       thumbnailUrls.length,
       (index) =>
-          'chat_thread_${widget.thread.id}_${message.id}_attachment_$index',
+          'chat_thread_${message.id}_attachment_$index',
     );
     const thumbnailSourceStyle = ViewerSourceStyle.cover(radius: 8);
 
