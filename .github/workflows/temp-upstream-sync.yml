@@ -39,8 +39,14 @@ jobs:
             git diff --name-only --diff-filter=U | tee "$conflicts_file"
             while IFS= read -r path; do
               [ -n "$path" ] || continue
-              git checkout --ours -- "$path"
-              git add -- "$path"
+              mode=$(git ls-files -u -- "$path" | awk '$3 == 2 {print $1; exit}')
+              sha=$(git ls-files -u -- "$path" | awk '$3 == 2 {print $2; exit}')
+              if [ "$mode" = "160000" ]; then
+                git update-index --add --cacheinfo "$mode,$sha,$path"
+              else
+                git checkout --ours -- "$path"
+                git add -- "$path"
+              fi
             done < "$conflicts_file"
           fi
 
