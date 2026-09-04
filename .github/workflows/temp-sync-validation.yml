@@ -29,3 +29,5 @@ jobs:
           cache: true
       - name: Run Flutter tests
         run: dart tool/flutterw.dart test
+
+# Validation trigger after merge-diagnostic cleanup.
