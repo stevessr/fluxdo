@@ -1,0 +1,89 @@
+name: Temporary bookmark final resolver
+
+on:
+  push:
+    branches:
+      - sync/upstream-20260905
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: sync/upstream-20260905
+          fetch-depth: 0
+      - name: Apply guarded bookmark fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one marker, found {count}: {old[:90]!r}')
+              p.write_text(s.replace(old, new, 1))
+
+          # BookmarksPage must not lazily construct a ref-backed binding from dispose().
+          path = 'lib/pages/bookmarks_page.dart'
+          replace_once(path,
+              '''  late final ShortcutScopeBinding _shortcutScopeBinding = ShortcutScopeBinding(\n    ref: ref,\n    scope: ShortcutScope.context,\n    // 底栏 tab 形态挂在 IndexedStack 里:不活跃时注册失效,否则截胡\n    // 其他 tab 的 ESC(共享根路由,路由过滤分不出活跃 tab)。\n    enabled: () => widget.isActive,\n  );''',
+              '''  ShortcutScopeBinding? _shortcutScopeBinding;''')
+          replace_once(path,
+              '''    if (PlatformUtils.isDesktop) {\n      WidgetsBinding.instance.addPostFrameCallback((_) {\n        if (!mounted) return;\n        _shortcutScopeBinding.register(context, {''',
+              '''    if (PlatformUtils.isDesktop) {\n      _shortcutScopeBinding = ShortcutScopeBinding(\n        ref: ref,\n        scope: ShortcutScope.context,\n        // 底栏 tab 形态挂在 IndexedStack 里:不活跃时注册失效,否则截胡\n        // 其他 tab 的 ESC(共享根路由,路由过滤分不出活跃 tab)。\n        enabled: () => widget.isActive,\n      );\n      WidgetsBinding.instance.addPostFrameCallback((_) {\n        if (!mounted) return;\n        _shortcutScopeBinding?.register(context, {''')
+          replace_once(path,
+              '''    _shortcutScopeBinding.dispose();''',
+              '''    _shortcutScopeBinding?.dispose();\n    _shortcutScopeBinding = null;''')
+
+          # Painted cards already compute a semanticsLabel; expose it to the actual
+          # semantics tree so the canvas-only fast path remains accessible.
+          path = 'lib/widgets/topic/painted_topic_card.dart'
+          replace_once(path,
+              '''    if (layout.band != null) {\n      card = ClipRRect(borderRadius: cardRadius, child: card);\n    }\n    return Padding(padding: const EdgeInsets.only(bottom: 8), child: card);''',
+              '''    if (layout.band != null) {\n      card = ClipRRect(borderRadius: cardRadius, child: card);\n    }\n    card = Semantics(\n      label: layout.semanticsLabel,\n      button: widget.onTap != null,\n      child: card,\n    );\n    return Padding(padding: const EdgeInsets.only(bottom: 8), child: card);''')
+
+          # Canvas titles are not Text widgets. Keep filtering tests attached to the
+          # actual production PaintedTopicCard/layout contract.
+          path = 'test/pages/bookmarks/bookmarks_list_content_test.dart'
+          replace_once(path,
+              "import 'package:fluxdo/widgets/bookmark/bookmarks_list_content.dart';",
+              "import 'package:fluxdo/widgets/bookmark/bookmarks_list_content.dart';\nimport 'package:fluxdo/widgets/topic/painted_topic_card.dart';")
+          insert_marker = "Topic _topic({required int id, required String title, String? bookmarkName}) {"
+          insert = '''Finder _findPaintedTopic(String title) => find.byWidgetPredicate(\n  (widget) =>\n      widget is PaintedTopicCard &&\n      widget.layout.semanticsLabel.split(',').first.trim() == title,\n);\n\n'''
+          replace_once(path, insert_marker, insert + insert_marker)
+          p = Path(path)
+          s = p.read_text()
+          for title in ['Alpha', 'Beta', 'Gamma', 'No Name 1', 'No Name 2']:
+              s = s.replace(f"find.text('{title}')", f"_findPaintedTopic('{title}')")
+          p.write_text(s)
+
+          # Page tests use a helper for list cards. Point it at the canvas card rather
+          # than a Text descendant. Other Text finders (workspace tabs/sheets) stay intact.
+          path = 'test/pages/bookmarks/bookmarks_page_test.dart'
+          replace_once(path,
+              "import 'package:fluxdo/widgets/bookmark/bookmarks_workspace_tab_bar.dart';",
+              "import 'package:fluxdo/widgets/bookmark/bookmarks_workspace_tab_bar.dart';\nimport 'package:fluxdo/widgets/topic/painted_topic_card.dart';")
+          replace_once(path,
+              '''Finder _findBookmarkInList(String title) {\n  return find.descendant(\n    of: find.byType(BookmarksListContent),\n    matching: find.text(title),\n  );\n}''',
+              '''Finder _findBookmarkInList(String title) {\n  return find.descendant(\n    of: find.byType(BookmarksListContent),\n    matching: find.byWidgetPredicate(\n      (widget) =>\n          widget is PaintedTopicCard &&\n          widget.layout.semanticsLabel.split(',').first.trim() == title,\n    ),\n  );\n}''')
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            lib/pages/bookmarks_page.dart \
+            lib/widgets/topic/painted_topic_card.dart \
+            test/pages/bookmarks/bookmarks_list_content_test.dart \
+            test/pages/bookmarks/bookmarks_page_test.dart
+          git commit -m 'fix: finalize bookmark lifecycle and painted semantics'
+          git rm .github/workflows/temp-bookmark-final-fix.yml
+          git commit -m 'ci: remove bookmark final resolver'
+          git push origin HEAD:sync/upstream-20260905
