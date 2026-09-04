@@ -23,14 +23,15 @@ import '../../../../../l10n/s.dart';
 /// 展示市场中所有可用的表情包分组，用户可以添加/移除。
 /// 支持分页加载：首次只加载第一页，滚动到底部时自动加载下一页。
 class StickerMarketSheet extends ConsumerStatefulWidget {
-  const StickerMarketSheet({super.key});
+  final ScrollController scrollController;
+
+  const StickerMarketSheet({super.key, required this.scrollController});
 
   @override
   ConsumerState<StickerMarketSheet> createState() => _StickerMarketSheetState();
 }
 
 class _StickerMarketSheetState extends ConsumerState<StickerMarketSheet> {
-  final ScrollController _scrollController = ScrollController();
   final LoadMoreCoordinator _loadMoreCoordinator = LoadMoreCoordinator(
     triggerDistance: 600,
     releaseDistance: 600,
@@ -42,6 +43,8 @@ class _StickerMarketSheetState extends ConsumerState<StickerMarketSheet> {
   /// 当前选中分类 id（'all' = 全部）；与 notifier 同步，驱动 chip 选中态
   String _selectedTopic = 'all';
 
+  ScrollController get _scrollController => widget.scrollController;
+
   @override
   void initState() {
     super.initState();
@@ -52,7 +55,7 @@ class _StickerMarketSheetState extends ConsumerState<StickerMarketSheet> {
   void dispose() {
     _searchDebounce?.cancel();
     _searchController.dispose();
-    _scrollController.dispose();
+    _scrollController.removeListener(_onScroll);
     super.dispose();
   }
 
@@ -85,41 +88,22 @@ class _StickerMarketSheetState extends ConsumerState<StickerMarketSheet> {
     final groupsAsync = ref.watch(marketGroupsProvider);
     final topicsAsync = ref.watch(marketTopicsProvider);
 
-    return AppSheetScaffold(
-      title: S.current.sticker_marketTitle,
-      showCloseButton: false,
-      showTitleDivider: true,
-      contentPadding: EdgeInsets.zero,
-      maxHeightFactor: 0.8,
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          style: TextButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-          ),
-          child: Text(S.current.common_done),
+    return Column(
+      children: [
+        _buildSearchField(),
+        _buildTopicChips(topicsAsync),
+        Expanded(
+          child: (() {
+            final groups = groupsAsync.value;
+            if (groups != null) return _buildGroupList(groups);
+            return groupsAsync.when(
+              data: (groups) => _buildGroupList(groups),
+              loading: () => const Center(child: LoadingSpinner()),
+              error: _buildError,
+            );
+          })(),
         ),
       ],
-      child: Column(
-        children: [
-          _buildSearchField(),
-          _buildTopicChips(topicsAsync),
-          Expanded(
-            child: (() {
-              final groups = groupsAsync.value;
-              if (groups != null) {
-                return _buildGroupList(groups);
-              }
-              return groupsAsync.when(
-                data: (groups) => _buildGroupList(groups),
-                loading: () => const Center(child: LoadingSpinner()),
-                error: _buildError,
-              );
-            })(),
-          ),
-        ],
-      ),
     );
   }
 

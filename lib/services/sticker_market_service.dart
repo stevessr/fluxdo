@@ -148,25 +148,49 @@ class StickerMarketService {
 
   // ==================== 订阅管理 ====================
 
-  /// 获取已订阅的分组 ID 列表
+  /// 获取已订阅的分组 ID 列表（订阅顺序即展示顺序）
   List<String> getSubscribedGroupIds() {
     return _prefs.getStringList(_subscribedKey) ?? [];
   }
 
-  /// 订阅一个分组
-  Future<void> subscribe(String groupId) async {
+  /// 已订阅分组（含 tab 首帧所需的 name/icon），按订阅顺序返回。
+  List<StickerGroup> getSubscribedGroups() {
+    final metaById = _readSubscribedMeta();
+    return [
+      for (final id in getSubscribedGroupIds())
+        metaById[id] ??
+            StickerGroup(
+              id: id,
+              name: '',
+              icon: '',
+              order: 0,
+              emojiCount: 0,
+              isArchived: false,
+            ),
+    ];
+  }
+
+  /// 兼容旧调用（String id）和上游新调用（StickerGroup）；新调用会同步缓存元信息。
+  Future<void> subscribe(Object groupOrId) async {
+    final group = groupOrId is StickerGroup ? groupOrId : null;
+    final groupId = group?.id ?? groupOrId.toString();
     final ids = getSubscribedGroupIds();
     if (!ids.contains(groupId)) {
       ids.add(groupId);
       await _prefs.setStringList(_subscribedKey, ids);
     }
+    if (group != null) await cacheSubscribedGroupMeta(group);
   }
 
-  /// 取消订阅
+  /// 取消订阅，连带清掉元信息缓存。
   Future<void> unsubscribe(String groupId) async {
     final ids = getSubscribedGroupIds();
     ids.remove(groupId);
     await _prefs.setStringList(_subscribedKey, ids);
+    final metaById = _readSubscribedMeta();
+    if (metaById.remove(groupId) != null) {
+      await _writeSubscribedMeta(metaById);
+    }
   }
 
   /// 是否已订阅

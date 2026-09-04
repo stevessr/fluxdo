@@ -23,29 +23,6 @@ class StickerMarketTopic {
 }
 
 /// 市场分类（topic）
-class StickerMarketTopic {
-  final String id;
-  final String label;
-  final int totalGroups;
-  final int totalPages;
-
-  const StickerMarketTopic({
-    required this.id,
-    required this.label,
-    required this.totalGroups,
-    required this.totalPages,
-  });
-
-  factory StickerMarketTopic.fromJson(Map<String, dynamic> json) {
-    return StickerMarketTopic(
-      id: json['id'] as String? ?? '',
-      label: json['label'] as String? ?? '',
-      totalGroups: json['totalGroups'] as int? ?? 0,
-      totalPages: json['totalPages'] as int? ?? 0,
-    );
-  }
-}
-
 /// 表情包分组
 class StickerGroup {
   final String id;
@@ -76,6 +53,29 @@ class StickerGroup {
       emojiCount: json['emojiCount'] as int? ?? 0,
       isArchived: json['isArchived'] as bool? ?? false,
       topic: json['topic'] as String? ?? '',
+    );
+  }
+
+  /// 与 [fromJson] 对称，用于持久化已订阅分组元信息。
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'icon': icon,
+    'order': order,
+    'emojiCount': emojiCount,
+    'isArchived': isArchived,
+    'topic': topic,
+  };
+
+  StickerGroup copyWith({String? name, String? icon, int? emojiCount}) {
+    return StickerGroup(
+      id: id,
+      name: name ?? this.name,
+      icon: icon ?? this.icon,
+      order: order,
+      emojiCount: emojiCount ?? this.emojiCount,
+      isArchived: isArchived,
+      topic: topic,
     );
   }
 }
