@@ -115,6 +115,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     _titleController.addListener(_onTitleChanged);
     _titleController.addListener(_onDraftContentChanged);
     _contentController.addListener(_onDraftContentChanged);
+    // 标题计数器需要随输入实时重建。
+    _titleController.addListener(_updateTitleLength);
 
     // 预填标题/内容(待审内容撤回重编辑等场景):直接落 controller,
     // 并跳过草稿恢复弹窗,避免旧草稿覆盖预填内容
@@ -351,6 +353,27 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
   void _updateContentLength() {
     setState(() => _contentLength = _contentController.text.length);
+  }
+
+  /// 标题长度变化时重建（驱动标题计数器）。
+  int _titleLength = 0;
+  void _updateTitleLength() {
+    final length = _titleController.text.trim().length;
+    if (length == _titleLength) return;
+    setState(() => _titleLength = length);
+  }
+
+  /// 首帖最小字数（含 warden 等插件按分类的改写）。
+  int? _minContentLength;
+
+  Future<void> _refreshMinContentLength() async {
+    final min = await ComposerMinLengthResolver.resolve(
+      category: _selectedCategory,
+      isFirstPost: true,
+      isPrivateMessage: false,
+    );
+    if (!mounted) return;
+    setState(() => _minContentLength = min);
   }
 
   bool get _featuredLinkEnabled =>
@@ -655,53 +678,69 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   /// (分类/标签/字数在底部 ComposerMetaBar 常驻);标题与正文同滚,
   /// 写正文时自然滚出屏,想改标题滚回顶部即可。
   Widget _buildComposerHeader(ThemeData theme, int minTitleLength) {
-    // extendBodyBehindAppBar 后滚动内容从屏顶开始,首屏让出渐变模糊层
-    // 全高(含消散尾巴 —— 初始态标题不被尾巴遮,滚动上移时才进入
-    // 消散区被渐次溶解)
     final topInset = ProgressiveTopBlur.heightFor(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(20, topInset + 10, 20, 0),
-      child: TextFormField(
-        controller: _titleController,
-        decoration: InputDecoration(
-          hintText: context.l10n.createTopic_titleHint,
-          hintStyle: TextStyle(
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-            fontWeight: FontWeight.normal,
-          ),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
-          isDense: true,
-        ),
-        style: theme.textTheme.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w900,
-          letterSpacing: -0.5,
-        ),
-        maxLines: null,
-        maxLength: _featuredLinkEnabled ? null : 200,
-        buildCounter:
-            (
+      child: Stack(
+        children: [
+          TextFormField(
+            controller: _titleController,
+            decoration: InputDecoration(
+              hintText: context.l10n.createTopic_titleHint,
+              hintStyle: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                fontWeight: FontWeight.normal,
+              ),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+              isDense: true,
+            ),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+            maxLines: null,
+            // featured-link 入口允许只输入 URL；沿用 fork 的长度兼容逻辑。
+            maxLength: _featuredLinkEnabled ? null : 200,
+            buildCounter: (
               context, {
               required currentLength,
               required isFocused,
               maxLength,
             }) => null,
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return context.l10n.createTopic_enterTitle;
-          }
-          if (value.trim().length < minTitleLength) {
-            return context.l10n.createTopic_minTitleLength(minTitleLength);
-          }
-          return null;
-        },
-        onTap: () {
-          _editorKey.currentState?.closeEmojiPanel();
-          _richKey.currentState?.closeEmojiPanel();
-        },
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return context.l10n.createTopic_enterTitle;
+              }
+              if (value.trim().length < minTitleLength) {
+                return context.l10n.createTopic_minTitleLength(minTitleLength);
+              }
+              return null;
+            },
+            onTap: () {
+              _editorKey.currentState?.closeEmojiPanel();
+              _richKey.currentState?.closeEmojiPanel();
+            },
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: CharacterCountsOverlay(
+              length: _titleLength,
+              minimumLength: minTitleLength,
+              showWarning: false,
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  /// 正文字数不足时悬浮在编辑区右下角。
+  Widget _buildCharCountOverlay() => CharacterCountsOverlay(
+    length: _contentLength,
+    minimumLength: _minContentLength,
+  );
 
   /// 底部属性条:分类/标签/字数(编辑区与工具栏之间,常驻可改)
   Widget _buildMetaBar(

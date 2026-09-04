@@ -11,6 +11,10 @@ import '../markdown_editor/rich_composer/rich_composer_editor.dart';
 import '../../providers/preferences_provider.dart';
 import '../../models/topic.dart';
 import '../../models/draft.dart';
+import '../../plugins/plugins.dart';
+import '../../providers/category_provider.dart';
+import '../../services/composer_min_length_resolver.dart';
+import '../common/character_counts_overlay.dart';
 import '../../models/pending_post.dart';
 import '../../pages/pending_posts_page.dart';
 import '../../pages/create_topic_page.dart';
@@ -253,6 +257,13 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   bool get _isInPrivateMessageContext =>
       _isPrivateMessage || widget.isPrivateMessageTopic;
   bool get _isEditMode => widget.editPost != null;
+
+  /// 当前正文最小字数（含站点插件按分类的改写）。
+  int? _minPostLength;
+  int _contentLength = 0;
+
+  /// 编辑首帖时按首帖规则计算；普通回复永远不是首帖。
+  bool get _isFirstPost => _isEditMode && widget.editPost!.postNumber == 1;
   bool get _canReviewPost =>
       !_isEditMode &&
       !_isPrivateMessage &&
@@ -1007,13 +1018,17 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
       editedReplyTargetChanged = editedReplyTarget != currentTarget;
     }
 
-    // 最小字数校验
-    final preloaded = PreloadedDataService();
-    final minLength = widget.isPmWithNonHumanUser
-        ? 1
-        : _isInPrivateMessageContext
-        ? await preloaded.getMinPmPostLength()
-        : await preloaded.getMinPostLength();
+    // 与悬浮计数器共用同一份最小字数解析结果（含 warden 等插件）。
+    final minLength =
+        _minPostLength ??
+        await ComposerMinLengthResolver.resolve(
+          category: widget.categoryId == null
+              ? null
+              : ref.read(categoryMapProvider).value?[widget.categoryId],
+          isFirstPost: _isFirstPost,
+          isPrivateMessage: _isInPrivateMessageContext,
+          isPmWithNonHumanUser: widget.isPmWithNonHumanUser,
+        );
     if (content.length < minLength) {
       ToastService.showInfo(S.current.createTopic_minContentLength(minLength));
       return;
@@ -1029,6 +1044,21 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
       _showError(S.current.pm_noRecipient);
       return;
     }
+
+    // 对齐 Discourse composerBeforeSave：发送前给站点插件一次确认/拦截机会。
+    if (!mounted) return;
+    final pluginAllowed = await PluginRegistry.runBeforeReplySubmit(
+      ReplySubmitContext(
+        context: context,
+        topic: TopicPluginContext(
+          topicId: widget.topicId,
+          topicJson: TopicPluginData.of(widget.topicId),
+        ),
+        isEditing: _isEditMode,
+        isPrivateMessage: _isPrivateMessage,
+      ),
+    );
+    if (!pluginAllowed || !mounted) return;
 
     setState(() => _isSubmitting = true);
     // 对齐 Discourse 前端 composer.set("disableDrafts", true):
@@ -1511,6 +1541,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                                         controller: _contentController,
                                         focusNode: _contentFocusNode,
                                         hintText: context.l10n.editor_hintText,
+                                        bodyOverlay: _buildCharCountOverlay(),
                                         emojiPanelHeight: _emojiPanelHeight,
                                         onEmojiPanelChanged: (show) {
                                           setState(
@@ -1548,6 +1579,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                                   focusNode: _contentFocusNode,
                                   hintText: context.l10n.editor_hintText,
                                   expands: true,
+                                  bodyOverlay: _buildCharCountOverlay(),
                                   emojiPanelHeight: _emojiPanelHeight,
                                   onEmojiPanelChanged: (show) {
                                     setState(() => _showEmojiPanel = show);
