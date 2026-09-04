@@ -682,20 +682,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     Navigator.of(context).maybePop();
   }
 
-  void _closeRemovedPrivateMessage() {
-    ref.invalidate(pmInboxProvider);
-    ref.invalidate(pmSentProvider);
-    ref.invalidate(pmArchiveProvider);
-    if (!mounted) return;
-    // 被移出后必须直接离开私信，不能复用 Esc 语义：
-    // 后者会在搜索或 AI 页中只退出子模式，仍把无权访问的私信留在屏幕上。
-    if (widget.embeddedMode) {
-      widget.onEmbeddedBack?.call();
-      return;
-    }
-    Navigator.of(context).maybePop();
-  }
-
   /// 刷新三个私信列表（收件箱 / 已发送 / 归档）：成员变动与归档都会挪动
   /// 私信在这三档里的归属。
   void _invalidatePrivateMessageLists() {

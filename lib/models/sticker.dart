@@ -1,3 +1,27 @@
+/// 表情包市场索引信息（旧 API 兼容层）。
+///
+/// 新市场浏览以分类页自己的 totalPages 为准，但 fork 仍有 getIndex /
+/// getAllGroups 调用；保留此模型避免升级后破坏旧调用。
+class StickerMarketIndex {
+  final int totalPages;
+  final int pageSize;
+  final int totalGroups;
+
+  const StickerMarketIndex({
+    required this.totalPages,
+    required this.pageSize,
+    required this.totalGroups,
+  });
+
+  factory StickerMarketIndex.fromJson(Map<String, dynamic> json) {
+    return StickerMarketIndex(
+      totalPages: json['totalPages'] as int? ?? 0,
+      pageSize: json['pageSize'] as int? ?? 0,
+      totalGroups: json['totalGroups'] as int? ?? 0,
+    );
+  }
+}
+
 /// 市场分类（topic）
 class StickerMarketTopic {
   final String id;

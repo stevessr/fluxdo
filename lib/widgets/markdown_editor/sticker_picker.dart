@@ -329,7 +329,7 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
             mainAxisSize: MainAxisSize.min,
             children: [
               TextButton(
-                onPressed: () => ref.invalidate(stickerGroupsProvider),
+                onPressed: () => ref.invalidate(subscribedStickerGroupsProvider),
                 child: Text(S.current.common_retry),
               ),
               const SizedBox(width: 8),
