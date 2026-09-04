@@ -22,58 +22,103 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          def replace_once(path, old, new):
+          def regex_once(path, pattern, replacement):
               p = Path(path)
               s = p.read_text()
-              count = s.count(old)
+              out, count = re.subn(pattern, replacement, s, count=1, flags=re.S)
               if count != 1:
-                  raise SystemExit(f'{path}: expected exactly one marker, found {count}: {old[:90]!r}')
-              p.write_text(s.replace(old, new, 1))
+                  raise SystemExit(f'{path}: expected exactly one regex match, found {count}')
+              p.write_text(out)
 
-          # BookmarksPage must not lazily construct a ref-backed binding from dispose().
+          # BookmarksPage: construct the ref-backed binding only on desktop, never
+          # lazily from dispose().
           path = 'lib/pages/bookmarks_page.dart'
-          replace_once(path,
-              '''  late final ShortcutScopeBinding _shortcutScopeBinding = ShortcutScopeBinding(\n    ref: ref,\n    scope: ShortcutScope.context,\n    // 底栏 tab 形态挂在 IndexedStack 里:不活跃时注册失效,否则截胡\n    // 其他 tab 的 ESC(共享根路由,路由过滤分不出活跃 tab)。\n    enabled: () => widget.isActive,\n  );''',
-              '''  ShortcutScopeBinding? _shortcutScopeBinding;''')
-          replace_once(path,
-              '''    if (PlatformUtils.isDesktop) {\n      WidgetsBinding.instance.addPostFrameCallback((_) {\n        if (!mounted) return;\n        _shortcutScopeBinding.register(context, {''',
-              '''    if (PlatformUtils.isDesktop) {\n      _shortcutScopeBinding = ShortcutScopeBinding(\n        ref: ref,\n        scope: ShortcutScope.context,\n        // 底栏 tab 形态挂在 IndexedStack 里:不活跃时注册失效,否则截胡\n        // 其他 tab 的 ESC(共享根路由,路由过滤分不出活跃 tab)。\n        enabled: () => widget.isActive,\n      );\n      WidgetsBinding.instance.addPostFrameCallback((_) {\n        if (!mounted) return;\n        _shortcutScopeBinding?.register(context, {''')
-          replace_once(path,
-              '''    _shortcutScopeBinding.dispose();''',
-              '''    _shortcutScopeBinding?.dispose();\n    _shortcutScopeBinding = null;''')
+          regex_once(
+              path,
+              r"  late final ShortcutScopeBinding _shortcutScopeBinding = ShortcutScopeBinding\(\n.*?\n  \);\n\n  @override\n  void initState\(\) \{\n    super\.initState\(\);\n    if \(PlatformUtils\.isDesktop\) \{\n      WidgetsBinding\.instance\.addPostFrameCallback\(\(_\) \{\n        if \(!mounted\) return;\n        _shortcutScopeBinding\.register\(context, \{",
+              """  ShortcutScopeBinding? _shortcutScopeBinding;
 
-          # Painted cards already compute a semanticsLabel; expose it to the actual
-          # semantics tree so the canvas-only fast path remains accessible.
+  @override
+  void initState() {
+    super.initState();
+    if (PlatformUtils.isDesktop) {
+      _shortcutScopeBinding = ShortcutScopeBinding(
+        ref: ref,
+        scope: ShortcutScope.context,
+        // 底栏 tab 形态挂在 IndexedStack 里:不活跃时注册失效,否则截胡
+        // 其他 tab 的 ESC(共享根路由,路由过滤分不出活跃 tab)。
+        enabled: () => widget.isActive,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _shortcutScopeBinding?.register(context, {""")
+          regex_once(
+              path,
+              r"    _shortcutScopeBinding\.dispose\(\);",
+              """    _shortcutScopeBinding?.dispose();
+    _shortcutScopeBinding = null;""")
+
+          # Canvas-only cards must publish their precomputed accessibility label.
           path = 'lib/widgets/topic/painted_topic_card.dart'
-          replace_once(path,
-              '''    if (layout.band != null) {\n      card = ClipRRect(borderRadius: cardRadius, child: card);\n    }\n    return Padding(padding: const EdgeInsets.only(bottom: 8), child: card);''',
-              '''    if (layout.band != null) {\n      card = ClipRRect(borderRadius: cardRadius, child: card);\n    }\n    card = Semantics(\n      label: layout.semanticsLabel,\n      button: widget.onTap != null,\n      child: card,\n    );\n    return Padding(padding: const EdgeInsets.only(bottom: 8), child: card);''')
+          regex_once(
+              path,
+              r"    if \(layout\.band != null\) \{\n      card = ClipRRect\(borderRadius: cardRadius, child: card\);\n    \}\n    return Padding\(padding: const EdgeInsets\.only\(bottom: 8\), child: card\);",
+              """    if (layout.band != null) {
+      card = ClipRRect(borderRadius: cardRadius, child: card);
+    }
+    card = Semantics(
+      label: layout.semanticsLabel,
+      button: widget.onTap != null,
+      child: card,
+    );
+    return Padding(padding: const EdgeInsets.only(bottom: 8), child: card);""")
 
-          # Canvas titles are not Text widgets. Keep filtering tests attached to the
-          # actual production PaintedTopicCard/layout contract.
+          # Filtering tests: titles are now canvas paragraphs, not Text widgets.
           path = 'test/pages/bookmarks/bookmarks_list_content_test.dart'
-          replace_once(path,
-              "import 'package:fluxdo/widgets/bookmark/bookmarks_list_content.dart';",
-              "import 'package:fluxdo/widgets/bookmark/bookmarks_list_content.dart';\nimport 'package:fluxdo/widgets/topic/painted_topic_card.dart';")
-          insert_marker = "Topic _topic({required int id, required String title, String? bookmarkName}) {"
-          insert = '''Finder _findPaintedTopic(String title) => find.byWidgetPredicate(\n  (widget) =>\n      widget is PaintedTopicCard &&\n      widget.layout.semanticsLabel.split(',').first.trim() == title,\n);\n\n'''
-          replace_once(path, insert_marker, insert + insert_marker)
+          regex_once(
+              path,
+              r"import 'package:fluxdo/widgets/bookmark/bookmarks_list_content\.dart';",
+              """import 'package:fluxdo/widgets/bookmark/bookmarks_list_content.dart';
+import 'package:fluxdo/widgets/topic/painted_topic_card.dart';""")
+          regex_once(
+              path,
+              r"Topic _topic\(\{required int id, required String title, String\? bookmarkName\}\) \{",
+              """Finder _findPaintedTopic(String title) => find.byWidgetPredicate(
+  (widget) =>
+      widget is PaintedTopicCard &&
+      widget.layout.semanticsLabel.split(',').first.trim() == title,
+);
+
+Topic _topic({required int id, required String title, String? bookmarkName}) {""")
           p = Path(path)
           s = p.read_text()
           for title in ['Alpha', 'Beta', 'Gamma', 'No Name 1', 'No Name 2']:
               s = s.replace(f"find.text('{title}')", f"_findPaintedTopic('{title}')")
           p.write_text(s)
 
-          # Page tests use a helper for list cards. Point it at the canvas card rather
-          # than a Text descendant. Other Text finders (workspace tabs/sheets) stay intact.
+          # Page tests: keep workspace Text assertions, but make the list-card helper
+          # follow the production PaintedTopicCard.
           path = 'test/pages/bookmarks/bookmarks_page_test.dart'
-          replace_once(path,
-              "import 'package:fluxdo/widgets/bookmark/bookmarks_workspace_tab_bar.dart';",
-              "import 'package:fluxdo/widgets/bookmark/bookmarks_workspace_tab_bar.dart';\nimport 'package:fluxdo/widgets/topic/painted_topic_card.dart';")
-          replace_once(path,
-              '''Finder _findBookmarkInList(String title) {\n  return find.descendant(\n    of: find.byType(BookmarksListContent),\n    matching: find.text(title),\n  );\n}''',
-              '''Finder _findBookmarkInList(String title) {\n  return find.descendant(\n    of: find.byType(BookmarksListContent),\n    matching: find.byWidgetPredicate(\n      (widget) =>\n          widget is PaintedTopicCard &&\n          widget.layout.semanticsLabel.split(',').first.trim() == title,\n    ),\n  );\n}''')
+          regex_once(
+              path,
+              r"import 'package:fluxdo/widgets/bookmark/bookmarks_workspace_tab_bar\.dart';",
+              """import 'package:fluxdo/widgets/bookmark/bookmarks_workspace_tab_bar.dart';
+import 'package:fluxdo/widgets/topic/painted_topic_card.dart';""")
+          regex_once(
+              path,
+              r"Finder _findBookmarkInList\(String title\) \{\n  return find\.descendant\(\n    of: find\.byType\(BookmarksListContent\),\n    matching: find\.text\(title\),\n  \);\n\}",
+              """Finder _findBookmarkInList(String title) {
+  return find.descendant(
+    of: find.byType(BookmarksListContent),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is PaintedTopicCard &&
+          widget.layout.semanticsLabel.split(',').first.trim() == title,
+    ),
+  );
+}""")
           PY
           git diff --check
           git config user.name github-actions[bot]
