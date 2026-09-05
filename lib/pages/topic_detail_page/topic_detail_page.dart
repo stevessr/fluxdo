@@ -63,6 +63,7 @@ import '../../providers/nested_topic_provider.dart';
 import 'controllers/topic_detail_controller.dart';
 import 'controllers/topic_toc_controller.dart';
 import 'widgets/nested_post_list.dart';
+import 'widgets/invite_private_message_dialog.dart';
 import 'widgets/topic_detail_overlay.dart';
 import 'widgets/topic_post_list.dart';
 import 'widgets/topic_toc_panel.dart';
@@ -1813,6 +1814,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           onExport: _showExportSheet,
           onOpenInBrowser: _openInBrowser,
           onFilter: _showFilterSheet,
+          onToggleArchiveMessage: () =>
+              unawaited(_handleToggleArchiveMessage(notifier)),
           onReadingSettings: () {
             Navigator.push(
               context,
@@ -1851,6 +1854,30 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
                 ),
                 const SizedBox(width: 12),
                 Text(context.l10n.topicDetail_generateShareImage),
+              ],
+            ),
+          ),
+        // 私信归档双态入口:对齐官方 topic footer 的 archive 按钮
+        // (message_archived 决定图标与文案)。
+        if (detail.isPrivateMessage)
+          PopupMenuItem(
+            value: 'archive_message',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  detail.messageArchived
+                      ? Symbols.move_to_inbox_rounded
+                      : Symbols.archive_rounded,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  detail.messageArchived
+                      ? context.l10n.topicDetail_moveMessageToInbox
+                      : context.l10n.topicDetail_archiveMessage,
+                ),
               ],
             ),
           ),

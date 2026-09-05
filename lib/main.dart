@@ -21,6 +21,7 @@ import 'providers/locale_provider.dart';
 import 'widgets/ai/builtin_presets_factory.dart';
 import 'providers/message_bus_providers.dart';
 import 'services/auth_issue_notice_service.dart';
+import 'services/crash_context_reporter.dart';
 import 'providers/app_state_refresher.dart';
 import 'services/highlighter_service.dart';
 import 'widgets/common/notification_icon_button.dart';
@@ -349,6 +350,8 @@ Future<void> main() async {
         'com.github.lingyan000.fluxdo/crashlytics',
       ).invokeMethod('setCrashlyticsEnabled', {'enabled': crashlyticsEnabled}),
   ]);
+  // 跟随同一开关:关闭时导航上下文也不再上报
+  CrashContextReporter.setEnabled(Platform.isAndroid && crashlyticsEnabled);
   // rhttp (Rust reqwest) 初始化：在 ProxySettingsService 之后、NetworkSettingsService 之前
   await RhttpSettingsService.instance.initialize(prefs);
   // WebView 适配器设置
