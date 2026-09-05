@@ -17,26 +17,34 @@ final stickerMarketServiceProvider = Provider<StickerMarketService>((ref) {
   return StickerMarketService(prefs);
 });
 
+/// 市场全部非归档分组
+final stickerGroupsProvider = FutureProvider<List<StickerGroup>>((ref) async {
+  final service = ref.watch(stickerMarketServiceProvider);
+  try {
+    return await service.getAllGroups();
+  } catch (e, st) {
+    AppLogger.error(
+      '加载表情包分组列表失败',
+      tag: 'Sticker',
+      error: e,
+      stackTrace: st,
+      fields: {'baseUrl': service.baseUrl},
+    );
+    rethrow;
+  }
+});
+
 /// 分组详情（按 groupId 懒加载）
 ///
 /// 加载完成后,异步批量 precache 第一屏 sticker 的 thumbnail —
 /// 这样用户实际打开 sticker panel / 切到这个 group 时,首屏多数 sticker 已经
 /// 在 PNG cache,只需 Flutter 内置 codec 几 ms 解出,不用等动图解码。
-///
-/// 同时把 name/icon 回填到已订阅分组的元信息缓存:老版本升级上来的订阅只有
-/// id、没有元信息,tab 栏先显示占位,详情到手即自愈;分组在市场侧改了名字
-/// 或图标也从这里跟上。
 final stickerGroupDetailProvider =
     FutureProvider.family<StickerGroupDetail, String>((ref, groupId) async {
       final service = ref.watch(stickerMarketServiceProvider);
       try {
         final detail = await service.getGroupDetail(groupId);
         unawaited(_prefetchFirstScreenThumbnails(groupId, detail.emojis));
-        unawaited(
-          ref
-              .read(subscribedStickerGroupsProvider.notifier)
-              .refreshMetaFromDetail(groupId, detail),
-        );
         return detail;
       } catch (e, st) {
         AppLogger.error(
@@ -151,8 +159,15 @@ class MarketGroupsNotifier
   /// 浏览模式下已加载的分组（未过滤；搜索过滤在其上进行）
   List<StickerGroup> _groups = [];
 
-  /// 单飞序号：分类切换/搜索拉全量页是异步的，过期结果按序号丢弃
-  int _seq = 0;
+  /// 数据世代：分类切换 / refresh 时递增。首页加载与翻页都带世代出门，
+  /// 回来发现世代变了就整包丢弃 —— 旧分类的页混进新分类不仅内容错，
+  /// 还会打乱 `_loadedPages/_totalPages` 游标，把后续翻页导向不存在的
+  /// `{topic}-page-N.json`。
+  int _dataSeq = 0;
+
+  /// 搜索世代：仅搜索补页用。搜索是在同一份数据上过滤，**不能**作废
+  /// 在飞的首页加载，因此必须与 [_dataSeq] 分开计数。
+  int _querySeq = 0;
 
   bool get isSearchMode => _query.isNotEmpty;
   bool get hasMore => !isSearchMode && _loadedPages < _totalPages;
@@ -173,21 +188,24 @@ class MarketGroupsNotifier
   }
 
   Future<void> _loadFirstPage() async {
-    final seq = ++_seq;
+    // 世代由调用方（构造/setTopic/refresh）负责递增，这里只读取快照。
+    final dataSeq = _dataSeq;
     _emit(const [], loading: true);
     try {
       final (groups, totalPages) = await _service.getGroupsPageWithMeta(
         1,
         topic: _topic,
       );
-      if (seq != _seq || !mounted) return;
+      if (dataSeq != _dataSeq || !mounted) return;
       _groups = groups;
       _loadedPages = 1;
       _totalPages = totalPages;
       _isLoadMoreFailed = false;
       _emit(_applyQuery());
+      // 首屏 loading 期间就输入了搜索词：此时缺页还没补，补齐后才是完整结果。
+      if (isSearchMode) await _ensureAllPagesLoaded();
     } catch (e, st) {
-      if (seq != _seq || !mounted) return;
+      if (dataSeq != _dataSeq || !mounted) return;
       AppLogger.error(
         '加载表情包市场首页失败',
         tag: 'Sticker',
@@ -199,9 +217,45 @@ class MarketGroupsNotifier
     }
   }
 
+  /// 补齐当前分类剩余页。搜索要在全量数据上过滤才不会漏结果；
+  /// 全市场 ~300 组、页数据本就有 24h 缓存，全量拉取代价可忽略。
+  Future<void> _ensureAllPagesLoaded() async {
+    if (_loadedPages == 0 || _loadedPages >= _totalPages) return;
+    final dataSeq = _dataSeq;
+    final querySeq = ++_querySeq;
+    try {
+      final missingPages = [
+        for (var p = _loadedPages + 1; p <= _totalPages; p++) p,
+      ];
+      final fetched = await Future.wait(
+        missingPages.map((p) => _service.getGroupsPage(p, topic: _topic)),
+      );
+      if (dataSeq != _dataSeq || querySeq != _querySeq || !mounted) return;
+      for (final pageGroups in fetched) {
+        _groups.addAll(pageGroups);
+      }
+      _loadedPages = _totalPages;
+    } catch (e, st) {
+      if (dataSeq != _dataSeq || querySeq != _querySeq || !mounted) return;
+      AppLogger.warning(
+        '表情包市场搜索拉全量页失败，按已加载结果过滤',
+        tag: 'Sticker',
+        fields: {
+          'topic': _topic,
+          'query': _query,
+          'error': e.toString(),
+          'stackTrace': st.toString(),
+        },
+      );
+    }
+    _emit(_applyQuery());
+  }
+
   /// 切换分类。清空搜索词（UI 侧同步清空输入框），重载该分类第一页。
   Future<void> setTopic(String topic) async {
     if (topic == _topic) return;
+    _dataSeq++; // 作废在飞的首页加载 / 翻页
+    _querySeq++; // 作废在飞的搜索补页
     _topic = topic;
     _query = '';
     _groups = [];
@@ -218,42 +272,15 @@ class MarketGroupsNotifier
     final query = rawQuery.trim();
     if (query == _query) return;
     _query = query;
-    final seq = ++_seq;
     if (_query.isEmpty) {
+      _querySeq++; // 作废在飞的补页
       _emit(_groups);
       return;
     }
 
     // 先展示已加载部分的过滤结果（首键即有反馈）
     _emit(_applyQuery());
-    if (_loadedPages >= _totalPages) return;
-
-    try {
-      final missingPages = [
-        for (var p = _loadedPages + 1; p <= _totalPages; p++) p,
-      ];
-      final fetched = await Future.wait(
-        missingPages.map((p) => _service.getGroupsPage(p, topic: _topic)),
-      );
-      if (seq != _seq || !mounted) return;
-      for (final pageGroups in fetched) {
-        _groups.addAll(pageGroups);
-      }
-      _loadedPages = _totalPages;
-    } catch (e, st) {
-      if (seq != _seq || !mounted) return;
-      AppLogger.warning(
-        '表情包市场搜索拉全量页失败，按已加载结果过滤',
-        tag: 'Sticker',
-        fields: {
-          'topic': _topic,
-          'query': _query,
-          'error': e.toString(),
-          'stackTrace': st.toString(),
-        },
-      );
-    }
-    _emit(_applyQuery());
+    await _ensureAllPagesLoaded();
   }
 
   Future<void> loadMore() async {
@@ -263,6 +290,7 @@ class MarketGroupsNotifier
         _isLoadMoreFailed) {
       return;
     }
+    final dataSeq = _dataSeq;
     _isLoadingMore = true;
     _isLoadMoreFailed = false;
     _emit(_applyQuery());
@@ -272,10 +300,10 @@ class MarketGroupsNotifier
         nextPage,
         topic: _topic,
       );
+      if (dataSeq != _dataSeq || !mounted) return;
       _loadedPages = nextPage;
       _totalPages = totalPages;
       _groups.addAll(newGroups);
-      if (!mounted) return;
 
       // 单次提交新页面，避免滚动过程中连续多次 rebuild 整个列表。
       _emit(_applyQuery());
@@ -294,8 +322,11 @@ class MarketGroupsNotifier
         },
       );
     } finally {
-      _isLoadingMore = false;
-      _emit(_applyQuery());
+      // 世代已变说明 setTopic/refresh 早已重置过这些字段，不能再回写。
+      if (dataSeq == _dataSeq) {
+        _isLoadingMore = false;
+        _emit(_applyQuery());
+      }
     }
   }
 
@@ -308,7 +339,8 @@ class MarketGroupsNotifier
 
   /// 重载当前分类第一页（错误重试入口）。同时退出搜索模式。
   Future<void> refresh() async {
-    _seq++; // 作废在飞的搜索/翻页请求
+    _dataSeq++; // 作废在飞的首页加载 / 翻页
+    _querySeq++; // 作废在飞的搜索补页
     _query = '';
     _groups = [];
     _loadedPages = 0;
@@ -319,69 +351,30 @@ class MarketGroupsNotifier
   }
 }
 
-/// 已订阅的分组（响应式，含 tab 栏所需的 name/icon）
-///
-/// 单一数据源：订阅态判定与 tab 栏渲染都从这里派生，不再有「id 一份、
-/// 元信息另一份」两套状态。初值是 prefs 同步读，面板首帧即可用，
-/// 不发任何请求。
-final subscribedStickerGroupsProvider =
-    StateNotifierProvider<SubscribedStickerGroupsNotifier, List<StickerGroup>>((
-      ref,
-    ) {
+/// 已订阅的分组 ID 列表（响应式）
+final subscribedStickerIdsProvider =
+    StateNotifierProvider<SubscribedStickerIdsNotifier, List<String>>((ref) {
       final service = ref.watch(stickerMarketServiceProvider);
-      return SubscribedStickerGroupsNotifier(service);
+      return SubscribedStickerIdsNotifier(service);
     });
 
-class SubscribedStickerGroupsNotifier
-    extends StateNotifier<List<StickerGroup>> {
+class SubscribedStickerIdsNotifier extends StateNotifier<List<String>> {
   final StickerMarketService _service;
 
-  SubscribedStickerGroupsNotifier(this._service)
-    : super(_service.getSubscribedGroups());
+  SubscribedStickerIdsNotifier(this._service)
+    : super(_service.getSubscribedGroupIds());
 
-  Future<void> subscribe(StickerGroup group) async {
-    await _service.subscribe(group);
-    state = _service.getSubscribedGroups();
+  Future<void> subscribe(String groupId) async {
+    await _service.subscribe(groupId);
+    state = _service.getSubscribedGroupIds();
   }
 
   Future<void> unsubscribe(String groupId) async {
     await _service.unsubscribe(groupId);
-    state = _service.getSubscribedGroups();
+    state = _service.getSubscribedGroupIds();
   }
 
-  bool isSubscribed(String groupId) => state.any((g) => g.id == groupId);
-
-  /// 从分组详情回填元信息（升级迁移 + 改名换图自愈）。
-  ///
-  /// 详情只带 id/name/icon，order/topic/isArchived 沿用已有缓存值；
-  /// emojiCount 用详情里的实际条数（比市场列表的快照更准）。
-  /// 未订阅的分组不写盘 —— 详情会被市场面板之外的路径拉到。
-  Future<void> refreshMetaFromDetail(
-    String groupId,
-    StickerGroupDetail detail,
-  ) async {
-    if (!_service.isSubscribed(groupId)) return;
-    final existing = state.firstWhere(
-      (g) => g.id == groupId,
-      orElse: () => StickerGroup(
-        id: groupId,
-        name: '',
-        icon: '',
-        order: 0,
-        emojiCount: 0,
-        isArchived: false,
-      ),
-    );
-    final merged = existing.copyWith(
-      name: detail.name,
-      icon: detail.icon,
-      emojiCount: detail.emojis.length,
-    );
-    if (_service.isSubscribedMetaFresh(merged)) return;
-    await _service.cacheSubscribedGroupMeta(merged);
-    if (!mounted) return;
-    state = _service.getSubscribedGroups();
-  }
+  bool isSubscribed(String groupId) => state.contains(groupId);
 }
 
 /// 最近使用的表情包（响应式）

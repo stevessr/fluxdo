@@ -11,7 +11,6 @@ import '../../services/discourse_cache_manager.dart';
 import '../../services/sticker_thumbnail_provider.dart';
 import '../../utils/dialog_utils.dart';
 import '../../utils/error_utils.dart';
-import '../common/app_bottom_sheet.dart';
 import '../common/cached_image.dart';
 import '../common/error_view.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -101,26 +100,11 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
     // 桌面悬浮弹层:市场 sheet 在 Navigator 路由层,会被 root overlay
     // 的弹层盖住 —— 先收弹层再开 sheet
     widget.onDismissRequested?.call();
-    // 市场面板带搜索框,必须走可拖拽外壳(expandToFill):固定高度那条分支会
-    // 叠加 viewInsets,键盘弹出时把标题栏与搜索框顶出屏幕。initialSize 沿用
-    // 原先的 0.8,打开时观感不变。
-    AppBottomSheet.showDraggable(
+    showAppBottomSheet(
       context: context,
-      title: S.current.sticker_marketTitle,
-      showTitleDivider: true,
-      initialSize: 0.8,
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          style: TextButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-          ),
-          child: Text(S.current.common_done),
-        ),
-      ],
-      bodyBuilder: (context, scrollController) =>
-          StickerMarketSheet(scrollController: scrollController),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const StickerMarketSheet(),
     );
   }
 
@@ -244,11 +228,10 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    // 已订阅分组含 tab 栏所需的 name/icon,prefs 同步读 —— 首帧就能画,
-    // 不再为了拿这几个字段去拉全市场 288 组的分页索引。
-    final subscribedGroups = ref.watch(subscribedStickerGroupsProvider);
+    final subscribedIds = ref.watch(subscribedStickerIdsProvider);
     _recentSnapshot ??= ref.read(recentStickersProvider);
     final recentStickers = _recentSnapshot!;
+    final groupsAsync = ref.watch(stickerGroupsProvider);
 
     return ClipRect(
       child: Container(
@@ -259,11 +242,37 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
               ? null
               : const BorderRadius.vertical(top: Radius.circular(16)),
         ),
-        child: subscribedGroups.isEmpty
-            ? _buildEmptyState()
-            : _buildContent(subscribedGroups, recentStickers),
+        child: (() {
+          if (subscribedIds.isEmpty) return _buildEmptyState();
+          final allGroups = groupsAsync.value;
+          if (allGroups != null) {
+            return _buildContent(
+              _filterSubscribed(allGroups, subscribedIds),
+              recentStickers,
+            );
+          }
+          return groupsAsync.when(
+            data: (groups) => _buildContent(
+              _filterSubscribed(groups, subscribedIds),
+              recentStickers,
+            ),
+            loading: () => const Center(child: LoadingSpinner()),
+            error: (err, stack) => _buildError(err, stack),
+          );
+        })(),
       ),
     );
+  }
+
+  List<StickerGroup> _filterSubscribed(
+    List<StickerGroup> allGroups,
+    List<String> subscribedIds,
+  ) {
+    final groupMap = {for (final g in allGroups) g.id: g};
+    return subscribedIds
+        .where((id) => groupMap.containsKey(id))
+        .map((id) => groupMap[id]!)
+        .toList();
   }
 
   Widget _buildEmptyState() {

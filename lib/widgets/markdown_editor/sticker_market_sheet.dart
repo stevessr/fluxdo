@@ -22,22 +22,15 @@ import '../../../../../l10n/s.dart';
 ///
 /// 展示市场中所有可用的表情包分组，用户可以添加/移除。
 /// 支持分页加载：首次只加载第一页，滚动到底部时自动加载下一页。
-///
-/// 外壳由 [AppBottomSheet.showDraggable] 提供：本面板带搜索框，必须走
-/// `expandToFill` 那条分支（高度交给 DraggableScrollableSheet、不叠加键盘
-/// 内边距），否则「固定高度 + viewInsets 顶起」会在键盘弹出时把标题栏和
-/// 搜索框顶出屏幕。键盘内边距由列表自己加，与标签/分类选择面板同体例。
 class StickerMarketSheet extends ConsumerStatefulWidget {
-  /// 由 DraggableScrollableSheet 提供，必须交给列表才能联动拖拽缩放。
-  final ScrollController scrollController;
-
-  const StickerMarketSheet({super.key, required this.scrollController});
+  const StickerMarketSheet({super.key});
 
   @override
   ConsumerState<StickerMarketSheet> createState() => _StickerMarketSheetState();
 }
 
 class _StickerMarketSheetState extends ConsumerState<StickerMarketSheet> {
+  final ScrollController _scrollController = ScrollController();
   final LoadMoreCoordinator _loadMoreCoordinator = LoadMoreCoordinator(
     triggerDistance: 600,
     releaseDistance: 600,
@@ -92,22 +85,20 @@ class _StickerMarketSheetState extends ConsumerState<StickerMarketSheet> {
     final groupsAsync = ref.watch(marketGroupsProvider);
     final topicsAsync = ref.watch(marketTopicsProvider);
 
-    return Column(
-      children: [
-        _buildSearchField(),
-        _buildTopicChips(topicsAsync),
-        Expanded(
-          child: (() {
-            final groups = groupsAsync.value;
-            if (groups != null) {
-              return _buildGroupList(groups);
-            }
-            return groupsAsync.when(
-              data: (groups) => _buildGroupList(groups),
-              loading: () => const Center(child: LoadingSpinner()),
-              error: _buildError,
-            );
-          })(),
+    return AppSheetScaffold(
+      title: S.current.sticker_marketTitle,
+      showCloseButton: false,
+      showTitleDivider: true,
+      contentPadding: EdgeInsets.zero,
+      maxHeightFactor: 0.8,
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: Text(S.current.common_done),
         ),
       ],
       child: Column(
@@ -330,11 +321,7 @@ class _StickerMarketSheetState extends ConsumerState<StickerMarketSheet> {
 
     return ListView.builder(
       controller: _scrollController,
-      // 外壳走 expandToFill、不叠加键盘内边距，键盘弹出时底部由列表自己让位
-      padding: EdgeInsets.only(
-        top: 8,
-        bottom: 8 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       // 200px ≈ 3 个 item,滚动稍快新 item 一进 viewport 才开始 build + load icon
       // → 滚动时显著掉帧。1200px ≈ 16 个 item,off-screen 预 build,enter
       // viewport 时已经 ready,滚动丝滑。
@@ -371,18 +358,15 @@ class _StickerGroupTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isSubscribed = ref.watch(
-      subscribedStickerGroupsProvider.select(
-        (groups) => groups.any((g) => g.id == group.id),
-      ),
+      subscribedStickerIdsProvider.select((ids) => ids.contains(group.id)),
     );
 
     void onToggle() async {
-      final notifier = ref.read(subscribedStickerGroupsProvider.notifier);
+      final notifier = ref.read(subscribedStickerIdsProvider.notifier);
       if (isSubscribed) {
         await notifier.unsubscribe(group.id);
       } else {
-        // 整个 group 一起交出去:name/icon 就地落盘，表情面板首帧不用再回网络
-        await notifier.subscribe(group);
+        await notifier.subscribe(group.id);
       }
     }
 

@@ -443,6 +443,53 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     }
   }
 
+  /// 将群组移出私信（PUT /t/:id/remove-allowed-group，按群组名）。
+  Future<void> removePrivateMessageGroup(int topicId, String groupName) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/remove-allowed-group.json',
+        data: {'name': groupName},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 邀请用户加入私信，并返回服务端回传的成员信息（若有）。
+  Future<TopicUser?> invitePrivateMessageUser(
+    int topicId,
+    String username,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/t/$topicId/invite.json',
+        data: {'user': username},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+      final user = (response.data as Map?)?['user'];
+      if (user is Map) {
+        return TopicUser.fromJson(Map<String, dynamic>.from(user));
+      }
+      return null;
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 邀请群组加入私信（POST /t/:id/invite-group，按群组名）。
+  Future<void> invitePrivateMessageGroup(int topicId, String groupName) async {
+    try {
+      await _dio.post(
+        '/t/$topicId/invite-group.json',
+        data: {'group': groupName},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
   /// 更新话题元数据
   Future<void> updateTopic({
     required int topicId,

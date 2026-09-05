@@ -1,23 +1,20 @@
-/// 市场分类（topic）
-class StickerMarketTopic {
-  final String id;
-  final String label;
-  final int totalGroups;
+/// 表情包市场索引信息
+class StickerMarketIndex {
   final int totalPages;
+  final int pageSize;
+  final int totalGroups;
 
-  const StickerMarketTopic({
-    required this.id,
-    required this.label,
-    required this.totalGroups,
+  const StickerMarketIndex({
     required this.totalPages,
+    required this.pageSize,
+    required this.totalGroups,
   });
 
-  factory StickerMarketTopic.fromJson(Map<String, dynamic> json) {
-    return StickerMarketTopic(
-      id: json['id'] as String? ?? '',
-      label: json['label'] as String? ?? '',
-      totalGroups: json['totalGroups'] as int? ?? 0,
+  factory StickerMarketIndex.fromJson(Map<String, dynamic> json) {
+    return StickerMarketIndex(
       totalPages: json['totalPages'] as int? ?? 0,
+      pageSize: json['pageSize'] as int? ?? 0,
+      totalGroups: json['totalGroups'] as int? ?? 0,
     );
   }
 }

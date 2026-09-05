@@ -259,40 +259,13 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     );
   }
 
-  /// 将成员移出当前私信，并同步首楼与底部的成员面板。
-  Future<void> removePrivateMessageParticipant(TopicUser participant) async {
-    final currentDetail = state.value;
-    if (currentDetail == null || !currentDetail.isPrivateMessage) return;
-
-    final service = ref.read(discourseServiceProvider);
-    await service.removePrivateMessageParticipant(
-      currentDetail.id,
-      participant.username,
-    );
-
-    // 请求期间可能收到新回复或其他 MessageBus 更新，必须基于
-    // 最新 detail 删成员，否则会用请求前的快照把新状态整体覆盖掉。
-    final latestDetail = state.value;
-    if (latestDetail == null || latestDetail.id != currentDetail.id) return;
-
-    AnchorGuardSliver.arm();
-    state = AsyncValue.data(
-      latestDetail.copyWith(
-        allowedUsers: latestDetail.allowedUsers
-            .where((user) => user.id != participant.id)
-            .toList(growable: false),
-        clearCanRemoveSelfId: latestDetail.canRemoveSelfId == participant.id,
-      ),
-    );
-  }
-
   /// 将群组移出当前私信，并同步成员面板。
-  Future<void> removePrivateMessageGroup(TopicGroup group) async {
+  Future<void> removePrivateMessageGroup(String groupName) async {
     final currentDetail = state.value;
     if (currentDetail == null || !currentDetail.isPrivateMessage) return;
 
     final service = ref.read(discourseServiceProvider);
-    await service.removePrivateMessageGroup(currentDetail.id, group.name);
+    await service.removePrivateMessageGroup(currentDetail.id, groupName);
 
     final latestDetail = state.value;
     if (latestDetail == null || latestDetail.id != currentDetail.id) return;
@@ -301,7 +274,7 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     state = AsyncValue.data(
       latestDetail.copyWith(
         allowedGroups: latestDetail.allowedGroups
-            .where((item) => item.name != group.name)
+            .where((item) => item != groupName)
             .toList(growable: false),
       ),
     );
@@ -324,7 +297,7 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     final service = ref.read(discourseServiceProvider);
     final topicId = currentDetail.id;
     final invitedUsers = <TopicUser>[];
-    final invitedGroups = <TopicGroup>[];
+    final invitedGroups = <String>[];
     final failed = <String>[];
 
     for (final username in usernames) {
@@ -338,7 +311,7 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     for (final groupName in groupNames) {
       try {
         await service.invitePrivateMessageGroup(topicId, groupName);
-        invitedGroups.add(TopicGroup(name: groupName));
+        invitedGroups.add(groupName);
       } catch (_) {
         failed.add(groupName);
       }
@@ -354,9 +327,7 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     final existingUserIds = latestDetail.allowedUsers
         .map((user) => user.id)
         .toSet();
-    final existingGroupNames = latestDetail.allowedGroups
-        .map((group) => group.name)
-        .toSet();
+    final existingGroupNames = latestDetail.allowedGroups.toSet();
 
     AnchorGuardSliver.arm();
     state = AsyncValue.data(
@@ -368,7 +339,7 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
         allowedGroups: [
           ...latestDetail.allowedGroups,
           ...invitedGroups.where(
-            (group) => !existingGroupNames.contains(group.name),
+            (groupName) => !existingGroupNames.contains(groupName),
           ),
         ],
       ),

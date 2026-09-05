@@ -356,6 +356,32 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     setState(() => _contentLength = _contentController.text.length);
   }
 
+  /// 标题长度变化时重建（驱动标题计数器）
+  int _titleLength = 0;
+  void _updateTitleLength() {
+    final length = _titleController.text.trim().length;
+    if (length == _titleLength) return;
+    setState(() => _titleLength = length);
+  }
+
+  /// 首帖最小字数（含 warden 等插件按分类的改写）；null 表示尚未解析出
+  int? _minContentLength;
+
+  /// 解析当前分类下的首帖最小字数
+  ///
+  /// 分类可随时切换（如从「云端资产」切到「搞七捻三」），每次切换都要重算，
+  /// 计数器分母与提交校验共用该结果。
+  Future<void> _refreshMinContentLength() async {
+    final category = _selectedCategory;
+    final min = await ComposerMinLengthResolver.resolve(
+      category: category,
+      isFirstPost: true,
+      isPrivateMessage: false,
+    );
+    if (!mounted) return;
+    setState(() => _minContentLength = min);
+  }
+
   bool get _featuredLinkEnabled =>
       PreloadedDataService().siteSettingsSync?['topic_featured_link_enabled'] !=
       false;
@@ -687,7 +713,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
               letterSpacing: -0.5,
             ),
             maxLines: null,
-            maxLength: 200,
+            maxLength: _featuredLinkEnabled ? null : 200,
             // 计数改用悬浮层(见下方 Stack),这里不占位
             buildCounter:
                 (
@@ -710,36 +736,19 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
               _richKey.currentState?.closeEmojiPanel();
             },
           ),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
-          isDense: true,
-        ),
-        style: theme.textTheme.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w900,
-          letterSpacing: -0.5,
-        ),
-        maxLines: null,
-        maxLength: _featuredLinkEnabled ? null : 200,
-        buildCounter:
-            (
-              context, {
-              required currentLength,
-              required isFocused,
-              maxLength,
-            }) => null,
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return context.l10n.createTopic_enterTitle;
-          }
-          if (value.trim().length < minTitleLength) {
-            return context.l10n.createTopic_minTitleLength(minTitleLength);
-          }
-          return null;
-        },
-        onTap: () {
-          _editorKey.currentState?.closeEmojiPanel();
-          _richKey.currentState?.closeEmojiPanel();
-        },
+          // 标题为空时同样提示（对齐 missingReplyCharacters > 0）：
+          // 一进来就知道标题有字数门槛，不用先打字才发现
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: CharacterCountsOverlay(
+              length: _titleLength,
+              minimumLength: minTitleLength,
+              // 标题不带社区警告文案（对齐主题组件 showWarning=false）
+              showWarning: false,
+            ),
+          ),
+        ],
       ),
     );
   }

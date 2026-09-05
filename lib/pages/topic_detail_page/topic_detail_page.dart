@@ -63,7 +63,6 @@ import '../../providers/nested_topic_provider.dart';
 import 'controllers/topic_detail_controller.dart';
 import 'controllers/topic_toc_controller.dart';
 import 'widgets/nested_post_list.dart';
-import 'widgets/invite_private_message_dialog.dart';
 import 'widgets/topic_detail_overlay.dart';
 import 'widgets/topic_post_list.dart';
 import 'widgets/topic_toc_panel.dart';
@@ -1999,6 +1998,30 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       await notifier.movePrivateMessageToInbox();
       if (!mounted) return;
       ToastService.showSuccess(context.l10n.topicDetail_moveToInbox);
+      ref.invalidate(pmInboxProvider);
+      ref.invalidate(pmArchiveProvider);
+    } catch (error) {
+      if (mounted) {
+        ToastService.showError(context.l10n.common_operationFailed('$error'));
+      }
+    }
+  }
+
+  /// 在更多菜单中切换当前私信的个人归档状态。
+  Future<void> _handleToggleArchiveMessage(
+    TopicDetailNotifier notifier,
+  ) async {
+    final detail = ref.read(topicDetailProvider(_params)).value;
+    if (detail == null || !detail.isPrivateMessage) return;
+
+    try {
+      final archived = await notifier.toggleArchivePrivateMessage();
+      if (!mounted) return;
+      ToastService.showSuccess(
+        archived
+            ? context.l10n.topicDetail_messageArchived
+            : context.l10n.topicDetail_messageMovedToInbox,
+      );
       ref.invalidate(pmInboxProvider);
       ref.invalidate(pmArchiveProvider);
     } catch (error) {
