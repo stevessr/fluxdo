@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification.dart';
+import '../models/notification_category.dart';
 import '../utils/paged_async_notifier.dart';
 import '../utils/pagination_helper.dart';
 import 'core_providers.dart';
@@ -15,29 +16,63 @@ enum NotificationReadFilter {
   const NotificationReadFilter(this.apiValue);
 }
 
-/// 通知列表 Notifier (支持分页和刷新，用于历史通知页面)
-/// autoDispose：离开页面后自动清除，下次进入重新加载
+/// 通知列表 Notifier。
+///
+/// “全部”使用 Discourse 历史通知接口并正常分页；用户菜单语义的通知子分类
+/// 使用 bounded recent API。后者是 Discourse 真正支持 `filter_by_types` 的
+/// 分支，避免为了在本地凑够某一类通知而把历史页连续全部拉下来。
 class NotificationListNotifier
     extends AsyncNotifier<List<DiscourseNotification>>
     with PagedAsyncNotifierMixin<DiscourseNotification> {
   int _totalRows = 0;
   NotificationReadFilter _filter = NotificationReadFilter.all;
+  NotificationCategory _category = NotificationCategory.all;
 
   NotificationReadFilter get filter => _filter;
+  NotificationCategory get category => _category;
 
   /// 分页助手
-  static final _paginationHelper = PaginationHelpers.forNotifications<DiscourseNotification>(
-    keyExtractor: (n) => n.id,
-  );
+  static final _paginationHelper =
+      PaginationHelpers.forNotifications<DiscourseNotification>(
+        keyExtractor: (n) => n.id,
+      );
+
+  bool _matchesReadFilter(DiscourseNotification notification) {
+    return switch (_filter) {
+      NotificationReadFilter.all => true,
+      NotificationReadFilter.read => notification.read,
+      NotificationReadFilter.unread => !notification.read,
+    };
+  }
 
   Future<PagedPage<DiscourseNotification>> _fetchFirstPage() async {
     final service = ref.read(discourseServiceProvider);
-    final response = await service.getNotifications(filter: _filter.apiValue);
-    _totalRows = response.totalRowsNotifications;
-    return PagedPage(
-      items: response.notifications,
-      hasMore: response.notifications.length < _totalRows,
+
+    if (_category == NotificationCategory.all) {
+      final response = await service.getNotifications(filter: _filter.apiValue);
+      _totalRows = response.totalRowsNotifications;
+      return PagedPage(
+        items: response.notifications,
+        hasMore: response.notifications.length < _totalRows,
+      );
+    }
+
+    // `filter_by_types` is only applied by Discourse in the recent branch.
+    // Keep this request bounded to one server page. `other` has no static type
+    // list because plugins can add notification types; it fetches the same
+    // bounded recent page and applies the complement locally.
+    final response = await service.getRecentNotifications(
+      filterByTypes: _category.serverFilterTypeNames,
+      limit: 60,
+      silent: true,
+      bumpLastSeenReviewable: false,
     );
+    final items = response.notifications
+        .where(_category.matches)
+        .where(_matchesReadFilter)
+        .toList(growable: false);
+    _totalRows = items.length;
+    return PagedPage(items: items, hasMore: false);
   }
 
   @override
@@ -49,10 +84,18 @@ class NotificationListNotifier
 
   /// 切换全部 / 已读 / 未读筛选。
   ///
-  /// 直接重新请求 Discourse，而不是只过滤本地已加载页，保证分页总数正确。
+  /// “全部”模式由服务端历史接口筛选；子分类是 bounded recent 列表，已读
+  /// 状态在这 60 条内过滤，且不会为此继续翻历史分页。
   Future<void> setFilter(NotificationReadFilter filter) async {
     if (_filter == filter && state.hasValue) return;
     _filter = filter;
+    await refresh();
+  }
+
+  /// 切换通知类型子分类并重新从正确的数据源获取。
+  Future<void> setCategory(NotificationCategory category) async {
+    if (_category == category && state.hasValue) return;
+    _category = category;
     await refresh();
   }
 
@@ -61,8 +104,10 @@ class NotificationListNotifier
     await runPagedRefresh(_fetchFirstPage);
   }
 
-  /// 加载更多
+  /// 加载更多。只有“全部”历史通知支持分页；子分类是 bounded recent。
   Future<void> loadMore() async {
+    if (_category != NotificationCategory.all) return;
+
     await runPagedLoadMore((currentList, _) async {
       final offset = currentList.length;
 
@@ -139,6 +184,9 @@ class NotificationListNotifier
   }
 }
 
-final notificationListProvider = AsyncNotifierProvider.autoDispose<NotificationListNotifier, List<DiscourseNotification>>(() {
+final notificationListProvider = AsyncNotifierProvider.autoDispose<
+  NotificationListNotifier,
+  List<DiscourseNotification>
+>(() {
   return NotificationListNotifier();
 });

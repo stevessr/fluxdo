@@ -66,6 +66,7 @@ class AccountManager {
   static const _currentUsernameKey = 'linux_do_username';
   static const _pendingNewLoginKey = 'multi_account_pending_new_login';
   static const _guestModeKey = 'multi_account_guest_mode';
+  static const _switchPreloadTimeout = Duration(seconds: 8);
 
   /// 没有登录账号时使用的默认 profile。它不展示在账号列表中，只用于
   /// 保证「添加账号」开始前拥有一个干净、可恢复的 cookie/config 边界。
@@ -210,16 +211,25 @@ class AccountManager {
     final writer = RawCookieWriter.instance;
     if (!writer.isSupported) return const [];
 
+    final origins = AccountBrowserSessionPolicy.snapshotOrigins.toList(
+      growable: false,
+    );
+    final infosByOrigin = await Future.wait(
+      origins.map((origin) async {
+        try {
+          return await writer.getAllCookieInfos(origin);
+        } catch (e) {
+          debugPrint('[AccountManager] 读取 $origin WebView cookie 失败: $e');
+          return const <CookieFullInfo>[];
+        }
+      }),
+    );
+
     final captured = <Map<String, dynamic>>[];
     final identities = <String>{};
-    for (final origin in AccountBrowserSessionPolicy.snapshotOrigins) {
-      List<CookieFullInfo> infos;
-      try {
-        infos = await writer.getAllCookieInfos(origin);
-      } catch (e) {
-        debugPrint('[AccountManager] 读取 $origin WebView cookie 失败: $e');
-        continue;
-      }
+    for (var index = 0; index < origins.length; index++) {
+      final origin = origins[index];
+      final infos = infosByOrigin[index];
       for (final info in infos) {
         if (_isDeviceCookie(info.name) ||
             info.name.isEmpty ||
@@ -280,39 +290,57 @@ class AccountManager {
     final writer = RawCookieWriter.instance;
     if (!writer.isSupported) return;
 
-    for (final origin in AccountBrowserSessionPolicy.externalAccountOrigins) {
-      List<CookieFullInfo> infos;
-      try {
-        infos = await writer.getAllCookieInfos(origin);
-      } catch (e) {
-        debugPrint('[AccountManager] 清理 $origin WebView cookie 前读取失败: $e');
-        continue;
-      }
+    final origins = AccountBrowserSessionPolicy.externalAccountOrigins.toList(
+      growable: false,
+    );
+    final infosByOrigin = await Future.wait(
+      origins.map((origin) async {
+        try {
+          return await writer.getAllCookieInfos(origin);
+        } catch (e) {
+          debugPrint('[AccountManager] 清理 $origin WebView cookie 前读取失败: $e');
+          return const <CookieFullInfo>[];
+        }
+      }),
+    );
 
-      for (final info in infos) {
+    final seen = <String>{};
+    final deletions = <ExactCookieDeleteRequest>[];
+    for (var index = 0; index < origins.length; index++) {
+      final origin = origins[index];
+      for (final info in infosByOrigin[index]) {
         if (_isDeviceCookie(info.name) ||
             info.name.isEmpty ||
             !_cookieBelongsToOrigin(info, origin)) {
           continue;
         }
-        try {
-          final deleted = await writer.deleteExactCookie(
-            url: origin,
-            name: info.name,
-            domain: info.domain,
-            path: info.path ?? '/',
-          );
-          if (!deleted) {
-            debugPrint(
-              '[AccountManager] 清理 $origin WebView cookie 失败: ${info.name}',
-            );
-          }
-        } catch (e) {
-          debugPrint(
-            '[AccountManager] 清理 $origin WebView cookie ${info.name} 失败: $e',
-          );
-        }
+        final host = Uri.parse(origin).host.toLowerCase();
+        final rawDomain = info.domain?.trim().toLowerCase();
+        final normalizedDomain = rawDomain == null || rawDomain.isEmpty
+            ? host
+            : rawDomain.replaceFirst(RegExp(r'^\.'), '');
+        final identity = [
+          info.name,
+          normalizedDomain,
+          info.path ?? '/',
+          info.isPartitioned == true ? '1' : '0',
+        ].join('|');
+        if (!seen.add(identity)) continue;
+        deletions.add((
+          url: origin,
+          name: info.name,
+          domain: info.domain,
+          path: info.path ?? '/',
+        ));
       }
+    }
+
+    final deletedCount = await writer.deleteExactCookiesBatch(deletions);
+    if (deletedCount != deletions.length) {
+      debugPrint(
+        '[AccountManager] 外部 WebView cookie batch 清理不完整: '
+        '$deletedCount/${deletions.length}',
+      );
     }
   }
 
@@ -427,6 +455,10 @@ class AccountManager {
     if (rawCookies is! List) return;
     final writer = RawCookieWriter.instance;
     if (!writer.isSupported) return;
+
+    // 旧快照可能含重复 identity。保留“最后一次写入获胜”的原语义，同时
+    // Android 最终只需要一次 native batch / 一次 flush。
+    final writesByIdentity = <String, RawCookieWriteRequest>{};
     for (final raw in rawCookies) {
       if (raw is! Map) continue;
       final map = Map<String, dynamic>.from(raw);
@@ -434,10 +466,29 @@ class AccountManager {
       if (url == null || !_isAllowedBrowserOrigin(url)) continue;
       final header = _rawCookieHeader(map);
       if (header == null) continue;
-      final ok = await writer.setRawCookie(url, header);
-      if (!ok) {
-        debugPrint('[AccountManager] $username 的 WebView cookie 写入失败');
-      }
+      final name = map['name']?.toString();
+      if (name == null || name.isEmpty) continue;
+      final host = Uri.parse(url).host.toLowerCase();
+      final rawDomain = map['domain']?.toString().trim().toLowerCase();
+      final normalizedDomain = rawDomain == null || rawDomain.isEmpty
+          ? host
+          : rawDomain.replaceFirst(RegExp(r'^\.'), '');
+      final identity = [
+        name,
+        normalizedDomain,
+        map['path']?.toString() ?? '/',
+        map['partitioned'] == true ? '1' : '0',
+      ].join('|');
+      writesByIdentity[identity] = (url: url, rawSetCookie: header);
+    }
+
+    final writes = writesByIdentity.values.toList(growable: false);
+    final writtenCount = await writer.setRawCookiesBatch(writes);
+    if (writtenCount != writes.length) {
+      debugPrint(
+        '[AccountManager] $username 的 WebView cookie batch 写入不完整: '
+        '$writtenCount/${writes.length}',
+      );
     }
   }
 
@@ -462,51 +513,79 @@ class AccountManager {
     return avatar is String && avatar.isNotEmpty ? avatar : null;
   }
 
-  Future<void> _syncCurrentAccountLocked({
+  Future<void> _prepareSwitchPreload() async {
+    try {
+      await PreloadedDataService().refresh().timeout(_switchPreloadTimeout);
+    } on TimeoutException {
+      debugPrint(
+        '[AccountManager] 账号切换 preload 超时 '
+        '(${_switchPreloadTimeout.inSeconds}s)，后续由用户资料刷新兜底',
+      );
+    } catch (e) {
+      debugPrint('[AccountManager] 账号切换 preload 失败(继续): $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> _syncCurrentAccountLocked({
     bool captureBrowserCookies = false,
+    bool updateRegistry = true,
   }) async {
     final generation = AuthSession().generation;
     final username = await getCurrentUsername();
     if (username == null || username.isEmpty || username == guestAccountId) {
-      return;
+      return null;
     }
 
-    final cookies = await _captureSessionCookies();
+    // 都是只读操作，可以同时进行。完整 WebView 快照通常最慢；registry
+    // 读取也提前隐藏在这段等待里，避免快照写完后再单独付一次安全存储 RTT。
+    final cookiesFuture = _captureSessionCookies();
+    final oldSnapshotFuture = _readSnapshot(username);
+    final browserCookiesFuture = captureBrowserCookies
+        ? _captureBrowserCookies()
+        : Future<List<Map<String, dynamic>>>.value(const []);
+    final registryRawFuture = updateRegistry
+        ? _storage.read(key: _registryKey)
+        : Future<String?>.value(null);
+
+    final cookies = await cookiesFuture;
+    final oldSnapshot = await oldSnapshotFuture;
+    final capturedBrowserCookies = await browserCookiesFuture;
+    final browserCookies = captureBrowserCookies
+        ? capturedBrowserCookies
+        : oldSnapshot?['webview_cookies'];
+
     if (!AuthSession().isValid(generation) ||
         await getCurrentUsername() != username ||
         !_snapshotHasSessionCookie(cookies)) {
-      return;
-    }
-
-    final oldSnapshot = await _readSnapshot(username);
-    final browserCookies = captureBrowserCookies
-        ? await _captureBrowserCookies()
-        : oldSnapshot?['webview_cookies'];
-    if (!AuthSession().isValid(generation) ||
-        await getCurrentUsername() != username) {
-      return;
+      return null;
     }
 
     final avatarTemplate =
         _currentAvatarFor(username) ??
         oldSnapshot?['avatar_template'] as String?;
-    await _writeSnapshot(username, {
+    final savedAt = DateTime.now();
+    final refreshedSnapshot = <String, dynamic>{
       'version': 2,
       'profile': username,
       'cookies': cookies,
       if (browserCookies is List) 'webview_cookies': browserCookies,
       'avatar_template': ?avatarTemplate,
-      'saved_at': DateTime.now().toIso8601String(),
-    });
+      'saved_at': savedAt.toIso8601String(),
+    };
 
-    final accounts = [
-      ..._decodeRegistry(await _storage.read(key: _registryKey)),
-    ];
+    // rollback 依赖的是 snapshot 本体，所以它仍然必须在 detach 前持久化。
+    // registry 只保存列表展示元数据，普通切换无需让它阻塞关键路径。
+    await _writeSnapshot(username, refreshedSnapshot);
+    if (!updateRegistry) {
+      return refreshedSnapshot;
+    }
+
+    final accounts = [..._decodeRegistry(await registryRawFuture)];
     final index = accounts.indexWhere((a) => a.username == username);
     final entry = SavedAccount(
       username: username,
       avatarTemplate: avatarTemplate,
-      savedAt: DateTime.now(),
+      savedAt: savedAt,
     );
     if (index >= 0) {
       accounts[index] = entry;
@@ -519,6 +598,7 @@ class AccountManager {
       '(${cookies.length} jar cookies, '
       '${browserCookies is List ? browserCookies.length : 0} WebView cookies)',
     );
+    return refreshedSnapshot;
   }
 
   // ========== 对外操作 ==========
@@ -641,10 +721,9 @@ class AccountManager {
 
   /// 从快照恢复一个完整会话，并在提交前确认服务端返回的确实是目标账号。
   ///
-  /// [detachSessionLocally] 会清空当前会话且不可逆，因此切换流程必须把
-  /// 「摘除 → 回灌 → 校验 → finalize」包在可回滚的事务里。校验时禁止
-  /// [DiscourseService.isLoggedIn] 直接 logout；否则一次切换窗口内的 401
-  /// 会把刚保存的旧账号也一起清掉。
+  /// 账户切换使用专用 selective detach；它会清空当前 native 会话，并对
+  /// app-owned WebView cookie 做“选择性删除 + 独立复检 + 全量回退”。切换流程
+  /// 仍把「摘除 → 回灌 → 校验 → commit」包在可回滚事务里。
   Future<void> _restoreAccountSnapshotLocked(
     String username,
     Map<String, dynamic> snapshot, {
@@ -657,38 +736,61 @@ class AccountManager {
       throw AccountSessionExpiredException(username);
     }
 
-    await DiscourseService().detachSessionLocally();
+    final service = DiscourseService();
+    await service.detachSessionForAccountSwitch();
     final restoreGeneration = AuthSession().generation;
-    // 外部账号站点必须先清旧态再恢复，不能仅覆盖同名 cookie；否则目标
-    // 快照缺少的旧 cookie 会残留并造成 AnyRouter 串号/看起来“掉登录”。
-    await _clearExternalBrowserSessionCookies();
-    await _restoreSessionCookies(cookies, username);
-    await _restoreBrowserCookies(snapshot['webview_cookies'], username);
 
-    final restoredToken = await CookieJarService().getTToken();
+    // external WebView 清理与 CookieJar 恢复分属不同存储，可以重叠执行。
+    await Future.wait<void>([
+      _clearExternalBrowserSessionCookies(),
+      _restoreSessionCookies(cookies, username),
+    ]);
+
+    // token 读取只访问 CookieJar；目标 WebView batch 写访问浏览器 store，二者
+    // 可以重叠。但在任何校验/回滚前仍等待两者都结束，绝不让原生写跨事务。
+    final restoredTokenFuture = CookieJarService().getTToken();
+    final browserRestoreFuture = _restoreBrowserCookies(
+      snapshot['webview_cookies'],
+      username,
+    );
+    final restoredToken = await restoredTokenFuture;
+    await browserRestoreFuture;
     if (restoredToken == null || restoredToken.isEmpty) {
       throw AccountSessionExpiredException(username);
     }
 
-    final sessionIsValid = await DiscourseService().isLoggedIn(
-      requestGeneration: restoreGeneration,
-      logoutOnInvalid: false,
+    // 网络请求会触发 WebView 会话同步；必须等整批 WebView 回灌完成后再校验，
+    // 避免与 RawCookieWriter 并发写同一个浏览器 cookie store。
+    final validation = await service.validateAccountSwitchSession(
       expectedUsername: username,
+      requestGeneration: restoreGeneration,
     );
-    if (!sessionIsValid) {
+    if (!validation.isValid) {
       throw AccountSessionExpiredException(username);
     }
 
+    // 正常路径已经从 /session/current.json 拿到并解析了 current_user，首页
+    // preload 对提交身份不再是必要条件。仅网络/CF 不确定时才走旧 preload。
+    if (validation.currentUser == null) {
+      await _prepareSwitchPreload();
+    }
+
     WebViewCookiePriming.instance.invalidate();
-    await DiscourseService().finalizeNativeLoginSuccess(
-      username,
+    final committed = await service.commitAccountSwitchSession(
+      username: username,
+      requestGeneration: restoreGeneration,
       notifyAuthState: notifyAuthState,
     );
+    if (!committed) {
+      throw AccountSessionExpiredException(username);
+    }
 
-    // finalize 期间可能被旧请求/服务端失效信号打断；不要让这种半恢复
+    // commit 期间可能被旧请求/服务端失效信号打断；不要让这种半恢复
     // 状态提交给 UI，交给上层 catch 回滚到切换前的快照。
-    final activeUsername = await getCurrentUsername();
-    final activeToken = await CookieJarService().getTToken();
+    final activeUsernameFuture = getCurrentUsername();
+    final activeTokenFuture = CookieJarService().getTToken();
+    final activeUsername = await activeUsernameFuture;
+    final activeToken = await activeTokenFuture;
     if (activeUsername != username ||
         activeToken == null ||
         activeToken.isEmpty) {
@@ -700,6 +802,8 @@ class AccountManager {
     String username, {
     bool notifyAuthState = true,
   }) async {
+    // 目标快照和当前用户名来自不同安全存储 key，先同时发起读取。
+    final currentFuture = getCurrentUsername();
     late final Map<String, dynamic> snapshot;
     try {
       snapshot = await _readRequiredSnapshot(username);
@@ -708,12 +812,17 @@ class AccountManager {
       rethrow;
     }
 
-    final current = await getCurrentUsername();
+    final current = await currentFuture;
     Map<String, dynamic>? previousSnapshot;
     if (current != null && current.isNotEmpty && current != username) {
       // 先把旧账号固化到最新快照，确保目标恢复失败时仍有可回滚边界。
-      await _syncCurrentAccountLocked(captureBrowserCookies: true);
-      previousSnapshot = await _readSnapshot(current);
+      // rollback 只需要快照本体；registry 是列表展示元数据，不再阻塞切换。
+      final refreshedPreviousSnapshot = await _syncCurrentAccountLocked(
+        captureBrowserCookies: true,
+        updateRegistry: false,
+      );
+      previousSnapshot =
+          refreshedPreviousSnapshot ?? await _readSnapshot(current);
     }
 
     var transitionStarted = false;
@@ -724,9 +833,9 @@ class AccountManager {
         snapshot,
         notifyAuthState: notifyAuthState,
       );
-
-      // 头像/快照只允许来自新账号。_currentAvatarFor 会拒绝仍残留的旧 preload。
-      await _syncCurrentAccountLocked(captureBrowserCookies: true);
+      // 目标账号已经完成服务端校验并提交；完整 WebView 快照无需阻塞切换。
+      // 轻量快照排在当前事务尾部，保留 cookie/头像刷新而不延长 UI 等待。
+      unawaited(syncCurrentAccount());
     } catch (error, stackTrace) {
       if (transitionStarted &&
           current != null &&

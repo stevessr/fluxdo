@@ -7,6 +7,7 @@ import 'cookie/cookie_jar_service.dart';
 import '../cf_challenge_service.dart';
 import 'cookie/csrf_token_service.dart';
 import 'interceptors/cf_challenge_interceptor.dart';
+import 'interceptors/cf_challenge_terminal_interceptor.dart';
 import 'interceptors/request_scheduler_interceptor.dart';
 import 'interceptors/session_guard_interceptor.dart';
 import 'interceptors/error_interceptor.dart';
@@ -114,11 +115,14 @@ class DiscourseDio {
     // 8. 错误拦截器
     dio.interceptors.add(ErrorInterceptor());
 
-    // 9. CF 验证拦截器
+    // 9. CF 验证拦截器 + 终态类型化兜底。
+    // 后者不做重试，只确保验证后仍残留的 challenge 不会以裸 403/429
+    // 泄漏给业务层并被误显示成“无权限访问资源”。
     if (enableCfChallenge) {
       dio.interceptors.add(
         CfChallengeInterceptor(dio: dio, cookieJarService: cookieJarService),
       );
+      dio.interceptors.add(CfChallengeTerminalInterceptor());
     }
 
     // 10. 网络日志拦截器（最后一个，记录最终结果）
