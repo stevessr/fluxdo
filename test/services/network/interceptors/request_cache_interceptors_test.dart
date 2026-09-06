@@ -29,6 +29,36 @@ void main() {
       );
     });
 
+    test('a cancelled follower does not cancel the shared owner', () async {
+      final adapter = _DelayedJsonAdapter();
+      final dio = _testDio(adapter)
+        ..interceptors.add(RequestCoalescingInterceptor())
+        ..interceptors.add(RequestCoalescingFinalizerInterceptor());
+      final followerToken = CancelToken();
+
+      final owner = dio.get<Map<String, dynamic>>('/latest.json');
+      final follower = dio.get<Map<String, dynamic>>(
+        '/latest.json',
+        cancelToken: followerToken,
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+      followerToken.cancel('follower cancelled');
+
+      await expectLater(
+        follower,
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+      expect((await owner).data, {'ok': true});
+      expect(adapter.fetchCount, 1);
+    });
+
     test('silent polling requests are not coalesced', () async {
       final adapter = _DelayedJsonAdapter();
       final dio = _testDio(adapter)
@@ -65,6 +95,7 @@ void main() {
       expect(adapter.secondIfNoneMatch, '"latest-v1"');
       expect(second.statusCode, 200);
       expect(second.data, {'version': 1});
+      expect(second.headers['set-cookie'], isNull);
       expect(second.extra['httpCacheRevalidated'], isTrue);
       expect(second.extra['httpCacheOriginalStatus'], 304);
     });
@@ -81,36 +112,42 @@ void main() {
       expect(adapter.secondIfNoneMatch, isNull);
     });
 
-    test('successful mutation invalidates validators for the same origin', () async {
-      final adapter = _MutationInvalidationAdapter();
-      final dio = _testDio(adapter)
-        ..interceptors.add(HttpRevalidationInterceptor());
+    test(
+      'successful mutation invalidates validators for the same origin',
+      () async {
+        final adapter = _MutationInvalidationAdapter();
+        final dio = _testDio(adapter)
+          ..interceptors.add(HttpRevalidationInterceptor());
 
-      await dio.get<Map<String, dynamic>>('/latest.json');
-      await dio.post<Map<String, dynamic>>('/posts.json', data: {'raw': 'x'});
-      await dio.get<Map<String, dynamic>>('/latest.json');
+        await dio.get<Map<String, dynamic>>('/latest.json');
+        await dio.post<Map<String, dynamic>>('/posts.json', data: {'raw': 'x'});
+        await dio.get<Map<String, dynamic>>('/latest.json');
 
-      expect(adapter.getCount, 2);
-      expect(adapter.secondGetIfNoneMatch, isNull);
-    });
+        expect(adapter.getCount, 2);
+        expect(adapter.secondGetIfNoneMatch, isNull);
+      },
+    );
 
-    test('Vary mismatch does not reuse another representation validator', () async {
-      final adapter = _VaryAdapter();
-      final dio = _testDio(adapter)
-        ..interceptors.add(HttpRevalidationInterceptor());
+    test(
+      'Vary mismatch does not reuse another representation validator',
+      () async {
+        final adapter = _VaryAdapter();
+        final dio = _testDio(adapter)
+          ..interceptors.add(HttpRevalidationInterceptor());
 
-      await dio.get<Map<String, dynamic>>(
-        '/site.json',
-        options: Options(headers: {'Accept-Language': 'zh-CN'}),
-      );
-      await dio.get<Map<String, dynamic>>(
-        '/site.json',
-        options: Options(headers: {'Accept-Language': 'en-US'}),
-      );
+        await dio.get<Map<String, dynamic>>(
+          '/site.json',
+          options: Options(headers: {'Accept-Language': 'zh-CN'}),
+        );
+        await dio.get<Map<String, dynamic>>(
+          '/site.json',
+          options: Options(headers: {'Accept-Language': 'en-US'}),
+        );
 
-      expect(adapter.fetchCount, 2);
-      expect(adapter.secondIfNoneMatch, isNull);
-    });
+        expect(adapter.fetchCount, 2);
+        expect(adapter.secondIfNoneMatch, isNull);
+      },
+    );
   });
 }
 
@@ -177,6 +214,7 @@ class _RevalidationAdapter implements HttpClientAdapter {
           Headers.contentTypeHeader: [Headers.jsonContentType],
           'etag': ['"latest-v1"'],
           'cache-control': ['private, no-cache'],
+          'set-cookie': ['stale=1; Path=/'],
         },
       );
     }
