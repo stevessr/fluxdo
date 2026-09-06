@@ -52,7 +52,7 @@ jobs:
 
       - name: Check formatting
         run: |
-          dart format --output=none \
+          dart format \
             lib/services/account_runtime_pool.dart \
             lib/services/account_switch_browser_cookie_cleaner.dart \
             lib/services/network/cookie/raw_cookie_writer.dart \
