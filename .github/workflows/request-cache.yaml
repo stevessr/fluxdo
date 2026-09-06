@@ -1,0 +1,74 @@
+name: Discourse Request Cache
+
+on:
+  pull_request:
+    paths:
+      - 'lib/services/network/discourse_dio.dart'
+      - 'lib/services/network/interceptors/http_revalidation_interceptor.dart'
+      - 'lib/services/network/interceptors/request_coalescing_interceptor.dart'
+      - 'test/services/network/interceptors/request_cache_interceptors_test.dart'
+      - '.github/workflows/request-cache.yaml'
+  push:
+    branches:
+      - main
+      - perf/discourse-request-cache
+    paths:
+      - 'lib/services/network/discourse_dio.dart'
+      - 'lib/services/network/interceptors/http_revalidation_interceptor.dart'
+      - 'lib/services/network/interceptors/request_coalescing_interceptor.dart'
+      - 'test/services/network/interceptors/request_cache_interceptors_test.dart'
+      - '.github/workflows/request-cache.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          dart format \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/interceptors/http_revalidation_interceptor.dart \
+            lib/services/network/interceptors/request_coalescing_interceptor.dart \
+            test/services/network/interceptors/request_cache_interceptors_test.dart
+          git diff --exit-code -- \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/interceptors/http_revalidation_interceptor.dart \
+            lib/services/network/interceptors/request_coalescing_interceptor.dart \
+            test/services/network/interceptors/request_cache_interceptors_test.dart
+
+      - name: Analyze request cache path
+        run: >-
+          flutter analyze
+          lib/services/network/discourse_dio.dart
+          lib/services/network/interceptors/http_revalidation_interceptor.dart
+          lib/services/network/interceptors/request_coalescing_interceptor.dart
+          test/services/network/interceptors/request_cache_interceptors_test.dart
+
+      - name: Test request cache contracts
+        run: >-
+          dart tool/flutterw.dart test
+          test/services/network/interceptors/request_cache_interceptors_test.dart
