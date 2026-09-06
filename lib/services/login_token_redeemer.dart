@@ -41,7 +41,7 @@ class LoginTokenRedeemer {
 
     // 兑换前必须成功取得基线。若这里失败，直接停止且绝不发送 OTP：
     // 否则后续看到一个本来就存在的 `_t` 时无法安全判断它是否由本次兑换产生。
-    final beforeSnapshot = await _readTToken(cookieJar, phase: 'before');
+    final beforeSnapshot = await _readTToken(cookieJar);
     if (!isCurrent()) return const LoginTokenRedeemResult.failed();
     if (!beforeSnapshot.succeeded) {
       _log(
@@ -86,7 +86,7 @@ class LoginTokenRedeemer {
       );
 
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
-      final afterSnapshot = await _readTToken(cookieJar, phase: 'after');
+      final afterSnapshot = await _readTToken(cookieJar);
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
       if (!afterSnapshot.succeeded) {
         _log(
@@ -123,7 +123,7 @@ class LoginTokenRedeemer {
       //
       // 注意：对账读取本身也可能失败。它不能覆盖原始 DioException，更不能
       // 逃出本方法；读取失败时继续按原始异常分类即可。
-      final afterSnapshot = await _readTToken(cookieJar, phase: 'reconcile');
+      final afterSnapshot = await _readTToken(cookieJar);
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
       if (afterSnapshot.succeeded &&
           _isFreshToken(beforeToken, afterSnapshot.token)) {
@@ -222,13 +222,12 @@ class LoginTokenRedeemer {
   }
 
   static Future<_TTokenSnapshot> _readTToken(
-    CookieJarService cookieJar, {
-    required String phase,
-  }) async {
+    CookieJarService cookieJar,
+  ) async {
     try {
       return _TTokenSnapshot.success(await cookieJar.getTToken());
     } catch (e) {
-      return _TTokenSnapshot.failed(e, phase);
+      return _TTokenSnapshot.failed(e);
     }
   }
 
@@ -273,17 +272,14 @@ class LoginTokenRedeemResult {
 }
 
 class _TTokenSnapshot {
-  const _TTokenSnapshot._({this.token, this.error, required this.phase});
+  const _TTokenSnapshot._({this.token, this.error});
 
-  const _TTokenSnapshot.success(String? token)
-      : this._(token: token, phase: '');
+  const _TTokenSnapshot.success(String? token) : this._(token: token);
 
-  const _TTokenSnapshot.failed(Object error, String phase)
-      : this._(error: error, phase: phase);
+  const _TTokenSnapshot.failed(Object error) : this._(error: error);
 
   final String? token;
   final Object? error;
-  final String phase;
 
   bool get succeeded => error == null;
 }
