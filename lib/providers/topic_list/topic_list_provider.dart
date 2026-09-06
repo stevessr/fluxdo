@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/topic.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/discourse/discourse_service.dart';
+import '../../services/discourse/solved_topics_extension.dart';
 import '../../utils/paged_async_notifier.dart';
 import '../../utils/pagination_helper.dart';
 import '../core_providers.dart';
@@ -13,6 +14,7 @@ import '../message_bus/topic_tracking_providers.dart';
 import 'filter_provider.dart';
 import 'sort_provider.dart';
 import 'tab_state_provider.dart';
+import 'topic_refresh_merge.dart';
 
 /// 话题列表 Notifier (支持分页、静默刷新和筛选)
 class TopicListNotifier extends AsyncNotifier<List<Topic>>
@@ -116,6 +118,23 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
     bool? ascending,
     String? subset,
   }) {
+    // discourse-solved 在普通 latest 列表上通过 solved=yes|no 过滤。
+    // 必须先于通用分类/标签分支处理，否则组合筛选会漏掉 solved 参数。
+    if (filter == TopicListFilter.solved ||
+        filter == TopicListFilter.unsolved) {
+      return service.getSolvedFilteredTopics(
+        filter: 'latest',
+        solved: filter == TopicListFilter.solved,
+        categoryId: filterParams.categoryId,
+        categorySlug: filterParams.categorySlug,
+        parentCategorySlug: filterParams.parentCategorySlug,
+        tags: filterParams.tags.isNotEmpty ? filterParams.tags : null,
+        page: page,
+        order: order,
+        ascending: ascending,
+      );
+    }
+
     // 如果有筛选条件，使用 getFilteredTopics
     if (filterParams.isNotEmpty) {
       final filterName = _getFilterName(filter);
@@ -163,6 +182,16 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
         );
       case TopicListFilter.unseen:
         return service.getUnseenTopics(
+          page: page,
+          order: order,
+          ascending: ascending,
+        );
+      case TopicListFilter.solved:
+      case TopicListFilter.unsolved:
+        // 该分支在上方已处理；保留穷尽分支避免未来 enum 扩展时静默漏项。
+        return service.getSolvedFilteredTopics(
+          filter: 'latest',
+          solved: filter == TopicListFilter.solved,
           page: page,
           order: order,
           ascending: ascending,
@@ -370,27 +399,10 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
       final service = ref.read(discourseServiceProvider);
       final detail = await service.getTopicDetail(topicId);
 
-      final updatedTopic = Topic(
-        id: detail.id,
-        title: detail.title,
-        slug: detail.slug,
-        categoryId: detail.categoryId.toString(),
-        postsCount: detail.postsCount,
-        replyCount: detail.postsCount > 0 ? detail.postsCount - 1 : 0,
-        views: existingTopic.views,
-        likeCount: existingTopic.likeCount,
-        lastPostedAt: existingTopic.lastPostedAt,
-        pinned: existingTopic.pinned,
-        tags: detail.tags ?? existingTopic.tags,
-        posters: existingTopic.posters,
-        unseen: false,
-        unread: 0,
-        lastReadPostNumber: detail.postsCount,
-        highestPostNumber: detail.postsCount,
-        lastPosterUsername: detail.postStream.posts.isNotEmpty
-            ? detail.postStream.posts.last.username
-            : existingTopic.lastPosterUsername,
-      );
+      // 详情接口和列表接口的 serializer 字段并不相同。增量合并而非重建
+      // Topic，避免后台 MessageBus 刷新抹掉书签/Solved/摘要等列表元数据，
+      // 更不能因为一次后台刷新就把未读游标推进到末尾。
+      final updatedTopic = mergeTopicListItemFromDetail(existingTopic, detail);
 
       final newList = currentTopics.map((t) {
         return t.id == topicId ? updatedTopic : t;
@@ -457,7 +469,10 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
       final tracked = tracking[topic.id];
       if (tracked == null) continue;
 
-      final highest = math.max(tracked.highestPostNumber, topic.highestPostNumber);
+      final highest = math.max(
+        tracked.highestPostNumber,
+        topic.highestPostNumber,
+      );
       final trackedLastRead = tracked.lastReadPostNumber;
       final topicLastRead = topic.lastReadPostNumber;
       final lastRead = trackedLastRead == null
@@ -468,7 +483,9 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
 
       // 未读数口径对齐服务端 lib/unread.rb:没读过的话题 unread 恒为 0
       // (它走 unseen/NEW 语义,不走未读计数)
-      final newUnread = lastRead == null ? 0 : (highest - lastRead).clamp(0, highest);
+      final newUnread = lastRead == null
+          ? 0
+          : (highest - lastRead).clamp(0, highest);
       // 对齐网页版 updateTopics 的 unseen 回写:读过或已被忽略
       // (dismiss_new 置 isSeen)都不再算新话题
       final newUnseen = lastRead == null && !tracked.isSeen && topic.unseen;
