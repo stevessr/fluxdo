@@ -72,3 +72,8 @@ jobs:
         run: >-
           dart tool/flutterw.dart test
           test/services/network/interceptors/request_cache_interceptors_test.dart
+
+      - name: Regression test network stack
+        run: >-
+          dart tool/flutterw.dart test
+          test/services/network
