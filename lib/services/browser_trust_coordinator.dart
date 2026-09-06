@@ -584,17 +584,22 @@ class BrowserTrustCoordinator {
         if (cancellation.isCancelled) return false;
       }
 
-      loadCompleter = Completer<void>();
       await _navigateToHome(c);
       if (cancellation.isCancelled) return false;
-      await _waitForLoad(loadCompleter, cancellation: cancellation);
+
+      // data-preloaded 在 HTML 解析阶段就会出现，不需要等待 onLoadStop。
+      // onLoadStop 还会被图片、插件 JS、字体等非首屏依赖拖住，过去最多白等 8s。
+      // 直接轮询 document-start 注入脚本捕获的快照，拿到后再同步 response
+      // cookies；此时主文档已经解析到 data-preloaded，cookie 也已经落入 WebView。
+      final html = await _readPreloadedSnapshot(c, cancellation: cancellation);
       if (cancellation.isCancelled) return false;
-      _log('startup WebView home loaded, syncing cookies reason=$reason');
+      _log(
+        'startup WebView snapshot captured=${html != null && html.isNotEmpty}, '
+        'syncing cookies reason=$reason',
+      );
       await _syncCookiesFromController(c);
       if (cancellation.isCancelled) return false;
 
-      final html = await _readPreloadedSnapshot(c, cancellation: cancellation);
-      if (cancellation.isCancelled) return false;
       final hydrated =
           html != null &&
           html.isNotEmpty &&
@@ -638,20 +643,6 @@ class BrowserTrustCoordinator {
         },
       ),
     );
-  }
-
-  Future<void> _waitForLoad(
-    Completer<void> loadCompleter, {
-    required BrowserTrustRunCancellation cancellation,
-  }) async {
-    try {
-      await Future.any<void>([
-        loadCompleter.future.timeout(_originLoadTimeout),
-        cancellation.whenCancelled,
-      ]);
-    } on TimeoutException {
-      _log('startup WebView load timeout, continue', level: 'warning');
-    }
   }
 
   Future<String?> _readPreloadedSnapshot(
