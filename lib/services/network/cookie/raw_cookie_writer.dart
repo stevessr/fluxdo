@@ -198,12 +198,7 @@ class RawCookieWriter {
     try {
       final result = await _channel.invokeMethod<int>('setRawCookiesBatch', {
         'cookies': items
-            .map(
-              (item) => {
-                'url': item.url,
-                'rawSetCookie': item.rawSetCookie,
-              },
-            )
+            .map((item) => {'url': item.url, 'rawSetCookie': item.rawSetCookie})
             .toList(growable: false),
       });
       final written = result ?? 0;
@@ -333,18 +328,21 @@ class RawCookieWriter {
     if (!io.Platform.isAndroid) return _deleteExactCookiesFallback(items);
 
     try {
-      final result = await _channel.invokeMethod<int>('deleteExactCookiesBatch', {
-        'cookies': items
-            .map(
-              (item) => {
-                'url': item.url,
-                'name': item.name,
-                'domain': item.domain,
-                'path': item.path,
-              },
-            )
-            .toList(growable: false),
-      });
+      final result = await _channel.invokeMethod<int>(
+        'deleteExactCookiesBatch',
+        {
+          'cookies': items
+              .map(
+                (item) => {
+                  'url': item.url,
+                  'name': item.name,
+                  'domain': item.domain,
+                  'path': item.path,
+                },
+              )
+              .toList(growable: false),
+        },
+      );
       final deleted = result ?? 0;
       if (deleted == items.length) return deleted;
       debugPrint(
