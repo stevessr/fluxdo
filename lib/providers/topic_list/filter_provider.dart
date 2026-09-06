@@ -10,6 +10,8 @@ enum TopicListFilter {
   unread,
   read,
   unseen,
+  solved,
+  unsolved,
   top,
   hot,
 }
@@ -50,6 +52,10 @@ extension TopicListFilterX on TopicListFilter {
         return 'read';
       case TopicListFilter.unseen:
         return 'unseen';
+      case TopicListFilter.solved:
+      case TopicListFilter.unsolved:
+        // Solved/unsolved are normal latest topic lists plus solved=yes|no.
+        return 'latest';
       case TopicListFilter.top:
         return 'top';
       case TopicListFilter.hot:
