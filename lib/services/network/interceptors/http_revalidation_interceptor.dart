@@ -15,6 +15,7 @@ class _RevalidationEntry {
     required this.generation,
     required this.data,
     required this.headers,
+    required this.statusMessage,
     required this.etag,
     required this.lastModified,
     required this.varyFingerprints,
@@ -23,6 +24,7 @@ class _RevalidationEntry {
   final int generation;
   final dynamic data;
   final Map<String, List<String>> headers;
+  final String? statusMessage;
   final String? etag;
   final String? lastModified;
   final Map<String, String> varyFingerprints;
@@ -47,10 +49,20 @@ class HttpRevalidationInterceptor extends Interceptor {
       LinkedHashMap<String, _RevalidationEntry>();
 
   @override
-  void onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final method = options.method.toUpperCase();
+
+    // Invalidate before a mutation is sent, not only after a successful
+    // response. A write can be redirected to a GET by the redirect interceptor,
+    // at which point the original method is no longer visible. Over-invalidating
+    // on a failed write is cheap and safer than retaining validators after a
+    // potentially accepted mutation whose response path changed.
+    if (method != 'GET' && method != 'HEAD') {
+      _invalidateScope(options);
+      handler.next(options);
+      return;
+    }
+
     if (!_eligibleGet(options)) {
       handler.next(options);
       return;
@@ -124,7 +136,10 @@ class HttpRevalidationInterceptor extends Interceptor {
     final attachedKey = options.extra.remove(_cacheKeyExtra);
 
     if (response.statusCode == 304 && snapshot is _RevalidationEntry) {
-      final mergedHeaders = _mergeHeaders(snapshot.headers, response.headers.map);
+      final mergedHeaders = _mergeHeaders(
+        snapshot.headers,
+        response.headers.map,
+      );
       final expanded = Response<dynamic>(
         requestOptions: options,
         data: snapshot.data,
@@ -133,7 +148,7 @@ class HttpRevalidationInterceptor extends Interceptor {
           preserveHeaderCase: response.headers.preserveHeaderCase,
         ),
         statusCode: 200,
-        statusMessage: response.statusMessage,
+        statusMessage: snapshot.statusMessage,
         isRedirect: response.isRedirect,
         redirects: List<RedirectRecord>.from(response.redirects),
         extra: Map<String, dynamic>.from(response.extra)
@@ -173,8 +188,10 @@ class HttpRevalidationInterceptor extends Interceptor {
 
   void _storeFromResponse(Response response, {String? keyOverride}) {
     final options = response.requestOptions;
-    final cacheControl = _responseHeader(response.headers, 'cache-control')
-        ?.toLowerCase();
+    final cacheControl = _responseHeader(
+      response.headers,
+      'cache-control',
+    )?.toLowerCase();
     final key = keyOverride ?? _cacheKey(options, AuthSession().generation);
 
     if (cacheControl?.contains('no-store') ?? false) {
@@ -183,8 +200,7 @@ class HttpRevalidationInterceptor extends Interceptor {
     }
 
     final vary = _responseHeader(response.headers, 'vary');
-    if (vary != null &&
-        vary.split(',').any((part) => part.trim() == '*')) {
+    if (vary != null && vary.split(',').any((part) => part.trim() == '*')) {
       _entries.remove(key);
       return;
     }
@@ -202,7 +218,8 @@ class HttpRevalidationInterceptor extends Interceptor {
       return;
     }
 
-    final varyNames = vary
+    final varyNames =
+        vary
             ?.split(',')
             .map((name) => name.trim().toLowerCase())
             .where((name) => name.isNotEmpty)
@@ -216,7 +233,8 @@ class HttpRevalidationInterceptor extends Interceptor {
     final entry = _RevalidationEntry(
       generation: AuthSession().generation,
       data: response.data,
-      headers: _copyHeaderMap(response.headers.map),
+      headers: _headersForStorage(response.headers.map),
+      statusMessage: response.statusMessage,
       etag: etag,
       lastModified: lastModified,
       varyFingerprints: varyFingerprints,
@@ -290,7 +308,8 @@ class HttpRevalidationInterceptor extends Interceptor {
   void _invalidateScope(RequestOptions options) {
     final generation = AuthSession().generation;
     final uri = options.uri;
-    final scope = '$generation|${uri.scheme.toLowerCase()}://'
+    final scope =
+        '$generation|${uri.scheme.toLowerCase()}://'
         '${uri.authority.toLowerCase()}|';
     _entries.removeWhere((key, _) => key.startsWith(scope));
   }
@@ -334,12 +353,16 @@ class HttpRevalidationInterceptor extends Interceptor {
     return values.join(',');
   }
 
-  Map<String, List<String>> _copyHeaderMap(
+  Map<String, List<String>> _copyHeaderMap(Map<String, List<String>> source) =>
+      source.map((key, values) => MapEntry(key, List<String>.from(values)));
+
+  Map<String, List<String>> _headersForStorage(
     Map<String, List<String>> source,
-  ) =>
-      source.map(
-        (key, values) => MapEntry(key, List<String>.from(values)),
-      );
+  ) {
+    final stored = _copyHeaderMap(source);
+    stored.removeWhere((key, _) => key.toLowerCase() == 'set-cookie');
+    return stored;
+  }
 
   Map<String, List<String>> _mergeHeaders(
     Map<String, List<String>> cached,
@@ -347,6 +370,7 @@ class HttpRevalidationInterceptor extends Interceptor {
   ) {
     final merged = _copyHeaderMap(cached);
     for (final entry in fresh.entries) {
+      if (entry.key.toLowerCase() == 'set-cookie') continue;
       merged[entry.key] = List<String>.from(entry.value);
     }
     return merged;
