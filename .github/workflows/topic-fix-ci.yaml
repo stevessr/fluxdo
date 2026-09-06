@@ -1,0 +1,53 @@
+name: Topic Fix Validation
+
+on:
+  push:
+    branches:
+      - fix/topic-refresh-solved-filter
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: >-
+          dart format --output=none --set-exit-if-changed
+          lib/providers/topic_list/filter_provider.dart
+          lib/providers/topic_list/topic_list_provider.dart
+          lib/providers/topic_list/topic_refresh_merge.dart
+          lib/services/discourse/solved_topics_extension.dart
+          lib/widgets/topic/sort_and_tags_bar.dart
+          test/providers/topic_refresh_merge_test.dart
+          test/services/solved_topics_extension_test.dart
+
+      - name: Run focused regression tests
+        run: >-
+          flutter test
+          test/providers/topic_refresh_merge_test.dart
+          test/services/solved_topics_extension_test.dart
+
+      - name: Analyze project
+        run: flutter analyze
