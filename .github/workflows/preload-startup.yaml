@@ -1,0 +1,69 @@
+name: Preload Startup Latency
+
+on:
+  pull_request:
+    paths:
+      - 'lib/services/browser_trust_coordinator.dart'
+      - 'lib/widgets/preheat_gate.dart'
+      - 'test/services/browser_trust_preload_latency_contract_test.dart'
+      - '.github/workflows/preload-startup.yaml'
+  push:
+    branches:
+      - main
+      - fix/preload-startup-latency
+    paths:
+      - 'lib/services/browser_trust_coordinator.dart'
+      - 'lib/widgets/preheat_gate.dart'
+      - 'test/services/browser_trust_preload_latency_contract_test.dart'
+      - '.github/workflows/preload-startup.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          dart format \
+            lib/services/browser_trust_coordinator.dart \
+            lib/widgets/preheat_gate.dart \
+            test/services/browser_trust_preload_latency_contract_test.dart
+          git diff --exit-code -- \
+            lib/services/browser_trust_coordinator.dart \
+            lib/widgets/preheat_gate.dart \
+            test/services/browser_trust_preload_latency_contract_test.dart
+
+      - name: Analyze preload startup path
+        run: >-
+          flutter analyze
+          lib/services/browser_trust_coordinator.dart
+          lib/widgets/preheat_gate.dart
+          test/services/browser_trust_preload_latency_contract_test.dart
+
+      - name: Test preload latency contract
+        run: >-
+          dart tool/flutterw.dart test
+          test/services/browser_trust_preload_latency_contract_test.dart
