@@ -338,10 +338,7 @@ class BrowserTrustCoordinator {
         );
         _log('$path preload browser trust settled=$synced reason=$reason');
       } catch (e) {
-        _log(
-          '$path preload browser trust settle failed: $e',
-          level: 'warning',
-        );
+        _log('$path preload browser trust settle failed: $e', level: 'warning');
       }
     }());
   }
