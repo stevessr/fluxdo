@@ -25,6 +25,17 @@ Topic mergeTopicListItemFromDetail(Topic existing, TopicDetail detail) {
   final detailContainsLatestPost =
       latestPost != null && latestPost.postNumber == detailHighest;
 
+  // TopicDetail uses false as the fallback for optional plugin booleans. Only
+  // let false clear a list-side true value when the serializer actually sent
+  // the scalar. A non-empty acceptedAnswers list is independently authoritative.
+  final rawSolved = detail.pluginExtras['has_accepted_answer'];
+  final hasAcceptedAnswer = detail.hasAcceptedAnswer ||
+      (rawSolved is bool ? rawSolved : existing.hasAcceptedAnswer);
+  final rawPostVoting = detail.pluginExtras['is_post_voting'];
+  final isPostVoting = rawPostVoting is bool
+      ? rawPostVoting
+      : (detail.isPostVoting || existing.isPostVoting);
+
   return Topic(
     id: detail.id,
     title: detail.title,
@@ -59,10 +70,10 @@ Topic mergeTopicListItemFromDetail(Topic existing, TopicDetail detail) {
     bookmarkReminderAt: existing.bookmarkReminderAt,
     bookmarkableType: existing.bookmarkableType,
     bookmarkableUrl: existing.bookmarkableUrl,
-    hasAcceptedAnswer: detail.hasAcceptedAnswer,
+    hasAcceptedAnswer: hasAcceptedAnswer,
     canHaveAnswer:
         (detail.pluginExtras['can_have_answer'] as bool?) ??
         existing.canHaveAnswer,
-    isPostVoting: detail.isPostVoting,
+    isPostVoting: isPostVoting,
   );
 }
