@@ -623,7 +623,10 @@ class BrowserTrustCoordinator {
       } catch (e) {
         _log('dispose startup WebView failed: $e', level: 'warning');
       }
-      if (platformViewStarted) {
+      // 1.2s 冷却是为 Windows WebView2 Controller 的异步真实析构保留的；
+      // Android/iOS/macOS/Linux 的 dispose Future 已经是此路径的 teardown 边界，
+      // 不再让其它平台为 Windows 的稳定性 workaround 固定多等 1.2 秒。
+      if (platformViewStarted && io.Platform.isWindows) {
         await Future<void>.delayed(_webViewTeardownCooldown);
       }
       FrameJankMonitor.logEvent('WEBVIEW', 'BrowserTrust dispose');
