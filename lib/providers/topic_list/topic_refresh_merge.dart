@@ -14,10 +14,7 @@ Topic mergeTopicListItemFromDetail(Topic existing, TopicDetail detail) {
   final detailHighest = detail.highestPostNumber > 0
       ? detail.highestPostNumber
       : detail.postsCount;
-  final highestPostNumber = math.max(
-    existing.highestPostNumber,
-    detailHighest,
-  );
+  final highestPostNumber = math.max(existing.highestPostNumber, detailHighest);
 
   final latestPost = detail.postStream.posts.isNotEmpty
       ? detail.postStream.posts.last
@@ -29,7 +26,8 @@ Topic mergeTopicListItemFromDetail(Topic existing, TopicDetail detail) {
   // let false clear a list-side true value when the serializer actually sent
   // the scalar. A non-empty acceptedAnswers list is independently authoritative.
   final rawSolved = detail.pluginExtras['has_accepted_answer'];
-  final hasAcceptedAnswer = detail.hasAcceptedAnswer ||
+  final hasAcceptedAnswer =
+      detail.hasAcceptedAnswer ||
       (rawSolved is bool ? rawSolved : existing.hasAcceptedAnswer);
   final rawPostVoting = detail.pluginExtras['is_post_voting'];
   final isPostVoting = rawPostVoting is bool
