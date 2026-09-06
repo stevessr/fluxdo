@@ -45,11 +45,16 @@ jobs:
         run: flutter pub get
 
       - name: Check formatting
-        run: >-
-          dart format --output=none --set-exit-if-changed
-          lib/services/browser_trust_coordinator.dart
-          lib/widgets/preheat_gate.dart
-          test/services/browser_trust_preload_latency_contract_test.dart
+        shell: bash
+        run: |
+          dart format \
+            lib/services/browser_trust_coordinator.dart \
+            lib/widgets/preheat_gate.dart \
+            test/services/browser_trust_preload_latency_contract_test.dart
+          git diff --exit-code -- \
+            lib/services/browser_trust_coordinator.dart \
+            lib/widgets/preheat_gate.dart \
+            test/services/browser_trust_preload_latency_contract_test.dart
 
       - name: Analyze preload startup path
         run: >-
