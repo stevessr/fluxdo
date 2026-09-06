@@ -277,7 +277,7 @@ class BrowserTrustCoordinator {
       try {
         await _preload.ensureLoaded();
         _log('native preload success reason=$reason');
-        _startBrowserTrustAfterNativePreload(reason: reason);
+        _startBrowserTrustAfterPreload(reason: reason, path: 'native');
         return;
       } catch (e) {
         _log(
@@ -307,7 +307,7 @@ class BrowserTrustCoordinator {
     if (hydrated) {
       _lastPreloadPath = BrowserTrustPreloadPath.webView;
       _log('startup WebView preload success reason=$reason');
-      _startClearanceRefreshIfLoggedIn();
+      _startBrowserTrustAfterPreload(reason: reason, path: 'webview');
       return;
     }
 
@@ -318,25 +318,28 @@ class BrowserTrustCoordinator {
     );
     await _preload.ensureLoaded();
     _log('fallback native preload success reason=$reason');
-    _startBrowserTrustAfterNativePreload(reason: reason);
+    _startBrowserTrustAfterPreload(reason: reason, path: 'native');
   }
 
-  void _startBrowserTrustAfterNativePreload({required String reason}) {
+  void _startBrowserTrustAfterPreload({
+    required String reason,
+    required String path,
+  }) {
     if (!_preload.isLoaded) return;
     if (_preload.currentUserSync == null) {
-      _log('skip native preload browser trust settle: not logged in');
+      _log('skip $path preload browser trust settle: not logged in');
       return;
     }
 
     unawaited(() async {
       try {
         final synced = await ensureBrowserTrust(
-          reason: '$reason:native_preload_settle',
+          reason: '$reason:${path}_preload_settle',
         );
-        _log('native preload browser trust settled=$synced reason=$reason');
+        _log('$path preload browser trust settled=$synced reason=$reason');
       } catch (e) {
         _log(
-          'native preload browser trust settle failed: $e',
+          '$path preload browser trust settle failed: $e',
           level: 'warning',
         );
       }
@@ -602,42 +605,12 @@ class BrowserTrustCoordinator {
         level: hydrated ? 'info' : 'warning',
       );
 
-      final tToken = await _jar.getTToken();
-      if (tToken != null && tToken.isNotEmpty) {
-        if (cancellation.isCancelled) return false;
-        _log('startup WebView session bootstrap begin reason=$reason');
-        final bootstrapResult = await WebViewSessionCookieRefreshService
-            .instance
-            .runOnController(
-              c,
-              reason: '$reason:startup_webview',
-              pluginCandidates: _preload.pluginCandidatesSync,
-              isCancelled: () => cancellation.isCancelled,
-              cancellationSignal: cancellation.whenCancelled,
-            );
-        if (cancellation.isCancelled) return false;
-        final bootstrapped = bootstrapResult.ok;
-        await _syncCookiesFromController(c);
-        if (cancellation.isCancelled) return false;
-        final runtimeDetails = await _jar.getCookieDiagnosticsForRequest(
-          Uri.parse(AppConstants.baseUrl),
-          names: const {'_rt'},
-        );
-        final hasRuntimeCookie = runtimeDetails.any(
-          (cookie) => (cookie['valueLength'] as int? ?? 0) > 0,
-        );
-        if (bootstrapped && hasRuntimeCookie) {
-          WebViewSessionCookieRefreshService.instance.markSynced(
-            reason: '$reason:startup_webview',
-            tToken: await _jar.getTToken(),
-            hasRuntimeCookie: hasRuntimeCookie,
-          );
-        }
-        _log('startup WebView session bootstrap end reason=$reason');
-      } else {
-        _log('startup WebView session bootstrap skipped: no _t');
-      }
-
+      // data-preloaded 一旦 hydrate 成功，首页所需数据已经可用。Fingerprint
+      // session bootstrap 最坏还会单独占用 18s，并且后面还有第二次 cookie
+      // 同步和 _rt 诊断；这些属于“浏览器会话收敛”，不是首屏数据依赖。
+      // 这里立即结束临时 preload WebView。finally 完成 dispose + cooldown 后，
+      // _ensurePreloadedInternal 再通过 ensureBrowserTrust() 后台补齐 bootstrap，
+      // 同时保留 request gate，首波业务请求仍可在有上限的情况下等待它。
       return hydrated;
     } catch (e) {
       _log('startup WebView preload failed: $e', level: 'warning');
