@@ -27,7 +27,8 @@ class _PendingRequest {
 /// shared across account switches. API-key based callers are additionally
 /// separated by a digest of their auth headers.
 class _RequestCoalescingRegistry {
-  static final Map<String, _PendingRequest> _pending = <String, _PendingRequest>{};
+  static final Map<String, _PendingRequest> _pending =
+      <String, _PendingRequest>{};
 
   static _PendingRequest? joinOrRegister(String key) {
     final existing = _pending[key];
@@ -64,10 +65,7 @@ class _RequestCoalescingRegistry {
 /// response rather than an intermediate retry/challenge response.
 class RequestCoalescingInterceptor extends Interceptor {
   @override
-  void onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     // Recovery/redirect/CF replay keeps the owner marker. Treat it as the same
     // physical request instead of joining its own pending future.
     if (options.extra[_ownerKey] is String) {
@@ -96,13 +94,19 @@ class RequestCoalescingInterceptor extends Interceptor {
     RequestInterceptorHandler handler,
     _PendingRequest pending,
   ) async {
-    final result = await pending.completer.future;
+    final cancelToken = options.cancelToken;
+    final result = cancelToken == null
+        ? await pending.completer.future
+        : await Future.any<_PendingResult?>([
+            pending.completer.future,
+            cancelToken.whenCancel.then<_PendingResult?>((_) => null),
+          ]);
 
-    if (options.cancelToken?.isCancelled ?? false) {
+    if (result == null || (cancelToken?.isCancelled ?? false)) {
       handler.reject(
         DioException.requestCancelled(
           requestOptions: options,
-          reason: '重复请求等待期间已取消',
+          reason: cancelToken?.cancelError?.error ?? '重复请求等待期间已取消',
         ),
         true,
       );
@@ -147,7 +151,8 @@ class RequestCoalescingInterceptor extends Interceptor {
                   error.response!.headers.map.map(
                     (key, values) => MapEntry(key, List<String>.from(values)),
                   ),
-                  preserveHeaderCase: error.response!.headers.preserveHeaderCase,
+                  preserveHeaderCase:
+                      error.response!.headers.preserveHeaderCase,
                 ),
                 statusCode: error.response!.statusCode,
                 statusMessage: error.response!.statusMessage,
@@ -173,7 +178,10 @@ class RequestCoalescingInterceptor extends Interceptor {
     }
     if (_header(options, 'range') != null) return null;
 
-    final requestCacheControl = _header(options, 'cache-control')?.toLowerCase();
+    final requestCacheControl = _header(
+      options,
+      'cache-control',
+    )?.toLowerCase();
     if (requestCacheControl?.contains('no-store') ?? false) return null;
 
     final uri = options.uri;
@@ -196,8 +204,9 @@ class RequestCoalescingInterceptor extends Interceptor {
       _header(options, 'discourse-track-view') ?? '',
       _header(options, 'discourse-track-view-topic-id') ?? '',
     ].join('\n');
-    final representationDigest =
-        sha256.convert(utf8.encode(representationMaterial)).toString();
+    final representationDigest = sha256
+        .convert(utf8.encode(representationMaterial))
+        .toString();
 
     return '${AuthSession().generation}|${uri.scheme.toLowerCase()}://'
         '${uri.authority.toLowerCase()}${uri.path}|$canonicalQuery|'
