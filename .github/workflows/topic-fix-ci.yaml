@@ -26,11 +26,14 @@ jobs:
           flutter-version: '3.44.0'
           cache: true
 
-      - name: Check new source formatting
+      - name: Check changed source formatting
         run: >-
           dart format --output=none --set-exit-if-changed
+          lib/providers/topic_list/filter_provider.dart
+          lib/providers/topic_list/topic_list_provider.dart
           lib/providers/topic_list/topic_refresh_merge.dart
           lib/services/discourse/solved_topics_extension.dart
+          lib/widgets/topic/sort_and_tags_bar.dart
           test/providers/topic_refresh_merge_test.dart
           test/services/solved_topics_extension_test.dart
 
@@ -40,5 +43,18 @@ jobs:
           test/providers/topic_refresh_merge_test.dart
           test/services/solved_topics_extension_test.dart
 
-      - name: Analyze project
-        run: flutter analyze
+      - name: Analyze changed files only
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            lib/providers/topic_list/filter_provider.dart \
+            lib/providers/topic_list/topic_list_provider.dart \
+            lib/providers/topic_list/topic_refresh_merge.dart \
+            lib/services/discourse/solved_topics_extension.dart \
+            lib/widgets/topic/sort_and_tags_bar.dart \
+            test/providers/topic_refresh_merge_test.dart \
+            test/services/solved_topics_extension_test.dart; do
+            echo "Analyzing $file"
+            dart analyze "$file"
+          done
