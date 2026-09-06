@@ -51,6 +51,7 @@ void main() {
         likeCount: 14,
         visible: false,
         highestPostNumber: 4,
+        pluginExtras: const {'has_accepted_answer': false},
       );
 
       final merged = mergeTopicListItemFromDetail(existing, detail);
@@ -82,8 +83,7 @@ void main() {
       expect(merged.bookmarkableType, 'Post');
       expect(merged.bookmarkableUrl, '/t/42/2');
 
-      // Detail is authoritative for solved state. This verifies a solved topic
-      // can also become unsolved without reconstructing the whole list item.
+      // Explicit false from the detail serializer can clear solved state.
       expect(merged.hasAcceptedAnswer, isFalse);
       // Missing plugin scalar must not erase list-side capability metadata.
       expect(merged.canHaveAnswer, isTrue);
@@ -126,6 +126,36 @@ void main() {
       expect(merged.isPostVoting, isTrue);
       // A stale detail response must not move the list cursor backwards.
       expect(merged.highestPostNumber, 5);
+    });
+
+    test('does not clear optional plugin flags when detail omits them', () {
+      final existing = Topic(
+        id: 9,
+        title: 'topic',
+        slug: 'topic',
+        postsCount: 2,
+        replyCount: 1,
+        views: 1,
+        likeCount: 0,
+        categoryId: '1',
+        hasAcceptedAnswer: true,
+        isPostVoting: true,
+      );
+      final detail = TopicDetail(
+        id: 9,
+        title: 'topic',
+        slug: 'topic',
+        postsCount: 2,
+        postStream: PostStream(posts: const [], stream: const []),
+        categoryId: 1,
+        closed: false,
+        archived: false,
+      );
+
+      final merged = mergeTopicListItemFromDetail(existing, detail);
+
+      expect(merged.hasAcceptedAnswer, isTrue);
+      expect(merged.isPostVoting, isTrue);
     });
   });
 }
