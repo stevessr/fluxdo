@@ -25,6 +25,10 @@ void main() {
     expect(preloadBody, contains('await _readPreloadedSnapshot('));
     expect(preloadBody, contains('await _syncCookiesFromController(c)'));
     expect(preloadBody, contains('await _preload.hydrateFromHtml(html)'));
+    expect(
+      preloadBody,
+      contains('if (platformViewStarted && io.Platform.isWindows)'),
+    );
   });
 
   test('hydrated WebView preload settles browser trust in background', () {
