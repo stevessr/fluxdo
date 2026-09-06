@@ -11,7 +11,7 @@ void main() {
     ).readAsStringSync();
   });
 
-  test('startup WebView preload does not await session bootstrap', () {
+  test('startup WebView preload avoids full-load and bootstrap waits', () {
     final start = source.indexOf('Future<bool> _hydratePreloadThroughWebView');
     final end = source.indexOf('Future<void> _navigateToHome', start);
 
@@ -21,6 +21,9 @@ void main() {
     final preloadBody = source.substring(start, end);
     expect(preloadBody, isNot(contains('.runOnController(')));
     expect(preloadBody, isNot(contains('getCookieDiagnosticsForRequest')));
+    expect(preloadBody, isNot(contains('_waitForLoad(')));
+    expect(preloadBody, contains('await _readPreloadedSnapshot('));
+    expect(preloadBody, contains('await _syncCookiesFromController(c)'));
     expect(preloadBody, contains('await _preload.hydrateFromHtml(html)'));
   });
 
