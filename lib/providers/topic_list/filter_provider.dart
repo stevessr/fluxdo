@@ -10,16 +10,14 @@ enum TopicListFilter {
   unread,
   read,
   unseen,
+  solved,
+  unsolved,
   top,
   hot,
 }
 
 /// 「新话题」二级子过滤
-enum NewSubset {
-  all,
-  topics,
-  replies,
-}
+enum NewSubset { all, topics, replies }
 
 extension NewSubsetX on NewSubset {
   /// 传给 Discourse API 的 subset 查询参数值，all 时返回 null（不传即默认行为）
@@ -50,6 +48,10 @@ extension TopicListFilterX on TopicListFilter {
         return 'read';
       case TopicListFilter.unseen:
         return 'unseen';
+      case TopicListFilter.solved:
+      case TopicListFilter.unsolved:
+        // Solved/unsolved are normal latest topic lists plus solved=yes|no.
+        return 'latest';
       case TopicListFilter.top:
         return 'top';
       case TopicListFilter.hot:
@@ -93,8 +95,7 @@ class TopicFilterNotifier extends StateNotifier<TopicListFilter> {
   static const String _key = 'topic_sort_filter';
   final SharedPreferences _prefs;
 
-  TopicFilterNotifier(this._prefs)
-      : super(_fromName(_prefs.getString(_key)));
+  TopicFilterNotifier(this._prefs) : super(_fromName(_prefs.getString(_key)));
 
   static TopicListFilter _fromName(String? name) {
     for (final filter in TopicListFilter.values) {
@@ -112,17 +113,16 @@ class TopicFilterNotifier extends StateNotifier<TopicListFilter> {
 /// 当前筛选模式（持久化到 SharedPreferences）
 final topicFilterProvider =
     StateNotifierProvider<TopicFilterNotifier, TopicListFilter>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return TopicFilterNotifier(prefs);
-});
+      final prefs = ref.watch(sharedPreferencesProvider);
+      return TopicFilterNotifier(prefs);
+    });
 
 /// 「新话题」子过滤持久化 Notifier
 class NewSubsetNotifier extends StateNotifier<NewSubset> {
   static const String _key = 'topic_new_subset';
   final SharedPreferences _prefs;
 
-  NewSubsetNotifier(this._prefs)
-      : super(_fromName(_prefs.getString(_key)));
+  NewSubsetNotifier(this._prefs) : super(_fromName(_prefs.getString(_key)));
 
   static NewSubset _fromName(String? name) {
     for (final subset in NewSubset.values) {
@@ -140,6 +140,6 @@ class NewSubsetNotifier extends StateNotifier<NewSubset> {
 /// 当前「新话题」子过滤（持久化到 SharedPreferences）
 final topicNewSubsetProvider =
     StateNotifierProvider<NewSubsetNotifier, NewSubset>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return NewSubsetNotifier(prefs);
-});
+      final prefs = ref.watch(sharedPreferencesProvider);
+      return NewSubsetNotifier(prefs);
+    });
