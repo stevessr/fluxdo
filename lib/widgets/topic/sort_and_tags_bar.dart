@@ -146,18 +146,12 @@ class SortAndTagsBar extends StatelessWidget {
                     ),
                   ),
                   if (onAddTag != null)
-                    _AddTagButton(
-                      colorScheme: colorScheme,
-                      onTap: onAddTag!,
-                    ),
+                    _AddTagButton(colorScheme: colorScheme, onTap: onAddTag!),
                 ],
               ),
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            trailing!,
-          ],
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ],
       ),
     );
@@ -168,10 +162,7 @@ class _AddTagButton extends StatelessWidget {
   final ColorScheme colorScheme;
   final VoidCallback onTap;
 
-  const _AddTagButton({
-    required this.colorScheme,
-    required this.onTap,
-  });
+  const _AddTagButton({required this.colorScheme, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
