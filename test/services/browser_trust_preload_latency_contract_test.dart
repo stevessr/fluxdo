@@ -34,10 +34,7 @@ void main() {
         "_startBrowserTrustAfterPreload(reason: reason, path: 'webview');",
       ),
     );
-    expect(
-      source,
-      contains("reason: '\$reason:\${path}_preload_settle'"),
-    );
+    expect(source, contains("reason: '\$reason:\${path}_preload_settle'"));
     expect(source, contains('final synced = await ensureBrowserTrust('));
   });
 }
