@@ -64,9 +64,7 @@ SolvedTopicListRequest buildSolvedTopicListRequest({
   bool? ascending,
   String? subset,
 }) {
-  final queryParameters = <String, dynamic>{
-    'solved': solved ? 'yes' : 'no',
-  };
+  final queryParameters = <String, dynamic>{'solved': solved ? 'yes' : 'no'};
 
   if (page > 0) queryParameters['page'] = page;
   if (period != null) queryParameters['period'] = period;
