@@ -162,14 +162,16 @@ class _PreheatGateState extends State<PreheatGate> {
         }
 
         return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 600),
-          switchInCurve: Curves.easeInOutCubic,
+          // 数据已经 ready 后不再额外做半秒以上的“假加载”。保留一个很短的
+          // 淡入/缩放只用于遮住布局切换，不让动画本身成为启动延迟的一部分。
+          duration: const Duration(milliseconds: 220),
+          switchInCurve: Curves.easeOutCubic,
           switchOutCurve: Curves.easeOut,
           transitionBuilder: (child, animation) {
             return FadeTransition(
               opacity: animation,
               child: ScaleTransition(
-                scale: Tween<double>(begin: 0.95, end: 1.0).animate(animation),
+                scale: Tween<double>(begin: 0.985, end: 1.0).animate(animation),
                 child: child,
               ),
             );
