@@ -15,10 +15,7 @@ class AccountSwitchBrowserCookieCleaner {
   AccountSwitchBrowserCookieCleaner._();
   static final instance = AccountSwitchBrowserCookieCleaner._();
 
-  static const Set<String> _deviceCookieNames = {
-    'cf_clearance',
-    '__cf_bm',
-  };
+  static const Set<String> _deviceCookieNames = {'cf_clearance', '__cf_bm'};
   static const _recentCaptureMaxAge = Duration(seconds: 5);
 
   bool _isDeviceCookie(String name) {
@@ -45,10 +42,7 @@ class AccountSwitchBrowserCookieCleaner {
     // AccountManager 会在 detach 前刚刚抓取完整 WebView cookie 快照。优先复用
     // 那次成功读取，避免切换流程对同一 origin 再做一次 native/WK 枚举。
     // 若缓存缺失或已过期则保持原行为，立即读取真实 store。
-    return writer.getRecentCookieInfos(
-          origin,
-          maxAge: _recentCaptureMaxAge,
-        ) ??
+    return writer.getRecentCookieInfos(origin, maxAge: _recentCaptureMaxAge) ??
         await writer.getAllCookieInfos(origin);
   }
 
@@ -135,9 +129,7 @@ class AccountSwitchBrowserCookieCleaner {
           }
           return true;
         } catch (e) {
-          debugPrint(
-            '[AccountSwitchCookieCleaner] $origin WebView 复检失败: $e',
-          );
+          debugPrint('[AccountSwitchCookieCleaner] $origin WebView 复检失败: $e');
           return false;
         }
       }),
