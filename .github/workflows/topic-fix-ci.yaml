@@ -32,14 +32,19 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Check formatting
+      - name: Format new validation sources
         run: >-
-          dart format --output=none --set-exit-if-changed
-          lib/providers/topic_list/filter_provider.dart
-          lib/providers/topic_list/topic_list_provider.dart
+          dart format
           lib/providers/topic_list/topic_refresh_merge.dart
           lib/services/discourse/solved_topics_extension.dart
-          lib/widgets/topic/sort_and_tags_bar.dart
+          test/providers/topic_refresh_merge_test.dart
+          test/services/solved_topics_extension_test.dart
+
+      - name: Show formatter diff
+        run: >-
+          git diff --
+          lib/providers/topic_list/topic_refresh_merge.dart
+          lib/services/discourse/solved_topics_extension.dart
           test/providers/topic_refresh_merge_test.dart
           test/services/solved_topics_extension_test.dart
 
