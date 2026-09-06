@@ -7,6 +7,8 @@ on:
       - feat/account-runtime-switching
     paths:
       - 'lib/services/account_runtime_pool.dart'
+      - 'lib/services/account_switch_browser_cookie_cleaner.dart'
+      - 'lib/services/network/cookie/raw_cookie_writer.dart'
       - 'lib/services/discourse/discourse_service.dart'
       - 'lib/services/discourse/_account_switch.dart'
       - 'test/services/account_runtime_pool_test.dart'
@@ -14,6 +16,8 @@ on:
   pull_request:
     paths:
       - 'lib/services/account_runtime_pool.dart'
+      - 'lib/services/account_switch_browser_cookie_cleaner.dart'
+      - 'lib/services/network/cookie/raw_cookie_writer.dart'
       - 'lib/services/discourse/discourse_service.dart'
       - 'lib/services/discourse/_account_switch.dart'
       - 'test/services/account_runtime_pool_test.dart'
@@ -47,17 +51,28 @@ jobs:
         run: flutter pub get
 
       - name: Check formatting
-        run: >-
-          dart format --output=none --set-exit-if-changed
-          lib/services/account_runtime_pool.dart
-          lib/services/discourse/discourse_service.dart
-          lib/services/discourse/_account_switch.dart
-          test/services/account_runtime_pool_test.dart
+        run: |
+          dart format \
+            lib/services/account_runtime_pool.dart \
+            lib/services/account_switch_browser_cookie_cleaner.dart \
+            lib/services/network/cookie/raw_cookie_writer.dart \
+            lib/services/discourse/discourse_service.dart \
+            lib/services/discourse/_account_switch.dart \
+            test/services/account_runtime_pool_test.dart
+          git diff --exit-code -- \
+            lib/services/account_runtime_pool.dart \
+            lib/services/account_switch_browser_cookie_cleaner.dart \
+            lib/services/network/cookie/raw_cookie_writer.dart \
+            lib/services/discourse/discourse_service.dart \
+            lib/services/discourse/_account_switch.dart \
+            test/services/account_runtime_pool_test.dart
 
       - name: Analyze runtime switching
         run: >-
           flutter analyze
           lib/services/account_runtime_pool.dart
+          lib/services/account_switch_browser_cookie_cleaner.dart
+          lib/services/network/cookie/raw_cookie_writer.dart
           lib/services/discourse/discourse_service.dart
           test/services/account_runtime_pool_test.dart
 
