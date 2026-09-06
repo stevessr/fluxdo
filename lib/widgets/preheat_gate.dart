@@ -123,9 +123,12 @@ class _PreheatGateState extends State<PreheatGate> {
   }
 
   void _skip() {
+    // “跳过”只解除启动页门禁，不取消 BrowserTrustCoordinator 内部正在运行的
+    // preload。这样用户可以立即进入应用，同时 HeadlessWebView 仍会按原逻辑
+    // 完成 cookie 同步和 finally 清理。
     setState(() {
-      _error ??= TimeoutException(S.current.preheat_userSkipped);
-      _loadFuture = Future.value(false);
+      _error = null;
+      _loadFuture = Future.value(true);
     });
   }
 
