@@ -12,23 +12,15 @@ void main() {
   });
 
   test('startup WebView preload does not await session bootstrap', () {
-    final start = source.indexOf(
-      'Future<bool> _hydratePreloadThroughWebView',
-    );
-    final end = source.indexOf(
-      'Future<void> _navigateToHome',
-      start,
-    );
+    final start = source.indexOf('Future<bool> _hydratePreloadThroughWebView');
+    final end = source.indexOf('Future<void> _navigateToHome', start);
 
     expect(start, greaterThanOrEqualTo(0));
     expect(end, greaterThan(start));
 
     final preloadBody = source.substring(start, end);
     expect(preloadBody, isNot(contains('.runOnController(')));
-    expect(
-      preloadBody,
-      isNot(contains('getCookieDiagnosticsForRequest')),
-    );
+    expect(preloadBody, isNot(contains('getCookieDiagnosticsForRequest')));
     expect(preloadBody, contains('await _preload.hydrateFromHtml(html)'));
   });
 
@@ -43,9 +35,6 @@ void main() {
       source,
       contains("reason: '\$reason:\${path}_preload_settle'"),
     );
-    expect(
-      source,
-      contains('final synced = await ensureBrowserTrust('),
-    );
+    expect(source, contains('final synced = await ensureBrowserTrust('));
   });
 }
