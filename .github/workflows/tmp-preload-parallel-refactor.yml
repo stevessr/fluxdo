@@ -6,6 +6,7 @@ on:
       - perf/preload-parallel-hydration
     paths:
       - '.github/workflows/tmp-preload-parallel-refactor.yml'
+      - 'tool/tmp_preload_parallel_refactor.py'
   workflow_dispatch:
 
 permissions:
@@ -25,205 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Apply parallel preload refactor
-        shell: bash
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          def replace_between(source: str, start: str, end: str, replacement: str) -> str:
-              start_i = source.find(start)
-              if start_i < 0:
-                  raise SystemExit(f'start marker missing: {start!r}')
-              end_i = source.find(end, start_i)
-              if end_i < 0:
-                  raise SystemExit(f'end marker missing: {end!r}')
-              return source[:start_i] + replacement + source[end_i:]
-
-          decoder_path = Path('lib/services/preloaded_data_decoder.dart')
-          decoder = decoder_path.read_text()
-
-          old_decode = '''  static Map<String, dynamic>? decode(\n    String rawJson, {\n    required bool htmlEntityEncoded,\n  }) {\n    final source = htmlEntityEncoded ? _decodeHtmlEntities(rawJson) : rawJson;\n\n    try {\n      return _decodeProjectedObject(source);\n    } on FormatException {\n      // Keep a compatibility fallback for unusual but valid JSON formatting.\n      // The fast path is intentionally conservative: correctness wins over the\n      // projection optimization if the lightweight scanner rejects a payload.\n      return _decodeWithJsonDecoder(source);\n    }\n  }\n'''
-          new_decode = '''  static Map<String, dynamic>? decode(\n    String rawJson, {\n    required bool htmlEntityEncoded,\n  }) {\n    final projected = scan(\n      rawJson,\n      htmlEntityEncoded: htmlEntityEncoded,\n    );\n    if (projected == null) return null;\n    return _decodeEagerEntries(projected);\n  }\n\n  /// Scans only the retained top-level preload entries but deliberately keeps\n  /// nested JSON strings undecoded. The service can then distribute the large\n  /// independent inner payloads across a small number of worker isolates.\n  static Map<String, dynamic>? scan(\n    String rawJson, {\n    required bool htmlEntityEncoded,\n  }) {\n    final source = htmlEntityEncoded ? _decodeHtmlEntities(rawJson) : rawJson;\n\n    try {\n      return _decodeProjectedObject(source);\n    } on FormatException {\n      // Keep a compatibility fallback for unusual but valid JSON formatting.\n      return _decodeWithJsonDecoder(source);\n    }\n  }\n\n  static Map<String, dynamic> _decodeEagerEntries(\n    Map<String, dynamic> projected,\n  ) {\n    final result = Map<String, dynamic>.from(projected);\n    for (final key in _eagerKeys) {\n      if (!result.containsKey(key)) continue;\n      final value = result[key];\n      if (value is! String) continue;\n      try {\n        result[key] = jsonDecode(value);\n      } catch (_) {\n        // Preserve a non-JSON string exactly as the previous decoder did.\n      }\n    }\n    return result;\n  }\n'''
-          if old_decode not in decoder:
-              raise SystemExit('decoder decode block marker missing')
-          decoder = decoder.replace(old_decode, new_decode, 1)
-
-          old_projected = '''      if (_retainedKeys.contains(key)) {\n        dynamic value = jsonDecode(source.substring(valueStart, valueEnd));\n        if (_eagerKeys.contains(key) && value is String) {\n          try {\n            value = jsonDecode(value);\n          } catch (_) {\n            // Match the previous implementation: an inner value that happens\n            // to be a non-JSON string is preserved unchanged.\n          }\n        }\n        result[key] = value;\n      }\n'''
-          new_projected = '''      if (_retainedKeys.contains(key)) {\n        // Decode only the outer value here. Nested preload JSON strings stay\n        // raw so independent groups can be hydrated concurrently afterwards.\n        result[key] = jsonDecode(source.substring(valueStart, valueEnd));\n      }\n'''
-          if old_projected not in decoder:
-              raise SystemExit('decoder projected block marker missing')
-          decoder = decoder.replace(old_projected, new_projected, 1)
-
-          old_fallback = '''    final result = <String, dynamic>{};\n    for (final key in _retainedKeys) {\n      if (!outer.containsKey(key)) continue;\n      dynamic value = outer[key];\n      if (_eagerKeys.contains(key) && value is String) {\n        try {\n          value = jsonDecode(value);\n        } catch (_) {\n          // Preserve the raw value for compatibility.\n        }\n      }\n      result[key] = value;\n    }\n    return result;\n'''
-          new_fallback = '''    final result = <String, dynamic>{};\n    for (final key in _retainedKeys) {\n      if (!outer.containsKey(key)) continue;\n      result[key] = outer[key];\n    }\n    return result;\n'''
-          if old_fallback not in decoder:
-              raise SystemExit('decoder fallback block marker missing')
-          decoder = decoder.replace(old_fallback, new_fallback, 1)
-          decoder_path.write_text(decoder)
-
-          service_path = Path('lib/services/preloaded_data_service.dart')
-          service = service_path.read_text()
-
-          parse_method = r'''  Future<bool> _parsePreloadedDataString(
-            String dataString, {
-            required bool htmlEntityEncoded,
-            required int revision,
-            required int generation,
-          }) async {
-            try {
-              // Phase 1: scan the outer preload object once. Nested JSON strings are
-              // intentionally kept raw so the expensive independent groups below can
-              // use multiple CPU cores instead of one long isolate task.
-              final preloaded = await compute(_scanPreloadedJsonInIsolate, [
-                dataString,
-                if (htmlEntityEncoded) 'entity',
-              ]);
-              if (preloaded == null) {
-                debugPrint('[PreloadedData] 预加载 JSON 解析为空');
-                return false;
-              }
-              if (!_isCurrent(revision, generation)) return false;
-
-              final userSettingsRaw = <String, dynamic>{
-                if (preloaded.containsKey('currentUser'))
-                  'currentUser': preloaded['currentUser'],
-                if (preloaded.containsKey('siteSettings'))
-                  'siteSettings': preloaded['siteSettings'],
-                if (preloaded.containsKey('topicTrackingStateMeta'))
-                  'topicTrackingStateMeta': preloaded['topicTrackingStateMeta'],
-              };
-              final siteRaw = <String, dynamic>{
-                if (preloaded.containsKey('site')) 'site': preloaded['site'],
-                if (preloaded.containsKey('customEmoji'))
-                  'customEmoji': preloaded['customEmoji'],
-              };
-
-              // Phase 2: two coarse-grained workers hydrate the largest independent
-              // startup groups concurrently. Two workers are deliberate: it gains
-              // multicore parallelism without spawning one isolate per tiny key.
-              final groups = await Future.wait<Map<String, dynamic>>([
-                compute(_decodePreloadedGroupInIsolate, userSettingsRaw),
-                compute(_decodePreloadedGroupInIsolate, siteRaw),
-              ]);
-              if (!_isCurrent(revision, generation)) return false;
-
-              final hydrated = <String, dynamic>{};
-              for (final group in groups) {
-                hydrated.addAll(group);
-              }
-
-              if (hydrated.containsKey('currentUser')) {
-                _currentUser = hydrated['currentUser'] as Map<String, dynamic>;
-                debugPrint(
-                  '[PreloadedData] currentUser 解析成功: id=${_currentUser?['id']}, '
-                  'unread_notifications=${_currentUser?['unread_notifications']}, '
-                  'all_unread=${_currentUser?['all_unread_notifications_count']}',
-                );
-              }
-
-              if (hydrated.containsKey('siteSettings')) {
-                _siteSettings = hydrated['siteSettings'] as Map<String, dynamic>;
-
-                final reactionsStr =
-                    _siteSettings?['discourse_reactions_enabled_reactions'] as String?;
-                if (reactionsStr != null && reactionsStr.isNotEmpty) {
-                  _enabledReactions = reactionsStr.split('|');
-                  debugPrint('[PreloadedData] reactions: $_enabledReactions');
-                }
-
-                final pollingUrl = _siteSettings?['long_polling_base_url'] as String?;
-                if (pollingUrl != null &&
-                    pollingUrl.isNotEmpty &&
-                    pollingUrl != '/') {
-                  _longPollingBaseUrl = pollingUrl.endsWith('/')
-                      ? pollingUrl.substring(0, pollingUrl.length - 1)
-                      : pollingUrl;
-                  debugPrint(
-                    '[PreloadedData] longPollingBaseUrl: $_longPollingBaseUrl',
-                  );
-                }
-              }
-
-              if (hydrated.containsKey('site')) {
-                _site = hydrated['site'] as Map<String, dynamic>;
-                debugPrint(
-                  '[PreloadedData] site 解析成功, categories=${(_site?['categories'] as List?)?.length ?? 0}',
-                );
-              }
-
-              if (hydrated.containsKey('topicTrackingStateMeta')) {
-                _topicTrackingStateMeta =
-                    hydrated['topicTrackingStateMeta'] as Map<String, dynamic>;
-                debugPrint(
-                  '[PreloadedData] topicTrackingStateMeta: $_topicTrackingStateMeta',
-                );
-              }
-
-              if (preloaded.containsKey('topicTrackingStates')) {
-                final value = preloaded['topicTrackingStates'];
-                if (value is List) {
-                  _topicTrackingStates = value.cast<Map<String, dynamic>>();
-                  _topicTrackingStatesRawJson = null;
-                  debugPrint(
-                    '[PreloadedData] topicTrackingStates: ${_topicTrackingStates?.length ?? 0} items',
-                  );
-                } else if (value is String && value.isNotEmpty) {
-                  _topicTrackingStatesRawJson = value;
-                  _topicTrackingStates = null;
-                  debugPrint('[PreloadedData] topicTrackingStates 后台预热');
-                }
-              }
-
-              if (hydrated.containsKey('customEmoji')) {
-                _customEmoji = (hydrated['customEmoji'] as List)
-                    .cast<Map<String, dynamic>>();
-                debugPrint(
-                  '[PreloadedData] customEmoji: ${_customEmoji?.length ?? 0} items',
-                );
-              }
-
-              // Phase 3: expensive non-critical data keeps warming in parallel after
-              // core hydration. Callers can consume the existing completers if they
-              // arrive before these workers finish.
-              _parseTopicListFromPreloaded(
-                preloaded,
-                revision: revision,
-                generation: generation,
-              );
-              if (_topicTrackingStatesRawJson != null) {
-                unawaited(_decodeTopicTrackingStatesAsync());
-              }
-              return true;
-            } catch (e) {
-              debugPrint('[PreloadedData] JSON 解析失败: $e');
-              return false;
-            }
-          }
-
-'''
-          service = replace_between(
-              service,
-              '  Future<bool> _parsePreloadedDataString(',
-              '  /// 从预加载数据中解析话题列表',
-              parse_method,
-          )
-
-          old_helper = '''Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {\n  return PreloadedDataDecoder.decode(\n    input[0],\n    htmlEntityEncoded: input.length > 1 && input[1] == 'entity',\n  );\n}\n'''
-          new_helper = '''Map<String, dynamic>? _scanPreloadedJsonInIsolate(List<String> input) {\n  return PreloadedDataDecoder.scan(\n    input[0],\n    htmlEntityEncoded: input.length > 1 && input[1] == 'entity',\n  );\n}\n\nMap<String, dynamic> _decodePreloadedGroupInIsolate(\n  Map<String, dynamic> rawGroup,\n) {\n  final result = <String, dynamic>{};\n  for (final entry in rawGroup.entries) {\n    final value = entry.value;\n    if (value is String) {\n      try {\n        result[entry.key] = jsonDecode(value);\n        continue;\n      } catch (_) {\n        // Preserve unusual non-JSON strings for compatibility.\n      }\n    }\n    result[entry.key] = value;\n  }\n  return result;\n}\n'''
-          if old_helper not in service:
-              raise SystemExit('service preload helper marker missing')
-          service = service.replace(old_helper, new_helper, 1)
-          service_path.write_text(service)
-
-          test_path = Path('test/services/preloaded_data_decoder_test.dart')
-          test = test_path.read_text()
-          marker = "    test('handles braces, commas and escapes inside skipped strings', () {\n"
-          extra = '''    test('scan keeps eager inner JSON raw for parallel hydration', () {\n      final raw = jsonEncode({\n        'currentUser': jsonEncode({'id': 42}),\n        'siteSettings': jsonEncode({'chat_enabled': true}),\n        'site': jsonEncode({'categories': <Object>[]}),\n        'customEmoji': jsonEncode(<Object>[]),\n        'topicList': jsonEncode({'topic_list': {'topics': <Object>[]}}),\n      });\n\n      final scanned = PreloadedDataDecoder.scan(\n        raw,\n        htmlEntityEncoded: false,\n      );\n\n      expect(scanned, isNotNull);\n      expect(scanned!['currentUser'], isA<String>());\n      expect(scanned['siteSettings'], isA<String>());\n      expect(scanned['site'], isA<String>());\n      expect(scanned['customEmoji'], isA<String>());\n      expect(scanned['topicList'], isA<String>());\n\n      final decoded = PreloadedDataDecoder.decode(\n        raw,\n        htmlEntityEncoded: false,\n      );\n      expect(decoded!['currentUser'], {'id': 42});\n      expect(decoded['siteSettings'], {'chat_enabled': true});\n      expect(decoded['site'], isA<Map<String, dynamic>>());\n    });\n\n'''
-          if marker not in test:
-              raise SystemExit('test insertion marker missing')
-          test = test.replace(marker, extra + marker, 1)
-          test_path.write_text(test)
-          PY
+        run: python3 tool/tmp_preload_parallel_refactor.py
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -256,15 +59,17 @@ jobs:
           dart tool/flutterw.dart test
           test/services/preloaded_data_decoder_test.dart
 
-      - name: Commit verified refactor and remove one-shot workflow
+      - name: Commit verified refactor and remove one-shot helpers
         shell: bash
         run: |
           rm .github/workflows/tmp-preload-parallel-refactor.yml
+          rm tool/tmp_preload_parallel_refactor.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add lib/services/preloaded_data_service.dart \
                   lib/services/preloaded_data_decoder.dart \
                   test/services/preloaded_data_decoder_test.dart \
-                  .github/workflows/tmp-preload-parallel-refactor.yml
+                  .github/workflows/tmp-preload-parallel-refactor.yml \
+                  tool/tmp_preload_parallel_refactor.py
           git commit -m 'perf(preload): parallelize preload hydration workers'
           git push origin HEAD:perf/preload-parallel-hydration
