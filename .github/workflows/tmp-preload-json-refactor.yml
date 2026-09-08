@@ -115,7 +115,7 @@ jobs:
             return parsed;
           }
 
-"""
+          """
           text = replace_between(
               text,
               '  Future<bool> _parsePreloadedDataFromHtml(',
@@ -151,7 +151,7 @@ jobs:
                 });
           }
 
-"""
+          """
           text = replace_between(
               text,
               '  void _decodeTopicListAsync(',
@@ -170,7 +170,7 @@ jobs:
             return null;
           }
 
-"""
+          """
           text = replace_between(
               text,
               'Map<String, dynamic>? _decodeTopicListInIsolate(String rawJson) {',
@@ -185,7 +185,7 @@ jobs:
             );
           }
 
-"""
+          """
           text = replace_between(
               text,
               'Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {',
