@@ -1,0 +1,239 @@
+name: Apply preload JSON fast path
+
+on:
+  push:
+    branches:
+      - perf/preload-json-fastpath
+    paths:
+      - '.github/workflows/tmp-preload-json-refactor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refactor-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: perf/preload-json-fastpath
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply focused service refactor
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('lib/services/preloaded_data_service.dart')
+          text = path.read_text()
+
+          old_import = "import 'auth_session.dart';\n"
+          new_import = old_import + "import 'preloaded_data_decoder.dart';\n"
+          if "import 'preloaded_data_decoder.dart';" not in text:
+              if old_import not in text:
+                  raise SystemExit('auth_session import marker missing')
+              text = text.replace(old_import, new_import, 1)
+
+          def replace_between(source: str, start: str, end: str, replacement: str) -> str:
+              start_i = source.find(start)
+              if start_i < 0:
+                  raise SystemExit(f'start marker missing: {start!r}')
+              end_i = source.find(end, start_i)
+              if end_i < 0:
+                  raise SystemExit(f'end marker missing: {end!r}')
+              return source[:start_i] + replacement + source[end_i:]
+
+          parse_method = r'''  Future<bool> _parsePreloadedDataFromHtml(
+            String html, {
+            required int revision,
+            required int generation,
+          }) async {
+            if (!_isCurrent(revision, generation)) return false;
+
+            // Locate the preload payload first and launch its isolate decode immediately.
+            // Metadata extraction below then overlaps with JSON decoding instead of delaying it.
+            String? dataString;
+            var htmlEntityEncoded = false;
+
+            // 新版形态：<script type="application/json" id="data-preloaded">{...}</script>
+            // 内容是原始 JSON，不做 HTML 实体解码（否则正文中字面的 &quot; 会被误还原）
+            final scriptTag = RegExp(
+              '''<script[^>]*id=["']data-preloaded["'][^>]*>''',
+              caseSensitive: false,
+            ).firstMatch(html);
+            if (scriptTag != null) {
+              final start = scriptTag.end;
+              final end = html.indexOf('</script>', start);
+              if (end > start) {
+                dataString = html.substring(start, end);
+              }
+            }
+
+            // 旧版形态：元素属性 data-preloaded="..."（HTML 实体转义，Isolate 中解码）
+            if (dataString == null) {
+              final match = RegExp(r'data-preloaded="([^"]*)"').firstMatch(html);
+              if (match == null) {
+                debugPrint('[PreloadedData] 未找到 data-preloaded 数据');
+                return false;
+              }
+              dataString = match.group(1)!;
+              htmlEntityEncoded = true;
+            }
+
+            final parseFuture = _parsePreloadedDataString(
+              dataString,
+              htmlEntityEncoded: htmlEntityEncoded,
+              revision: revision,
+              generation: generation,
+            );
+
+            // These small HTML metadata scans run while the preload isolate is decoding.
+            _extractCsrfTokenFromHtml(html);
+            _extractSharedSessionKeyFromHtml(html);
+            _extractTurnstileSitekeyFromHtml(html);
+            _extractBaseUriFromHtml(html);
+            _extractCdnUrlFromHtml(html);
+
+            final parsed = await parseFuture;
+            if (!_isCurrent(revision, generation)) return false;
+
+            // Plugin discovery is useful for later browser bootstrap, but must not compete
+            // with the startup-critical preload JSON decode for CPU/memory bandwidth.
+            if (parsed) {
+              _extractPluginCandidatesInBackground(
+                html,
+                revision: revision,
+                generation: generation,
+              );
+            }
+            return parsed;
+          }
+
+'''
+          text = replace_between(
+              text,
+              '  Future<bool> _parsePreloadedDataFromHtml(',
+              '  void _extractCsrfTokenFromHtml(String html) {',
+              parse_method,
+          )
+
+          topic_method = r'''  void _decodeTopicListAsync(
+            String rawJson, {
+            required int revision,
+            required int generation,
+          }) {
+            final completer = _topicListResponseCompleter ??=
+                Completer<TopicListResponse?>();
+            compute(_decodeAndParseTopicListInIsolate, rawJson)
+                .then((result) {
+                  if (!_isCurrent(revision, generation)) {
+                    if (!completer.isCompleted) completer.complete(null);
+                    return;
+                  }
+                  _topicListData = null;
+                  _cachedTopicListResponse = result;
+                  if (result != null) {
+                    debugPrint(
+                      '[PreloadedData] topic_list 单次 isolate 解码并缓存成功',
+                    );
+                  }
+                  if (!completer.isCompleted) completer.complete(result);
+                })
+                .catchError((e) {
+                  debugPrint('[PreloadedData] 异步解析 topic_list 失败: $e');
+                  if (!completer.isCompleted) completer.complete(null);
+                });
+          }
+
+'''
+          text = replace_between(
+              text,
+              '  void _decodeTopicListAsync(',
+              '  void _parseTopicListResponseAsync(',
+              topic_method,
+          )
+
+          topic_helper = r'''TopicListResponse? _decodeAndParseTopicListInIsolate(String rawJson) {
+            final decoded = jsonDecode(rawJson);
+            if (decoded is Map<String, dynamic>) {
+              return TopicListResponse.fromJson(decoded);
+            }
+            if (decoded is Map) {
+              return TopicListResponse.fromJson(decoded.cast<String, dynamic>());
+            }
+            return null;
+          }
+
+'''
+          text = replace_between(
+              text,
+              'Map<String, dynamic>? _decodeTopicListInIsolate(String rawJson) {',
+              'List<Map<String, dynamic>>? _decodeTopicTrackingStatesInIsolate(',
+              topic_helper,
+          )
+
+          preload_helper = r'''Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {
+            return PreloadedDataDecoder.decode(
+              input[0],
+              htmlEntityEncoded: input.length > 1 && input[1] == 'entity',
+            );
+          }
+
+'''
+          text = replace_between(
+              text,
+              'Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {',
+              'List<String> _extractPluginCandidatesInIsolate(List<String> input) {',
+              preload_helper,
+          )
+
+          path.write_text(text)
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Format touched Dart files
+        run: >-
+          dart format
+          lib/services/preloaded_data_service.dart
+          lib/services/preloaded_data_decoder.dart
+          test/services/preloaded_data_decoder_test.dart
+
+      - name: Analyze preload path
+        run: >-
+          flutter analyze
+          lib/services/preloaded_data_service.dart
+          lib/services/preloaded_data_decoder.dart
+          test/services/preloaded_data_decoder_test.dart
+
+      - name: Run preload decoder tests
+        run: >-
+          dart tool/flutterw.dart test
+          test/services/preloaded_data_decoder_test.dart
+
+      - name: Commit refactor and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/tmp-preload-json-refactor.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/services/preloaded_data_service.dart \
+                  lib/services/preloaded_data_decoder.dart \
+                  test/services/preloaded_data_decoder_test.dart \
+                  .github/workflows/tmp-preload-json-refactor.yml
+          git commit -m 'perf(preload): streamline JSON hydration critical path'
+          git push origin HEAD:perf/preload-json-fastpath
