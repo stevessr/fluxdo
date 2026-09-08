@@ -32,16 +32,43 @@ class PreloadedDataDecoder {
     String rawJson, {
     required bool htmlEntityEncoded,
   }) {
+    final projected = scan(rawJson, htmlEntityEncoded: htmlEntityEncoded);
+    if (projected == null) return null;
+    return _decodeEagerEntries(projected);
+  }
+
+  /// Scans only retained top-level preload entries while deliberately keeping
+  /// nested JSON strings raw. The service can then distribute the independent
+  /// large inner payloads across a small number of worker isolates.
+  static Map<String, dynamic>? scan(
+    String rawJson, {
+    required bool htmlEntityEncoded,
+  }) {
     final source = htmlEntityEncoded ? _decodeHtmlEntities(rawJson) : rawJson;
 
     try {
       return _decodeProjectedObject(source);
     } on FormatException {
-      // Keep a compatibility fallback for unusual but valid JSON formatting.
-      // The fast path is intentionally conservative: correctness wins over the
-      // projection optimization if the lightweight scanner rejects a payload.
+      // Preserve the compatibility fallback for unusual but valid JSON.
       return _decodeWithJsonDecoder(source);
     }
+  }
+
+  static Map<String, dynamic> _decodeEagerEntries(
+    Map<String, dynamic> projected,
+  ) {
+    final result = Map<String, dynamic>.from(projected);
+    for (final key in _eagerKeys) {
+      if (!result.containsKey(key)) continue;
+      final value = result[key];
+      if (value is! String) continue;
+      try {
+        result[key] = jsonDecode(value);
+      } catch (_) {
+        // Preserve a non-JSON string exactly as the previous decoder did.
+      }
+    }
+    return result;
   }
 
   static Map<String, dynamic>? _decodeProjectedObject(String source) {
@@ -76,16 +103,9 @@ class PreloadedDataDecoder {
       final valueEnd = _scanValue(source, valueStart);
 
       if (_retainedKeys.contains(key)) {
-        dynamic value = jsonDecode(source.substring(valueStart, valueEnd));
-        if (_eagerKeys.contains(key) && value is String) {
-          try {
-            value = jsonDecode(value);
-          } catch (_) {
-            // Match the previous implementation: an inner value that happens
-            // to be a non-JSON string is preserved unchanged.
-          }
-        }
-        result[key] = value;
+        // Decode only the outer value here. Nested preload JSON strings stay
+        // raw so independent groups can be hydrated concurrently afterwards.
+        result[key] = jsonDecode(source.substring(valueStart, valueEnd));
       }
 
       index = _skipWhitespace(source, valueEnd);
@@ -118,15 +138,7 @@ class PreloadedDataDecoder {
     final result = <String, dynamic>{};
     for (final key in _retainedKeys) {
       if (!outer.containsKey(key)) continue;
-      dynamic value = outer[key];
-      if (_eagerKeys.contains(key) && value is String) {
-        try {
-          value = jsonDecode(value);
-        } catch (_) {
-          // Preserve the raw value for compatibility.
-        }
-      }
-      result[key] = value;
+      result[key] = outer[key];
     }
     return result;
   }

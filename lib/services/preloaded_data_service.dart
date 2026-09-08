@@ -866,8 +866,9 @@ class PreloadedDataService {
     required int generation,
   }) async {
     try {
-      // 在 Isolate 中完成（可选的）HTML entity 解码 + 外层/内层 JSON 解码
-      final preloaded = await compute(_decodePreloadedJsonInIsolate, [
+      // Phase 1: scan the outer preload object once. Nested JSON strings stay
+      // raw so the large independent inner payloads can use multiple CPU cores.
+      final preloaded = await compute(_scanPreloadedJsonInIsolate, [
         dataString,
         if (htmlEntityEncoded) 'entity',
       ]);
@@ -877,9 +878,36 @@ class PreloadedDataService {
       }
       if (!_isCurrent(revision, generation)) return false;
 
-      // 解析 currentUser（已在 Isolate 中完成 jsonDecode）
-      if (preloaded.containsKey('currentUser')) {
-        _currentUser = preloaded['currentUser'] as Map<String, dynamic>;
+      final userSettingsRaw = <String, dynamic>{
+        if (preloaded.containsKey('currentUser'))
+          'currentUser': preloaded['currentUser'],
+        if (preloaded.containsKey('siteSettings'))
+          'siteSettings': preloaded['siteSettings'],
+        if (preloaded.containsKey('topicTrackingStateMeta'))
+          'topicTrackingStateMeta': preloaded['topicTrackingStateMeta'],
+      };
+      final siteRaw = <String, dynamic>{
+        if (preloaded.containsKey('site')) 'site': preloaded['site'],
+        if (preloaded.containsKey('customEmoji'))
+          'customEmoji': preloaded['customEmoji'],
+      };
+
+      // Phase 2: use two coarse-grained workers instead of one long decoder.
+      // This exposes real multicore parallelism without spawning one isolate
+      // per tiny field and paying excessive isolate/copy overhead.
+      final groups = await Future.wait<Map<String, dynamic>>([
+        compute(_decodePreloadedGroupInIsolate, userSettingsRaw),
+        compute(_decodePreloadedGroupInIsolate, siteRaw),
+      ]);
+      if (!_isCurrent(revision, generation)) return false;
+
+      final hydrated = <String, dynamic>{};
+      for (final group in groups) {
+        hydrated.addAll(group);
+      }
+
+      if (hydrated.containsKey('currentUser')) {
+        _currentUser = hydrated['currentUser'] as Map<String, dynamic>;
         debugPrint(
           '[PreloadedData] currentUser 解析成功: id=${_currentUser?['id']}, '
           'unread_notifications=${_currentUser?['unread_notifications']}, '
@@ -887,11 +915,9 @@ class PreloadedDataService {
         );
       }
 
-      // 解析 siteSettings
-      if (preloaded.containsKey('siteSettings')) {
-        _siteSettings = preloaded['siteSettings'] as Map<String, dynamic>;
+      if (hydrated.containsKey('siteSettings')) {
+        _siteSettings = hydrated['siteSettings'] as Map<String, dynamic>;
 
-        // 提取 reactions 配置
         final reactionsStr =
             _siteSettings?['discourse_reactions_enabled_reactions'] as String?;
         if (reactionsStr != null && reactionsStr.isNotEmpty) {
@@ -899,7 +925,6 @@ class PreloadedDataService {
           debugPrint('[PreloadedData] reactions: $_enabledReactions');
         }
 
-        // 提取 MessageBus 长轮询独立域名
         final pollingUrl = _siteSettings?['long_polling_base_url'] as String?;
         if (pollingUrl != null && pollingUrl.isNotEmpty && pollingUrl != '/') {
           _longPollingBaseUrl = pollingUrl.endsWith('/')
@@ -911,24 +936,21 @@ class PreloadedDataService {
         }
       }
 
-      // 解析 site（包含 categories、top_tags 等）
-      if (preloaded.containsKey('site')) {
-        _site = preloaded['site'] as Map<String, dynamic>;
+      if (hydrated.containsKey('site')) {
+        _site = hydrated['site'] as Map<String, dynamic>;
         debugPrint(
           '[PreloadedData] site 解析成功, categories=${(_site?['categories'] as List?)?.length ?? 0}',
         );
       }
 
-      // 解析 topicTrackingStateMeta（MessageBus 频道初始 ID）
-      if (preloaded.containsKey('topicTrackingStateMeta')) {
+      if (hydrated.containsKey('topicTrackingStateMeta')) {
         _topicTrackingStateMeta =
-            preloaded['topicTrackingStateMeta'] as Map<String, dynamic>;
+            hydrated['topicTrackingStateMeta'] as Map<String, dynamic>;
         debugPrint(
           '[PreloadedData] topicTrackingStateMeta: $_topicTrackingStateMeta',
         );
       }
 
-      // 解析 topicTrackingStates（话题追踪状态）
       if (preloaded.containsKey('topicTrackingStates')) {
         final value = preloaded['topicTrackingStates'];
         if (value is List) {
@@ -940,26 +962,28 @@ class PreloadedDataService {
         } else if (value is String && value.isNotEmpty) {
           _topicTrackingStatesRawJson = value;
           _topicTrackingStates = null;
-          debugPrint('[PreloadedData] topicTrackingStates 延迟解析');
+          debugPrint('[PreloadedData] topicTrackingStates 后台预热');
         }
       }
 
-      // 解析 customEmoji（自定义 emoji）
-      if (preloaded.containsKey('customEmoji')) {
-        _customEmoji = (preloaded['customEmoji'] as List)
+      if (hydrated.containsKey('customEmoji')) {
+        _customEmoji = (hydrated['customEmoji'] as List)
             .cast<Map<String, dynamic>>();
         debugPrint(
           '[PreloadedData] customEmoji: ${_customEmoji?.length ?? 0} items',
         );
       }
 
-      // 解析首页话题列表（如果存在）
-      // 注意：这个数据可能在不同的 key 下，需要检查多个位置
+      // Phase 3: non-critical heavy data continues warming concurrently after
+      // core hydration. Existing completers let early callers reuse the work.
       _parseTopicListFromPreloaded(
         preloaded,
         revision: revision,
         generation: generation,
       );
+      if (_topicTrackingStatesRawJson != null) {
+        unawaited(_decodeTopicTrackingStatesAsync());
+      }
       return true;
     } catch (e) {
       debugPrint('[PreloadedData] JSON 解析失败: $e');
@@ -1122,11 +1146,30 @@ List<Map<String, dynamic>>? _decodeTopicTrackingStatesInIsolate(
   return decoded.cast<Map<String, dynamic>>();
 }
 
-Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {
-  return PreloadedDataDecoder.decode(
+Map<String, dynamic>? _scanPreloadedJsonInIsolate(List<String> input) {
+  return PreloadedDataDecoder.scan(
     input[0],
     htmlEntityEncoded: input.length > 1 && input[1] == 'entity',
   );
+}
+
+Map<String, dynamic> _decodePreloadedGroupInIsolate(
+  Map<String, dynamic> rawGroup,
+) {
+  final result = <String, dynamic>{};
+  for (final entry in rawGroup.entries) {
+    final value = entry.value;
+    if (value is String) {
+      try {
+        result[entry.key] = jsonDecode(value);
+        continue;
+      } catch (_) {
+        // Preserve unusual non-JSON strings for compatibility.
+      }
+    }
+    result[entry.key] = value;
+  }
+  return result;
 }
 
 List<String> _extractPluginCandidatesInIsolate(List<String> input) {
