@@ -47,6 +47,35 @@ void main() {
       expect(decoded, isNot(contains('unusedLargePayload')));
     });
 
+    test('scan keeps eager inner JSON raw for parallel hydration', () {
+      final raw = jsonEncode({
+        'currentUser': jsonEncode({'id': 42}),
+        'siteSettings': jsonEncode({'chat_enabled': true}),
+        'site': jsonEncode({'categories': <Object>[]}),
+        'customEmoji': jsonEncode(<Object>[]),
+        'topicList': jsonEncode({
+          'topic_list': {'topics': <Object>[]},
+        }),
+      });
+
+      final scanned = PreloadedDataDecoder.scan(raw, htmlEntityEncoded: false);
+
+      expect(scanned, isNotNull);
+      expect(scanned!['currentUser'], isA<String>());
+      expect(scanned['siteSettings'], isA<String>());
+      expect(scanned['site'], isA<String>());
+      expect(scanned['customEmoji'], isA<String>());
+      expect(scanned['topicList'], isA<String>());
+
+      final decoded = PreloadedDataDecoder.decode(
+        raw,
+        htmlEntityEncoded: false,
+      );
+      expect(decoded!['currentUser'], {'id': 42});
+      expect(decoded['siteSettings'], {'chat_enabled': true});
+      expect(decoded['site'], isA<Map<String, dynamic>>());
+    });
+
     test('handles braces, commas and escapes inside skipped strings', () {
       final raw = jsonEncode({
         'ignored': r'noise { [ ] }, \\ " still string',
