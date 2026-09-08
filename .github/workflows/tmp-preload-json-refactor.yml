@@ -25,8 +25,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply focused service refactor
-        shell: python
+        shell: bash
         run: |
+          python3 <<'PY'
           from pathlib import Path
 
           path = Path('lib/services/preloaded_data_service.dart')
@@ -48,7 +49,7 @@ jobs:
                   raise SystemExit(f'end marker missing: {end!r}')
               return source[:start_i] + replacement + source[end_i:]
 
-          parse_method = r'''  Future<bool> _parsePreloadedDataFromHtml(
+          parse_method = r"""  Future<bool> _parsePreloadedDataFromHtml(
             String html, {
             required int revision,
             required int generation,
@@ -114,7 +115,7 @@ jobs:
             return parsed;
           }
 
-'''
+"""
           text = replace_between(
               text,
               '  Future<bool> _parsePreloadedDataFromHtml(',
@@ -122,7 +123,7 @@ jobs:
               parse_method,
           )
 
-          topic_method = r'''  void _decodeTopicListAsync(
+          topic_method = r"""  void _decodeTopicListAsync(
             String rawJson, {
             required int revision,
             required int generation,
@@ -150,7 +151,7 @@ jobs:
                 });
           }
 
-'''
+"""
           text = replace_between(
               text,
               '  void _decodeTopicListAsync(',
@@ -158,7 +159,7 @@ jobs:
               topic_method,
           )
 
-          topic_helper = r'''TopicListResponse? _decodeAndParseTopicListInIsolate(String rawJson) {
+          topic_helper = r"""TopicListResponse? _decodeAndParseTopicListInIsolate(String rawJson) {
             final decoded = jsonDecode(rawJson);
             if (decoded is Map<String, dynamic>) {
               return TopicListResponse.fromJson(decoded);
@@ -169,7 +170,7 @@ jobs:
             return null;
           }
 
-'''
+"""
           text = replace_between(
               text,
               'Map<String, dynamic>? _decodeTopicListInIsolate(String rawJson) {',
@@ -177,14 +178,14 @@ jobs:
               topic_helper,
           )
 
-          preload_helper = r'''Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {
+          preload_helper = r"""Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {
             return PreloadedDataDecoder.decode(
               input[0],
               htmlEntityEncoded: input.length > 1 && input[1] == 'entity',
             );
           }
 
-'''
+"""
           text = replace_between(
               text,
               'Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {',
@@ -193,6 +194,7 @@ jobs:
           )
 
           path.write_text(text)
+          PY
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
