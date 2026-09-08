@@ -50,10 +50,7 @@ void main() {
     test('handles braces, commas and escapes inside skipped strings', () {
       final raw = jsonEncode({
         'ignored': r'noise { [ ] }, \\ " still string',
-        'currentUser': jsonEncode({
-          'id': 7,
-          'name': 'A { tricky }, value',
-        }),
+        'currentUser': jsonEncode({'id': 7, 'name': 'A { tricky }, value'}),
         'siteSettings': jsonEncode({'min_post_length': 8}),
         'site': jsonEncode({'categories': <Object>[]}),
       });
@@ -89,14 +86,9 @@ void main() {
         'currentUser': jsonEncode({'id': 5}),
         'siteSettings': jsonEncode({'title': 'A&B'}),
         'site': jsonEncode({'categories': <Object>[]}),
-      })
-          .replaceAll('&', '&amp;')
-          .replaceAll('"', '&quot;');
+      }).replaceAll('&', '&amp;').replaceAll('"', '&quot;');
 
-      final decoded = PreloadedDataDecoder.decode(
-        raw,
-        htmlEntityEncoded: true,
-      );
+      final decoded = PreloadedDataDecoder.decode(raw, htmlEntityEncoded: true);
 
       expect(decoded!['currentUser'], {'id': 5});
       expect(decoded['siteSettings'], {'title': 'A&B'});
