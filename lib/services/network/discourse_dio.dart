@@ -45,7 +45,8 @@ class DiscourseDio {
         headers: defaultHeaders,
         // 禁用自动重定向，手动处理以确保重定向时使用正确的 cookie
         followRedirects: false,
-        // 包含重定向状态码，让我们手动处理
+        // 只接受真正的最终响应和重定向。1xx informational response
+        // （尤其 Cloudflare 103 Early Hints）不能被业务层当成成功结果。
         validateStatus: (status) =>
             status != null && status >= 200 && status < 400,
       ),
@@ -79,7 +80,11 @@ class DiscourseDio {
     // 5. 恢复协调器:全项目唯一的重放引擎
     //
     // 策略顺序即失败归属(首个 canHandle 者独占决策权):
-    //   会话自愈 → 引擎降级 → 限流等待 → 瞬态重试
+    //   会话自愈 → rhttp 1xx 旁路 → 引擎降级 → 限流等待 → 瞬态重试
+    //
+    // rhttp/reqwest 的实验性 HTTP/3 路径在部分 Cloudflare 站点会把
+    // 103 Early Hints 错暴露成最终响应。该策略只对幂等请求重放一次，并
+    // 给下一次尝试打 skipRhttpAdapter，让统一平台适配器选择系统网络栈。
     //
     // 必须注册在 AppCookieManager **之前**:dio 5.11 三相全 FIFO,先注册者
     // 先看到响应。服务端拒绝时常带 Set-Cookie 清 _t,自愈判定要读的是那条
@@ -99,6 +104,7 @@ class DiscourseDio {
           dio: dio,
           policies: [
             if (cookiesEnabled) SessionSelfHealPolicy(),
+            const RhttpInformationalFallbackPolicy(),
             const EngineFallbackPolicy(),
             RateLimitPolicy(
               isChallengeResponse: CfChallengeService.isCfChallengeResponse,
