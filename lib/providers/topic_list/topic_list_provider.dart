@@ -82,6 +82,7 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
         late final VoidCallback onProgressiveTopicList;
 
         void detachProgressiveListener() {
+          acceptProgressiveUpdates = false;
           if (!listenerAttached) return;
           listenerAttached = false;
           progressiveListenable.removeListener(onProgressiveTopicList);
@@ -103,7 +104,6 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
             if (!acceptProgressiveUpdates) return;
             final phase = preloadedService.preloadProgress.phase;
             if (phase == PreloadPhase.complete || phase == PreloadPhase.failed) {
-              acceptProgressiveUpdates = false;
               detachProgressiveListener();
             }
           });
