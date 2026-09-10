@@ -15,10 +15,8 @@ class AccountSwitchBrowserCookieCleaner {
   AccountSwitchBrowserCookieCleaner._();
   static final instance = AccountSwitchBrowserCookieCleaner._();
 
-  static const Set<String> _deviceCookieNames = {
-    'cf_clearance',
-    '__cf_bm',
-  };
+  static const Set<String> _deviceCookieNames = {'cf_clearance', '__cf_bm'};
+  static const _recentCaptureMaxAge = Duration(seconds: 5);
 
   bool _isDeviceCookie(String name) {
     final lower = name.toLowerCase();
@@ -37,6 +35,17 @@ class AccountSwitchBrowserCookieCleaner {
     return host == domain || host.endsWith('.$domain');
   }
 
+  Future<List<CookieFullInfo>> _readCookieInfosForSwitch(
+    RawCookieWriter writer,
+    String origin,
+  ) async {
+    // AccountManager 会在 detach 前刚刚抓取完整 WebView cookie 快照。优先复用
+    // 那次成功读取，避免切换流程对同一 origin 再做一次 native/WK 枚举。
+    // 若缓存缺失或已过期则保持原行为，立即读取真实 store。
+    return writer.getRecentCookieInfos(origin, maxAge: _recentCaptureMaxAge) ??
+        await writer.getAllCookieInfos(origin);
+  }
+
   /// 清理 app-owned origins 的用户态 WebView cookies。
   ///
   /// AnyRouter 等 external origin 仍由 AccountManager 原有逻辑处理，避免改变
@@ -48,7 +57,7 @@ class AccountSwitchBrowserCookieCleaner {
 
     final origins = AccountBrowserSessionPolicy.appOrigins;
     final infosByOrigin = await Future.wait(
-      origins.map((origin) => writer.getAllCookieInfos(origin)),
+      origins.map((origin) => _readCookieInfosForSwitch(writer, origin)),
     );
 
     // 先按完整 cookie identity 去重。Android 随后把这些互不相同的目标合成
@@ -97,9 +106,9 @@ class AccountSwitchBrowserCookieCleaner {
       return false;
     }
 
-    // RawCookieWriter 的读取 API 为 best-effort，平台通道异常会返回空列表。
-    // 因此成功判定不能只靠 batch 返回值：用 WebView 自身 CookieManager 再做
-    // 一次独立复检。各 origin 互不依赖，可并发读取；任一异常或残留都回退。
+    // Recent-cookie cache 只是删除候选，不能作为成功依据。这里继续使用 WebView
+    // 自身 CookieManager 做一次独立复检：即使快照之后页面又写入了新 cookie，
+    // 也会在此处被发现并回退全量清理，账号隔离正确性不依赖缓存新鲜度。
     final manager = CookieJarService().webViewCookieManager;
     final verificationResults = await Future.wait<bool>(
       origins.map((origin) async {
@@ -120,9 +129,7 @@ class AccountSwitchBrowserCookieCleaner {
           }
           return true;
         } catch (e) {
-          debugPrint(
-            '[AccountSwitchCookieCleaner] $origin WebView 复检失败: $e',
-          );
+          debugPrint('[AccountSwitchCookieCleaner] $origin WebView 复检失败: $e');
           return false;
         }
       }),

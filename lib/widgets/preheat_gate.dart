@@ -30,6 +30,8 @@ class PreheatGate extends StatefulWidget {
 }
 
 class _PreheatGateState extends State<PreheatGate> {
+  static const Duration _blockingPreloadBudget = Duration(seconds: 5);
+
   late Future<bool> _loadFuture;
   Object? _error;
   AppIconStyle _iconStyle = AppIconStyle.classic;
@@ -61,9 +63,26 @@ class _PreheatGateState extends State<PreheatGate> {
         await _showReloginDialog();
       }
 
-      await BrowserTrustCoordinator.instance.ensurePreloaded(
+      final preloadFuture = BrowserTrustCoordinator.instance.ensurePreloaded(
         reason: 'preheat_gate',
       );
+      try {
+        // BrowserTrust 在无可信 cf_clearance 时可能走临时 WebView。该流程内部
+        // 为保证正确性允许等待更久，但它不应把整个首屏也同步锁住几十秒。
+        // 给首屏一个明确预算；超时只解除 UI 门禁，原任务继续后台完成并清理
+        // HeadlessWebView，避免为了“提速”打破 cookie/CF 的安全收尾语义。
+        await preloadFuture.timeout(_blockingPreloadBudget);
+      } on TimeoutException {
+        debugPrint(
+          '[PreheatGate] preload 超过 '
+          '${_blockingPreloadBudget.inSeconds}s，解除首屏门禁并转后台完成',
+        );
+        unawaited(
+          preloadFuture.catchError((Object e, StackTrace stackTrace) {
+            debugPrint('[PreheatGate] 后台 preload 最终失败: $e');
+          }),
+        );
+      }
 
       DiscourseService().getEnabledReactions();
       EmojiHandler().init();
@@ -104,9 +123,12 @@ class _PreheatGateState extends State<PreheatGate> {
   }
 
   void _skip() {
+    // “跳过”只解除启动页门禁，不取消 BrowserTrustCoordinator 内部正在运行的
+    // preload。这样用户可以立即进入应用，同时 HeadlessWebView 仍会按原逻辑
+    // 完成 cookie 同步和 finally 清理。
     setState(() {
-      _error ??= TimeoutException(S.current.preheat_userSkipped);
-      _loadFuture = Future.value(false);
+      _error = null;
+      _loadFuture = Future.value(true);
     });
   }
 
@@ -140,14 +162,16 @@ class _PreheatGateState extends State<PreheatGate> {
         }
 
         return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 600),
-          switchInCurve: Curves.easeInOutCubic,
+          // 数据已经 ready 后不再额外做半秒以上的“假加载”。保留一个很短的
+          // 淡入/缩放只用于遮住布局切换，不让动画本身成为启动延迟的一部分。
+          duration: const Duration(milliseconds: 220),
+          switchInCurve: Curves.easeOutCubic,
           switchOutCurve: Curves.easeOut,
           transitionBuilder: (child, animation) {
             return FadeTransition(
               opacity: animation,
               child: ScaleTransition(
-                scale: Tween<double>(begin: 0.95, end: 1.0).animate(animation),
+                scale: Tween<double>(begin: 0.985, end: 1.0).animate(animation),
                 child: child,
               ),
             );
@@ -178,7 +202,7 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
   void initState() {
     super.initState();
     if (widget.onSkip != null) {
-      _skipTimer = Timer(const Duration(seconds: 10), () {
+      _skipTimer = Timer(const Duration(seconds: 3), () {
         if (mounted) setState(() => _showSkip = true);
       });
     }

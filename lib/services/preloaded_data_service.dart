@@ -7,6 +7,7 @@ import '../constants.dart';
 import '../models/topic.dart';
 import '../models/category.dart';
 import 'auth_session.dart';
+import 'preloaded_data_decoder.dart';
 import 'network/discourse_dio.dart';
 import 'network/cookie/csrf_token_service.dart';
 import 'cf_challenge_service.dart';
@@ -702,16 +703,11 @@ class PreloadedDataService {
     required int generation,
   }) async {
     if (!_isCurrent(revision, generation)) return false;
-    _extractCsrfTokenFromHtml(html);
-    _extractSharedSessionKeyFromHtml(html);
-    _extractTurnstileSitekeyFromHtml(html);
-    _extractBaseUriFromHtml(html);
-    _extractCdnUrlFromHtml(html);
-    _extractPluginCandidatesInBackground(
-      html,
-      revision: revision,
-      generation: generation,
-    );
+
+    // Locate the preload payload first and launch its isolate decode immediately.
+    // Metadata extraction below then overlaps with JSON decoding instead of delaying it.
+    String? dataString;
+    var htmlEntityEncoded = false;
 
     // 新版形态：<script type="application/json" id="data-preloaded">{...}</script>
     // 内容是原始 JSON，不做 HTML 实体解码（否则正文中字面的 &quot; 会被误还原）
@@ -723,27 +719,48 @@ class PreloadedDataService {
       final start = scriptTag.end;
       final end = html.indexOf('</script>', start);
       if (end > start) {
-        return _parsePreloadedDataString(
-          html.substring(start, end),
-          htmlEntityEncoded: false,
-          revision: revision,
-          generation: generation,
-        );
+        dataString = html.substring(start, end);
       }
     }
 
     // 旧版形态：元素属性 data-preloaded="..."（HTML 实体转义，Isolate 中解码）
-    final match = RegExp(r'data-preloaded="([^"]*)"').firstMatch(html);
-    if (match == null) {
-      debugPrint('[PreloadedData] 未找到 data-preloaded 数据');
-      return false;
+    if (dataString == null) {
+      final match = RegExp(r'data-preloaded="([^"]*)"').firstMatch(html);
+      if (match == null) {
+        debugPrint('[PreloadedData] 未找到 data-preloaded 数据');
+        return false;
+      }
+      dataString = match.group(1)!;
+      htmlEntityEncoded = true;
     }
-    return _parsePreloadedDataString(
-      match.group(1)!,
-      htmlEntityEncoded: true,
+
+    final parseFuture = _parsePreloadedDataString(
+      dataString,
+      htmlEntityEncoded: htmlEntityEncoded,
       revision: revision,
       generation: generation,
     );
+
+    // These small HTML metadata scans run while the preload isolate is decoding.
+    _extractCsrfTokenFromHtml(html);
+    _extractSharedSessionKeyFromHtml(html);
+    _extractTurnstileSitekeyFromHtml(html);
+    _extractBaseUriFromHtml(html);
+    _extractCdnUrlFromHtml(html);
+
+    final parsed = await parseFuture;
+    if (!_isCurrent(revision, generation)) return false;
+
+    // Plugin discovery is useful for later browser bootstrap, but must not compete
+    // with the startup-critical preload JSON decode for CPU/memory bandwidth.
+    if (parsed) {
+      _extractPluginCandidatesInBackground(
+        html,
+        revision: revision,
+        generation: generation,
+      );
+    }
+    return parsed;
   }
 
   void _extractCsrfTokenFromHtml(String html) {
@@ -894,8 +911,9 @@ class PreloadedDataService {
     required int generation,
   }) async {
     try {
-      // 在 Isolate 中完成（可选的）HTML entity 解码 + 外层/内层 JSON 解码
-      final preloaded = await compute(_decodePreloadedJsonInIsolate, [
+      // Phase 1: scan the outer preload object once. Nested JSON strings stay
+      // raw so the large independent inner payloads can use multiple CPU cores.
+      final preloaded = await compute(_scanPreloadedJsonInIsolate, [
         dataString,
         if (htmlEntityEncoded) 'entity',
       ]);
@@ -905,9 +923,36 @@ class PreloadedDataService {
       }
       if (!_isCurrent(revision, generation)) return false;
 
-      // 解析 currentUser（已在 Isolate 中完成 jsonDecode）
-      if (preloaded.containsKey('currentUser')) {
-        _currentUser = preloaded['currentUser'] as Map<String, dynamic>;
+      final userSettingsRaw = <String, dynamic>{
+        if (preloaded.containsKey('currentUser'))
+          'currentUser': preloaded['currentUser'],
+        if (preloaded.containsKey('siteSettings'))
+          'siteSettings': preloaded['siteSettings'],
+        if (preloaded.containsKey('topicTrackingStateMeta'))
+          'topicTrackingStateMeta': preloaded['topicTrackingStateMeta'],
+      };
+      final siteRaw = <String, dynamic>{
+        if (preloaded.containsKey('site')) 'site': preloaded['site'],
+        if (preloaded.containsKey('customEmoji'))
+          'customEmoji': preloaded['customEmoji'],
+      };
+
+      // Phase 2: use two coarse-grained workers instead of one long decoder.
+      // This exposes real multicore parallelism without spawning one isolate
+      // per tiny field and paying excessive isolate/copy overhead.
+      final groups = await Future.wait<Map<String, dynamic>>([
+        compute(_decodePreloadedGroupInIsolate, userSettingsRaw),
+        compute(_decodePreloadedGroupInIsolate, siteRaw),
+      ]);
+      if (!_isCurrent(revision, generation)) return false;
+
+      final hydrated = <String, dynamic>{};
+      for (final group in groups) {
+        hydrated.addAll(group);
+      }
+
+      if (hydrated.containsKey('currentUser')) {
+        _currentUser = hydrated['currentUser'] as Map<String, dynamic>;
         debugPrint(
           '[PreloadedData] currentUser 解析成功: id=${_currentUser?['id']}, '
           'unread_notifications=${_currentUser?['unread_notifications']}, '
@@ -915,11 +960,9 @@ class PreloadedDataService {
         );
       }
 
-      // 解析 siteSettings
-      if (preloaded.containsKey('siteSettings')) {
-        _siteSettings = preloaded['siteSettings'] as Map<String, dynamic>;
+      if (hydrated.containsKey('siteSettings')) {
+        _siteSettings = hydrated['siteSettings'] as Map<String, dynamic>;
 
-        // 提取 reactions 配置
         final reactionsStr =
             _siteSettings?['discourse_reactions_enabled_reactions'] as String?;
         if (reactionsStr != null && reactionsStr.isNotEmpty) {
@@ -927,7 +970,6 @@ class PreloadedDataService {
           debugPrint('[PreloadedData] reactions: $_enabledReactions');
         }
 
-        // 提取 MessageBus 长轮询独立域名
         final pollingUrl = _siteSettings?['long_polling_base_url'] as String?;
         if (pollingUrl != null && pollingUrl.isNotEmpty && pollingUrl != '/') {
           _longPollingBaseUrl = pollingUrl.endsWith('/')
@@ -939,24 +981,21 @@ class PreloadedDataService {
         }
       }
 
-      // 解析 site（包含 categories、top_tags 等）
-      if (preloaded.containsKey('site')) {
-        _site = preloaded['site'] as Map<String, dynamic>;
+      if (hydrated.containsKey('site')) {
+        _site = hydrated['site'] as Map<String, dynamic>;
         debugPrint(
           '[PreloadedData] site 解析成功, categories=${(_site?['categories'] as List?)?.length ?? 0}',
         );
       }
 
-      // 解析 topicTrackingStateMeta（MessageBus 频道初始 ID）
-      if (preloaded.containsKey('topicTrackingStateMeta')) {
+      if (hydrated.containsKey('topicTrackingStateMeta')) {
         _topicTrackingStateMeta =
-            preloaded['topicTrackingStateMeta'] as Map<String, dynamic>;
+            hydrated['topicTrackingStateMeta'] as Map<String, dynamic>;
         debugPrint(
           '[PreloadedData] topicTrackingStateMeta: $_topicTrackingStateMeta',
         );
       }
 
-      // 解析 topicTrackingStates（话题追踪状态）
       if (preloaded.containsKey('topicTrackingStates')) {
         final value = preloaded['topicTrackingStates'];
         if (value is List) {
@@ -968,26 +1007,28 @@ class PreloadedDataService {
         } else if (value is String && value.isNotEmpty) {
           _topicTrackingStatesRawJson = value;
           _topicTrackingStates = null;
-          debugPrint('[PreloadedData] topicTrackingStates 延迟解析');
+          debugPrint('[PreloadedData] topicTrackingStates 后台预热');
         }
       }
 
-      // 解析 customEmoji（自定义 emoji）
-      if (preloaded.containsKey('customEmoji')) {
-        _customEmoji = (preloaded['customEmoji'] as List)
+      if (hydrated.containsKey('customEmoji')) {
+        _customEmoji = (hydrated['customEmoji'] as List)
             .cast<Map<String, dynamic>>();
         debugPrint(
           '[PreloadedData] customEmoji: ${_customEmoji?.length ?? 0} items',
         );
       }
 
-      // 解析首页话题列表（如果存在）
-      // 注意：这个数据可能在不同的 key 下，需要检查多个位置
+      // Phase 3: non-critical heavy data continues warming concurrently after
+      // core hydration. Existing completers let early callers reuse the work.
       _parseTopicListFromPreloaded(
         preloaded,
         revision: revision,
         generation: generation,
       );
+      if (_topicTrackingStatesRawJson != null) {
+        unawaited(_decodeTopicTrackingStatesAsync());
+      }
       return true;
     } catch (e) {
       debugPrint('[PreloadedData] JSON 解析失败: $e');
@@ -1048,29 +1089,18 @@ class PreloadedDataService {
   }) {
     final completer = _topicListResponseCompleter ??=
         Completer<TopicListResponse?>();
-    compute(_decodeTopicListInIsolate, rawJson)
-        .then((decoded) {
+    compute(_decodeAndParseTopicListInIsolate, rawJson)
+        .then((result) {
           if (!_isCurrent(revision, generation)) {
             if (!completer.isCompleted) completer.complete(null);
             return;
           }
-          if (decoded == null) {
-            if (!completer.isCompleted) completer.complete(null);
-            return;
+          _topicListData = null;
+          _cachedTopicListResponse = result;
+          if (result != null) {
+            debugPrint('[PreloadedData] topic_list 单次 isolate 解码并缓存成功');
           }
-          _topicListData = decoded;
-          final topicsCount =
-              (_topicListData?['topic_list']?['topics'] as List?)?.length ??
-              (_topicListData?['topics'] as List?)?.length ??
-              0;
-          debugPrint(
-            '[PreloadedData] topic_list 解析成功 (async), topics=$topicsCount',
-          );
-          _parseTopicListResponseAsync(
-            decoded,
-            revision: revision,
-            generation: generation,
-          );
+          if (!completer.isCompleted) completer.complete(result);
         })
         .catchError((e) {
           debugPrint('[PreloadedData] 异步解析 topic_list 失败: $e');
@@ -1142,13 +1172,13 @@ class PreloadedDataService {
   }
 }
 
-Map<String, dynamic>? _decodeTopicListInIsolate(String rawJson) {
+TopicListResponse? _decodeAndParseTopicListInIsolate(String rawJson) {
   final decoded = jsonDecode(rawJson);
   if (decoded is Map<String, dynamic>) {
-    return decoded;
+    return TopicListResponse.fromJson(decoded);
   }
   if (decoded is Map) {
-    return decoded.cast<String, dynamic>();
+    return TopicListResponse.fromJson(decoded.cast<String, dynamic>());
   }
   return null;
 }
@@ -1161,52 +1191,29 @@ List<Map<String, dynamic>>? _decodeTopicTrackingStatesInIsolate(
   return decoded.cast<Map<String, dynamic>>();
 }
 
-Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {
-  final rawJson = input[0];
-  final htmlEntityEncoded = input.length > 1 && input[1] == 'entity';
+Map<String, dynamic>? _scanPreloadedJsonInIsolate(List<String> input) {
+  return PreloadedDataDecoder.scan(
+    input[0],
+    htmlEntityEncoded: input.length > 1 && input[1] == 'entity',
+  );
+}
 
-  // 旧版属性形态需要 HTML entity 解码；新版 script 标签形态是原始 JSON
-  final unescaped = htmlEntityEncoded
-      ? rawJson
-            .replaceAll('&quot;', '"')
-            .replaceAll('&amp;', '&')
-            .replaceAll('&lt;', '<')
-            .replaceAll('&gt;', '>')
-            .replaceAll('&#39;', "'")
-      : rawJson;
-
-  final decoded = jsonDecode(unescaped);
-  final Map<String, dynamic> result;
-  if (decoded is Map<String, dynamic>) {
-    result = decoded;
-  } else if (decoded is Map) {
-    result = decoded.cast<String, dynamic>();
-  } else {
-    return null;
-  }
-
-  // 内层 value 也是 JSON 字符串；这里只解启动首屏必须同步可用的 key。
-  // 大体积但非首屏硬依赖的数据（topicTrackingStates / topic_list）保持 raw
-  // 字符串，后续按需异步解码，避免卡住 ensureLoaded 的关键路径。
-  const eagerKeys = {
-    'currentUser',
-    'siteSettings',
-    'site',
-    'topicTrackingStateMeta',
-    'customEmoji',
-  };
-  for (final key in result.keys.toList()) {
-    if (!eagerKeys.contains(key)) continue;
-    final value = result[key];
+Map<String, dynamic> _decodePreloadedGroupInIsolate(
+  Map<String, dynamic> rawGroup,
+) {
+  final result = <String, dynamic>{};
+  for (final entry in rawGroup.entries) {
+    final value = entry.value;
     if (value is String) {
       try {
-        result[key] = jsonDecode(value);
+        result[entry.key] = jsonDecode(value);
+        continue;
       } catch (_) {
-        // 非 JSON 字符串，保持原值
+        // Preserve unusual non-JSON strings for compatibility.
       }
     }
+    result[entry.key] = value;
   }
-
   return result;
 }
 

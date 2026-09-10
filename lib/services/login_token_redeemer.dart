@@ -38,8 +38,21 @@ class LoginTokenRedeemer {
     }
 
     final cookieJar = CookieJarService();
-    final beforeToken = await cookieJar.getTToken();
+
+    // 兑换前必须成功取得基线。若这里失败，直接停止且绝不发送 OTP：
+    // 否则后续看到一个本来就存在的 `_t` 时无法安全判断它是否由本次兑换产生。
+    final beforeSnapshot = await _readTToken(cookieJar);
     if (!isCurrent()) return const LoginTokenRedeemResult.failed();
+    if (!beforeSnapshot.succeeded) {
+      _log(
+        'warning',
+        'login_otp_cookie_baseline_failed',
+        '登录 OTP 兑换前无法读取 _t 基线，已停止兑换以避免误判',
+        {'error': beforeSnapshot.error.toString()},
+      );
+      return const LoginTokenRedeemResult.failed();
+    }
+    final beforeToken = beforeSnapshot.token;
 
     try {
       final csrf = await _fetchCsrf(dio);
@@ -73,8 +86,19 @@ class LoginTokenRedeemer {
       );
 
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
-      final afterToken = await cookieJar.getTToken();
+      final afterSnapshot = await _readTToken(cookieJar);
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
+      if (!afterSnapshot.succeeded) {
+        _log(
+          'warning',
+          'login_otp_cookie_verify_failed',
+          '登录 OTP 请求完成，但读取兑换后的 _t 失败；不会重放一次性 OTP',
+          {'error': afterSnapshot.error.toString()},
+        );
+        return const LoginTokenRedeemResult.failed();
+      }
+
+      final afterToken = afterSnapshot.token;
       if (_isFreshToken(beforeToken, afterToken)) {
         _log(
           'info',
@@ -87,18 +111,22 @@ class LoginTokenRedeemer {
       _log(
         'warning',
         'login_otp_no_session_cookie',
-        '登录 OTP 请求完成，但未观察到新的 _t',
+        '登录 OTP 请求完成，但未观察到新的 _t；不会重放一次性 OTP',
       );
       return const LoginTokenRedeemResult.failed();
     } on DioException catch (e) {
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
 
       // OTP 可能已经在服务端成功消费，只是后续响应/同步链路抛错。
-      // 在分类错误之前先对账 cookie，避免把“已经登录成功”误报为失败，
+      // 在分类原始网络错误之前先对账 cookie，避免把“已经登录成功”误报为失败，
       // 也避免再次发送一次性 OTP。
-      final afterToken = await cookieJar.getTToken();
+      //
+      // 注意：对账读取本身也可能失败。它不能覆盖原始 DioException，更不能
+      // 逃出本方法；读取失败时继续按原始异常分类即可。
+      final afterSnapshot = await _readTToken(cookieJar);
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
-      if (_isFreshToken(beforeToken, afterToken)) {
+      if (afterSnapshot.succeeded &&
+          _isFreshToken(beforeToken, afterSnapshot.token)) {
         _log(
           'warning',
           'login_otp_recovered_from_cookie',
@@ -108,7 +136,19 @@ class LoginTokenRedeemer {
             'errorType': e.type.toString(),
           },
         );
-        return LoginTokenRedeemResult.success(afterToken!);
+        return LoginTokenRedeemResult.success(afterSnapshot.token!);
+      }
+      if (!afterSnapshot.succeeded) {
+        _log(
+          'warning',
+          'login_otp_cookie_reconcile_failed',
+          '登录 OTP 响应链报错，且 _t 对账读取失败；保留原始异常分类',
+          {
+            'statusCode': e.response?.statusCode,
+            'errorType': e.type.toString(),
+            'cookieError': afterSnapshot.error.toString(),
+          },
+        );
       }
 
       if (isChallengeError(e)) {
@@ -181,6 +221,16 @@ class LoginTokenRedeemer {
     return null;
   }
 
+  static Future<_TTokenSnapshot> _readTToken(
+    CookieJarService cookieJar,
+  ) async {
+    try {
+      return _TTokenSnapshot.success(await cookieJar.getTToken());
+    } catch (e) {
+      return _TTokenSnapshot.failed(e);
+    }
+  }
+
   static bool _isFreshToken(String? beforeToken, String? afterToken) {
     return afterToken != null &&
         afterToken.isNotEmpty &&
@@ -219,4 +269,17 @@ class LoginTokenRedeemResult {
   final bool challengeBlocked;
 
   bool get succeeded => token != null && token!.isNotEmpty;
+}
+
+class _TTokenSnapshot {
+  const _TTokenSnapshot._({this.token, this.error});
+
+  const _TTokenSnapshot.success(String? token) : this._(token: token);
+
+  const _TTokenSnapshot.failed(Object error) : this._(error: error);
+
+  final String? token;
+  final Object? error;
+
+  bool get succeeded => error == null;
 }
