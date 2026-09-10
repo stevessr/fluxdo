@@ -61,32 +61,42 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
         ? ref.read(topicNewSubsetProvider).apiValue
         : null;
 
-    // 优化：如果是 latest 列表且没有筛选条件且没有自定义排序，优先同步使用预加载数据
-    // 这样可以避免显示 loading 状态
+    // latest 首屏允许直接消费 preload 的累计解析快照。第一批完成就结束
+    // AsyncLoading，后续每个批次继续替换 state；最终批次仍携带原始
+    // more_topics_url，因此不会改变后面的正常分页协议。
     if (currentFilter == TopicListFilter.latest &&
         filter.isEmpty &&
         orderParam == null) {
       final preloadedService = PreloadedDataService();
       final preloadedData = preloadedService.getInitialTopicListSync();
       if (preloadedData != null) {
-        final result = _paginationHelper.processRefresh(
-          PaginationResult(
-            items: preloadedData.topics,
-            moreUrl: preloadedData.moreTopicsUrl,
-          ),
-        );
-        return completePagedRefresh(PagedPage.fromPagination(result));
+        return _completePreloadedRefresh(preloadedData);
       }
+
       if (preloadedService.hasInitialTopicList) {
-        final asyncPreloaded = await preloadedService.getInitialTopicList();
-        if (asyncPreloaded != null) {
-          final result = _paginationHelper.processRefresh(
-            PaginationResult(
-              items: asyncPreloaded.topics,
-              moreUrl: asyncPreloaded.moreTopicsUrl,
-            ),
-          );
-          return completePagedRefresh(PagedPage.fromPagination(result));
+        var acceptProgressiveUpdates = false;
+        final progressiveListenable =
+            preloadedService.progressiveTopicListListenable;
+
+        void onProgressiveTopicList() {
+          if (!acceptProgressiveUpdates) return;
+          final snapshot = progressiveListenable.value;
+          if (snapshot == null) return;
+          state = AsyncValue.data(_completePreloadedRefresh(snapshot));
+        }
+
+        progressiveListenable.addListener(onProgressiveTopicList);
+        ref.onDispose(
+          () => progressiveListenable.removeListener(onProgressiveTopicList),
+        );
+
+        final firstBatch = await preloadedService.getInitialTopicListFirstBatch();
+        if (firstBatch != null) {
+          acceptProgressiveUpdates = true;
+          // 若第一批 future 唤醒到这里时下一批已完成，直接取最新累计快照，
+          // 避免恰好落在 listener 开闸之前的那一次通知被错过。
+          final latest = preloadedService.progressiveTopicListSync ?? firstBatch;
+          return _completePreloadedRefresh(latest);
         }
       }
     }
@@ -105,6 +115,16 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
 
     final result = _paginationHelper.processRefresh(
       PaginationResult(items: response.topics, moreUrl: response.moreTopicsUrl),
+    );
+    return completePagedRefresh(PagedPage.fromPagination(result));
+  }
+
+  List<Topic> _completePreloadedRefresh(TopicListResponse response) {
+    final result = _paginationHelper.processRefresh(
+      PaginationResult(
+        items: response.topics,
+        moreUrl: response.moreTopicsUrl,
+      ),
     );
     return completePagedRefresh(PagedPage.fromPagination(result));
   }
