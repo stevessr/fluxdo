@@ -48,8 +48,6 @@ jobs:
               exit 1
             fi
 
-            # Keep the already-validated progressive implementation, then replay
-            # every main-side addition to this file since PR #70's old merge base.
             git checkout --ours lib/services/preloaded_data_service.dart
             python3 - <<'PY'
           from pathlib import Path
@@ -92,7 +90,6 @@ jobs:
             git add lib/services/preloaded_data_service.dart
           fi
 
-          # Helper must not survive into the merge result.
           git rm .github/workflows/pr70-sync-main.yaml
 
       - name: Setup Flutter
@@ -110,15 +107,14 @@ jobs:
           dart format lib/services/preloaded_data_service.dart
           git add lib/services/preloaded_data_service.dart
 
-          # Check both sides of the conflict at the API/implementation level.
           python3 - <<'PY'
           from pathlib import Path
-          source = Path('lib/services/preloaded_data_service.dart').read_text()
-          required = [
+          service = Path('lib/services/preloaded_data_service.dart').read_text()
+          provider = Path('lib/providers/topic_list/topic_list_provider.dart').read_text()
+          service_required = [
               'static const int _topicParseBatchSize = 24;',
               'progressiveTopicListListenable',
               'getInitialTopicListFirstBatch',
-              '_mergeProgressivePreloadedSnapshot',
               'Map<String, dynamic>? get siteSync => _site;',
               'topicFeaturedLinkAllowedCategoryIdsSync',
               'uncategorizedCategoryIdSync',
@@ -126,13 +122,17 @@ jobs:
               '@visibleForTesting',
               'void debugSeed({',
           ]
-          missing = [item for item in required if item not in source]
+          provider_required = [
+              '_mergeProgressivePreloadedSnapshot',
+              'detachProgressiveListener',
+              'Future<void>.delayed(Duration.zero',
+          ]
+          missing = [item for item in service_required if item not in service]
+          missing += [item for item in provider_required if item not in provider]
           if missing:
               raise SystemExit('missing merged preload contracts: ' + ', '.join(missing))
           PY
 
-          # Targeted analysis catches compatibility with the newer main callers
-          # without being blocked by unrelated in-flight topic-detail errors on main.
           flutter analyze \
             lib/services/preloaded_data_service.dart \
             lib/providers/topic_list/topic_list_provider.dart \
@@ -142,8 +142,6 @@ jobs:
             test/services/browser_trust_preload_latency_contract_test.dart \
             test/services/preloaded_data_progress_test.dart
 
-          # This source-contract suite has no app imports and remains independent
-          # of current main's unrelated topic-detail compilation failures.
           dart tool/flutterw.dart test \
             test/services/browser_trust_preload_latency_contract_test.dart
 
