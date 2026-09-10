@@ -14,7 +14,14 @@ import 'network/cookie/csrf_token_service.dart';
 import 'cf_challenge_service.dart';
 import 'cf_clearance_refresh_service.dart';
 
-enum PreloadPhase { idle, requesting, decoding, parsingTopics, complete, failed }
+enum PreloadPhase {
+  idle,
+  requesting,
+  decoding,
+  parsingTopics,
+  complete,
+  failed,
+}
 
 @immutable
 class PreloadProgress {
@@ -133,7 +140,8 @@ class PreloadedDataService {
   /// 消费方可以在最终 TopicListResponse 产生前先展示已完成的话题。
   ValueListenable<TopicListResponse?> get progressiveTopicListListenable =>
       _progressiveTopicList;
-  TopicListResponse? get progressiveTopicListSync => _progressiveTopicList.value;
+  TopicListResponse? get progressiveTopicListSync =>
+      _progressiveTopicList.value;
 
   void _setPreloadProgress(PreloadProgress progress) {
     _preloadProgress.value = progress;
@@ -593,9 +601,7 @@ class PreloadedDataService {
     if (!_isCurrent(revision, generation)) return false;
     if (!parsed) {
       debugPrint('[PreloadedData] HTML 快照不包含可用的 data-preloaded');
-      _setPreloadProgress(
-        const PreloadProgress(phase: PreloadPhase.failed),
-      );
+      _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.failed));
       return false;
     }
 
@@ -754,9 +760,7 @@ class PreloadedDataService {
       // 由 BrowserTrustCoordinator 统一判断启动，避免预加载服务绕过生命周期门禁。
     } catch (e) {
       if (_isCurrent(revision, generation)) {
-        _setPreloadProgress(
-          const PreloadProgress(phase: PreloadPhase.failed),
-        );
+        _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.failed));
       }
       debugPrint('[PreloadedData] 加载失败: $e');
       rethrow;
@@ -805,9 +809,7 @@ class PreloadedDataService {
       htmlEntityEncoded = true;
     }
 
-    _setPreloadProgress(
-      const PreloadProgress(phase: PreloadPhase.decoding),
-    );
+    _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.decoding));
     final parseFuture = _parsePreloadedDataString(
       dataString,
       htmlEntityEncoded: htmlEntityEncoded,
@@ -1112,9 +1114,7 @@ class PreloadedDataService {
     } catch (e) {
       debugPrint('[PreloadedData] JSON 解析失败: $e');
       if (_isCurrent(revision, generation)) {
-        _setPreloadProgress(
-          const PreloadProgress(phase: PreloadPhase.failed),
-        );
+        _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.failed));
       }
       return false;
     }
@@ -1258,7 +1258,10 @@ class PreloadedDataService {
 
       if (total == 0) {
         _publishTopicListSnapshot(
-          TopicListResponse(topics: const <Topic>[], moreTopicsUrl: moreTopicsUrl),
+          TopicListResponse(
+            topics: const <Topic>[],
+            moreTopicsUrl: moreTopicsUrl,
+          ),
           finalSnapshot: true,
         );
         _setPreloadProgress(
@@ -1270,10 +1273,13 @@ class PreloadedDataService {
       for (var start = 0; start < total; start += _topicParseBatchSize) {
         final requestedEnd = start + _topicParseBatchSize;
         final end = requestedEnd < total ? requestedEnd : total;
-        final batch = await compute(_parseTopicBatchInIsolate, <String, dynamic>{
-          'users': rawUsers,
-          'topics': rawTopics.sublist(start, end),
-        });
+        final batch = await compute(
+          _parseTopicBatchInIsolate,
+          <String, dynamic>{
+            'users': rawUsers,
+            'topics': rawTopics.sublist(start, end),
+          },
+        );
         if (!_isCurrent(revision, generation)) return;
 
         for (final topic in batch) {
@@ -1303,9 +1309,7 @@ class PreloadedDataService {
     } catch (e) {
       debugPrint('[PreloadedData] 分批解析 TopicListResponse 失败: $e');
       if (_isCurrent(revision, generation)) {
-        _setPreloadProgress(
-          const PreloadProgress(phase: PreloadPhase.failed),
-        );
+        _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.failed));
         _completeTopicListWithNull();
       }
     }
@@ -1338,7 +1342,8 @@ class PreloadedDataService {
 
   void _completeTopicListWithNull() {
     final firstBatch = _firstTopicListBatchCompleter;
-    if (firstBatch != null && !firstBatch.isCompleted) firstBatch.complete(null);
+    if (firstBatch != null && !firstBatch.isCompleted)
+      firstBatch.complete(null);
     final complete = _topicListResponseCompleter;
     if (complete != null && !complete.isCompleted) complete.complete(null);
   }
