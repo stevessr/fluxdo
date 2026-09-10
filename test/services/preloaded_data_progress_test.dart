@@ -81,10 +81,7 @@ void main() {
       expect(providerSource, contains('scheduleMicrotask'));
       expect(providerSource, contains('detachProgressiveListener'));
       expect(providerSource, contains('Future<void>.delayed(Duration.zero'));
-      expect(
-        providerSource,
-        contains('if (topicIds.add(topic.id)) topic'),
-      );
+      expect(providerSource, contains('if (topicIds.add(topic.id)) topic'));
     });
 
     test('top progress overlay does not rebuild the workspace tree', () {
