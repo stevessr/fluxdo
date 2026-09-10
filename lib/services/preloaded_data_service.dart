@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
-    show ValueListenable, ValueNotifier, compute, immutable;
+    show ValueListenable, ValueNotifier, compute, immutable, visibleForTesting;
 import 'package:flutter/material.dart';
 import '../constants.dart';
 import '../models/topic.dart';
@@ -130,6 +130,30 @@ class PreloadedDataService {
   bool get isLoaded => _loaded;
   Map<String, dynamic>? get currentUserSync => _currentUser;
   Map<String, dynamic>? get siteSettingsSync => _siteSettings;
+  Map<String, dynamic>? get siteSync => _site;
+
+  /// 允许使用话题精选链接的分类 ID 白名单。
+  ///
+  /// 由 SiteSerializer 下发在 site.json 顶层（仅当 `topic_featured_link_enabled`
+  /// 为真时才包含该字段）；分类对象自身的 `topic_featured_link_allowed` 只在
+  /// CategorySerializer 里，不会出现在 site.json 的分类列表中。
+  ///
+  /// 返回 null 表示站点未下发该字段（等价于「无分类限制」，对齐官方
+  /// `categoryIds === undefined` 分支）。
+  List<int>? get topicFeaturedLinkAllowedCategoryIdsSync {
+    final raw = _site?['topic_featured_link_allowed_category_ids'];
+    if (raw is! List) return null;
+    return raw
+        .map((e) => e is int ? e : int.tryParse(e.toString()))
+        .whereType<int>()
+        .toList(growable: false);
+  }
+
+  /// 未分类分类的 ID（官方 `uncategorized_category_id`）
+  int? get uncategorizedCategoryIdSync {
+    final raw = _site?['uncategorized_category_id'];
+    return raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+  }
 
   /// 启动预加载的真实阶段/话题解析进度。
   ValueListenable<PreloadProgress> get preloadProgressListenable =>
@@ -308,6 +332,14 @@ class PreloadedDataService {
     if (value is int) return value;
     if (value is String) return int.tryParse(value) ?? 15;
     return 15; // Discourse 默认值
+  }
+
+  /// 话题标题最大长度（官方 `max_topic_title_length`，默认 255）
+  int get maxTopicTitleLengthSync {
+    final value = _siteSettings?['max_topic_title_length'];
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? 255;
+    return 255; // Discourse 默认值
   }
 
   /// 获取私信标题最小长度
@@ -658,6 +690,19 @@ class PreloadedDataService {
   void _invalidateCachedData() {
     _dataRevision++;
     _clearCachedData();
+  }
+
+  /// 仅供测试：直接注入当前用户与站点设置
+  ///
+  /// 静音过滤等逻辑依赖这两份预加载数据，而本类是单例、真实加载路径要发
+  /// 网络请求。给测试开一个最小口子，好过把那些判定写成不可测。
+  @visibleForTesting
+  void debugSeed({
+    Map<String, dynamic>? currentUser,
+    Map<String, dynamic>? siteSettings,
+  }) {
+    _currentUser = currentUser;
+    _siteSettings = siteSettings;
   }
 
   /// 重置缓存（登出时调用）

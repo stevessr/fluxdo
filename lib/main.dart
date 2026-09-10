@@ -41,6 +41,7 @@ import 'services/local_notification_service.dart';
 import 'services/account_manager.dart';
 import 'services/data_management/cache_size_service.dart';
 import 'services/discourse_cache_manager.dart';
+import 'services/render_backend_service.dart';
 import 'services/toast_service.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import 'l10n/s.dart';
@@ -940,6 +941,17 @@ class _MainPageState extends ConsumerState<MainPage>
   ProviderSubscription<void>? _messageBusSub;
   ProviderSubscription<void>? _notificationChannelSub;
   ProviderSubscription<void>? _notificationAlertChannelSub;
+
+  ProviderSubscription<void>? _chatAlertChannelSub;
+  ProviderSubscription<void>? _logoutChannelSub;
+  ProviderSubscription<bool>? _siteReadOnlySub;
+  ProviderSubscription<PmIncomingState>? _pmTrackingSub;
+  ProviderSubscription<DateTime?>? _doNotDisturbSub;
+  ProviderSubscription<Map<int, UserStatus?>>? _userStatusSub;
+  ProviderSubscription<int?>? _userDraftCountSub;
+  ProviderSubscription<ReviewableCountsState>? _reviewableCountsSub;
+  ProviderSubscription<void>? _siteChangesSub;
+
   ProviderSubscription<AsyncValue<bool>>? _connectivitySub;
   bool _messageBusInitialized = false;
   int? _lastTappedIndex;
@@ -985,7 +997,13 @@ class _MainPageState extends ConsumerState<MainPage>
     ) {
       next.whenData((message) => _handleAuthError(message));
     });
-
+    // 站点只读模式：/site/read-only 是公开频道，匿名也能收，
+    // 所以不放进下面那个以登录为前提的订阅块
+    _siteReadOnlySub?.close();
+    _siteReadOnlySub = ref.listenManual<bool>(siteReadOnlyProvider, (_, _) {});
+    // 分类/站点设置变更同样是公开频道，匿名也需要跟进
+    _siteChangesSub?.close();
+    _siteChangesSub = ref.listenManual<void>(siteChangesProvider, (_, _) {});
     // 初始化连通性检测服务
     ConnectivityService().init();
 
@@ -1046,6 +1064,42 @@ class _MainPageState extends ConsumerState<MainPage>
             notificationAlertChannelProvider,
             (_, _) {},
           );
+
+          _chatAlertChannelSub?.close();
+          _chatAlertChannelSub = ref.listenManual<void>(
+            chatNotificationAlertProvider,
+            (_, _) {},
+          );
+          _logoutChannelSub?.close();
+          _logoutChannelSub = ref.listenManual<void>(
+            logoutChannelProvider,
+            (_, _) {},
+          );
+          _pmTrackingSub?.close();
+          _pmTrackingSub = ref.listenManual<PmIncomingState>(
+            pmTrackingProvider,
+            (_, _) {},
+          );
+          _doNotDisturbSub?.close();
+          _doNotDisturbSub = ref.listenManual<DateTime?>(
+            doNotDisturbProvider,
+            (_, _) {},
+          );
+          _userStatusSub?.close();
+          _userStatusSub = ref.listenManual<Map<int, UserStatus?>>(
+            userStatusProvider,
+            (_, _) {},
+          );
+          _userDraftCountSub?.close();
+          _userDraftCountSub = ref.listenManual<int?>(
+            userDraftCountProvider,
+            (_, _) {},
+          );
+          _reviewableCountsSub?.close();
+          _reviewableCountsSub = ref.listenManual<ReviewableCountsState>(
+            reviewableCountsProvider,
+            (_, _) {},
+          );
         });
       } else if (user == null) {
         _messageBusInitialized = false;
@@ -1055,6 +1109,21 @@ class _MainPageState extends ConsumerState<MainPage>
         _notificationChannelSub = null;
         _notificationAlertChannelSub?.close();
         _notificationAlertChannelSub = null;
+
+        _chatAlertChannelSub?.close();
+        _chatAlertChannelSub = null;
+        _logoutChannelSub?.close();
+        _logoutChannelSub = null;
+        _pmTrackingSub?.close();
+        _pmTrackingSub = null;
+        _doNotDisturbSub?.close();
+        _doNotDisturbSub = null;
+        _userStatusSub?.close();
+        _userStatusSub = null;
+        _userDraftCountSub?.close();
+        _userDraftCountSub = null;
+        _reviewableCountsSub?.close();
+        _reviewableCountsSub = null;
       }
     }, fireImmediately: true);
   }
@@ -1074,9 +1143,61 @@ class _MainPageState extends ConsumerState<MainPage>
     if (Platform.isAndroid) {
       await _showCrashlyticsNotice();
       if (!mounted) return;
+      // 疑似 Mali/Vulkan 渲染崩溃时建议开启兼容模式。
+      // 放在数据收集告知之后：那个是必须先看到的一次性声明。
+      await _maybeSuggestRenderCompatMode();
+      if (!mounted) return;
     }
 
     await _checkClipboardTopicLink();
+  }
+
+  /// 上次进程疑似因 Mali/Vulkan 驱动崩溃时，建议开启渲染兼容模式。
+  ///
+  /// 判定完全在原生侧完成（见 RenderCrashDetector.kt），这里只负责呈现。
+  /// 用户选「暂不开启」后不再自动弹窗，但设置项上会保留建议标记。
+  Future<void> _maybeSuggestRenderCompatMode() async {
+    // 已经开着了就不用建议了（原生侧也会做这个判断，这里是快速短路）
+    if (ref.read(preferencesProvider).renderGlesBackend) return;
+    final shouldSuggest = await RenderBackendService.shouldSuggestCompatMode();
+    if (!shouldSuggest || !mounted) return;
+    final enable = await showAppDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(S.current.preferences_renderGlesDetectedTitle),
+        content: Text(S.current.preferences_renderGlesDetectedBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(S.current.preferences_renderGlesDetectedDismiss),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(S.current.preferences_renderGlesDetectedEnable),
+          ),
+        ],
+      ),
+    );
+    if (enable == true) {
+      await ref.read(preferencesProvider.notifier).setRenderGlesBackend(true);
+      if (!mounted) return;
+      await showAppDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(S.current.preferences_renderGlesRestartTitle),
+          content: Text(S.current.preferences_renderGlesRestartBody),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(S.current.common_gotIt),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // 明确拒绝（含点遮罩关闭）后不再自动弹窗
+      await RenderBackendService.dismissSuggestion();
+    }
   }
 
   Future<void> _showCrashlyticsNotice() async {
@@ -1215,6 +1336,17 @@ class _MainPageState extends ConsumerState<MainPage>
     _messageBusSub?.close();
     _notificationChannelSub?.close();
     _notificationAlertChannelSub?.close();
+
+    _chatAlertChannelSub?.close();
+    _logoutChannelSub?.close();
+    _siteReadOnlySub?.close();
+    _pmTrackingSub?.close();
+    _doNotDisturbSub?.close();
+    _userStatusSub?.close();
+    _userDraftCountSub?.close();
+    _reviewableCountsSub?.close();
+    _siteChangesSub?.close();
+
     _connectivitySub?.close();
     super.dispose();
   }
