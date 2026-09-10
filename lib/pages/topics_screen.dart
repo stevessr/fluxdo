@@ -194,8 +194,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
           maxMasterRatio: selectedTopic.isStacked && !_masterIsListLike
               ? 0.8
               : MasterDetailLayout.defaultMaxMasterRatio,
-          preferredMasterRatio:
-              selectedTopic.isStacked && !_masterIsListLike ? 0.5 : 0.25,
+          preferredMasterRatio: selectedTopic.isStacked && !_masterIsListLike
+              ? 0.5
+              : 0.25,
           projectDetailWhenNarrow: true,
           // 胶片带:列表也在带上,压栈时被顶出左侧、倒二层格顶上左栏
           // (旧"上一层预览"形态,由容器统一承担,预览格 State 全保)。
@@ -244,10 +245,7 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                   value: fraction == null
                       ? null
                       : '${(fraction * 100).round()}%',
-                  child: LinearProgressIndicator(
-                    value: fraction,
-                    minHeight: 2,
-                  ),
+                  child: LinearProgressIndicator(value: fraction, minHeight: 2),
                 ),
               ),
             ),
