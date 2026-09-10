@@ -942,7 +942,6 @@ class _MainPageState extends ConsumerState<MainPage>
   ProviderSubscription<void>? _notificationChannelSub;
   ProviderSubscription<void>? _notificationAlertChannelSub;
 
-  ProviderSubscription<void>? _chatAlertChannelSub;
   ProviderSubscription<void>? _logoutChannelSub;
   ProviderSubscription<bool>? _siteReadOnlySub;
   ProviderSubscription<PmIncomingState>? _pmTrackingSub;
@@ -1065,11 +1064,6 @@ class _MainPageState extends ConsumerState<MainPage>
             (_, _) {},
           );
 
-          _chatAlertChannelSub?.close();
-          _chatAlertChannelSub = ref.listenManual<void>(
-            chatNotificationAlertProvider,
-            (_, _) {},
-          );
           _logoutChannelSub?.close();
           _logoutChannelSub = ref.listenManual<void>(
             logoutChannelProvider,
@@ -1110,8 +1104,6 @@ class _MainPageState extends ConsumerState<MainPage>
         _notificationAlertChannelSub?.close();
         _notificationAlertChannelSub = null;
 
-        _chatAlertChannelSub?.close();
-        _chatAlertChannelSub = null;
         _logoutChannelSub?.close();
         _logoutChannelSub = null;
         _pmTrackingSub?.close();
@@ -1337,7 +1329,6 @@ class _MainPageState extends ConsumerState<MainPage>
     _notificationChannelSub?.close();
     _notificationAlertChannelSub?.close();
 
-    _chatAlertChannelSub?.close();
     _logoutChannelSub?.close();
     _siteReadOnlySub?.close();
     _pmTrackingSub?.close();

@@ -1389,7 +1389,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   }
 
   Widget _buildEmbeddedMobileWorkspaceTitle(
-    DataTheme theme,
+    ThemeData theme,
     TopicDetail? detail,
   ) {
     return GestureDetector(
