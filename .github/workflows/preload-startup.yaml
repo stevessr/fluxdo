@@ -59,15 +59,24 @@ jobs:
       - name: Check formatting
         id: format
         continue-on-error: true
-        run: >-
-          dart format --output=none --set-exit-if-changed
-          lib/services/browser_trust_coordinator.dart
-          lib/services/preloaded_data_service.dart
-          lib/providers/topic_list/topic_list_provider.dart
-          lib/pages/topics_screen.dart
-          lib/widgets/preheat_gate.dart
-          test/services/browser_trust_preload_latency_contract_test.dart
-          test/services/preloaded_data_progress_test.dart
+        shell: bash
+        run: |
+          dart format \
+            lib/services/browser_trust_coordinator.dart \
+            lib/services/preloaded_data_service.dart \
+            lib/providers/topic_list/topic_list_provider.dart \
+            lib/pages/topics_screen.dart \
+            lib/widgets/preheat_gate.dart \
+            test/services/browser_trust_preload_latency_contract_test.dart \
+            test/services/preloaded_data_progress_test.dart
+          git diff --exit-code -- \
+            lib/services/browser_trust_coordinator.dart \
+            lib/services/preloaded_data_service.dart \
+            lib/providers/topic_list/topic_list_provider.dart \
+            lib/pages/topics_screen.dart \
+            lib/widgets/preheat_gate.dart \
+            test/services/browser_trust_preload_latency_contract_test.dart \
+            test/services/preloaded_data_progress_test.dart
 
       - name: Analyze preload startup path
         id: analyze
