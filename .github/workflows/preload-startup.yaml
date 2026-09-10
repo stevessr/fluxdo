@@ -91,7 +91,7 @@ jobs:
           test/services/preloaded_data_progress_test.dart
 
       - name: Enforce quality gates
-        if: always()
+        if: ${{ always() && !cancelled() }}
         shell: bash
         env:
           FORMAT_OUTCOME: ${{ steps.format.outcome }}
