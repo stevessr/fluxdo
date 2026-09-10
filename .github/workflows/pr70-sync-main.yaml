@@ -1,0 +1,126 @@
+name: PR70 Sync Main
+
+on:
+  push:
+    branches:
+      - feat/progressive-preload-progress
+    paths:
+      - '.github/workflows/pr70-sync-main.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr70-sync-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v5
+        with:
+          ref: feat/progressive-preload-progress
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Merge latest main and resolve the known preload conflict
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+
+          set +e
+          git merge --no-ff --no-commit origin/main
+          merge_status=$?
+          set -e
+
+          if [ "$merge_status" -ne 0 ]; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            if [ "$conflicts" != 'lib/services/preloaded_data_service.dart' ]; then
+              echo 'Unexpected merge conflicts:' >&2
+              printf '%s\n' "$conflicts" >&2
+              exit 1
+            fi
+
+            git checkout --ours lib/services/preloaded_data_service.dart
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/services/preloaded_data_service.dart')
+          source = path.read_text()
+
+          old_import = """import 'package:flutter/foundation.dart'
+              show ValueListenable, ValueNotifier, compute, immutable;"""
+          new_import = """import 'package:flutter/foundation.dart'
+              show ValueListenable, ValueNotifier, compute, immutable, visibleForTesting;"""
+          if source.count(old_import) != 1:
+              raise SystemExit('unexpected flutter/foundation import while resolving PR #70')
+          source = source.replace(old_import, new_import, 1)
+
+          marker = """  /// 重置缓存（登出时调用）
+            void reset() {"""
+          replacement = """  /// 仅供测试：直接注入当前用户与站点设置
+            ///
+            /// 静音过滤等逻辑依赖这两份预加载数据，而本类是单例、真实加载路径要发
+            /// 网络请求。给测试开一个最小口子，好过把那些判定写成不可测。
+            @visibleForTesting
+            void debugSeed({
+              Map<String, dynamic>? currentUser,
+              Map<String, dynamic>? siteSettings,
+            }) {
+              _currentUser = currentUser;
+              _siteSettings = siteSettings;
+            }
+
+            /// 重置缓存（登出时调用）
+            void reset() {"""
+          if source.count(marker) != 1:
+              raise SystemExit('unexpected reset marker while resolving PR #70')
+          path.write_text(source.replace(marker, replacement, 1))
+          PY
+            git add lib/services/preloaded_data_service.dart
+          fi
+
+          # This helper workflow must not become part of the resulting PR/main tree.
+          git rm .github/workflows/pr70-sync-main.yaml
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Validate merged tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/certs
+          dart format lib/services/preloaded_data_service.dart
+          git add lib/services/preloaded_data_service.dart
+          flutter pub get
+          flutter analyze \
+            lib/services/preloaded_data_service.dart \
+            lib/providers/topic_list/topic_list_provider.dart \
+            lib/pages/topics_screen.dart \
+            lib/providers/message_bus/topic_tracking_providers.dart \
+            test/services/browser_trust_preload_latency_contract_test.dart \
+            test/services/preloaded_data_progress_test.dart \
+            test/providers/topic_tracking_mute_test.dart
+          dart tool/flutterw.dart test \
+            test/services/browser_trust_preload_latency_contract_test.dart \
+            test/services/preloaded_data_progress_test.dart \
+            test/providers/topic_tracking_mute_test.dart
+          git diff --cached --check
+
+      - name: Commit merged tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git commit -m 'merge: sync main into progressive preload branch'
+          git push origin HEAD:feat/progressive-preload-progress
