@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -61,33 +62,80 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
         ? ref.read(topicNewSubsetProvider).apiValue
         : null;
 
-    // 优化：如果是 latest 列表且没有筛选条件且没有自定义排序，优先同步使用预加载数据
-    // 这样可以避免显示 loading 状态
+    // latest 首屏允许直接消费 preload 的累计解析快照。第一批完成就结束
+    // AsyncLoading，后续每个批次继续替换 state；最终批次仍携带原始
+    // more_topics_url，因此不会改变后面的正常分页协议。
     if (currentFilter == TopicListFilter.latest &&
         filter.isEmpty &&
         orderParam == null) {
       final preloadedService = PreloadedDataService();
       final preloadedData = preloadedService.getInitialTopicListSync();
       if (preloadedData != null) {
-        final result = _paginationHelper.processRefresh(
-          PaginationResult(
-            items: preloadedData.topics,
-            moreUrl: preloadedData.moreTopicsUrl,
-          ),
-        );
-        return completePagedRefresh(PagedPage.fromPagination(result));
+        return _completePreloadedRefresh(preloadedData);
       }
+
       if (preloadedService.hasInitialTopicList) {
-        final asyncPreloaded = await preloadedService.getInitialTopicList();
-        if (asyncPreloaded != null) {
-          final result = _paginationHelper.processRefresh(
-            PaginationResult(
-              items: asyncPreloaded.topics,
-              moreUrl: asyncPreloaded.moreTopicsUrl,
-            ),
-          );
-          return completePagedRefresh(PagedPage.fromPagination(result));
+        var acceptProgressiveUpdates = false;
+        var listenerAttached = false;
+        final progressiveListenable =
+            preloadedService.progressiveTopicListListenable;
+        late final VoidCallback onProgressiveTopicList;
+
+        void detachProgressiveListener() {
+          acceptProgressiveUpdates = false;
+          if (!listenerAttached) return;
+          listenerAttached = false;
+          progressiveListenable.removeListener(onProgressiveTopicList);
         }
+
+        onProgressiveTopicList = () {
+          if (!acceptProgressiveUpdates) return;
+          final snapshot = progressiveListenable.value;
+          if (snapshot == null) return;
+          // 后续批次只追加“新解析出来”的 topic。已经显示过的对象保留
+          // 当前 state 版本，避免 MessageBus、已读游标或用户操作刚更新完，
+          // 下一份 preload 累计快照又把它覆盖回启动时的旧状态。
+          state = AsyncValue.data(_mergeProgressivePreloadedSnapshot(snapshot));
+
+          // ValueNotifier 会在 _setPreloadProgress(complete) 之前同步通知
+          // topic snapshot listener，因此把解绑检查放到 microtask；这样最终批次
+          // 发布完成后就停止监听，避免未来账号的 preload 快照串进旧列表。
+          scheduleMicrotask(() {
+            if (!acceptProgressiveUpdates) return;
+            final phase = preloadedService.preloadProgress.phase;
+            if (phase == PreloadPhase.complete ||
+                phase == PreloadPhase.failed) {
+              detachProgressiveListener();
+            }
+          });
+        };
+
+        progressiveListenable.addListener(onProgressiveTopicList);
+        listenerAttached = true;
+        ref.onDispose(detachProgressiveListener);
+
+        final firstBatch = await preloadedService
+            .getInitialTopicListFirstBatch();
+        if (firstBatch != null) {
+          acceptProgressiveUpdates = true;
+          // 若第一批 future 唤醒到这里时下一批已完成，直接取最新累计快照，
+          // 避免恰好落在 listener 开闸之前的那一次通知被错过。
+          final latest =
+              preloadedService.progressiveTopicListSync ?? firstBatch;
+
+          // AsyncNotifier.build 的返回值会由 Riverpod 再写入一次 state。
+          // 下一事件循环重新对账当前累计快照，堵住“第二批先由 listener 写入、
+          // 随后 build 的首批返回值反而覆盖新 state”的极窄竞态窗口。
+          unawaited(
+            Future<void>.delayed(Duration.zero, () {
+              if (!acceptProgressiveUpdates) return;
+              onProgressiveTopicList();
+            }),
+          );
+          return _completePreloadedRefresh(latest);
+        }
+
+        detachProgressiveListener();
       }
     }
 
@@ -105,6 +153,31 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
 
     final result = _paginationHelper.processRefresh(
       PaginationResult(items: response.topics, moreUrl: response.moreTopicsUrl),
+    );
+    return completePagedRefresh(PagedPage.fromPagination(result));
+  }
+
+  List<Topic> _completePreloadedRefresh(TopicListResponse response) {
+    final result = _paginationHelper.processRefresh(
+      PaginationResult(items: response.topics, moreUrl: response.moreTopicsUrl),
+    );
+    return completePagedRefresh(PagedPage.fromPagination(result));
+  }
+
+  List<Topic> _mergeProgressivePreloadedSnapshot(TopicListResponse response) {
+    final current = state.value;
+    if (current == null || current.isEmpty) {
+      return _completePreloadedRefresh(response);
+    }
+
+    final topicIds = current.map((topic) => topic.id).toSet();
+    final merged = <Topic>[
+      ...current,
+      for (final topic in response.topics)
+        if (topicIds.add(topic.id)) topic,
+    ];
+    final result = _paginationHelper.processRefresh(
+      PaginationResult(items: merged, moreUrl: response.moreTopicsUrl),
     );
     return completePagedRefresh(PagedPage.fromPagination(result));
   }
