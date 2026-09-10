@@ -29,6 +29,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: preload-startup-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -36,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -53,26 +57,21 @@ jobs:
         run: flutter pub get
 
       - name: Check formatting
-        shell: bash
-        run: |
-          dart format \
-            lib/services/browser_trust_coordinator.dart \
-            lib/services/preloaded_data_service.dart \
-            lib/providers/topic_list/topic_list_provider.dart \
-            lib/pages/topics_screen.dart \
-            lib/widgets/preheat_gate.dart \
-            test/services/browser_trust_preload_latency_contract_test.dart \
-            test/services/preloaded_data_progress_test.dart
-          git diff --exit-code -- \
-            lib/services/browser_trust_coordinator.dart \
-            lib/services/preloaded_data_service.dart \
-            lib/providers/topic_list/topic_list_provider.dart \
-            lib/pages/topics_screen.dart \
-            lib/widgets/preheat_gate.dart \
-            test/services/browser_trust_preload_latency_contract_test.dart \
-            test/services/preloaded_data_progress_test.dart
+        id: format
+        continue-on-error: true
+        run: >-
+          dart format --output=none --set-exit-if-changed
+          lib/services/browser_trust_coordinator.dart
+          lib/services/preloaded_data_service.dart
+          lib/providers/topic_list/topic_list_provider.dart
+          lib/pages/topics_screen.dart
+          lib/widgets/preheat_gate.dart
+          test/services/browser_trust_preload_latency_contract_test.dart
+          test/services/preloaded_data_progress_test.dart
 
       - name: Analyze preload startup path
+        id: analyze
+        continue-on-error: true
         run: >-
           flutter analyze
           lib/services/browser_trust_coordinator.dart
@@ -84,7 +83,28 @@ jobs:
           test/services/preloaded_data_progress_test.dart
 
       - name: Test preload latency and progress contracts
+        id: test
+        continue-on-error: true
         run: >-
           dart tool/flutterw.dart test
           test/services/browser_trust_preload_latency_contract_test.dart
           test/services/preloaded_data_progress_test.dart
+
+      - name: Enforce quality gates
+        if: always()
+        shell: bash
+        env:
+          FORMAT_OUTCOME: ${{ steps.format.outcome }}
+          ANALYZE_OUTCOME: ${{ steps.analyze.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+        run: |
+          failed=0
+          for gate in FORMAT ANALYZE TEST; do
+            value_name="${gate}_OUTCOME"
+            value="${!value_name}"
+            if [[ "$value" != "success" ]]; then
+              echo "::error::$gate gate failed: $value"
+              failed=1
+            fi
+          done
+          exit "$failed"
