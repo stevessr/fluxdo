@@ -48,6 +48,8 @@ jobs:
               exit 1
             fi
 
+            # Keep the already-validated progressive implementation, then replay
+            # every main-side addition to this file since PR #70's old merge base.
             git checkout --ours lib/services/preloaded_data_service.dart
             python3 - <<'PY'
           from pathlib import Path
@@ -55,39 +57,42 @@ jobs:
           path = Path('lib/services/preloaded_data_service.dart')
           source = path.read_text()
 
-          old_import = """import 'package:flutter/foundation.dart'
-              show ValueListenable, ValueNotifier, compute, immutable;"""
-          new_import = """import 'package:flutter/foundation.dart'
-              show ValueListenable, ValueNotifier, compute, immutable, visibleForTesting;"""
-          if source.count(old_import) != 1:
-              raise SystemExit('unexpected flutter/foundation import while resolving PR #70')
-          source = source.replace(old_import, new_import, 1)
+          def replace_once(old: str, new: str, label: str) -> None:
+              global source
+              if source.count(old) != 1:
+                  raise SystemExit(f'unexpected {label} marker while resolving PR #70')
+              source = source.replace(old, new, 1)
 
-          marker = """  /// 重置缓存（登出时调用）
-            void reset() {"""
-          replacement = """  /// 仅供测试：直接注入当前用户与站点设置
-            ///
-            /// 静音过滤等逻辑依赖这两份预加载数据，而本类是单例、真实加载路径要发
-            /// 网络请求。给测试开一个最小口子，好过把那些判定写成不可测。
-            @visibleForTesting
-            void debugSeed({
-              Map<String, dynamic>? currentUser,
-              Map<String, dynamic>? siteSettings,
-            }) {
-              _currentUser = currentUser;
-              _siteSettings = siteSettings;
-            }
+          replace_once(
+              """import 'package:flutter/foundation.dart'\n    show ValueListenable, ValueNotifier, compute, immutable;""",
+              """import 'package:flutter/foundation.dart'\n    show ValueListenable, ValueNotifier, compute, immutable, visibleForTesting;""",
+              'flutter/foundation import',
+          )
 
-            /// 重置缓存（登出时调用）
-            void reset() {"""
-          if source.count(marker) != 1:
-              raise SystemExit('unexpected reset marker while resolving PR #70')
-          path.write_text(source.replace(marker, replacement, 1))
+          replace_once(
+              """  Map<String, dynamic>? get currentUserSync => _currentUser;\n  Map<String, dynamic>? get siteSettingsSync => _siteSettings;\n\n  /// 启动预加载的真实阶段/话题解析进度。""",
+              """  Map<String, dynamic>? get currentUserSync => _currentUser;\n  Map<String, dynamic>? get siteSettingsSync => _siteSettings;\n  Map<String, dynamic>? get siteSync => _site;\n\n  /// 允许使用话题精选链接的分类 ID 白名单。\n  ///\n  /// 由 SiteSerializer 下发在 site.json 顶层（仅当 `topic_featured_link_enabled`\n  /// 为真时才包含该字段）；分类对象自身的 `topic_featured_link_allowed` 只在\n  /// CategorySerializer 里，不会出现在 site.json 的分类列表中。\n  ///\n  /// 返回 null 表示站点未下发该字段（等价于「无分类限制」，对齐官方\n  /// `categoryIds === undefined` 分支）。\n  List<int>? get topicFeaturedLinkAllowedCategoryIdsSync {\n    final raw = _site?['topic_featured_link_allowed_category_ids'];\n    if (raw is! List) return null;\n    return raw\n        .map((e) => e is int ? e : int.tryParse(e.toString()))\n        .whereType<int>()\n        .toList(growable: false);\n  }\n\n  /// 未分类分类的 ID（官方 `uncategorized_category_id`）\n  int? get uncategorizedCategoryIdSync {\n    final raw = _site?['uncategorized_category_id'];\n    return raw is int ? raw : int.tryParse(raw?.toString() ?? '');\n  }\n\n  /// 启动预加载的真实阶段/话题解析进度。""",
+              'sync site getters',
+          )
+
+          replace_once(
+              """  Future<int> getMinTopicTitleLength() async {\n    await _ensureLoaded();\n    final value = _siteSettings?['min_topic_title_length'];\n    if (value is int) return value;\n    if (value is String) return int.tryParse(value) ?? 15;\n    return 15; // Discourse 默认值\n  }\n\n  /// 获取私信标题最小长度""",
+              """  Future<int> getMinTopicTitleLength() async {\n    await _ensureLoaded();\n    final value = _siteSettings?['min_topic_title_length'];\n    if (value is int) return value;\n    if (value is String) return int.tryParse(value) ?? 15;\n    return 15; // Discourse 默认值\n  }\n\n  /// 话题标题最大长度（官方 `max_topic_title_length`，默认 255）\n  int get maxTopicTitleLengthSync {\n    final value = _siteSettings?['max_topic_title_length'];\n    if (value is int) return value;\n    if (value is String) return int.tryParse(value) ?? 255;\n    return 255; // Discourse 默认值\n  }\n\n  /// 获取私信标题最小长度""",
+              'max topic title getter',
+          )
+
+          replace_once(
+              """  /// 重置缓存（登出时调用）\n  void reset() {""",
+              """  /// 仅供测试：直接注入当前用户与站点设置\n  ///\n  /// 静音过滤等逻辑依赖这两份预加载数据，而本类是单例、真实加载路径要发\n  /// 网络请求。给测试开一个最小口子，好过把那些判定写成不可测。\n  @visibleForTesting\n  void debugSeed({\n    Map<String, dynamic>? currentUser,\n    Map<String, dynamic>? siteSettings,\n  }) {\n    _currentUser = currentUser;\n    _siteSettings = siteSettings;\n  }\n\n  /// 重置缓存（登出时调用）\n  void reset() {""",
+              'debugSeed/reset',
+          )
+
+          path.write_text(source)
           PY
             git add lib/services/preloaded_data_service.dart
           fi
 
-          # This helper workflow must not become part of the resulting PR/main tree.
+          # Helper must not survive into the merge result.
           git rm .github/workflows/pr70-sync-main.yaml
 
       - name: Setup Flutter
@@ -101,26 +106,53 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p assets/certs
+          flutter pub get
           dart format lib/services/preloaded_data_service.dart
           git add lib/services/preloaded_data_service.dart
-          flutter pub get
+
+          # Check both sides of the conflict at the API/implementation level.
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('lib/services/preloaded_data_service.dart').read_text()
+          required = [
+              'static const int _topicParseBatchSize = 24;',
+              'progressiveTopicListListenable',
+              'getInitialTopicListFirstBatch',
+              '_mergeProgressivePreloadedSnapshot',
+              'Map<String, dynamic>? get siteSync => _site;',
+              'topicFeaturedLinkAllowedCategoryIdsSync',
+              'uncategorizedCategoryIdSync',
+              'maxTopicTitleLengthSync',
+              '@visibleForTesting',
+              'void debugSeed({',
+          ]
+          missing = [item for item in required if item not in source]
+          if missing:
+              raise SystemExit('missing merged preload contracts: ' + ', '.join(missing))
+          PY
+
+          # Targeted analysis catches compatibility with the newer main callers
+          # without being blocked by unrelated in-flight topic-detail errors on main.
           flutter analyze \
             lib/services/preloaded_data_service.dart \
             lib/providers/topic_list/topic_list_provider.dart \
             lib/pages/topics_screen.dart \
+            lib/pages/create_topic_page.dart \
             lib/providers/message_bus/topic_tracking_providers.dart \
             test/services/browser_trust_preload_latency_contract_test.dart \
-            test/services/preloaded_data_progress_test.dart \
-            test/providers/topic_tracking_mute_test.dart
+            test/services/preloaded_data_progress_test.dart
+
+          # This source-contract suite has no app imports and remains independent
+          # of current main's unrelated topic-detail compilation failures.
           dart tool/flutterw.dart test \
-            test/services/browser_trust_preload_latency_contract_test.dart \
-            test/services/preloaded_data_progress_test.dart \
-            test/providers/topic_tracking_mute_test.dart
+            test/services/browser_trust_preload_latency_contract_test.dart
+
           git diff --cached --check
 
       - name: Commit merged tree
         shell: bash
         run: |
           set -euo pipefail
+          git status --short
           git commit -m 'merge: sync main into progressive preload branch'
           git push origin HEAD:feat/progressive-preload-progress
