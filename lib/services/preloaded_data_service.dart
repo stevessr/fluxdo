@@ -1342,8 +1342,9 @@ class PreloadedDataService {
 
   void _completeTopicListWithNull() {
     final firstBatch = _firstTopicListBatchCompleter;
-    if (firstBatch != null && !firstBatch.isCompleted)
+    if (firstBatch != null && !firstBatch.isCompleted) {
       firstBatch.complete(null);
+    }
     final complete = _topicListResponseCompleter;
     if (complete != null && !complete.isCompleted) complete.complete(null);
   }
