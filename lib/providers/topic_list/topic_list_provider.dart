@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -75,10 +76,18 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
 
       if (preloadedService.hasInitialTopicList) {
         var acceptProgressiveUpdates = false;
+        var listenerAttached = false;
         final progressiveListenable =
             preloadedService.progressiveTopicListListenable;
+        late final VoidCallback onProgressiveTopicList;
 
-        void onProgressiveTopicList() {
+        void detachProgressiveListener() {
+          if (!listenerAttached) return;
+          listenerAttached = false;
+          progressiveListenable.removeListener(onProgressiveTopicList);
+        }
+
+        onProgressiveTopicList = () {
           if (!acceptProgressiveUpdates) return;
           final snapshot = progressiveListenable.value;
           if (snapshot == null) return;
@@ -86,12 +95,23 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
           // 当前 state 版本，避免 MessageBus、已读游标或用户操作刚更新完，
           // 下一份 preload 累计快照又把它覆盖回启动时的旧状态。
           state = AsyncValue.data(_mergeProgressivePreloadedSnapshot(snapshot));
-        }
+
+          // ValueNotifier 会在 _setPreloadProgress(complete) 之前同步通知
+          // topic snapshot listener，因此把解绑检查放到 microtask；这样最终批次
+          // 发布完成后就停止监听，避免未来账号的 preload 快照串进旧列表。
+          scheduleMicrotask(() {
+            if (!acceptProgressiveUpdates) return;
+            final phase = preloadedService.preloadProgress.phase;
+            if (phase == PreloadPhase.complete || phase == PreloadPhase.failed) {
+              acceptProgressiveUpdates = false;
+              detachProgressiveListener();
+            }
+          });
+        };
 
         progressiveListenable.addListener(onProgressiveTopicList);
-        ref.onDispose(
-          () => progressiveListenable.removeListener(onProgressiveTopicList),
-        );
+        listenerAttached = true;
+        ref.onDispose(detachProgressiveListener);
 
         final firstBatch = await preloadedService
             .getInitialTopicListFirstBatch();
@@ -101,8 +121,20 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
           // 避免恰好落在 listener 开闸之前的那一次通知被错过。
           final latest =
               preloadedService.progressiveTopicListSync ?? firstBatch;
+
+          // AsyncNotifier.build 的返回值会由 Riverpod 再写入一次 state。
+          // 下一事件循环重新对账当前累计快照，堵住“第二批先由 listener 写入、
+          // 随后 build 的首批返回值反而覆盖新 state”的极窄竞态窗口。
+          unawaited(
+            Future<void>.delayed(Duration.zero, () {
+              if (!acceptProgressiveUpdates) return;
+              onProgressiveTopicList();
+            }),
+          );
           return _completePreloadedRefresh(latest);
         }
+
+        detachProgressiveListener();
       }
     }
 
