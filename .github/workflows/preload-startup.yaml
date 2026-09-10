@@ -4,8 +4,12 @@ on:
   pull_request:
     paths:
       - 'lib/services/browser_trust_coordinator.dart'
+      - 'lib/services/preloaded_data_service.dart'
+      - 'lib/providers/topic_list/topic_list_provider.dart'
+      - 'lib/pages/topics_screen.dart'
       - 'lib/widgets/preheat_gate.dart'
       - 'test/services/browser_trust_preload_latency_contract_test.dart'
+      - 'test/services/preloaded_data_progress_test.dart'
       - '.github/workflows/preload-startup.yaml'
   push:
     branches:
@@ -13,8 +17,12 @@ on:
       - fix/preload-startup-latency
     paths:
       - 'lib/services/browser_trust_coordinator.dart'
+      - 'lib/services/preloaded_data_service.dart'
+      - 'lib/providers/topic_list/topic_list_provider.dart'
+      - 'lib/pages/topics_screen.dart'
       - 'lib/widgets/preheat_gate.dart'
       - 'test/services/browser_trust_preload_latency_contract_test.dart'
+      - 'test/services/preloaded_data_progress_test.dart'
       - '.github/workflows/preload-startup.yaml'
   workflow_dispatch:
 
@@ -49,21 +57,34 @@ jobs:
         run: |
           dart format \
             lib/services/browser_trust_coordinator.dart \
+            lib/services/preloaded_data_service.dart \
+            lib/providers/topic_list/topic_list_provider.dart \
+            lib/pages/topics_screen.dart \
             lib/widgets/preheat_gate.dart \
-            test/services/browser_trust_preload_latency_contract_test.dart
+            test/services/browser_trust_preload_latency_contract_test.dart \
+            test/services/preloaded_data_progress_test.dart
           git diff --exit-code -- \
             lib/services/browser_trust_coordinator.dart \
+            lib/services/preloaded_data_service.dart \
+            lib/providers/topic_list/topic_list_provider.dart \
+            lib/pages/topics_screen.dart \
             lib/widgets/preheat_gate.dart \
-            test/services/browser_trust_preload_latency_contract_test.dart
+            test/services/browser_trust_preload_latency_contract_test.dart \
+            test/services/preloaded_data_progress_test.dart
 
       - name: Analyze preload startup path
         run: >-
           flutter analyze
           lib/services/browser_trust_coordinator.dart
+          lib/services/preloaded_data_service.dart
+          lib/providers/topic_list/topic_list_provider.dart
+          lib/pages/topics_screen.dart
           lib/widgets/preheat_gate.dart
           test/services/browser_trust_preload_latency_contract_test.dart
+          test/services/preloaded_data_progress_test.dart
 
-      - name: Test preload latency contract
+      - name: Test preload latency and progress contracts
         run: >-
           dart tool/flutterw.dart test
           test/services/browser_trust_preload_latency_contract_test.dart
+          test/services/preloaded_data_progress_test.dart
