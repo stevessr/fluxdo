@@ -103,7 +103,8 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
           scheduleMicrotask(() {
             if (!acceptProgressiveUpdates) return;
             final phase = preloadedService.preloadProgress.phase;
-            if (phase == PreloadPhase.complete || phase == PreloadPhase.failed) {
+            if (phase == PreloadPhase.complete ||
+                phase == PreloadPhase.failed) {
               detachProgressiveListener();
             }
           });
