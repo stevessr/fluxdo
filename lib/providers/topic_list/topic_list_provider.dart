@@ -82,7 +82,10 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
           if (!acceptProgressiveUpdates) return;
           final snapshot = progressiveListenable.value;
           if (snapshot == null) return;
-          state = AsyncValue.data(_completePreloadedRefresh(snapshot));
+          // 后续批次只追加“新解析出来”的 topic。已经显示过的对象保留
+          // 当前 state 版本，避免 MessageBus、已读游标或用户操作刚更新完，
+          // 下一份 preload 累计快照又把它覆盖回启动时的旧状态。
+          state = AsyncValue.data(_mergeProgressivePreloadedSnapshot(snapshot));
         }
 
         progressiveListenable.addListener(onProgressiveTopicList);
@@ -90,12 +93,14 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
           () => progressiveListenable.removeListener(onProgressiveTopicList),
         );
 
-        final firstBatch = await preloadedService.getInitialTopicListFirstBatch();
+        final firstBatch = await preloadedService
+            .getInitialTopicListFirstBatch();
         if (firstBatch != null) {
           acceptProgressiveUpdates = true;
           // 若第一批 future 唤醒到这里时下一批已完成，直接取最新累计快照，
           // 避免恰好落在 listener 开闸之前的那一次通知被错过。
-          final latest = preloadedService.progressiveTopicListSync ?? firstBatch;
+          final latest =
+              preloadedService.progressiveTopicListSync ?? firstBatch;
           return _completePreloadedRefresh(latest);
         }
       }
@@ -121,10 +126,25 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
 
   List<Topic> _completePreloadedRefresh(TopicListResponse response) {
     final result = _paginationHelper.processRefresh(
-      PaginationResult(
-        items: response.topics,
-        moreUrl: response.moreTopicsUrl,
-      ),
+      PaginationResult(items: response.topics, moreUrl: response.moreTopicsUrl),
+    );
+    return completePagedRefresh(PagedPage.fromPagination(result));
+  }
+
+  List<Topic> _mergeProgressivePreloadedSnapshot(TopicListResponse response) {
+    final current = state.value;
+    if (current == null || current.isEmpty) {
+      return _completePreloadedRefresh(response);
+    }
+
+    final topicIds = current.map((topic) => topic.id).toSet();
+    final merged = <Topic>[
+      ...current,
+      for (final topic in response.topics)
+        if (topicIds.add(topic.id)) topic,
+    ];
+    final result = _paginationHelper.processRefresh(
+      PaginationResult(items: merged, moreUrl: response.moreTopicsUrl),
     );
     return completePagedRefresh(PagedPage.fromPagination(result));
   }
