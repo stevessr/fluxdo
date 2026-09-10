@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, ValueNotifier, compute, immutable;
 import 'package:flutter/material.dart';
 import '../constants.dart';
 import '../models/topic.dart';
@@ -40,7 +41,7 @@ class PreloadProgress {
   double? get fraction {
     if (phase == PreloadPhase.complete) return 1.0;
     if (phase != PreloadPhase.parsingTopics || totalTopics <= 0) return null;
-    return (parsedTopics / totalTopics).clamp(0.0, 1.0);
+    return (parsedTopics / totalTopics).clamp(0.0, 1.0).toDouble();
   }
 
   String get semanticsLabel {
@@ -1180,11 +1181,11 @@ class PreloadedDataService {
     unawaited(() async {
       try {
         final data = await compute(_decodeTopicListJsonInIsolate, rawJson);
-        if (!_isCurrent(revision, generation)) {
-          _completeTopicListWithNull();
-          return;
-        }
+        if (!_isCurrent(revision, generation)) return;
         if (data == null) {
+          _setPreloadProgress(
+            const PreloadProgress(phase: PreloadPhase.failed),
+          );
           _completeTopicListWithNull();
           return;
         }
@@ -1200,8 +1201,8 @@ class PreloadedDataService {
           _setPreloadProgress(
             const PreloadProgress(phase: PreloadPhase.failed),
           );
+          _completeTopicListWithNull();
         }
-        _completeTopicListWithNull();
       }
     }());
   }
@@ -1230,11 +1231,11 @@ class PreloadedDataService {
       final rawTopicList = data['topic_list'];
       if (rawTopicList is! Map) {
         final result = await compute(_parseTopicListInIsolate, data);
-        if (!_isCurrent(revision, generation)) {
-          _completeTopicListWithNull();
-          return;
-        }
+        if (!_isCurrent(revision, generation)) return;
         _publishTopicListSnapshot(result, finalSnapshot: true);
+        _setPreloadProgress(
+          const PreloadProgress(phase: PreloadPhase.complete),
+        );
         return;
       }
 
@@ -1260,19 +1261,20 @@ class PreloadedDataService {
           TopicListResponse(topics: const <Topic>[], moreTopicsUrl: moreTopicsUrl),
           finalSnapshot: true,
         );
+        _setPreloadProgress(
+          const PreloadProgress(phase: PreloadPhase.complete),
+        );
         return;
       }
 
       for (var start = 0; start < total; start += _topicParseBatchSize) {
-        final end = (start + _topicParseBatchSize).clamp(0, total);
+        final requestedEnd = start + _topicParseBatchSize;
+        final end = requestedEnd < total ? requestedEnd : total;
         final batch = await compute(_parseTopicBatchInIsolate, <String, dynamic>{
           'users': rawUsers,
           'topics': rawTopics.sublist(start, end),
         });
-        if (!_isCurrent(revision, generation)) {
-          _completeTopicListWithNull();
-          return;
-        }
+        if (!_isCurrent(revision, generation)) return;
 
         for (final topic in batch) {
           if (seenTopicIds.add(topic.id)) accumulated.add(topic);
@@ -1304,8 +1306,8 @@ class PreloadedDataService {
         _setPreloadProgress(
           const PreloadProgress(phase: PreloadPhase.failed),
         );
+        _completeTopicListWithNull();
       }
-      _completeTopicListWithNull();
     }
   }
 
