@@ -1044,6 +1044,136 @@ extension _UserActions on _TopicDetailPageState {
     }
   }
 
+  /// 移除私信群组;群组没有「退出」语义,门禁只看 can_remove_allowed_users。
+  Future<void> _handleRemovePrivateMessageGroup(TopicGroup group) async {
+    if (_removingPrivateMessageParticipantId != null ||
+        _removingPrivateMessageGroupName != null) {
+      return;
+    }
+
+    final detail = ref.read(topicDetailProvider(_params)).value;
+    if (detail == null ||
+        !detail.isPrivateMessage ||
+        !detail.canRemoveAllowedUsers) {
+      return;
+    }
+
+    final confirmed = await showAppDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.common_remove),
+        content: Text(
+          context.l10n.topicDetail_removePrivateMessageGroupConfirm(group.name),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.common_cancel),
+          ),
+          FilledButton(
+            key: const ValueKey('pm-group-confirm'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.common_remove),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _removingPrivateMessageGroupName = group.name);
+    try {
+      await ref
+          .read(topicDetailProvider(_params).notifier)
+          .removePrivateMessageGroup(group);
+      if (!mounted) return;
+      ToastService.showSuccess(
+        context.l10n.topicDetail_removedPrivateMessageGroup(group.name),
+      );
+    } catch (error) {
+      if (mounted) {
+        ToastService.showError(context.l10n.common_operationFailed('$error'));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _removingPrivateMessageGroupName = null);
+      }
+    }
+  }
+
+  /// 邀请新成员/群组加入私信。
+  Future<void> _handleInvitePrivateMessageParticipants() async {
+    final detail = ref.read(topicDetailProvider(_params)).value;
+    if (detail == null || !detail.isPrivateMessage || !detail.canInviteTo) {
+      return;
+    }
+
+    final result = await showInvitePrivateMessageDialog(context: context);
+    if (result == null || result.isEmpty || !mounted) return;
+
+    try {
+      final failed = await ref
+          .read(topicDetailProvider(_params).notifier)
+          .invitePrivateMessageParticipants(
+            usernames: result.usernames,
+            groupNames: result.groupNames,
+          );
+      if (!mounted) return;
+
+      if (failed.isEmpty) {
+        ToastService.showSuccess(context.l10n.pm_inviteSucceeded);
+      } else {
+        // 逐个提交,部分成功也已并入名单,这里只报失败的那几个。
+        ToastService.showError(
+          context.l10n.pm_invitePartiallyFailed(failed.join('、')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ToastService.showError(context.l10n.common_operationFailed('$error'));
+      }
+    }
+  }
+
+  /// 归档 / 取消归档当前私信。
+  ///
+  /// 归档后这条私信已离开收件箱，留在页上会和列表状态打架，所以直接退回
+  /// 列表（同官方 toggleArchiveMessage 的 backToInbox）；取消归档是「捞回来
+  /// 继续看」，留在原页只给个提示。
+  Future<void> _handleToggleArchiveMessage(
+    TopicDetailNotifier notifier,
+  ) async {
+    if (_isTogglingArchiveMessage) return;
+
+    final detail = ref.read(topicDetailProvider(_params)).value;
+    if (detail == null || !detail.isPrivateMessage) return;
+
+    setState(() => _isTogglingArchiveMessage = true);
+    try {
+      final archived = await notifier.toggleArchivePrivateMessage();
+      if (!mounted) return;
+
+      _invalidatePrivateMessageLists();
+      if (archived) {
+        ToastService.showSuccess(context.l10n.topicDetail_messageArchived);
+        _leaveTopicPage();
+      } else {
+        ToastService.showSuccess(context.l10n.topicDetail_messageMovedToInbox);
+      }
+    } catch (error) {
+      if (mounted) {
+        ToastService.showError(context.l10n.common_operationFailed('$error'));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isTogglingArchiveMessage = false);
+      }
+    }
+  }
+
   Future<void> _handleDeletePost(Post post) async {
     final confirmed = await showAppDialog<bool>(
       context: context,
