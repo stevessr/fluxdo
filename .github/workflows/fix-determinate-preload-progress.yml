@@ -1,0 +1,417 @@
+name: Apply determinate preload progress fix
+
+on:
+  push:
+    branches:
+      - fix/determinate-preload-progress
+    paths:
+      - '.github/workflows/fix-determinate-preload-progress.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-determinate-preload-progress
+  cancel-in-progress: false
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout fix branch
+        uses: actions/checkout@v5
+        with:
+          ref: fix/determinate-preload-progress
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply determinate progress implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str, label: str) -> None:
+              source = path.read_text()
+              if source.count(old) != 1:
+                  raise SystemExit(f'{path}: unexpected {label} marker count={source.count(old)}')
+              path.write_text(source.replace(old, new, 1))
+
+          service = Path('lib/services/preloaded_data_service.dart')
+          old_progress = r'''@immutable
+          class PreloadProgress {
+            const PreloadProgress({
+              required this.phase,
+              this.parsedTopics = 0,
+              this.totalTopics = 0,
+            });
+
+            const PreloadProgress.idle()
+              : phase = PreloadPhase.idle,
+                parsedTopics = 0,
+                totalTopics = 0;
+
+            final PreloadPhase phase;
+            final int parsedTopics;
+            final int totalTopics;
+
+            bool get isActive =>
+                phase == PreloadPhase.requesting ||
+                phase == PreloadPhase.decoding ||
+                phase == PreloadPhase.parsingTopics;
+
+            double? get fraction {
+              if (phase == PreloadPhase.complete) return 1.0;
+              if (phase != PreloadPhase.parsingTopics || totalTopics <= 0) return null;
+              return (parsedTopics / totalTopics).clamp(0.0, 1.0).toDouble();
+            }
+
+            String get semanticsLabel {
+              switch (phase) {
+                case PreloadPhase.idle:
+                  return '预加载未开始';
+                case PreloadPhase.requesting:
+                  return '正在获取预加载数据';
+                case PreloadPhase.decoding:
+                  return '正在解析预加载数据';
+                case PreloadPhase.parsingTopics:
+                  return totalTopics > 0
+                      ? '正在解析话题 $parsedTopics / $totalTopics'
+                      : '正在解析话题';
+                case PreloadPhase.complete:
+                  return '预加载完成';
+                case PreloadPhase.failed:
+                  return '预加载失败';
+              }
+            }
+          }
+          '''
+          new_progress = r'''@immutable
+          class PreloadProgress {
+            const PreloadProgress({
+              required this.phase,
+              this.parsedTopics = 0,
+              this.totalTopics = 0,
+              this.receivedBytes = 0,
+              this.totalBytes = 0,
+            });
+
+            const PreloadProgress.idle()
+              : phase = PreloadPhase.idle,
+                parsedTopics = 0,
+                totalTopics = 0,
+                receivedBytes = 0,
+                totalBytes = 0;
+
+            final PreloadPhase phase;
+            final int parsedTopics;
+            final int totalTopics;
+            final int receivedBytes;
+            final int totalBytes;
+
+            bool get isActive =>
+                phase == PreloadPhase.requesting ||
+                phase == PreloadPhase.decoding ||
+                phase == PreloadPhase.parsingTopics;
+
+            /// 整个 preload 流程的确定进度。
+            ///
+            /// 网络下载占 2%~45%（Content-Length 可用时使用真实字节进度），
+            /// 外层 JSON/核心数据解析推进到 55%，topic_list 分批解析占 60%~100%。
+            /// 即使服务器未提供 Content-Length，也始终返回确定值，避免 Flutter
+            /// LinearProgressIndicator 退化成来回播放的不定进度动画。
+            double? get fraction {
+              switch (phase) {
+                case PreloadPhase.idle:
+                  return 0.0;
+                case PreloadPhase.requesting:
+                  final networkFraction = totalBytes > 0
+                      ? (receivedBytes / totalBytes).clamp(0.0, 1.0).toDouble()
+                      : 0.0;
+                  return 0.02 + networkFraction * 0.43;
+                case PreloadPhase.decoding:
+                  return 0.55;
+                case PreloadPhase.parsingTopics:
+                  if (totalTopics <= 0) return 0.60;
+                  final topicFraction = (parsedTopics / totalTopics)
+                      .clamp(0.0, 1.0)
+                      .toDouble();
+                  return 0.60 + topicFraction * 0.40;
+                case PreloadPhase.complete:
+                  return 1.0;
+                case PreloadPhase.failed:
+                  return null;
+              }
+            }
+
+            int get percent => ((fraction ?? 0.0) * 100).round();
+
+            int? get downloadPercent {
+              if (phase != PreloadPhase.requesting || totalBytes <= 0) return null;
+              return ((receivedBytes / totalBytes).clamp(0.0, 1.0) * 100).round();
+            }
+
+            String get semanticsLabel {
+              switch (phase) {
+                case PreloadPhase.idle:
+                  return '预加载未开始';
+                case PreloadPhase.requesting:
+                  final networkPercent = downloadPercent;
+                  return networkPercent == null
+                      ? '正在获取预加载数据'
+                      : '正在获取预加载数据 · 下载 $networkPercent%';
+                case PreloadPhase.decoding:
+                  return '正在解析预加载数据';
+                case PreloadPhase.parsingTopics:
+                  return totalTopics > 0
+                      ? '正在解析话题 $parsedTopics / $totalTopics'
+                      : '正在解析话题';
+                case PreloadPhase.complete:
+                  return '预加载完成';
+                case PreloadPhase.failed:
+                  return '预加载失败';
+              }
+            }
+          }
+          '''
+          replace_once(service, old_progress, new_progress, 'PreloadProgress class')
+
+          old_request = r'''      debugPrint('[PreloadedData] 发起 HTTP 请求');
+                final response = await _dio.get(
+                  AppConstants.baseUrl,
+                  options: Options(
+                    headers: {'Accept': 'text/html'},
+                    extra: {
+                      if (AppConstants.skipCsrfForHomeRequest) 'skipCsrf': true,
+                      // 诊断标注:首页 HTML 是 CF 盾高发路径,日志里需可辨识
+                      'requestTag': 'preload-home',
+                    },
+                  ),
+                );
+          '''
+          new_request = r'''      debugPrint('[PreloadedData] 发起 HTTP 请求');
+                var lastDownloadPercent = -1;
+                final response = await _dio.get(
+                  AppConstants.baseUrl,
+                  options: Options(
+                    headers: {'Accept': 'text/html'},
+                    extra: {
+                      if (AppConstants.skipCsrfForHomeRequest) 'skipCsrf': true,
+                      // 诊断标注:首页 HTML 是 CF 盾高发路径,日志里需可辨识
+                      'requestTag': 'preload-home',
+                    },
+                  ),
+                  onReceiveProgress: (received, total) {
+                    if (!_isCurrent(revision, generation) || total <= 0) return;
+                    final downloadPercent = received * 100 ~/ total;
+                    if (downloadPercent == lastDownloadPercent && received != total) {
+                      return;
+                    }
+                    lastDownloadPercent = downloadPercent;
+                    _setPreloadProgress(
+                      PreloadProgress(
+                        phase: PreloadPhase.requesting,
+                        receivedBytes: received,
+                        totalBytes: total,
+                      ),
+                    );
+                  },
+                );
+          '''
+          replace_once(service, old_request, new_request, 'HTTP preload request')
+
+          screen = Path('lib/pages/topics_screen.dart')
+          old_overlay = r'''    // 进度条只重建自身，workspace 作为 child 复用，避免每个解析批次
+              // 都重建整棵 MasterDetailLayout。请求/外层 JSON 解码阶段使用不定进度，
+              // topic_list 开始分批解析后切换为真实 parsed/total 百分比。
+              return ValueListenableBuilder<PreloadProgress>(
+                valueListenable: PreloadedDataService().preloadProgressListenable,
+                child: workspace,
+                builder: (context, progress, child) {
+                  if (!progress.isActive) return child!;
+                  final fraction = progress.fraction;
+                  return Stack(
+                    children: [
+                      child!,
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        child: IgnorePointer(
+                          child: Semantics(
+                            label: progress.semanticsLabel,
+                            value: fraction == null
+                                ? null
+                                : '${(fraction * 100).round()}%',
+                            child: LinearProgressIndicator(value: fraction, minHeight: 2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+          '''
+          new_overlay = r'''    // 进度 UI 只重建自身，workspace 作为 child 复用，避免网络回调/解析批次
+              // 重建整棵 MasterDetailLayout。所有活动阶段都使用确定 value，并明确显示
+              // 当前阶段与总百分比，不再出现来回播放的不定进度动画。
+              return ValueListenableBuilder<PreloadProgress>(
+                valueListenable: PreloadedDataService().preloadProgressListenable,
+                child: workspace,
+                builder: (context, progress, child) {
+                  if (!progress.isActive) return child!;
+                  final fraction = progress.fraction ?? 0.0;
+                  final theme = Theme.of(context);
+                  return Stack(
+                    children: [
+                      child!,
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        child: IgnorePointer(
+                          child: Semantics(
+                            label: progress.semanticsLabel,
+                            value: '${progress.percent}%',
+                            child: Material(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              elevation: 1,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            progress.semanticsLabel,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: theme.textTheme.labelSmall?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          '${progress.percent}%',
+                                          style: theme.textTheme.labelSmall?.copyWith(
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(999),
+                                      child: LinearProgressIndicator(
+                                        value: fraction,
+                                        minHeight: 4,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+          '''
+          replace_once(screen, old_overlay, new_overlay, 'top preload overlay')
+
+          test = Path('test/services/preloaded_data_progress_test.dart')
+          old_test = r'''    test('uses indeterminate progress before topic parsing starts', () {
+                const requesting = PreloadProgress(phase: PreloadPhase.requesting);
+                const decoding = PreloadProgress(phase: PreloadPhase.decoding);
+
+                expect(requesting.isActive, isTrue);
+                expect(requesting.fraction, isNull);
+                expect(decoding.isActive, isTrue);
+                expect(decoding.fraction, isNull);
+              });
+          '''
+          new_test = r'''    test('uses determinate overall progress before topic parsing starts', () {
+                const requesting = PreloadProgress(phase: PreloadPhase.requesting);
+                const halfDownloaded = PreloadProgress(
+                  phase: PreloadPhase.requesting,
+                  receivedBytes: 50,
+                  totalBytes: 100,
+                );
+                const decoding = PreloadProgress(phase: PreloadPhase.decoding);
+
+                expect(requesting.isActive, isTrue);
+                expect(requesting.fraction, 0.02);
+                expect(halfDownloaded.downloadPercent, 50);
+                expect(halfDownloaded.fraction, closeTo(0.235, 0.000001));
+                expect(decoding.isActive, isTrue);
+                expect(decoding.fraction, 0.55);
+              });
+          '''
+          replace_once(test, old_test, new_test, 'indeterminate progress test')
+          replace_once(
+              test,
+              '      expect(half.fraction, 0.5);',
+              '      expect(half.fraction, 0.8);',
+              'topic half progress expectation',
+          )
+          replace_once(
+              test,
+              "      expect(screenSource, contains('minHeight: 2'));",
+              "      expect(screenSource, contains('progress.percent'));\n      expect(screenSource, contains('minHeight: 4'));\n      expect(serviceSource, contains('onReceiveProgress:'));",
+              'progress overlay source assertions',
+          )
+          PY
+
+          git rm .github/workflows/fix-determinate-preload-progress.yml
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Format and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/certs
+          dart format \
+            lib/services/preloaded_data_service.dart \
+            lib/pages/topics_screen.dart \
+            test/services/preloaded_data_progress_test.dart
+          git add \
+            lib/services/preloaded_data_service.dart \
+            lib/pages/topics_screen.dart \
+            test/services/preloaded_data_progress_test.dart
+          flutter pub get
+          flutter analyze \
+            lib/services/preloaded_data_service.dart \
+            lib/pages/topics_screen.dart \
+            test/services/preloaded_data_progress_test.dart
+          dart tool/flutterw.dart test \
+            test/services/preloaded_data_progress_test.dart \
+            test/services/browser_trust_preload_latency_contract_test.dart
+          git diff --cached --check -- \
+            lib/services/preloaded_data_service.dart \
+            lib/pages/topics_screen.dart \
+            test/services/preloaded_data_progress_test.dart
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: show determinate preload progress'
+          git push origin HEAD:fix/determinate-preload-progress
