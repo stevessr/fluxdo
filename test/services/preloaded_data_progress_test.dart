@@ -12,14 +12,21 @@ void main() {
         receivedBytes: 50,
         totalBytes: 100,
       );
-      const decoding = PreloadProgress(phase: PreloadPhase.decoding);
+      const scanning = PreloadProgress(phase: PreloadPhase.scanning);
+      const halfWork = PreloadProgress(
+        phase: PreloadPhase.hydratingCore,
+        completedWorkUnits: 50,
+        totalWorkUnits: 100,
+      );
 
       expect(requesting.isActive, isTrue);
       expect(requesting.fraction, 0.02);
       expect(halfDownloaded.downloadPercent, 50);
       expect(halfDownloaded.fraction, closeTo(0.235, 0.000001));
-      expect(decoding.isActive, isTrue);
-      expect(decoding.fraction, 0.55);
+      expect(scanning.isActive, isTrue);
+      expect(scanning.fraction, 0.45);
+      expect(halfWork.fraction, closeTo(0.725, 0.000001));
+      expect(halfWork.percent, 73);
     });
 
     test('reports and clamps parsed topic progress', () {
@@ -27,16 +34,21 @@ void main() {
         phase: PreloadPhase.parsingTopics,
         parsedTopics: 12,
         totalTopics: 24,
+        completedWorkUnits: 50,
+        totalWorkUnits: 100,
       );
       const overflow = PreloadProgress(
         phase: PreloadPhase.parsingTopics,
         parsedTopics: 30,
         totalTopics: 24,
+        completedWorkUnits: 100,
+        totalWorkUnits: 100,
       );
 
-      expect(half.fraction, 0.8);
+      expect(half.fraction, closeTo(0.725, 0.000001));
       expect(half.semanticsLabel, contains('12 / 24'));
       expect(overflow.fraction, 1.0);
+      expect(overflow.percent, 100);
     });
 
     test('complete and failed phases stop the active indicator', () {
@@ -67,9 +79,17 @@ void main() {
 
     test('topic list decoding stays incremental and generation guarded', () {
       expect(serviceSource, contains('_topicParseBatchSize = 24'));
+      expect(serviceSource, contains('_topicParseConcurrency = 2'));
+      expect(serviceSource, contains('Future.wait<List<Topic>>'));
+      expect(serviceSource, contains('completedWorkUnits'));
       expect(serviceSource, contains('getInitialTopicListFirstBatch'));
       expect(serviceSource, contains('progressiveTopicListListenable'));
       expect(serviceSource, contains('rawTopics.sublist(start, end)'));
+      expect(serviceSource, contains('final firstBatch = await parseBatch(0)'));
+      expect(
+        serviceSource,
+        contains('for (final start in starts) parseBatch(start)'),
+      );
       expect(
         serviceSource,
         contains('_publishTopicListSnapshot(snapshot, finalSnapshot: isFinal)'),
