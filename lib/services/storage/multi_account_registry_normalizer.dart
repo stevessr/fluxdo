@@ -1,21 +1,21 @@
 import 'dart:convert';
 
-/// Normalizes the legacy multi-account registry before it reaches
-/// [AccountManager].
+/// Normalizes the legacy multi-account registry before it reaches the account
+/// manager.
 ///
 /// Older builds could leave more than one registry entry for the same
-/// Discourse username. AccountManager only refreshed the first exact match,
-/// so the remaining copies stayed visible forever. Discourse usernames are
-/// case-insensitive, therefore whitespace/case-only variants must also share
-/// one identity.
+/// Discourse username. The account manager only refreshed the first exact
+/// match, so the remaining copies stayed visible forever. Discourse usernames
+/// are case-insensitive, therefore whitespace/case-only variants must also
+/// share one identity.
 class MultiAccountRegistryNormalizer {
   const MultiAccountRegistryNormalizer._();
 
   static const String registryKey = 'multi_account_registry';
 
   /// Returns [raw] unchanged when it is not a valid registry payload. This
-  /// deliberately preserves AccountManager's existing malformed-registry
-  /// recovery behavior instead of silently accepting corrupt data here.
+  /// deliberately preserves the existing malformed-registry recovery behavior
+  /// instead of silently accepting corrupt data here.
   static String normalize(String raw) {
     if (raw.isEmpty) return raw;
 
