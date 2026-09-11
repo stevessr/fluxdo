@@ -11,8 +11,73 @@ import '../common/category_tags_line.dart';
 import '../common/relative_time_text.dart';
 import '../common/smart_avatar.dart';
 import '../topic/painted_topic_card.dart';
+import '../common/morphing_dialog_anchor.dart';
 import '../topic/topic_card_layout.dart';
+import '../topic/topic_card_prewarmer.dart';
 import '../topic/topic_item_builder.dart' show kUsePaintedTopicCard;
+
+/// 搜索卡排版宽:与 [SearchPostCard.build] 的壳层约束同源(页边
+/// 16×2 = 32,桌面同口径再封顶 maxContentWidth)。预热层必须用同一
+/// 口径取宽,否则挂载帧 ensureWidth 纠偏重排,预热白做。
+double searchCardWidthFor(BuildContext context) {
+  final viewportWidth = MediaQuery.sizeOf(context).width - 32;
+  if (Responsive.isMobile(context)) return viewportWidth;
+  return viewportWidth > Breakpoints.maxContentWidth
+      ? Breakpoints.maxContentWidth
+      : viewportWidth;
+}
+
+/// 搜索卡取排版单一入口:挂载路径([SearchPostCard.build])与列表外层
+/// 预热路径共用,identity/宽度/theme/category 全同口径 —— 预热建的
+/// 缓存挂载帧必命中。
+TopicCardLayout obtainSearchPostLayout(
+  BuildContext context,
+  SearchPost post,
+  Map<int, Category>? categoryMap,
+) {
+  final cardWidth = searchCardWidthFor(context);
+  final categoryId = post.topic?.categoryId;
+  return TopicCardLayout.obtainSearch(
+    identity: 'search:${post.id}',
+    post: post,
+    width: cardWidth,
+    theme: Theme.of(context),
+    category: categoryId == null ? null : categoryMap?[categoryId],
+    statsAvailableWidth: cardWidth - 64,
+  );
+}
+
+/// 搜索结果列表的预热接线:results 落地后空闲扫 [obtainSearchPostLayout]
+/// (与 [SearchPostCard.build] 同一函数,天然同源)+ 预解码头像。
+/// 搜索卡带高亮解析与两行 blurb,排版 miss 比普通卡贵 —— 不预热则
+/// 全落在滚入帧,叠加头像补画潮即"拖影感"。
+class SearchPostPrewarmScope extends ConsumerWidget {
+  const SearchPostPrewarmScope({
+    super.key,
+    required this.posts,
+    required this.child,
+  });
+
+  final List<SearchPost> posts;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categoryMap = ref.watch(categoryMapProvider).value;
+    return CardPrewarmScope<SearchPost>(
+      items: posts,
+      signature: (
+        identityHashCode(posts),
+        identityHashCode(Theme.of(context)),
+        searchCardWidthFor(context),
+        identityHashCode(categoryMap),
+      ),
+      warmItem: (context, post) =>
+          obtainSearchPostLayout(context, post, categoryMap),
+      child: child,
+    );
+  }
+}
 
 /// 搜索结果帖子卡片 — 与话题卡片同款的标题置顶布局:
 /// 1. 标题(满宽,最多两行,支持搜索高亮)+ 右侧 AI标记/#楼层 槽位
@@ -20,13 +85,45 @@ import '../topic/topic_item_builder.dart' show kUsePaintedTopicCard;
 /// 2. 头像(32px,跨两行)+ 用户名 ······ 时间
 /// 3.                     ▪分类 + 标签 ······ 统计
 /// 无分类无标签时退化为单行署名:用户名 ······ 统计 + 时间
-class SearchPostCard extends ConsumerWidget {
+class SearchPostCard extends StatelessWidget {
+  const SearchPostCard({
+    super.key,
+    required this.post,
+    this.onTap,
+    this.onLongPress,
+  });
+
+  final SearchPost post;
+  final VoidCallback? onTap;
+  final ValueChanged<BuildContext>? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget card = MorphingDialogAnchor(
+      enabled: onLongPress != null,
+      builder: (cardContext) => _SearchPostCardContent(
+        post: post,
+        onTap: onTap,
+        onLongPress: onLongPress == null
+            ? null
+            : () => onLongPress!(cardContext),
+      ),
+    );
+    if (!Responsive.isMobile(context)) {
+      card = Center(
+        child: SizedBox(width: searchCardWidthFor(context), child: card),
+      );
+    }
+    return card;
+  }
+}
+
+class _SearchPostCardContent extends ConsumerWidget {
   final SearchPost post;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
-  const SearchPostCard({
-    super.key,
+  const _SearchPostCardContent({
     required this.post,
     this.onTap,
     this.onLongPress,
@@ -48,30 +145,12 @@ class SearchPostCard extends ConsumerWidget {
     // ── 自绘路径(默认):排版全局缓存 + 单渲染对象,与话题卡同引擎
     // (kUsePaintedTopicCard 总开关一键回退 widget 版)
     if (kUsePaintedTopicCard) {
-      final viewportWidth = MediaQuery.sizeOf(context).width - 32; // 页边 16×2
-      final isMobile = Responsive.isMobile(context);
-      final cardWidth = isMobile
-          ? viewportWidth
-          : (viewportWidth > Breakpoints.maxContentWidth
-              ? Breakpoints.maxContentWidth
-              : viewportWidth);
-      final layout = TopicCardLayout.obtainSearch(
-        identity: 'search:${post.id}',
-        post: post,
-        width: cardWidth,
-        theme: theme,
-        category: category,
-        statsAvailableWidth: cardWidth - 64,
-      );
-      Widget card = PaintedTopicCard(
+      final layout = obtainSearchPostLayout(context, post, categoryMap);
+      return PaintedTopicCard(
         layout: layout,
         onTap: onTap,
         onLongPress: onLongPress,
       );
-      if (!isMobile) {
-        card = Center(child: SizedBox(width: cardWidth, child: card));
-      }
-      return card;
     }
 
     // ── widget 版(回退保险丝)────────────────────────────────

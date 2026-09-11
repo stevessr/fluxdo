@@ -53,9 +53,10 @@ class ShareImageWidget extends ConsumerWidget {
         : Colors.black.withValues(alpha: 0.1);
 
     // 优先使用传入的 post，否则查找主帖，最后使用第一个可用帖子
-    final targetPost = post
-        ?? detail.postStream.posts.where((p) => p.postNumber == 1).firstOrNull
-        ?? detail.postStream.posts.firstOrNull;
+    final targetPost =
+        post ??
+        detail.postStream.posts.where((p) => p.postNumber == 1).firstOrNull ??
+        detail.postStream.posts.firstOrNull;
 
     if (targetPost == null) {
       return RepaintBoundary(
@@ -65,7 +66,10 @@ class ShareImageWidget extends ConsumerWidget {
           padding: const EdgeInsets.all(40),
           color: bgColor,
           child: Center(
-            child: Text(S.current.common_noContent, style: TextStyle(color: textColor)),
+            child: Text(
+              S.current.common_noContent,
+              style: TextStyle(color: textColor),
+            ),
           ),
         ),
       );
@@ -73,43 +77,53 @@ class ShareImageWidget extends ConsumerWidget {
 
     return RepaintBoundary(
       key: repaintBoundaryKey,
-      child: Container(
-        width: 375,
-        padding: const EdgeInsets.all(20),
-        color: bgColor,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Logo
-            _buildLogo(textColor),
-            const SizedBox(height: 16),
+      child: Stack(
+        children: [
+          Container(
+            width: 375,
+            padding: const EdgeInsets.all(20),
+            color: bgColor,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Logo
+                _buildLogo(textColor),
+                const SizedBox(height: 16),
 
-            // 标题
-            _buildTitle(context, textColor),
-            const SizedBox(height: 12),
+                // 标题
+                _buildTitle(context, textColor),
+                const SizedBox(height: 12),
 
-            // 作者信息
-            _buildAuthorInfo(context, targetPost, textColor, secondaryTextColor, borderColor),
-            const SizedBox(height: 12),
+                // 作者信息
+                _buildAuthorInfo(
+                  context,
+                  targetPost,
+                  textColor,
+                  secondaryTextColor,
+                  borderColor,
+                ),
+                const SizedBox(height: 12),
 
-            // 分隔线
-            Container(height: 1, color: borderColor),
-            const SizedBox(height: 12),
+                // 分隔线
+                Container(height: 1, color: borderColor),
+                const SizedBox(height: 12),
 
-            // 内容
-            _buildContent(targetPost, cardColor),
+                // 内容
+                _buildContent(targetPost, cardColor),
 
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            // 分隔线
-            Container(height: 1, color: borderColor),
-            const SizedBox(height: 12),
+                // 分隔线
+                Container(height: 1, color: borderColor),
+                const SizedBox(height: 12),
 
-            // 底部分享链接
-            _buildShareLink(targetPost, secondaryTextColor),
-          ],
-        ),
+                // 底部分享链接
+                _buildShareLink(targetPost, secondaryTextColor),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -152,16 +166,18 @@ class ShareImageWidget extends ConsumerWidget {
     return Text.rich(
       TextSpan(
         style: titleStyle, // 设置父 TextSpan 的默认样式
-        children: EmojiText.buildEmojiSpans(
-          context,
-          detail.title,
-          titleStyle,
-        ),
+        children: EmojiText.buildEmojiSpans(context, detail.title, titleStyle),
       ),
     );
   }
 
-  Widget _buildAuthorInfo(BuildContext context, Post post, Color textColor, Color secondaryTextColor, Color borderColor) {
+  Widget _buildAuthorInfo(
+    BuildContext context,
+    Post post,
+    Color textColor,
+    Color secondaryTextColor,
+    Color borderColor,
+  ) {
     final fullAvatarUrl = post.getAvatarUrl(size: 120);
 
     return Row(
@@ -197,10 +213,7 @@ class ShareImageWidget extends ConsumerWidget {
               ),
               Text(
                 '@${post.username} · ${TimeUtils.formatRelativeTime(post.createdAt)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: secondaryTextColor,
-                ),
+                style: TextStyle(fontSize: 12, color: secondaryTextColor),
               ),
             ],
           ),
@@ -268,28 +281,21 @@ class ShareImageWidget extends ConsumerWidget {
   }
 
   Widget _buildShareLink(Post post, Color secondaryTextColor) {
-    final url = '${AppConstants.baseUrl}/t/${detail.slug}/${detail.id}/${post.postNumber}';
+    final url =
+        '${AppConstants.baseUrl}/t/${detail.slug}/${detail.id}/${post.postNumber}';
 
     return Row(
       children: [
-        Icon(
-          Symbols.link_rounded,
-          size: 14,
-          color: secondaryTextColor,
-        ),
+        Icon(Symbols.link_rounded, size: 14, color: secondaryTextColor),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
             url,
-            style: TextStyle(
-              fontSize: 11,
-              color: secondaryTextColor,
-            ),
+            style: TextStyle(fontSize: 11, color: secondaryTextColor),
             overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
     );
   }
-
 }

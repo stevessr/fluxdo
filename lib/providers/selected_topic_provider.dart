@@ -4,14 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
-import '../pages/drafts_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/user_profile_page.dart';
 import '../widgets/layout/auto_restore_master_detail_route.dart';
 
 /// 平行视界导航栈里一层的内容种类。栈里可以混插话题层和个人资料层
 /// （比如：话题 -> 点头像 -> 资料 -> 点资料里的链接 -> 另一个话题）。
-enum PaneKind { topic, profile, settings, drafts }
+enum PaneKind { topic, profile, settings }
 
 /// 平行视界导航栈里的一层。
 class PaneEntry {
@@ -31,19 +30,6 @@ class PaneEntry {
   const PaneEntry.profile({required this.username})
     : kind = PaneKind.profile,
       topicId = null,
-      initialTitle = null,
-      scrollToPostNumber = null,
-      instanceId = null,
-      highlightBoostUsername = null,
-      initialRevisionPostNumber = null,
-      initialRevisionNumber = null,
-      autoOpenReply = false,
-      autoReplyToPostNumber = null;
-
-  const PaneEntry.drafts()
-    : kind = PaneKind.drafts,
-      topicId = null,
-      username = null,
       initialTitle = null,
       scrollToPostNumber = null,
       instanceId = null,
@@ -323,33 +309,6 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     state = SelectedTopicState(stack: [PaneEntry.profile(username: username)]);
   }
 
-  /// 打开草稿列表：压栈显示在右栏。语义同 pushSettings ——
-  /// 草稿页是平行视界的一层内容，不是自成一套分栏。
-  void pushDrafts() {
-    // 草稿**占据**右栏，不是叠在别人上面：右边已经有话题时顶替掉它，
-    // 左边保持信息流/私信列表。所以整栈重置成单层草稿，而不是 append
-    // —— append 会让"栈里两个草稿"和"草稿压在话题上"两种烂状态都成立。
-    if (state.stack.length == 1 && state.stack.single.kind == PaneKind.drafts) {
-      return; // 已经就是它，别白重建一次状态
-    }
-    state = const SelectedTopicState(stack: [PaneEntry.drafts()]);
-  }
-
-  /// master 面板"上一层预览"里打开草稿：截断栈顶后压入。
-  void pushDraftsTruncating() {
-    if (state.stack.length < 2) {
-      pushDrafts();
-      return;
-    }
-    // 同 [pushDrafts]：草稿层唯一，截断后若下面还压着一个草稿就别再加
-    final kept = state.stack
-        .take(state.stack.length - 1)
-        .where((e) => e.kind != PaneKind.drafts);
-    state = SelectedTopicState(
-      stack: [...kept, const PaneEntry.drafts()],
-    );
-  }
-
   /// 打开设置：压栈，保留之前的层。
   void pushSettings() {
     state = SelectedTopicState(
@@ -432,18 +391,6 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     );
   }
 
-  /// 抽掉栈中某一类层，其余层保持相对顺序。
-  ///
-  /// 草稿栏用:草稿全部处理完之后，草稿这一层要从栈里消失，但**右边的
-  /// 话题/私信必须留着** —— 所以不能用 pop(那会关掉栈顶的话题)。
-  /// 抽掉后 `[草稿, 话题]` 变成 `[话题]`，左栏自然退回信息流/私信列表。
-  void removeEntriesOfKind(PaneKind kind) {
-    if (!state.stack.any((e) => e.kind == kind)) return;
-    state = SelectedTopicState(
-      stack: state.stack.where((e) => e.kind != kind).toList(),
-    );
-  }
-
   void clear() {
     state = const SelectedTopicState();
   }
@@ -463,34 +410,18 @@ final selectedMessageProvider = SelectedTopicProvider((ref) {
   return SelectedTopicNotifier();
 });
 
-/// 把草稿和某条话题/私信一起放进栈：`[草稿, 内容]`。
-///
-/// 这是"处理草稿"的标准形态 —— 左栏草稿处理栏、右栏正在处理的那条。
-/// 处理完最后一条时 [SelectedTopicNotifier.removeEntriesOfKind] 抽掉草稿
-/// 层，栈剩 `[内容]`，左栏自然退回该内容对应的列表（信息流 / 私信列表）。
-extension DraftHandoff on SelectedTopicNotifier {
-  void openDraftTarget({
-    required int topicId,
-    int? scrollToPostNumber,
-    bool autoOpenReply = true,
-    int? autoReplyToPostNumber,
-  }) {
-    pushDrafts(); // 栈重置成 [草稿]
-    push(
-      topicId: topicId,
-      scrollToPostNumber: scrollToPostNumber,
-      autoOpenReply: autoOpenReply,
-      autoReplyToPostNumber: autoReplyToPostNumber,
-    ); // → [草稿, 内容]
-  }
-}
+// 「我的」页右栏栈(selectedProfilePaneProvider)已退役:该页是导航
+// 枢纽,所有入口一律开新页面,不做右栏平行视界(用户拍板)。
 
-/// 「我的」页右栏的平行视界栈。
-///
-/// 「我的」在宽屏是"左资料 + 右卡片"的双栏,右栏这一半可以被压进来的
-/// 内容(草稿列表 / 设置)顶替 —— 这样从「我的」点草稿就是右半边显示
-/// 草稿列表,而不是整屏跳走。
-final selectedProfilePaneProvider = SelectedTopicProvider((ref) {
+/// 用户资料页(全屏形态)右栏的平行视界栈,按 username family 隔离
+/// (资料页可叠开多个:话题里点头像→资料→再开别人资料)。资料页
+/// 自己是宿主:宽屏点话题/回复列表进右栏,缩窄投影,窄屏真路由。
+/// 嵌入形态(在别的宿主栈里)不用它——压宿主的栈。
+final selectedUserProfilePaneProvider = StateNotifierProvider.family<
+  SelectedTopicNotifier,
+  SelectedTopicState,
+  String
+>((ref, _) {
   return SelectedTopicNotifier();
 });
 
@@ -502,6 +433,59 @@ final selectedSearchProvider = SelectedTopicProvider((ref) {
 /// 追觅（视奸）面板自己的平行视界栈。不能复用首页或搜索栈，否则切换
 /// 导航项时两个页面会互相继承对方正在查看的话题/资料。
 final selectedSeekingProvider = SelectedTopicProvider((ref) {
+  return SelectedTopicNotifier();
+});
+
+/// 草稿页右栏的平行视界栈——独立于首页/私信/搜索，草稿页自己是宿主。
+final selectedDraftPaneProvider = SelectedTopicProvider((ref) {
+  return SelectedTopicNotifier();
+});
+
+/// 浏览历史页右栏的平行视界栈。
+final selectedHistoryPaneProvider = SelectedTopicProvider((ref) {
+  return SelectedTopicNotifier();
+});
+
+/// 「我的话题」页右栏的平行视界栈。
+final selectedMyTopicsPaneProvider = SelectedTopicProvider((ref) {
+  return SelectedTopicNotifier();
+});
+
+/// 待审帖列表页右栏的平行视界栈。
+final selectedPendingPaneProvider = SelectedTopicProvider((ref) {
+  return SelectedTopicNotifier();
+});
+
+/// 徽章详情页右栏的平行视界栈(获得者话题列表)。
+final selectedBadgePaneProvider = SelectedTopicProvider((ref) {
+  return SelectedTopicNotifier();
+});
+
+/// 关注/粉丝列表页右栏的平行视界栈(点用户开资料)。
+final selectedFollowPaneProvider = SelectedTopicProvider((ref) {
+  return SelectedTopicNotifier();
+});
+
+/// 分类话题页右栏的平行视界栈,按 categoryId family 隔离(分类页可
+/// 叠开多个:话题里点分类→再点别的分类,共享单例会互相踩栈)。普通
+/// family 而非 autoDispose:宿主组件链(PaneHost/投影 scope)吃的是
+/// SelectedTopicProvider(non-autodispose)类型;残留代价只是每个访问
+/// 过的分类一个空栈对象。同一分类叠开两层共享一份栈,极罕见,
+/// clearOnInit 兜底。
+final selectedCategoryPaneProvider = StateNotifierProvider.family<
+  SelectedTopicNotifier,
+  SelectedTopicState,
+  int
+>((ref, _) {
+  return SelectedTopicNotifier();
+});
+
+/// 标签话题页右栏的平行视界栈(按 tagName family 隔离,见分类页注释)。
+final selectedTagPaneProvider = StateNotifierProvider.family<
+  SelectedTopicNotifier,
+  SelectedTopicState,
+  String
+>((ref, _) {
   return SelectedTopicNotifier();
 });
 
@@ -670,25 +654,6 @@ class EmbeddedStackScope extends InheritedWidget {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => UserProfilePage(username: username)),
     );
-  }
-
-  /// 打开草稿列表的统一入口：嵌入面板里压栈（右栏显示草稿列表），
-  /// 不在就全屏 push。
-  static void openDrafts(BuildContext context) {
-    final scope = _maybeScopeOf(context);
-    if (scope != null) {
-      final container = ProviderScope.containerOf(context, listen: false);
-      final notifier = container.read(scope.stackProvider.notifier);
-      if (scope.truncateOnPush) {
-        notifier.pushDraftsTruncating();
-      } else {
-        notifier.pushDrafts();
-      }
-      return;
-    }
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const DraftsPage()));
   }
 
   /// 打开设置的统一入口：嵌入面板里压栈显示平行视界，不在就全屏 push。

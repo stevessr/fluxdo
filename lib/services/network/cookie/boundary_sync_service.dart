@@ -4,10 +4,12 @@ import 'dart:io' as io;
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../../constants.dart';
 import '../../auth_session.dart';
 import '../../log/log_writer.dart';
+import '../../cf_clearance_authority.dart';
 import 'cookie_jar_service.dart';
 import 'cookie_logger.dart';
 import 'raw_cookie_writer.dart';
@@ -25,9 +27,30 @@ class BoundarySyncService {
   final CookieJarService _jar = CookieJarService();
   final PlatformCookieStrategy _strategy = PlatformCookieStrategy.create();
 
+  // 读取快照、判定在位值、写入必须串行：否则两个同步都在 jar 空时放行，
+  // 较慢的旧快照仍会在新值落库后覆盖它。CDP 与 CookieManager 共用此锁。
+  final Lock _syncLock = Lock();
+
   /// 已记录过的良性双变体签名（会话级，防同一对变体随轮询反复刷日志）。
   final Set<String> _loggedBenignDuplicateSignatures = <String>{};
   static const int _maxBenignDuplicateSignatures = 32;
+
+  /// 记录验证前可见的全部同名值，包括 WebView 中并存的旧副本。
+  /// 只读取，不修改 jar；用于区分本轮新值与删除后仍残留的分区 Cookie。
+  Future<Set<String>> readCookieValuesFromWebView({
+    required String name,
+    String? currentUrl,
+  }) async {
+    final cookies = await _strategy.readCookiesFromWebView(
+      _jar.webViewCookieManager,
+      currentUrl ?? AppConstants.baseUrl,
+    );
+    return {
+      for (final cookie in cookies)
+        if (cookie.name == name && cookie.value.isNotEmpty)
+          CookieValueCodec.decode(cookie.value),
+    };
+  }
 
   /// 从 WebView 读取一个 cookie 值，但不写入 CookieJar。
   ///
@@ -81,8 +104,31 @@ class BoundarySyncService {
   /// [excludeCookieNames] 排除指定 cookie；用于 CF/预登录流程避免写回 session。
   /// [trusted] 标记为权威写入（CF challenge 确认后），让写入升 version 盖过旧值。
   /// [acceptValues] cookie 名 → 只接受的值；用于 challenge 场景按确认的 fresh 值
-  ///   过滤，排除 WebView 中可能残留的旧变体。
+  ///   过滤，排除 WebView 中可能残留的旧变体。与 trusted 同用时，确认的
+  ///   cf_clearance 可替换验证期间被普通同步抢先写回的副本。
   Future<void> syncFromWebView({
+    String? currentUrl,
+    InAppWebViewController? controller,
+    Set<String>? cookieNames,
+    Set<String>? excludeCookieNames,
+    bool allowLowConfidenceSessionCookies = false,
+    int? requestGeneration,
+    bool trusted = false,
+    Map<String, String>? acceptValues,
+  }) => _syncLock.synchronized(
+    () => _syncFromWebView(
+      currentUrl: currentUrl,
+      controller: controller,
+      cookieNames: cookieNames,
+      excludeCookieNames: excludeCookieNames,
+      allowLowConfidenceSessionCookies: allowLowConfidenceSessionCookies,
+      requestGeneration: requestGeneration,
+      trusted: trusted,
+      acceptValues: acceptValues,
+    ),
+  );
+
+  Future<void> _syncFromWebView({
     String? currentUrl,
     InAppWebViewController? controller,
     Set<String>? cookieNames,
@@ -114,6 +160,13 @@ class BoundarySyncService {
           excludeCookieNames: excludeCookieNames,
           trusted: trusted,
           acceptValues: acceptValues,
+          shouldSyncCookie: (name, value) => _shouldSyncCookie(
+            name,
+            value,
+            url: url,
+            trusted: trusted,
+            acceptValues: acceptValues,
+          ),
         );
         if (synced > 0) {
           final syncedDetails = await _jar.getCookieDiagnosticsForRequest(
@@ -196,6 +249,16 @@ class BoundarySyncService {
             lowConfidenceSnapshot &&
             !allowLowConfidenceSessionCookies) {
           debugPrint('[BoundarySync] ${wc.name}: 跳过低置信度会话 Cookie 快照');
+          continue;
+        }
+
+        if (!await _shouldSyncCookie(
+          wc.name,
+          value,
+          url: url,
+          trusted: trusted,
+          acceptValues: acceptValues,
+        )) {
           continue;
         }
 
@@ -297,7 +360,20 @@ class BoundarySyncService {
       if (!_jar.isInitialized) await _jar.initialize();
       final jar = _jar.cookieJar;
       if (trusted && jar is EnhancedPersistCookieJar) {
-        await jar.saveFromResponseTrusted(uri, toSave, trusted: true);
+        final remaining = [...toSave];
+        if (acceptValues?['cf_clearance'] != null) {
+          final verified = toSave
+              .where((cookie) => cookie.name == 'cf_clearance')
+              .map((cookie) => SetCookieParser.fromIoCookie(cookie, uri: uri))
+              .toList();
+          if (verified.isNotEmpty) {
+            // 旧分区副本的 expires 可能更晚。确认值落库时原子替换所有
+            // 同名变体，避免请求选优再次选中旧值；不向 WebView 回灌。
+            await jar.replaceByNameForSite(uri, 'cf_clearance', verified);
+            remaining.removeWhere((cookie) => cookie.name == 'cf_clearance');
+          }
+        }
+        await jar.saveFromResponseTrusted(uri, remaining, trusted: true);
       } else {
         await jar.saveFromResponse(uri, toSave);
       }
@@ -331,6 +407,41 @@ class BoundarySyncService {
     } catch (e) {
       CookieLogger.error(operation: 'boundary_sync', error: e.toString());
     }
+  }
+
+  Future<bool> _shouldSyncCookie(
+    String name,
+    String value, {
+    required String url,
+    required bool trusted,
+    Map<String, String>? acceptValues,
+  }) async {
+    if (name != CfClearanceAuthority.cookieName) return true;
+
+    final confirmedValue = acceptValues?[name];
+    final decision = await CfClearanceAuthority.instance.evaluateReplacement(
+      value,
+      verified:
+          trusted &&
+          confirmedValue != null &&
+          CookieValueCodec.decode(confirmedValue) ==
+              CookieValueCodec.decode(value),
+    );
+    if (decision == CfClearanceReplaceDecision.skipHealthyIncumbent) {
+      LogWriter.instance.write({
+        'timestamp': DateTime.now().toIso8601String(),
+        'level': 'info',
+        'type': 'cookie_trace',
+        'event': 'cf_clearance_rotation_skipped',
+        'message':
+            '[BoundarySync] cf_clearance 在位值健康，'
+            '跳过异值替换（valueLength=${value.length}）',
+        'name': name,
+        'valueLength': value.length,
+        'url': url,
+      });
+    }
+    return decision == CfClearanceReplaceDecision.allow;
   }
 
   bool _isLowConfidenceWebViewCookie(Cookie cookie) {
@@ -652,7 +763,9 @@ class BoundarySyncService {
     List<Cookie> cookies,
   ) {
     final valueHashes =
-        cookies.map((cookie) => (cookie.value?.toString() ?? '').hashCode).toList()
+        cookies
+            .map((cookie) => (cookie.value?.toString() ?? '').hashCode)
+            .toList()
           ..sort();
     return '$host|$name|${valueHashes.join(',')}';
   }

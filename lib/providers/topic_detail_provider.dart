@@ -6,8 +6,10 @@ import '../l10n/s.dart';
 import '../models/topic.dart';
 import '../models/pending_post.dart';
 import '../models/user.dart';
+import '../plugins/plugins.dart';
 import '../services/preloaded_data_service.dart';
 import '../widgets/common/anchor_guard_sliver.dart';
+import 'bookmark_sync_controller.dart';
 import 'core_providers.dart';
 import 'message_bus/models.dart';
 
@@ -98,7 +100,11 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
   bool get isLoadMoreFailed => _isLoadMoreFailed;
   bool get isLoadPreviousFailed => _isLoadPreviousFailed;
   bool get isSummaryMode => _filter == 'summary';
+  bool get isActivityMode => _filter == 'activity';
   bool get isAuthorOnlyMode => _usernameFilter != null;
+  /// 当前按用户过滤的用户名(null = 未启用)。isAuthorOnlyMode 历史上
+  /// 只用于楼主,现已泛化为任意参与者,靠这个字段区分过滤对象。
+  String? get usernameFilter => _usernameFilter;
   bool get isTopLevelMode => _filterTopLevelReplies;
   bool get _isFilteredMode => _filter != null || _usernameFilter != null || _filterTopLevelReplies;
 
@@ -170,6 +176,163 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     ));
   }
 
+  /// 将成员移出当前私信，并同步首楼与底部的成员面板。
+  Future<void> removePrivateMessageParticipant(TopicUser participant) async {
+    final currentDetail = state.value;
+    if (currentDetail == null || !currentDetail.isPrivateMessage) return;
+
+    final service = ref.read(discourseServiceProvider);
+    await service.removePrivateMessageParticipant(
+      currentDetail.id,
+      participant.username,
+    );
+
+    // 请求期间可能收到新回复或其他 MessageBus 更新，必须基于
+    // 最新 detail 删成员，否则会用请求前的快照把新状态整体覆盖掉。
+    final latestDetail = state.value;
+    if (latestDetail == null || latestDetail.id != currentDetail.id) return;
+
+    AnchorGuardSliver.arm();
+    state = AsyncValue.data(
+      latestDetail.copyWith(
+        allowedUsers: latestDetail.allowedUsers
+            .where((user) => user.id != participant.id)
+            .toList(growable: false),
+        clearCanRemoveSelfId: latestDetail.canRemoveSelfId == participant.id,
+      ),
+    );
+  }
+
+  /// 将群组移出当前私信，并同步成员面板。
+  Future<void> removePrivateMessageGroup(TopicGroup group) async {
+    final currentDetail = state.value;
+    if (currentDetail == null || !currentDetail.isPrivateMessage) return;
+
+    final service = ref.read(discourseServiceProvider);
+    await service.removePrivateMessageGroup(currentDetail.id, group.name);
+
+    final latestDetail = state.value;
+    if (latestDetail == null || latestDetail.id != currentDetail.id) return;
+
+    AnchorGuardSliver.arm();
+    state = AsyncValue.data(
+      latestDetail.copyWith(
+        allowedGroups: latestDetail.allowedGroups
+            .where((item) => item.name != group.name)
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  /// 邀请用户/群组加入当前私信，并把新成员并入面板名单。
+  ///
+  /// 逐个提交:官方 invite 接口一次只收一个收件人(用户走 invite、群组走
+  /// invite-group),这里保持同样粒度,部分成功也把已成功的并进名单,失败
+  /// 名单原样抛给调用方提示。
+  Future<List<String>> invitePrivateMessageParticipants({
+    required List<String> usernames,
+    required List<String> groupNames,
+  }) async {
+    final currentDetail = state.value;
+    if (currentDetail == null || !currentDetail.isPrivateMessage) {
+      return const [];
+    }
+
+    final service = ref.read(discourseServiceProvider);
+    final topicId = currentDetail.id;
+    final invitedUsers = <TopicUser>[];
+    final invitedGroups = <TopicGroup>[];
+    final failed = <String>[];
+
+    for (final username in usernames) {
+      try {
+        final user = await service.invitePrivateMessageUser(topicId, username);
+        if (user != null) invitedUsers.add(user);
+      } catch (_) {
+        failed.add(username);
+      }
+    }
+    for (final groupName in groupNames) {
+      try {
+        await service.invitePrivateMessageGroup(topicId, groupName);
+        invitedGroups.add(TopicGroup(name: groupName));
+      } catch (_) {
+        failed.add(groupName);
+      }
+    }
+
+    if (invitedUsers.isEmpty && invitedGroups.isEmpty) return failed;
+
+    // 同 removePrivateMessageParticipant:请求期间可能有别的更新落到 state,
+    // 必须基于最新 detail 追加。
+    final latestDetail = state.value;
+    if (latestDetail == null || latestDetail.id != topicId) return failed;
+
+    final existingUserIds = latestDetail.allowedUsers
+        .map((user) => user.id)
+        .toSet();
+    final existingGroupNames = latestDetail.allowedGroups
+        .map((group) => group.name)
+        .toSet();
+
+    AnchorGuardSliver.arm();
+    state = AsyncValue.data(
+      latestDetail.copyWith(
+        allowedUsers: [
+          ...latestDetail.allowedUsers,
+          ...invitedUsers.where((user) => !existingUserIds.contains(user.id)),
+        ],
+        allowedGroups: [
+          ...latestDetail.allowedGroups,
+          ...invitedGroups.where(
+            (group) => !existingGroupNames.contains(group.name),
+          ),
+        ],
+      ),
+    );
+    return failed;
+  }
+
+  /// 归档 / 取消归档当前私信，并把 `message_archived` 同步进 detail。
+  ///
+  /// 返回操作后的归档态。调用方据此决定是留在页面还是退回私信列表。
+  Future<bool> toggleArchivePrivateMessage() async {
+    final currentDetail = state.value;
+    if (currentDetail == null || !currentDetail.isPrivateMessage) {
+      return false;
+    }
+
+    final service = ref.read(discourseServiceProvider);
+    final archive = !currentDetail.messageArchived;
+    if (archive) {
+      await service.archivePrivateMessage(currentDetail.id);
+    } else {
+      await service.movePrivateMessageToInbox(currentDetail.id);
+    }
+
+    // 同 removePrivateMessageParticipant:请求期间可能有别的更新落到 state。
+    final latestDetail = state.value;
+    if (latestDetail == null || latestDetail.id != currentDetail.id) {
+      return archive;
+    }
+
+    AnchorGuardSliver.arm();
+    state = AsyncValue.data(latestDetail.copyWith(messageArchived: archive));
+    return archive;
+  }
+
+  /// MessageBus 的 archived / move_to_inbox 通知（在别的端归档时会收到）
+  /// 落到 detail 上，让菜单里的双态入口跟着翻。
+  void applyMessageArchived(bool archived) {
+    final currentDetail = state.value;
+    if (currentDetail == null ||
+        !currentDetail.isPrivateMessage ||
+        currentDetail.messageArchived == archived) {
+      return;
+    }
+    state = AsyncValue.data(currentDetail.copyWith(messageArchived: archived));
+  }
+
   @override
   Future<TopicDetail> build() async {
     debugPrint('[TopicDetailNotifier] build called with topicId=${arg.topicId}, postNumber=${arg.postNumber}');
@@ -183,7 +346,11 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
       final list = _activeParams[arg.topicId];
       if (list == null) return;
       list.remove(arg);
-      if (list.isEmpty) _activeParams.remove(arg.topicId);
+      if (list.isEmpty) {
+        _activeParams.remove(arg.topicId);
+        // 该话题已无存活实例，同步丢弃插件扩展字段缓存
+        TopicPluginData.forget(arg.topicId);
+      }
     });
 
     // 保持存活，防止布局切换的短暂间隙被 autoDispose 清理
@@ -211,6 +378,10 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
 
     _updateBoundaryState(detail.postStream.posts, detail.postStream.stream);
 
+    // 记录话题级插件扩展字段，供分散在深层组件里的回复入口按 topicId 取用
+    // （如 linux.do 回复扣积分的 reply_cost）
+    TopicPluginData.put(arg.topicId, detail.pluginExtras);
+
     return _withSuggestedCache(detail);
   }
 }
@@ -218,6 +389,45 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
 final topicDetailProvider = AsyncNotifierProvider.family.autoDispose<TopicDetailNotifier, TopicDetail, TopicDetailParams>(
   TopicDetailNotifier.new,
 );
+
+/// 话题内「只看某用户」请求(用户卡片/头像长按菜单发起,话题详情页消费)。
+///
+/// 发起方是深层弹层组件,不持有页面 State,没法直接调页面的过滤 action
+/// (那里除了改 notifier 还要做整套 UI 复位:退出嵌套视图/跳 1 楼/切换
+/// spinner)。经此桥广播,由当前活跃的详情页实例 ref.listen 消费。
+/// [username] 为 null 表示取消过滤;[seq] 单调递增,保证连续两次相同
+/// 请求也能触发 listener。
+class TopicUserFilterRequest {
+  final int seq;
+  final int topicId;
+  final String? username;
+
+  const TopicUserFilterRequest({
+    required this.seq,
+    required this.topicId,
+    this.username,
+  });
+}
+
+class TopicUserFilterRequestNotifier extends Notifier<TopicUserFilterRequest?> {
+  int _seq = 0;
+
+  @override
+  TopicUserFilterRequest? build() => null;
+
+  void request({required int topicId, String? username}) {
+    state = TopicUserFilterRequest(
+      seq: ++_seq,
+      topicId: topicId,
+      username: username,
+    );
+  }
+}
+
+final topicUserFilterRequestProvider =
+    NotifierProvider<TopicUserFilterRequestNotifier, TopicUserFilterRequest?>(
+      TopicUserFilterRequestNotifier.new,
+    );
 
 /// 话题 AI 摘要 Provider
 final topicSummaryProvider = StreamProvider.autoDispose

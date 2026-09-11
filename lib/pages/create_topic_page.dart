@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
@@ -15,6 +17,8 @@ import 'package:fluxdo/models/draft.dart';
 import 'package:fluxdo/models/shortcut_binding.dart';
 
 import 'package:fluxdo/providers/discourse_providers.dart';
+import 'package:fluxdo/services/composer_min_length_resolver.dart';
+import 'package:fluxdo/widgets/common/character_counts_overlay.dart';
 import 'package:fluxdo/services/toast_service.dart';
 import 'package:dio/dio.dart';
 import 'package:fluxdo/services/ai_post_review_service.dart';
@@ -28,8 +32,10 @@ import 'package:fluxdo/providers/shortcut_provider.dart';
 import 'package:fluxdo/widgets/topic/topic_editor_helpers.dart';
 import 'package:fluxdo/services/local_notification_service.dart'
     show navigatorKey;
+import '../constants.dart';
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
+import '../utils/discourse_url_parser.dart';
 import 'pending_posts_page.dart';
 
 class CreateTopicPage extends ConsumerStatefulWidget {
@@ -85,6 +91,15 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   String? _templateContent;
   bool _isLoadingDraft = false;
   bool _showEmojiPanel = false;
+  bool _createAsPostVoting = false; // post-voting(问答)模式
+  Timer? _featuredLinkDebounce;
+  int _titleChangeGeneration = 0;
+  bool _isResolvingFeaturedLink = false;
+  bool _updatingFeaturedLinkTitle = false;
+
+  /// 对齐官方 `autoPosted`：标题 URL 已自动搬运过一次的门闩
+  bool _featuredLinkAutoPosted = false;
+  String? _featuredLink;
 
   final PageController _pageController = PageController();
   int _contentLength = 0;
@@ -101,12 +116,15 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     _draftController = DraftController(draftKey: widget.draftKey);
 
     // 添加草稿自动保存监听
-    _titleController.addListener(_onDraftContentChanged);
+    // 标题上的三件事（featured link 解析 / 草稿 / 计数器）合并成一个监听，
+    // 标题输入是热路径，不必每个按键跑三轮回调。
+    _titleController.addListener(_onTitleInputChanged);
     _contentController.addListener(_onDraftContentChanged);
 
     // 预填标题/内容(待审内容撤回重编辑等场景):直接落 controller,
     // 并跳过草稿恢复弹窗,避免旧草稿覆盖预填内容
-    final hasInitialPrefill = (widget.initialTitle?.isNotEmpty ?? false) ||
+    final hasInitialPrefill =
+        (widget.initialTitle?.isNotEmpty ?? false) ||
         (widget.initialContent?.isNotEmpty ?? false);
     if (hasInitialPrefill) {
       if (widget.initialTitle != null) {
@@ -122,6 +140,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
     // 从当前筛选条件自动填入分类和标签
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyCurrentFilter());
+    // 先按站点默认算一版下限，_applyCurrentFilter 选中分类后会再刷新
+    _refreshMinContentLength();
   }
 
   @override
@@ -300,8 +320,9 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   @override
   void dispose() {
     _shortcutSurfaceBinding.disposeDeferred();
+    _featuredLinkDebounce?.cancel();
     // 移除草稿监听器
-    _titleController.removeListener(_onDraftContentChanged);
+    _titleController.removeListener(_onTitleInputChanged);
     _contentController.removeListener(_onDraftContentChanged);
 
     // 关闭时处理草稿：已提交则跳过，有内容则保存，无内容则删除
@@ -336,8 +357,286 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     setState(() => _contentLength = _contentController.text.length);
   }
 
+  /// 是否允许当前 composer 使用话题精选链接。
+  ///
+  /// 对齐官方 `Composer#canEditTopicFeaturedLink`
+  /// (frontend/discourse/app/models/composer.js)：
+  /// 1. 信任级别 0 的用户不允许（防垃圾链接）；
+  /// 2. 站点开关 `topic_featured_link_enabled` 必须为真；
+  /// 3. 当前分类需在 `topic_featured_link_allowed_category_ids` 白名单内。
+  ///
+  /// 预加载 blob 未就绪时 `siteSettingsSync` 为 null，取正向判定按「未开启」
+  /// 处理，避免凭空发起 inline-onebox 请求并改写用户标题。
+  bool get _featuredLinkEnabled {
+    final preloaded = PreloadedDataService();
+    if (preloaded.siteSettingsSync?['topic_featured_link_enabled'] != true) {
+      return false;
+    }
+
+    // TL0 不允许精选链接（官方第一道门）
+    final trustLevel = preloaded.currentUserSync?['trust_level'];
+    if (trustLevel is int && trustLevel == 0) return false;
+
+    final allowed = preloaded.topicFeaturedLinkAllowedCategoryIdsSync;
+    final categoryId = _selectedCategory?.id;
+
+    // 尚未选分类：对齐官方的特例分支——白名单已下发，且（未分类在白名单里
+    // 或站点压根不允许未分类话题）时放行。linux.do 属于后者：
+    // allow_uncategorized_topics=false，所以刚打开发帖页、还没选分类时
+    // 也应当能粘链接——反正发布前必定会选一个合法分类。
+    if (categoryId == null) {
+      if (allowed == null || allowed.isEmpty) return true;
+      final uncategorizedId = preloaded.uncategorizedCategoryIdSync;
+      final allowUncategorized =
+          preloaded.siteSettingsSync?['allow_uncategorized_topics'] == true;
+      return (uncategorizedId != null && allowed.contains(uncategorizedId)) ||
+          !allowUncategorized;
+    }
+
+    // 白名单未下发或为空 = 不限制（对齐官方
+    // `categoryIds === undefined || !categoryIds.length`）
+    if (allowed == null || allowed.isEmpty) return true;
+    return allowed.contains(categoryId);
+  }
+
+  /// 正文是否仍为「默认态」（空或等于分类模板）。
+  ///
+  /// 官方 `bodyIsDefault()`：只有正文还没被用户动过时才自动把标题 URL 搬进
+  /// 正文，否则会在用户已经写了内容的帖子末尾突兀地多出一行链接。
+  bool _bodyIsDefault() {
+    final reply = _contentController.text;
+    if (reply.isEmpty) return true;
+    final template = _templateContent;
+    if (template != null && reply.trim() == template.trim()) return true;
+    return false;
+  }
+
+  /// 标题 URL 是否指向本站。
+  ///
+  /// 官方只把**外部**链接做成精选链接（`only feature links to external
+  /// sites`），指向本站的 URL 直接不处理。
+  bool _isSameSiteUrl(TitleUrlInfo candidate) {
+    final siteHost = Uri.tryParse(AppConstants.baseUrl)?.host;
+    if (siteHost == null || siteHost.isEmpty) return false;
+    return candidate.uri.host.toLowerCase() == siteHost.toLowerCase();
+  }
+
+  /// 标题输入的单一监听入口（草稿 / 计数器 / featured link 三合一）。
+  void _onTitleInputChanged() {
+    _onDraftContentChanged();
+    _updateTitleLength();
+    _onTitleChanged();
+  }
+
+  /// 对齐 Discourse composer：标题只包含一个 URL 时，异步取 onebox 标题，
+  /// 并记下原 URL 作为 `featured_link`。
+  ///
+  /// 注意这里**只**改标题、不碰正文：正文追加统一放到提交前（见
+  /// [_applyFeaturedLinkToContent]），否则与富文本编辑器的 flush 抢写。
+  void _onTitleChanged() {
+    // 自增必须晚于「自改标题」的早退判断：_replaceTitleWithOneboxTitle 写回
+    // controller 会重入本方法，若在早退前推进 generation，就会把刚发出的那次
+    // 解析判成过期，_isCurrentTitleUrl 随之永远为 false。
+    if (_updatingFeaturedLinkTitle) return;
+
+    _featuredLinkDebounce?.cancel();
+    final generation = ++_titleChangeGeneration;
+
+    // 对齐官方 `autoPosted`：标题被清空才重置自动处理资格，否则整个
+    // composer 生命周期内只自动搬运一次，不会反复往正文里塞链接。
+    if (_titleController.text.trim().isEmpty) {
+      _featuredLinkAutoPosted = false;
+    }
+    if (_featuredLinkAutoPosted) return;
+
+    final candidate = DiscourseUrlParser.parseTitleUrl(_titleController.text);
+    // 对齐官方：只给外部链接做精选，且正文仍为默认态时才接管。
+    if (!_featuredLinkEnabled ||
+        candidate == null ||
+        _isSameSiteUrl(candidate) ||
+        !_bodyIsDefault()) {
+      if (_isResolvingFeaturedLink || _featuredLink != null) {
+        setState(() {
+          _isResolvingFeaturedLink = false;
+          _featuredLink = null;
+        });
+      }
+      return;
+    }
+
+    // 同一个 URL 已经解析过时，不重复请求。
+    if (_featuredLink == candidate.absoluteUrl) {
+      if (_isResolvingFeaturedLink) {
+        setState(() => _isResolvingFeaturedLink = false);
+      }
+      return;
+    }
+
+    setState(() {
+      _isResolvingFeaturedLink = true;
+      _featuredLink = null;
+    });
+    _featuredLinkDebounce = Timer(const Duration(milliseconds: 500), () {
+      unawaited(_resolveFeaturedLink(candidate, generation));
+    });
+  }
+
+  Future<void> _resolveFeaturedLink(
+    TitleUrlInfo candidate,
+    int generation,
+  ) async {
+    if (!_isCurrentTitleUrl(candidate, generation)) {
+      if (mounted &&
+          generation == _titleChangeGeneration &&
+          _isResolvingFeaturedLink) {
+        setState(() => _isResolvingFeaturedLink = false);
+      }
+      return;
+    }
+
+    String? resolvedTitle;
+    try {
+      final boxes = await ref
+          .read(discourseServiceProvider)
+          .fetchInlineOneboxes([
+            candidate.absoluteUrl,
+          ], categoryId: _selectedCategory?.id)
+          .timeout(const Duration(seconds: 5));
+      resolvedTitle = boxes[candidate.absoluteUrl]?.title.trim();
+    } catch (_) {
+      // fetchInlineOneboxes 已将 onebox 失败降级为空结果；这里保留 URL。
+    }
+
+    if (!mounted || !_isCurrentTitleUrl(candidate, generation)) return;
+
+    setState(() {
+      _featuredLink = candidate.absoluteUrl;
+      _isResolvingFeaturedLink = false;
+      _featuredLinkAutoPosted = true;
+    });
+
+    // 对齐官方：解析成功当场就把链接写进正文，用户能立即看到。
+    await _applyFeaturedLinkToContent(candidate.absoluteUrl);
+
+    if (resolvedTitle != null && resolvedTitle.isNotEmpty) {
+      _replaceTitleWithOneboxTitle(resolvedTitle);
+    }
+  }
+
+  bool _isCurrentTitleUrl(TitleUrlInfo candidate, int generation) {
+    return mounted &&
+        generation == _titleChangeGeneration &&
+        _featuredLinkEnabled &&
+        // 官方同样在真正发请求前再查一次 bodyIsDefault：debounce 窗口内
+        // 用户可能已经开始写正文了。
+        _bodyIsDefault() &&
+        _titleController.text.trim() == candidate.url;
+  }
+
+  /// 提交时提前结束未完成的解析，把标题里的 URL 直接定为 featured link。
+  ///
+  /// onebox 只负责「把标题换成网页标题」这个锦上添花的步骤；用户主动点发布
+  /// 就说明他接受当前标题，没必要拿一个网络请求把提交按钮卡住。
+  void _settlePendingFeaturedLink() {
+    _featuredLinkDebounce?.cancel();
+    if (!_featuredLinkEnabled) return;
+
+    final candidate = DiscourseUrlParser.parseTitleUrl(_titleController.text);
+    if (candidate == null ||
+        _isSameSiteUrl(candidate) ||
+        !_bodyIsDefault()) {
+      return;
+    }
+    // 推进 generation 使飞在路上的解析回调失效，避免它在提交途中改标题。
+    _titleChangeGeneration++;
+    _isResolvingFeaturedLink = false;
+    _featuredLink = candidate.absoluteUrl;
+  }
+
+  /// 把 featured link 落进正文（对齐官方 `appendText(url, null, {block: true})`）。
+  ///
+  /// 富文本模式下必须走编辑器的插入 API：它持有独立的 EditorState，
+  /// 且镜像是单向的（doc → controller），直接写 controller 不会显示，
+  /// 还会被下一次序列化覆盖掉。
+  Future<void> _applyFeaturedLinkToContent(String url) async {
+    if (url.isEmpty) return;
+    if (_contentController.text.contains(url)) return;
+
+    final richEditor = _richKey.currentState;
+    if (richEditor != null) {
+      // 富文本：经 EditorState 插入，内部会自行镜像回 controller
+      await richEditor.insertMarkdownSnippet(url);
+      return;
+    }
+
+    // 纯文本：直接拼接。用 value 整体赋值并给出合法选区——text setter 会把
+    // selection 置为 -1，平台以「无光标态」初始化输入连接后，IME 退格
+    // 对既有文本失效。
+    final trimmed = _contentController.text.trimRight();
+    final next = trimmed.isEmpty ? url : '$trimmed\n\n$url';
+    _contentController.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
+    );
+  }
+
+  void _replaceTitleWithOneboxTitle(String title) {
+    final resolvedTitle = title.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (resolvedTitle.isEmpty ||
+        resolvedTitle == _titleController.text.trim()) {
+      return;
+    }
+
+    _updatingFeaturedLinkTitle = true;
+    try {
+      _titleController.value = _titleController.value.copyWith(
+        text: resolvedTitle,
+        selection: TextSelection.collapsed(offset: resolvedTitle.length),
+        composing: TextRange.empty,
+      );
+    } finally {
+      _updatingFeaturedLinkTitle = false;
+    }
+  }
+
+  /// 标题长度变化时重建（驱动标题计数器）
+  int _titleLength = 0;
+  void _updateTitleLength() {
+    final length = _titleController.text.trim().length;
+    if (length == _titleLength) return;
+    setState(() => _titleLength = length);
+  }
+
+  /// 首帖最小字数（含 warden 等插件按分类的改写）；null 表示尚未解析出
+  int? _minContentLength;
+
+  /// 解析当前分类下的首帖最小字数
+  ///
+  /// 分类可随时切换（如从「云端资产」切到「搞七捻三」），每次切换都要重算，
+  /// 计数器分母与提交校验共用该结果。
+  Future<void> _refreshMinContentLength() async {
+    final category = _selectedCategory;
+    final min = await ComposerMinLengthResolver.resolve(
+      category: category,
+      isFirstPost: true,
+      isPrivateMessage: false,
+    );
+    if (!mounted) return;
+    setState(() => _minContentLength = min);
+  }
+
   void _onCategorySelected(Category category) {
-    setState(() => _selectedCategory = category);
+    setState(() {
+      _selectedCategory = category;
+      // 分类联动问答默认值:强制分类锁定开;默认分类预勾选;
+      // 切到普通分类保留用户当前选择
+      if (category.onlyPostVotingInThisCategory ||
+          category.createAsPostVotingDefault) {
+        _createAsPostVoting = true;
+      }
+    });
+    // 分类决定 warden 最小字数，切换后立即重算
+    _refreshMinContentLength();
 
     final currentContent = _contentController.text.trim();
     if (currentContent.isEmpty ||
@@ -381,8 +680,21 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   }
 
   Future<void> _submit() async {
-    // 富文本模式:先强制序列化镜像
+    // 富文本模式:先强制序列化镜像。
+    // 必须排在下面两步**之前**：它俩都要读 _contentController 判断正文是否
+    // 仍为默认态，而富文本的内容在 flush 前还在 EditorState 里。
     _richKey.currentState?.flushToController();
+    // 标题是纯 URL 但 onebox 还在飞（或还在 debounce 窗口内）时，不阻断提交：
+    // featured link 本身不依赖 onebox 结果，直接用当前标题里的 URL 定案。
+    _settlePendingFeaturedLink();
+    // 已解析成功的情况下链接早已写进正文，这里只是兜底：接住「没等
+    // onebox 回来就点了发布」这条路径（内部已去重，不会重复追加）。
+    final pendingLink = _featuredLink;
+    if (pendingLink != null) {
+      await _applyFeaturedLinkToContent(pendingLink);
+      // 富文本插入后需要重新序列化，否则 controller 拿不到刚插的链接。
+      _richKey.currentState?.flushToController();
+    }
     if (!_formKey.currentState!.validate()) {
       // 预览模式下验证错误不可见，切回编辑模式并提示
       if (_showPreview) {
@@ -396,7 +708,14 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     }
 
     // 手动验证内容
-    final minContentLength = ref.read(minFirstPostLengthProvider).value ?? 20;
+    // 与计数器共用同一份解析结果（含 warden 按分类改写）
+    final minContentLength =
+        _minContentLength ??
+        await ComposerMinLengthResolver.resolve(
+          category: _selectedCategory,
+          isFirstPost: true,
+          isPrivateMessage: false,
+        );
     final contentText = _contentController.text.trim();
     if (contentText.isEmpty) {
       if (_showPreview) _togglePreview();
@@ -428,6 +747,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
     if (_templateContent != null &&
         _contentController.text.trim() == _templateContent!.trim()) {
+      // 上方最小字数解析可能 await 过，用 context 前先确认页面还在
+      if (!mounted) return;
       final confirm = await showAppDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -457,6 +778,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
         raw: _contentController.text,
         categoryId: _selectedCategory!.id,
         tags: _selectedTags.isNotEmpty ? _selectedTags : null,
+        featuredLink: _featuredLink,
+        createAsPostVoting: _createAsPostVoting,
       );
 
       // 发送成功后删除草稿
@@ -500,47 +823,98 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     final topInset = ProgressiveTopBlur.heightFor(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(20, topInset + 10, 20, 0),
-      child: TextFormField(
-        controller: _titleController,
-        decoration: InputDecoration(
-          hintText: context.l10n.createTopic_titleHint,
-          hintStyle: TextStyle(
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-            fontWeight: FontWeight.normal,
+      // 标题字数提示悬浮在输入框右下角(与正文同一套做法):
+      // 不占布局空间,标题为空或已达标时完全不出现
+      child: Stack(
+        children: [
+          TextFormField(
+            controller: _titleController,
+            decoration: InputDecoration(
+              // 对齐官方 `titlePlaceholder`：允许精选链接时提示可以粘链接
+              hintText: _featuredLinkEnabled
+                  ? context.l10n.createTopic_titleOrLinkHint
+                  : context.l10n.createTopic_titleHint,
+              hintStyle: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant.withValues(
+                  alpha: 0.5,
+                ),
+                fontWeight: FontWeight.normal,
+              ),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+              isDense: true,
+            ),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+            maxLines: null,
+            // 对齐官方 `titleMaxLength`：允许精选链接时不设 maxLength，否则会
+            // 把粘贴进来的长链接截断（超长交由校验提示，不靠硬截）。
+            maxLength: _featuredLinkEnabled
+                ? null
+                : PreloadedDataService().maxTopicTitleLengthSync,
+            // 计数改用悬浮层(见下方 Stack),这里不占位
+            buildCounter:
+                (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) => null,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return context.l10n.createTopic_enterTitle;
+              }
+              if (value.trim().length < minTitleLength) {
+                return context.l10n.createTopic_minTitleLength(minTitleLength);
+              }
+              // 允许精选链接时不靠 maxLength 硬截，改由校验抦（对齐官方
+              // `composer.error.title_too_long`）。
+              final maxTitleLength = PreloadedDataService()
+                  .maxTopicTitleLengthSync;
+              if (value.trim().length > maxTitleLength) {
+                return context.l10n.createTopic_maxTitleLength(maxTitleLength);
+              }
+              return null;
+            },
+            onTap: () {
+              _editorKey.currentState?.closeEmojiPanel();
+              _richKey.currentState?.closeEmojiPanel();
+            },
           ),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
-          isDense: true,
-        ),
-        style: theme.textTheme.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w900,
-          letterSpacing: -0.5,
-        ),
-        maxLines: null,
-        maxLength: 200,
-        buildCounter:
-            (
-              context, {
-              required currentLength,
-              required isFocused,
-              maxLength,
-            }) => null,
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return context.l10n.createTopic_enterTitle;
-          }
-          if (value.trim().length < minTitleLength) {
-            return context.l10n.createTopic_minTitleLength(minTitleLength);
-          }
-          return null;
-        },
-        onTap: () {
-          _editorKey.currentState?.closeEmojiPanel();
-          _richKey.currentState?.closeEmojiPanel();
-        },
+          // 标题为空时同样提示（对齐 missingReplyCharacters > 0）：
+          // 一进来就知道标题有字数门槛，不用先打字才发现
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: CharacterCountsOverlay(
+              length: _titleLength,
+              minimumLength: minTitleLength,
+              // 标题不带社区警告文案（对齐主题组件 showWarning=false）
+              showWarning: false,
+            ),
+          ),
+          // 正在解析标题里的链接。官方是把整个 composer 置 loading 态，这里
+          // 不阻断输入，只在标题右上角提示「在拿网页标题」。
+          // 用 LoadingSpinner：它内部跟随 M3eFlags，M3E 开启走 Expressive
+          // 形变环，关闭自动回退经典转圈（线宽按 size 等比缩放）。
+          if (_isResolvingFeaturedLink)
+            const Positioned(
+              right: 0,
+              top: 0,
+              child: LoadingSpinner(size: 16),
+            ),
+        ],
       ),
     );
   }
+
+  /// 字数不足时悬浮在正文区右下角的提示（对齐网页主题 CSS 的绝对定位）
+  Widget _buildCharCountOverlay() => CharacterCountsOverlay(
+    length: _contentLength,
+    minimumLength: _minContentLength,
+  );
 
   /// 底部属性条:分类/标签/字数(编辑区与工具栏之间,常驻可改)
   Widget _buildMetaBar(
@@ -548,6 +922,9 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     bool canTagTopics,
     AsyncValue<List<String>> tagsAsync,
   ) {
+    // 站点是否装 post-voting 插件:从分类 JSON 是否下发插件字段派生
+    final sitePostVoting = categories.any((c) => c.hasPostVotingFields);
+    final locked = _selectedCategory?.onlyPostVotingInThisCategory ?? false;
     return ComposerMetaBar(
       category: _selectedCategory,
       categories: categories,
@@ -556,7 +933,10 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       selectedTags: _selectedTags,
       allTags: tagsAsync.value ?? const [],
       onTagsChanged: _onTagsChanged,
-      charCount: _contentLength,
+      showPostVotingToggle: sitePostVoting,
+      postVotingEnabled: _createAsPostVoting || locked,
+      postVotingLocked: locked,
+      onPostVotingChanged: (v) => setState(() => _createAsPostVoting = v),
     );
   }
 
@@ -753,6 +1133,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                                   canTagTopics,
                                                   tagsAsync,
                                                 ),
+                                                bodyOverlay:
+                                                    _buildCharCountOverlay(),
                                                 controller: _contentController,
                                                 focusNode: _contentFocusNode,
                                                 hintText: context
@@ -805,6 +1187,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                             canTagTopics,
                                             tagsAsync,
                                           ),
+                                          bodyOverlay: _buildCharCountOverlay(),
                                           controller: _contentController,
                                           focusNode: _contentFocusNode,
                                           hintText: context

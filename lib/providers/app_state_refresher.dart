@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core_providers.dart';
 import 'bookmark_name_suggestions_provider.dart';
+import 'bookmark_sync_controller.dart';
 import 'notification_list_provider.dart';
 import 'topic_list/topic_list_provider.dart';
 import 'topic_list/filter_provider.dart';
@@ -10,6 +11,8 @@ import 'pinned_categories_provider.dart';
 import 'user_content_providers.dart';
 import 'category_provider.dart';
 import 'message_bus/notification_providers.dart';
+import 'message_bus/pm_tracking_providers.dart';
+import 'message_bus/session_channel_providers.dart';
 import 'message_bus/topic_tracking_providers.dart';
 import 'ldc_providers.dart';
 import 'cdk_providers.dart';
@@ -47,6 +50,7 @@ class AppStateRefresher {
     container.read(currentUserProvider.notifier).clearCache();
     container.read(userSummaryProvider.notifier).clearCache();
     container.read(bookmarkNameSuggestionsProvider.notifier).clearCache();
+    container.read(bookmarkSyncControllerProvider.notifier).reset();
     // 登出时 invalidate 所有（不会发请求，因为数据被清空了）
     for (final refresh in _coreRefreshers) {
       refresh(container);
@@ -114,6 +118,12 @@ class AppStateRefresher {
     (c) => c.invalidate(notificationCountStateProvider),
     (c) => c.invalidate(notificationChannelProvider),
     (c) => c.invalidate(notificationAlertChannelProvider),
+    (c) => c.invalidate(logoutChannelProvider),
+    (c) => c.invalidate(pmTrackingProvider),
+    (c) => c.invalidate(doNotDisturbProvider),
+    (c) => c.invalidate(userStatusProvider),
+    (c) => c.invalidate(userDraftCountProvider),
+    (c) => c.invalidate(reviewableCountsProvider),
     (c) => c.invalidate(latestChannelProvider),
     (c) => c.invalidate(messageBusInitProvider),
     (c) => c.invalidate(ldcUserInfoProvider),

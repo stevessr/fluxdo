@@ -604,10 +604,16 @@ class ComposerMetaBar extends StatelessWidget {
   final List<String> allTags;
   final ValueChanged<List<String>> onTagsChanged;
 
-  final int charCount;
-
   /// 元数据可编辑权限(编辑页 _canEditMetadata):false 时禁用态展示
   final bool enabled;
+
+  /// post-voting(问答)开关:站点未装插件时不传(不显示)。
+  /// [postVotingLocked] = 分类强制问答(only_post_voting_in_this_category),
+  /// 锁定为开、不可点。
+  final bool showPostVotingToggle;
+  final bool postVotingEnabled;
+  final bool postVotingLocked;
+  final ValueChanged<bool>? onPostVotingChanged;
 
   const ComposerMetaBar({
     super.key,
@@ -618,8 +624,11 @@ class ComposerMetaBar extends StatelessWidget {
     required this.selectedTags,
     required this.allTags,
     required this.onTagsChanged,
-    required this.charCount,
     this.enabled = true,
+    this.showPostVotingToggle = false,
+    this.postVotingEnabled = false,
+    this.postVotingLocked = false,
+    this.onPostVotingChanged,
   });
 
   Future<void> _pickCategory(BuildContext context) async {
@@ -786,6 +795,47 @@ class ComposerMetaBar extends StatelessWidget {
     );
   }
 
+  /// 问答模式 pill:选中态 primary 描边+文字(同分类未选引导色语汇);
+  /// 分类强制问答时锁定不可点。
+  Widget _postVotingPill(ThemeData theme) {
+    final active = postVotingEnabled;
+    final color = active
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurfaceVariant;
+    final pill = _pill(
+      theme,
+      onTap: postVotingLocked
+          ? () {}
+          : () => onPostVotingChanged?.call(!active),
+      borderColor: active
+          ? theme.colorScheme.primary.withValues(alpha: 0.5)
+          : null,
+      children: [
+        Icon(
+          Symbols.thumbs_up_down_rounded,
+          size: 14,
+          color: color,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          S.current.createTopic_postVoting,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: color,
+            fontWeight: active ? FontWeight.w600 : null,
+          ),
+        ),
+        if (postVotingLocked) ...[
+          const SizedBox(width: 2),
+          Icon(Symbols.lock_rounded, size: 12, color: color),
+        ],
+      ],
+    );
+    if (postVotingLocked) return IgnorePointer(child: pill);
+    return pill;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -799,30 +849,19 @@ class ComposerMetaBar extends StatelessWidget {
           ),
         ),
       ),
+      // 字数展示已移出:不足时由 CharacterCountsOverlay 悬浮在输入区
+      // 右下角,达标后不再展示常驻字数(常驻计数只是噪音)。
       child: Row(
         children: [
-          // 左侧 pills 容器占掉全部中间空间(pills 靠左、内部各自
-          // Flexible 截断),字数固定贴最右 —— 不能用 Spacer:
-          // Flexible pills 未用完的 flex 份额会变成行尾空白,把
-          // 字数顶离右缘
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(child: _categoryPill(context, theme)),
-                if (showTags) ...[
-                  const SizedBox(width: 6),
-                  Flexible(child: _tagsPill(context, theme)),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            S.current.createTopic_charCount(charCount),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
+          Flexible(child: _categoryPill(context, theme)),
+          if (showTags) ...[
+            const SizedBox(width: 6),
+            Flexible(child: _tagsPill(context, theme)),
+          ],
+          if (showPostVotingToggle) ...[
+            const SizedBox(width: 6),
+            Flexible(child: _postVotingPill(theme)),
+          ],
         ],
       ),
     );

@@ -5,6 +5,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 import '../providers/preferences_provider.dart';
 import '../providers/shortcut_provider.dart';
 import '../services/dynamic_content_suspension_service.dart';
+import 'package:common_ui/common_ui.dart';
 import 'blur_config.dart';
 
 /// 根据用户偏好判断是否启用模糊
@@ -176,12 +177,14 @@ Future<T?> showAppGeneralDialog<T extends Object?>({
   String? barrierLabel,
   Color? barrierColor,
   Duration transitionDuration = const Duration(milliseconds: 200),
+  Duration? reverseTransitionDuration,
   RouteTransitionsBuilder? transitionBuilder,
   bool useRootNavigator = true,
   RouteSettings? routeSettings,
   bool blur = true,
   ShortcutSurfaceConfig? shortcutSurface,
   bool suspendDynamicContent = true,
+  VoidCallback? onDisposed,
 }) {
   final enableBlur = blur && _isBlurEnabled(context);
   final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
@@ -195,9 +198,11 @@ Future<T?> showAppGeneralDialog<T extends Object?>({
             ? blurBarrierColor(Theme.of(context).brightness)
             : const Color(0x80000000)),
     transitionDuration: transitionDuration,
+    reverseTransitionDuration: reverseTransitionDuration,
     transitionBuilder: transitionBuilder,
     settings: routeSettings,
     enableBlur: enableBlur,
+    onDisposed: onDisposed,
   );
 
   return _pushOverlayRoute(
@@ -344,6 +349,32 @@ class _BlurModalBottomSheetRoute<T> extends ModalBottomSheetRoute<T> {
     if (!enableBlur) return barrier;
     return _buildAnimatedBlurBarrier(barrier: barrier, animation: animation!);
   }
+
+  /// Android 预测返回手势:慢划边缘时 sheet 跟手下滑,与手指下拉关闭是同
+  /// 一套动画 —— sheet 位移本就绑 route.animation(`_ModalBottomSheetState`
+  /// 里 `_sheetAnimation.parent = widget.route.animation`),而官方的下拉
+  /// 关闭改的是同一个 controller 的 value,手势进度喂进去即跟手,零新增
+  /// 动画代码。ModalBottomSheetRoute 不重写 buildTransitions(继承
+  /// ModalRoute 的默认实现 `return child`),故这里是干净的插入点;
+  /// 只认领手势、不包任何视觉 widget。详见
+  /// [wrapPredictiveBackForModalRoute] 与预测返回文件头的差异点 8。
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return wrapPredictiveBackForModalRoute(
+      route: this,
+      child: super.buildTransitions(
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+      ),
+    );
+  }
 }
 
 /// 支持动画模糊的 RawDialogRoute 替代
@@ -353,8 +384,10 @@ class _BlurRawDialogRoute<T> extends PopupRoute<T> {
   final String? _barrierLabel;
   final Color _barrierColor;
   final Duration _transitionDuration;
+  final Duration? _reverseTransitionDuration;
   final RouteTransitionsBuilder? _transitionBuilder;
   final bool enableBlur;
+  final VoidCallback? onDisposed;
 
   _BlurRawDialogRoute({
     required this.pageBuilder,
@@ -362,13 +395,16 @@ class _BlurRawDialogRoute<T> extends PopupRoute<T> {
     String? barrierLabel,
     required Color barrierColor,
     required Duration transitionDuration,
+    Duration? reverseTransitionDuration,
     RouteTransitionsBuilder? transitionBuilder,
     super.settings,
     this.enableBlur = false,
+    this.onDisposed,
   }) : _barrierDismissible = barrierDismissible,
        _barrierLabel = barrierLabel,
        _barrierColor = barrierColor,
        _transitionDuration = transitionDuration,
+       _reverseTransitionDuration = reverseTransitionDuration,
        _transitionBuilder = transitionBuilder;
 
   @override
@@ -382,6 +418,16 @@ class _BlurRawDialogRoute<T> extends PopupRoute<T> {
 
   @override
   Duration get transitionDuration => _transitionDuration;
+
+  @override
+  Duration get reverseTransitionDuration =>
+      _reverseTransitionDuration ?? _transitionDuration;
+
+  @override
+  void dispose() {
+    onDisposed?.call();
+    super.dispose();
+  }
 
   @override
   Widget buildPage(

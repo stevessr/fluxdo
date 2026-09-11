@@ -280,6 +280,8 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     required String raw,
     required int categoryId,
     List<String>? tags,
+    String? featuredLink,
+    bool createAsPostVoting = false,
   }) async {
     final data = <String, dynamic>{
       'title': title,
@@ -290,6 +292,22 @@ mixin _TopicsMixin on _DiscourseServiceBase {
 
     if (tags != null && tags.isNotEmpty) {
       data['tags[]'] = tags;
+    }
+
+    // 精选链接（标题为纯 URL 时自动解析）。
+    //
+    // 注：Discourse 除站点开关 topic_featured_link_enabled 外，还有分类级的
+    // topic_featured_link_allowed，而后者只在 CategorySerializer 下发、不在
+    // /site.json 用的 SiteCategorySerializer 里，客户端无法预先判断。分类
+    // 不允许时服务端会直接忽略该字段，不会连带整个发帖失败；叠加上正文
+    // 里已经追加了同一个 URL，降级后链接不会丢。
+    if (featuredLink != null && featuredLink.isNotEmpty) {
+      data['featured_link'] = featuredLink;
+    }
+
+    // post-voting(问答)话题:插件只认字符串 'true',且仅对新话题生效
+    if (createAsPostVoting) {
+      data['create_as_post_voting'] = 'true';
     }
 
     final response = await _dio.post(
@@ -360,6 +378,16 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     );
   }
 
+  /// 标记话题为未读（对齐官方 deferTopic:DELETE /t/:id/timings?last=1,
+  /// 服务端把 last_read_post_number 回退到最高楼层号 - 1)。
+  /// [all] = true 时不带 last=1,服务端 destroy_for 删除全部 PostTiming
+  /// 和 TopicUser,话题回到「从没读过」的 NEW 态,再进从头读。
+  Future<void> markTopicUnread(int topicId, {bool all = false}) async {
+    await _dio.delete(
+      all ? '/t/$topicId/timings.json' : '/t/$topicId/timings.json?last=1',
+    );
+  }
+
   /// 设置话题订阅级别
   Future<void> setTopicNotificationLevel(int topicId, TopicNotificationLevel level) async {
     await _dio.post(
@@ -367,6 +395,95 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       data: {'notification_level': level.value},
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
+  }
+
+  /// 将用户移出私信；移除自己时等价于退出该私信。
+  Future<void> removePrivateMessageParticipant(
+    int topicId,
+    String username,
+  ) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/remove-allowed-user.json',
+        data: {'username': username},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 将群组移出私信（PUT /t/:id/remove-allowed-group，按群组名）。
+  Future<void> removePrivateMessageGroup(int topicId, String groupName) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/remove-allowed-group.json',
+        data: {'name': groupName},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 邀请用户加入私信（POST /t/:id/invite）。
+  ///
+  /// 成功时服务端回 BasicUserSerializer（root 为 `user`），据此可直接把新
+  /// 成员并入本地名单，无需整帖重载；用户是邮箱邀请等无 user 返回的情况
+  /// 则回 null。
+  Future<TopicUser?> invitePrivateMessageUser(
+    int topicId,
+    String username,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/t/$topicId/invite.json',
+        data: {'user': username},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+      final user = (response.data as Map?)?['user'];
+      if (user is Map) {
+        return TopicUser.fromJson(Map<String, dynamic>.from(user));
+      }
+      return null;
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 邀请群组加入私信（POST /t/:id/invite-group，按群组名）。
+  Future<void> invitePrivateMessageGroup(int topicId, String groupName) async {
+    try {
+      await _dio.post(
+        '/t/$topicId/invite-group.json',
+        data: {'group': groupName},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 归档私信（PUT /t/:id/archive-message）。
+  ///
+  /// 服务端同时处理个人归档与「当前用户所属、且在本私信收件人里」的群组
+  /// 归档；群组私信会回 `{group_name: ...}` 用于定位群组收件箱，本项目私信
+  /// 页只有收件箱/已发送/归档三档，没有群组收件箱，故不取该返回值。
+  Future<void> archivePrivateMessage(int topicId) async {
+    try {
+      await _dio.put('/t/$topicId/archive-message.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 将已归档私信移回收件箱（PUT /t/:id/move-to-inbox）。
+  Future<void> movePrivateMessageToInbox(int topicId) async {
+    try {
+      await _dio.put('/t/$topicId/move-to-inbox.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
   }
 
   /// 更新话题元数据
@@ -485,15 +602,12 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     return watchTopicSummary(topicId, skipAgeCheck: skipAgeCheck).last;
   }
 
-  /// 获取话题主贴的 HTML 内容（轻量请求，只解析第一楼）
+  /// 获取话题主贴的 HTML 内容
+  /// 走 posts#by_number 单帖接口(只回一帖 JSON),
+  /// 比 /t/:id/1.json 的 TopicView(20 楼 chunk + 话题详情)轻量得多
   Future<String?> getTopicFirstPostCooked(int topicId) async {
-    final response = await _dio.get('/t/$topicId/1.json');
-    final data = response.data as Map<String, dynamic>;
-    final postStream = data['post_stream'] as Map<String, dynamic>?;
-    final posts = postStream?['posts'] as List<dynamic>?;
-    if (posts == null || posts.isEmpty) return null;
-    final firstPost = posts.first as Map<String, dynamic>;
-    return firstPost['cooked'] as String?;
+    final response = await _dio.get('/posts/by_number/$topicId/1.json');
+    return (response.data as Map<String, dynamic>)['cooked'] as String?;
   }
 }
 

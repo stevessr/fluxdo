@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:flutter/material.dart';
 import '../constants.dart';
 import '../models/topic.dart';
@@ -62,6 +62,30 @@ class PreloadedDataService {
   bool get isLoaded => _loaded;
   Map<String, dynamic>? get currentUserSync => _currentUser;
   Map<String, dynamic>? get siteSettingsSync => _siteSettings;
+  Map<String, dynamic>? get siteSync => _site;
+
+  /// 允许使用话题精选链接的分类 ID 白名单。
+  ///
+  /// 由 SiteSerializer 下发在 site.json 顶层（仅当 `topic_featured_link_enabled`
+  /// 为真时才包含该字段）；分类对象自身的 `topic_featured_link_allowed` 只在
+  /// CategorySerializer 里，不会出现在 site.json 的分类列表中。
+  ///
+  /// 返回 null 表示站点未下发该字段（等价于「无分类限制」，对齐官方
+  /// `categoryIds === undefined` 分支）。
+  List<int>? get topicFeaturedLinkAllowedCategoryIdsSync {
+    final raw = _site?['topic_featured_link_allowed_category_ids'];
+    if (raw is! List) return null;
+    return raw
+        .map((e) => e is int ? e : int.tryParse(e.toString()))
+        .whereType<int>()
+        .toList(growable: false);
+  }
+
+  /// 未分类分类的 ID（官方 `uncategorized_category_id`）
+  int? get uncategorizedCategoryIdSync {
+    final raw = _site?['uncategorized_category_id'];
+    return raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+  }
 
   /// 从首页 HTML 扫出的 plugin js url 列表（供 WebView session bootstrap 复用,
   /// 避免重复 fetch 首页）。未加载或没扫到时返回 null。
@@ -223,6 +247,14 @@ class PreloadedDataService {
     return 15; // Discourse 默认值
   }
 
+  /// 话题标题最大长度（官方 `max_topic_title_length`，默认 255）
+  int get maxTopicTitleLengthSync {
+    final value = _siteSettings?['max_topic_title_length'];
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? 255;
+    return 255; // Discourse 默认值
+  }
+
   /// 获取私信标题最小长度
   Future<int> getMinPmTitleLength() async {
     await _ensureLoaded();
@@ -255,6 +287,18 @@ class PreloadedDataService {
     if (value is int) return value;
     if (value is String) return int.tryParse(value) ?? 20;
     return 20; // Discourse 默认值
+  }
+
+  /// 获取帖子最大长度
+  ///
+  /// warden 等插件抬高最小字数时需要用它封顶,避免管理员误配出
+  /// 一个永远满足不了的下限。
+  Future<int> getMaxPostLength() async {
+    await _ensureLoaded();
+    final value = _siteSettings?['max_post_length'];
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? 32000;
+    return 32000; // Discourse 默认值
   }
 
   /// 获取私信内容最小长度
@@ -296,6 +340,24 @@ class PreloadedDataService {
     final raw = _siteSettings?['signatures_show_in_categories'] as String?;
     if (raw == null || raw.isEmpty) return const [];
     return raw.split('|').map(int.tryParse).whereType<int>().toList();
+  }
+
+  // ---- discourse-assign 插件开关（均为 client:true，preload 可读）----
+
+  /// 指定功能总开关(assign_enabled)。站点未装插件时该键不存在,
+  /// 视为未启用——入口显隐以「assignEnabled && can_assign」为准。
+  bool get assignEnabled => _siteSettings?['assign_enabled'] == true;
+
+  /// 指定状态字段开关(enable_assign_status)。关闭时官方 Web 端弹窗
+  /// 不显示状态下拉。
+  bool get assignStatusEnabled =>
+      _siteSettings?['enable_assign_status'] == true;
+
+  /// 指定状态可选值(assign_statuses,竖线分隔;首项为默认状态)。
+  List<String> get assignStatuses {
+    final raw = _siteSettings?['assign_statuses'] as String?;
+    if (raw == null || raw.isEmpty) return const [];
+    return raw.split('|').where((s) => s.isNotEmpty).toList();
   }
 
   /// 获取可用的回应表情列表
@@ -468,6 +530,19 @@ class PreloadedDataService {
   }
 
   /// 重置缓存（登出时调用）
+  /// 仅供测试：直接注入当前用户与站点设置
+  ///
+  /// 静音过滤等逻辑依赖这两份预加载数据，而本类是单例、真实加载路径要发
+  /// 网络请求。给测试开一个最小口子，好过把那些判定写成不可测。
+  @visibleForTesting
+  void debugSeed({
+    Map<String, dynamic>? currentUser,
+    Map<String, dynamic>? siteSettings,
+  }) {
+    _currentUser = currentUser;
+    _siteSettings = siteSettings;
+  }
+
   void reset() {
     _clearCachedData();
     _baseUri = '';
@@ -504,12 +579,22 @@ class PreloadedDataService {
         AppConstants.baseUrl,
         options: Options(
           headers: {'Accept': 'text/html'},
-          extra: {if (AppConstants.skipCsrfForHomeRequest) 'skipCsrf': true},
+          extra: {
+            if (AppConstants.skipCsrfForHomeRequest) 'skipCsrf': true,
+            // 诊断标注:首页 HTML 是 CF 盾高发路径,日志里需可辨识
+            'requestTag': 'preload-home',
+          },
         ),
       );
 
       final html = response.data as String;
-      await _parsePreloadedDataFromHtml(html);
+      final parsed = await _parsePreloadedDataFromHtml(html);
+      if (!parsed) {
+        // 解析失败不可标记成功:置 _loaded 会让所有消费方拿到空数据并
+        // 静默降级到接口兜底(站点改版时曾无声潜伏)。抛错让调用方走
+        // BrowserTrustCoordinator 的降级链(启动 WebView 补水/重试)。
+        throw const FormatException('首页 HTML 未解析出 data-preloaded 数据');
+      }
       debugPrint('[PreloadedData] 数据加载成功');
       _loaded = true;
       // 预热完成后仅更新站点基础数据和 sitekey。cf_clearance 自动续期

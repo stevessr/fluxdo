@@ -15,6 +15,25 @@ Future<ProviderContainer> _createContainer({
 }
 
 void main() {
+  test('单次返回退出默认关闭并可以持久化', () async {
+    final container = await _createContainer();
+    addTearDown(container.dispose);
+
+    expect(container.read(preferencesProvider).exitOnSingleBack, isFalse);
+
+    await container
+        .read(preferencesProvider.notifier)
+        .setExitOnSingleBack(true);
+
+    final prefs = container.read(sharedPreferencesProvider);
+    final reloaded = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
+    addTearDown(reloaded.dispose);
+
+    expect(reloaded.read(preferencesProvider).exitOnSingleBack, isTrue);
+  });
+
   test('书签默认打开方式默认值为 defaultRoute', () async {
     final container = await _createContainer();
     addTearDown(container.dispose);
@@ -54,6 +73,25 @@ void main() {
       container.read(preferencesProvider).bookmarksOpenMode,
       BookmarksOpenMode.defaultRoute,
     );
+  });
+
+  test('过滤提示开关默认开启，关闭后持久化并可恢复', () async {
+    final container = await _createContainer();
+    addTearDown(container.dispose);
+
+    expect(container.read(preferencesProvider).showFilterHint, isTrue);
+
+    await container.read(preferencesProvider.notifier).setShowFilterHint(false);
+
+    expect(container.read(preferencesProvider).showFilterHint, isFalse);
+    final prefs = container.read(sharedPreferencesProvider);
+    expect(prefs.getBool('pref_show_filter_hint'), isFalse);
+
+    final reloaded = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
+    addTearDown(reloaded.dispose);
+    expect(reloaded.read(preferencesProvider).showFilterHint, isFalse);
   });
 
   test('AI 翻译偏好可以持久化并恢复', () async {

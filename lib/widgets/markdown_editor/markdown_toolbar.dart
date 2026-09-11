@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:fluxdo_render/editor.dart'
-    show observeModifierKeyEvent, primaryModifierHeld, shiftModifierHeld;
+import 'package:fluxdo_render/editor.dart' show
+        observeModifierKeyEvent,
+        primaryModifierHeldForReversibleAction,
+        shiftModifierHeld;
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
+import '../../widgets/crypto/crypto_encrypt_sheet.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:super_clipboard/super_clipboard.dart';
@@ -27,6 +31,7 @@ import 'media_upload_helper.dart';
 import 'voice_recorder_sheet.dart';
 import 'image_upload_dialog.dart';
 import 'link_insert_dialog.dart';
+import 'poll_builder_dialog.dart';
 import 'template_insert_dialog.dart';
 import 'package:common_ui/common_ui.dart';
 import '../../../../../l10n/s.dart';
@@ -128,14 +133,15 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     // 就恒 false,Ctrl+Shift+V 会被误判成 Ctrl+V 触发贴图。
     observeModifierKeyEvent(event);
     if (widget.focusNode == null || !widget.focusNode!.hasFocus) return false;
-    // 发送类之外的判定口径:primary 只认 HardwareKeyboard 真实状态
-    // (平台化 meta/ctrl,不吃补偿窗口);Shift 用内核合取判定防
-    // Windows 中文输入法切换导致的假按住。Alt 无失真先例,保持直读。
+    // 贴图是**可逆**动作 → 用宽松版判定(真实状态 或 2s 补偿窗口):
+    // Win+V 注入的 V 不带 Ctrl 修饰位,只认真实状态整条贴图路径失效。
+    // Shift 用内核合取判定防 Windows 中文输入法切换导致的假按住,
+    // Alt 无失真先例保持直读。
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.keyV &&
         !shiftModifierHeld() &&
         !HardwareKeyboard.instance.isAltPressed &&
-        primaryModifierHeld(event)) {
+        primaryModifierHeldForReversibleAction(event)) {
       _handlePasteImage();
       // 不返回 true：让 TextField 自行处理文本粘贴，
       // 仅在检测到图片时通过上传流程处理
@@ -516,6 +522,43 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         ),
       );
     }
+
+    widget.focusNode?.requestFocus();
+  }
+
+  /// 打开加解密工具箱加密面板，把选中内容加密为 ```enc 代码块。
+  ///
+  /// 有选中文本时预填明文并在返回后**替换选区**；无选中则插入光标处。
+  Future<void> insertEncryptedBlock() async {
+    final selection = widget.controller.selection;
+    final text = widget.controller.text;
+
+    String? initialText;
+    if (selection.isValid && selection.start != selection.end) {
+      initialText = selection.textInside(text);
+    }
+
+    final ciphertext = await showCryptoEncryptSheet(
+      context: context,
+      initialPlaintext: initialText,
+    );
+
+    if (ciphertext == null) {
+      widget.focusNode?.requestFocus();
+      return;
+    }
+
+    final block = '```enc\n$ciphertext\n```';
+    final insertPos = selection.isValid ? selection.start : text.length;
+    final endPos = selection.isValid && selection.start != selection.end
+        ? selection.end
+        : insertPos;
+
+    final newText = text.replaceRange(insertPos, endPos, block);
+    widget.controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: insertPos + block.length),
+    );
 
     widget.focusNode?.requestFocus();
   }
@@ -964,6 +1007,19 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         text[selection.start - 1] != '\n';
     final prefix = needsLeadingNewline ? '\n' : '';
     insertText('$prefix$snippet\n');
+  }
+
+  /// 插入投票:构建对话框 → [poll] BBCode 块级插入。同帖多投票时
+  /// name 必须唯一,按现有文本统计 poll 数决定 name=pollN。
+  Future<void> insertPoll(BuildContext context) async {
+    final existing =
+        RegExp(r'\[poll[\s\]]').allMatches(widget.controller.text).length;
+    final spec = await showPollBuilderDialog(
+      context,
+      existingPollCount: existing,
+    );
+    if (spec == null || !mounted) return;
+    insertBlockSnippet(spec.toBBCode(existingPollCount: existing));
   }
 
   /// 语音消息:录音面板 → 上传([wrap=voice] 语音条标签)→ 插入。

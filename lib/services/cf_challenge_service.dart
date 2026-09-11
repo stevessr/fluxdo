@@ -26,6 +26,18 @@ import '../widgets/draggable_floating_pill.dart';
 CookieManager get _cfCookieManager =>
     WindowsWebViewEnvironmentService.instance.cookieManager;
 
+/// 「切兼容模式」询问的三种去向。
+enum _CompatPromptChoice {
+  /// 本次会话改用浏览器网络栈发主站请求。
+  enableCompat,
+
+  /// 关掉自动过盾,改为撞盾时手动点验证。
+  disableAutoVerify,
+
+  /// 什么都不做(含关闭弹窗)。
+  dismiss,
+}
+
 /// CF 验证服务
 /// 处理 Cloudflare Turnstile 验证（仅手动模式）
 class CfChallengeService {
@@ -36,6 +48,13 @@ class CfChallengeService {
   bool _isVerifying = false;
   bool? _completedVerificationResult;
   Completer<void>? _manualTeardownCompleter;
+  Future<void>? _completionCookieSync;
+
+  /// 等待本次已经发起的 Cookie 快照同步，不等待签发或续期新 Cookie。
+  /// 页面可以先结束，原生重试再复用这次同步，避免读到同步前的 jar。
+  Future<void> waitForCompletionCookieSync() async {
+    await _completionCookieSync;
+  }
 
   /// CF 验证是否正在进行中（用于外部判断是否应忽略路由变化）
   bool get isVerifying => _isVerifying;
@@ -57,7 +76,8 @@ class CfChallengeService {
   /// 拦截器 / ScreenTrack 等订阅它来在 CF 期间冻结业务流量与数据采集。
   final ValueNotifier<bool> inProgressNotifier = ValueNotifier<bool>(false);
 
-  /// CF 挑战被成功解决、新 cf_clearance 已落 CookieJar 的时刻广播。
+  /// 验证页面已不再被 CF 挑战、可以恢复请求的时刻广播。
+  /// 页面可能直接到达源站，不保证本轮发生过验证或签发过新 Cookie。
   /// [BrowserTrustCoordinator] 订阅它:WebView session bootstrap 因 CF 失败后,
   /// 等待 Dio 侧(或主动发起的)验证完成,再 force 重跑 bootstrap,避免两条线各自为政。
   final ValueNotifier<DateTime?> clearanceResolvedAt = ValueNotifier<DateTime?>(
@@ -68,7 +88,9 @@ class CfChallengeService {
     if (_isVerifying == value) return;
     _isVerifying = value;
     if (value) {
+      _verifyRound++;
       _completedVerificationResult = null;
+      _completionCookieSync = null;
       final current = _manualTeardownCompleter;
       if (current == null || current.isCompleted) {
         _manualTeardownCompleter = Completer<void>();
@@ -109,11 +131,20 @@ class CfChallengeService {
   /// 交给 ErrorView 提供"手动验证"入口。由 PreferencesNotifier 同步维护。
   bool autoVerifyEnabled = true;
 
+  /// 请求把「自动过盾」开关持久化关闭。
+  ///
+  /// 服务层拿不到 Riverpod 容器,由 PreferencesNotifier 在初始化时注入
+  /// (它才是这个开关的真正归属方,要写 SharedPreferences)。
+  /// 未注入时只改内存态,不持久化 —— 不阻塞功能。
+  Future<void> Function()? disableAutoVerifyRequest;
+
   final _verifyCompleter = <Completer<bool>>[];
   BuildContext? _context;
   static DateTime? _lastToastAt;
   Future<bool>? _activeSessionCompatPrompt;
-  bool _sessionCompatPromptDeclined = false;
+
+  /// 上次拒绝「切兼容」的时刻;超过 [_sessionCompatDeclineTtl] 后可再问。
+  DateTime? _sessionCompatDeclinedAt;
   Completer<BuildContext>? _contextReadyCompleter;
   VoidCallback? _activePromoteToForeground;
   bool _pendingPromoteToForeground = false;
@@ -121,10 +152,34 @@ class CfChallengeService {
   /// 冷却机制：连续失败 N 次后进入冷却期
   DateTime? _cooldownUntil;
   int _consecutiveFailures = 0;
+
+  /// 验证轮次序号。每次真正起一轮验证(_setVerifying(true))时递增。
+  ///
+  /// 多个并发请求撞盾时会合流到同一轮验证(见 showManualVerify 的排队分支),
+  /// 但它们各自拿到结果后会**各自**走后续处置。失败计数必须按轮次去重,
+  /// 否则五个并发请求把一次时序抖动记成五次失败,瞬间打满阈值 → 冷却 +
+  /// 弹切兼容询问,而用户全程无感(实测:启动时五个首屏请求同时撞盾,
+  /// cookie 同步慢一拍,9 秒后自行恢复正常)。
+  int _verifyRound = 0;
+
+  /// 已被记过失败的轮次号,防止同一轮被多个等待者重复计数。
+  int? _failureCountedRound;
   static const _cooldownDuration = Duration(seconds: 30);
   static const _ineffectiveClearanceCooldown = Duration(seconds: 60);
   static const _maxFailuresBeforeCooldown = 3;
   static const _toastCooldown = Duration(seconds: 2);
+
+  /// 等待 navigator context 就绪的上限。
+  ///
+  /// 启动早期 context 通常几百毫秒内到位;等不到说明当前环境根本没有前台
+  /// UI(后台 isolate 等),此时应放弃验证而不是挂死。
+  static const _contextWaitTimeout = Duration(seconds: 10);
+
+  /// "切兼容模式"询问被拒绝后的静默期。
+  ///
+  /// 此前一旦拒绝就沉默到登出,用户启动时随手点了取消,之后哪怕盾天天触发
+  /// 也不再询问。给它加时效:既不反复打扰,也不永久放弃。
+  static const _sessionCompatDeclineTtl = Duration(minutes: 30);
 
   /// 检查是否在冷却期
   bool get isInCooldown {
@@ -136,15 +191,49 @@ class CfChallengeService {
     return true;
   }
 
+  /// 冷却截止时刻(仅供诊断快照读取,不参与判定——判定请用 [isInCooldown])。
+  DateTime? get cooldownUntil => _cooldownUntil;
+
+  /// 连续验证失败次数(诊断用)。
+  int get consecutiveFailures => _consecutiveFailures;
+
+  /// 本次会话是否已被用户拒绝过"切兼容模式"询问(诊断用)。
+  /// 当前是否处于「已拒绝切兼容」的静默期内(诊断用)。
+  bool get sessionCompatPromptDeclined {
+    final declinedAt = _sessionCompatDeclinedAt;
+    if (declinedAt == null) return false;
+    return DateTime.now().difference(declinedAt) < _sessionCompatDeclineTtl;
+  }
+
   /// 重置冷却期和失败计数（验证成功后调用）
   void resetCooldown() {
     _cooldownUntil = null;
     _consecutiveFailures = 0;
+    // 去重标记随计数一起清:下一轮失败要能重新记账
+    _failureCountedRound = null;
     CfChallengeLogger.logCooldown(entering: false);
   }
 
-  /// 记录一次验证失败，连续达到上限后进入冷却期
-  void startCooldown() {
+  /// 当前验证轮次号。
+  ///
+  /// 拦截器在"验证成功但后续处置失败"时把它传给 [startCooldown],
+  /// 让同一轮验证的多个等待者只记一次失败。
+  int get verifyRound => _verifyRound;
+
+  /// 记录一次验证失败，连续达到上限后进入冷却期。
+  ///
+  /// [round] 传入触发本次失败的验证轮次号(见 [verifyRound])。同一轮只记一次
+  /// —— 多个并发请求撞盾会合流到同一轮验证,却各自走后续处置,不去重会把
+  /// 一次失败放大成 N 次,瞬间打满阈值。不传则按独立失败计数(如验证本身
+  /// 被用户取消,那与并发无关)。
+  void startCooldown({int? round}) {
+    if (round != null) {
+      if (_failureCountedRound == round) {
+        debugPrint('[CfChallenge] 轮次 $round 的失败已记过，跳过重复计数');
+        return;
+      }
+      _failureCountedRound = round;
+    }
     _consecutiveFailures++;
     if (_consecutiveFailures >= _maxFailuresBeforeCooldown) {
       _cooldownUntil = DateTime.now().add(_cooldownDuration);
@@ -159,16 +248,15 @@ class CfChallengeService {
     }
   }
 
-  /// 验证「成功」但铸出的 cf_clearance 对 Dio 无效(重试仍 403)时立即冷却。
+  /// 验证页面已无挑战，但原生请求重试仍命中 CF 时立即冷却。
   ///
-  /// 这是确定性环境问题(典型:Dio 与 WebView2 出口 IP 不一致,clearance
-  /// 绑定了另一侧的 IP),重复验证不可能成功,不能走 3 次计数——否则每个
-  /// 403 都会拉起一轮完整验证,形成删 cookie → 验证 → 再 403 的无限循环。
+  /// 浏览器入口的放行不能证明原生 API 已恢复。两侧出口、网络栈或路径规则
+  /// 可能不同；先阻止反复拉起相同的验证页面，再由实际请求结果判断恢复。
   void startIneffectiveClearanceCooldown() {
     _consecutiveFailures = _maxFailuresBeforeCooldown;
     _cooldownUntil = DateTime.now().add(_ineffectiveClearanceCooldown);
     debugPrint(
-      '[CfChallenge] 验证完成但 clearance 对请求无效，'
+      '[CfChallenge] 验证入口已无盾，但原生请求仍命中 CF，'
       '进入 ${_ineffectiveClearanceCooldown.inSeconds}s 冷却期',
     );
     CfChallengeLogger.logCooldown(entering: true, until: _cooldownUntil);
@@ -191,7 +279,7 @@ class CfChallengeService {
   /// 原生链路在完成验证后仍被 CF 拒绝时，询问用户是否仅在本次会话
   /// 使用浏览器网络栈。并发失败请求共享同一个弹窗结果。
   Future<bool> confirmSessionCompatibilityMode() {
-    if (_sessionCompatPromptDeclined) return Future.value(false);
+    if (sessionCompatPromptDeclined) return Future.value(false);
     final active = _activeSessionCompatPrompt;
     if (active != null) return active;
 
@@ -212,36 +300,94 @@ class CfChallengeService {
     }
     if (context == null || !context.mounted) return false;
 
-    final result = await showDialog<bool>(
+    final choice = await showDialog<_CompatPromptChoice>(
       context: context,
       useRootNavigator: true,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(S.current.cf_sessionCompatTitle),
-        content: Text(S.current.cf_sessionCompatMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(
-              MaterialLocalizations.of(dialogContext).cancelButtonLabel,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return AlertDialog(
+          title: Text(S.current.cf_sessionCompatTitle),
+          // 三个动作横排放不下(中文约 360px、英文约 500px,而对话框可用宽度
+          // 只有 280~320px,OverflowBar 会自动竖排,把"取消"顶到最上面、
+          // 主次层级反过来)。故把第三条出路降级为正文里的文字链接:
+          // 主次分明,且它紧跟在解释文字后面,阅读顺序自然。
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(S.current.cf_sessionCompatMessage),
+              const SizedBox(height: 16),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: () => Navigator.of(
+                    dialogContext,
+                  ).pop(_CompatPromptChoice.disableAutoVerify),
+                  child: Text(
+                    S.current.cf_sessionCompatDisableAuto,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.primary,
+                      decoration: TextDecoration.underline,
+                      decorationColor: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(_CompatPromptChoice.dismiss),
+              child: Text(
+                MaterialLocalizations.of(dialogContext).cancelButtonLabel,
+              ),
             ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(S.current.cf_sessionCompatEnable),
-          ),
-        ],
-      ),
+            FilledButton(
+              onPressed: () => Navigator.of(
+                dialogContext,
+              ).pop(_CompatPromptChoice.enableCompat),
+              child: Text(S.current.cf_sessionCompatEnable),
+            ),
+          ],
+        );
+      },
     );
-    final confirmed = result == true;
-    if (!confirmed) {
-      // 用户本次会话已经明确拒绝，不在后续 CF 失败时反复打扰。
-      _sessionCompatPromptDeclined = true;
+
+    switch (choice) {
+      case _CompatPromptChoice.enableCompat:
+        return true;
+
+      case _CompatPromptChoice.disableAutoVerify:
+        autoVerifyEnabled = false;
+        // 持久化交给设置层(它持有 SharedPreferences);未注入时只改内存态。
+        await disableAutoVerifyRequest?.call();
+        // 关掉自动过盾后不必再问兼容模式 —— 后续撞盾会静默 reject 并由
+        // ErrorView 给出手动验证入口,不再走到本询问。
+        _sessionCompatDeclinedAt = DateTime.now();
+        showGlobalMessage(S.current.cf_autoVerifyDisabledHint, isError: false);
+        CfChallengeLogger.log(
+          '[PROMPT] User disabled auto verify from compat prompt',
+        );
+        return false;
+
+      case _CompatPromptChoice.dismiss:
+      case null:
+        // 用户明确拒绝:进入静默期不再打扰。带时效而非永久——盾的成因
+        // (出口 IP、代理配置)可能在半小时内就变了,那时值得再问一次。
+        _sessionCompatDeclinedAt = DateTime.now();
+        return false;
     }
-    return confirmed;
   }
 
   void resetSessionCompatibilityDecision() {
-    _sessionCompatPromptDeclined = false;
+    _sessionCompatDeclinedAt = null;
   }
 
   void setContext(BuildContext context) {
@@ -273,18 +419,20 @@ class CfChallengeService {
     if (response == null) return false;
     final headers = response.headers;
 
-    // 1. 必须来自 Cloudflare
-    final server = headers.value('server') ?? '';
-    if (!server.toLowerCase().contains('cloudflare')) return false;
-
-    // 2. cf-mitigated: challenge — CF 官方权威信号, 不依赖 content-type
+    // 1. cf-mitigated: challenge — CF 官方权威信号,单独命中即判定。
+    //    不再把 server 头当前置闸:部分传输通道下响应头可能缺失/走样,
+    //    server 头一票否决会让挑战型 429 永远进不了验证自愈链路。
     final cfMitigated = headers.value('cf-mitigated') ?? '';
     if (cfMitigated.contains('challenge')) return true;
 
-    // 3. fallback: 老版本 CF 或某些路径不带 cf-mitigated, 用 body 兜底,
-    //    但 body 兜底只对 text/html 走 — 避免误判 Discourse 自己的 plaintext 403。
+    // 2. fallback: 不带 cf-mitigated 时用 body 兜底。挑战页一定是 text/html,
+    //    content-type 明确为其他类型则排除(避免误判 Discourse 自己的
+    //    plaintext/JSON 403);content-type 缺失时放行 body 判定,
+    //    isCfChallenge 的标记(cf_chl_opt 等)足够特异,不会误伤业务响应。
     final contentType = headers.value('content-type') ?? '';
-    if (!contentType.contains('text/html')) return false;
+    if (contentType.isNotEmpty && !contentType.contains('text/html')) {
+      return false;
+    }
 
     return isCfChallenge(response.data);
   }
@@ -358,11 +506,29 @@ class CfChallengeService {
       }
     }
 
-    // 启动时可能还没有可用的 context，等到 context 可用后立即弹出
+    // 启动时可能还没有可用的 context，等到 context 可用后立即弹出。
+    //
+    // 但这个等待必须有上限:后台 isolate(iOS 后台拉取)与无 UI 环境里
+    // context 永远不会到来,无限等待会让请求挂死,只能靠系统任务超时收尸
+    // (历史上后台拉取撞盾就是这个形态)。启动早期的等待仍然有效——那时
+    // context 通常在几百毫秒内就绪。
     if (ctx == null || !ctx.mounted) {
       _contextReadyCompleter ??= Completer<BuildContext>();
       debugPrint('[CfChallenge] Waiting for context to be ready...');
-      ctx = await _contextReadyCompleter!.future;
+      try {
+        ctx = await _contextReadyCompleter!.future.timeout(_contextWaitTimeout);
+      } on TimeoutException {
+        debugPrint(
+          '[CfChallenge] 等待 context 超时 '
+          '(${_contextWaitTimeout.inSeconds}s),按无 UI 环境处理',
+        );
+        CfChallengeLogger.log(
+          '[VERIFY] Skipped: no UI available after '
+          '${_contextWaitTimeout.inSeconds}s',
+          level: 'warning',
+        );
+        return null;
+      }
     }
     if (!ctx.mounted) {
       debugPrint('[CfChallenge] Context no longer mounted');
@@ -419,6 +585,15 @@ class CfChallengeService {
     // 备份旧 cf_clearance，验证失败时恢复（避免误删仍有效的值）
     final cookieJarService = CookieJarService();
     final backupCfClearance = await cookieJarService.getCfClearanceCookie();
+    Set<String>? oldWebViewClearances;
+    try {
+      oldWebViewClearances = await BoundarySyncService.instance
+          .readCookieValuesFromWebView(name: 'cf_clearance');
+    } catch (e) {
+      CfChallengeLogger.log(
+        '[VERIFY] Failed to snapshot WebView clearances: $e',
+      );
+    }
 
     // Dio 请求已经 403，说明当前 cf_clearance 可能失效了。
     // 必须确保 WebView 中也没有旧的 cf_clearance，否则 CF 直接放行不显示盾。
@@ -436,6 +611,9 @@ class CfChallengeService {
     late final OverlayEntry entry;
     // 引用当前的拦截 Route，用于 cleanup
     ModalRoute? interceptorRoute;
+
+    /// 验证结束清理时放行 interceptorRoute 的 PopScope（见 cleanup 内注释）。
+    final interceptorRoutePopAllowed = ValueNotifier<bool>(false);
 
     // Page Key 用于触发内部弹窗
     final pageKey = GlobalKey<_CfChallengePageState>();
@@ -465,8 +643,29 @@ class CfChallengeService {
       } else {
         removeEntry();
       }
-      if (interceptorRoute?.isActive ?? false) {
-        interceptorRoute?.navigator?.removeRoute(interceptorRoute!);
+      final routeToClose = interceptorRoute;
+      if (routeToClose != null && routeToClose.isActive) {
+        // 绝不能 removeRoute：框架 _flushHistoryUpdates 的 remove 分支不会
+        // 给下方路由补发 didPopNext（RouteObserver 也没有 didRemove 实现），
+        // 下方页面的 RouteAware 订阅者（话题详情 ScreenTrack、视频、iframe）
+        // 会永远停在「被覆盖」状态——曾表现为 CF 验证通过后 ScreenTrack 不再
+        // start，阅读时长怎么滑动都不上报。放行 PopScope 后走正常 pop，让
+        // 路由生命周期通知完整派发。canPop 变更要等下一帧重建才生效，pop
+        // 放到 post-frame。
+        interceptorRoutePopAllowed.value = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!routeToClose.isActive) return;
+          final nav = routeToClose.navigator;
+          if (nav == null) return;
+          if (routeToClose.isCurrent) {
+            nav.pop();
+          } else {
+            // 极端兜底：验证期间有别的路由压到它上面（正常不会发生——前台
+            // 验证时全屏 Overlay 拦截所有交互）。pop 动画是异步的，无法同步
+            // 回收到本 route，退化为 removeRoute。
+            nav.removeRoute(routeToClose);
+          }
+        });
       }
       _activePromoteToForeground = null;
       _pendingPromoteToForeground = false;
@@ -496,23 +695,32 @@ class CfChallengeService {
         opaque: false,
         barrierColor: Colors.transparent,
         pageBuilder: (context, _, _) {
-          return PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (didPop, result) async {
-              if (didPop) return;
-              if (!_isVerifying) return;
+          // canPop 由 cleanup 在验证结束时放行：验证期间拦截系统返回键
+          // 弹退出确认；结束时必须让本 route 走正常 pop（而非 removeRoute），
+          // 否则下方路由永远收不到 didPopNext（见 cleanup 内注释）。
+          return ValueListenableBuilder<bool>(
+            valueListenable: interceptorRoutePopAllowed,
+            builder: (context, canPop, _) {
+              return PopScope(
+                canPop: canPop,
+                onPopInvokedWithResult: (didPop, result) async {
+                  if (didPop) return;
+                  if (!_isVerifying) return;
 
-              // 触发内部弹窗 via GlobalKey
-              pageKey.currentState?.showExitConfirmation();
+                  // 触发内部弹窗 via GlobalKey
+                  pageKey.currentState?.showExitConfirmation();
+                },
+                // 使用 IgnorePointer 让点击事件穿透到下层的 Overlay (WebView)
+                child: const IgnorePointer(child: SizedBox.expand()),
+              );
             },
-            // 使用 IgnorePointer 让点击事件穿透到下层的 Overlay (WebView)
-            child: const IgnorePointer(child: SizedBox.expand()),
           );
         },
       );
 
       Navigator.of(pageContext).push(interceptorRoute!).then((_) {
-        // Route 被 pop
+        // Route 被 pop（cleanup 走正常 pop 后在这里完成）
+        interceptorRoutePopAllowed.dispose();
       });
     }
 
@@ -526,6 +734,7 @@ class CfChallengeService {
         oldCfClearanceValue: backupCfClearance != null
             ? CookieValueCodec.decode(backupCfClearance.value)
             : null,
+        oldCfClearanceValues: oldWebViewClearances,
       ),
     );
     overlayState.insert(entry);
@@ -553,11 +762,11 @@ class CfChallengeService {
     // 验证成功后重置冷却期
     if (result == true) {
       resetCooldown();
-      // 广播:一次 CF 挑战被成功解决,新 cf_clearance 已落 jar。
+      // 广播验证入口已经无盾。是否签发新 Cookie、原生请求是否恢复是独立状态。
       clearanceResolvedAt.value = DateTime.now();
       CfChallengeLogger.logVerifyResult(
         success: true,
-        reason: 'user completed',
+        reason: 'verification page is no longer challenged',
       );
       // 验证页移除后，Windows WebView2 的原生 Controller 仍会异步析构。
       // 等验证冷却完成、帖子 WebView 池恢复后再错峰启动续期 WebView。
@@ -605,6 +814,7 @@ class CfChallengePage extends StatefulWidget {
     this.onResult,
     this.onPromoteRequest,
     this.oldCfClearanceValue,
+    this.oldCfClearanceValues,
   });
 
   final String verifyUrl;
@@ -617,6 +827,10 @@ class CfChallengePage extends StatefulWidget {
   /// showManualVerify 在删除前备份的旧 cf_clearance 值（已解码）
   /// 用于可靠过滤 Windows 上 WebView 中未完全删除的残留旧值
   final String? oldCfClearanceValue;
+
+  /// 删除前 WebView 中的全部旧值。空集合表示已确认没有旧值；null 表示
+  /// 未取得快照，需要沿用页面初始化时的读取兜底。
+  final Set<String>? oldCfClearanceValues;
 
   @override
   State<CfChallengePage> createState() => _CfChallengePageState();
@@ -656,7 +870,7 @@ class _CfChallengePageState extends State<CfChallengePage> {
 
   /// 验证页面加载时 WebView 中的 cf_clearance 快照
   /// 用于区分「旧值残留」和「验证后新设的值」
-  String? _initialCfClearance;
+  final Set<String> _initialCfClearances = {};
 
   int get _activeMaxCheckCount =>
       _isBackground ? _backgroundMaxCheckCount : _foregroundMaxCheckCount;
@@ -669,18 +883,25 @@ class _CfChallengePageState extends State<CfChallengePage> {
     _snapshotInitialClearance();
   }
 
-  /// 记录验证开始时的旧 cf_clearance 值
-  /// 优先使用 showManualVerify 传入的备份值（可靠），WebView 读取作为补充
-  /// 解决 Windows 上 initState 时 controller 为 null 导致 _initialCfClearance
-  /// 为 null，进而无法过滤残留旧值、误判为验证成功的问题
+  /// 记录本轮开始前 jar 与 WebView 中可见的旧值。两者可能不同，不能只
+  /// 比较 jar 的备份，否则另一枚残留值会被误认成本轮新签发的 clearance。
   Future<void> _snapshotInitialClearance() async {
-    // 优先使用从 showManualVerify 传入的备份旧值（最可靠）
+    _initialCfClearances.addAll(
+      (widget.oldCfClearanceValues ?? const <String>{})
+          .where((value) => value.isNotEmpty)
+          .map(CookieValueCodec.decode),
+    );
     if (widget.oldCfClearanceValue != null &&
         widget.oldCfClearanceValue!.isNotEmpty) {
-      _initialCfClearance = widget.oldCfClearanceValue;
+      _initialCfClearances.add(
+        CookieValueCodec.decode(widget.oldCfClearanceValue!),
+      );
+    }
+    if (widget.oldCfClearanceValues != null ||
+        _initialCfClearances.isNotEmpty) {
       debugPrint(
-        '[CfChallenge] 使用备份的旧 cf_clearance 作为初始快照 '
-        '(${_initialCfClearance!.length} chars)',
+        '[CfChallenge] 已记录验证前 cf_clearance 快照 '
+        '(${_initialCfClearances.length} 个不同值)',
       );
       return;
     }
@@ -688,11 +909,11 @@ class _CfChallengePageState extends State<CfChallengePage> {
     // 兜底：从 WebView 读取（可能不可靠，但聊胜于无）
     try {
       final cookieValue = await _readCookieValue('cf_clearance');
-      _initialCfClearance = cookieValue;
-      if (_initialCfClearance != null && _initialCfClearance!.isNotEmpty) {
+      if (cookieValue != null && cookieValue.isNotEmpty) {
+        _initialCfClearances.add(CookieValueCodec.decode(cookieValue));
         debugPrint(
           '[CfChallenge] ⚠️ 验证页加载时 WebView 仍存在旧 cf_clearance '
-          '(${_initialCfClearance!.length} chars)，将忽略该值',
+          '(${cookieValue.length} chars)，将忽略该值',
         );
       }
     } catch (e) {
@@ -996,9 +1217,9 @@ class _CfChallengePageState extends State<CfChallengePage> {
   ///
   /// 不再主动 reveal WebView：reveal 完全交给 _startChallengeRevealProbe，
   /// 避免「完成响应到达 → reveal → 紧接着 CF 跳转回 /challenge 加载源站 404」
-  /// 期间 404 闪现。此处只负责 cf_clearance 探测与 finish(true)。
+  /// 期间 404 闪现。回调只触发页面检查，不用 Cookie 变化代替挑战状态。
   Future<void> _onChallengeComplete(List<dynamic> args) async {
-    if (_hasPopped) return;
+    if (_hasPopped || _finishingFromVerifyResponse) return;
     final url = args.isNotEmpty ? args[0] : '';
     final status = args.length > 1 ? args[1] : 0;
     debugPrint('[CfChallenge] challenge-platform 响应: url=$url, status=$status');
@@ -1007,53 +1228,16 @@ class _CfChallengePageState extends State<CfChallengePage> {
     );
 
     try {
-      final cookieValue = await _readCookieValue('cf_clearance');
-
-      if (cookieValue == null || cookieValue.isEmpty) {
-        debugPrint('[CfChallenge] 未检测到 cf_clearance，等待后续响应');
-        return;
-      }
-
-      // 关键：对比初始快照，过滤掉未被清除干净的旧值
-      if (!_isFreshClearance(cookieValue)) {
-        debugPrint('[CfChallenge] cf_clearance 与初始值相同（旧值残留），忽略');
-        return;
-      }
-
-      // cf_clearance 是新值，但需要确认页面已真正通过验证
-      // challenge-platform 在验证过程中有多次请求（脚本加载、初始化、提交等），
-      // 只有最终完成时页面才不再包含验证标记
-      final html = await _controller?.evaluateJavascript(
-        source: 'document.body ? document.body.innerHTML : ""',
-      );
-      if (html != null && CfChallengeService.hasActiveCfChallenge(html)) {
-        debugPrint('[CfChallenge] 检测到新 cf_clearance 但页面仍在验证中，继续等待');
-        return;
-      }
-
-      debugPrint(
-        '[CfChallenge] ✓ 验证完成：新 cf_clearance (${cookieValue.length} chars) 且页面已通过',
-      );
-      CfChallengeLogger.logVerifyResult(
-        success: true,
-        reason: 'new cf_clearance detected and page passed challenge',
-      );
-      await _syncLiveCookiesToCookieJar(freshClearance: cookieValue);
-      // 验证 cf_clearance 是否真正写入了 CookieJar
-      final synced = await CookieJarService().getCfClearance();
-      if (synced != null && synced.isNotEmpty) {
-        debugPrint(
-          '[CfChallenge] cf_clearance 已同步到 CookieJar (${synced.length} chars)',
-        );
-      } else {
-        debugPrint(
-          '[CfChallenge] ⚠️ syncFromWebView 后 CookieJar 中未找到 cf_clearance',
+      final controller = _controller;
+      // challenge-platform 有脚本加载、初始化、提交等多次请求；收到它的
+      // 响应或观察到续期 Cookie 都不等于页面已经结束挑战。
+      if (controller != null && await _hasLoadedOriginDocument(controller)) {
+        _finishFromOriginResponse(
+          reason: 'challenge callback: loaded document has no CF challenge',
         );
       }
-      _timeoutTimer?.cancel();
-      if (mounted) _finish(true);
     } catch (e) {
-      debugPrint('[CfChallenge] cookie 检查异常: $e');
+      debugPrint('[CfChallenge] challenge 回调页面检查异常: $e');
     }
   }
 
@@ -1096,8 +1280,8 @@ class _CfChallengePageState extends State<CfChallengePage> {
 
       // 兜底轮询：验证通过后页面重定向会销毁 JS 上下文，
       // 导致 onChallengeComplete 回调丢失（macOS 上尤为明显），
-      // 每秒主动检查 cf_clearance 变化来弥补
-      _pollCfClearance();
+      // 每秒检查已加载的页面是否还有挑战；续期 Cookie 不作为完成信号。
+      _pollVerificationDocument();
 
       if (_checkCount > _activeMaxCheckCount) {
         if (_isBackground) {
@@ -1166,8 +1350,8 @@ class _CfChallengePageState extends State<CfChallengePage> {
   /// 处理「页面没有 CF 挑战」的统一入口
   ///
   /// 触发场景：源站 404 / onReceivedHttpError / reveal 后页面退化 / noChallengeCheck 命中。
-  /// 行为：立刻覆盖 WebView 显示「正在完成验证…」overlay，短期轮询 cf_clearance；
-  /// 拿到新 cf_clearance 则 finish(true)，否则前台显示「重试/退出」操作，后台直接 finish(false)。
+  /// 状态码回调缺失或页面正在跳转时，短期确认源站文档。
+  /// 已加载的无盾文档即可结束，不要求源站为本轮签发新 Cookie。
   Future<void> _handleVerifyOriginFallback(
     int generation, {
     String? reason,
@@ -1193,20 +1377,13 @@ class _CfChallengePageState extends State<CfChallengePage> {
           (isCompletionProbe
               ? _completionProbeTimeout
               : _noChallengeProbeTimeout)) {
-        if (_hasPopped || _finishingFromVerifyResponse) return;
+        if (_hasPopped || !mounted || _finishingFromVerifyResponse) return;
         if (!isCompletionProbe && generation != _loadGeneration) return;
-        final cookieValue = await _readCookieValue('cf_clearance');
-        if (_isFreshClearance(cookieValue)) {
-          debugPrint(
-            '[CfChallenge] fallback/completion 期间检测到新 cf_clearance，自动完成',
+        final controller = _controller;
+        if (controller != null && await _hasLoadedOriginDocument(controller)) {
+          _finishFromOriginResponse(
+            reason: 'loaded verification document has no CF challenge',
           );
-          CfChallengeLogger.logVerifyResult(
-            success: true,
-            reason: reason ?? 'fresh cf_clearance during completion probe',
-          );
-          await _syncLiveCookiesToCookieJar(freshClearance: cookieValue);
-          _timeoutTimer?.cancel();
-          if (mounted) _finish(true);
           return;
         }
         attempt++;
@@ -1217,10 +1394,10 @@ class _CfChallengePageState extends State<CfChallengePage> {
         );
       }
 
-      debugPrint('[CfChallenge] fallback/completion 结束仍无新 cf_clearance');
+      debugPrint('[CfChallenge] fallback/completion 尚未确认页面结束挑战');
       CfChallengeLogger.logVerifyResult(
         success: false,
-        reason: reason ?? 'no fresh cf_clearance after completion probe',
+        reason: reason ?? 'no origin document after completion probe',
       );
       if (_isBackground) {
         _timeoutTimer?.cancel();
@@ -1263,26 +1440,23 @@ class _CfChallengePageState extends State<CfChallengePage> {
     });
   }
 
-  /// 轮询检测 cf_clearance 变化（兜底 JS 回调被重定向吞掉的场景）
+  /// 页面状态轮询（兜底 JS 回调被重定向吞掉的场景）
   bool _polling = false;
-  Future<void> _pollCfClearance() async {
-    if (_hasPopped || _finishingFromVerifyResponse || _polling) return;
+  Future<void> _pollVerificationDocument() async {
+    if (_hasPopped ||
+        _finishingFromVerifyResponse ||
+        _polling ||
+        _checkingOriginFallback) {
+      return;
+    }
     _polling = true;
     try {
-      final cookieValue = await _readCookieValue('cf_clearance');
-      if (_hasPopped || _finishingFromVerifyResponse) return;
-      if (!_isFreshClearance(cookieValue)) return;
-
-      debugPrint(
-        '[CfChallenge] ✓ 轮询检测到新 cf_clearance (${cookieValue!.length} chars)',
-      );
-      CfChallengeLogger.logVerifyResult(
-        success: true,
-        reason: 'polling detected new cf_clearance',
-      );
-      await _syncLiveCookiesToCookieJar(freshClearance: cookieValue);
-      _timeoutTimer?.cancel();
-      if (mounted) _finish(true);
+      final controller = _controller;
+      if (controller != null && await _hasLoadedOriginDocument(controller)) {
+        _finishFromOriginResponse(
+          reason: 'polling: loaded document has no CF challenge',
+        );
+      }
     } catch (e) {
       debugPrint('[CfChallenge] 轮询检查异常: $e');
     } finally {
@@ -1400,12 +1574,7 @@ class _CfChallengePageState extends State<CfChallengePage> {
 
   bool _isFreshClearance(String? cookieValue) {
     if (cookieValue == null || cookieValue.isEmpty) return false;
-    if (_initialCfClearance != null &&
-        _initialCfClearance!.isNotEmpty &&
-        cookieValue == _initialCfClearance) {
-      return false;
-    }
-    return true;
+    return !_initialCfClearances.contains(CookieValueCodec.decode(cookieValue));
   }
 
   bool _isVerifyUrl(WebUri? url) {
@@ -1450,15 +1619,6 @@ class _CfChallengePageState extends State<CfChallengePage> {
     return NavigationActionPolicy.ALLOW;
   }
 
-  bool _isVerifyOriginFallback(
-    WebResourceRequest request,
-    WebResourceResponse response,
-  ) {
-    if (response.statusCode != 404) return false;
-    if (request.isForMainFrame != true) return false;
-    return _isVerifyUrl(request.url);
-  }
-
   bool _isCfMitigatedChallengeHeaders(Map<String, String>? headers) {
     if (headers == null || headers.isEmpty) return false;
     for (final entry in headers.entries) {
@@ -1470,27 +1630,20 @@ class _CfChallengePageState extends State<CfChallengePage> {
     return false;
   }
 
-  bool _isVerifyPassedResponse(
-    WebResourceRequest request,
-    WebResourceResponse response,
-  ) {
-    if (request.isForMainFrame != true) return false;
-    if (!_isBareVerifyUrl(request.url)) return false;
-    if (_isCfMitigatedChallengeHeaders(response.headers)) return false;
+  bool _isVerifyOriginResponse({
+    required WebUri? url,
+    required bool? isForMainFrame,
+    required int? statusCode,
+    Map<String, String>? headers,
+  }) {
+    if (isForMainFrame != true || !_isVerifyUrl(url)) return false;
+    if (_isCfMitigatedChallengeHeaders(headers)) return false;
 
-    // /challenge 是站点专用的 CF 验证入口：
-    // 未通过时 Cloudflare 接管并返回 challenge；通过后请求会落到源站，
-    // 源站没有这个业务页面，所以 404 本身就是“已通过 CF”的完成信号。
-    return response.statusCode == 404;
-  }
-
-  bool _isVerifyPassedNavigationResponse(NavigationResponse response) {
-    final urlResponse = response.response;
-    if (response.isForMainFrame != true || urlResponse == null) return false;
-    if (!_isBareVerifyUrl(urlResponse.url)) return false;
-    if (_isCfMitigatedChallengeHeaders(urlResponse.headers)) return false;
-
-    return urlResponse.statusCode == 404;
+    // /challenge 在源站恰好不存在，所以通常返回 404；若站点以后提供正常
+    // 页面，2xx 也应结束。这里只说明入口当前无盾，不说明签发了新 Cookie。
+    // 403/429 等含义不明确的状态继续由页面内容判定，不能一律视为已放行。
+    return statusCode != null &&
+        ((statusCode >= 200 && statusCode < 300) || statusCode == 404);
   }
 
   Future<NavigationResponseAction> _handleVerifyNavigationResponse(
@@ -1507,9 +1660,15 @@ class _CfChallengePageState extends State<CfChallengePage> {
       );
     }
 
-    if (_isVerifyPassedNavigationResponse(navigationResponse)) {
-      await _finishVerifiedFromNetworkStatus(
-        reason: 'main frame /challenge navigation response returned source 404',
+    if (_isVerifyOriginResponse(
+      url: response?.url,
+      isForMainFrame: navigationResponse.isForMainFrame,
+      statusCode: response?.statusCode,
+      headers: response?.headers,
+    )) {
+      _finishFromOriginResponse(
+        reason:
+            'main frame verification navigation reached origin (${response?.statusCode})',
         headers: response?.headers,
       );
       return NavigationResponseAction.CANCEL;
@@ -1518,10 +1677,10 @@ class _CfChallengePageState extends State<CfChallengePage> {
     return NavigationResponseAction.ALLOW;
   }
 
-  Future<void> _finishVerifiedFromNetworkStatus({
+  void _finishFromOriginResponse({
     required String reason,
     Map<String, String>? headers,
-  }) async {
+  }) {
     if (_hasPopped || _finishingFromVerifyResponse) return;
     _finishingFromVerifyResponse = true;
     _coverWebViewForOriginFallback();
@@ -1532,27 +1691,48 @@ class _CfChallengePageState extends State<CfChallengePage> {
     _challengeRevealProbeGeneration++;
     _revealStateWatchGeneration++;
 
-    debugPrint('[CfChallenge] $reason，按网络状态判定验证完成');
+    debugPrint('[CfChallenge] $reason，验证入口当前无盾，结束验证页面');
     CfChallengeLogger.logVerifyResult(success: true, reason: reason);
     if (headers != null) {
       CfChallengeLogger.log('[VERIFY] Passed response headers: $headers');
     }
 
-    unawaited(_syncVerifiedCookiesBestEffort());
+    // 源站可直接放行而不签发 Cookie。只同步此刻已有的值，不轮询续期，
+    // 不把 Cookie 的产生或落库作为页面结束条件。
+    final cookieSync = _syncCookiesAfterOriginResponse();
+    CfChallengeService()._completionCookieSync = cookieSync;
+    unawaited(cookieSync);
     if (mounted && !_hasPopped) _finish(true);
   }
 
-  Future<void> _syncVerifiedCookiesBestEffort() async {
+  Future<void> _syncCookiesAfterOriginResponse() async {
     try {
-      final freshClearance = await _readCookieValue('cf_clearance');
+      final clearance = await _readCookieValue('cf_clearance');
       await _syncLiveCookiesToCookieJar(
-        freshClearance: _isFreshClearance(freshClearance)
-            ? freshClearance
-            : null,
+        freshClearance: _isFreshClearance(clearance) ? clearance : null,
       );
     } catch (e) {
-      debugPrint('[CfChallenge] 按网络状态完成时后台同步 cookie 失败: $e');
+      debugPrint('[CfChallenge] 源站已放行，Cookie 同步未完成: $e');
     }
+  }
+
+  Future<bool> _hasLoadedOriginDocument(
+    InAppWebViewController controller,
+  ) async {
+    final generation = _loadGeneration;
+    if (!_isVerifyUrl(await controller.getUrl())) return false;
+    final html = await controller.evaluateJavascript(
+      source: '''
+document.readyState === 'complete' && document.body && document.body.innerHTML.trim()
+  ? document.documentElement.outerHTML : ''
+''',
+    );
+    return mounted &&
+        generation == _loadGeneration &&
+        html is String &&
+        html.trim().isNotEmpty &&
+        !CfChallengeService.hasActiveCfChallenge(html) &&
+        !CfChallengeService.isCfChallenge(html);
   }
 
   Future<bool> _hasVisibleChallenge(InAppWebViewController controller) async {
@@ -1838,11 +2018,10 @@ class _CfChallengePageState extends State<CfChallengePage> {
         _revealChallengeWebView();
         return;
       }
-      if (CfChallengeService.isOriginNotFound(htmlStr)) {
-        await _handleVerifyOriginFallback(
-          generation,
-          reason: 'immediate probe: origin 404 markers',
-          completionLikely: _hasSeenChallenge,
+      if (CfChallengeService.isOriginNotFound(htmlStr) ||
+          await _hasLoadedOriginDocument(controller)) {
+        _finishFromOriginResponse(
+          reason: 'loaded verification document reached origin',
         );
       }
     } catch (e) {
@@ -2026,22 +2205,16 @@ class _CfChallengePageState extends State<CfChallengePage> {
                 'headers=${errorResponse.headers}',
               );
             }
-            if (_isVerifyPassedResponse(request, errorResponse)) {
-              unawaited(
-                _finishVerifiedFromNetworkStatus(
-                  reason: 'main frame /challenge returned source 404',
-                  headers: errorResponse.headers,
-                ),
-              );
-              return;
-            }
-            if (_isVerifyOriginFallback(request, errorResponse)) {
-              unawaited(
-                _handleVerifyOriginFallback(
-                  _loadGeneration,
-                  reason: 'main frame /challenge returned 404',
-                  completionLikely: _hasSeenChallenge,
-                ),
+            if (_isVerifyOriginResponse(
+              url: request.url,
+              isForMainFrame: request.isForMainFrame,
+              statusCode: errorResponse.statusCode,
+              headers: errorResponse.headers,
+            )) {
+              _finishFromOriginResponse(
+                reason:
+                    'main frame verification request reached origin (${errorResponse.statusCode})',
+                headers: errorResponse.headers,
               );
             }
           },
@@ -2146,14 +2319,26 @@ class _CfChallengePageState extends State<CfChallengePage> {
                 final coverWebView = _shouldCoverWebView;
                 final webViewWidth = math.max(1.0, constraints.maxWidth);
                 final webViewHeight = math.max(1.0, constraints.maxHeight);
-                final screenWidth = MediaQuery.sizeOf(context).width;
-                final hiddenLeft = -(screenWidth + webViewWidth + 64);
 
                 return Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
+                    // 隐藏态不再把 WebView 挪到屏幕外——那是对一个由
+                    // WebView2/ANGLE D3D11 swapchain 支撑的原生 platform
+                    // view 做瞬时大幅度位移,和下面的不透明覆盖层在同一帧
+                    // 生效,曾经在 reveal 那一刻(_challengeWebViewVisible
+                    // 从 false→true)稳定触发 flutter_windows.dll 内部的
+                    // native crash(illegal instruction / 访问越界,Dart
+                    // 层 try/catch、Catcher2 都拦不住)。位置固定不动,
+                    // 隐藏完全交给下面的不透明覆盖层 + IgnorePointer。
+                    //
+                    // 注:后台静默验证(startInBackground)路径的 WebView
+                    // 仍常驻屏幕外(见 build 里的负坐标 Positioned),但
+                    // promote 到前台是重建整棵前台子树(showUi 切换),
+                    // 不是对同一个 platform view 做同帧「大位移 + 覆盖层
+                    // 翻转」,与此处崩溃的触发组合不同,暂不改动。
                     Positioned(
-                      left: coverWebView ? hiddenLeft : 0,
+                      left: 0,
                       top: 0,
                       width: webViewWidth,
                       height: webViewHeight,
@@ -2166,7 +2351,13 @@ class _CfChallengePageState extends State<CfChallengePage> {
                       child: IgnorePointer(
                         ignoring: !coverWebView,
                         child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200),
+                          // 盖上必须瞬时:WebView 此刻可能正是验证完成后
+                          // 跳转的源站 404,200ms 淡入会让它在半透明覆盖
+                          // 下露出(即 b0964381 修过的 404 闪现)。只在
+                          // 揭开方向保留淡出动画。
+                          duration: coverWebView
+                              ? Duration.zero
+                              : const Duration(milliseconds: 200),
                           opacity: coverWebView ? 1 : 0,
                           curve: Curves.easeOut,
                           child: _buildOriginFallbackOverlay(theme),
