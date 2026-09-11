@@ -8,6 +8,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 import '../../l10n/s.dart';
 import '../../providers/app_state_refresher.dart';
 import '../../providers/core_providers.dart';
+import '../../providers/theme_provider.dart';
 import '../../services/data_management/cache_size_service.dart';
 import '../../services/toast_service.dart';
 import '../../utils/dialog_utils.dart';

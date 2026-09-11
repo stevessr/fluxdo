@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../blob_image_cache.dart';
 import '../discourse_cache_manager.dart';
 
 /// 图片缓存分类（Telegram Storage Usage 式明细的口径）。
