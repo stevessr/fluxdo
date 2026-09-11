@@ -25,7 +25,12 @@ void main() {
         'expected_transport': 'livekit',
         'max_quality_profile': 'high',
         'recording': {'status': 'recording'},
-        'membership': {'id': 3, 'user_id': 5, 'role': 'moderator'},
+        'membership': {
+          'id': 3,
+          'user_id': 5,
+          'role': 1,
+          'role_name': 'moderator',
+        },
         'active_participants': [
           {
             'id': 5,
