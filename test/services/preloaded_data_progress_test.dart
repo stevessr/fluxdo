@@ -5,14 +5,21 @@ import 'package:fluxdo/services/preloaded_data_service.dart';
 
 void main() {
   group('PreloadProgress', () {
-    test('uses indeterminate progress before topic parsing starts', () {
+    test('uses determinate overall progress before topic parsing starts', () {
       const requesting = PreloadProgress(phase: PreloadPhase.requesting);
+      const halfDownloaded = PreloadProgress(
+        phase: PreloadPhase.requesting,
+        receivedBytes: 50,
+        totalBytes: 100,
+      );
       const decoding = PreloadProgress(phase: PreloadPhase.decoding);
 
       expect(requesting.isActive, isTrue);
-      expect(requesting.fraction, isNull);
+      expect(requesting.fraction, 0.02);
+      expect(halfDownloaded.downloadPercent, 50);
+      expect(halfDownloaded.fraction, closeTo(0.235, 0.000001));
       expect(decoding.isActive, isTrue);
-      expect(decoding.fraction, isNull);
+      expect(decoding.fraction, 0.55);
     });
 
     test('reports and clamps parsed topic progress', () {
@@ -27,7 +34,7 @@ void main() {
         totalTopics: 24,
       );
 
-      expect(half.fraction, 0.5);
+      expect(half.fraction, 0.8);
       expect(half.semanticsLabel, contains('12 / 24'));
       expect(overflow.fraction, 1.0);
     });
@@ -88,7 +95,9 @@ void main() {
       expect(screenSource, contains('ValueListenableBuilder<PreloadProgress>'));
       expect(screenSource, contains('child: workspace'));
       expect(screenSource, contains('LinearProgressIndicator'));
-      expect(screenSource, contains('minHeight: 2'));
+      expect(screenSource, contains('progress.percent'));
+      expect(screenSource, contains('minHeight: 4'));
+      expect(serviceSource, contains('onReceiveProgress:'));
     });
   });
 }

@@ -223,15 +223,16 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       ),
     );
 
-    // 进度条只重建自身，workspace 作为 child 复用，避免每个解析批次
-    // 都重建整棵 MasterDetailLayout。请求/外层 JSON 解码阶段使用不定进度，
-    // topic_list 开始分批解析后切换为真实 parsed/total 百分比。
+    // 进度 UI 只重建自身，workspace 作为 child 复用，避免网络回调/解析批次
+    // 重建整棵 MasterDetailLayout。所有活动阶段都使用确定 value，并明确显示
+    // 当前阶段与总百分比，不再出现来回播放的不定进度动画。
     return ValueListenableBuilder<PreloadProgress>(
       valueListenable: PreloadedDataService().preloadProgressListenable,
       child: workspace,
       builder: (context, progress, child) {
         if (!progress.isActive) return child!;
-        final fraction = progress.fraction;
+        final fraction = progress.fraction ?? 0.0;
+        final theme = Theme.of(context);
         return Stack(
           children: [
             child!,
@@ -242,10 +243,51 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
               child: IgnorePointer(
                 child: Semantics(
                   label: progress.semanticsLabel,
-                  value: fraction == null
-                      ? null
-                      : '${(fraction * 100).round()}%',
-                  child: LinearProgressIndicator(value: fraction, minHeight: 2),
+                  value: '${progress.percent}%',
+                  child: Material(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    elevation: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  progress.semanticsLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                '${progress.percent}%',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: LinearProgressIndicator(
+                              value: fraction,
+                              minHeight: 4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

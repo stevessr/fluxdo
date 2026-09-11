@@ -29,26 +29,63 @@ class PreloadProgress {
     required this.phase,
     this.parsedTopics = 0,
     this.totalTopics = 0,
+    this.receivedBytes = 0,
+    this.totalBytes = 0,
   });
 
   const PreloadProgress.idle()
     : phase = PreloadPhase.idle,
       parsedTopics = 0,
-      totalTopics = 0;
+      totalTopics = 0,
+      receivedBytes = 0,
+      totalBytes = 0;
 
   final PreloadPhase phase;
   final int parsedTopics;
   final int totalTopics;
+  final int receivedBytes;
+  final int totalBytes;
 
   bool get isActive =>
       phase == PreloadPhase.requesting ||
       phase == PreloadPhase.decoding ||
       phase == PreloadPhase.parsingTopics;
 
+  /// 整个 preload 流程的确定进度。
+  ///
+  /// 网络下载占 2%~45%（Content-Length 可用时使用真实字节进度），
+  /// 外层 JSON/核心数据解析推进到 55%，topic_list 分批解析占 60%~100%。
+  /// 即使服务器未提供 Content-Length，也始终返回确定值，避免 Flutter
+  /// LinearProgressIndicator 退化成来回播放的不定进度动画。
   double? get fraction {
-    if (phase == PreloadPhase.complete) return 1.0;
-    if (phase != PreloadPhase.parsingTopics || totalTopics <= 0) return null;
-    return (parsedTopics / totalTopics).clamp(0.0, 1.0).toDouble();
+    switch (phase) {
+      case PreloadPhase.idle:
+        return 0.0;
+      case PreloadPhase.requesting:
+        final networkFraction = totalBytes > 0
+            ? (receivedBytes / totalBytes).clamp(0.0, 1.0).toDouble()
+            : 0.0;
+        return 0.02 + networkFraction * 0.43;
+      case PreloadPhase.decoding:
+        return 0.55;
+      case PreloadPhase.parsingTopics:
+        if (totalTopics <= 0) return 0.60;
+        final topicFraction = (parsedTopics / totalTopics)
+            .clamp(0.0, 1.0)
+            .toDouble();
+        return 0.60 + topicFraction * 0.40;
+      case PreloadPhase.complete:
+        return 1.0;
+      case PreloadPhase.failed:
+        return null;
+    }
+  }
+
+  int get percent => ((fraction ?? 0.0) * 100).round();
+
+  int? get downloadPercent {
+    if (phase != PreloadPhase.requesting || totalBytes <= 0) return null;
+    return ((receivedBytes / totalBytes).clamp(0.0, 1.0) * 100).round();
   }
 
   String get semanticsLabel {
@@ -56,7 +93,10 @@ class PreloadProgress {
       case PreloadPhase.idle:
         return '预加载未开始';
       case PreloadPhase.requesting:
-        return '正在获取预加载数据';
+        final networkPercent = downloadPercent;
+        return networkPercent == null
+            ? '正在获取预加载数据'
+            : '正在获取预加载数据 · 下载 $networkPercent%';
       case PreloadPhase.decoding:
         return '正在解析预加载数据';
       case PreloadPhase.parsingTopics:
@@ -773,6 +813,7 @@ class PreloadedDataService {
         const PreloadProgress(phase: PreloadPhase.requesting),
       );
       debugPrint('[PreloadedData] 发起 HTTP 请求');
+      var lastDownloadPercent = -1;
       final response = await _dio.get(
         AppConstants.baseUrl,
         options: Options(
@@ -783,6 +824,21 @@ class PreloadedDataService {
             'requestTag': 'preload-home',
           },
         ),
+        onReceiveProgress: (received, total) {
+          if (!_isCurrent(revision, generation) || total <= 0) return;
+          final downloadPercent = received * 100 ~/ total;
+          if (downloadPercent == lastDownloadPercent && received != total) {
+            return;
+          }
+          lastDownloadPercent = downloadPercent;
+          _setPreloadProgress(
+            PreloadProgress(
+              phase: PreloadPhase.requesting,
+              receivedBytes: received,
+              totalBytes: total,
+            ),
+          );
+        },
       );
 
       final html = response.data as String;
