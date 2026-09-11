@@ -146,15 +146,14 @@ mixin _VoiceMixin on _DiscourseServiceBase {
     bool? watching,
     bool? transcribing,
   }) async {
-    assert(
-      muted != null ||
-          deafened != null ||
-          video != null ||
-          screen != null ||
-          watching != null ||
-          transcribing != null,
-      'Voice state update requires at least one changed field',
-    );
+    if (muted == null &&
+        deafened == null &&
+        video == null &&
+        screen == null &&
+        watching == null &&
+        transcribing == null) {
+      throw ArgumentError('Voice state update requires a changed field');
+    }
     try {
       await _dio.post(
         '/voice/rooms/$room/state',
@@ -220,17 +219,19 @@ mixin _VoiceMixin on _DiscourseServiceBase {
   }
 
   /// Withdraw the caller's hand, or dismiss [userId] when the server grants
-  /// room-management permission.
+  /// room-management permission. Dismissing another user does not require the
+  /// manager to be an active participant, so [participantSessionId] is optional.
   Future<void> withdrawVoiceRequestToSpeak(
     Object room, {
-    required String participantSessionId,
+    String? participantSessionId,
     int? userId,
   }) async {
     try {
       await _dio.delete(
         '/voice/rooms/$room/request_to_speak',
         data: {
-          'participant_session_id': participantSessionId,
+          if (participantSessionId != null && participantSessionId.isNotEmpty)
+            'participant_session_id': participantSessionId,
           if (userId != null) 'user_id': userId,
         },
       );
