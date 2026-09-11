@@ -65,7 +65,8 @@ class VoiceRoomMembership {
     return VoiceRoomMembership(
       id: _asInt(json['id']),
       userId: _asInt(json['user_id']),
-      role: json['role']?.toString() ?? json['role_name']?.toString(),
+      // Serializer exposes both the enum integer (`role`) and stable name.
+      role: json['role_name']?.toString() ?? json['role']?.toString(),
     );
   }
 }
