@@ -1225,11 +1225,7 @@ class PreloadedDataService {
       // topic_list 的 raw JSON 解码和模型构建都需要完整遍历一次，分别
       // 计入同等工作量；核心组则按各自 raw payload 大小计权。
       final totalWorkUnits =
-          scanUnits +
-          userSettingsUnits +
-          siteUnits +
-          (topicUnits * 2) +
-          1;
+          scanUnits + userSettingsUnits + siteUnits + (topicUnits * 2) + 1;
       final tracker = _PreloadWorkTracker(
         revision: revision,
         generation: generation,
@@ -1560,13 +1556,10 @@ class PreloadedDataService {
       Future<List<Topic>> parseBatch(int start) {
         final requestedEnd = start + _topicParseBatchSize;
         final end = requestedEnd < total ? requestedEnd : total;
-        return compute(
-          _parseTopicBatchInIsolate,
-          <String, dynamic>{
-            'users': rawUsers,
-            'topics': rawTopics.sublist(start, end),
-          },
-        );
+        return compute(_parseTopicBatchInIsolate, <String, dynamic>{
+          'users': rawUsers,
+          'topics': rawTopics.sublist(start, end),
+        });
       }
 
       void publishBatch(int start, int end, List<Topic> batch) {
