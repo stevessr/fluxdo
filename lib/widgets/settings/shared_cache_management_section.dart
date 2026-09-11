@@ -80,14 +80,13 @@ class _SharedCacheManagementSectionState
   }
 
   String _categoryName(ImageCacheCategory category) => switch (category) {
-        ImageCacheCategory.content => S.current.dataManagement_categoryContent,
-        ImageCacheCategory.emoji => S.current.dataManagement_categoryEmoji,
-        ImageCacheCategory.avatar => S.current.dataManagement_categoryAvatar,
-        ImageCacheCategory.sticker => S.current.dataManagement_categorySticker,
-        ImageCacheCategory.external =>
-          S.current.dataManagement_categoryExternal,
-        ImageCacheCategory.other => S.current.dataManagement_categoryOther,
-      };
+    ImageCacheCategory.content => S.current.dataManagement_categoryContent,
+    ImageCacheCategory.emoji => S.current.dataManagement_categoryEmoji,
+    ImageCacheCategory.avatar => S.current.dataManagement_categoryAvatar,
+    ImageCacheCategory.sticker => S.current.dataManagement_categorySticker,
+    ImageCacheCategory.external => S.current.dataManagement_categoryExternal,
+    ImageCacheCategory.other => S.current.dataManagement_categoryOther,
+  };
 
   Color _categoryColor(ImageCacheCategory category, ColorScheme scheme) {
     const palette = {
@@ -102,8 +101,8 @@ class _SharedCacheManagementSectionState
   }
 
   Future<void> _clearSelected() async {
-    final before = _usage?.physicalBytes ??
-        await CacheSizeService.getImageCacheSize();
+    final before =
+        _usage?.physicalBytes ?? await CacheSizeService.getImageCacheSize();
     final confirmed = await _showConfirmDialog(
       title: S.current.dataManagement_clearSelectedTitle,
       content: S.current.dataManagement_clearSelectedContent,
@@ -282,11 +281,12 @@ class _SharedCacheManagementSectionState
                         if (usage.deduplicatedBytes > 0)
                           _UsagePill(
                             icon: Symbols.content_copy_rounded,
-                            label: context.l10n.dataManagement_deduplicatedSpace(
-                              CacheSizeService.formatSize(
-                                usage.deduplicatedBytes,
-                              ),
-                            ),
+                            label: context.l10n
+                                .dataManagement_deduplicatedSpace(
+                                  CacheSizeService.formatSize(
+                                    usage.deduplicatedBytes,
+                                  ),
+                                ),
                           ),
                       ],
                     ),
@@ -309,7 +309,8 @@ class _SharedCacheManagementSectionState
                 width: double.infinity,
                 height: 44,
                 child: FilledButton(
-                  onPressed: _isClearing ||
+                  onPressed:
+                      _isClearing ||
                           breakdown == null ||
                           _selectedLogicalSize <= 0
                       ? null
@@ -377,12 +378,12 @@ class _SharedCacheManagementSectionState
         onChanged: empty || _isClearing
             ? null
             : (value) => setState(() {
-                  if (value == true) {
-                    _selected.add(category);
-                  } else {
-                    _selected.remove(category);
-                  }
-                }),
+                if (value == true) {
+                  _selected.add(category);
+                } else {
+                  _selected.remove(category);
+                }
+              }),
       ),
       title: Text.rich(
         TextSpan(
@@ -412,12 +413,12 @@ class _SharedCacheManagementSectionState
       onTap: empty || _isClearing
           ? null
           : () => setState(() {
-                if (_selected.contains(category)) {
-                  _selected.remove(category);
-                } else {
-                  _selected.add(category);
-                }
-              }),
+              if (_selected.contains(category)) {
+                _selected.remove(category);
+              } else {
+                _selected.add(category);
+              }
+            }),
     );
   }
 

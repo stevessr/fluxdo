@@ -36,7 +36,9 @@ void main() {
 
     test('最后一段无点时回退默认 jpg', () {
       expect(
-        BlobImageCache.httpUrlExtension('https://example.com/uploads/short-url'),
+        BlobImageCache.httpUrlExtension(
+          'https://example.com/uploads/short-url',
+        ),
         'jpg',
       );
       expect(BlobImageCache.httpUrlExtension('https://example.com/'), 'jpg');

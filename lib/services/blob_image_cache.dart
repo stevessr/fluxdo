@@ -125,16 +125,16 @@ class BlobImageCache {
   /// 正确更新，而不是被“每会话 touch 一次”的优化误挡住。
   static final Map<String, String> _referenceTargets = {};
 
-  static Future<Directory> _ensureRoot() =>
-      _rootFuture ??= (() async {
-        final tmp = await getTemporaryDirectory();
-        final dir = Directory('${tmp.path}/$dirName');
-        await dir.create(recursive: true);
-        _root = dir;
-        return dir;
-      })();
+  static Future<Directory> _ensureRoot() => _rootFuture ??= (() async {
+    final tmp = await getTemporaryDirectory();
+    final dir = Directory('${tmp.path}/$dirName');
+    await dir.create(recursive: true);
+    _root = dir;
+    return dir;
+  })();
 
-  static String _hash(String value) => md5.convert(utf8.encode(value)).toString();
+  static String _hash(String value) =>
+      md5.convert(utf8.encode(value)).toString();
 
   /// URL 对应的唯一物理对象文件名。
   ///
@@ -292,8 +292,7 @@ class BlobImageCache {
     var object = await _objectFileFor(resourceUrl);
     var bytes = await _readObject(object);
     if (bytes == null) {
-      object =
-          await _migrateLegacyCopies(bucket, key, resourceUrl) ?? object;
+      object = await _migrateLegacyCopies(bucket, key, resourceUrl) ?? object;
       bytes = await _readObject(object);
     }
     if (bytes == null) return null;
@@ -363,10 +362,10 @@ class BlobImageCache {
   }
 
   static DownloadChannel _channelOf(String bucket) => switch (bucket) {
-        emojiBucket => DownloadChannel.small,
-        stickerOriginalBucket => DownloadChannel.sticker,
-        _ => DownloadChannel.content,
-      };
+    emojiBucket => DownloadChannel.small,
+    stickerOriginalBucket => DownloadChannel.sticker,
+    _ => DownloadChannel.content,
+  };
 
   static void bump(String bucket, String url) =>
       DioHttpClient.bumpPending(_channelOf(bucket), url);
@@ -403,12 +402,7 @@ class BlobImageCache {
     String? cacheKey,
     void Function(int received, int? total)? onProgress,
   }) async {
-    await fetch(
-      bucket,
-      url,
-      cacheKey: cacheKey,
-      onProgress: onProgress,
-    );
+    await fetch(bucket, url, cacheKey: cacheKey, onProgress: onProgress);
     return _objectFileFor(url);
   }
 
@@ -562,14 +556,15 @@ class BlobImageCache {
               final stat = entity.statSync();
               final age = nowTime.difference(stat.modified);
               if (age > policy.value ||
-                  (_isTempPath(entity.path) &&
-                      age > const Duration(days: 1))) {
+                  (_isTempPath(entity.path) && age > const Duration(days: 1))) {
                 entity.deleteSync();
                 count++;
               } else if (!_isTempPath(entity.path)) {
-                legacyAlive.add(
-                  (path: entity.path, mtime: stat.modified, size: stat.size),
-                );
+                legacyAlive.add((
+                  path: entity.path,
+                  mtime: stat.modified,
+                  size: stat.size,
+                ));
               }
             } catch (_) {}
           }
@@ -588,8 +583,10 @@ class BlobImageCache {
           }
           var legacyBudget = limit - refBytes;
           if (legacyBudget < 0) legacyBudget = 0;
-          var legacyBytes =
-              legacyAlive.fold<int>(0, (sum, item) => sum + item.size);
+          var legacyBytes = legacyAlive.fold<int>(
+            0,
+            (sum, item) => sum + item.size,
+          );
           if (legacyBytes <= legacyBudget) continue;
           legacyAlive.sort((a, b) => a.mtime.compareTo(b.mtime));
           for (final item in legacyAlive) {
@@ -606,8 +603,10 @@ class BlobImageCache {
         final liveTargets = <String>{};
         final refsRoot = Directory(refsPath);
         if (refsRoot.existsSync()) {
-          for (final entity
-              in refsRoot.listSync(recursive: true, followLinks: false)) {
+          for (final entity in refsRoot.listSync(
+            recursive: true,
+            followLinks: false,
+          )) {
             if (entity is! File || _isTempPath(entity.path)) continue;
             try {
               final target = entity.readAsStringSync().trim();
@@ -654,8 +653,7 @@ class BlobImageCache {
     final targets = <String>{};
     try {
       if (!root.existsSync()) return targets;
-      for (final entity
-          in root.listSync(recursive: true, followLinks: false)) {
+      for (final entity in root.listSync(recursive: true, followLinks: false)) {
         if (entity is! File || _isTempPath(entity.path)) continue;
         try {
           final target = entity.readAsStringSync().trim();

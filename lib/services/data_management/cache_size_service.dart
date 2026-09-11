@@ -6,14 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../discourse_cache_manager.dart';
 
 /// 图片缓存分类（Telegram Storage Usage 式明细的口径）。
-enum ImageCacheCategory {
-  content,
-  emoji,
-  avatar,
-  sticker,
-  external,
-  other,
-}
+enum ImageCacheCategory { content, emoji, avatar, sticker, external, other }
 
 /// 图片缓存的 UI 统计快照。
 ///
@@ -43,10 +36,7 @@ class ImageCacheUsage {
 /// 缓存大小计算服务。
 class CacheSizeService {
   /// 统计/删除口径：blob 缓存根目录 + legacy cache_manager 残留目录。
-  static const _cacheKeys = [
-    BlobImageCache.dirName,
-    ...kLegacyImageCacheKeys,
-  ];
+  static const _cacheKeys = [BlobImageCache.dirName, ...kLegacyImageCacheKeys];
 
   /// 获取共享图片缓存完整统计。
   ///
@@ -64,12 +54,12 @@ class CacheSizeService {
     final breakdown = <ImageCacheCategory, int>{
       ImageCacheCategory.content:
           (b[BlobImageCache.contentBucket] ?? 0) +
-              (b[BlobImageCache.originalBucket] ?? 0),
+          (b[BlobImageCache.originalBucket] ?? 0),
       ImageCacheCategory.emoji: b[BlobImageCache.emojiBucket] ?? 0,
       ImageCacheCategory.avatar: b[BlobImageCache.avatarBucket] ?? 0,
       ImageCacheCategory.sticker:
           (b[BlobImageCache.stickerOriginalBucket] ?? 0) +
-              (b[BlobImageCache.stickerThumbBucket] ?? 0),
+          (b[BlobImageCache.stickerThumbBucket] ?? 0),
       ImageCacheCategory.external: b[BlobImageCache.externalBucket] ?? 0,
       ImageCacheCategory.other: other,
     };
