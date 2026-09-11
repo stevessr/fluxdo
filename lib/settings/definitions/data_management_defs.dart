@@ -4,6 +4,7 @@ import 'package:app_icons/app_icons.dart';
 import '../../l10n/s.dart';
 import '../../providers/preferences_provider.dart';
 import '../../pages/data_management_page.dart';
+import '../../widgets/settings/shared_cache_management_section.dart';
 import '../settings_model.dart';
 
 /// 数据管理设置数据声明
@@ -20,7 +21,7 @@ List<SettingsGroup> buildDataManagementGroups(BuildContext context) {
         CustomModel(
           id: 'cacheManagement',
           title: l10n.dataManagement_cacheManagement,
-          builder: (context, ref) => const CacheManagementSection(),
+          builder: (context, ref) => const SharedCacheManagementSection(),
         ),
       ],
     ),
