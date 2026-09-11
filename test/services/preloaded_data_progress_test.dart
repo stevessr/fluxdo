@@ -83,6 +83,8 @@ void main() {
       expect(serviceSource, contains('getInitialTopicListFirstBatch'));
       expect(serviceSource, contains('progressiveTopicListListenable'));
       expect(serviceSource, contains('rawTopics.sublist(start, end)'));
+      expect(serviceSource, contains('final firstBatch = await parseBatch(0)'));
+      expect(serviceSource, contains('for (final start in starts) parseBatch(start)'));
       expect(
         serviceSource,
         contains('_publishTopicListSnapshot(snapshot, finalSnapshot: isFinal)'),
