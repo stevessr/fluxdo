@@ -44,7 +44,6 @@ void main() {
     });
 
     test('不会把域名后缀误吞成扩展名', () {
-      // 单字符尾段触发整串回退搜索时,'.io/x' 含 '/' 必须被拒绝。
       expect(BlobImageCache.httpUrlExtension('https://a.io/x'), 'jpg');
     });
 
@@ -67,11 +66,31 @@ void main() {
     });
   });
 
+  group('BlobImageCache shared URL identity', () {
+    test('物理对象只由 URL 决定，不受 bucket 或逻辑 key 影响', () {
+      const url = 'https://example.com/uploads/shared/image.png';
+      final objectFromContent = BlobImageCache.objectNameForUrl(url);
+      final objectFromAvatar = BlobImageCache.objectNameForUrl(url);
+
+      expect(objectFromAvatar, objectFromContent);
+      expect(objectFromContent, endsWith('.png'));
+    });
+
+    test('不同逻辑 key 有不同引用身份，但可以共同指向同一 URL 对象', () {
+      const url = 'https://example.com/uploads/shared/image.webp';
+      final firstRef = BlobImageCache.referenceNameForKey('topic:123:hero');
+      final secondRef = BlobImageCache.referenceNameForKey('profile:456:cover');
+
+      expect(firstRef, isNot(secondRef));
+      expect(BlobImageCache.objectNameForUrl(url), isNotEmpty);
+    });
+  });
+
   group('BlobImageProvider global identity', () {
     test('同 URL / bucket 跨 profile 始终复用同一图片身份', () {
       // profile/session 刻意不进入 BlobImageProvider key。账号切换只更换
       // cookie/session；相同图片 URL 必须命中同一 Flutter ImageCache 项，
-      // 磁盘层也由 BlobImageCache 的 bucket + md5(url) 唯一寻址。
+      // 磁盘层也由 URL 的共享 object 唯一寻址。
       const firstProfile = BlobImageProvider(
         'https://linux.do/user_avatar/example/shared/96/1.png',
         bucket: BlobImageCache.avatarBucket,
@@ -96,6 +115,29 @@ void main() {
       );
 
       expect(content, isNot(equals(avatar)));
+      expect(
+        BlobImageCache.objectNameForUrl(content.url),
+        BlobImageCache.objectNameForUrl(avatar.url),
+      );
+    });
+
+    test('显式不同 cacheKey 保留独立逻辑身份', () {
+      const first = BlobImageProvider(
+        'https://example.com/image.png',
+        bucket: BlobImageCache.contentBucket,
+        cacheKey: 'topic:1:image',
+      );
+      const second = BlobImageProvider(
+        'https://example.com/image.png',
+        bucket: BlobImageCache.contentBucket,
+        cacheKey: 'topic:2:image',
+      );
+
+      expect(second, isNot(equals(first)));
+      expect(
+        BlobImageCache.objectNameForUrl(second.url),
+        BlobImageCache.objectNameForUrl(first.url),
+      );
     });
   });
 
