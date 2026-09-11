@@ -53,6 +53,26 @@ jobs:
       - name: Generate localization
         run: dart run tool/gen_l10n.dart
 
+      - name: Apply analyzer import fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cache_size = Path('lib/services/data_management/cache_size_service.dart')
+          text = cache_size.read_text()
+          marker = "import '../discourse_cache_manager.dart';"
+          if "import '../blob_image_cache.dart';" not in text:
+              text = text.replace(marker, "import '../blob_image_cache.dart';\n" + marker)
+              cache_size.write_text(text)
+
+          cache_ui = Path('lib/widgets/settings/shared_cache_management_section.dart')
+          text = cache_ui.read_text()
+          marker = "import '../../providers/core_providers.dart';"
+          if "import '../../providers/theme_provider.dart';" not in text:
+              text = text.replace(marker, marker + "\nimport '../../providers/theme_provider.dart';")
+              cache_ui.write_text(text)
+          PY
+
       - name: Format cache path
         run: |
           dart format \
@@ -77,7 +97,7 @@ jobs:
             lib/settings/definitions/data_management_defs.dart \
             lib/widgets/settings/shared_cache_management_section.dart \
             test/services/blob_image_cache_test.dart
-          git commit -m 'style: format shared cache changes'
+          git commit -m 'fix: wire shared cache providers'
           git push origin HEAD:${{ github.head_ref }}
 
       - name: Analyze cache path
