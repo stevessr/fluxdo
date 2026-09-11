@@ -26,6 +26,7 @@ void main() {
       expect(scanning.isActive, isTrue);
       expect(scanning.fraction, 0.45);
       expect(halfWork.fraction, closeTo(0.725, 0.000001));
+      expect(halfWork.percent, 73);
     });
 
     test('reports and clamps parsed topic progress', () {
@@ -47,6 +48,7 @@ void main() {
       expect(half.fraction, closeTo(0.725, 0.000001));
       expect(half.semanticsLabel, contains('12 / 24'));
       expect(overflow.fraction, 1.0);
+      expect(overflow.percent, 100);
     });
 
     test('complete and failed phases stop the active indicator', () {
