@@ -54,7 +54,9 @@ void main() {
 
     test('derives custom namespace from base URL, not persisted id', () {
       const baseUrl = 'https://forum.example.com';
-      final canonicalId = DiscourseInstanceRuntime.instanceIdForBaseUrl(baseUrl);
+      final canonicalId = DiscourseInstanceRuntime.instanceIdForBaseUrl(
+        baseUrl,
+      );
 
       DiscourseInstanceRuntime.activate(
         instanceId: 'tampered-shared-id',
