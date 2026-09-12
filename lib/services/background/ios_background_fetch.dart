@@ -52,8 +52,7 @@ void callbackDispatcher() {
         return true;
       }
 
-      final lastMessageId =
-          prefs.getInt(_instanceKey(_kLastMessageId)) ?? -1;
+      final lastMessageId = prefs.getInt(_instanceKey(_kLastMessageId)) ?? -1;
       final channel = '/notification-alert/$userId';
 
       // 读取当前实例的 MessageBus 独立域名配置
@@ -161,10 +160,7 @@ void callbackDispatcher() {
 
       // 5. 持久化当前实例的 lastMessageId
       if (newLastMessageId > lastMessageId) {
-        await prefs.setInt(
-          _instanceKey(_kLastMessageId),
-          newLastMessageId,
-        );
+        await prefs.setInt(_instanceKey(_kLastMessageId), newLastMessageId);
         debugPrint('[iOSBgFetch] 更新 lastMessageId: $newLastMessageId');
       }
 
