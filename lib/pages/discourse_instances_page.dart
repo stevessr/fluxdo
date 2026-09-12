@@ -217,63 +217,74 @@ class _DiscourseInstancesPageState extends State<DiscourseInstancesPage> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-              children: [
-                Card(
-                  child: SwitchListTile(
-                    value: _enabled,
-                    onChanged: _setEnabled,
-                    title: const Text('启用多 Discourse 实例'),
-                    subtitle: const Text(
-                      '实验性功能。一次只运行一个实例；实例切换在下次启动时生效，以保证网络、Cookie、账号和 MessageBus 使用同一站点。',
-                    ),
-                  ),
-                ),
-                if (_restartRequired)
-                  const Card(
-                    child: ListTile(
-                      leading: Icon(Icons.restart_alt_rounded),
-                      title: Text('需要重启 FluxDo'),
-                      subtitle: Text('当前进程继续使用旧实例；重启后应用所选实例。'),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                ..._instances.map((profile) {
-                  final selected = _enabled && profile.id == _selected.id;
-                  final running = profile.id == DiscourseInstanceRuntime.instanceId;
-                  return Card(
-                    child: RadioListTile<String>(
-                      value: profile.id,
-                      groupValue: _enabled ? _selected.id : null,
-                      onChanged: (_) => _select(profile),
-                      title: Row(
-                        children: [
-                          Expanded(child: Text(profile.name)),
-                          if (running)
-                            const Padding(
-                              padding: EdgeInsets.only(left: 8),
-                              child: Chip(label: Text('当前运行')),
-                            ),
-                          if (selected && !running)
-                            const Padding(
-                              padding: EdgeInsets.only(left: 8),
-                              child: Chip(label: Text('下次启动')),
-                            ),
-                        ],
+          : RadioGroup<String>(
+              groupValue: _enabled ? _selected.id : null,
+              onChanged: (value) {
+                if (value == null) return;
+                for (final profile in _instances) {
+                  if (profile.id == value) {
+                    _select(profile);
+                    return;
+                  }
+                }
+              },
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                children: [
+                  Card(
+                    child: SwitchListTile(
+                      value: _enabled,
+                      onChanged: _setEnabled,
+                      title: const Text('启用多 Discourse 实例'),
+                      subtitle: const Text(
+                        '实验性功能。一次只运行一个实例；实例切换在下次启动时生效，以保证网络、Cookie、账号和 MessageBus 使用同一站点。',
                       ),
-                      subtitle: Text(profile.baseUrl),
-                      secondary: profile.builtIn
-                          ? const Icon(Icons.home_rounded)
-                          : IconButton(
-                              tooltip: '移除实例',
-                              onPressed: () => _removeInstance(profile),
-                              icon: const Icon(Icons.delete_outline_rounded),
-                            ),
                     ),
-                  );
-                }),
-              ],
+                  ),
+                  if (_restartRequired)
+                    const Card(
+                      child: ListTile(
+                        leading: Icon(Icons.restart_alt_rounded),
+                        title: Text('需要重启 FluxDo'),
+                        subtitle: Text('当前进程继续使用旧实例；重启后应用所选实例。'),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  ..._instances.map((profile) {
+                    final selected = _enabled && profile.id == _selected.id;
+                    final running =
+                        profile.id == DiscourseInstanceRuntime.instanceId;
+                    return Card(
+                      child: RadioListTile<String>(
+                        value: profile.id,
+                        title: Row(
+                          children: [
+                            Expanded(child: Text(profile.name)),
+                            if (running)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 8),
+                                child: Chip(label: Text('当前运行')),
+                              ),
+                            if (selected && !running)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 8),
+                                child: Chip(label: Text('下次启动')),
+                              ),
+                          ],
+                        ),
+                        subtitle: Text(profile.baseUrl),
+                        secondary: profile.builtIn
+                            ? const Icon(Icons.home_rounded)
+                            : IconButton(
+                                tooltip: '移除实例',
+                                onPressed: () => _removeInstance(profile),
+                                icon: const Icon(Icons.delete_outline_rounded),
+                              ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
             ),
     );
   }
