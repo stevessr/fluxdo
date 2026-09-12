@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+import '../constants.dart';
 import '../l10n/s.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../utils/notification_navigation.dart';
+import '../utils/notification_route_payload.dart';
 
 /// 全局 NavigatorKey，用于通知点击时导航
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -14,11 +19,13 @@ const String _apkUpdateChannelId = 'apk_update';
 
 /// 本地系统通知服务
 class LocalNotificationService {
-  static final LocalNotificationService _instance = LocalNotificationService._internal();
+  static final LocalNotificationService _instance =
+      LocalNotificationService._internal();
   factory LocalNotificationService() => _instance;
   LocalNotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   bool _permissionGranted = false;
 
@@ -26,13 +33,17 @@ class LocalNotificationService {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    const linuxSettings = LinuxInitializationSettings(defaultActionName: 'Open');
+    const linuxSettings = LinuxInitializationSettings(
+      defaultActionName: 'Open',
+    );
     const windowsSettings = WindowsInitializationSettings(
       appName: 'FluxDO',
       appUserModelId: 'Com.FluxDO.FluxDO',
@@ -53,37 +64,48 @@ class LocalNotificationService {
     );
     _initialized = true;
     debugPrint('[LocalNotification] 初始化完成');
-    
+
     // 请求通知权限 (Android 13+)
     await _requestPermission();
   }
 
-  /// 通知点击回调
+  /// 通知点击回调。插件回调本身是 void，因此把真正的异步恢复流程显式托管。
   void _onNotificationTapped(NotificationResponse response) {
+    unawaited(_handleNotificationTapped(response));
+  }
+
+  Future<void> _handleNotificationTapped(NotificationResponse response) async {
     debugPrint('[LocalNotification] 通知被点击: payload=${response.payload}');
 
     final payload = response.payload;
     if (payload == null || payload.isEmpty) return;
 
-    // payload 格式: "topic:{topicId}[:{postNumber}]" 或
-    // "message:{topicId}[:{postNumber}]"(私信,走私信平行视界栈)。
-    final isMessage = payload.startsWith('message:');
-    if (!isMessage && !payload.startsWith('topic:')) return;
-    final parts = payload.substring(isMessage ? 8 : 6).split(':');
-    final topicId = int.tryParse(parts[0]);
-    final postNumber = parts.length > 1 ? int.tryParse(parts[1]) : null;
-    if (topicId == null) return;
+    // 冷启动时通知回调可能早于 main() 的并行初始化阶段。先恢复活动实例，
+    // 再判断 v2 payload 的实例边界，避免把 A 站残留通知误开到 B 站同 ID 话题。
+    await AppConstants.initDiscourseInstanceRuntime();
+
+    final target = NotificationRoutePayload.parse(payload);
+    if (target == null) return;
+    if (!target.belongsToInstance(AppConstants.discourseInstanceId)) {
+      debugPrint(
+        '[LocalNotification] 忽略其他实例的残留通知: '
+        'payloadInstance=${target.instanceId}, '
+        'activeInstance=${AppConstants.discourseInstanceId}',
+      );
+      return;
+    }
 
     debugPrint(
-      '[LocalNotification] 跳转到${isMessage ? "私信" : "话题"}: $topicId, 帖子: $postNumber',
+      '[LocalNotification] 跳转到${target.isPrivateMessage ? "私信" : "话题"}: '
+      '${target.topicId}, 帖子: ${target.postNumber}',
     );
 
     // 与应用内通知落点一致:大屏页面弹窗、窄屏全屏路由(私信/话题
     // 同一入口,不再写工作区栈/切 tab)。拿不到 context(冷启动时通知
     // 先于根 widget 树就绪)退化为直接 push。
     final page = TopicDetailPage(
-      topicId: topicId,
-      scrollToPostNumber: postNumber,
+      topicId: target.topicId,
+      scrollToPostNumber: target.postNumber,
     );
     final context = navigatorKey.currentContext;
     if (context != null && context.mounted) {
@@ -98,8 +120,10 @@ class LocalNotificationService {
   /// 请求通知权限
   Future<void> _requestPermission() async {
     // Android 平台请求权限
-    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidPlugin != null) {
       final granted = await androidPlugin.requestNotificationsPermission();
       _permissionGranted = granted ?? false;
@@ -145,19 +169,27 @@ class LocalNotificationService {
       windows: const WindowsNotificationDetails(),
     );
 
-    final notificationId = id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
-    
-    // 构建 payload 用于点击回调:私信用 message: 前缀,走私信自己的
-    // 平行视界栈,不能跟普通话题共用 topic: 前缀(否则左栏会显示信息流)。
-    String? payload;
-    if (topicId != null) {
-      final prefix = isPrivateMessage ? 'message' : 'topic';
-      payload = postNumber != null
-          ? '$prefix:$topicId:$postNumber'
-          : '$prefix:$topicId';
-    }
-    
-    await _plugin.show(id: notificationId, title: title, body: body, notificationDetails: details, payload: payload);
+    final notificationId =
+        id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
+    // v2 payload 带实例 identity。切换实例并重启后，旧实例残留系统通知
+    // 仍可被识别并拒绝跨站跳转；legacy payload 继续由解析器兼容。
+    final payload = topicId == null
+        ? null
+        : NotificationRoutePayload.build(
+            instanceId: AppConstants.discourseInstanceId,
+            topicId: topicId,
+            postNumber: postNumber,
+            isPrivateMessage: isPrivateMessage,
+          );
+
+    await _plugin.show(
+      id: notificationId,
+      title: title,
+      body: body,
+      notificationDetails: details,
+      payload: payload,
+    );
     debugPrint('[LocalNotification] 已发送: $title, payload=$payload');
   }
 
