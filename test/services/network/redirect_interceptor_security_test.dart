@@ -64,44 +64,50 @@ void main() {
       'Accept': 'application/json',
     };
 
-    test('same-origin redirect only refreshes Cookie through CookieManager', () {
-      final sanitized = RedirectInterceptor.sanitizedHeadersForRedirect(
-        headers,
-        sameOrigin: true,
-      );
+    test(
+      'same-origin redirect only refreshes Cookie through CookieManager',
+      () {
+        final sanitized = RedirectInterceptor.sanitizedHeadersForRedirect(
+          headers,
+          sameOrigin: true,
+        );
 
-      expect(sanitized.containsKey('Cookie'), isFalse);
-      expect(sanitized['X-CSRF-Token'], 'csrf-secret');
-      expect(sanitized['User-Api-Key'], 'api-secret');
-      expect(sanitized['X-Shared-Session-Key'], 'messagebus-secret');
-      expect(sanitized['X-Requested-With'], 'XMLHttpRequest');
-      expect(sanitized['Accept'], 'application/json');
-    });
+        expect(sanitized.containsKey('Cookie'), isFalse);
+        expect(sanitized['X-CSRF-Token'], 'csrf-secret');
+        expect(sanitized['User-Api-Key'], 'api-secret');
+        expect(sanitized['X-Shared-Session-Key'], 'messagebus-secret');
+        expect(sanitized['X-Requested-With'], 'XMLHttpRequest');
+        expect(sanitized['Accept'], 'application/json');
+      },
+    );
 
-    test('cross-origin redirect strips site credentials and fetch metadata', () {
-      final sanitized = RedirectInterceptor.sanitizedHeadersForRedirect(
-        headers,
-        sameOrigin: false,
-      );
+    test(
+      'cross-origin redirect strips site credentials and fetch metadata',
+      () {
+        final sanitized = RedirectInterceptor.sanitizedHeadersForRedirect(
+          headers,
+          sameOrigin: false,
+        );
 
-      for (final name in [
-        'Cookie',
-        'Authorization',
-        'Proxy-Authorization',
-        'X-CSRF-Token',
-        'User-Api-Key',
-        'User-Api-Client-Id',
-        'X-Shared-Session-Key',
-        'X-Requested-With',
-        'Origin',
-        'Referer',
-        'Discourse-Present',
-        'Sec-Fetch-Site',
-      ]) {
-        expect(sanitized.containsKey(name), isFalse, reason: name);
-      }
-      expect(sanitized['Accept'], 'application/json');
-    });
+        for (final name in [
+          'Cookie',
+          'Authorization',
+          'Proxy-Authorization',
+          'X-CSRF-Token',
+          'User-Api-Key',
+          'User-Api-Client-Id',
+          'X-Shared-Session-Key',
+          'X-Requested-With',
+          'Origin',
+          'Referer',
+          'Discourse-Present',
+          'Sec-Fetch-Site',
+        ]) {
+          expect(sanitized.containsKey(name), isFalse, reason: name);
+        }
+        expect(sanitized['Accept'], 'application/json');
+      },
+    );
 
     test('cross-origin redirect disables discourse auth side effects', () {
       final extra = RedirectInterceptor.redirectExtra(
