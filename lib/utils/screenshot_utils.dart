@@ -40,8 +40,7 @@ class ScreenshotUtils {
       final textureHeight = widgetHeight * pixelRatio;
 
       // 纹理尺寸未超限，直接截图
-      if (textureWidth <= _maxTextureSize &&
-          textureHeight <= _maxTextureSize) {
+      if (textureWidth <= _maxTextureSize && textureHeight <= _maxTextureSize) {
         debugPrint(
           '[ScreenshotUtils] 直接截图 (${widgetWidth}x$widgetHeight @ $pixelRatio)',
         );
