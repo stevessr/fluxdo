@@ -27,6 +27,11 @@ class DiscourseBasePathInterceptor extends Interceptor {
     final normalizedBase = _normalizeBasePath(basePath);
     if (normalizedBase.isEmpty || requestPath.isEmpty) return requestPath;
 
+    // `//host/path` is a protocol-relative absolute URL. Uri.hasScheme is false
+    // for this form, so it must be checked before treating the value as a local
+    // leading-slash Discourse path.
+    if (requestPath.startsWith('//')) return requestPath;
+
     final absolute = Uri.tryParse(requestPath);
     if (absolute != null && absolute.hasScheme) return requestPath;
 
