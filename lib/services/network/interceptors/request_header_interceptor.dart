@@ -18,7 +18,8 @@ class RequestHeaderInterceptor extends Interceptor {
   final CsrfTokenService _cookieSync;
 
   @visibleForTesting
-  static String xhrOriginForBaseUrl(String baseUrl) => Uri.parse(baseUrl).origin;
+  static String xhrOriginForBaseUrl(String baseUrl) =>
+      Uri.parse(baseUrl).origin;
 
   @visibleForTesting
   static String xhrRefererForBaseUrl(String baseUrl) =>
