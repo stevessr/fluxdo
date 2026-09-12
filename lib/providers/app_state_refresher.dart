@@ -14,6 +14,7 @@ import 'message_bus/notification_providers.dart';
 import 'message_bus/pm_tracking_providers.dart';
 import 'message_bus/session_channel_providers.dart';
 import 'message_bus/topic_tracking_providers.dart';
+import 'voice/voice_media_provider.dart';
 import 'voice/voice_rooms_provider.dart';
 import 'voice/voice_session_provider.dart';
 import 'ldc_providers.dart';
@@ -50,9 +51,11 @@ class AppStateRefresher {
   }
 
   static Future<void> resetForLogout(ProviderContainer container) async {
-    // Voice participant sessions are account-bound. Drop the local realtime
-    // state before refreshing auth-scoped providers; if a final leave request
-    // was impossible, the server's presence TTL remains the backstop.
+    // Voice participant/media sessions are account-bound. Stop local media
+    // before clearing auth state so microphone tracks and peer connections
+    // never survive into another account. The server TTL remains the fallback
+    // if a final leave request was impossible.
+    container.invalidate(voiceMediaProvider);
     container.invalidate(voiceSessionProvider);
     container.invalidate(voiceRoomsProvider);
 
