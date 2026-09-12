@@ -16,7 +16,9 @@ import 'storage/resilient_secure_storage.dart';
 /// - 最长保留 7 天；
 /// - 以站点 + 当前账号为命名空间，不同账号绝不复用同一份文件；
 /// - 文件名只落不可逆哈希，不额外暴露用户名；
-/// - 开关是全局实验开关，关闭后停止读写，但不会隐式删除已有缓存。
+/// - 开关是全局实验开关，关闭后停止读写，但不会隐式删除已有缓存；
+/// - 落盘前剥离 CSRF、MessageBus session key 与 Turnstile sitekey 等
+///   短生命周期会话元数据，避免 7 天缓存把旧凭证重新灌回新会话。
 class PreloadCacheService {
   PreloadCacheService._internal()
     : _cacheBaseDirectory = getApplicationCacheDirectory,
@@ -122,7 +124,7 @@ class PreloadCacheService {
       '${file.path}.tmp-${Process.pid}-${stamp.microsecondsSinceEpoch}',
     );
     try {
-      await temp.writeAsString(html, flush: true);
+      await temp.writeAsString(_sanitizeForPersistence(html), flush: true);
       await temp.setLastModified(stamp);
 
       try {
@@ -164,6 +166,31 @@ class PreloadCacheService {
   bool _isExpired(DateTime modifiedAt) {
     final age = _now().difference(modifiedAt);
     return !age.isNegative && age >= cacheTtl;
+  }
+
+  /// 去掉不能安全跨会话复用的 HTML 元数据。
+  ///
+  /// data-preloaded 内的 JSON 字符串会把双引号转义，因此这些正则只会命中
+  /// 真正的 HTML meta/attribute，不会误删帖子正文中作为 JSON 内容出现的文本。
+  String _sanitizeForPersistence(String html) {
+    var sanitized = html;
+    for (final metaName in const ['csrf-token', 'shared_session_key']) {
+      sanitized = sanitized.replaceAll(
+        RegExp(
+          '''<meta\\b[^>]*\\bname=["']${RegExp.escape(metaName)}["'][^>]*>''',
+          caseSensitive: false,
+        ),
+        '',
+      );
+    }
+    sanitized = sanitized.replaceAll(
+      RegExp(
+        '''\\sdata-sitekey=["'][^"']*["']''',
+        caseSensitive: false,
+      ),
+      '',
+    );
+    return sanitized;
   }
 
   Future<void> _pruneExpired(Directory root) async {
