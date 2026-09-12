@@ -55,6 +55,7 @@ void main() {
       'X-CSRF-Token': 'csrf-secret',
       'User-Api-Key': 'api-secret',
       'User-Api-Client-Id': 'client-secret',
+      'X-Shared-Session-Key': 'messagebus-secret',
       'X-Requested-With': 'XMLHttpRequest',
       'Origin': 'https://forum.example.com',
       'Referer': 'https://forum.example.com/forum/',
@@ -72,6 +73,7 @@ void main() {
       expect(sanitized.containsKey('Cookie'), isFalse);
       expect(sanitized['X-CSRF-Token'], 'csrf-secret');
       expect(sanitized['User-Api-Key'], 'api-secret');
+      expect(sanitized['X-Shared-Session-Key'], 'messagebus-secret');
       expect(sanitized['X-Requested-With'], 'XMLHttpRequest');
       expect(sanitized['Accept'], 'application/json');
     });
@@ -89,6 +91,7 @@ void main() {
         'X-CSRF-Token',
         'User-Api-Key',
         'User-Api-Client-Id',
+        'X-Shared-Session-Key',
         'X-Requested-With',
         'Origin',
         'Referer',
