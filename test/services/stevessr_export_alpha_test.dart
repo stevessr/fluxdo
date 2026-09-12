@@ -29,7 +29,10 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    // 只需要完成布局/绘制即可截图；不要用 pumpAndSettle，Image.asset 的
+    // 异步解码/调度状态不应成为 PNG 导出测试的无限等待条件。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
     final exported = await StevessrExportService.render(
       params: params,
