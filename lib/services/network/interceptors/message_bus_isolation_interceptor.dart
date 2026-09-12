@@ -10,7 +10,8 @@ import '../flux_request_spec.dart';
 /// 会话同步或恢复动作。把约束放在统一 Dio 层，避免前台/iOS 后台/未来调用方
 /// 各自遗漏某个 extra 标记。
 class MessageBusIsolationInterceptor extends Interceptor {
-  MessageBusIsolationInterceptor(String baseUrl) : _baseUri = Uri.parse(baseUrl);
+  MessageBusIsolationInterceptor(String baseUrl)
+    : _baseUri = Uri.parse(baseUrl);
 
   final Uri _baseUri;
 
