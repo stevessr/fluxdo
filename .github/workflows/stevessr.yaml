@@ -61,6 +61,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+
       - name: Check formatting
         run: |
           dart format \
@@ -90,13 +93,13 @@ jobs:
           test/widgets/stevessr_quick_toolbar_test.dart
 
       - name: Test PNG export alpha
-        run: dart tool/flutterw.dart test test/services/stevessr_export_alpha_test.dart
+        run: flutter test test/services/stevessr_export_alpha_test.dart
 
       - name: Test chunked screenshot alpha
-        run: dart tool/flutterw.dart test test/utils/screenshot_utils_alpha_test.dart
+        run: flutter test test/utils/screenshot_utils_alpha_test.dart
 
       - name: Test generator UI
-        run: dart tool/flutterw.dart test test/widgets/stevessr_generator_page_test.dart
+        run: flutter test test/widgets/stevessr_generator_page_test.dart
 
       - name: Test composer quick toolbar
-        run: dart tool/flutterw.dart test test/widgets/stevessr_quick_toolbar_test.dart
+        run: flutter test test/widgets/stevessr_quick_toolbar_test.dart
