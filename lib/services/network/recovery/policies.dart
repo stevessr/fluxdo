@@ -2,9 +2,54 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../adapters/adapter_log_metadata.dart';
 import '../exceptions/api_exception.dart';
+import '../flux_request_spec.dart';
 import 'recovery_policy.dart';
 import 'retry_after.dart';
+
+/// rhttp 将 1xx informational response 错误暴露为终态时的兼容恢复。
+///
+/// HTTP 103 Early Hints 只是最终响应之前的中间响应，业务层绝不应该看到它。
+/// 当前 rhttp/reqwest 的实验性 HTTP/3 路径在部分 Cloudflare 站点上可能把
+/// 103 直接返回给 Dio，随后被 validateStatus 正确判成 badResponse。
+///
+/// 这里只对 rhttp 实际承载过的幂等请求生效，并让下一次尝试显式旁路 rhttp；
+/// 重放本身仍由 RecoveryCoordinator 统一执行，因此不会绕开尝试预算、Cookie
+/// 刷新、请求合并 owner 标记等现有恢复约束。101 Switching Protocols 不属于
+/// 这个兜底范围，避免破坏真正的协议升级请求。
+class RhttpInformationalFallbackPolicy implements RecoveryPolicy {
+  const RhttpInformationalFallbackPolicy();
+
+  static const _replaySafeMethods = {'GET', 'HEAD', 'OPTIONS'};
+
+  @override
+  String get name => 'rhttp-informational-fallback';
+
+  @override
+  bool canHandle(AttemptOutcome outcome) {
+    if (outcome.isSuccess) return false;
+
+    final err = outcome.error!;
+    final status = outcome.statusCode;
+    if (status == null || status < 100 || status >= 200 || status == 101) {
+      return false;
+    }
+
+    final options = err.requestOptions;
+    if (options.spec.skipRhttpAdapter) return false;
+    if (getRequestAdapterLogName(options) != 'rhttp') return false;
+
+    return _replaySafeMethods.contains(options.method.toUpperCase());
+  }
+
+  @override
+  Future<RecoveryDecision> decide(AttemptOutcome outcome) async {
+    return RecoveryDecision.retry(
+      requestExtra: const {FluxRequestKeys.skipRhttpAdapter: true},
+    );
+  }
+}
 
 /// 限流(429)恢复策略。
 ///

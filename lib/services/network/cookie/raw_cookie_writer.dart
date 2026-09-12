@@ -7,6 +7,24 @@ import 'package:flutter/services.dart';
 import 'cookie_full_info.dart';
 import 'raw_cookie_writer_fallback.dart';
 
+typedef RawCookieWriteRequest = ({String url, String rawSetCookie});
+typedef ExactCookieDeleteRequest = ({
+  String url,
+  String name,
+  String? domain,
+  String path,
+});
+
+class _RecentCookieInfoRead {
+  const _RecentCookieInfoRead({
+    required this.capturedAt,
+    required this.cookies,
+  });
+
+  final DateTime capturedAt;
+  final List<CookieFullInfo> cookies;
+}
+
 /// 通过原生平台通道写入 / 读取 / 删除 WebView cookie store。
 ///
 /// 保留完整的 cookie 语义（host-only / domain / sameSite 等）。
@@ -29,6 +47,9 @@ class RawCookieWriter {
     '_t',
     '_forum_session',
   };
+  static const _recentCookieInfoReadLimit = 32;
+
+  final Map<String, _RecentCookieInfoRead> _recentCookieInfoReads = {};
 
   /// 当前平台是否有 native method channel 实现。
   bool get _hasNativeChannel =>
@@ -39,6 +60,49 @@ class RawCookieWriter {
 
   /// 是否支持当前平台 (native 或 Dart fallback 任一可用即支持)。
   bool get isSupported => _hasNativeChannel || _hasDartFallback;
+
+  /// 返回最近一次成功读取 [url] 时抓到的完整 cookie 信息。
+  ///
+  /// 这只是短流程中的性能提示，不是当前 WebView cookie store 的权威状态。
+  /// 调用方必须提供一个很短的 [maxAge]，并在依赖它执行删除等破坏性操作后
+  /// 用独立 API 复检。账号切换利用它复用刚刚保存账号快照时的读取结果，避免
+  /// 随后清理阶段再次跨 MethodChannel/WK store 枚举同一批 cookie。
+  List<CookieFullInfo>? getRecentCookieInfos(
+    String url, {
+    Duration maxAge = const Duration(seconds: 5),
+  }) {
+    if (maxAge.inMicroseconds <= 0) return null;
+    final cached = _recentCookieInfoReads[url];
+    if (cached == null) return null;
+    if (DateTime.now().difference(cached.capturedAt) > maxAge) {
+      _recentCookieInfoReads.remove(url);
+      return null;
+    }
+    return cached.cookies;
+  }
+
+  void _rememberCookieInfoRead(String url, List<CookieFullInfo> cookies) {
+    // Map 保持插入顺序。先移除再写回可让热点 URL 移到末尾，从而用一个很小的
+    // 有界缓存覆盖账号切换涉及的 origins，而不会因浏览器访问任意 URL 无限增长。
+    _recentCookieInfoReads.remove(url);
+    if (_recentCookieInfoReads.length >= _recentCookieInfoReadLimit) {
+      _recentCookieInfoReads.remove(_recentCookieInfoReads.keys.first);
+    }
+    _recentCookieInfoReads[url] = _RecentCookieInfoRead(
+      capturedAt: DateTime.now(),
+      cookies: List<CookieFullInfo>.unmodifiable(cookies),
+    );
+  }
+
+  void _invalidateCookieInfoRead(String url) {
+    _recentCookieInfoReads.remove(url);
+  }
+
+  void _invalidateCookieInfoReads(Iterable<String> urls) {
+    for (final url in urls) {
+      _invalidateCookieInfoRead(url);
+    }
+  }
 
   /// 通过原始 Set-Cookie 头字符串写入 cookie。
   ///
@@ -59,6 +123,7 @@ class RawCookieWriter {
     String rawSetCookie, {
     bool writeSharedStorage = true,
   }) async {
+    _invalidateCookieInfoRead(url);
     final effectiveWriteSharedStorage = _effectiveSharedStorageWrite(
       url,
       rawSetCookie,
@@ -110,11 +175,54 @@ class RawCookieWriter {
     }
   }
 
-  /// 批量写入多个 raw Set-Cookie 头。
-  Future<int> setRawCookies(String url, List<String> rawSetCookies) async {
+  /// 批量写入同一 URL 的多个 raw Set-Cookie 头。
+  Future<int> setRawCookies(String url, List<String> rawSetCookies) {
+    return setRawCookiesBatch(
+      rawSetCookies.map((raw) => (url: url, rawSetCookie: raw)),
+    );
+  }
+
+  /// 批量写入多个 origin 的 raw Set-Cookie。
+  ///
+  /// Android 走一次原生 MethodChannel batch：一次性向 Chromium cookie store
+  /// 发出整批 setCookie，并且只在批次尾部 flush 一次。其它平台维持原来的
+  /// 串行写入语义，避免扩大 Apple/shared-storage 的行为变化范围。
+  Future<int> setRawCookiesBatch(
+    Iterable<RawCookieWriteRequest> cookies,
+  ) async {
+    final items = cookies.toList(growable: false);
+    if (items.isEmpty) return 0;
+    _invalidateCookieInfoReads(items.map((item) => item.url));
+    if (!io.Platform.isAndroid) return _setRawCookiesSerial(items);
+
+    try {
+      final result = await _channel.invokeMethod<int>('setRawCookiesBatch', {
+        'cookies': items
+            .map((item) => {'url': item.url, 'rawSetCookie': item.rawSetCookie})
+            .toList(growable: false),
+      });
+      final written = result ?? 0;
+      if (written == items.length) return written;
+      debugPrint(
+        '[RawCookieWriter] setRawCookiesBatch incomplete '
+        '$written/${items.length}, fallback serial',
+      );
+      return _setRawCookiesSerial(items);
+    } on PlatformException catch (e) {
+      debugPrint('[RawCookieWriter] setRawCookiesBatch failed, fallback: $e');
+      return _setRawCookiesSerial(items);
+    } on MissingPluginException {
+      debugPrint(
+        '[RawCookieWriter] setRawCookiesBatch unavailable, fallback serial',
+      );
+      return _setRawCookiesSerial(items);
+    }
+  }
+
+  Future<int> _setRawCookiesSerial(List<RawCookieWriteRequest> items) async {
     var written = 0;
-    for (final raw in rawSetCookies) {
-      if (await setRawCookie(url, raw)) written++;
+    for (final item in items) {
+      if (await setRawCookie(item.url, item.rawSetCookie)) written++;
     }
     return written;
   }
@@ -142,6 +250,7 @@ class RawCookieWriter {
     required List<String?> domainCandidates,
     required List<String> pathCandidates,
   }) async {
+    _invalidateCookieInfoRead(url);
     if (_hasDartFallback) {
       return RawCookieWriterFallback.instance.nukeAllVariants(
         url: url,
@@ -179,6 +288,7 @@ class RawCookieWriter {
     required String? domain,
     required String path,
   }) async {
+    _invalidateCookieInfoRead(url);
     if (_hasDartFallback) {
       return RawCookieWriterFallback.instance.deleteExactCookie(
         url: url,
@@ -204,7 +314,75 @@ class RawCookieWriter {
     }
   }
 
+  /// 批量精确删除互不相同的 cookie identity。
+  ///
+  /// Android 把所有 `(url,name,domain,path)` 合并为一次平台调用，每个 identity
+  /// 仍覆盖 plain / Secure / SameSite=None / Partitioned 四种删除头，但整批
+  /// 只 flush 一次。其它平台沿用并发的单条删除，保持既有性能与行为。
+  Future<int> deleteExactCookiesBatch(
+    Iterable<ExactCookieDeleteRequest> cookies,
+  ) async {
+    final items = cookies.toList(growable: false);
+    if (items.isEmpty) return 0;
+    _invalidateCookieInfoReads(items.map((item) => item.url));
+    if (!io.Platform.isAndroid) return _deleteExactCookiesFallback(items);
+
+    try {
+      final result = await _channel.invokeMethod<int>(
+        'deleteExactCookiesBatch',
+        {
+          'cookies': items
+              .map(
+                (item) => {
+                  'url': item.url,
+                  'name': item.name,
+                  'domain': item.domain,
+                  'path': item.path,
+                },
+              )
+              .toList(growable: false),
+        },
+      );
+      final deleted = result ?? 0;
+      if (deleted == items.length) return deleted;
+      debugPrint(
+        '[RawCookieWriter] deleteExactCookiesBatch incomplete '
+        '$deleted/${items.length}, fallback individual deletes',
+      );
+      return _deleteExactCookiesFallback(items);
+    } on PlatformException catch (e) {
+      debugPrint(
+        '[RawCookieWriter] deleteExactCookiesBatch failed, fallback: $e',
+      );
+      return _deleteExactCookiesFallback(items);
+    } on MissingPluginException {
+      debugPrint(
+        '[RawCookieWriter] deleteExactCookiesBatch unavailable, fallback',
+      );
+      return _deleteExactCookiesFallback(items);
+    }
+  }
+
+  Future<int> _deleteExactCookiesFallback(
+    List<ExactCookieDeleteRequest> items,
+  ) async {
+    final results = await Future.wait<bool>(
+      items.map(
+        (item) => deleteExactCookie(
+          url: item.url,
+          name: item.name,
+          domain: item.domain,
+          path: item.path,
+        ),
+      ),
+    );
+    return results.where((deleted) => deleted).length;
+  }
+
   /// 读取指定 url 下所有 cookie 的完整信息。
+  ///
+  /// 每次调用都读取真实 store，并把成功结果保留为一个很小的最近读取缓存。
+  /// 缓存不会自动参与普通读取；只有显式调用 [getRecentCookieInfos] 才会复用。
   ///
   /// 平台差异：
   /// - iOS / macOS：`WKHTTPCookieStore.getAllCookies()` 返回完整字段
@@ -214,7 +392,11 @@ class RawCookieWriter {
   /// 验证项：V12（flutter_inappwebview Android getCookies 实际行为）。
   Future<List<CookieFullInfo>> getAllCookieInfos(String url) async {
     if (_hasDartFallback) {
-      return RawCookieWriterFallback.instance.getAllCookieInfos(url);
+      final result = await RawCookieWriterFallback.instance.getAllCookieInfos(
+        url,
+      );
+      _rememberCookieInfoRead(url, result);
+      return result;
     }
     try {
       final raw = await _channel.invokeListMethod<Map<dynamic, dynamic>>(
@@ -222,7 +404,7 @@ class RawCookieWriter {
         {'url': url},
       );
       if (raw == null) return const [];
-      return raw
+      final result = raw
           .map((m) {
             final map = Map<String, dynamic>.from(m);
             return CookieFullInfo(
@@ -238,6 +420,8 @@ class RawCookieWriter {
             );
           })
           .toList(growable: false);
+      _rememberCookieInfoRead(url, result);
+      return result;
     } on PlatformException catch (e) {
       debugPrint('[RawCookieWriter] getAllCookieInfos failed: $e');
       return const [];

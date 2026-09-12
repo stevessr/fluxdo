@@ -643,7 +643,6 @@ class _RadialAccountLayout {
     const preferredInnerRadius = 76.0;
     const preferredRingGap = 64.0;
     const minimumRingGap = 52.0;
-    const preferredNodePitch = 58.0;
     const sweep = math.pi / 2.0;
     final safe = Rect.fromLTRB(
       padding.left + outerMargin,
@@ -673,8 +672,28 @@ class _RadialAccountLayout {
     // percentage of the screen: compact/floating navigation bars can place the
     // profile entry well inside that threshold even though it is still the
     // bottom-right trigger.
-    final inwardAngle = fromTop ? math.pi * 3.0 / 4.0 : math.pi * 5.0 / 4.0;
-    final startAngle = fromTop ? math.pi / 2.0 : math.pi;
+    final roomToLeft = center.dx - targetCenterBounds.left;
+    final roomToRight = targetCenterBounds.right - center.dx;
+    final opensRight = roomToRight >= roomToLeft;
+    final double inwardAngle;
+    final double startAngle;
+    if (fromTop) {
+      if (opensRight) {
+        startAngle = 0.0;
+        inwardAngle = math.pi / 4.0;
+      } else {
+        startAngle = math.pi / 2.0;
+        inwardAngle = math.pi * 3.0 / 4.0;
+      }
+    } else {
+      if (opensRight) {
+        startAngle = math.pi * 3.0 / 2.0;
+        inwardAngle = math.pi * 7.0 / 4.0;
+      } else {
+        startAngle = math.pi;
+        inwardAngle = math.pi * 5.0 / 4.0;
+      }
+    }
 
     final geometryBounds = Rect.fromLTRB(
       math.min(targetCenterBounds.left, center.dx),
@@ -700,7 +719,9 @@ class _RadialAccountLayout {
     // Slot geometry is derived from the complete saved-account registry. The
     // active account keeps its original slot but is not rendered there, so
     // switching the active account cannot make the remaining targets reflow.
-    final slotAccounts = accounts;
+    final slotAccounts = accounts
+        .where((account) => account.username != currentUsername)
+        .toList(growable: false);
 
     ({double startAngle, double sweepAngle}) accountArcFor(double radius) =>
         _accountTargetArc(
@@ -712,14 +733,13 @@ class _RadialAccountLayout {
           inwardAngle: inwardAngle,
         );
 
-    int capacityFor(double radius) {
-      if (radius <= 0.0) return 0;
-      final targetArc = accountArcFor(radius);
-      if (targetArc.sweepAngle <= 0.0) return 0;
-      return math.max(
-        1,
-        (radius * targetArc.sweepAngle / preferredNodePitch).floor() + 1,
-      );
+    int capacityForRing(int ringIndex) => ringIndex * 2 + 3;
+
+    var requiredAccountRingCount = 0;
+    var slotsRemaining = slotAccounts.length;
+    while (slotsRemaining > 0) {
+      slotsRemaining -= capacityForRing(requiredAccountRingCount);
+      requiredAccountRingCount++;
     }
 
     final hasAccounts = slotAccounts.isNotEmpty;
@@ -751,41 +771,20 @@ class _RadialAccountLayout {
       );
     }
 
-    int comfortableAccountCapacity(List<double> radii) {
-      var total = 0;
-      for (final radius in radii) {
-        total += capacityFor(radius);
-      }
-      return total;
-    }
-
-    var accountRingCount = hasAccounts && maxAccountRingCount > 0 ? 1 : 0;
-    while (accountRingCount < maxAccountRingCount &&
-        comfortableAccountCapacity(accountRadiiFor(accountRingCount)) <
-            slotAccounts.length) {
-      accountRingCount++;
-    }
+    final accountRingCount = math.min(requiredAccountRingCount, maxAccountRingCount);
     final accountRadii = accountRadiiFor(accountRingCount).toList();
-    if (accountRadii.length > 1 &&
-        comfortableAccountCapacity(accountRadii) < slotAccounts.length) {
-      final stretchedGap =
-          (maxAccountRadius - accountInnerRadius) / (accountRadii.length - 1);
-      for (var index = 0; index < accountRadii.length; index++) {
-        accountRadii[index] = accountInnerRadius + stretchedGap * index;
-      }
-    }
-    final overflowed =
-        comfortableAccountCapacity(accountRadii) < slotAccounts.length;
+    final overflowed = requiredAccountRingCount > maxAccountRingCount;
     final manageRadius = accountRadii.isEmpty
         ? defaultInnerRadius
         : math.min(maxRadius, accountRadii.last + preferredRingGap);
     final radii = <double>[...accountRadii, manageRadius];
     final targets = <_RadialTarget>[];
     var accountOffset = 0;
-    for (final radius in accountRadii) {
+    for (var ringIndex = 0; ringIndex < accountRadii.length; ringIndex++) {
+      final radius = accountRadii[ringIndex];
       final remaining = slotAccounts.length - accountOffset;
       if (remaining <= 0) break;
-      final accountCount = math.min(remaining, capacityFor(radius));
+      final accountCount = math.min(remaining, capacityForRing(ringIndex));
       final ringAccounts = slotAccounts
           .skip(accountOffset)
           .take(accountCount)

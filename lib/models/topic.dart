@@ -251,6 +251,40 @@ class TopicUser {
       : null;
 }
 
+/// 私信收件人里的群组（details.allowed_groups，BasicGroupSerializer）。
+///
+/// `id` 允许为空：邀请群组的接口只回 success_json，本地追加时手上只有
+/// 名字；而移除群组（remove-allowed-group）与展示都只用 [name]，id 仅
+/// 用于跳转群组页，缺了不影响成员管理。
+class TopicGroup {
+  final int? id;
+  final String name;
+  final String? fullName;
+  final int? userCount;
+
+  const TopicGroup({
+    this.id,
+    required this.name,
+    this.fullName,
+    this.userCount,
+  });
+
+  /// 显示名:优先全名,空则回退群组名
+  String get displayName {
+    final n = fullName?.trim();
+    return (n != null && n.isNotEmpty) ? n : name;
+  }
+
+  factory TopicGroup.fromJson(Map<String, dynamic> json) {
+    return TopicGroup(
+      id: (json['id'] as num?)?.toInt(),
+      name: json['name'] as String? ?? '',
+      fullName: json['full_name'] as String?,
+      userCount: (json['user_count'] as num?)?.toInt(),
+    );
+  }
+}
+
 /// 话题海报（参与者）信息
 class TopicPoster {
   final int userId;
@@ -1524,7 +1558,16 @@ class BoostUser {
   }
 }
 
-/// 帖子流中的 gaps 数据（拉黑用户的帖子位置）
+/// 帖子流中的 gaps 数据：服务端过滤后被跳过的楼层索引（`{postId: [被跳过的 postId]}`）。
+///
+/// 来源不止一种，且结构本身不带来源标记。Discourse `TopicView` 里会置
+/// `contains_gaps` 的分支包括：论坛原生忽略（ignored users）、`filter=summary`
+/// （热门回复）、`username_filters`（只看某人）、`best`、只看某帖的回复、
+/// 回复链上溯、staff 视角未展开的已删帖。
+///
+/// 所以不能把 gaps 当成「拉黑用户的帖子位置」处理——被跳过的楼层并不在
+/// 本地，`_GapIndicator` 是它们唯一的加载入口（点击走 `fillGapBefore` /
+/// `fillGapAfter` 去请求）。抹掉 gaps 等于让这些楼层永久不可达。
 class PostStreamGaps {
   final Map<int, List<int>> before; // {postId: [gapPostIds]}
   final Map<int, List<int>> after; // {postId: [gapPostIds]}
@@ -1557,7 +1600,7 @@ class PostStreamGaps {
 class PostStream {
   final List<Post> posts;
   final List<int> stream; // 所有 post_id 的列表
-  final PostStreamGaps? gaps; // 拉黑用户帖子的 gaps 数据
+  final PostStreamGaps? gaps; // 服务端过滤后被跳过的楼层，见 PostStreamGaps
 
   /// 翻页响应(`/t/{id}/posts.json?include_suggested=true`)顶层带回的推荐
   /// 话题。大话题首屏 `/t/{id}.json` 不返回这两组(服务端见 next_page 有值
@@ -1810,6 +1853,10 @@ class TopicDetail {
   // 话题权限（来自 details）
   final bool canEdit; // 是否可以编辑话题元数据（标题、分类、标签）
 
+  /// 该私信是否已被当前用户归档（顶层 `message_archived`，非 details；
+  /// 服务端只在私信下发，见 TopicViewSerializer#include_message_archived?）。
+  final bool messageArchived;
+
   // 私信成员与移除权限（来自 details）
   final List<TopicUser> allowedUsers;
   final List<String> allowedGroups;
@@ -1849,6 +1896,17 @@ class TopicDetail {
   /// build_indirectly_assigned_to),官方 Web 端"三个点→指定帖子"
   /// 指定的就是这个,跟上面几个话题级字段是两回事。
   final Map<int, PostAssignmentInfo> indirectlyAssignedTo;
+
+  /// 站点插件扩展字段(话题详情顶层的非标准标量字段)
+  ///
+  /// 各社区自建的 Discourse 插件会往话题序列化里加自己的字段,
+  /// 例如 linux.do `discourse-reply-cost` 的 `reply_cost`。这类字段不属于
+  /// Discourse 标准能力,不为其单独扩充模型属性,统一收进这里由
+  /// `lib/plugins` 下的站点插件自行解析。
+  ///
+  /// 只保留顶层标量(数字/布尔/字符串),不含 `post_stream` 等重型结构,
+  /// 避免整份原始 JSON 常驻内存。
+  final Map<String, dynamic> pluginExtras;
 
   bool get isAssigned => assignedToUser != null || assignedToGroupName != null;
 
@@ -1893,6 +1951,7 @@ class TopicDetail {
     this.pmWithNonHumanUser = false,
     this.isPostVoting = false,
     this.canEdit = false,
+    this.messageArchived = false,
     this.allowedUsers = const [],
     this.allowedGroups = const [],
     this.canRemoveAllowedUsers = false,
@@ -1910,7 +1969,20 @@ class TopicDetail {
     this.assignmentNote,
     this.assignmentStatus,
     this.indirectlyAssignedTo = const {},
+    this.pluginExtras = const <String, dynamic>{},
   });
+
+  /// 从话题详情原始 JSON 中挑出顶层标量字段,供站点插件读取
+  static Map<String, dynamic> _extractPluginExtras(Map<String, dynamic> json) {
+    final extras = <String, dynamic>{};
+    for (final entry in json.entries) {
+      final value = entry.value;
+      if (value is num || value is bool || value is String) {
+        extras[entry.key] = value;
+      }
+    }
+    return Map.unmodifiable(extras);
+  }
 
   factory TopicDetail.fromJson(Map<String, dynamic> json) {
     var postStream = PostStream.fromJson(
@@ -2083,6 +2155,7 @@ class TopicDetail {
         details['notification_level'] as int?,
       ),
       canEdit: details['can_edit'] as bool? ?? false,
+      messageArchived: json['message_archived'] as bool? ?? false,
       allowedUsers: (details['allowed_users'] as List<dynamic>? ?? const [])
           .whereType<Map>()
           .map((user) => TopicUser.fromJson(Map<String, dynamic>.from(user)))
@@ -2114,6 +2187,7 @@ class TopicDetail {
       indirectlyAssignedTo: _tryParseIndirectlyAssignedTo(
         json['indirectly_assigned_to'],
       ),
+      pluginExtras: _extractPluginExtras(json),
     );
   }
 
@@ -2208,6 +2282,7 @@ class TopicDetail {
     bool? pmWithNonHumanUser,
     bool? isPostVoting,
     bool? canEdit,
+    bool? messageArchived,
     List<TopicUser>? allowedUsers,
     List<String>? allowedGroups,
     bool? canRemoveAllowedUsers,
@@ -2258,6 +2333,7 @@ class TopicDetail {
       pmWithNonHumanUser: pmWithNonHumanUser ?? this.pmWithNonHumanUser,
       isPostVoting: isPostVoting ?? this.isPostVoting,
       canEdit: canEdit ?? this.canEdit,
+      messageArchived: messageArchived ?? this.messageArchived,
       allowedUsers: allowedUsers ?? this.allowedUsers,
       allowedGroups: allowedGroups ?? this.allowedGroups,
       canRemoveAllowedUsers:
@@ -2284,6 +2360,8 @@ class TopicDetail {
       assignmentNote: assignmentNote,
       assignmentStatus: assignmentStatus,
       indirectlyAssignedTo: indirectlyAssignedTo,
+      // 插件扩展字段只有整页重拉才会变,本地局部更新一律透传旧值
+      pluginExtras: pluginExtras,
     );
   }
 }

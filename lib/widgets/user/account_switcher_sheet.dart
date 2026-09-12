@@ -17,6 +17,7 @@ import '../../services/toast_service.dart';
 import '../../utils/url_helper.dart';
 import '../common/app_bottom_sheet.dart';
 import '../common/smart_avatar.dart';
+import 'account_quick_switcher_trigger_state.dart';
 import 'account_switch_loading.dart';
 import 'radial_account_quick_switcher.dart';
 
@@ -37,9 +38,6 @@ abstract final class AccountSwitcherSheet {
         AccountQuickSwitcherPlacement.bottomRight,
   }) {
     if (_preferTouchQuickSwitcher) {
-      if (placement == AccountQuickSwitcherPlacement.bottomRight) {
-        return _TouchAccountSwitcherEntry.show(context, placement: placement);
-      }
       final container = ProviderScope.containerOf(context, listen: false);
       final preferences = container.read(accountQuickSwitcherPreferencesProvider);
       if (shouldUseRadialSwitcher(
@@ -64,7 +62,7 @@ abstract final class AccountSwitcherSheet {
     required AccountQuickSwitcherPlacement placement,
     required bool radialEnabled,
   }) {
-    return radialEnabled && placement == AccountQuickSwitcherPlacement.topRight;
+    return radialEnabled;
   }
 
   static Future<void> showClassic(BuildContext context) {
@@ -141,6 +139,14 @@ abstract final class _TouchAccountSwitcherEntry {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return AccountSwitcherSheet.showClassic(context);
 
+    final globalAnchor = AccountQuickSwitcherTriggerState.takeAnchor();
+    final overlayRenderObject = overlay.context.findRenderObject();
+    final overlayBox = overlayRenderObject is RenderBox && overlayRenderObject.hasSize
+        ? overlayRenderObject
+        : null;
+    final anchor = globalAnchor == null || overlayBox == null
+        ? globalAnchor
+        : overlayBox.globalToLocal(globalAnchor);
     final completer = Completer<void>();
     final pointerRoute = _QuickPointerRouteController();
     late OverlayEntry entry;
@@ -158,6 +164,7 @@ abstract final class _TouchAccountSwitcherEntry {
       builder: (_) => _TouchAccountQuickSwitcher(
         hostContext: context,
         placement: placement,
+        anchor: anchor,
         pointerRoute: pointerRoute,
         onRemove: removeEntry,
         onComplete: complete,
@@ -172,6 +179,7 @@ class _TouchAccountQuickSwitcher extends StatefulWidget {
   const _TouchAccountQuickSwitcher({
     required this.hostContext,
     required this.placement,
+    required this.anchor,
     required this.pointerRoute,
     required this.onRemove,
     required this.onComplete,
@@ -179,6 +187,7 @@ class _TouchAccountQuickSwitcher extends StatefulWidget {
 
   final BuildContext hostContext;
   final AccountQuickSwitcherPlacement placement;
+  final Offset? anchor;
   final _QuickPointerRouteController pointerRoute;
   final VoidCallback onRemove;
   final VoidCallback onComplete;
@@ -466,6 +475,13 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         .clamp(120.0, 520.0)
         .toDouble();
     final showManageDivider = _loading || _accounts.isNotEmpty;
+    const switcherWidth = 72.0;
+    final maxSwitcherLeft = media.size.width - 12.0 - switcherWidth;
+    final switcherLeft = widget.anchor == null
+        ? null
+        : (widget.anchor!.dx - switcherWidth / 2.0)
+              .clamp(12.0, maxSwitcherLeft < 12.0 ? 12.0 : maxSwitcherLeft)
+              .toDouble();
 
     final switcher = FadeTransition(
       opacity: _opacity,
@@ -473,7 +489,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         position: _slide,
         child: ScaleTransition(
           scale: _scale,
-          alignment: fromTop ? Alignment.topRight : Alignment.bottomRight,
+          alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight),
             child: DecoratedBox(
@@ -492,7 +508,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
                 ],
               ),
               child: SizedBox(
-                width: 72,
+                width: switcherWidth,
                 child: SingleChildScrollView(
                   physics: const NeverScrollableScrollPhysics(),
                   padding: const EdgeInsets.symmetric(vertical: 7),
@@ -535,7 +551,12 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         child: Stack(
           children: [
             if (fromTop)
-              Positioned(right: 12, top: edgeInset, child: switcher)
+              if (switcherLeft != null)
+                Positioned(left: switcherLeft, top: edgeInset, child: switcher)
+              else
+                Positioned(right: 12, top: edgeInset, child: switcher)
+            else if (switcherLeft != null)
+              Positioned(left: switcherLeft, bottom: edgeInset, child: switcher)
             else
               Positioned(right: 12, bottom: edgeInset, child: switcher),
           ],
@@ -665,6 +686,8 @@ class _AccountSwitcherBody extends StatefulWidget {
 }
 
 class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
+  static const _switchCoverMinDuration = Duration(milliseconds: 320);
+
   final AccountManager _manager = AccountManager();
   List<SavedAccount> _accounts = const [];
   String? _currentUsername;
@@ -693,13 +716,50 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
 
   Future<void> _switchTo(SavedAccount account) async {
     if (_switchingAccount != null) return;
-    setState(() => _switchingAccount = account);
-    final switched = await _performAccountSwitch(context, _manager, account);
-    if (!mounted) return;
-    if (switched) {
-      Navigator.of(context).pop();
+    _switchingAccount = account;
+
+    final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    final switchContext = overlay?.context ?? context;
+    OverlayEntry? switchCover;
+    Stopwatch? switchCoverStopwatch;
+
+    if (overlay != null) {
+      switchCover = OverlayEntry(
+        builder: (_) => AccountSwitchLoadingCover(account: account),
+      );
+      switchCoverStopwatch = Stopwatch()..start();
+      overlay.insert(switchCover);
+    }
+
+    // Start the foreground switch while the sheet context is still alive, then
+    // destroy the sheet route immediately. The root loading cover remains as
+    // the only switching UI until the account/session refresh is complete.
+    final switchFuture = _performAccountSwitch(switchContext, _manager, account);
+    if (route != null) {
+      navigator.removeRoute(route);
     } else {
-      setState(() => _switchingAccount = null);
+      navigator.pop();
+    }
+
+    try {
+      await switchFuture;
+      if (switchCover != null) {
+        await WidgetsBinding.instance.endOfFrame;
+        final elapsed = switchCoverStopwatch?.elapsed ?? Duration.zero;
+        final remaining = _switchCoverMinDuration - elapsed;
+        if (remaining > Duration.zero) {
+          await Future<void>.delayed(remaining);
+        }
+      }
+    } finally {
+      final cover = switchCover;
+      if (cover != null) {
+        switchCoverStopwatch?.stop();
+        if (cover.mounted) cover.remove();
+        cover.dispose();
+      }
     }
   }
 

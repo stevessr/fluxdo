@@ -6,6 +6,8 @@ import 'package:dio/dio.dart';
 import '../../l10n/s.dart';
 import '../../pages/network_settings_page/network_settings_page.dart';
 import '../../services/cf_challenge_service.dart';
+import '../../services/network/cookie/boundary_sync_service.dart';
+import '../../services/network/cookie/cookie_jar_service.dart';
 import '../../services/network/exceptions/api_exception.dart';
 import '../../services/toast_service.dart';
 import '../../utils/dialog_utils.dart';
@@ -14,7 +16,7 @@ import '../../utils/error_utils.dart';
 
 /// 通用错误页面组件
 /// 显示语义化的错误提示，并提供查看详情和重试功能
-class ErrorView extends StatelessWidget {
+class ErrorView extends StatefulWidget {
   const ErrorView({
     super.key,
     required this.error,
@@ -52,10 +54,17 @@ class ErrorView extends StatelessWidget {
   final bool showDetails;
 
   @override
+  State<ErrorView> createState() => _ErrorViewState();
+}
+
+class _ErrorViewState extends State<ErrorView> {
+  bool _actionInProgress = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final errorInfo = ErrorUtils.getErrorInfo(error);
-    final isCfChallengeError = _isCfChallengeError(error);
+    final errorInfo = ErrorUtils.getErrorInfo(widget.error);
+    final isCfChallengeError = _isCfChallengeError(widget.error);
 
     return Center(
       child: SingleChildScrollView(
@@ -65,10 +74,10 @@ class ErrorView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _ErrorIconBadge(icon: icon ?? errorInfo.icon),
+              _ErrorIconBadge(icon: widget.icon ?? errorInfo.icon),
               const SizedBox(height: 24),
               Text(
-                title ?? errorInfo.title,
+                widget.title ?? errorInfo.title,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w600,
@@ -111,14 +120,18 @@ class ErrorView extends StatelessWidget {
       widgets.add(
         _PrimaryButton(
           label: context.l10n.cf_manualVerifyAction,
-          onPressed: () => _runManualCfVerify(context),
+          isLoading: _actionInProgress,
+          onPressed: _actionInProgress
+              ? null
+              : () => _runManualCfVerify(context),
         ),
       );
-    } else if (onRetry != null) {
+    } else if (widget.onRetry != null) {
       widgets.add(
         _PrimaryButton(
-          label: retryLabel ?? context.l10n.common_retry,
-          onPressed: onRetry!,
+          label: widget.retryLabel ?? context.l10n.common_retry,
+          isLoading: _actionInProgress,
+          onPressed: _actionInProgress ? null : _runRetry,
         ),
       );
     }
@@ -127,23 +140,28 @@ class ErrorView extends StatelessWidget {
     // CF 验证 + 重试 / 网络设置 / 查看详情都收纳到这里，
     // 形成"一个主按钮 + 一排快捷入口"的清爽布局。
     final helperActions = <Widget>[
-      if (isCfChallengeError && onRetry != null)
+      if (isCfChallengeError && widget.onRetry != null)
         _HelperAction(
           icon: Symbols.refresh_rounded,
           label: context.l10n.common_retry,
-          onPressed: onRetry!,
+          isLoading: _actionInProgress,
+          onPressed: _actionInProgress ? null : _runCfRetry,
         ),
       if (errorInfo.isNetworkError)
         _HelperAction(
           icon: Symbols.tune_rounded,
           label: context.l10n.error_openNetworkSettings,
-          onPressed: () => _openNetworkSettings(context),
+          onPressed: _actionInProgress
+              ? null
+              : () => _openNetworkSettings(context),
         ),
-      if (showDetails)
+      if (widget.showDetails)
         _HelperAction(
           icon: Symbols.info_rounded,
           label: context.l10n.common_viewDetails,
-          onPressed: () => _showErrorDetails(context),
+          onPressed: _actionInProgress
+              ? null
+              : () => _showErrorDetails(context),
         ),
     ];
 
@@ -171,24 +189,114 @@ class ErrorView extends StatelessWidget {
   }
 
   Future<void> _runManualCfVerify(BuildContext context) async {
-    final result = await CfChallengeService().showManualVerifyNow(
-      context,
-      true,
-    );
-    if (!context.mounted) return;
+    if (_actionInProgress) return;
+    _setActionInProgress(true);
+    HapticFeedback.selectionClick();
 
-    if (result == true) {
-      ToastService.showSuccess(S.current.cfVerify_success);
-      onRetry?.call();
-      return;
+    try {
+      final result = await CfChallengeService().showManualVerifyNow(
+        context,
+        true,
+      );
+      if (!mounted) return;
+
+      if (result == true) {
+        // showManualVerify 的少数快速完成路径会先返回 true，再异步把
+        // WebView 的 cf_clearance 落到 CookieJar。错误页若立刻 onRetry，
+        // 原请求就可能继续携带旧/空 Cookie 再次撞盾，看起来像“验证通过但
+        // 重试没反应”。这里在离开错误态前显式等待边界同步收敛。
+        await _syncCfClearanceAfterVerify();
+        if (!mounted) return;
+        ToastService.showSuccess(S.current.cfVerify_success);
+        widget.onRetry?.call();
+        return;
+      }
+
+      if (result == false) {
+        ToastService.showError(S.current.cf_verifyIncomplete);
+        return;
+      }
+
+      ToastService.showError(S.current.cf_cannotOpenVerifyPage);
+    } finally {
+      _setActionInProgress(false);
+    }
+  }
+
+  Future<void> _runCfRetry() async {
+    if (_actionInProgress || widget.onRetry == null) return;
+    _setActionInProgress(true);
+    HapticFeedback.selectionClick();
+
+    try {
+      // 用户可能已经在验证页完成挑战，只是上一轮快速返回时 CookieJar 还
+      // 没追上 WebView。重试前做一次短暂的 best-effort 同步，避免继续拿
+      // 旧 Cookie 重放请求；即使同步最终没读到值，也仍尊重用户的“重试”。
+      await _syncCfClearanceBestEffort();
+      if (!mounted) return;
+      widget.onRetry?.call();
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+    } finally {
+      _setActionInProgress(false);
+    }
+  }
+
+  Future<void> _runRetry() async {
+    if (_actionInProgress || widget.onRetry == null) return;
+    _setActionInProgress(true);
+    HapticFeedback.selectionClick();
+
+    try {
+      widget.onRetry?.call();
+      // onRetry 的历史 API 是 VoidCallback，无法可靠 await 调用方的异步加载。
+      // 保留一个很短的忙碌态，至少给用户明确的点击反馈并阻止连点风暴；
+      // 页面正常进入 loading / data 状态后本 ErrorView 通常会直接卸载。
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+    } finally {
+      _setActionInProgress(false);
+    }
+  }
+
+  Future<bool> _syncCfClearanceAfterVerify() async {
+    final cookieJar = CookieJarService();
+
+    // 验证流程开始时会删除已失效的 cf_clearance，所以成功后的非空值可以
+    // 作为“新 clearance 已真正进入网络层”的信号。WebView/原生 Cookie
+    // 提交存在轻微时序差，最多给 4 次短重试，总额约 1.5 秒。
+    for (var attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      await BoundarySyncService.instance.syncFromWebView(
+        cookieNames: const {'cf_clearance'},
+        trusted: true,
+      );
+      final clearance = await cookieJar.getCfClearance();
+      if (clearance != null && clearance.isNotEmpty) {
+        return true;
+      }
     }
 
-    if (result == false) {
-      ToastService.showError(S.current.cf_verifyIncomplete);
-      return;
-    }
+    return false;
+  }
 
-    ToastService.showError(S.current.cf_cannotOpenVerifyPage);
+  Future<void> _syncCfClearanceBestEffort() async {
+    try {
+      await BoundarySyncService.instance.syncFromWebView(
+        cookieNames: const {'cf_clearance'},
+        trusted: true,
+      );
+    } catch (_) {
+      // 重试按钮本身不能因为边界同步失败而失效。真正请求会继续走统一的
+      // CF interceptor，并在仍被盾拦截时重新进入验证流程。
+    }
+  }
+
+  void _setActionInProgress(bool value) {
+    if (!mounted || _actionInProgress == value) return;
+    setState(() {
+      _actionInProgress = value;
+    });
   }
 
   void _openNetworkSettings(BuildContext context) {
@@ -198,7 +306,10 @@ class ErrorView extends StatelessWidget {
   }
 
   void _showErrorDetails(BuildContext context) {
-    final details = ErrorUtils.getErrorDetails(error, stackTrace);
+    final details = ErrorUtils.getErrorDetails(
+      widget.error,
+      widget.stackTrace,
+    );
 
     showAppBottomSheet(
       context: context,
@@ -429,10 +540,15 @@ class _ErrorIconBadge extends StatelessWidget {
 /// 主操作按钮：内嵌胶囊（自适应宽度），48 高，加粗文字。
 /// 不强求全宽，让按钮回归"自然尺寸"，更精致。
 class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({required this.label, required this.onPressed});
+  const _PrimaryButton({
+    required this.label,
+    required this.onPressed,
+    this.isLoading = false,
+  });
 
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -450,7 +566,17 @@ class _PrimaryButton extends StatelessWidget {
           ),
           elevation: 0,
         ),
-        child: Text(label),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 160),
+          child: isLoading
+              ? const SizedBox(
+                  key: ValueKey('loading'),
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.2),
+                )
+              : Text(label, key: const ValueKey('label')),
+        ),
       ),
     );
   }
@@ -463,16 +589,21 @@ class _HelperAction extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onPressed,
+    this.isLoading = false,
   });
 
   final IconData icon;
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = theme.colorScheme.onSurfaceVariant;
+    final enabled = onPressed != null;
+    final color = enabled
+        ? theme.colorScheme.onSurfaceVariant
+        : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45);
     return InkWell(
       onTap: onPressed,
       borderRadius: BorderRadius.circular(12),
@@ -481,7 +612,16 @@ class _HelperAction extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 20, color: color),
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: isLoading
+                  ? CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: color,
+                    )
+                  : Icon(icon, size: 20, color: color),
+            ),
             const SizedBox(height: 6),
             Text(
               label,

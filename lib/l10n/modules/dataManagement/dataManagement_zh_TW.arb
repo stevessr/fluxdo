@@ -22,8 +22,18 @@
       }
     }
   },
-  "dataManagement_backupSubject": "FluxDO 資料備份",
   "dataManagement_cacheManagement": "快取管理",
+  "dataManagement_cacheObjects": "{objects} 個實體副本 · {references} 個邏輯引用",
+  "@dataManagement_cacheObjects": {
+    "placeholders": {
+      "objects": {
+        "type": "int"
+      },
+      "references": {
+        "type": "int"
+      }
+    }
+  },
   "dataManagement_calculating": "計算中...",
   "dataManagement_categoryAvatar": "頭像",
   "dataManagement_categoryContent": "貼文圖片",
@@ -56,6 +66,14 @@
   "dataManagement_cookieCache": "Cookie 快取",
   "dataManagement_cookieCleared": "Cookie 快取已清除，請重新登入",
   "dataManagement_dataBackup": "資料備份",
+  "dataManagement_deduplicatedSpace": "共享副本已節省 {size}",
+  "@dataManagement_deduplicatedSpace": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "dataManagement_exportData": "匯出資料",
   "dataManagement_exportDesc": "將偏好設定匯出為檔案",
   "dataManagement_exportSensitiveWarning": "備份檔案包含 AI API Key、代理密碼、Notion Token 等敏感資訊，請妥善保管。",
@@ -108,5 +126,6 @@
       }
     }
   },
+  "dataManagement_sharedCacheHint": "分類大小按邏輯用途統計；相同 URL 只儲存一份，頂部總量為實際磁碟佔用。",
   "dataManagement_title": "資料管理"
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../l10n/s.dart';
 import '../../../models/topic.dart';
 import '../../../widgets/common/smart_avatar.dart';
+import 'topic_post_list.dart' show TopicPostList;
 
 enum PrivateMessageParticipantsLocation { firstPost, bottom }
 
@@ -30,6 +31,15 @@ class PrivateMessageParticipants extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (participants.isEmpty) return const SizedBox.shrink();
+
+    // 单楼私信的 firstPost 与 bottom 实际指向同一个位置附近，同时展示会
+    // 重复。这里使用服务端 postsCount 判断总楼层数，避免受分页加载范围影响；
+    // bottom 始终保留，多楼私信则继续维持首楼 + 底部的现有展示。
+    final topicPostList = context.findAncestorWidgetOfExactType<TopicPostList>();
+    if (location == PrivateMessageParticipantsLocation.firstPost &&
+        topicPostList?.detail.postsCount == 1) {
+      return const SizedBox.shrink();
+    }
 
     final theme = Theme.of(context);
     return Container(

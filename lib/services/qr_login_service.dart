@@ -5,6 +5,7 @@ import 'package:zxing2/qrcode.dart';
 
 import 'discourse/discourse_service.dart';
 import 'log/log_writer.dart';
+import 'login_token_redeemer.dart';
 import 'user_api_key_service.dart';
 
 /// 扫码登录 payload。
@@ -20,7 +21,7 @@ import 'user_api_key_service.dart';
 /// ```
 /// - `k`: User API Key(明文,等同临时分享登录能力,UI 需提示勿外泄)
 /// - `o`: 服务端随 create 下发的一次性 OTP(约 10 分钟有效,兑换即焚)
-/// - `exp`: API Key 过期时间 UTC 毫秒; `0` 表示不过期
+/// - `exp`: API Key 服务端过期时间 UTC 毫秒; `0` 表示不过期
 /// - 不传 `_t`/密码;二维码只传 API Key + OTP
 class QrLoginPayload {
   const QrLoginPayload({
@@ -214,8 +215,18 @@ class QrLoginService {
       await userApiKeyService.persistSharedKey(payload.apiKey);
 
       final service = DiscourseService();
-      final token = await userApiKeyService.redeemOtp(service.dio, payload.otp);
+      final redeemResult = await LoginTokenRedeemer.redeemUserApiKeyOtp(
+        service.dio,
+        payload.otp,
+      );
+      final token = redeemResult.token;
       if (token == null || token.isEmpty) {
+        if (redeemResult.challengeBlocked) {
+          throw const QrLoginException(
+            QrLoginError.applyFailed,
+            '安全验证未完成,二维码未按失效处理,请完成验证后重新扫码',
+          );
+        }
         throw const QrLoginException(
           QrLoginError.applyFailed,
           '登录令牌兑换失败,二维码可能已失效,请让对方重新生成',

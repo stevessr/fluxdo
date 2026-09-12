@@ -7,41 +7,81 @@ import 'dart:ui' as ui;
 import 'package:crypto/crypto.dart' show md5;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'dio_http_client.dart';
 
-/// 图片的内容寻址文件缓存(Telegram ImageLoader 形态)。
+/// Blob 图片缓存的磁盘使用统计。
 ///
-/// ## 为什么不用 flutter_cache_manager
+/// [diskBytes] 是缓存根目录里真实文件的字节数；[logicalBytes] 按逻辑引用
+/// 计算，同一 URL 被多个 key / bucket 引用时会重复计入，因此两者之差中
+/// 的 [deduplicatedBytes] 可以直观看出共享物理副本节省了多少 payload。
+@immutable
+class BlobImageCacheUsage {
+  const BlobImageCacheUsage({
+    required this.diskBytes,
+    required this.payloadBytes,
+    required this.logicalBytes,
+    required this.deduplicatedBytes,
+    required this.objectCount,
+    required this.referenceCount,
+    required this.sharedObjectCount,
+    required this.bucketBytes,
+  });
+
+  final int diskBytes;
+  final int payloadBytes;
+  final int logicalBytes;
+  final int deduplicatedBytes;
+  final int objectCount;
+  final int referenceCount;
+  final int sharedObjectCount;
+  final Map<String, int> bucketBytes;
+}
+
+class _CacheRefStat {
+  const _CacheRefStat({
+    required this.path,
+    required this.target,
+    required this.mtime,
+    required this.size,
+  });
+
+  final String path;
+  final String target;
+  final DateTime mtime;
+  final int size;
+}
+
+/// 图片的 URL 寻址文件缓存（Telegram ImageLoader 形态）。
 ///
-/// cache_manager 每张图的热路径 = sqlite SELECT(url→相对路径)→
-/// File.exists → 读文件,还要 touch 回写维护 LRU。表情面板 200 张同屏
-/// = 200 次串行查询,这层索引本身就是延迟来源(为此已被迫做过
-/// ThrottledCacheObjectProvider 节流补丁);正文图侧 500 条 LRU 上限
-/// 让两三个图密话题就互相挤兑重下。
+/// ## 存储身份与逻辑身份分离
 ///
-/// Telegram 的收敛形态(源码实证)是**零数据库**:
-/// - 寻址:HTTP 图 = `MD5(url).ext` 确定性文件名,给定 URL 纯函数算路径
-///   (ImageLoader.getHttpFilePath);FilePathDatabase 只是"文件被移出
-///   缓存目录"的例外覆盖表,图片显示热路径不查库;
-/// - 淘汰:每 24h 节流扫描 listFiles + stat 时间戳,按保留期删旧
-///   (AutoDeleteMediaTask);容量上限 = 按时间戳排序从旧裁剪
-///   (cache_limit),无 per-file LRU 记录。
-/// **文件系统本身就是索引,时间戳本身就是 LRU。**
+/// 旧实现虽然不使用 sqlite，但路径仍是 `bucket/md5(url)`，因此同一 URL
+/// 只要同时以正文图、原图、头像或外部图等不同用途出现，就会在磁盘上
+/// 保存多份 payload，并且并发请求也会重复下载。
 ///
-/// ## 覆盖面(2026-07 起全量,flutter_cache_manager 退役)
+/// 现在拆为两层：
+/// - `_objects/md5(url).ext`：URL 决定唯一物理对象，全局只保存一份；
+/// - `_refs/<bucket>/md5(key).ref`：很小的逻辑引用，记录 key 指向哪个
+///   物理对象。不同 key、不同 bucket 都可以共享同一个 URL 对象。
 ///
-/// 小图(emoji/头像/贴纸缩略)与大图(正文/原图/贴纸原文件/外部图)
-/// 全部走这里,按 bucket 分池:保留期各异 + 大图 bucket 另设字节上限,
-/// 查看器原图(多 MB)不再与正文图挤兑。下载进度经 [fetch] 的
-/// onProgress 上报(替代 cache_manager 的 DownloadProgress 流)。
+/// bucket 仍负责保留期、容量上限和分类清理。删除一个 bucket 只删除它
+/// 的引用；只有最后一个引用消失后才回收物理对象，所以共享不会破坏
+/// Telegram Storage Usage 式的分类管理语义。
 class BlobImageCache {
   BlobImageCache._();
 
-  /// 根目录名(Temporary 下),也是数据管理页统计/清理的口径。
+  /// 根目录名（Temporary 下），也是数据管理页统计/清理的口径。
   static const String dirName = 'blobImageCache';
+
+  /// 共享物理对象目录。
+  static const String objectDirName = '_objects';
+
+  /// 逻辑引用目录。
+  static const String referenceDirName = '_refs';
 
   /// bucket → 保留期。沿用被替换的各 cache manager 的 stalePeriod 语义。
   static const Map<String, Duration> buckets = {
@@ -54,8 +94,10 @@ class BlobImageCache {
     externalBucket: Duration(days: 30),
   };
 
-  /// 大图 bucket 的字节上限(TG cache_limit 式:sweep 时按 mtime 从旧
-  /// 裁剪到上限内)。小图 bucket 域有界(emoji ~3k×5KB)不设上限。
+  /// 大图 bucket 的逻辑字节上限。
+  ///
+  /// 同一个物理对象在同 bucket 下即使存在多个 key，也只计一次容量；
+  /// 跨 bucket 则分别参与各自策略，但磁盘 payload 仍只有一份。
   static const Map<String, int> bucketByteLimits = {
     contentBucket: 1 << 30, // 1 GB
     originalBucket: 512 << 20, // 512 MB
@@ -66,54 +108,63 @@ class BlobImageCache {
   static const String emojiBucket = 'emoji';
   static const String avatarBucket = 'avatar';
   static const String stickerThumbBucket = 'stickerThumb';
-
-  /// 正文 optimized 图(cooked src / srcset 选档结果)。
   static const String contentBucket = 'content';
-
-  /// 查看器原图(lightbox href)。与 content 分池:多 MB 原图的容量
-  /// 压力不波及正文图。
   static const String originalBucket = 'original';
-
-  /// 贴纸原文件(Rust 解码管线的 bytes 来源)。
   static const String stickerOriginalBucket = 'stickerOriginal';
-
-  /// 第三方图(mermaid.ink / GitHub 等,无 Discourse 鉴权语义)。
   static const String externalBucket = 'external';
 
   static Directory? _root;
   static Future<Directory>? _rootFuture;
 
-  /// 同 key 在途下载去重。
+  /// 同 URL 在途下载全局去重，不再把 bucket 算进下载身份。
   static final Map<String, Future<Uint8List>> _inflight = {};
 
-  /// 本会话已 touch 过的文件,每 key 只 touch 一次(给淘汰扫描供
-  /// 时间戳;mtime 精度要求是"天"级,会话内重复 touch 纯浪费 IO)。
-  static final Set<String> _touched = {};
+  /// 本会话已经写过的引用目标。
+  ///
+  /// value 也保留下来，以便同一个 cacheKey 在会话内改指向新 URL 时可以
+  /// 正确更新，而不是被“每会话 touch 一次”的优化误挡住。
+  static final Map<String, String> _referenceTargets = {};
 
-  static Future<Directory> _ensureRoot() =>
-      _rootFuture ??= (() async {
-        final tmp = await getTemporaryDirectory();
-        final dir = Directory('${tmp.path}/$dirName');
-        await dir.create(recursive: true);
-        _root = dir;
-        return dir;
-      })();
+  static Future<Directory> _ensureRoot() => _rootFuture ??= (() async {
+    final tmp = await getTemporaryDirectory();
+    final dir = Directory('${tmp.path}/$dirName');
+    await dir.create(recursive: true);
+    _root = dir;
+    return dir;
+  })();
 
-  /// 确定性寻址:bucket 目录 + `md5(key).ext`(Telegram ImageLoader
-  /// `getHttpFilePath` 同款,ext 见 [httpUrlExtension])。显示层不依赖
-  /// 后缀 —— Flutter codec 按 magic bytes 嗅探格式,SVG 探测也读文件头;
-  /// 后缀服务于系统分享/保存这类按扩展名定型的外部消费者:裸 md5 文
-  /// 件名会被分享面板当成无后缀通用文件而非图片。
-  static Future<File> _fileFor(String bucket, String key) async {
+  static String _hash(String value) =>
+      md5.convert(utf8.encode(value)).toString();
+
+  /// URL 对应的唯一物理对象文件名。
+  ///
+  /// 公开这个纯函数主要用于诊断/测试：无论从哪个 bucket 或 cacheKey
+  /// 访问，只要 URL 完全相同，返回值就完全相同。
+  static String objectNameForUrl(String url) =>
+      '${_hash(url)}.${httpUrlExtension(url)}';
+
+  /// 逻辑 key 对应的引用文件名。key 与 URL 完全解耦。
+  static String referenceNameForKey(String key) => '${_hash(key)}.ref';
+
+  static Future<File> _objectFileFor(String url) async {
     final root = _root ?? await _ensureRoot();
-    final name = '${md5.convert(utf8.encode(key))}.${httpUrlExtension(key)}';
-    return File('${root.path}/$bucket/$name');
+    return File('${root.path}/$objectDirName/${objectNameForUrl(url)}');
   }
 
-  /// 从 URL 提取扩展名(Telegram `ImageLoader.getHttpUrlExtension` 同款):
-  /// 取最后一段路径里最后一个 '.' 的后缀;为空、长度 >4 或含非字母数
-  /// 字(误吞域名后缀等)时回退 [defaultExt]。显示层解码不读它,它只
-  /// 决定缓存文件名(供系统分享/保存定型)。
+  static Future<File> _referenceFileFor(String bucket, String key) async {
+    final root = _root ?? await _ensureRoot();
+    return File(
+      '${root.path}/$referenceDirName/$bucket/${referenceNameForKey(key)}',
+    );
+  }
+
+  /// v10 以前 `bucket/md5(url).ext` 的旧布局，只用于惰性迁移。
+  static Future<File> _legacyFileFor(String bucket, String url) async {
+    final root = _root ?? await _ensureRoot();
+    return File('${root.path}/$bucket/${objectNameForUrl(url)}');
+  }
+
+  /// 从 URL 提取扩展名（Telegram `ImageLoader.getHttpUrlExtension` 同款）。
   static String httpUrlExtension(String url, [String defaultExt = 'jpg']) {
     var haystack = url;
     final segments = Uri.tryParse(url)?.pathSegments;
@@ -129,78 +180,200 @@ class BlobImageCache {
 
   static final RegExp _extPattern = RegExp(r'^[a-z0-9]+$');
 
-  /// 只读缓存:命中返回字节,miss 返回 null。不做 exists 预检 ——
-  /// 直接读,读失败即 miss(省一次 stat)。
-  static Future<Uint8List?> read(String bucket, String key) async {
-    final file = await _fileFor(bucket, key);
+  static bool _isSafeObjectName(String value) =>
+      value.isNotEmpty && !value.contains('/') && !value.contains('\\');
+
+  static bool _isTempPath(String path) =>
+      path.endsWith('.tmp') || path.contains('.tmp.');
+
+  /// 为 bucket/key 建立或刷新逻辑引用。
+  ///
+  /// 引用文件只有几十字节，mtime 就是该逻辑引用的 LRU 时间。每会话同一
+  /// key→object 只写一次，避免热图片反复产生小 IO。
+  static Future<void> _ensureReference(
+    String bucket,
+    String key,
+    File object,
+  ) async {
+    final ref = await _referenceFileFor(bucket, key);
+    final target = p.basename(object.path);
+    if (_referenceTargets[ref.path] == target) return;
+
     try {
-      final bytes = await file.readAsBytes();
+      await ref.parent.create(recursive: true);
+      final tmp = File(
+        '${ref.path}.tmp.${DateTime.now().microsecondsSinceEpoch}',
+      );
+      await tmp.writeAsString(target, flush: false);
+      try {
+        await tmp.rename(ref.path);
+      } on FileSystemException {
+        if (await ref.exists()) await ref.delete();
+        await tmp.rename(ref.path);
+      }
+      _referenceTargets[ref.path] = target;
+    } catch (e) {
+      debugPrint('[BlobImageCache] 写引用失败 $bucket/$key: $e');
+    }
+  }
+
+  static Future<Uint8List?> _readObject(File object) async {
+    try {
+      final bytes = await object.readAsBytes();
       if (bytes.isEmpty) return null;
-      _touch(file);
       return bytes;
     } on FileSystemException {
       return null;
     }
   }
 
-  /// 写入缓存:临时文件 + 原子 rename(Telegram `_temp` 同款),
-  /// 半截文件永远不会出现在正式路径上。
-  static Future<void> write(String bucket, String key, Uint8List bytes) async {
-    final file = await _fileFor(bucket, key);
+  /// 把旧的 per-bucket payload 惰性迁入共享对象池。
+  ///
+  /// 已知 URL 后可以反推出所有旧 bucket 的确定性路径，因此会把同 URL
+  /// 的旧重复副本一次性收敛成一个 object，并为发现它的每个旧 bucket
+  /// 补引用，最大限度保留升级前的分类语义。
+  static Future<File?> _migrateLegacyCopies(
+    String requestedBucket,
+    String requestedKey,
+    String url,
+  ) async {
+    final found = <({String bucket, File file})>[];
+    final order = <String>[
+      requestedBucket,
+      ...buckets.keys.where((b) => b != requestedBucket),
+    ];
+    for (final bucket in order) {
+      final file = await _legacyFileFor(bucket, url);
+      try {
+        if (await file.exists()) found.add((bucket: bucket, file: file));
+      } catch (_) {}
+    }
+    if (found.isEmpty) return null;
+
+    final object = await _objectFileFor(url);
     try {
-      await file.parent.create(recursive: true);
-      final tmp = File('${file.path}.tmp');
-      await tmp.writeAsBytes(bytes, flush: true);
-      await tmp.rename(file.path);
+      await object.parent.create(recursive: true);
+      if (!await object.exists()) {
+        final source = found.first.file;
+        try {
+          await source.rename(object.path);
+        } on FileSystemException {
+          await source.copy(object.path);
+        }
+      }
+
+      for (final entry in found) {
+        // 旧布局的 key 就是 URL，因此保留原逻辑引用。
+        await _ensureReference(entry.bucket, url, object);
+        try {
+          if (await entry.file.exists()) await entry.file.delete();
+        } catch (_) {}
+      }
+      // 如果本次调用显式用了不同 cacheKey，再额外建立该别名。
+      if (requestedKey != url) {
+        await _ensureReference(requestedBucket, requestedKey, object);
+      }
+      return object;
     } catch (e) {
-      debugPrint('[BlobImageCache] write 失败 $bucket/$key: $e');
+      debugPrint('[BlobImageCache] 迁移旧缓存失败 $url: $e');
+      return null;
     }
   }
 
-  /// 读缓存,miss 则下载并落盘。同 key 并发调用共享同一个下载 future。
+  /// 只读缓存：物理身份由 [url] 决定，逻辑身份由 [key] 决定。
   ///
-  /// 下载走 [DioHttpClient](主域带 cookie / CDN 不带的双 dio 语义 +
-  /// 全局 8 并发信号量,与 cache_manager 时代同一条网络路径)。
+  /// 省略 [url] 时保持旧 API 兼容，即 key 本身就是 URL。
+  static Future<Uint8List?> read(
+    String bucket,
+    String key, {
+    String? url,
+  }) async {
+    final resourceUrl = url ?? key;
+    var object = await _objectFileFor(resourceUrl);
+    var bytes = await _readObject(object);
+    if (bytes == null) {
+      object = await _migrateLegacyCopies(bucket, key, resourceUrl) ?? object;
+      bytes = await _readObject(object);
+    }
+    if (bytes == null) return null;
+    await _ensureReference(bucket, key, object);
+    return bytes;
+  }
+
+  static Future<void> _writeObject(String url, Uint8List bytes) async {
+    final object = await _objectFileFor(url);
+    try {
+      await object.parent.create(recursive: true);
+      final tmp = File(
+        '${object.path}.tmp.${DateTime.now().microsecondsSinceEpoch}',
+      );
+      await tmp.writeAsBytes(bytes, flush: true);
+      try {
+        await tmp.rename(object.path);
+      } on FileSystemException {
+        if (await object.exists()) await object.delete();
+        await tmp.rename(object.path);
+      }
+    } catch (e) {
+      debugPrint('[BlobImageCache] 写共享对象失败 $url: $e');
+    }
+  }
+
+  /// 写入缓存。不同 key 只要 [url] 相同，最终都引用同一个物理文件。
+  static Future<void> write(
+    String bucket,
+    String key,
+    Uint8List bytes, {
+    String? url,
+  }) async {
+    final resourceUrl = url ?? key;
+    await _writeObject(resourceUrl, bytes);
+    final object = await _objectFileFor(resourceUrl);
+    if (await object.exists()) {
+      await _ensureReference(bucket, key, object);
+    }
+  }
+
+  /// 读缓存，miss 则下载并落盘。
   ///
-  /// [onProgress] 下载字节进度(received, total;total 可能为 null ——
-  /// 无 content-length)。缓存命中不回调;同 key 并发时**只有首个调用
-  /// 方的回调生效**(共享同一下载,进度语义按首发方)。
+  /// [cacheKey] 只决定逻辑引用；下载和 payload 永远以 URL 为身份，所以
+  /// 不同 key / bucket 对同一 URL 的并发调用也只会发生一次 HTTP 请求。
   static Future<Uint8List> fetch(
     String bucket,
     String url, {
+    String? cacheKey,
     DownloadPriority priority = DownloadPriority.normal,
     void Function(int received, int? total)? onProgress,
   }) async {
-    final cached = await read(bucket, url);
+    final key = cacheKey ?? url;
+    final cached = await read(bucket, key, url: url);
     if (cached != null) return cached;
 
-    final inflightKey = '$bucket|$url';
-    return _inflight[inflightKey] ??=
-        _download(bucket, url, priority, onProgress).whenComplete(() {
-      _inflight.remove(inflightKey);
-    });
+    final future = _inflight.putIfAbsent(
+      url,
+      () => _downloadObject(bucket, url, priority, onProgress).whenComplete(() {
+        _inflight.remove(url);
+      }),
+    );
+    final bytes = await future;
+    final object = await _objectFileFor(url);
+    await _ensureReference(bucket, key, object);
+    return bytes;
   }
 
-  /// 按 bucket 选下载通道:emoji(KB 级,RTT 主导)走 12 槽 small
-  /// 高并发;贴纸原文件(面板预取型大动图)独立 3 槽防饿死内容;
-  /// 其余(正文/头像/原图/外部)走 6 槽 content。
   static DownloadChannel _channelOf(String bucket) => switch (bucket) {
-        emojiBucket => DownloadChannel.small,
-        stickerOriginalBucket => DownloadChannel.sticker,
-        _ => DownloadChannel.content,
-      };
+    emojiBucket => DownloadChannel.small,
+    stickerOriginalBucket => DownloadChannel.sticker,
+    _ => DownloadChannel.content,
+  };
 
-  /// 视野优先级信号(Telegram bumpPriority 同款语义):
-  /// [bump] = 图片首帧 paint(真进视口)→ 排队中的请求插到高优队列;
-  /// [sink] = widget dispose(滚出视口)→ 沉回低优队尾给新视野让路。
-  /// 在途 HTTP 不动 —— 下完写盘即缓存,取消是白扔投资。两者幂等。
   static void bump(String bucket, String url) =>
       DioHttpClient.bumpPending(_channelOf(bucket), url);
 
   static void sink(String bucket, String url) =>
       DioHttpClient.sinkPending(_channelOf(bucket), url);
 
-  static Future<Uint8List> _download(
+  static Future<Uint8List> _downloadObject(
     String bucket,
     String url,
     DownloadPriority priority,
@@ -213,54 +386,65 @@ class BlobImageCache {
       onProgress: onProgress,
     );
     if (bytes.isEmpty) {
-      throw HttpException('BlobImageCache: empty body for $url',
-          uri: Uri.parse(url));
+      throw HttpException(
+        'BlobImageCache: empty body for $url',
+        uri: Uri.parse(url),
+      );
     }
-    await write(bucket, url, bytes);
+    await _writeObject(url, bytes);
     return bytes;
   }
 
-  /// 读缓存,miss 则下载,返回**缓存文件**(需要 File 语义的调用方:
-  /// 贴纸 Rust 管线、保存/分享)。文件由 fetch 落盘,路径确定性。
+  /// 需要 File 语义的调用方得到共享 object 文件，而不是 bucket 副本。
   static Future<File> getFile(
     String bucket,
     String url, {
+    String? cacheKey,
     void Function(int received, int? total)? onProgress,
   }) async {
-    await fetch(bucket, url, onProgress: onProgress);
-    return _fileFor(bucket, url);
+    await fetch(bucket, url, cacheKey: cacheKey, onProgress: onProgress);
+    return _objectFileFor(url);
   }
 
-  /// 仅查缓存是否已存在(不下载)。预取跳过判断用。
-  static Future<bool> contains(String bucket, String url) async {
-    final file = await _fileFor(bucket, url);
-    return file.exists();
-  }
-
-  /// 预取:已缓存/在途则跳过,否则下载落盘。错误静默(预取尽力而为)。
-  static Future<void> precache(String bucket, String url) async {
+  /// 仅查缓存是否存在，不下载；命中时顺便确保当前逻辑引用存在。
+  static Future<bool> contains(
+    String bucket,
+    String url, {
+    String? cacheKey,
+  }) async {
+    final key = cacheKey ?? url;
+    var object = await _objectFileFor(url);
     try {
-      if (_inflight.containsKey('$bucket|$url')) return;
-      if (await contains(bucket, url)) return;
-      await fetch(bucket, url);
+      if (await object.exists()) {
+        await _ensureReference(bucket, key, object);
+        return true;
+      }
+    } catch (_) {}
+
+    object = await _migrateLegacyCopies(bucket, key, url) ?? object;
+    try {
+      return await object.exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 预取：共享在途下载由 [fetch] 自动合并，不能因“另一个 bucket 正在
+  /// 下载”就提前 return，否则当前 bucket 的逻辑引用会丢失。
+  static Future<void> precache(
+    String bucket,
+    String url, {
+    String? cacheKey,
+  }) async {
+    try {
+      if (await contains(bucket, url, cacheKey: cacheKey)) return;
+      await fetch(bucket, url, cacheKey: cacheKey);
     } catch (e) {
       debugPrint('[BlobImageCache] precache 失败 $url: $e');
     }
   }
 
-  /// 节流 touch:更新 mtime 供 [sweep] 判活。fire-and-forget,失败无害
-  /// (最坏情况 = 常用文件被当旧文件删掉,下次重新下载)。
-  static void _touch(File file) {
-    if (!_touched.add(file.path)) return;
-    unawaited(
-      file.setLastModified(DateTime.now()).catchError((Object _) {}),
-    );
-  }
-
-  /// 淘汰扫描:按 bucket 保留期删 mtime 过期文件 + 大图 bucket 超出
-  /// 字节上限时按 mtime 从旧裁剪(Telegram AutoDeleteMediaTask +
-  /// cache_limit 同款)。prefs 时间戳节流每 24h 一次;调用方应在首帧后
-  /// 空闲时机触发。扫描/删除整体放 [Isolate.run],主 isolate 零负担。
+  /// 扫描并执行 bucket 保留期/容量策略，然后回收无引用共享对象。
   static Future<void> sweep(SharedPreferences prefs) async {
     const stampKey = 'blob_image_cache_last_sweep';
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -270,74 +454,254 @@ class BlobImageCache {
 
     final root = await _ensureRoot();
     final rootPath = root.path;
-    // const map 复制成局部量传进 isolate。
     final retention = Map<String, Duration>.of(buckets);
     final byteLimits = Map<String, int>.of(bucketByteLimits);
+
     try {
-      final deleted = await Isolate.run(() async {
+      final deleted = await Isolate.run(() {
         var count = 0;
         final nowTime = DateTime.now();
-        for (final entry in retention.entries) {
-          final dir = Directory('$rootPath/${entry.key}');
-          if (!dir.existsSync()) continue;
+        final objectsPath = '$rootPath/$objectDirName';
+        final refsPath = '$rootPath/$referenceDirName';
 
-          // Pass 1: 按保留期删过期 + 清 .tmp 残骸;顺带收集存活文件。
-          final alive = <({String path, DateTime mtime, int size})>[];
-          for (final f in dir.listSync()) {
-            if (f is! File) continue;
+        for (final policy in retention.entries) {
+          final refDir = Directory('$refsPath/${policy.key}');
+          final aliveRefs = <_CacheRefStat>[];
+
+          if (refDir.existsSync()) {
+            for (final entity in refDir.listSync(followLinks: false)) {
+              if (entity is! File) continue;
+              try {
+                final stat = entity.statSync();
+                final age = nowTime.difference(stat.modified);
+                if (_isTempPath(entity.path)) {
+                  if (age > const Duration(days: 1)) {
+                    entity.deleteSync();
+                    count++;
+                  }
+                  continue;
+                }
+                if (age > policy.value) {
+                  entity.deleteSync();
+                  count++;
+                  continue;
+                }
+                final target = entity.readAsStringSync().trim();
+                if (!_isSafeObjectName(target)) {
+                  entity.deleteSync();
+                  count++;
+                  continue;
+                }
+                final object = File('$objectsPath/$target');
+                if (!object.existsSync()) {
+                  entity.deleteSync();
+                  count++;
+                  continue;
+                }
+                final objectStat = object.statSync();
+                aliveRefs.add(
+                  _CacheRefStat(
+                    path: entity.path,
+                    target: target,
+                    mtime: stat.modified,
+                    size: objectStat.size,
+                  ),
+                );
+              } catch (_) {}
+            }
+          }
+
+          // bucket 容量按“唯一对象”计，不让同 URL 的多个别名重复挤占配额。
+          final grouped = <String, List<_CacheRefStat>>{};
+          for (final ref in aliveRefs) {
+            (grouped[ref.target] ??= <_CacheRefStat>[]).add(ref);
+          }
+          final limit = byteLimits[policy.key];
+          if (limit != null) {
+            var refBytes = 0;
+            final groups = <({String target, DateTime mtime, int size})>[];
+            for (final entry in grouped.entries) {
+              var newest = entry.value.first.mtime;
+              for (final ref in entry.value.skip(1)) {
+                if (ref.mtime.isAfter(newest)) newest = ref.mtime;
+              }
+              final size = entry.value.first.size;
+              refBytes += size;
+              groups.add((target: entry.key, mtime: newest, size: size));
+            }
+            groups.sort((a, b) => a.mtime.compareTo(b.mtime));
+            for (final group in groups) {
+              if (refBytes <= limit) break;
+              for (final ref in grouped[group.target]!) {
+                try {
+                  final file = File(ref.path);
+                  if (file.existsSync()) {
+                    file.deleteSync();
+                    count++;
+                  }
+                } catch (_) {}
+              }
+              refBytes -= group.size;
+            }
+          }
+
+          // v10 前旧 bucket payload 继续按原策略淘汰。容量上限会扣除新
+          // 引用已经占用的逻辑空间，避免迁移窗口出现 2 倍配额。
+          final legacyDir = Directory('$rootPath/${policy.key}');
+          if (!legacyDir.existsSync()) continue;
+          final legacyAlive = <({String path, DateTime mtime, int size})>[];
+          for (final entity in legacyDir.listSync(followLinks: false)) {
+            if (entity is! File) continue;
             try {
-              final stat = f.statSync();
+              final stat = entity.statSync();
               final age = nowTime.difference(stat.modified);
-              final isTmp = f.path.endsWith('.tmp');
-              if (age > entry.value ||
-                  (isTmp && age > const Duration(days: 1))) {
-                f.deleteSync();
+              if (age > policy.value ||
+                  (_isTempPath(entity.path) && age > const Duration(days: 1))) {
+                entity.deleteSync();
                 count++;
-              } else if (!isTmp) {
-                alive.add(
-                    (path: f.path, mtime: stat.modified, size: stat.size));
+              } else if (!_isTempPath(entity.path)) {
+                legacyAlive.add((
+                  path: entity.path,
+                  mtime: stat.modified,
+                  size: stat.size,
+                ));
               }
             } catch (_) {}
           }
 
-          // Pass 2: 字节上限裁剪(从旧到新删,直到落回上限内)。
-          final limit = byteLimits[entry.key];
           if (limit == null) continue;
-          var total = alive.fold<int>(0, (a, f) => a + f.size);
-          if (total <= limit) continue;
-          alive.sort((a, b) => a.mtime.compareTo(b.mtime));
-          for (final f in alive) {
-            if (total <= limit) break;
+          final survivingTargets = <String>{};
+          for (final entry in grouped.entries) {
+            if (entry.value.any((r) => File(r.path).existsSync())) {
+              survivingTargets.add(entry.key);
+            }
+          }
+          var refBytes = 0;
+          for (final target in survivingTargets) {
+            final refs = grouped[target];
+            if (refs != null && refs.isNotEmpty) refBytes += refs.first.size;
+          }
+          var legacyBudget = limit - refBytes;
+          if (legacyBudget < 0) legacyBudget = 0;
+          var legacyBytes = legacyAlive.fold<int>(
+            0,
+            (sum, item) => sum + item.size,
+          );
+          if (legacyBytes <= legacyBudget) continue;
+          legacyAlive.sort((a, b) => a.mtime.compareTo(b.mtime));
+          for (final item in legacyAlive) {
+            if (legacyBytes <= legacyBudget) break;
             try {
-              File(f.path).deleteSync();
-              total -= f.size;
+              File(item.path).deleteSync();
+              legacyBytes -= item.size;
               count++;
+            } catch (_) {}
+          }
+        }
+
+        // 最终从所有 ref（包括未来新增的未知 bucket）收集存活 object。
+        final liveTargets = <String>{};
+        final refsRoot = Directory(refsPath);
+        if (refsRoot.existsSync()) {
+          for (final entity in refsRoot.listSync(
+            recursive: true,
+            followLinks: false,
+          )) {
+            if (entity is! File || _isTempPath(entity.path)) continue;
+            try {
+              final target = entity.readAsStringSync().trim();
+              if (_isSafeObjectName(target)) liveTargets.add(target);
+            } catch (_) {}
+          }
+        }
+
+        final objectDir = Directory(objectsPath);
+        if (objectDir.existsSync()) {
+          for (final entity in objectDir.listSync(followLinks: false)) {
+            if (entity is! File) continue;
+            try {
+              final stat = entity.statSync();
+              final age = nowTime.difference(stat.modified);
+              if (_isTempPath(entity.path)) {
+                if (age > const Duration(days: 1)) {
+                  entity.deleteSync();
+                  count++;
+                }
+                continue;
+              }
+              final name = p.basename(entity.path);
+              // 给“object 已落盘、ref 尚未写完”的极短窗口留 1 天保护。
+              if (!liveTargets.contains(name) &&
+                  age > const Duration(days: 1)) {
+                entity.deleteSync();
+                count++;
+              }
             } catch (_) {}
           }
         }
         return count;
       });
       if (deleted > 0) {
-        debugPrint('[BlobImageCache] sweep 删除 $deleted 个过期/超限文件');
+        debugPrint('[BlobImageCache] sweep 删除 $deleted 个过期/超限项');
       }
     } catch (e) {
       debugPrint('[BlobImageCache] sweep 失败: $e');
     }
   }
 
-  /// 清空单个 bucket(数据管理页分类清理)。
+  static Set<String> _readReferenceTargetsSync(Directory root) {
+    final targets = <String>{};
+    try {
+      if (!root.existsSync()) return targets;
+      for (final entity in root.listSync(recursive: true, followLinks: false)) {
+        if (entity is! File || _isTempPath(entity.path)) continue;
+        try {
+          final target = entity.readAsStringSync().trim();
+          if (_isSafeObjectName(target)) targets.add(target);
+        } catch (_) {}
+      }
+    } catch (_) {}
+    return targets;
+  }
+
+  static Future<void> _deleteUnreferencedTargets(Set<String> candidates) async {
+    if (candidates.isEmpty) return;
+    final root = await _ensureRoot();
+    final liveTargets = _readReferenceTargetsSync(
+      Directory('${root.path}/$referenceDirName'),
+    );
+    final protected = _inflight.keys.map(objectNameForUrl).toSet();
+
+    for (final target in candidates) {
+      if (liveTargets.contains(target) || protected.contains(target)) continue;
+      try {
+        final file = File('${root.path}/$objectDirName/$target');
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+    }
+  }
+
+  /// 清空单个 bucket：只删逻辑引用和旧布局副本。
+  ///
+  /// 删除前收集它引用的 object，删除后只回收不再被其它 bucket 引用的
+  /// 那部分，因此分类清理天然支持共享副本。
   static Future<void> clearBucket(String bucket) async {
     final root = await _ensureRoot();
-    final dir = Directory('${root.path}/$bucket');
+    final refDir = Directory('${root.path}/$referenceDirName/$bucket');
+    final legacyDir = Directory('${root.path}/$bucket');
+    final candidates = _readReferenceTargetsSync(refDir);
+
     try {
-      if (await dir.exists()) await dir.delete(recursive: true);
+      if (await refDir.exists()) await refDir.delete(recursive: true);
+      if (await legacyDir.exists()) await legacyDir.delete(recursive: true);
     } catch (e) {
       debugPrint('[BlobImageCache] clearBucket $bucket 失败: $e');
     }
-    _touched.removeWhere((p) => p.startsWith(dir.path));
+    _referenceTargets.removeWhere((path, _) => path.startsWith(refDir.path));
+    await _deleteUnreferencedTargets(candidates);
   }
 
-  /// 清空全部 blob 缓存(清缓存入口)。
+  /// 清空全部 blob 缓存。
   static Future<void> clearAll() async {
     final root = await _ensureRoot();
     try {
@@ -346,31 +710,147 @@ class BlobImageCache {
     } catch (e) {
       debugPrint('[BlobImageCache] clearAll 失败: $e');
     }
-    _touched.clear();
+    _referenceTargets.clear();
+  }
+
+  /// 获取共享缓存统计。目录扫描放 isolate，避免数据管理页打开时阻塞 UI。
+  static Future<BlobImageCacheUsage> getUsage() async {
+    final root = await _ensureRoot();
+    final rootPath = root.path;
+    final knownBuckets = buckets.keys.toList(growable: false);
+
+    final result = await Isolate.run(() {
+      var diskBytes = 0;
+      var payloadBytes = 0;
+      var logicalBytes = 0;
+      var objectCount = 0;
+      var referenceCount = 0;
+      var sharedObjectCount = 0;
+      var deduplicatedBytes = 0;
+      final bucketBytes = <String, int>{
+        for (final bucket in knownBuckets) bucket: 0,
+      };
+      final objectSizes = <String, int>{};
+      final refCounts = <String, int>{};
+      final bucketTargets = <String, Set<String>>{};
+
+      final objectDir = Directory('$rootPath/$objectDirName');
+      if (objectDir.existsSync()) {
+        for (final entity in objectDir.listSync(followLinks: false)) {
+          if (entity is! File) continue;
+          try {
+            final stat = entity.statSync();
+            diskBytes += stat.size;
+            if (_isTempPath(entity.path)) continue;
+            final name = p.basename(entity.path);
+            objectSizes[name] = stat.size;
+            payloadBytes += stat.size;
+            objectCount++;
+          } catch (_) {}
+        }
+      }
+
+      final refsRoot = Directory('$rootPath/$referenceDirName');
+      if (refsRoot.existsSync()) {
+        for (final bucketDir in refsRoot.listSync(followLinks: false)) {
+          if (bucketDir is! Directory) continue;
+          final bucket = p.basename(bucketDir.path);
+          final targets = bucketTargets.putIfAbsent(bucket, () => <String>{});
+          for (final entity in bucketDir.listSync(followLinks: false)) {
+            if (entity is! File) continue;
+            try {
+              final stat = entity.statSync();
+              diskBytes += stat.size;
+              if (_isTempPath(entity.path)) continue;
+              final target = entity.readAsStringSync().trim();
+              final size = objectSizes[target];
+              if (!_isSafeObjectName(target) || size == null) continue;
+              referenceCount++;
+              logicalBytes += size;
+              refCounts[target] = (refCounts[target] ?? 0) + 1;
+              targets.add(target);
+            } catch (_) {}
+          }
+        }
+      }
+
+      for (final entry in bucketTargets.entries) {
+        var total = 0;
+        for (final target in entry.value) {
+          total += objectSizes[target] ?? 0;
+        }
+        bucketBytes[entry.key] = (bucketBytes[entry.key] ?? 0) + total;
+      }
+
+      for (final entry in refCounts.entries) {
+        if (entry.value <= 1) continue;
+        final size = objectSizes[entry.key] ?? 0;
+        sharedObjectCount++;
+        deduplicatedBytes += size * (entry.value - 1);
+      }
+
+      // 旧 per-bucket 布局仍是真实 payload，迁移前照常计入。
+      for (final bucket in knownBuckets) {
+        final legacyDir = Directory('$rootPath/$bucket');
+        if (!legacyDir.existsSync()) continue;
+        for (final entity in legacyDir.listSync(followLinks: false)) {
+          if (entity is! File) continue;
+          try {
+            final stat = entity.statSync();
+            diskBytes += stat.size;
+            if (_isTempPath(entity.path)) continue;
+            payloadBytes += stat.size;
+            logicalBytes += stat.size;
+            objectCount++;
+            bucketBytes[bucket] = (bucketBytes[bucket] ?? 0) + stat.size;
+          } catch (_) {}
+        }
+      }
+
+      return (
+        diskBytes: diskBytes,
+        payloadBytes: payloadBytes,
+        logicalBytes: logicalBytes,
+        deduplicatedBytes: deduplicatedBytes,
+        objectCount: objectCount,
+        referenceCount: referenceCount,
+        sharedObjectCount: sharedObjectCount,
+        bucketBytes: bucketBytes,
+      );
+    });
+
+    return BlobImageCacheUsage(
+      diskBytes: result.diskBytes,
+      payloadBytes: result.payloadBytes,
+      logicalBytes: result.logicalBytes,
+      deduplicatedBytes: result.deduplicatedBytes,
+      objectCount: result.objectCount,
+      referenceCount: result.referenceCount,
+      sharedObjectCount: result.sharedObjectCount,
+      bucketBytes: Map<String, int>.unmodifiable(result.bucketBytes),
+    );
   }
 }
 
 /// [BlobImageCache] 的 ImageProvider 门面。
-///
-/// 解码走 [PaintingBinding.instantiateImageCodecWithSize] 标准回调 →
-/// 自动纳入解码闸门的尺寸分档(小图旁路 / 大图过闸)。
 @immutable
 class BlobImageProvider extends ImageProvider<BlobImageProvider> {
   const BlobImageProvider(
     this.url, {
     required this.bucket,
+    this.cacheKey,
     this.scale = 1.0,
     this.priority = DownloadPriority.normal,
   });
 
   final String url;
   final String bucket;
+
+  /// 可选逻辑 key。不同 key 可以共享同一 URL 的磁盘 object。
+  final String? cacheKey;
   final double scale;
 
-  /// 初始下载优先级(用户主动打开的查看器传 high;正文/面板图默认
-  /// normal,靠首帧 paint 的 [BlobImageCache.bump] 动态提级)。
-  /// **刻意不参与 == / hashCode**:优先级是调度提示,不是图片身份,
-  /// 参与相等性会让同 URL 的 high/normal 各解码一份。
+  /// 调度提示，不参与图片内容身份。
   final DownloadPriority priority;
 
   @override
@@ -383,8 +863,6 @@ class BlobImageProvider extends ImageProvider<BlobImageProvider> {
     BlobImageProvider key,
     ImageDecoderCallback decode,
   ) {
-    // chunkEvents 驱动 Image.loadingBuilder / LazyImage 的确定值进度环
-    // (与 CachedNetworkImageProvider 的 DownloadProgress 流同语义)。
     final chunkEvents = StreamController<ImageChunkEvent>();
     return MultiFrameImageStreamCompleter(
       codec: _loadAsync(key, decode, chunkEvents),
@@ -394,6 +872,8 @@ class BlobImageProvider extends ImageProvider<BlobImageProvider> {
       informationCollector: () => [
         DiagnosticsProperty<String>('URL', key.url),
         DiagnosticsProperty<String>('Bucket', key.bucket),
+        if (key.cacheKey != null)
+          DiagnosticsProperty<String>('Cache key', key.cacheKey!),
       ],
     );
   }
@@ -407,20 +887,21 @@ class BlobImageProvider extends ImageProvider<BlobImageProvider> {
       final bytes = await BlobImageCache.fetch(
         key.bucket,
         key.url,
+        cacheKey: key.cacheKey,
         priority: key.priority,
         onProgress: (received, total) {
           if (chunkEvents.isClosed) return;
-          chunkEvents.add(ImageChunkEvent(
-            cumulativeBytesLoaded: received,
-            expectedTotalBytes: total,
-          ));
+          chunkEvents.add(
+            ImageChunkEvent(
+              cumulativeBytesLoaded: received,
+              expectedTotalBytes: total,
+            ),
+          );
         },
       );
       final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
       return await decode(buffer);
     } catch (e) {
-      // 失败结果不能留在 ImageCache,否则同 key 后续 Image 永久裂图
-      // (与 cached_image.dart 的 evict 兜底同语义)。
       scheduleMicrotask(() {
         PaintingBinding.instance.imageCache.evict(key);
       });
@@ -436,12 +917,14 @@ class BlobImageProvider extends ImageProvider<BlobImageProvider> {
     return other is BlobImageProvider &&
         other.url == url &&
         other.bucket == bucket &&
+        other.cacheKey == cacheKey &&
         other.scale == scale;
   }
 
   @override
-  int get hashCode => Object.hash(url, bucket, scale);
+  int get hashCode => Object.hash(url, bucket, cacheKey, scale);
 
   @override
-  String toString() => 'BlobImageProvider("$url", bucket: $bucket)';
+  String toString() =>
+      'BlobImageProvider("$url", bucket: $bucket, cacheKey: $cacheKey)';
 }

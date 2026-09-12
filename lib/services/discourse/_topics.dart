@@ -294,6 +294,13 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       data['tags[]'] = tags;
     }
 
+    // 精选链接（标题为纯 URL 时自动解析）。
+    //
+    // 注：Discourse 除站点开关 topic_featured_link_enabled 外，还有分类级的
+    // topic_featured_link_allowed，而后者只在 CategorySerializer 下发、不在
+    // /site.json 用的 SiteCategorySerializer 里，客户端无法预先判断。分类
+    // 不允许时服务端会直接忽略该字段，不会连带整个发帖失败；叠加上正文
+    // 里已经追加了同一个 URL，降级后链接不会丢。
     if (featuredLink != null && featuredLink.isNotEmpty) {
       data['featured_link'] = featuredLink;
     }
@@ -436,6 +443,53 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       await _dio.put(
         '/t/$topicId/remove-allowed-user.json',
         data: {'username': username},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 将群组移出私信（PUT /t/:id/remove-allowed-group，按群组名）。
+  Future<void> removePrivateMessageGroup(int topicId, String groupName) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/remove-allowed-group.json',
+        data: {'name': groupName},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 邀请用户加入私信，并返回服务端回传的成员信息（若有）。
+  Future<TopicUser?> invitePrivateMessageUser(
+    int topicId,
+    String username,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/t/$topicId/invite.json',
+        data: {'user': username},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+      final user = (response.data as Map?)?['user'];
+      if (user is Map) {
+        return TopicUser.fromJson(Map<String, dynamic>.from(user));
+      }
+      return null;
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 邀请群组加入私信（POST /t/:id/invite-group，按群组名）。
+  Future<void> invitePrivateMessageGroup(int topicId, String groupName) async {
+    try {
+      await _dio.post(
+        '/t/$topicId/invite-group.json',
+        data: {'group': groupName},
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
     } on DioException catch (e) {

@@ -40,7 +40,6 @@ class RecoveryCoordinator extends Interceptor {
   ///
   /// dio 的 [FormData] 是**一次性**的:`finalize()` 把字段与文件提交成流,
   /// 二次使用直接抛 `StateError('The FormData has already been finalized')`。
-  /// 上传就是这个形态 —— 若恢复层去重放它,一个本可恢复的 429 会变成硬失败。
   ///
   /// 这类请求的重试必须由调用方做(每轮重建 FormData),`_uploads.dart` 的
   /// 重试循环正是为此存在,不是历史遗留。
@@ -169,6 +168,10 @@ class RecoveryCoordinator extends Interceptor {
             RecoveryRecoverThenRetry(:final delay) => delay,
             _ => Duration.zero,
           };
+          final requestExtra = switch (decision) {
+            RecoveryRetry(:final requestExtra) => requestExtra,
+            _ => const <String, dynamic>{},
+          };
           if (delay > Duration.zero) {
             await Future<void>.delayed(delay);
           }
@@ -177,7 +180,11 @@ class RecoveryCoordinator extends Interceptor {
             '[Recovery] 重放 policy=${policy.name} '
             'attempt=${budget.attemptsUsed}/${budget.maxAttempts} $uri',
           );
-          outcome = await _replay(outcome, budget.attemptsUsed - 1);
+          outcome = await _replay(
+            outcome,
+            budget.attemptsUsed - 1,
+            requestExtra: requestExtra,
+          );
           if (outcome.isSuccess) return outcome;
       }
     }
@@ -196,11 +203,12 @@ class RecoveryCoordinator extends Interceptor {
   /// 执行一次重放。所有重放前置工作集中在此,不由策略各自操心。
   Future<AttemptOutcome> _replay(
     AttemptOutcome previous,
-    int attemptIndex,
-  ) async {
+    int attemptIndex, {
+    Map<String, dynamic> requestExtra = const <String, dynamic>{},
+  }) async {
     final previousOptions =
         previous.error?.requestOptions ?? previous.response!.requestOptions;
-    final options = _nextAttempt(previousOptions);
+    final options = _nextAttempt(previousOptions, requestExtra);
     try {
       final response = await dio.fetch<dynamic>(options);
       return AttemptOutcome.success(
@@ -217,9 +225,13 @@ class RecoveryCoordinator extends Interceptor {
   /// 关键点:清掉残留的 Cookie 头。重放走 dio.fetch 会重跑 AppCookieManager,
   /// 但若旧头还在,某些路径下会继续发送过期值(自愈/CF 重放都曾各自处理
   /// 这件事,现在只此一处)。
-  RequestOptions _nextAttempt(RequestOptions previous) {
+  RequestOptions _nextAttempt(
+    RequestOptions previous,
+    Map<String, dynamic> requestExtra,
+  ) {
     final extra = Map<String, dynamic>.from(previous.extra)
-      ..[_managedKey] = true;
+      ..[_managedKey] = true
+      ..addAll(requestExtra);
     final headers = Map<String, dynamic>.from(previous.headers)
       ..remove('cookie')
       ..remove('Cookie');

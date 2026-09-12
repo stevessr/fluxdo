@@ -244,6 +244,35 @@ class EnhancedPersistCookieJar implements base.CookieJar {
     });
   }
 
+  /// 按精确域名批量删除 Cookie，返回删除条数。
+  ///
+  /// 与 [delete] 的“请求可见性”语义不同，本接口只比较 Cookie 实际所属域名，
+  /// 因而删除 `credit.linux.do` 时不会顺带删除父域 `linux.do` 的 Domain Cookie。
+  /// host-only / domain / partitioned 变体都会按所属域统一删除，适合浏览器的
+  /// “按站点清理”场景。
+  Future<int> deleteDomainsExactly(Iterable<String> domains) {
+    final normalizedDomains = domains
+        .map((domain) => domain.trim().toLowerCase())
+        .map((domain) => domain.startsWith('.') ? domain.substring(1) : domain)
+        .where((domain) => domain.isNotEmpty)
+        .toSet();
+    if (normalizedDomains.isEmpty) return Future.value(0);
+
+    return _synchronized(() async {
+      final all = [...await _readAll()];
+      final before = all.length;
+      all.removeWhere((cookie) {
+        final domain = cookie.normalizedDomain ?? _originHost(cookie);
+        return domain != null && normalizedDomains.contains(domain);
+      });
+      final removed = before - all.length;
+      if (removed > 0) {
+        await _writeAll(all);
+      }
+      return removed;
+    });
+  }
+
   /// 按名称显式删除与 [uri] 站点相关的所有 cookie，返回删除条数。
   ///
   /// 与写入"已过期同名 cookie"的删除方式不同，本方法绕过 [CanonicalCookie.isFresherThan]

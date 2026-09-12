@@ -2,9 +2,12 @@ import 'notification.dart';
 
 /// Notification groupings used by Discourse's user menu.
 ///
-/// The historical `/notifications` endpoint cannot filter by type, so FluxDO
-/// keeps the server-side read/unread filter and applies these semantic groups
-/// locally while continuing to paginate through history.
+/// Replies / likes / messages are fetched with Discourse's native
+/// `recent=true&filter_by_types=...` user-menu API. Bookmarks are a special
+/// case in Discourse: that tab contains real bookmark records as well as
+/// bookmark-reminder notifications, so the full notifications page routes it
+/// to FluxDO's dedicated bookmarks page instead of pretending reminders are
+/// the bookmark list.
 enum NotificationCategory {
   all,
   replies,
@@ -34,6 +37,35 @@ enum NotificationCategory {
 
   static const Set<NotificationType> _bookmarkTypes = {
     NotificationType.bookmarkReminder,
+  };
+
+  /// Discourse notification type names accepted by `filter_by_types`.
+  ///
+  /// `other` intentionally returns null. Discourse builds that group from the
+  /// site's dynamic notification-type registry (including plugins), which the
+  /// historical notifications payload does not expose. For that tab FluxDO
+  /// fetches one bounded recent page and applies [matches] locally; importantly
+  /// it never walks the historical pagination to fill the category.
+  List<String>? get serverFilterTypeNames => switch (this) {
+    NotificationCategory.all => null,
+    NotificationCategory.replies => const [
+      'mentioned',
+      'group_mentioned',
+      'posted',
+      'quoted',
+      'replied',
+    ],
+    NotificationCategory.likes => const [
+      'liked',
+      'liked_consolidated',
+      'reaction',
+    ],
+    NotificationCategory.messages => const [
+      'private_message',
+      'group_message_summary',
+    ],
+    NotificationCategory.bookmarks => const ['bookmark_reminder'],
+    NotificationCategory.other => null,
   };
 
   bool matches(DiscourseNotification notification) {

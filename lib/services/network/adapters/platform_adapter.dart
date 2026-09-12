@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cronet_http/cronet_http.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
@@ -248,6 +249,19 @@ HttpClientAdapter _createNativeAdapter() {
         };
         return client;
       },
+    );
+  }
+  if (Platform.isAndroid) {
+    // Android Native 链路显式启用 Cronet QUIC/HTTP/3，并保留 HTTP/2 回落。
+    // rhttp 链路的 H3 由 RhttpAdapter 自己负责探测与熔断，不走这里。
+    // 不写 quicHints：让 Cronet 依据服务端 Alt-Svc/缓存能力自动升级，
+    // 避免站点关闭 UDP/HTTP3 后仍被硬提示到不可达的 QUIC 端点。
+    debugPrint('[DIO] Dynamic adapter -> NativeAdapter (Cronet HTTP/3/QUIC)');
+    return NativeAdapter(
+      createCronetEngine: () => CronetEngine.build(
+        enableQuic: true,
+        enableHttp2: true,
+      ),
     );
   }
   if (kDebugMode && (Platform.isMacOS || Platform.isIOS)) {

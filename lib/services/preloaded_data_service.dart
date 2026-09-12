@@ -1,16 +1,171 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, ValueNotifier, compute, immutable, visibleForTesting;
 import 'package:flutter/material.dart';
 import '../constants.dart';
 import '../models/topic.dart';
 import '../models/category.dart';
 import 'auth_session.dart';
+import 'preloaded_data_decoder.dart';
 import 'network/discourse_dio.dart';
 import 'network/cookie/csrf_token_service.dart';
 import 'cf_challenge_service.dart';
 import 'cf_clearance_refresh_service.dart';
+
+enum PreloadPhase {
+  idle,
+  requesting,
+  scanning,
+  hydratingCore,
+  decodingTopics,
+  parsingTopics,
+  complete,
+  failed,
+}
+
+@immutable
+class PreloadProgress {
+  const PreloadProgress({
+    required this.phase,
+    this.parsedTopics = 0,
+    this.totalTopics = 0,
+    this.receivedBytes = 0,
+    this.totalBytes = 0,
+    this.completedWorkUnits = 0,
+    this.totalWorkUnits = 0,
+  });
+
+  const PreloadProgress.idle()
+    : phase = PreloadPhase.idle,
+      parsedTopics = 0,
+      totalTopics = 0,
+      receivedBytes = 0,
+      totalBytes = 0,
+      completedWorkUnits = 0,
+      totalWorkUnits = 0;
+
+  final PreloadPhase phase;
+  final int parsedTopics;
+  final int totalTopics;
+  final int receivedBytes;
+  final int totalBytes;
+  final int completedWorkUnits;
+  final int totalWorkUnits;
+
+  bool get isActive =>
+      phase == PreloadPhase.requesting ||
+      phase == PreloadPhase.scanning ||
+      phase == PreloadPhase.hydratingCore ||
+      phase == PreloadPhase.decodingTopics ||
+      phase == PreloadPhase.parsingTopics;
+
+  /// 整个 preload 流程的确定进度。
+  ///
+  /// 首页下载占 2%~45%。下载完成后的 45%~100% 不再按固定阶段硬切，
+  /// 而是按实际 preload payload、核心 JSON、topic_list JSON 与 topic
+  /// 模型批次的工作量累计。并行任务只增加自己对应的份额，避免固定卡在
+  /// 某个百分比以及最后突然跳满。
+  double? get fraction {
+    switch (phase) {
+      case PreloadPhase.idle:
+        return 0.0;
+      case PreloadPhase.requesting:
+        final networkFraction = totalBytes > 0
+            ? (receivedBytes / totalBytes).clamp(0.0, 1.0).toDouble()
+            : 0.0;
+        return 0.02 + networkFraction * 0.43;
+      case PreloadPhase.scanning:
+      case PreloadPhase.hydratingCore:
+      case PreloadPhase.decodingTopics:
+      case PreloadPhase.parsingTopics:
+        if (totalWorkUnits <= 0) return 0.45;
+        final workFraction = (completedWorkUnits / totalWorkUnits)
+            .clamp(0.0, 1.0)
+            .toDouble();
+        return 0.45 + workFraction * 0.55;
+      case PreloadPhase.complete:
+        return 1.0;
+      case PreloadPhase.failed:
+        return null;
+    }
+  }
+
+  int get percent => ((fraction ?? 0.0) * 100).round();
+
+  int? get downloadPercent {
+    if (phase != PreloadPhase.requesting || totalBytes <= 0) return null;
+    return ((receivedBytes / totalBytes).clamp(0.0, 1.0) * 100).round();
+  }
+
+  String get semanticsLabel {
+    switch (phase) {
+      case PreloadPhase.idle:
+        return '预加载未开始';
+      case PreloadPhase.requesting:
+        final networkPercent = downloadPercent;
+        return networkPercent == null
+            ? '正在获取预加载数据'
+            : '正在获取预加载数据 · 下载 $networkPercent%';
+      case PreloadPhase.scanning:
+        return '正在扫描预加载数据';
+      case PreloadPhase.hydratingCore:
+        return '正在解析核心数据';
+      case PreloadPhase.decodingTopics:
+        return '正在解码话题数据';
+      case PreloadPhase.parsingTopics:
+        return totalTopics > 0
+            ? '正在解析话题 $parsedTopics / $totalTopics'
+            : '正在解析话题';
+      case PreloadPhase.complete:
+        return '预加载完成';
+      case PreloadPhase.failed:
+        return '预加载失败';
+    }
+  }
+}
+
+class _PreloadWorkTracker {
+  _PreloadWorkTracker({
+    required this.revision,
+    required this.generation,
+    required this.totalUnits,
+    required this.completedUnits,
+    required this.phase,
+  });
+
+  final int revision;
+  final int generation;
+  final int totalUnits;
+  int completedUnits;
+  PreloadPhase phase;
+  int parsedTopics = 0;
+  int totalTopics = 0;
+}
+
+int _rawPreloadWorkUnits(Object? value) {
+  if (value == null) return 0;
+  if (value is String) return value.isEmpty ? 1 : value.length;
+  return 1;
+}
+
+int _preloadGroupWorkUnits(Map<String, dynamic> group) {
+  var total = 0;
+  for (final value in group.values) {
+    total += _rawPreloadWorkUnits(value);
+  }
+  return total;
+}
+
+int _preloadTopicWorkUnits(Map<String, dynamic> preloaded) {
+  for (final key in const ['topicList', 'topic_list', 'latest']) {
+    if (preloaded.containsKey(key)) {
+      return _rawPreloadWorkUnits(preloaded[key]);
+    }
+  }
+  return 0;
+}
 
 /// 预加载数据服务
 /// 从首页 HTML 中提取 Discourse 预加载数据，避免额外 API 请求。
@@ -22,9 +177,16 @@ class PreloadedDataService {
       PreloadedDataService._internal();
   factory PreloadedDataService() => _instance;
 
+  static const int _topicParseBatchSize = 24;
+  static const int _topicParseConcurrency = 2;
+
   final Dio _dio;
   final CsrfTokenService _cookieSync = CsrfTokenService();
   final CfChallengeService _cfChallenge = CfChallengeService();
+  final ValueNotifier<PreloadProgress> _preloadProgress =
+      ValueNotifier<PreloadProgress>(const PreloadProgress.idle());
+  final ValueNotifier<TopicListResponse?> _progressiveTopicList =
+      ValueNotifier<TopicListResponse?>(null);
 
   // 缓存的预加载数据
   Map<String, dynamic>? _currentUser;
@@ -34,6 +196,7 @@ class PreloadedDataService {
   Map<String, dynamic>? _topicListData; // 首页话题列表原始数据
   TopicListResponse? _cachedTopicListResponse; // 缓存的已解析话题列表
   Completer<TopicListResponse?>? _topicListResponseCompleter;
+  Completer<TopicListResponse?>? _firstTopicListBatchCompleter;
   List<Map<String, dynamic>>? _customEmoji; // 自定义 emoji
   List<Map<String, dynamic>>? _topicTrackingStates; // 话题追踪状态
   String? _topicTrackingStatesRawJson;
@@ -64,6 +227,93 @@ class PreloadedDataService {
   bool get isLoaded => _loaded;
   Map<String, dynamic>? get currentUserSync => _currentUser;
   Map<String, dynamic>? get siteSettingsSync => _siteSettings;
+  Map<String, dynamic>? get siteSync => _site;
+
+  /// 允许使用话题精选链接的分类 ID 白名单。
+  ///
+  /// 由 SiteSerializer 下发在 site.json 顶层（仅当 `topic_featured_link_enabled`
+  /// 为真时才包含该字段）；分类对象自身的 `topic_featured_link_allowed` 只在
+  /// CategorySerializer 里，不会出现在 site.json 的分类列表中。
+  ///
+  /// 返回 null 表示站点未下发该字段（等价于「无分类限制」，对齐官方
+  /// `categoryIds === undefined` 分支）。
+  List<int>? get topicFeaturedLinkAllowedCategoryIdsSync {
+    final raw = _site?['topic_featured_link_allowed_category_ids'];
+    if (raw is! List) return null;
+    return raw
+        .map((e) => e is int ? e : int.tryParse(e.toString()))
+        .whereType<int>()
+        .toList(growable: false);
+  }
+
+  /// 未分类分类的 ID（官方 `uncategorized_category_id`）
+  int? get uncategorizedCategoryIdSync {
+    final raw = _site?['uncategorized_category_id'];
+    return raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+  }
+
+  /// 启动预加载的真实阶段/话题解析进度。
+  ValueListenable<PreloadProgress> get preloadProgressListenable =>
+      _preloadProgress;
+  PreloadProgress get preloadProgress => _preloadProgress.value;
+
+  /// 首页 topic_list 的累计解析快照。每完成一批就替换一次快照，
+  /// 消费方可以在最终 TopicListResponse 产生前先展示已完成的话题。
+  ValueListenable<TopicListResponse?> get progressiveTopicListListenable =>
+      _progressiveTopicList;
+  TopicListResponse? get progressiveTopicListSync =>
+      _progressiveTopicList.value;
+
+  void _setPreloadProgress(PreloadProgress progress) {
+    _preloadProgress.value = progress;
+  }
+
+  void _publishPreloadWork(
+    _PreloadWorkTracker tracker, {
+    required PreloadPhase phase,
+    int? parsedTopics,
+    int? totalTopics,
+  }) {
+    if (!_isCurrent(tracker.revision, tracker.generation)) return;
+    if (phase.index > tracker.phase.index &&
+        phase != PreloadPhase.complete &&
+        phase != PreloadPhase.failed) {
+      tracker.phase = phase;
+    }
+    if (parsedTopics != null) tracker.parsedTopics = parsedTopics;
+    if (totalTopics != null) tracker.totalTopics = totalTopics;
+
+    final completed = tracker.completedUnits >= tracker.totalUnits;
+    _setPreloadProgress(
+      PreloadProgress(
+        phase: completed ? PreloadPhase.complete : tracker.phase,
+        parsedTopics: tracker.parsedTopics,
+        totalTopics: tracker.totalTopics,
+        completedWorkUnits: tracker.completedUnits,
+        totalWorkUnits: tracker.totalUnits,
+      ),
+    );
+  }
+
+  void _advancePreloadWork(
+    _PreloadWorkTracker tracker, {
+    required int units,
+    required PreloadPhase phase,
+    int? parsedTopics,
+    int? totalTopics,
+  }) {
+    if (!_isCurrent(tracker.revision, tracker.generation)) return;
+    final next = tracker.completedUnits + (units < 0 ? 0 : units);
+    tracker.completedUnits = next > tracker.totalUnits
+        ? tracker.totalUnits
+        : next;
+    _publishPreloadWork(
+      tracker,
+      phase: phase,
+      parsedTopics: parsedTopics,
+      totalTopics: totalTopics,
+    );
+  }
 
   /// 从首页 HTML 扫出的 plugin js url 列表（供 WebView session bootstrap 复用,
   /// 避免重复 fetch 首页）。未加载或没扫到时返回 null。
@@ -228,6 +478,14 @@ class PreloadedDataService {
     return 15; // Discourse 默认值
   }
 
+  /// 话题标题最大长度（官方 `max_topic_title_length`，默认 255）
+  int get maxTopicTitleLengthSync {
+    final value = _siteSettings?['max_topic_title_length'];
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? 255;
+    return 255; // Discourse 默认值
+  }
+
   /// 获取私信标题最小长度
   Future<int> getMinPmTitleLength() async {
     await _ensureLoaded();
@@ -260,6 +518,18 @@ class PreloadedDataService {
     if (value is int) return value;
     if (value is String) return int.tryParse(value) ?? 20;
     return 20; // Discourse 默认值
+  }
+
+  /// 获取帖子最大长度
+  ///
+  /// warden 等插件抬高最小字数时需要用它封顶,避免管理员误配出
+  /// 一个永远满足不了的下限。
+  Future<int> getMaxPostLength() async {
+    await _ensureLoaded();
+    final value = _siteSettings?['max_post_length'];
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? 32000;
+    return 32000; // Discourse 默认值
   }
 
   /// 获取私信内容最小长度
@@ -393,6 +663,18 @@ class PreloadedDataService {
     return _customEmoji;
   }
 
+  /// 等到 topic_list 的第一批完成，而不是等待整份列表。
+  /// 后续批次通过 [progressiveTopicListListenable] 继续推送累计快照。
+  Future<TopicListResponse?> getInitialTopicListFirstBatch() async {
+    await _ensureLoaded();
+    final progressive = _progressiveTopicList.value;
+    if (progressive != null) return progressive;
+    if (_cachedTopicListResponse != null) return _cachedTopicListResponse;
+    final firstBatch = _firstTopicListBatchCompleter;
+    if (firstBatch == null) return null;
+    return firstBatch.future;
+  }
+
   /// 获取预加载的首页话题列表（仅首次加载时有效）
   /// 返回 TopicListResponse 或 null
   Future<TopicListResponse?> getInitialTopicList() async {
@@ -402,6 +684,8 @@ class PreloadedDataService {
       _cachedTopicListResponse = null;
       _topicListData = null;
       _topicListResponseCompleter = null;
+      _firstTopicListBatchCompleter = null;
+      _progressiveTopicList.value = null;
       return response;
     }
     if (_topicListData == null && _topicListResponseCompleter == null) {
@@ -418,11 +702,14 @@ class PreloadedDataService {
       _cachedTopicListResponse = null;
       _topicListData = null;
       _topicListResponseCompleter = null;
+      _firstTopicListBatchCompleter = null;
+      _progressiveTopicList.value = null;
       return response;
     } catch (e) {
       debugPrint('[PreloadedData] 解析 topic_list 失败: $e');
       _topicListData = null;
       _topicListResponseCompleter = null;
+      _firstTopicListBatchCompleter = null;
       return null;
     }
   }
@@ -430,8 +717,10 @@ class PreloadedDataService {
   /// 检查是否有预加载的话题列表可用
   bool get hasInitialTopicList =>
       _cachedTopicListResponse != null ||
+      _progressiveTopicList.value != null ||
       _topicListData != null ||
-      _topicListResponseCompleter != null;
+      _topicListResponseCompleter != null ||
+      _firstTopicListBatchCompleter != null;
 
   /// 同步获取预加载的话题列表（如果已加载）
   /// 返回 TopicListResponse 或 null
@@ -442,6 +731,8 @@ class PreloadedDataService {
     _cachedTopicListResponse = null; // 消费后清除
     _topicListData = null;
     _topicListResponseCompleter = null;
+    _firstTopicListBatchCompleter = null;
+    _progressiveTopicList.value = null;
     return response;
   }
 
@@ -486,6 +777,7 @@ class PreloadedDataService {
     if (!_isCurrent(revision, generation)) return false;
     if (!parsed) {
       debugPrint('[PreloadedData] HTML 快照不包含可用的 data-preloaded');
+      _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.failed));
       return false;
     }
 
@@ -513,7 +805,18 @@ class PreloadedDataService {
     _site = null;
     _topicListData = null;
     _cachedTopicListResponse = null;
+    final pendingTopicList = _topicListResponseCompleter;
+    if (pendingTopicList != null && !pendingTopicList.isCompleted) {
+      pendingTopicList.complete(null);
+    }
     _topicListResponseCompleter = null;
+    final pendingFirstBatch = _firstTopicListBatchCompleter;
+    if (pendingFirstBatch != null && !pendingFirstBatch.isCompleted) {
+      pendingFirstBatch.complete(null);
+    }
+    _firstTopicListBatchCompleter = null;
+    _progressiveTopicList.value = null;
+    _setPreloadProgress(const PreloadProgress.idle());
     _customEmoji = null;
     _topicTrackingStates = null;
     _topicTrackingStatesRawJson = null;
@@ -531,6 +834,19 @@ class PreloadedDataService {
   void _invalidateCachedData() {
     _dataRevision++;
     _clearCachedData();
+  }
+
+  /// 仅供测试：直接注入当前用户与站点设置
+  ///
+  /// 静音过滤等逻辑依赖这两份预加载数据，而本类是单例、真实加载路径要发
+  /// 网络请求。给测试开一个最小口子，好过把那些判定写成不可测。
+  @visibleForTesting
+  void debugSeed({
+    Map<String, dynamic>? currentUser,
+    Map<String, dynamic>? siteSettings,
+  }) {
+    _currentUser = currentUser;
+    _siteSettings = siteSettings;
   }
 
   /// 重置缓存（登出时调用）
@@ -597,7 +913,11 @@ class PreloadedDataService {
   }) async {
     try {
       // 发起 HTTP 请求获取数据
+      _setPreloadProgress(
+        const PreloadProgress(phase: PreloadPhase.requesting),
+      );
       debugPrint('[PreloadedData] 发起 HTTP 请求');
+      var lastDownloadPercent = -1;
       final response = await _dio.get(
         AppConstants.baseUrl,
         options: Options(
@@ -608,6 +928,21 @@ class PreloadedDataService {
             'requestTag': 'preload-home',
           },
         ),
+        onReceiveProgress: (received, total) {
+          if (!_isCurrent(revision, generation) || total <= 0) return;
+          final downloadPercent = received * 100 ~/ total;
+          if (downloadPercent == lastDownloadPercent && received != total) {
+            return;
+          }
+          lastDownloadPercent = downloadPercent;
+          _setPreloadProgress(
+            PreloadProgress(
+              phase: PreloadPhase.requesting,
+              receivedBytes: received,
+              totalBytes: total,
+            ),
+          );
+        },
       );
 
       final html = response.data as String;
@@ -629,6 +964,9 @@ class PreloadedDataService {
       // 预热完成后仅更新站点基础数据和 sitekey。cf_clearance 自动续期
       // 由 BrowserTrustCoordinator 统一判断启动，避免预加载服务绕过生命周期门禁。
     } catch (e) {
+      if (_isCurrent(revision, generation)) {
+        _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.failed));
+      }
       debugPrint('[PreloadedData] 加载失败: $e');
       rethrow;
     }
@@ -645,16 +983,11 @@ class PreloadedDataService {
     required int generation,
   }) async {
     if (!_isCurrent(revision, generation)) return false;
-    _extractCsrfTokenFromHtml(html);
-    _extractSharedSessionKeyFromHtml(html);
-    _extractTurnstileSitekeyFromHtml(html);
-    _extractBaseUriFromHtml(html);
-    _extractCdnUrlFromHtml(html);
-    _extractPluginCandidatesInBackground(
-      html,
-      revision: revision,
-      generation: generation,
-    );
+
+    // Locate the preload payload first and launch its isolate decode immediately.
+    // Metadata extraction below then overlaps with JSON decoding instead of delaying it.
+    String? dataString;
+    var htmlEntityEncoded = false;
 
     // 新版形态：<script type="application/json" id="data-preloaded">{...}</script>
     // 内容是原始 JSON，不做 HTML 实体解码（否则正文中字面的 &quot; 会被误还原）
@@ -666,27 +999,49 @@ class PreloadedDataService {
       final start = scriptTag.end;
       final end = html.indexOf('</script>', start);
       if (end > start) {
-        return _parsePreloadedDataString(
-          html.substring(start, end),
-          htmlEntityEncoded: false,
-          revision: revision,
-          generation: generation,
-        );
+        dataString = html.substring(start, end);
       }
     }
 
     // 旧版形态：元素属性 data-preloaded="..."（HTML 实体转义，Isolate 中解码）
-    final match = RegExp(r'data-preloaded="([^"]*)"').firstMatch(html);
-    if (match == null) {
-      debugPrint('[PreloadedData] 未找到 data-preloaded 数据');
-      return false;
+    if (dataString == null) {
+      final match = RegExp(r'data-preloaded="([^"]*)"').firstMatch(html);
+      if (match == null) {
+        debugPrint('[PreloadedData] 未找到 data-preloaded 数据');
+        return false;
+      }
+      dataString = match.group(1)!;
+      htmlEntityEncoded = true;
     }
-    return _parsePreloadedDataString(
-      match.group(1)!,
-      htmlEntityEncoded: true,
+
+    _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.scanning));
+    final parseFuture = _parsePreloadedDataString(
+      dataString,
+      htmlEntityEncoded: htmlEntityEncoded,
       revision: revision,
       generation: generation,
     );
+
+    // These small HTML metadata scans run while the preload isolate is decoding.
+    _extractCsrfTokenFromHtml(html);
+    _extractSharedSessionKeyFromHtml(html);
+    _extractTurnstileSitekeyFromHtml(html);
+    _extractBaseUriFromHtml(html);
+    _extractCdnUrlFromHtml(html);
+
+    final parsed = await parseFuture;
+    if (!_isCurrent(revision, generation)) return false;
+
+    // Plugin discovery is useful for later browser bootstrap, but must not compete
+    // with the startup-critical preload JSON decode for CPU/memory bandwidth.
+    if (parsed) {
+      _extractPluginCandidatesInBackground(
+        html,
+        revision: revision,
+        generation: generation,
+      );
+    }
+    return parsed;
   }
 
   void _extractCsrfTokenFromHtml(String html) {
@@ -837,8 +1192,9 @@ class PreloadedDataService {
     required int generation,
   }) async {
     try {
-      // 在 Isolate 中完成（可选的）HTML entity 解码 + 外层/内层 JSON 解码
-      final preloaded = await compute(_decodePreloadedJsonInIsolate, [
+      // Phase 1: scan the outer preload object once. Nested JSON strings stay
+      // raw so large independent payloads can be decoded in parallel.
+      final preloaded = await compute(_scanPreloadedJsonInIsolate, [
         dataString,
         if (htmlEntityEncoded) 'entity',
       ]);
@@ -848,9 +1204,78 @@ class PreloadedDataService {
       }
       if (!_isCurrent(revision, generation)) return false;
 
-      // 解析 currentUser（已在 Isolate 中完成 jsonDecode）
-      if (preloaded.containsKey('currentUser')) {
-        _currentUser = preloaded['currentUser'] as Map<String, dynamic>;
+      final userSettingsRaw = <String, dynamic>{
+        if (preloaded.containsKey('currentUser'))
+          'currentUser': preloaded['currentUser'],
+        if (preloaded.containsKey('siteSettings'))
+          'siteSettings': preloaded['siteSettings'],
+        if (preloaded.containsKey('topicTrackingStateMeta'))
+          'topicTrackingStateMeta': preloaded['topicTrackingStateMeta'],
+      };
+      final siteRaw = <String, dynamic>{
+        if (preloaded.containsKey('site')) 'site': preloaded['site'],
+        if (preloaded.containsKey('customEmoji'))
+          'customEmoji': preloaded['customEmoji'],
+      };
+
+      final scanUnits = dataString.isEmpty ? 1 : dataString.length;
+      final userSettingsUnits = _preloadGroupWorkUnits(userSettingsRaw);
+      final siteUnits = _preloadGroupWorkUnits(siteRaw);
+      final topicUnits = _preloadTopicWorkUnits(preloaded);
+      // topic_list 的 raw JSON 解码和模型构建都需要完整遍历一次，分别
+      // 计入同等工作量；核心组则按各自 raw payload 大小计权。
+      final totalWorkUnits =
+          scanUnits + userSettingsUnits + siteUnits + (topicUnits * 2) + 1;
+      final tracker = _PreloadWorkTracker(
+        revision: revision,
+        generation: generation,
+        totalUnits: totalWorkUnits,
+        completedUnits: scanUnits,
+        phase: PreloadPhase.hydratingCore,
+      );
+      _publishPreloadWork(tracker, phase: PreloadPhase.hydratingCore);
+
+      // Start topic_list immediately after the outer scan. Previously this waited
+      // for both core decode workers, leaving a serial bubble on startup.
+      final hasTopicList = _parseTopicListFromPreloaded(
+        preloaded,
+        revision: revision,
+        generation: generation,
+        tracker: tracker,
+        topicDecodeWorkUnits: topicUnits,
+        topicModelWorkUnits: topicUnits,
+      );
+
+      Future<Map<String, dynamic>> decodeCoreGroup(
+        Map<String, dynamic> rawGroup,
+        int workUnits,
+      ) async {
+        if (rawGroup.isEmpty) return const <String, dynamic>{};
+        final decoded = await compute(_decodePreloadedGroupInIsolate, rawGroup);
+        _advancePreloadWork(
+          tracker,
+          units: workUnits,
+          phase: PreloadPhase.hydratingCore,
+        );
+        return decoded;
+      }
+
+      // Two coarse-grained workers keep site/settings parallel, while empty groups
+      // avoid paying an isolate startup at all.
+      final groups = await Future.wait<Map<String, dynamic>>([
+        if (userSettingsRaw.isNotEmpty)
+          decodeCoreGroup(userSettingsRaw, userSettingsUnits),
+        if (siteRaw.isNotEmpty) decodeCoreGroup(siteRaw, siteUnits),
+      ]);
+      if (!_isCurrent(revision, generation)) return false;
+
+      final hydrated = <String, dynamic>{};
+      for (final group in groups) {
+        hydrated.addAll(group);
+      }
+
+      if (hydrated.containsKey('currentUser')) {
+        _currentUser = hydrated['currentUser'] as Map<String, dynamic>;
         debugPrint(
           '[PreloadedData] currentUser 解析成功: id=${_currentUser?['id']}, '
           'unread_notifications=${_currentUser?['unread_notifications']}, '
@@ -858,11 +1283,9 @@ class PreloadedDataService {
         );
       }
 
-      // 解析 siteSettings
-      if (preloaded.containsKey('siteSettings')) {
-        _siteSettings = preloaded['siteSettings'] as Map<String, dynamic>;
+      if (hydrated.containsKey('siteSettings')) {
+        _siteSettings = hydrated['siteSettings'] as Map<String, dynamic>;
 
-        // 提取 reactions 配置
         final reactionsStr =
             _siteSettings?['discourse_reactions_enabled_reactions'] as String?;
         if (reactionsStr != null && reactionsStr.isNotEmpty) {
@@ -870,7 +1293,6 @@ class PreloadedDataService {
           debugPrint('[PreloadedData] reactions: $_enabledReactions');
         }
 
-        // 提取 MessageBus 长轮询独立域名
         final pollingUrl = _siteSettings?['long_polling_base_url'] as String?;
         if (pollingUrl != null && pollingUrl.isNotEmpty && pollingUrl != '/') {
           _longPollingBaseUrl = pollingUrl.endsWith('/')
@@ -882,24 +1304,21 @@ class PreloadedDataService {
         }
       }
 
-      // 解析 site（包含 categories、top_tags 等）
-      if (preloaded.containsKey('site')) {
-        _site = preloaded['site'] as Map<String, dynamic>;
+      if (hydrated.containsKey('site')) {
+        _site = hydrated['site'] as Map<String, dynamic>;
         debugPrint(
           '[PreloadedData] site 解析成功, categories=${(_site?['categories'] as List?)?.length ?? 0}',
         );
       }
 
-      // 解析 topicTrackingStateMeta（MessageBus 频道初始 ID）
-      if (preloaded.containsKey('topicTrackingStateMeta')) {
+      if (hydrated.containsKey('topicTrackingStateMeta')) {
         _topicTrackingStateMeta =
-            preloaded['topicTrackingStateMeta'] as Map<String, dynamic>;
+            hydrated['topicTrackingStateMeta'] as Map<String, dynamic>;
         debugPrint(
           '[PreloadedData] topicTrackingStateMeta: $_topicTrackingStateMeta',
         );
       }
 
-      // 解析 topicTrackingStates（话题追踪状态）
       if (preloaded.containsKey('topicTrackingStates')) {
         final value = preloaded['topicTrackingStates'];
         if (value is List) {
@@ -911,137 +1330,344 @@ class PreloadedDataService {
         } else if (value is String && value.isNotEmpty) {
           _topicTrackingStatesRawJson = value;
           _topicTrackingStates = null;
-          debugPrint('[PreloadedData] topicTrackingStates 延迟解析');
+          debugPrint('[PreloadedData] topicTrackingStates 后台预热');
         }
       }
 
-      // 解析 customEmoji（自定义 emoji）
-      if (preloaded.containsKey('customEmoji')) {
-        _customEmoji = (preloaded['customEmoji'] as List)
+      if (hydrated.containsKey('customEmoji')) {
+        _customEmoji = (hydrated['customEmoji'] as List)
             .cast<Map<String, dynamic>>();
         debugPrint(
           '[PreloadedData] customEmoji: ${_customEmoji?.length ?? 0} items',
         );
       }
 
-      // 解析首页话题列表（如果存在）
-      // 注意：这个数据可能在不同的 key 下，需要检查多个位置
-      _parseTopicListFromPreloaded(
-        preloaded,
-        revision: revision,
-        generation: generation,
+      // Keep one tiny final unit so progress cannot report 100% before decoded
+      // core maps have actually been published to the service.
+      _advancePreloadWork(
+        tracker,
+        units: 1,
+        phase: hasTopicList
+            ? PreloadPhase.parsingTopics
+            : PreloadPhase.hydratingCore,
       );
+
+      // Non-critical tracking state continues after core hydration. Existing
+      // completers let an early caller reuse the same background work.
+      if (_topicTrackingStatesRawJson != null) {
+        unawaited(_decodeTopicTrackingStatesAsync());
+      }
       return true;
     } catch (e) {
       debugPrint('[PreloadedData] JSON 解析失败: $e');
+      if (_isCurrent(revision, generation)) {
+        _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.failed));
+      }
       return false;
     }
   }
 
   /// 从预加载数据中解析话题列表
-  void _parseTopicListFromPreloaded(
+  bool _parseTopicListFromPreloaded(
     Map<String, dynamic> preloaded, {
     required int revision,
     required int generation,
+    required _PreloadWorkTracker tracker,
+    required int topicDecodeWorkUnits,
+    required int topicModelWorkUnits,
   }) {
-    // 尝试多个可能的 key
     final possibleKeys = ['topicList', 'topic_list', 'latest'];
 
     for (final key in possibleKeys) {
-      if (preloaded.containsKey(key)) {
-        try {
-          final value = preloaded[key];
-          if (value is String) {
-            _decodeTopicListAsync(
-              value,
-              revision: revision,
-              generation: generation,
-            );
-            return;
-          } else if (value is Map) {
-            _topicListData = value as Map<String, dynamic>;
-          }
-
-          if (_topicListData != null) {
-            final topicsCount =
-                (_topicListData?['topic_list']?['topics'] as List?)?.length ??
-                (_topicListData?['topics'] as List?)?.length ??
-                0;
-            debugPrint(
-              '[PreloadedData] topic_list 解析成功 (key=$key), topics=$topicsCount',
-            );
-            _parseTopicListResponseAsync(
-              _topicListData!,
-              revision: revision,
-              generation: generation,
-            );
-            return;
-          }
-        } catch (e) {
-          debugPrint('[PreloadedData] 解析 $key 失败: $e');
+      if (!preloaded.containsKey(key)) continue;
+      try {
+        final value = preloaded[key];
+        if (value is String) {
+          _decodeTopicListAsync(
+            value,
+            revision: revision,
+            generation: generation,
+            tracker: tracker,
+            topicDecodeWorkUnits: topicDecodeWorkUnits,
+            topicModelWorkUnits: topicModelWorkUnits,
+          );
+          return true;
+        } else if (value is Map) {
+          _topicListData = Map<String, dynamic>.from(value);
+          _advancePreloadWork(
+            tracker,
+            units: topicDecodeWorkUnits,
+            phase: PreloadPhase.decodingTopics,
+          );
         }
+
+        if (_topicListData != null) {
+          final topicsCount =
+              (_topicListData?['topic_list']?['topics'] as List?)?.length ??
+              (_topicListData?['topics'] as List?)?.length ??
+              0;
+          debugPrint(
+            '[PreloadedData] topic_list 解析成功 (key=$key), topics=$topicsCount',
+          );
+          _parseTopicListResponseAsync(
+            _topicListData!,
+            revision: revision,
+            generation: generation,
+            tracker: tracker,
+            topicModelWorkUnits: topicModelWorkUnits,
+          );
+          return true;
+        }
+      } catch (e) {
+        debugPrint('[PreloadedData] 解析 $key 失败: $e');
       }
     }
+    return false;
+  }
+
+  void _prepareTopicListCompleters() {
+    _topicListResponseCompleter ??= Completer<TopicListResponse?>();
+    _firstTopicListBatchCompleter ??= Completer<TopicListResponse?>();
   }
 
   void _decodeTopicListAsync(
     String rawJson, {
     required int revision,
     required int generation,
+    required _PreloadWorkTracker tracker,
+    required int topicDecodeWorkUnits,
+    required int topicModelWorkUnits,
   }) {
-    final completer = _topicListResponseCompleter ??=
-        Completer<TopicListResponse?>();
-    compute(_decodeTopicListInIsolate, rawJson)
-        .then((decoded) {
-          if (!_isCurrent(revision, generation)) {
-            if (!completer.isCompleted) completer.complete(null);
-            return;
-          }
-          if (decoded == null) {
-            if (!completer.isCompleted) completer.complete(null);
-            return;
-          }
-          _topicListData = decoded;
-          final topicsCount =
-              (_topicListData?['topic_list']?['topics'] as List?)?.length ??
-              (_topicListData?['topics'] as List?)?.length ??
-              0;
-          debugPrint(
-            '[PreloadedData] topic_list 解析成功 (async), topics=$topicsCount',
+    _prepareTopicListCompleters();
+    _publishPreloadWork(tracker, phase: PreloadPhase.decodingTopics);
+    unawaited(() async {
+      try {
+        final data = await compute(_decodeTopicListJsonInIsolate, rawJson);
+        if (!_isCurrent(revision, generation)) return;
+        if (data == null) {
+          _setPreloadProgress(
+            const PreloadProgress(phase: PreloadPhase.failed),
           );
-          _parseTopicListResponseAsync(
-            decoded,
-            revision: revision,
-            generation: generation,
+          _completeTopicListWithNull();
+          return;
+        }
+        _advancePreloadWork(
+          tracker,
+          units: topicDecodeWorkUnits,
+          phase: PreloadPhase.decodingTopics,
+        );
+        _topicListData = data;
+        await _parseTopicListResponseInBatches(
+          data,
+          revision: revision,
+          generation: generation,
+          tracker: tracker,
+          topicModelWorkUnits: topicModelWorkUnits,
+        );
+      } catch (e) {
+        debugPrint('[PreloadedData] 异步解析 topic_list 失败: $e');
+        if (_isCurrent(revision, generation)) {
+          _setPreloadProgress(
+            const PreloadProgress(phase: PreloadPhase.failed),
           );
-        })
-        .catchError((e) {
-          debugPrint('[PreloadedData] 异步解析 topic_list 失败: $e');
-          if (!completer.isCompleted) completer.complete(null);
-        });
+          _completeTopicListWithNull();
+        }
+      }
+    }());
   }
 
   void _parseTopicListResponseAsync(
     Map<String, dynamic> data, {
     required int revision,
     required int generation,
+    required _PreloadWorkTracker tracker,
+    required int topicModelWorkUnits,
   }) {
-    final completer = _topicListResponseCompleter ??=
-        Completer<TopicListResponse?>();
-    compute(_parseTopicListInIsolate, data)
-        .then((result) {
-          if (!_isCurrent(revision, generation)) {
-            if (!completer.isCompleted) completer.complete(null);
-            return;
-          }
-          _cachedTopicListResponse = result;
-          debugPrint('[PreloadedData] TopicListResponse 异步缓存成功');
-          if (!completer.isCompleted) completer.complete(result);
-        })
-        .catchError((e) {
-          debugPrint('[PreloadedData] 异步解析 TopicListResponse 失败: $e');
-          if (!completer.isCompleted) completer.complete(null);
+    _prepareTopicListCompleters();
+    unawaited(
+      _parseTopicListResponseInBatches(
+        data,
+        revision: revision,
+        generation: generation,
+        tracker: tracker,
+        topicModelWorkUnits: topicModelWorkUnits,
+      ),
+    );
+  }
+
+  Future<void> _parseTopicListResponseInBatches(
+    Map<String, dynamic> data, {
+    required int revision,
+    required int generation,
+    required _PreloadWorkTracker tracker,
+    required int topicModelWorkUnits,
+  }) async {
+    try {
+      final rawTopicList = data['topic_list'];
+      if (rawTopicList is! Map) {
+        final result = await compute(_parseTopicListInIsolate, data);
+        if (!_isCurrent(revision, generation)) return;
+        final total = result.topics.length;
+        _publishTopicListSnapshot(result, finalSnapshot: true);
+        _advancePreloadWork(
+          tracker,
+          units: topicModelWorkUnits,
+          phase: PreloadPhase.parsingTopics,
+          parsedTopics: total,
+          totalTopics: total,
+        );
+        return;
+      }
+
+      final topicList = Map<String, dynamic>.from(rawTopicList);
+      final rawUsers = data['users'] as List<dynamic>? ?? const <dynamic>[];
+      final rawTopics =
+          topicList['topics'] as List<dynamic>? ?? const <dynamic>[];
+      final moreTopicsUrl = topicList['more_topics_url'] as String?;
+      final total = rawTopics.length;
+      final accumulated = <Topic>[];
+      final seenTopicIds = <int>{};
+
+      _publishPreloadWork(
+        tracker,
+        phase: PreloadPhase.parsingTopics,
+        parsedTopics: 0,
+        totalTopics: total,
+      );
+
+      if (total == 0) {
+        _publishTopicListSnapshot(
+          TopicListResponse(
+            topics: const <Topic>[],
+            moreTopicsUrl: moreTopicsUrl,
+          ),
+          finalSnapshot: true,
+        );
+        _advancePreloadWork(
+          tracker,
+          units: topicModelWorkUnits,
+          phase: PreloadPhase.parsingTopics,
+          parsedTopics: 0,
+          totalTopics: 0,
+        );
+        return;
+      }
+
+      Future<List<Topic>> parseBatch(int start) {
+        final requestedEnd = start + _topicParseBatchSize;
+        final end = requestedEnd < total ? requestedEnd : total;
+        return compute(_parseTopicBatchInIsolate, <String, dynamic>{
+          'users': rawUsers,
+          'topics': rawTopics.sublist(start, end),
         });
+      }
+
+      void publishBatch(int start, int end, List<Topic> batch) {
+        for (final topic in batch) {
+          if (seenTopicIds.add(topic.id)) accumulated.add(topic);
+        }
+
+        final snapshot = TopicListResponse(
+          topics: List<Topic>.unmodifiable(accumulated),
+          moreTopicsUrl: moreTopicsUrl,
+        );
+        final isFinal = end >= total;
+        _publishTopicListSnapshot(snapshot, finalSnapshot: isFinal);
+
+        final previousWork = topicModelWorkUnits * start ~/ total;
+        final currentWork = topicModelWorkUnits * end ~/ total;
+        _advancePreloadWork(
+          tracker,
+          units: currentWork - previousWork,
+          phase: PreloadPhase.parsingTopics,
+          parsedTopics: end,
+          totalTopics: total,
+        );
+      }
+
+      // Keep time-to-first-content optimal: the first 24 topics are parsed alone
+      // and published immediately. Only the remaining batches fan out two-wide.
+      final firstEnd = _topicParseBatchSize < total
+          ? _topicParseBatchSize
+          : total;
+      final firstBatch = await parseBatch(0);
+      if (!_isCurrent(revision, generation)) return;
+      publishBatch(0, firstEnd, firstBatch);
+      if (firstEnd >= total) return;
+
+      await Future<void>.delayed(Duration.zero);
+      final windowSize = _topicParseBatchSize * _topicParseConcurrency;
+      for (
+        var windowStart = firstEnd;
+        windowStart < total;
+        windowStart += windowSize
+      ) {
+        final starts = <int>[];
+        for (
+          var start = windowStart;
+          start < total && starts.length < _topicParseConcurrency;
+          start += _topicParseBatchSize
+        ) {
+          starts.add(start);
+        }
+
+        final batches = await Future.wait<List<Topic>>([
+          for (final start in starts) parseBatch(start),
+        ]);
+        if (!_isCurrent(revision, generation)) return;
+
+        for (var index = 0; index < starts.length; index++) {
+          final batchStart = starts[index];
+          final requestedEnd = batchStart + _topicParseBatchSize;
+          final batchEnd = requestedEnd < total ? requestedEnd : total;
+          publishBatch(batchStart, batchEnd, batches[index]);
+        }
+
+        if (windowStart + windowSize < total) {
+          await Future<void>.delayed(Duration.zero);
+        }
+      }
+    } catch (e) {
+      debugPrint('[PreloadedData] 分批解析 TopicListResponse 失败: $e');
+      if (_isCurrent(revision, generation)) {
+        _setPreloadProgress(const PreloadProgress(phase: PreloadPhase.failed));
+        _completeTopicListWithNull();
+      }
+    }
+  }
+
+  void _publishTopicListSnapshot(
+    TopicListResponse response, {
+    required bool finalSnapshot,
+  }) {
+    _progressiveTopicList.value = response;
+    final firstBatch = _firstTopicListBatchCompleter;
+    if (firstBatch != null && !firstBatch.isCompleted) {
+      firstBatch.complete(response);
+    }
+    if (!finalSnapshot) {
+      debugPrint(
+        '[PreloadedData] topic_list 分批解析: ${response.topics.length} items ready',
+      );
+      return;
+    }
+
+    _cachedTopicListResponse = response;
+    _topicListData = null;
+    final complete = _topicListResponseCompleter;
+    if (complete != null && !complete.isCompleted) complete.complete(response);
+    debugPrint(
+      '[PreloadedData] TopicListResponse 分批解析完成: ${response.topics.length} items',
+    );
+  }
+
+  void _completeTopicListWithNull() {
+    final firstBatch = _firstTopicListBatchCompleter;
+    if (firstBatch != null && !firstBatch.isCompleted) {
+      firstBatch.complete(null);
+    }
+    final complete = _topicListResponseCompleter;
+    if (complete != null && !complete.isCompleted) complete.complete(null);
   }
 
   Future<void> _decodeTopicTrackingStatesAsync() async {
@@ -1085,15 +1711,32 @@ class PreloadedDataService {
   }
 }
 
-Map<String, dynamic>? _decodeTopicListInIsolate(String rawJson) {
+Map<String, dynamic>? _decodeTopicListJsonInIsolate(String rawJson) {
   final decoded = jsonDecode(rawJson);
-  if (decoded is Map<String, dynamic>) {
-    return decoded;
-  }
-  if (decoded is Map) {
-    return decoded.cast<String, dynamic>();
-  }
+  if (decoded is Map<String, dynamic>) return decoded;
+  if (decoded is Map) return decoded.cast<String, dynamic>();
   return null;
+}
+
+List<Topic> _parseTopicBatchInIsolate(Map<String, dynamic> input) {
+  final usersJson = input['users'] as List<dynamic>? ?? const <dynamic>[];
+  final userMap = <int, TopicUser>{};
+  for (final rawUser in usersJson) {
+    if (rawUser is! Map) continue;
+    final user = TopicUser.fromJson(Map<String, dynamic>.from(rawUser));
+    userMap[user.id] = user;
+  }
+
+  final topicsJson = input['topics'] as List<dynamic>? ?? const <dynamic>[];
+  return topicsJson
+      .whereType<Map>()
+      .map(
+        (rawTopic) => Topic.fromJson(
+          Map<String, dynamic>.from(rawTopic),
+          userMap: userMap,
+        ),
+      )
+      .toList(growable: false);
 }
 
 List<Map<String, dynamic>>? _decodeTopicTrackingStatesInIsolate(
@@ -1104,52 +1747,29 @@ List<Map<String, dynamic>>? _decodeTopicTrackingStatesInIsolate(
   return decoded.cast<Map<String, dynamic>>();
 }
 
-Map<String, dynamic>? _decodePreloadedJsonInIsolate(List<String> input) {
-  final rawJson = input[0];
-  final htmlEntityEncoded = input.length > 1 && input[1] == 'entity';
+Map<String, dynamic>? _scanPreloadedJsonInIsolate(List<String> input) {
+  return PreloadedDataDecoder.scan(
+    input[0],
+    htmlEntityEncoded: input.length > 1 && input[1] == 'entity',
+  );
+}
 
-  // 旧版属性形态需要 HTML entity 解码；新版 script 标签形态是原始 JSON
-  final unescaped = htmlEntityEncoded
-      ? rawJson
-            .replaceAll('&quot;', '"')
-            .replaceAll('&amp;', '&')
-            .replaceAll('&lt;', '<')
-            .replaceAll('&gt;', '>')
-            .replaceAll('&#39;', "'")
-      : rawJson;
-
-  final decoded = jsonDecode(unescaped);
-  final Map<String, dynamic> result;
-  if (decoded is Map<String, dynamic>) {
-    result = decoded;
-  } else if (decoded is Map) {
-    result = decoded.cast<String, dynamic>();
-  } else {
-    return null;
-  }
-
-  // 内层 value 也是 JSON 字符串；这里只解启动首屏必须同步可用的 key。
-  // 大体积但非首屏硬依赖的数据（topicTrackingStates / topic_list）保持 raw
-  // 字符串，后续按需异步解码，避免卡住 ensureLoaded 的关键路径。
-  const eagerKeys = {
-    'currentUser',
-    'siteSettings',
-    'site',
-    'topicTrackingStateMeta',
-    'customEmoji',
-  };
-  for (final key in result.keys.toList()) {
-    if (!eagerKeys.contains(key)) continue;
-    final value = result[key];
+Map<String, dynamic> _decodePreloadedGroupInIsolate(
+  Map<String, dynamic> rawGroup,
+) {
+  final result = <String, dynamic>{};
+  for (final entry in rawGroup.entries) {
+    final value = entry.value;
     if (value is String) {
       try {
-        result[key] = jsonDecode(value);
+        result[entry.key] = jsonDecode(value);
+        continue;
       } catch (_) {
-        // 非 JSON 字符串，保持原值
+        // Preserve unusual non-JSON strings for compatibility.
       }
     }
+    result[entry.key] = value;
   }
-
   return result;
 }
 

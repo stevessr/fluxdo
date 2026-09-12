@@ -14,6 +14,7 @@ import '../providers/selected_topic_provider.dart';
 import '../providers/shortcut_provider.dart';
 import '../providers/discourse_providers.dart';
 import '../services/dynamic_content_suspension_service.dart';
+import '../services/preloaded_data_service.dart';
 import '../utils/platform_utils.dart';
 import '../utils/blur_config.dart';
 import '../utils/responsive.dart';
@@ -177,7 +178,7 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
     // 手机/平板单栏：只显示 master;栈非空时 detail 在本页体内全宽投影
     // (平行视界栈是唯一真相,不 push 合成路由,宽窄切换 State 原地保留)
     // 平板双栏：显示 master + detail
-    return HomeWorkspaceScope(
+    final workspace = HomeWorkspaceScope(
       onShowFeed: _showFeed,
       onShowCategory: _showCategory,
       onShowTag: _showTag,
@@ -185,40 +186,114 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
         stackProvider: selectedTopicProvider,
         isActive: widget.isActive,
         child: MasterDetailLayout(
-        // 压栈时左栏显示的是"上一层"内容而不是列表，才是真正的平行
-        // 视界——放宽到接近对半分；master 还是列表时维持列表该有的窄栏。
-        //
-        // 例外：上一层是**草稿列表**时它本质仍是列表（一列卡片），
-        // 对半分太宽、右边话题被挤扁 —— 按列表口径给窄栏。
-        maxMasterRatio: selectedTopic.isStacked && !_masterIsListLike
-            ? 0.8
-            : MasterDetailLayout.defaultMaxMasterRatio,
-        preferredMasterRatio:
-            selectedTopic.isStacked && !_masterIsListLike ? 0.5 : 0.25,
-        projectDetailWhenNarrow: true,
-        // 胶片带:列表也在带上,压栈时被顶出左侧、倒二层格顶上左栏
-        // (旧"上一层预览"形态,由容器统一承担,预览格 State 全保)。
-        pinMaster: false,
-        master: _wrapPaneTap(
-          ActivePane.master,
-          _buildMasterPane(selectedTopic),
-        ),
-        panes: [
-          for (var i = 0; i < selectedTopic.stack.length; i++)
-            _buildPaneCell(selectedTopic, i),
-        ],
-        // 压栈时 master 显示的是话题预览（不可交互，见
-        // TopicDetailPage.truncateOnPush 注释），不是列表——"新建话题"这个
-        // FAB 只在 master 真的是列表时才有意义，之前没跟着切换，压栈后
-        // 预览一个话题下面还挂着"新建话题"的加号，容易被当成回复按钮。
-        masterFloatingActionButton: user != null && !selectedTopic.isStacked
-            ? _TopicsFab(
-                onCreateTopic: () => _createTopic(context, ref),
-                onOpenDrafts: () => _openDrafts(context),
-              )
-            : null,
+          // 压栈时左栏显示的是"上一层"内容而不是列表，才是真正的平行
+          // 视界——放宽到接近对半分；master 还是列表时维持列表该有的窄栏。
+          //
+          // 例外：上一层是**草稿列表**时它本质仍是列表（一列卡片），
+          // 对半分太宽、右边话题被挤扁 —— 按列表口径给窄栏。
+          maxMasterRatio: selectedTopic.isStacked && !_masterIsListLike
+              ? 0.8
+              : MasterDetailLayout.defaultMaxMasterRatio,
+          preferredMasterRatio: selectedTopic.isStacked && !_masterIsListLike
+              ? 0.5
+              : 0.25,
+          projectDetailWhenNarrow: true,
+          // 胶片带:列表也在带上,压栈时被顶出左侧、倒二层格顶上左栏
+          // (旧"上一层预览"形态,由容器统一承担,预览格 State 全保)。
+          pinMaster: false,
+          master: _wrapPaneTap(
+            ActivePane.master,
+            _buildMasterPane(selectedTopic),
+          ),
+          panes: [
+            for (var i = 0; i < selectedTopic.stack.length; i++)
+              _buildPaneCell(selectedTopic, i),
+          ],
+          // 压栈时 master 显示的是话题预览（不可交互，见
+          // TopicDetailPage.truncateOnPush 注释），不是列表——"新建话题"这个
+          // FAB 只在 master 真的是列表时才有意义，之前没跟着切换，压栈后
+          // 预览一个话题下面还挂着"新建话题"的加号，容易被当成回复按钮。
+          masterFloatingActionButton: user != null && !selectedTopic.isStacked
+              ? _TopicsFab(
+                  onCreateTopic: () => _createTopic(context, ref),
+                  onOpenDrafts: () => _openDrafts(context),
+                )
+              : null,
         ),
       ),
+    );
+
+    // 进度 UI 只重建自身，workspace 作为 child 复用，避免网络回调/解析批次
+    // 重建整棵 MasterDetailLayout。所有活动阶段都使用确定 value，并明确显示
+    // 当前阶段与总百分比，不再出现来回播放的不定进度动画。
+    return ValueListenableBuilder<PreloadProgress>(
+      valueListenable: PreloadedDataService().preloadProgressListenable,
+      child: workspace,
+      builder: (context, progress, child) {
+        if (!progress.isActive) return child!;
+        final fraction = progress.fraction ?? 0.0;
+        final theme = Theme.of(context);
+        return Stack(
+          children: [
+            child!,
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: IgnorePointer(
+                child: Semantics(
+                  label: progress.semanticsLabel,
+                  value: '${progress.percent}%',
+                  child: Material(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    elevation: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  progress.semanticsLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                '${progress.percent}%',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: LinearProgressIndicator(
+                              value: fraction,
+                              minHeight: 4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

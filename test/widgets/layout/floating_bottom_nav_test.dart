@@ -69,6 +69,46 @@ void main() {
   RenderBox capsuleOf(WidgetTester tester) =>
       tester.renderObject<RenderBox>(find.byType(ClipRRect).first);
 
+  /// 只重建、不 settle：用于需要观察动画中间帧的用例。
+  Future<void> rebuildWithIndex(
+    WidgetTester tester, {
+    required bool labelless,
+    required int selectedIndex,
+    int count = 5,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        child: MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: screen,
+              padding: EdgeInsets.only(bottom: safeBottom),
+            ),
+            child: Scaffold(
+              extendBody: true,
+              bottomNavigationBar: AdaptiveBottomNavigation(
+                selectedIndex: selectedIndex,
+                onDestinationSelected: (_) {},
+                destinations: [
+                  for (var i = 0; i < count; i++)
+                    AdaptiveDestination(
+                      id: 'id$i',
+                      icon: const Icon(Icons.home_outlined),
+                      selectedIcon: const Icon(Icons.home),
+                      label: '标签$i',
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+  }
+
   testWidgets('带字态胶囊高 56，贴屏底 8 / 距左右 12', (tester) async {
     await pumpBar(tester, labelless: false);
     final box = capsuleOf(tester);
@@ -151,8 +191,6 @@ void main() {
     await pumpBar(tester, labelless: false, count: count);
 
     final capsule = capsuleOf(tester);
-    // pill 是 StadiumBorder 的 DecoratedBox；条目的墨水层也用 StadiumBorder，
-    // 这里按尺寸筛出 pill（宽 = 槽宽、高 = item 高）
     final itemHeight = capsule.size.height - 4 * 2;
     final slot = (capsule.size.width - 4 * 2) / count;
 
@@ -179,7 +217,6 @@ void main() {
       return d is ShapeDecoration && d.shape is StadiumBorder;
     });
 
-    // 入口数少到不触发宽度压缩（5 项在 390 宽下会被 maxWidth 压窄）
     await pumpBar(tester, labelless: false, count: 3);
     final labeled = tester.renderObject<RenderBox>(pill.first).size;
     expect(
@@ -267,12 +304,44 @@ void main() {
     await tester.longPress(find.text('标签1'));
     await tester.pumpAndSettle();
     expect(longPressed, isTrue);
-    // 长按不产生 tab 切换
     expect(switchedTo, isNull);
 
-    // 点按路径不受长按手势接入影响
     await tester.tap(find.text('标签1'));
     await tester.pumpAndSettle();
     expect(switchedTo, 1);
+  });
+
+  testWidgets('pill 飞行中横向拉伸，停下后恢复原宽', (tester) async {
+    final pill = find.byWidgetPredicate((w) {
+      if (w is! DecoratedBox) return false;
+      final d = w.decoration;
+      return d is ShapeDecoration && d.shape is StadiumBorder;
+    });
+    double paintedWidth() {
+      final box = tester.renderObject<RenderBox>(pill.first);
+      final left = box.localToGlobal(Offset.zero).dx;
+      final right = box.localToGlobal(Offset(box.size.width, 0)).dx;
+      return right - left;
+    }
+
+    await pumpBar(tester, labelless: false, selectedIndex: 0);
+    final restWidth = paintedWidth();
+
+    await rebuildWithIndex(tester, labelless: false, selectedIndex: 3);
+    var peak = restWidth;
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      final w = paintedWidth();
+      if (w > peak) peak = w;
+    }
+    expect(peak, greaterThan(restWidth * 1.02), reason: '飞行中应被拉长（至少 2%）');
+    expect(peak, lessThan(restWidth * 1.19), reason: '拉伸不得超过上限 18%');
+
+    await tester.pumpAndSettle();
+    expect(
+      paintedWidth(),
+      moreOrLessEquals(restWidth, epsilon: 0.5),
+      reason: '弹簧静止后回到原宽',
+    );
   });
 }

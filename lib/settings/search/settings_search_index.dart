@@ -4,6 +4,7 @@ import 'package:app_icons/app_icons.dart';
 import '../../l10n/s.dart';
 import '../../pages/appearance_page.dart';
 import '../../pages/bottom_nav_settings_page.dart';
+import '../../pages/custom_settings_page.dart';
 import '../../pages/data_management_page.dart';
 import '../../pages/network_settings_page/network_settings_page.dart';
 import '../../pages/preferences_page.dart';
@@ -12,6 +13,7 @@ import '../../pages/shortcut_settings_page.dart';
 import '../../utils/platform_utils.dart';
 import '../definitions/appearance_defs.dart';
 import '../definitions/bottom_nav_defs.dart';
+import '../definitions/custom_settings_defs.dart';
 import '../definitions/data_management_defs.dart';
 import '../definitions/network_defs.dart';
 import '../definitions/preferences_defs.dart';
@@ -75,6 +77,14 @@ List<SettingsSearchResult> buildSearchIndex(BuildContext context) {
           ReadingSettingsPage(highlightId: highlightId),
     ),
     ...fromGroups(
+      buildCustomSettingsGroups(context),
+      categoryName: CustomSettingsPage.titleFor(context),
+      categoryIcon: Symbols.dashboard_customize_rounded,
+      categoryColor: Colors.indigo,
+      pageBuilder: ({highlightId}) =>
+          CustomSettingsPage(highlightId: highlightId),
+    ),
+    ...fromGroups(
       buildPreferencesGroups(context),
       categoryName: l10n.settings_preferences,
       categoryIcon: Symbols.tune_rounded,
@@ -114,7 +124,6 @@ List<SettingsSearchResult> buildSearchIndex(BuildContext context) {
       pageBuilder: ({highlightId}) =>
           DataManagementPage(highlightId: highlightId),
     ),
-    // 快捷键（仅桌面端）
     if (PlatformUtils.isDesktop)
       ...fromGroups(
         buildShortcutGroups(context),

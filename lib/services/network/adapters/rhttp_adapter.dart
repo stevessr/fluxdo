@@ -9,10 +9,16 @@ import '../proxy/proxy_settings_service.dart';
 import '../rhttp/rhttp_settings_service.dart';
 import '../system_proxy_service.dart';
 
-/// 基于 rhttp (Rust reqwest) 的 Dio 适配器
+const _http3FailureBackoff = Duration(minutes: 10);
+const _http3SuccessTtl = Duration(hours: 1);
+const _http3ConnectTimeout = Duration(seconds: 3);
+const _normalConnectTimeout = Duration(seconds: 30);
+
+/// 基于 rhttp (Rust reqwest) 的 Dio 适配器。
 ///
-/// 支持 HTTP/2 多路复用、DOH DNS 解析（请求前静态注入）、
-/// 原生 HTTP/SOCKS5 代理、以及通过本地 Rust 代理中转 SS 连接。
+/// 直连 HTTPS 的可安全重放请求优先探测 HTTP/3/QUIC；成功后按 host 记忆，
+/// 失败则立即回退 HTTP/2/1.1 并短期熔断 H3，避免 UDP 被阻断时反复等待。
+/// 代理/本地中转仍使用普通 HTTP/2/1.1 链路。
 class RhttpAdapter implements HttpClientAdapter {
   RhttpAdapter(this._networkSettings, this._proxySettings);
 
@@ -23,8 +29,10 @@ class RhttpAdapter implements HttpClientAdapter {
   final Map<String, Future<_RhttpDelegate>> _delegateBuilds = {};
   final Map<String, String> _delegateBuildFingerprints = {};
   final Map<String, String> _clientFingerprints = {};
-  final Map<String, int> _hostBuildTokens = {};
+  final Map<String, int> _clientBuildTokens = {};
   final Map<String, rhttp.RhttpClient> _clients = {};
+  final Map<String, _Http3Capability> _http3Capabilities = {};
+
   int _buildEpoch = 0;
   int _settingsVersion = -1;
   int _proxyVersion = -1;
@@ -43,14 +51,56 @@ class RhttpAdapter implements HttpClientAdapter {
         "Can't establish connection after the adapter was closed.",
       );
     }
-    final host = options.uri.host;
-    final config = await _prepareClientConfig(host);
-    final delegate = await _ensureDelegate(config);
+
+    final baseConfig = await _prepareClientConfig(options.uri.host);
+    final shouldTryHttp3 = _shouldTryHttp3(options, requestStream, baseConfig);
+
+    if (shouldTryHttp3) {
+      final http3Config = baseConfig.withHttpVersion(rhttp.HttpVersionPref.http3);
+      try {
+        final response = await _fetchOnce(
+          options,
+          requestStream,
+          cancelFuture,
+          http3Config,
+        );
+        if (response.version == rhttp.HttpVersion.http3) {
+          _markHttp3Success(baseConfig.host);
+        }
+        _markConfigSuccess(http3Config, response.remoteIp);
+        return response.responseBody;
+      } catch (error) {
+        if (!_canFallbackFromHttp3(error)) {
+          rethrow;
+        }
+        _markHttp3Failure(baseConfig.host);
+        debugPrint(
+          '[DIO] RhttpAdapter HTTP/3 failed for ${baseConfig.host}; '
+          'falling back to HTTP/2/1.1: $error',
+        );
+      }
+    }
+
+    return _fetchWithAlternateIpRetry(
+      options,
+      requestStream,
+      cancelFuture,
+      baseConfig.withHttpVersion(rhttp.HttpVersionPref.all),
+    );
+  }
+
+  Future<ResponseBody> _fetchWithAlternateIpRetry(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+    _PreparedClientConfig config,
+  ) async {
     try {
-      final response = await delegate.fetch(
+      final response = await _fetchOnce(
         options,
         requestStream,
         cancelFuture,
+        config,
       );
       _markConfigSuccess(config, response.remoteIp);
       return response.responseBody;
@@ -63,7 +113,9 @@ class RhttpAdapter implements HttpClientAdapter {
           ? config.dnsOverrides.first
           : null;
       _networkSettings.reportHostConnectionFailure(config.host, attemptedIp);
-      final retryConfig = await _prepareClientConfig(host);
+
+      final retryConfig = (await _prepareClientConfig(config.host))
+          .withHttpVersion(rhttp.HttpVersionPref.all);
       if (retryConfig.clientFingerprint == config.clientFingerprint) {
         rethrow;
       }
@@ -73,15 +125,101 @@ class RhttpAdapter implements HttpClientAdapter {
         '(${attemptedIp ?? "system"} -> '
         '${retryConfig.dnsOverrides.isEmpty ? "system" : retryConfig.dnsOverrides.join(", ")})',
       );
-      final retryDelegate = await _ensureDelegate(retryConfig);
-      final response = await retryDelegate.fetch(
+      final response = await _fetchOnce(
         options,
         requestStream,
         cancelFuture,
+        retryConfig,
       );
       _markConfigSuccess(retryConfig, response.remoteIp);
       return response.responseBody;
     }
+  }
+
+  Future<_RhttpFetchResult> _fetchOnce(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+    _PreparedClientConfig config,
+  ) async {
+    final delegate = await _ensureDelegate(config);
+    return delegate.fetch(options, requestStream, cancelFuture);
+  }
+
+  bool _shouldTryHttp3(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    _PreparedClientConfig config,
+  ) {
+    if (!requestCanProbeRhttpHttp3(
+      options,
+      hasRequestStream: requestStream != null,
+    )) {
+      return false;
+    }
+    if (!_usesDirectTransport()) {
+      return false;
+    }
+
+    final capability = _http3Capabilities[config.host];
+    if (capability == null) {
+      return true;
+    }
+    if (DateTime.now().isAfter(capability.expiresAt)) {
+      _http3Capabilities.remove(config.host);
+      return true;
+    }
+    return capability.supported;
+  }
+
+  bool _usesDirectTransport() {
+    final ns = _networkSettings.current;
+    final ps = _proxySettings.current;
+
+    if (ns.customHosts.isNotEmpty && ns.proxyPort != null) {
+      return false;
+    }
+    if (ps.isValid) {
+      return false;
+    }
+    if (SystemProxyService.instance.effectiveProxyUrl != null) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _canFallbackFromHttp3(Object error) {
+    if (error is DioException) {
+      switch (error.type) {
+        case DioExceptionType.cancel:
+        case DioExceptionType.badCertificate:
+        case DioExceptionType.badResponse:
+          return false;
+        default:
+          return true;
+      }
+    }
+    return true;
+  }
+
+  void _markHttp3Success(String host) {
+    if (host.isEmpty) return;
+    final previous = _http3Capabilities[host];
+    _http3Capabilities[host] = _Http3Capability(
+      supported: true,
+      expiresAt: DateTime.now().add(_http3SuccessTtl),
+    );
+    if (previous?.supported != true) {
+      debugPrint('[DIO] RhttpAdapter HTTP/3 available: $host');
+    }
+  }
+
+  void _markHttp3Failure(String host) {
+    if (host.isEmpty) return;
+    _http3Capabilities[host] = _Http3Capability(
+      supported: false,
+      expiresAt: DateTime.now().add(_http3FailureBackoff),
+    );
   }
 
   Future<_RhttpDelegate> _ensureDelegate(_PreparedClientConfig config) {
@@ -103,29 +241,29 @@ class RhttpAdapter implements HttpClientAdapter {
       _systemProxyVersion = systemProxyVersion;
     }
 
-    final hostKey = config.hostKey;
+    final clientKey = config.clientKey;
     final fingerprint = config.clientFingerprint;
-    final delegate = _delegates[hostKey];
-    if (delegate != null && _clientFingerprints[hostKey] == fingerprint) {
+    final delegate = _delegates[clientKey];
+    if (delegate != null && _clientFingerprints[clientKey] == fingerprint) {
       return Future.value(delegate);
     }
 
-    final building = _delegateBuilds[hostKey];
+    final building = _delegateBuilds[clientKey];
     if (building != null &&
-        _delegateBuildFingerprints[hostKey] == fingerprint) {
+        _delegateBuildFingerprints[clientKey] == fingerprint) {
       return building;
     }
 
-    final hostBuildToken = (_hostBuildTokens[hostKey] ?? 0) + 1;
-    _hostBuildTokens[hostKey] = hostBuildToken;
+    final buildToken = (_clientBuildTokens[clientKey] ?? 0) + 1;
+    _clientBuildTokens[clientKey] = buildToken;
 
-    final future = _rebuildDelegate(config, _buildEpoch, hostBuildToken);
-    _delegateBuilds[hostKey] = future;
-    _delegateBuildFingerprints[hostKey] = fingerprint;
+    final future = _rebuildDelegate(config, _buildEpoch, buildToken);
+    _delegateBuilds[clientKey] = future;
+    _delegateBuildFingerprints[clientKey] = fingerprint;
     return future.whenComplete(() {
-      if (identical(_delegateBuilds[hostKey], future)) {
-        _delegateBuilds.remove(hostKey);
-        _delegateBuildFingerprints.remove(hostKey);
+      if (identical(_delegateBuilds[clientKey], future)) {
+        _delegateBuilds.remove(clientKey);
+        _delegateBuildFingerprints.remove(clientKey);
       }
     });
   }
@@ -133,17 +271,17 @@ class RhttpAdapter implements HttpClientAdapter {
   Future<_RhttpDelegate> _rebuildDelegate(
     _PreparedClientConfig config,
     int buildEpoch,
-    int hostBuildToken,
+    int buildToken,
   ) async {
     final client = await _createClient(config);
-    final hostKey = config.hostKey;
+    final clientKey = config.clientKey;
     final stillCurrent =
         !_closed &&
         buildEpoch == _buildEpoch &&
-        _hostBuildTokens[hostKey] == hostBuildToken;
+        _clientBuildTokens[clientKey] == buildToken;
     if (!stillCurrent) {
       client.dispose(cancelRunningRequests: true);
-      final existing = _delegates[hostKey];
+      final existing = _delegates[clientKey];
       if (existing != null) {
         return existing;
       }
@@ -151,14 +289,15 @@ class RhttpAdapter implements HttpClientAdapter {
     }
 
     final delegate = _RhttpDelegate(client);
+    _clients.remove(clientKey)?.dispose(cancelRunningRequests: true);
+    _clients[clientKey] = client;
+    _delegates[clientKey] = delegate;
+    _clientFingerprints[clientKey] = config.clientFingerprint;
 
-    _clients.remove(hostKey)?.dispose(cancelRunningRequests: true);
-    _clients[hostKey] = client;
-    _delegates[hostKey] = delegate;
-    _clientFingerprints[hostKey] = config.clientFingerprint;
     debugPrint(
       '[DIO] RhttpAdapter 重建完成 ${config.host} '
-      '(DNS: ${config.dnsOverrides.isEmpty ? "system" : config.dnsOverrides.join(", ")}'
+      '(HTTP: ${config.httpVersionPref.name}, '
+      'DNS: ${config.dnsOverrides.isEmpty ? "system" : config.dnsOverrides.join(", ")}'
       '${config.stickyIp != null ? " [sticky]" : ""}, '
       'ECH: ${config.echConfig == null ? "off" : "on"})',
     );
@@ -179,6 +318,7 @@ class RhttpAdapter implements HttpClientAdapter {
       stickyIp: resolvedHost.preferredIp,
       echConfig: resolvedHost.echConfig,
       dohEnabled: ns.dohEnabled,
+      httpVersionPref: rhttp.HttpVersionPref.all,
     );
   }
 
@@ -223,7 +363,6 @@ class RhttpAdapter implements HttpClientAdapter {
           }
           break;
         default:
-          // 其余枚举值(如 5.11 新增 transformTimeout)不视为可重试的连接失败
           break;
       }
     }
@@ -265,37 +404,23 @@ class RhttpAdapter implements HttpClientAdapter {
   Future<rhttp.RhttpClient> _createClient(_PreparedClientConfig config) async {
     final ns = _networkSettings.current;
     final ps = _proxySettings.current;
+    final connectTimeout = config.httpVersionPref == rhttp.HttpVersionPref.http3
+        ? _http3ConnectTimeout
+        : _normalConnectTimeout;
 
     return rhttp.RhttpClient.create(
       settings: rhttp.ClientSettings(
-        // 用 ALPN 协商 HTTP/2，避免 https 场景误用 prior knowledge 造成超时。
-        httpVersionPref: rhttp.HttpVersionPref.all,
-
-        // Dio 自己根据状态码处理，不让 rhttp 提前抛状态码异常。
+        httpVersionPref: config.httpVersionPref,
         throwOnStatusCode: false,
-
-        // DNS：请求前在 Dart 层完成解析，避免连接阶段再从 Rust 回调 Dart。
         dnsSettings: config.toDnsSettings(),
-
-        // TLS：始终传入 TlsSettings 以确保 cipher suite 重排生效（对齐 Chrome 指纹）
-        // ECH 配置可用时额外启用 ECH
         tlsSettings: rhttp.TlsSettings(echConfigList: config.echConfig),
-
-        // 代理配置
         proxySettings: _buildProxySettings(ns, ps),
-
-        // Cookie/重定向交给 Dio 拦截器
         cookieSettings: const rhttp.CookieSettings(storeCookies: false),
         redirectSettings: const rhttp.RedirectSettings.none(),
-
-        timeoutSettings: const rhttp.TimeoutSettings(
-          connectTimeout: Duration(seconds: 30),
-          // client 级 timeout 仅作进程兜底,真正的 per-request 超时由 Dio 的
-          // RequestOptions.receiveTimeout / connectTimeout 在上层控制。
-          // 这里若写死成 30s,会硬截断所有需要 >30s 的请求(如 MessageBus 长轮询
-          // 服务端 hold 25s),导致请求被 rhttp 提前 abort 抛 RhttpTimeoutException。
-          timeout: Duration(minutes: 10),
-          keepAliveTimeout: Duration(seconds: 60),
+        timeoutSettings: rhttp.TimeoutSettings(
+          connectTimeout: connectTimeout,
+          timeout: const Duration(minutes: 10),
+          keepAliveTimeout: const Duration(seconds: 60),
         ),
       ),
     );
@@ -312,19 +437,12 @@ class RhttpAdapter implements HttpClientAdapter {
     NetworkSettings ns,
     ProxySettings ps,
   ) {
-    // A hosts mapping must be applied before an HTTP/SOCKS upstream gets a
-    // chance to resolve the hostname. The local Rust proxy receives the same
-    // upstream settings and can connect to the pinned address instead.
     final localProxyPort = ns.proxyPort;
     if (ns.customHosts.isNotEmpty && localProxyPort != null) {
       return rhttp.ProxySettings.proxy('http://127.0.0.1:$localProxyPort');
     }
 
     if (!ps.isValid) {
-      // 未配置上游代理时,Windows 下跟随注册表系统代理,与 WebView2
-      // (默认走系统代理)保持同一出口。出口不一致时验证 WebView 铸出的
-      // cf_clearance 绑定代理节点 IP,对直连的 Dio 无效,会造成 CF 验证
-      // 无限循环。
       final systemProxy = SystemProxyService.instance.effectiveProxyUrl;
       if (systemProxy != null) {
         return rhttp.ProxySettings.proxy(systemProxy);
@@ -333,13 +451,11 @@ class RhttpAdapter implements HttpClientAdapter {
     }
 
     if (ps.isShadowsocks) {
-      // SS：经本地 Rust 代理（tunnel 模式）
       final port = ns.proxyPort;
       if (port == null) return const rhttp.ProxySettings.noProxy();
       return rhttp.ProxySettings.proxy('http://127.0.0.1:$port');
     }
 
-    // HTTP/SOCKS5：reqwest 原生支持
     final scheme = ps.protocol == UpstreamProxyProtocol.socks5
         ? 'socks5'
         : 'http';
@@ -354,15 +470,21 @@ class RhttpAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {
     _closed = true;
-    _disposeAllClients(force: force);
+    _disposeAllClients(force: force, clearHttp3Capabilities: true);
   }
 
-  void _disposeAllClients({bool force = false}) {
+  void _disposeAllClients({
+    bool force = false,
+    bool clearHttp3Capabilities = false,
+  }) {
     _buildEpoch++;
     _delegateBuilds.clear();
     _delegateBuildFingerprints.clear();
     _clientFingerprints.clear();
-    _hostBuildTokens.clear();
+    _clientBuildTokens.clear();
+    if (clearHttp3Capabilities) {
+      _http3Capabilities.clear();
+    }
     for (final client in _clients.values) {
       client.dispose(cancelRunningRequests: force);
     }
@@ -371,11 +493,37 @@ class RhttpAdapter implements HttpClientAdapter {
   }
 }
 
+@visibleForTesting
+bool requestCanProbeRhttpHttp3(
+  RequestOptions options, {
+  bool hasRequestStream = false,
+}) {
+  if (hasRequestStream) return false;
+  final uri = options.uri;
+  if (uri.scheme.toLowerCase() != 'https' || uri.host.isEmpty) {
+    return false;
+  }
+  final method = options.method.toUpperCase();
+  return method == 'GET' || method == 'HEAD' || method == 'OPTIONS';
+}
+
+class _Http3Capability {
+  const _Http3Capability({required this.supported, required this.expiresAt});
+
+  final bool supported;
+  final DateTime expiresAt;
+}
+
 class _RhttpFetchResult {
-  const _RhttpFetchResult({required this.responseBody, required this.remoteIp});
+  const _RhttpFetchResult({
+    required this.responseBody,
+    required this.remoteIp,
+    required this.version,
+  });
 
   final ResponseBody responseBody;
   final String? remoteIp;
+  final rhttp.HttpVersion version;
 }
 
 class _RhttpDelegate {
@@ -400,20 +548,22 @@ class _RhttpDelegate {
         cancelToken: cancelToken,
       );
 
+      final responseBody = ResponseBody(
+        response.body.cast<Uint8List>().handleError(
+          (error) {},
+          test: (error) => error.toString().contains('STREAM_CANCEL_ERROR'),
+        ),
+        response.statusCode,
+        headers: response.headerMapList,
+        isRedirect: false,
+      )
+        ..extra['remote_ip'] = response.remoteIp
+        ..extra['http_version'] = response.version.name;
+
       return _RhttpFetchResult(
-        responseBody: ResponseBody(
-          response.body.cast<Uint8List>().handleError(
-            // flutter_rust_bridge STREAM_CANCEL_ERROR：
-            // Dart 端取消了流（页面销毁/请求取消），Rust 端写入已关闭的 StreamSink。
-            // 等价于流正常结束，静默吞掉避免 SIGABRT 崩溃。
-            (error) {},
-            test: (error) => error.toString().contains('STREAM_CANCEL_ERROR'),
-          ),
-          response.statusCode,
-          headers: response.headerMapList,
-          isRedirect: false,
-        )..extra['remote_ip'] = response.remoteIp,
+        responseBody: responseBody,
         remoteIp: response.remoteIp,
+        version: response.version,
       );
     } on rhttp.RhttpException catch (error) {
       throw _mapRhttpException(options, error);
@@ -542,6 +692,7 @@ class _PreparedClientConfig {
     required this.stickyIp,
     required this.echConfig,
     required this.dohEnabled,
+    required this.httpVersionPref,
   });
 
   final String host;
@@ -550,13 +701,28 @@ class _PreparedClientConfig {
   final String? stickyIp;
   final Uint8List? echConfig;
   final bool dohEnabled;
+  final rhttp.HttpVersionPref httpVersionPref;
+
+  String get clientKey => '$hostKey|${httpVersionPref.name}';
 
   String get clientFingerprint {
     final dnsPart = dnsOverrides.isEmpty ? 'system' : dnsOverrides.join(',');
     final echPart = echConfig == null || echConfig!.isEmpty
         ? 'no-ech'
         : '${echConfig!.length}:${Object.hashAll(echConfig!)}';
-    return '$dohEnabled|$dnsPart|$echPart';
+    return '$dohEnabled|$dnsPart|$echPart|${httpVersionPref.name}';
+  }
+
+  _PreparedClientConfig withHttpVersion(rhttp.HttpVersionPref value) {
+    return _PreparedClientConfig(
+      host: host,
+      hostKey: hostKey,
+      dnsOverrides: dnsOverrides,
+      stickyIp: stickyIp,
+      echConfig: echConfig,
+      dohEnabled: dohEnabled,
+      httpVersionPref: value,
+    );
   }
 
   rhttp.DnsSettings? toDnsSettings() {

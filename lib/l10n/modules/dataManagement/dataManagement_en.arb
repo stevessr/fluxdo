@@ -8,8 +8,8 @@
   "dataManagement_apiKeysCount": "Contains {count} API Keys",
   "dataManagement_autoManagement": "Auto management",
   "dataManagement_backupSource": "Backup from: v{version}",
-  "dataManagement_backupSubject": "FluxDO Data Backup",
   "dataManagement_cacheManagement": "Cache management",
+  "dataManagement_cacheObjects": "{objects} physical copies · {references} logical references",
   "dataManagement_calculating": "Calculating...",
   "dataManagement_categoryAvatar": "Avatars",
   "dataManagement_categoryContent": "Post images",
@@ -35,6 +35,7 @@
   "dataManagement_cookieCache": "Cookie cache",
   "dataManagement_cookieCleared": "Cookie cache cleared, please log in again",
   "dataManagement_dataBackup": "Data backup",
+  "dataManagement_deduplicatedSpace": "Shared copies saved {size}",
   "dataManagement_exportData": "Export data",
   "dataManagement_exportDesc": "Export preferences to file",
   "dataManagement_exportSensitiveWarning": "The backup file contains sensitive data such as AI API keys, proxy passwords and Notion tokens. Keep it safe.",
@@ -52,5 +53,6 @@
   "dataManagement_importWarning": "Importing will overwrite current settings. Restart required.",
   "dataManagement_noCache": "No cache",
   "dataManagement_settingsCount": "Contains {count} settings",
+  "dataManagement_sharedCacheHint": "Category sizes are logical usage. Shared URLs are stored once; the total above is actual disk usage.",
   "dataManagement_title": "Data Management"
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cf_challenge_service.dart';
 import 'discourse/discourse_service.dart';
@@ -18,6 +19,9 @@ class ScreenTrack {
   static const _tickInterval = Duration(seconds: 1);
   static const _pauseUnlessScrolled = Duration(minutes: 3);
   static const _maxTrackingTime = Duration(minutes: 6);
+  static const _quickReadingEnabledKey = 'pref_quick_reading_enabled';
+  static const _quickReadingBatchSize = 2000;
+  static const _quickReadingPostTimeMs = 1000;
   static const _ajaxFailureDelays = [
     Duration(seconds: 5),
     Duration(seconds: 10),
@@ -32,6 +36,7 @@ class ScreenTrack {
   final CfChallengeService _cfService;
 
   int? _topicId;
+  int? _quickReadingHandledTopicId;
   Timer? _tickTimer;
   DateTime? _lastTick;
   DateTime? _lastScrolled;
@@ -76,11 +81,79 @@ class ScreenTrack {
     _reset();
     _topicId = topicId;
     _suppressCallbacks = false;
+    // 每个 ScreenTrack 页面实例只在首次进入该话题时执行一次快速阅读，
+    // 避免应用切后台/路由遮挡后的 stop→start 重复拉取和上报。
+    if (_quickReadingHandledTopicId != topicId) {
+      _quickReadingHandledTopicId = topicId;
+      unawaited(_sendQuickReadingTimings(topicId));
+    }
     // 监听 CF 验证状态：CF 触发时立即清空累积数据并冻结后续 tick；
     // CF 完成后从下一个 tick 起从 0 重新累积。
     _cfFrozen = _cfService.isVerifying;
     _cfService.inProgressNotifier.addListener(_onCfChange);
     _tickTimer ??= Timer.periodic(_tickInterval, (_) => _tick());
+  }
+
+  /// 快速阅读：进入话题后直接把当前未读楼层通过 timings 上报。
+  ///
+  /// Discourse 的 timings 以 post_number 为键；每次最多发送 2000 个楼层，
+  /// 大话题按顺序分批，任意一批失败就停止，避免跳过中间楼层形成已读空洞。
+  Future<void> _sendQuickReadingTimings(int topicId) async {
+    try {
+      if (!_service.isAuthenticated) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_quickReadingEnabledKey) != true) return;
+      if (_topicId != topicId || _suppressCallbacks || _cfFrozen) return;
+
+      // ScreenTrack 不持有 TopicDetail；用不计访问次数的详情请求取得服务端
+      // last_read/highest 游标。只在快速阅读开启时额外请求一次。
+      final detail = await _service.getTopicDetail(topicId, trackVisit: false);
+      if (_topicId != topicId || _suppressCallbacks || _cfFrozen) return;
+
+      final firstUnread = (detail.lastReadPostNumber ?? 0) + 1;
+      final highest = detail.highestPostNumber;
+      if (firstUnread > highest) return;
+
+      for (
+        var batchStart = firstUnread;
+        batchStart <= highest;
+        batchStart += _quickReadingBatchSize
+      ) {
+        if (_topicId != topicId || _suppressCallbacks || _cfFrozen) return;
+        final candidateEnd = batchStart + _quickReadingBatchSize - 1;
+        final batchEnd = candidateEnd < highest ? candidateEnd : highest;
+        final timings = <int, int>{};
+        for (var postNumber = batchStart; postNumber <= batchEnd; postNumber++) {
+          timings[postNumber] = _quickReadingPostTimeMs;
+        }
+
+        final statusCode = await _service.topicsTimings(
+          topicId: topicId,
+          topicTime: timings.length * _quickReadingPostTimeMs,
+          timings: timings,
+          logContext: {
+            if (debugSourceId != null) 'screenTrackSourceId': debugSourceId,
+            'quickReading': true,
+            'batchStart': batchStart,
+            'batchEnd': batchEnd,
+            'batchSize': timings.length,
+          },
+        );
+        if (statusCode == null || statusCode >= 400) {
+          debugPrint(
+            '[ScreenTrack] 快速阅读 timings 上报失败 status=$statusCode '
+            'topicId=$topicId batch=$batchStart-$batchEnd',
+          );
+          return;
+        }
+
+        if (onTimingsSent != null && !_suppressCallbacks) {
+          onTimingsSent!(topicId, timings.keys.toSet(), batchEnd);
+        }
+      }
+    } catch (e) {
+      debugPrint('[ScreenTrack] 快速阅读 timings 上报失败: $e');
+    }
   }
 
   void stop() {
@@ -111,8 +184,6 @@ class ScreenTrack {
   void _onCfChange() {
     final inProgress = _cfService.inProgressNotifier.value;
     if (inProgress) {
-      // 进入 CF 验证：丢弃已累积但未上报的 timings/topicTime/退避状态。
-      // _totalTimings 不清——它是"上次发到哪了"的基准，CF 后继续作为去重依据。
       _timings.clear();
       _consolidatedTimings.clear();
       _topicTime = 0;
@@ -122,8 +193,6 @@ class ScreenTrack {
       _cfFrozen = true;
       debugPrint('[ScreenTrack] CF 验证开始，冻结采集并丢弃未上报数据 sourceId=$debugSourceId');
     } else {
-      // CF 完成：重置 _lastTick，下次 tick 用新的时间戳算 diff，
-      // 避免把 CF 期间的真实流逝时间也算进 _topicTime。
       _lastTick = DateTime.now();
       _lastScrolled = DateTime.now();
       _lastFlush = Duration.zero;
@@ -168,18 +237,14 @@ class ScreenTrack {
   void _tick() {
     if (_cfFrozen) return;
     final now = DateTime.now();
-
-    // 长时间未滚动则暂停追踪
     final sinceScrolled = now.difference(_lastScrolled ?? now);
     if (sinceScrolled > _pauseUnlessScrolled) return;
 
     final diffDuration = now.difference(_lastTick ?? now);
     _lastTick = now;
-
     final diff = diffDuration.inMilliseconds;
     _lastFlush += diffDuration;
 
-    // 检查是否需要立即上报（有新的未上报帖子）
     final rush = _timings.entries.any(
       (e) =>
           e.value > 0 &&
@@ -190,18 +255,15 @@ class ScreenTrack {
     if (!_inProgress && (_lastFlush > _flushInterval || rush)) {
       _flush();
     }
-
     if (!_inProgress) {
       _sendNextConsolidatedTiming();
     }
-
     if (!_hasFocus) return;
 
     _topicTime += diff;
     for (final postNumber in _onscreen) {
       _timings[postNumber] = (_timings[postNumber] ?? 0) + diff;
     }
-
     for (final postNumber in _readOnscreen) {
       _readPosts.add(postNumber);
     }
@@ -217,7 +279,6 @@ class ScreenTrack {
       final postNumber = entry.key;
       final time = entry.value;
       final totalTime = _totalTimings[postNumber] ?? 0;
-
       if (time > 0 && totalTime < _maxTrackingTime.inMilliseconds) {
         _totalTimings[postNumber] = totalTime + time;
         newTimings[postNumber] = time;
@@ -237,7 +298,6 @@ class ScreenTrack {
       }
       _topicTime = 0;
     }
-
     _lastFlush = Duration.zero;
   }
 
@@ -288,7 +348,6 @@ class ScreenTrack {
         },
       );
 
-      // 上报成功后调用回调，同步本地状态
       if (statusCode != null && statusCode < 400) {
         _ajaxFailures = 0;
         if (next.timings.isNotEmpty &&

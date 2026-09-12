@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/topic.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/discourse/discourse_service.dart';
+import '../../services/discourse/solved_topics_extension.dart';
 import '../../utils/paged_async_notifier.dart';
 import '../../utils/pagination_helper.dart';
 import '../core_providers.dart';
@@ -13,6 +15,7 @@ import '../message_bus/topic_tracking_providers.dart';
 import 'filter_provider.dart';
 import 'sort_provider.dart';
 import 'tab_state_provider.dart';
+import 'topic_refresh_merge.dart';
 
 /// 话题列表 Notifier (支持分页、静默刷新和筛选)
 class TopicListNotifier extends AsyncNotifier<List<Topic>>
@@ -59,33 +62,80 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
         ? ref.read(topicNewSubsetProvider).apiValue
         : null;
 
-    // 优化：如果是 latest 列表且没有筛选条件且没有自定义排序，优先同步使用预加载数据
-    // 这样可以避免显示 loading 状态
+    // latest 首屏允许直接消费 preload 的累计解析快照。第一批完成就结束
+    // AsyncLoading，后续每个批次继续替换 state；最终批次仍携带原始
+    // more_topics_url，因此不会改变后面的正常分页协议。
     if (currentFilter == TopicListFilter.latest &&
         filter.isEmpty &&
         orderParam == null) {
       final preloadedService = PreloadedDataService();
       final preloadedData = preloadedService.getInitialTopicListSync();
       if (preloadedData != null) {
-        final result = _paginationHelper.processRefresh(
-          PaginationResult(
-            items: preloadedData.topics,
-            moreUrl: preloadedData.moreTopicsUrl,
-          ),
-        );
-        return completePagedRefresh(PagedPage.fromPagination(result));
+        return _completePreloadedRefresh(preloadedData);
       }
+
       if (preloadedService.hasInitialTopicList) {
-        final asyncPreloaded = await preloadedService.getInitialTopicList();
-        if (asyncPreloaded != null) {
-          final result = _paginationHelper.processRefresh(
-            PaginationResult(
-              items: asyncPreloaded.topics,
-              moreUrl: asyncPreloaded.moreTopicsUrl,
-            ),
-          );
-          return completePagedRefresh(PagedPage.fromPagination(result));
+        var acceptProgressiveUpdates = false;
+        var listenerAttached = false;
+        final progressiveListenable =
+            preloadedService.progressiveTopicListListenable;
+        late final VoidCallback onProgressiveTopicList;
+
+        void detachProgressiveListener() {
+          acceptProgressiveUpdates = false;
+          if (!listenerAttached) return;
+          listenerAttached = false;
+          progressiveListenable.removeListener(onProgressiveTopicList);
         }
+
+        onProgressiveTopicList = () {
+          if (!acceptProgressiveUpdates) return;
+          final snapshot = progressiveListenable.value;
+          if (snapshot == null) return;
+          // 后续批次只追加“新解析出来”的 topic。已经显示过的对象保留
+          // 当前 state 版本，避免 MessageBus、已读游标或用户操作刚更新完，
+          // 下一份 preload 累计快照又把它覆盖回启动时的旧状态。
+          state = AsyncValue.data(_mergeProgressivePreloadedSnapshot(snapshot));
+
+          // ValueNotifier 会在 _setPreloadProgress(complete) 之前同步通知
+          // topic snapshot listener，因此把解绑检查放到 microtask；这样最终批次
+          // 发布完成后就停止监听，避免未来账号的 preload 快照串进旧列表。
+          scheduleMicrotask(() {
+            if (!acceptProgressiveUpdates) return;
+            final phase = preloadedService.preloadProgress.phase;
+            if (phase == PreloadPhase.complete ||
+                phase == PreloadPhase.failed) {
+              detachProgressiveListener();
+            }
+          });
+        };
+
+        progressiveListenable.addListener(onProgressiveTopicList);
+        listenerAttached = true;
+        ref.onDispose(detachProgressiveListener);
+
+        final firstBatch = await preloadedService
+            .getInitialTopicListFirstBatch();
+        if (firstBatch != null) {
+          acceptProgressiveUpdates = true;
+          // 若第一批 future 唤醒到这里时下一批已完成，直接取最新累计快照，
+          // 避免恰好落在 listener 开闸之前的那一次通知被错过。
+          final latest =
+              preloadedService.progressiveTopicListSync ?? firstBatch;
+
+          // AsyncNotifier.build 的返回值会由 Riverpod 再写入一次 state。
+          // 下一事件循环重新对账当前累计快照，堵住“第二批先由 listener 写入、
+          // 随后 build 的首批返回值反而覆盖新 state”的极窄竞态窗口。
+          unawaited(
+            Future<void>.delayed(Duration.zero, () {
+              if (!acceptProgressiveUpdates) return;
+              onProgressiveTopicList();
+            }),
+          );
+          return _completePreloadedRefresh(latest);
+        }
+
+        detachProgressiveListener();
       }
     }
 
@@ -107,6 +157,31 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
     return completePagedRefresh(PagedPage.fromPagination(result));
   }
 
+  List<Topic> _completePreloadedRefresh(TopicListResponse response) {
+    final result = _paginationHelper.processRefresh(
+      PaginationResult(items: response.topics, moreUrl: response.moreTopicsUrl),
+    );
+    return completePagedRefresh(PagedPage.fromPagination(result));
+  }
+
+  List<Topic> _mergeProgressivePreloadedSnapshot(TopicListResponse response) {
+    final current = state.value;
+    if (current == null || current.isEmpty) {
+      return _completePreloadedRefresh(response);
+    }
+
+    final topicIds = current.map((topic) => topic.id).toSet();
+    final merged = <Topic>[
+      ...current,
+      for (final topic in response.topics)
+        if (topicIds.add(topic.id)) topic,
+    ];
+    final result = _paginationHelper.processRefresh(
+      PaginationResult(items: merged, moreUrl: response.moreTopicsUrl),
+    );
+    return completePagedRefresh(PagedPage.fromPagination(result));
+  }
+
   Future<TopicListResponse> _fetchTopics(
     DiscourseService service,
     TopicListFilter filter,
@@ -116,6 +191,23 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
     bool? ascending,
     String? subset,
   }) {
+    // discourse-solved 在普通 latest 列表上通过 solved=yes|no 过滤。
+    // 必须先于通用分类/标签分支处理，否则组合筛选会漏掉 solved 参数。
+    if (filter == TopicListFilter.solved ||
+        filter == TopicListFilter.unsolved) {
+      return service.getSolvedFilteredTopics(
+        filter: 'latest',
+        solved: filter == TopicListFilter.solved,
+        categoryId: filterParams.categoryId,
+        categorySlug: filterParams.categorySlug,
+        parentCategorySlug: filterParams.parentCategorySlug,
+        tags: filterParams.tags.isNotEmpty ? filterParams.tags : null,
+        page: page,
+        order: order,
+        ascending: ascending,
+      );
+    }
+
     // 如果有筛选条件，使用 getFilteredTopics
     if (filterParams.isNotEmpty) {
       final filterName = _getFilterName(filter);
@@ -163,6 +255,16 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
         );
       case TopicListFilter.unseen:
         return service.getUnseenTopics(
+          page: page,
+          order: order,
+          ascending: ascending,
+        );
+      case TopicListFilter.solved:
+      case TopicListFilter.unsolved:
+        // 该分支在上方已处理；保留穷尽分支避免未来 enum 扩展时静默漏项。
+        return service.getSolvedFilteredTopics(
+          filter: 'latest',
+          solved: filter == TopicListFilter.solved,
           page: page,
           order: order,
           ascending: ascending,
@@ -370,27 +472,10 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
       final service = ref.read(discourseServiceProvider);
       final detail = await service.getTopicDetail(topicId);
 
-      final updatedTopic = Topic(
-        id: detail.id,
-        title: detail.title,
-        slug: detail.slug,
-        categoryId: detail.categoryId.toString(),
-        postsCount: detail.postsCount,
-        replyCount: detail.postsCount > 0 ? detail.postsCount - 1 : 0,
-        views: existingTopic.views,
-        likeCount: existingTopic.likeCount,
-        lastPostedAt: existingTopic.lastPostedAt,
-        pinned: existingTopic.pinned,
-        tags: detail.tags ?? existingTopic.tags,
-        posters: existingTopic.posters,
-        unseen: false,
-        unread: 0,
-        lastReadPostNumber: detail.postsCount,
-        highestPostNumber: detail.postsCount,
-        lastPosterUsername: detail.postStream.posts.isNotEmpty
-            ? detail.postStream.posts.last.username
-            : existingTopic.lastPosterUsername,
-      );
+      // 详情接口和列表接口的 serializer 字段并不相同。增量合并而非重建
+      // Topic，避免后台 MessageBus 刷新抹掉书签/Solved/摘要等列表元数据，
+      // 更不能因为一次后台刷新就把未读游标推进到末尾。
+      final updatedTopic = mergeTopicListItemFromDetail(existingTopic, detail);
 
       final newList = currentTopics.map((t) {
         return t.id == topicId ? updatedTopic : t;
@@ -457,7 +542,10 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
       final tracked = tracking[topic.id];
       if (tracked == null) continue;
 
-      final highest = math.max(tracked.highestPostNumber, topic.highestPostNumber);
+      final highest = math.max(
+        tracked.highestPostNumber,
+        topic.highestPostNumber,
+      );
       final trackedLastRead = tracked.lastReadPostNumber;
       final topicLastRead = topic.lastReadPostNumber;
       final lastRead = trackedLastRead == null
@@ -468,7 +556,9 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
 
       // 未读数口径对齐服务端 lib/unread.rb:没读过的话题 unread 恒为 0
       // (它走 unseen/NEW 语义,不走未读计数)
-      final newUnread = lastRead == null ? 0 : (highest - lastRead).clamp(0, highest);
+      final newUnread = lastRead == null
+          ? 0
+          : (highest - lastRead).clamp(0, highest);
       // 对齐网页版 updateTopics 的 unseen 回写:读过或已被忽略
       // (dismiss_new 置 isSeen)都不再算新话题
       final newUnseen = lastRead == null && !tracked.isSeen && topic.unseen;

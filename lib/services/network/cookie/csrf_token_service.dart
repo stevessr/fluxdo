@@ -17,8 +17,18 @@ class CsrfTokenService {
   static const String _csrfTokenKey = 'linux_do_csrf_token';
 
   final ResilientSecureStorage _storage = ResilientSecureStorage();
+  Future<void> _storageTail = Future<void>.value();
 
   String? _csrfToken;
+
+  /// SecureStorage 跨调用不保证完成顺序。CSRF 的 set/clear/reset 都排进同一
+  /// 队列，这样 reset 可以只同步清内存、把持久化删除留在后台，而不会出现
+  /// 旧 delete 晚于新账号 write 返回、反过来把新 token 删除的竞态。
+  Future<void> _enqueueStorage(Future<void> Function() operation) {
+    final result = _storageTail.then((_) => operation());
+    _storageTail = result.then<void>((_) {}, onError: (_) {});
+    return result;
+  }
 
   /// 取 CSRF 用的 Dio。
   ///
@@ -60,6 +70,8 @@ class CsrfTokenService {
 
   /// 初始化：从本地存储恢复 CSRF token
   Future<void> init() async {
+    // 若进程内已经有排队的 set/clear，先等它们落稳再读，避免读回旧值。
+    await _storageTail;
     final raw = await _storage.read(key: _csrfTokenKey);
     if (raw != null && raw.isNotEmpty) {
       _csrfToken = raw;
@@ -70,10 +82,11 @@ class CsrfTokenService {
     if (token == null || token.isEmpty) return;
     _csrfToken = token;
     // 持久化是尽力而为:内存里的 token 已经可用,落盘只为跨进程复用。
-    // keychain 不可用(权限/插件缺失/系统异常)不该让本次刷新算失败,
-    // 更不该冒泡成未处理的异步错误。
+    // 所有写删经 _storageTail 保序，因此可安全留在后台，不阻塞业务请求。
     unawaited(
-      _storage.write(key: _csrfTokenKey, value: token).catchError((Object e) {
+      _enqueueStorage(
+        () => _storage.write(key: _csrfTokenKey, value: token),
+      ).catchError((Object e) {
         debugPrint('[CsrfTokenService] CSRF token 持久化失败(忽略): $e');
       }),
     );
@@ -85,7 +98,9 @@ class CsrfTokenService {
     // BAD CSRF 说明业务请求已到达服务端(非 CF 拦截),放行下一次刷新
     _lastFailureAt = null;
     unawaited(
-      _storage.delete(key: _csrfTokenKey).catchError((Object e) {
+      _enqueueStorage(() => _storage.delete(key: _csrfTokenKey)).catchError((
+        Object e,
+      ) {
         debugPrint('[CsrfTokenService] CSRF token 清除失败(忽略): $e');
       }),
     );
@@ -206,15 +221,18 @@ class CsrfTokenService {
     return null;
   }
 
-  /// 重置（登出时调用）
+  /// 重置（登出/切换账号时调用）。
   Future<void> reset() async {
     _csrfToken = null;
     _lastFailureAt = null;
-    // 内存态已清,落盘失败不影响登出正确性
-    try {
-      await _storage.delete(key: _csrfTokenKey);
-    } catch (e) {
-      debugPrint('[CsrfTokenService] CSRF token 清除失败(忽略): $e');
-    }
+    // 正确性依赖的是同步清掉内存 token；持久化删除已经由队列保证一定排在
+    // 后续新账号 token 写入之前，因此无需让登录/切换 UI 等 SecureStorage RTT。
+    unawaited(
+      _enqueueStorage(() => _storage.delete(key: _csrfTokenKey)).catchError((
+        Object e,
+      ) {
+        debugPrint('[CsrfTokenService] CSRF token 清除失败(忽略): $e');
+      }),
+    );
   }
 }

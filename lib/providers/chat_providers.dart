@@ -122,6 +122,51 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
       ),
     );
   }
+
+  /// 已读 API 成功后同步本地频道水位。
+  ///
+  /// 水位只允许向前推进；只有确实读到当前已知最新消息时才把未读/提及清零，
+  /// 避免浏览历史消息时过早消除频道角标。
+  void markChannelReadLocally(int channelId, int messageId) {
+    final current = state.value;
+    if (current == null || messageId <= 0) return;
+
+    state = AsyncData(
+      current.mapChannel(channelId, (channel) {
+        final previous = channel.lastReadMessageId;
+        if (previous != null && messageId <= previous) return channel;
+
+        final latestMessageId = channel.lastMessage?.id;
+        final reachedLatest =
+            latestMessageId != null && messageId >= latestMessageId;
+        return channel.copyWith(
+          lastReadMessageId: messageId,
+          unreadCount: reachedLatest ? 0 : channel.unreadCount,
+          unreadMentions: reachedLatest ? 0 : channel.unreadMentions,
+        );
+      }),
+    );
+  }
+
+  /// “全部已读”成功后的本地同步，立即消除角标，再静默向服务端校准。
+  void markAllReadLocally() {
+    final current = state.value;
+    if (current == null) return;
+
+    ChatChannel markRead(ChatChannel channel) => channel.copyWith(
+      lastReadMessageId: channel.lastMessage?.id ?? channel.lastReadMessageId,
+      unreadCount: 0,
+      unreadMentions: 0,
+    );
+
+    state = AsyncData(
+      current.copyWith(
+        publicChannels: current.publicChannels.map(markRead).toList(),
+        directMessageChannels:
+            current.directMessageChannels.map(markRead).toList(),
+      ),
+    );
+  }
 }
 
 final chatChannelsProvider =
@@ -149,13 +194,52 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
   /// 定位到指定消息 ID 时传入
   int? targetMessageId;
 
-  /// 已标记已读的最大 message id，避免 build 反复打 read API
+  /// 服务端已经确认的最大已读 message id。
   int? _lastMarkedReadId;
+
+  /// 等待上报的最大 message id。快速滚动期间只保留最新水位。
+  int? _pendingReadId;
+
+  /// 同一频道始终只允许一个已读请求在途，避免请求乱序造成水位回退。
+  bool _isMarkingRead = false;
+
+  /// 从频道 membership 快照读取服务端已知水位。
+  ///
+  /// Discourse 会拒绝小于现有 last_read_message_id 的 read 请求（400），因此
+  /// 搜索/通知跳到历史消息时必须先用频道快照作为下界，不能从 null 重新起算。
+  int? _knownChannelReadWatermark() {
+    final channelsState = ref.read(chatChannelsProvider).value;
+    if (channelsState == null) return null;
+
+    for (final channel in [
+      ...channelsState.publicChannels,
+      ...channelsState.directMessageChannels,
+    ]) {
+      if (channel.id == channelId) return channel.lastReadMessageId;
+    }
+    return null;
+  }
+
+  void _syncKnownChannelReadWatermark() {
+    final known = _knownChannelReadWatermark();
+    if (known == null) return;
+
+    final committed = _lastMarkedReadId;
+    if (committed == null || known > committed) {
+      _lastMarkedReadId = known;
+    }
+    final pending = _pendingReadId;
+    if (pending != null && pending <= known) {
+      _pendingReadId = null;
+    }
+  }
 
   @override
   Future<List<ChatMessage>> build() async {
     resetPagingState();
-    _lastMarkedReadId = null;
+    _lastMarkedReadId = _knownChannelReadWatermark();
+    _pendingReadId = null;
+    _isMarkingRead = false;
     _subscribeMessageBus();
     final loaded = await _loadInitialMessages();
     return completePagedRefresh(
@@ -694,20 +778,72 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     }
   }
 
-  /// 标记已读（同 id / 更旧 id 跳过，避免 build 反复请求）
+  /// 推进频道已读水位。
+  ///
+  /// 快速滚动时可能在一个请求完成前连续产生多个可见消息 id：这里将它们
+  /// 合并为“最大待发送水位”，并保证同一频道始终只有一个 API 请求在途。
+  /// 服务端成功后才推进 [_lastMarkedReadId]，失败则保留 pending，等待后续
+  /// 可见性/滚动事件重试，因此不会因为乱序完成或单次失败造成水位回退。
   Future<void> markAsRead(int messageId) async {
-    if (_lastMarkedReadId != null && messageId <= _lastMarkedReadId!) {
-      return;
+    if (messageId <= 0) return;
+
+    // 频道列表可能刚被 MessageBus/静默刷新推进过；每次提交前都先同步下界。
+    _syncKnownChannelReadWatermark();
+    final committed = _lastMarkedReadId;
+    if (committed != null && messageId <= committed) return;
+
+    final pending = _pendingReadId;
+    if (pending == null || messageId > pending) {
+      _pendingReadId = messageId;
     }
-    _lastMarkedReadId = messageId;
+
+    if (_isMarkingRead) return;
+    await _flushReadQueue();
+  }
+
+  Future<void> _flushReadQueue() async {
+    if (_isMarkingRead) return;
+    _isMarkingRead = true;
+
     try {
       final service = ref.read(discourseServiceProvider);
-      await service.markChannelRead(channelId, messageId);
-    } catch (_) {
-      // 已读失败不阻塞 UI；允许下次重试
-      if (_lastMarkedReadId == messageId) {
-        _lastMarkedReadId = null;
+      while (true) {
+        _syncKnownChannelReadWatermark();
+        final messageId = _pendingReadId;
+        if (messageId == null) break;
+
+        final committed = _lastMarkedReadId;
+        if (committed != null && messageId <= committed) {
+          _pendingReadId = null;
+          continue;
+        }
+
+        // 先移出 pending；请求过程中出现的更新 id 会重新写入 pending，
+        // 当前请求完成后直接继续发送最新值，中间水位不会产生额外请求。
+        _pendingReadId = null;
+        try {
+          await service.markChannelRead(channelId, messageId);
+          _lastMarkedReadId = messageId;
+          ref
+              .read(chatChannelsProvider.notifier)
+              .markChannelReadLocally(channelId, messageId);
+        } catch (_) {
+          // 恢复失败的水位，同时保留请求期间出现的更大水位。
+          final pendingAfterFailure = _pendingReadId;
+          if (pendingAfterFailure == null || messageId > pendingAfterFailure) {
+            _pendingReadId = messageId;
+          }
+          // 可能是服务端已有更高水位导致的 400，也可能是临时网络异常。
+          // 静默刷新 membership；后续触发会先同步新的服务端下界再决定是否重试。
+          unawaited(
+            ref.read(chatChannelsProvider.notifier).refreshSilently(),
+          );
+          // 不在这里紧循环重试，避免网络故障时产生请求风暴。
+          break;
+        }
       }
+    } finally {
+      _isMarkingRead = false;
     }
   }
 
@@ -844,7 +980,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
       return;
     }
 
-    // 消息不在频道窗口
+    // 消息不在当前窗口
     final currentlyBookmarked = knownBookmarked ?? false;
     final nextBookmarked = !currentlyBookmarked;
     if (!nextBookmarked && (knownBookmarkId == null || knownBookmarkId <= 0)) {
@@ -1058,7 +1194,8 @@ final chatUnreadProvider = Provider<int>((ref) {
   final channelsState = ref.watch(chatChannelsProvider).value;
   if (channelsState == null) return 0;
 
-  // 优先用已合并到频道上的未读；tracking 作为兜底
+  // 优先使用已经合并到频道对象上的权威快照。即使总数恰好为 0 也直接返回，
+  // 否则会回退到尚未同步的 tracking，把刚清掉的未读角标“复活”。
   var total = 0;
   final all = [
     ...channelsState.publicChannels,
@@ -1069,9 +1206,10 @@ final chatUnreadProvider = Provider<int>((ref) {
       // 对齐官方：公开频道偏 mention，DM 偏 unread_count；这里汇总两者避免漏计
       total += ch.unreadCount + ch.unreadMentions;
     }
-    if (total > 0) return total;
+    return total;
   }
 
+  // 极端情况下频道对象还没有解析出来，才使用原始 tracking 兜底。
   for (final entry in channelsState.tracking.entries) {
     total += (entry.value['unread_count'] as num?)?.toInt() ?? 0;
     total +=
@@ -1643,7 +1781,7 @@ final chatFavoritesProvider = NotifierProvider<ChatFavoritesNotifier, Set<int>>(
 /// 8. 频道浏览 Provider（论坛所有公开频道）
 /// ============================================================================
 
-/// 浏览频道请求参数
+/// 频道浏览参数
 class BrowseChannelsParams {
   final String? status;
   final String? filter;
@@ -1719,7 +1857,12 @@ final unfollowChannelProvider = FutureProvider.family<void, int>((
 final markAllChatChannelsReadProvider = FutureProvider<void>((ref) async {
   final service = ref.read(discourseServiceProvider);
   await service.markAllChannelsRead();
-  ref.invalidate(chatChannelsProvider);
+
+  // 请求成功后先本地立即清除角标，再静默获取一次服务端权威状态。
+  // 避免 invalidate 进入 loading 导致列表闪烁，也避免用户看到旧未读数残留。
+  final notifier = ref.read(chatChannelsProvider.notifier);
+  notifier.markAllReadLocally();
+  unawaited(notifier.refreshSilently());
 });
 
 /// ============================================================================

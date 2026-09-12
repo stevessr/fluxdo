@@ -13,6 +13,7 @@ import '../services/deep_link_service.dart';
 import '../services/toast_service.dart';
 import '../services/app_link_service.dart';
 import '../services/network/cookie/cookie_store_observer.dart';
+import '../services/network/cookie/site_cookie_cleanup_service.dart';
 import '../services/network/cookie/webview_cookie_priming.dart';
 import '../services/webview_settings.dart';
 import '../services/windows_webview_environment_service.dart';
@@ -214,6 +215,16 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                       const Icon(Symbols.content_copy_rounded),
                       const SizedBox(width: 8),
                       Text(context.l10n.common_copyLink),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'clear_site_cookies',
+                  child: Row(
+                    children: [
+                      const Icon(Symbols.cookie_rounded),
+                      const SizedBox(width: 8),
+                      const Text('Cookie'),
                     ],
                   ),
                 ),
@@ -452,6 +463,9 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
       case 'copy_url':
         _copyUrl();
         break;
+      case 'clear_site_cookies':
+        unawaited(_showSiteCookieCleanup());
+        break;
       case 'open_external':
         _openInExternalBrowser();
         break;
@@ -507,6 +521,94 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
     } finally {
       focusNode.dispose();
       textController.dispose();
+      if (mounted && _webViewSnapshot != null) {
+        setState(() => _webViewSnapshot = null);
+      }
+    }
+  }
+
+  Future<void> _showSiteCookieCleanup() async {
+    final uri = Uri.tryParse(_currentUrl);
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      return;
+    }
+
+    final currentHost = uri.host.toLowerCase();
+    final hosts = await SiteCookieCleanupService.instance.discoverRelatedHosts(
+      _currentUrl,
+    );
+    if (!mounted || hosts.isEmpty) return;
+
+    final selected = <String>{currentHost};
+    final snapshot = await _controller?.takeScreenshot();
+    if (!mounted) return;
+    if (snapshot != null) {
+      setState(() => _webViewSnapshot = snapshot);
+    }
+
+    try {
+      final confirmed = await showAppDialog<bool>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('Cookie'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420, minWidth: 320),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final host in hosts)
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: selected.contains(host),
+                        title: Text(host),
+                        secondary: host == currentHost
+                            ? const Icon(Symbols.language_rounded)
+                            : null,
+                        onChanged: host == currentHost
+                            ? null
+                            : (value) {
+                                setDialogState(() {
+                                  if (value == true) {
+                                    selected.add(host);
+                                  } else {
+                                    selected.remove(host);
+                                  }
+                                });
+                              },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(context.l10n.common_cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(context.l10n.common_clear),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (confirmed != true) return;
+
+      await SiteCookieCleanupService.instance.clearHosts(selected);
+      if (!mounted) return;
+      await _controller?.reload();
+      ToastService.showSuccess('Cookie (${selected.length})');
+    } catch (e) {
+      if (mounted) {
+        ToastService.showError(context.l10n.common_clearFailed(e.toString()));
+      }
+    } finally {
       if (mounted && _webViewSnapshot != null) {
         setState(() => _webViewSnapshot = null);
       }
