@@ -120,7 +120,7 @@ Discourse
       await cache.writeCurrentAccount(cachedHtml);
       now = now.add(PreloadCacheService.startupFastPathTtl);
 
-      const liveHtml = '''
+      const liveHtml = r'''
 <html>
 <script id="data-preloaded" type="application/json">{"site":"{}","siteSettings":"{}","currentUser":"{\"username\":\"fresh\"}"}</script>
 </html>
