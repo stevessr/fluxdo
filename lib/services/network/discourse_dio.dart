@@ -11,6 +11,7 @@ import 'interceptors/cf_challenge_terminal_interceptor.dart';
 import 'interceptors/discourse_base_path_interceptor.dart';
 import 'interceptors/error_interceptor.dart';
 import 'interceptors/http_revalidation_interceptor.dart';
+import 'interceptors/message_bus_isolation_interceptor.dart';
 import 'interceptors/network_log_interceptor.dart';
 import 'interceptors/preload_cache_interceptor.dart';
 import 'interceptors/redirect_interceptor.dart';
@@ -71,6 +72,10 @@ class DiscourseDio {
     // 合并会把该请求解析回域名根目录。这里统一改成 /forum/latest.json，
     // 后续缓存、调度、日志和恢复层看到的都是最终站内路径。
     dio.interceptors.add(DiscourseBasePathInterceptor(effectiveBaseUrl));
+
+    // MessageBus 可能位于主站或独立 origin。relative-root 补齐后立即把它
+    // 标记为纯消息通道，禁止它触发当前论坛的 auth/session/CF 恢复副作用。
+    dio.interceptors.add(MessageBusIsolationInterceptor(effectiveBaseUrl));
 
     // 3. 会话代守卫（确保过期请求不进入后续拦截器）
     dio.interceptors.add(SessionGuardInterceptor());
