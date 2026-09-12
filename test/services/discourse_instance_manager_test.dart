@@ -50,25 +50,29 @@ void main() {
     expect(selected.baseUrl, DiscourseInstanceRuntime.defaultBaseUrl);
   });
 
-  test('selected instance requires active id and URL to describe same site', () async {
-    const firstUrl = 'https://forum.example.com/a';
-    const secondUrl = 'https://forum.example.com/b';
-    final firstId = DiscourseInstanceRuntime.instanceIdForBaseUrl(firstUrl);
-    final secondId = DiscourseInstanceRuntime.instanceIdForBaseUrl(secondUrl);
-    SharedPreferences.setMockInitialValues({
-      DiscourseInstanceRuntime.enabledPrefKey: true,
-      DiscourseInstanceRuntime.instancesPrefKey: jsonEncode([
-        {'id': firstId, 'name': 'A', 'base_url': firstUrl},
-        {'id': secondId, 'name': 'B', 'base_url': secondUrl},
-      ]),
-      DiscourseInstanceRuntime.activeInstanceIdPrefKey: firstId,
-      DiscourseInstanceRuntime.activeBaseUrlPrefKey: secondUrl,
-    });
+  test(
+    'selected instance requires active id and URL to describe same site',
+    () async {
+      const firstUrl = 'https://forum.example.com/a';
+      const secondUrl = 'https://forum.example.com/b';
+      final firstId = DiscourseInstanceRuntime.instanceIdForBaseUrl(firstUrl);
+      final secondId = DiscourseInstanceRuntime.instanceIdForBaseUrl(secondUrl);
+      SharedPreferences.setMockInitialValues({
+        DiscourseInstanceRuntime.enabledPrefKey: true,
+        DiscourseInstanceRuntime.instancesPrefKey: jsonEncode([
+          {'id': firstId, 'name': 'A', 'base_url': firstUrl},
+          {'id': secondId, 'name': 'B', 'base_url': secondUrl},
+        ]),
+        DiscourseInstanceRuntime.activeInstanceIdPrefKey: firstId,
+        DiscourseInstanceRuntime.activeBaseUrlPrefKey: secondUrl,
+      });
 
-    final selected = await DiscourseInstanceManager.instance.selectedInstance();
+      final selected = await DiscourseInstanceManager.instance
+          .selectedInstance();
 
-    expect(selected.id, DiscourseInstanceRuntime.defaultInstanceId);
-  });
+      expect(selected.id, DiscourseInstanceRuntime.defaultInstanceId);
+    },
+  );
 
   test('valid selected instance still restores normally', () async {
     const baseUrl = 'http://localhost:3000/forum';
