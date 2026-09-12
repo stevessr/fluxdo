@@ -20,6 +20,8 @@ class MeshVoiceTransport implements VoiceMediaTransport {
   static const _candidateBatchSize = 5;
   static const _httpBatchDelay = Duration(milliseconds: 200);
   static const _httpFlushEventThreshold = 20;
+  static const _disconnectedRestartDelay = Duration(seconds: 3);
+  static const _maxRestartAttempts = 5;
 
   final VoiceMediaContext context;
 
@@ -29,6 +31,8 @@ class MeshVoiceTransport implements VoiceMediaTransport {
   final Map<int, Timer> _candidateTimers = {};
   final Map<int, List<Map<String, dynamic>>> _httpQueues = {};
   final Map<int, MediaStream> _remoteStreams = {};
+  final Map<int, Timer> _restartTimers = {};
+  final Map<int, int> _restartAttempts = {};
 
   StreamSubscription<VoiceSignalEvent>? _signalSubscription;
   Timer? _httpTimer;
@@ -99,7 +103,8 @@ class MeshVoiceTransport implements VoiceMediaTransport {
     if (!_canPublishAudio) return;
 
     await _ensureLocalAudio();
-    for (final track in _localStream?.getAudioTracks() ?? const <MediaStreamTrack>[]) {
+    for (final track
+        in _localStream?.getAudioTracks() ?? const <MediaStreamTrack>[]) {
       track.enabled = !muted;
     }
   }
@@ -130,7 +135,9 @@ class MeshVoiceTransport implements VoiceMediaTransport {
 
     final desired = <int, VoiceParticipant>{};
     for (final participant in _participants) {
-      if (participant.id == context.currentUserId || participant.id <= 0) continue;
+      if (participant.id == context.currentUserId || participant.id <= 0) {
+        continue;
+      }
       if (_shouldMaintainPeer(participant)) desired[participant.id] = participant;
     }
 
@@ -163,6 +170,18 @@ class MeshVoiceTransport implements VoiceMediaTransport {
     if (context.room.roomType != 'stage') return true;
     final theyCanSpeak = remote.role == 'moderator' || remote.role == 'speaker';
     return _canPublishAudio || theyCanSpeak;
+  }
+
+  VoiceParticipant? _participantFor(int userId) {
+    for (final participant in _participants) {
+      if (participant.id == userId) return participant;
+    }
+    return null;
+  }
+
+  bool _shouldMaintainPeerForUser(int userId) {
+    final remote = _participantFor(userId);
+    return remote != null && _shouldMaintainPeer(remote);
   }
 
   Future<_MeshPeer?> _ensurePeer(int remoteUserId) async {
@@ -198,8 +217,20 @@ class MeshVoiceTransport implements VoiceMediaTransport {
       }
     };
 
+    pc.onConnectionState = (connectionState) {
+      _handlePeerConnectionState(remoteUserId, connectionState.toString());
+    };
+
+    pc.onIceConnectionState = (iceState) {
+      _handlePeerConnectionState(remoteUserId, iceState.toString());
+    };
+
     pc.onTrack = (event) {
-      if (_disposed || event.track.kind != 'audio' || event.streams.isEmpty) return;
+      if (_disposed ||
+          event.track.kind != 'audio' ||
+          event.streams.isEmpty) {
+        return;
+      }
       _remoteStreams[remoteUserId] = event.streams.first;
     };
 
@@ -213,6 +244,81 @@ class MeshVoiceTransport implements VoiceMediaTransport {
     final orphaned = _orphanCandidates.remove(remoteUserId);
     if (orphaned != null) peer.pendingCandidates.addAll(orphaned);
     return peer;
+  }
+
+  void _handlePeerConnectionState(int remoteUserId, String rawState) {
+    if (_disposed || !_connected) return;
+    final normalized = rawState.toLowerCase();
+
+    // Check "disconnected" before "connected" because the former contains
+    // the latter as a substring in flutter_webrtc enum names.
+    if (normalized.contains('failed')) {
+      _schedulePeerRestart(remoteUserId, immediate: true);
+      return;
+    }
+    if (normalized.contains('disconnected')) {
+      _schedulePeerRestart(remoteUserId);
+      return;
+    }
+    if (normalized.contains('connected')) {
+      _restartTimers.remove(remoteUserId)?.cancel();
+      _restartAttempts.remove(remoteUserId);
+    }
+  }
+
+  void _schedulePeerRestart(int remoteUserId, {bool immediate = false}) {
+    if (_disposed ||
+        !_connected ||
+        !_shouldMaintainPeerForUser(remoteUserId) ||
+        _restartTimers.containsKey(remoteUserId)) {
+      return;
+    }
+
+    final attempts = _restartAttempts[remoteUserId] ?? 0;
+    if (attempts >= _maxRestartAttempts) {
+      debugPrint(
+        '[VoiceMesh] max peer restart attempts reached for $remoteUserId',
+      );
+      return;
+    }
+
+    final delay = immediate
+        ? Duration.zero
+        : Duration(
+            milliseconds:
+                _disconnectedRestartDelay.inMilliseconds * (1 << attempts),
+          );
+    final boundedDelay = delay > const Duration(seconds: 15)
+        ? const Duration(seconds: 15)
+        : delay;
+
+    _restartTimers[remoteUserId] = Timer(boundedDelay, () {
+      _restartTimers.remove(remoteUserId);
+      _restartAttempts[remoteUserId] = attempts + 1;
+      unawaited(_restartPeer(remoteUserId));
+    });
+  }
+
+  Future<void> _restartPeer(int remoteUserId) async {
+    if (_disposed ||
+        !_connected ||
+        !_shouldMaintainPeerForUser(remoteUserId)) {
+      return;
+    }
+
+    try {
+      await _destroyPeer(remoteUserId, clearRestartState: false);
+      final peer = await _ensurePeer(remoteUserId);
+      if (peer == null || _disposed) return;
+
+      // Unlike the first deterministic offer, a restart always sends a fresh
+      // offer. The remote peer's glare rule handles the rare simultaneous
+      // restart, and this ensures a higher-id client can recover independently.
+      await _initiateOffer(remoteUserId);
+    } catch (e) {
+      debugPrint('[VoiceMesh] peer restart failed for $remoteUserId: $e');
+      _schedulePeerRestart(remoteUserId);
+    }
   }
 
   Map<String, dynamic> _peerConfiguration() {
@@ -249,7 +355,11 @@ class MeshVoiceTransport implements VoiceMediaTransport {
 
   Future<void> _handleSignal(VoiceSignalEvent envelope) async {
     final remoteUserId = envelope.senderId;
-    if (_disposed || remoteUserId <= 0 || remoteUserId == context.currentUserId) return;
+    if (_disposed ||
+        remoteUserId <= 0 ||
+        remoteUserId == context.currentUserId) {
+      return;
+    }
 
     for (final data in envelope.events) {
       final type = data['type']?.toString();
@@ -265,16 +375,14 @@ class MeshVoiceTransport implements VoiceMediaTransport {
         continue;
       }
 
-      VoiceParticipant? knownRemote;
-      for (final participant in _participants) {
-        if (participant.id == remoteUserId) {
-          knownRemote = participant;
-          break;
-        }
+      final knownRemote = _participantFor(remoteUserId);
+      if (knownRemote == null && type != 'offer' && type != 'candidate') {
+        continue;
       }
-      if (knownRemote == null && type != 'offer' && type != 'candidate') continue;
       if (knownRemote == null && context.room.roomType == 'stage') continue;
       if (knownRemote != null && !_shouldMaintainPeer(knownRemote)) continue;
+
+      _restartTimers.remove(remoteUserId)?.cancel();
 
       var peer = await _ensurePeer(remoteUserId);
       if (peer == null) continue;
@@ -287,7 +395,7 @@ class MeshVoiceTransport implements VoiceMediaTransport {
           final local = await peer.pc.getLocalDescription();
           if (local?.type == 'offer') {
             if (context.currentUserId < remoteUserId) {
-              await _destroyPeer(remoteUserId);
+              await _destroyPeer(remoteUserId, clearRestartState: false);
               peer = await _ensurePeer(remoteUserId);
               if (peer == null) continue;
             } else {
@@ -295,7 +403,9 @@ class MeshVoiceTransport implements VoiceMediaTransport {
             }
           }
 
-          await peer.pc.setRemoteDescription(RTCSessionDescription(sdp, 'offer'));
+          await peer.pc.setRemoteDescription(
+            RTCSessionDescription(sdp, 'offer'),
+          );
           await _flushPendingCandidates(peer);
           final answer = await peer.pc.createAnswer({
             'mandatory': {
@@ -315,7 +425,9 @@ class MeshVoiceTransport implements VoiceMediaTransport {
           if (sdp == null || sdp.isEmpty) continue;
           final local = await peer.pc.getLocalDescription();
           if (local?.type != 'offer') continue;
-          await peer.pc.setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
+          await peer.pc.setRemoteDescription(
+            RTCSessionDescription(sdp, 'answer'),
+          );
           await _flushPendingCandidates(peer);
 
         case 'candidate':
@@ -385,7 +497,11 @@ class MeshVoiceTransport implements VoiceMediaTransport {
     int remoteUserId,
     List<Map<String, dynamic>> events,
   ) async {
-    if (_disposed || events.isEmpty || !_peers.containsKey(remoteUserId)) return;
+    if (_disposed ||
+        events.isEmpty ||
+        !_peers.containsKey(remoteUserId)) {
+      return;
+    }
     final queue = _httpQueues[remoteUserId] ??= [];
     queue.addAll(events);
 
@@ -414,10 +530,12 @@ class MeshVoiceTransport implements VoiceMediaTransport {
     if (snapshot.isEmpty) return;
 
     final messages = snapshot.entries
-        .map((entry) => <String, dynamic>{
-              'recipient_id': entry.key,
-              'events': entry.value,
-            })
+        .map(
+          (entry) => <String, dynamic>{
+            'recipient_id': entry.key,
+            'events': entry.value,
+          },
+        )
         .toList(growable: false);
 
     final Map<String, dynamic> payload;
@@ -439,18 +557,27 @@ class MeshVoiceTransport implements VoiceMediaTransport {
     await context.sendSignal(payload);
   }
 
-  Future<void> _destroyPeer(int remoteUserId) async {
+  Future<void> _destroyPeer(
+    int remoteUserId, {
+    bool clearRestartState = true,
+  }) async {
     _candidateTimers.remove(remoteUserId)?.cancel();
     _candidateQueues.remove(remoteUserId);
     _httpQueues.remove(remoteUserId);
     _orphanCandidates.remove(remoteUserId);
     _remoteStreams.remove(remoteUserId);
+    if (clearRestartState) {
+      _restartTimers.remove(remoteUserId)?.cancel();
+      _restartAttempts.remove(remoteUserId);
+    }
 
     final peer = _peers.remove(remoteUserId);
     if (peer == null) return;
     peer.pc.onIceCandidate = null;
     peer.pc.onTrack = null;
     peer.pc.onIceGatheringState = null;
+    peer.pc.onConnectionState = null;
+    peer.pc.onIceConnectionState = null;
     await peer.pc.close();
     await peer.pc.dispose();
   }
@@ -459,6 +586,11 @@ class MeshVoiceTransport implements VoiceMediaTransport {
     for (final remoteId in _peers.keys.toList(growable: false)) {
       await _destroyPeer(remoteId);
     }
+    for (final timer in _restartTimers.values) {
+      timer.cancel();
+    }
+    _restartTimers.clear();
+    _restartAttempts.clear();
   }
 
   Future<void> _disposeLocalAudio() async {
