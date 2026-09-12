@@ -47,7 +47,7 @@ void main() {
     expect(service.canHandleUri(Uri.parse('ftp://linux.do/t/123')), isFalse);
   });
 
-  test('自定义实例只接管当前 Discourse host', () {
+  test('自定义实例只接管当前 origin 和 relative-url-root', () {
     DiscourseInstanceRuntime.activate(
       instanceId: 'meta-discourse',
       baseUrl: 'https://meta.discourse.org/forum',
@@ -59,6 +59,16 @@ void main() {
         Uri.parse('https://meta.discourse.org/forum/t/topic/123'),
       ),
       isTrue,
+    );
+    expect(
+      service.canHandleUri(Uri.parse('https://meta.discourse.org/t/123')),
+      isFalse,
+    );
+    expect(
+      service.canHandleUri(
+        Uri.parse('https://cdn.meta.discourse.org/forum/t/123'),
+      ),
+      isFalse,
     );
     expect(service.canHandleUri(Uri.parse('https://linux.do/t/123')), isFalse);
     expect(
