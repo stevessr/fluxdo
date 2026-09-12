@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'discourse_account_danger_page.dart';
 import 'discourse_avatar_page.dart';
 import 'discourse_calendar_subscriptions_page.dart';
+import 'discourse_chat_channel_list_preferences_page.dart';
 import 'discourse_confirm_access_page.dart';
 import 'discourse_identity_profile_page.dart';
 import 'discourse_interface_advanced_page.dart';
@@ -128,6 +129,26 @@ class UserPreferencesPage extends StatelessWidget {
                         builder: (_) => DiscourseInterfaceAdvancedPage(
                           username: username,
                         ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.forum_outlined),
+                  title: Text(zh ? '聊天频道列表' : 'Chat channel lists'),
+                  subtitle: Text(
+                    zh
+                        ? '公开频道、直接消息和收藏频道的筛选与排序'
+                        : 'Filter and sort public, direct-message, and starred channel lists',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            DiscourseChatChannelListPreferencesPage(
+                              username: username,
+                            ),
                       ),
                     );
                   },
