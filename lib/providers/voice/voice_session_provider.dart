@@ -80,6 +80,7 @@ class VoiceSessionNotifier extends Notifier<VoiceSessionState> {
 
   MessageBusService? _bus;
   MessageBusCallback? _roomCallback;
+  int? _subscribedRoomId;
   Timer? _heartbeatTimer;
   bool _heartbeatInFlight = false;
   int _revision = 0;
@@ -261,6 +262,7 @@ class VoiceSessionNotifier extends Notifier<VoiceSessionState> {
     _unsubscribeRoom();
     final bus = ref.read(messageBusServiceProvider);
     _bus = bus;
+    _subscribedRoomId = room.id;
 
     void onRoomMessage(MessageBusMessage message) {
       final raw = message.data;
@@ -359,12 +361,13 @@ class VoiceSessionNotifier extends Notifier<VoiceSessionState> {
   }
 
   void _unsubscribeRoom() {
-    final roomId = state.roomId;
+    final roomId = _subscribedRoomId;
     final bus = _bus;
     final callback = _roomCallback;
     if (roomId != null && bus != null && callback != null) {
       bus.unsubscribe('/voice/rooms/$roomId', callback);
     }
+    _subscribedRoomId = null;
     _bus = null;
     _roomCallback = null;
   }
