@@ -17,8 +17,9 @@ import 'storage/resilient_secure_storage.dart';
 /// - 以站点 + 当前账号为命名空间，不同账号绝不复用同一份文件；
 /// - 文件名只落不可逆哈希，不额外暴露用户名；
 /// - 开关是全局实验开关，关闭后停止读写，但不会隐式删除已有缓存；
-/// - 落盘前剥离 CSRF、MessageBus session key 与 Turnstile sitekey 等
-///   短生命周期会话元数据，避免 7 天缓存把旧凭证重新灌回新会话。
+/// - 落盘前剥离 CSRF 与 Turnstile sitekey 等不适合长期复用的元数据；
+/// - 保留 Discourse `shared_session_key`：它本身由服务端以 7 天 TTL 保存，
+///   且外置 MessageBus 认证依赖该字段，生命周期与本缓存上限一致。
 class PreloadCacheService {
   PreloadCacheService._internal()
     : _cacheBaseDirectory = getApplicationCacheDirectory,
@@ -168,21 +169,18 @@ class PreloadCacheService {
     return !age.isNegative && age >= cacheTtl;
   }
 
-  /// 去掉不能安全跨会话复用的 HTML 元数据。
+  /// 去掉不能安全跨请求长期复用的 HTML 元数据。
   ///
   /// data-preloaded 内的 JSON 字符串会把双引号转义，因此这些正则只会命中
   /// 真正的 HTML meta/attribute，不会误删帖子正文中作为 JSON 内容出现的文本。
   String _sanitizeForPersistence(String html) {
-    var sanitized = html;
-    for (final metaName in const ['csrf-token', 'shared_session_key']) {
-      sanitized = sanitized.replaceAll(
-        RegExp(
-          '''<meta\\b[^>]*\\bname=["']${RegExp.escape(metaName)}["'][^>]*>''',
-          caseSensitive: false,
-        ),
-        '',
-      );
-    }
+    var sanitized = html.replaceAll(
+      RegExp(
+        '''<meta\\b[^>]*\\bname=["']csrf-token["'][^>]*>''',
+        caseSensitive: false,
+      ),
+      '',
+    );
     sanitized = sanitized.replaceAll(
       RegExp(
         '''\\sdata-sitekey=["'][^"']*["']''',
