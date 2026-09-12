@@ -33,7 +33,9 @@ void main() {
         'https://linux.do/uploads/short-url/test.pdf',
       );
       expect(
-        UrlHelper.resolveUrl('/uploads/default/optimized/1X/test_2_690x200.png'),
+        UrlHelper.resolveUrl(
+          '/uploads/default/optimized/1X/test_2_690x200.png',
+        ),
         'https://linux.do/uploads/default/optimized/1X/test_2_690x200.png',
       );
     });
@@ -54,10 +56,7 @@ void main() {
         UrlHelper.resolveUrl('/forum/t/topic-slug/123'),
         'https://linux.do/forum/t/topic-slug/123',
       );
-      expect(
-        UrlHelper.resolveUrl('/'),
-        'https://linux.do/forum',
-      );
+      expect(UrlHelper.resolveUrl('/'), 'https://linux.do/forum');
     });
 
     test('uses active instance root before preload exposes baseUri', () {
@@ -77,12 +76,15 @@ void main() {
       );
     });
 
-    test('does not rewrite protocol-relative S3 URL when not using CDN helper', () {
-      expect(
-        UrlHelper.resolveUrl('//uploads.example.com/original/1X/test.png'),
-        'https://uploads.example.com/original/1X/test.png',
-      );
-    });
+    test(
+      'does not rewrite protocol-relative S3 URL when not using CDN helper',
+      () {
+        expect(
+          UrlHelper.resolveUrl('//uploads.example.com/original/1X/test.png'),
+          'https://uploads.example.com/original/1X/test.png',
+        );
+      },
+    );
   });
 
   group('UrlHelper.resolveUrlWithCdn', () {
