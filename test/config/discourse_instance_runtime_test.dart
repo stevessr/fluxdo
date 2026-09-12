@@ -21,12 +21,12 @@ void main() {
       );
     });
 
-    test('normalizes scheme and host casing', () {
+    test('normalizes scheme and host casing without changing path case', () {
       expect(
         DiscourseInstanceRuntime.normalizeBaseUrl(
-          'HTTPS://Forum.Example.COM/forum/',
+          'HTTPS://Forum.Example.COM/Forum/',
         ),
-        'https://forum.example.com/forum',
+        'https://forum.example.com/Forum',
       );
     });
 
@@ -68,6 +68,17 @@ void main() {
         DiscourseInstanceRuntime.scopedStorageKey('linux_do_username'),
         'linux_do_username::discourse_instance::${Uri.encodeComponent(canonicalId)}',
       );
+    });
+
+    test('keeps case-sensitive relative roots in distinct namespaces', () {
+      final upper = DiscourseInstanceRuntime.instanceIdForBaseUrl(
+        'https://forum.example.com/Forum',
+      );
+      final lower = DiscourseInstanceRuntime.instanceIdForBaseUrl(
+        'https://forum.example.com/forum',
+      );
+
+      expect(upper, isNot(lower));
     });
 
     test('default URL always restores legacy default identity', () {
@@ -114,6 +125,26 @@ void main() {
           Uri.parse('https://cdn.forum.example.com:8443/forum/t/1'),
         ),
         isFalse,
+      );
+      expect(
+        DiscourseInstanceRuntime.containsUri(
+          Uri.parse('https://forum.example.com/forum/t/1'),
+        ),
+        isFalse,
+      );
+    });
+
+    test('relative-url-root path matching remains case-sensitive', () {
+      DiscourseInstanceRuntime.activate(
+        instanceId: 'site-test',
+        baseUrl: 'https://forum.example.com/Forum',
+      );
+
+      expect(
+        DiscourseInstanceRuntime.containsUri(
+          Uri.parse('https://forum.example.com/Forum/t/1'),
+        ),
+        isTrue,
       );
       expect(
         DiscourseInstanceRuntime.containsUri(
