@@ -19,6 +19,8 @@ class VoiceSessionState {
     this.room,
     this.transport,
     this.participantSessionId,
+    this.ice = const {},
+    this.livekit,
     this.participants = const [],
     this.lastHandRaise,
     this.lastRinging,
@@ -30,6 +32,15 @@ class VoiceSessionState {
   final VoiceRoom? room;
   final String? transport;
   final String? participantSessionId;
+
+  /// Server-provided WebRTC configuration for mesh calls.
+  final Map<String, dynamic> ice;
+
+  /// Short-lived SFU credentials for a LiveKit call. The transport layer owns
+  /// reconnect policy; [refreshLiveKitCredentials] rotates these and the
+  /// participant session atomically when the server reissues them.
+  final VoiceLiveKitCredentials? livekit;
+
   final List<VoiceParticipant> participants;
   final VoiceHandRaiseEvent? lastHandRaise;
   final VoiceRingingEvent? lastRinging;
@@ -48,6 +59,8 @@ class VoiceSessionState {
     VoiceRoom? room,
     String? transport,
     String? participantSessionId,
+    Map<String, dynamic>? ice,
+    VoiceLiveKitCredentials? livekit,
     List<VoiceParticipant>? participants,
     VoiceHandRaiseEvent? lastHandRaise,
     VoiceRingingEvent? lastRinging,
@@ -61,6 +74,8 @@ class VoiceSessionState {
       transport: transport ?? this.transport,
       participantSessionId:
           participantSessionId ?? this.participantSessionId,
+      ice: ice ?? this.ice,
+      livekit: livekit ?? this.livekit,
       participants: participants ?? this.participants,
       lastHandRaise: lastHandRaise ?? this.lastHandRaise,
       lastRinging: lastRinging ?? this.lastRinging,
@@ -123,10 +138,7 @@ class VoiceSessionNotifier extends Notifier<VoiceSessionState> {
     await _leaveCurrent(sendRequest: true);
     if (revision != _revision) return;
 
-    state = VoiceSessionState(
-      phase: VoiceSessionPhase.joining,
-      room: state.room,
-    );
+    state = const VoiceSessionState(phase: VoiceSessionPhase.joining);
 
     try {
       final response = await service.joinVoiceRoom(
@@ -151,6 +163,8 @@ class VoiceSessionNotifier extends Notifier<VoiceSessionState> {
         room: response.room,
         transport: response.transport,
         participantSessionId: response.participantSessionId,
+        ice: response.ice,
+        livekit: response.livekit,
         participants: response.room.activeParticipants,
       );
       _startHeartbeat();
@@ -256,6 +270,29 @@ class VoiceSessionNotifier extends Notifier<VoiceSessionState> {
           participantSessionId: sessionId,
           payload: payload,
         );
+  }
+
+  /// Reissue LiveKit credentials during the reconnect ladder.
+  ///
+  /// The server rotates the participant session along with the token, so both
+  /// values must be committed together or future heartbeat/state calls would
+  /// continue with stale authority.
+  Future<VoiceLiveKitCredentials?> refreshLiveKitCredentials() async {
+    final roomId = state.roomId;
+    if (!state.isConnected || !state.usesLiveKit || roomId == null) return null;
+
+    final credentials =
+        await ref.read(discourseServiceProvider).refreshVoiceLiveKitToken(roomId);
+    if (!state.isConnected || state.roomId != roomId) return null;
+
+    state = state.copyWith(
+      participantSessionId:
+          credentials.participantSessionId ?? state.participantSessionId,
+      livekit: credentials,
+      heartbeatFailures: 0,
+      clearError: true,
+    );
+    return credentials;
   }
 
   void _subscribeRoom(VoiceRoom room) {
