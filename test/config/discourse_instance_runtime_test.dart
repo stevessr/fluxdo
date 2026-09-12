@@ -30,6 +30,27 @@ void main() {
       );
     });
 
+    test('removes explicit default ports but preserves custom ports', () {
+      expect(
+        DiscourseInstanceRuntime.normalizeBaseUrl(
+          'https://forum.example.com:443/forum',
+        ),
+        'https://forum.example.com/forum',
+      );
+      expect(
+        DiscourseInstanceRuntime.normalizeBaseUrl(
+          'http://forum.example.com:80/forum',
+        ),
+        'http://forum.example.com/forum',
+      );
+      expect(
+        DiscourseInstanceRuntime.normalizeBaseUrl(
+          'https://forum.example.com:8443/forum',
+        ),
+        'https://forum.example.com:8443/forum',
+      );
+    });
+
     test('rejects non-http schemes and credentials', () {
       expect(
         () => DiscourseInstanceRuntime.normalizeBaseUrl('ftp://example.com'),
@@ -79,6 +100,17 @@ void main() {
       );
 
       expect(upper, isNot(lower));
+    });
+
+    test('default-port aliases share one instance identity', () {
+      final implicit = DiscourseInstanceRuntime.instanceIdForBaseUrl(
+        'https://forum.example.com/forum',
+      );
+      final explicit = DiscourseInstanceRuntime.instanceIdForBaseUrl(
+        'https://forum.example.com:443/forum',
+      );
+
+      expect(explicit, implicit);
     });
 
     test('default URL always restores legacy default identity', () {
