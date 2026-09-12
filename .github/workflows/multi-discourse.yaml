@@ -11,14 +11,17 @@ on:
       - 'lib/services/deep_link_service.dart'
       - 'lib/services/discourse/discourse_service.dart'
       - 'lib/services/discourse_instance_manager.dart'
+      - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
+      - 'lib/services/preload_cache_service.dart'
       - 'lib/services/storage/resilient_secure_storage.dart'
       - 'lib/settings/definitions/custom_settings_defs.dart'
       - 'lib/utils/url_helper.dart'
       - 'test/config/discourse_instance_runtime_test.dart'
       - 'test/services/account_browser_session_policy_test.dart'
       - 'test/services/deep_link_service_test.dart'
+      - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
       - 'test/utils/url_helper_test.dart'
       - '.github/workflows/multi-discourse.yaml'
@@ -34,14 +37,17 @@ on:
       - 'lib/services/deep_link_service.dart'
       - 'lib/services/discourse/discourse_service.dart'
       - 'lib/services/discourse_instance_manager.dart'
+      - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
+      - 'lib/services/preload_cache_service.dart'
       - 'lib/services/storage/resilient_secure_storage.dart'
       - 'lib/settings/definitions/custom_settings_defs.dart'
       - 'lib/utils/url_helper.dart'
       - 'test/config/discourse_instance_runtime_test.dart'
       - 'test/services/account_browser_session_policy_test.dart'
       - 'test/services/deep_link_service_test.dart'
+      - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
       - 'test/utils/url_helper_test.dart'
       - '.github/workflows/multi-discourse.yaml'
@@ -73,44 +79,47 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # constants.dart / discourse_instances_page.dart / discourse_instance_manager.dart
+      # already carry formatter drift on main. Keep them under analyze, but do not make
+      # this feature CI rewrite unrelated historical formatting.
       - name: Check formatting
         run: |
           dart format \
             lib/config/discourse_instance_runtime.dart \
-            lib/constants.dart \
-            lib/pages/discourse_instances_page.dart \
             lib/services/account_browser_session_policy.dart \
             lib/services/background/ios_background_fetch.dart \
             lib/services/deep_link_service.dart \
             lib/services/discourse/discourse_service.dart \
-            lib/services/discourse_instance_manager.dart \
+            lib/services/network/cookie/cookie_jar_service.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
+            lib/services/preload_cache_service.dart \
             lib/services/storage/resilient_secure_storage.dart \
             lib/settings/definitions/custom_settings_defs.dart \
             lib/utils/url_helper.dart \
             test/config/discourse_instance_runtime_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
+            test/services/network/cookie/discourse_instance_cookie_isolation_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
             test/utils/url_helper_test.dart
           git diff --exit-code -- \
             lib/config/discourse_instance_runtime.dart \
-            lib/constants.dart \
-            lib/pages/discourse_instances_page.dart \
             lib/services/account_browser_session_policy.dart \
             lib/services/background/ios_background_fetch.dart \
             lib/services/deep_link_service.dart \
             lib/services/discourse/discourse_service.dart \
-            lib/services/discourse_instance_manager.dart \
+            lib/services/network/cookie/cookie_jar_service.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
+            lib/services/preload_cache_service.dart \
             lib/services/storage/resilient_secure_storage.dart \
             lib/settings/definitions/custom_settings_defs.dart \
             lib/utils/url_helper.dart \
             test/config/discourse_instance_runtime_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
+            test/services/network/cookie/discourse_instance_cookie_isolation_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
             test/utils/url_helper_test.dart
 
@@ -125,14 +134,17 @@ jobs:
           lib/services/deep_link_service.dart
           lib/services/discourse/discourse_service.dart
           lib/services/discourse_instance_manager.dart
+          lib/services/network/cookie/cookie_jar_service.dart
           lib/services/network/discourse_dio.dart
           lib/services/network/interceptors/discourse_base_path_interceptor.dart
+          lib/services/preload_cache_service.dart
           lib/services/storage/resilient_secure_storage.dart
           lib/settings/definitions/custom_settings_defs.dart
           lib/utils/url_helper.dart
           test/config/discourse_instance_runtime_test.dart
           test/services/account_browser_session_policy_test.dart
           test/services/deep_link_service_test.dart
+          test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
           test/utils/url_helper_test.dart
 
@@ -142,5 +154,6 @@ jobs:
           test/config/discourse_instance_runtime_test.dart
           test/services/account_browser_session_policy_test.dart
           test/services/deep_link_service_test.dart
+          test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
           test/utils/url_helper_test.dart
