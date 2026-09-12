@@ -41,11 +41,19 @@ class AccountBrowserSessionPolicy {
 
   static bool isAllowedRestoreOrigin(String url) {
     final uri = Uri.tryParse(url);
-    if (uri == null || uri.scheme.toLowerCase() != 'https') return false;
+    if (uri == null) return false;
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'https' && scheme != 'http') return false;
 
     final host = uri.host.toLowerCase();
-    if (CookieJarService.matchesAppHost(host)) return true;
+    if (CookieJarService.matchesAppHost(host)) {
+      // app-owned origin may be HTTP for local/self-hosted experimental sites,
+      // but must still match the active instance's scheme.
+      return scheme == Uri.parse(AppConstants.baseUrl).scheme.toLowerCase();
+    }
 
+    // Third-party account bindings are intentionally HTTPS-only.
+    if (scheme != 'https') return false;
     return externalAccountOrigins.any(
       (origin) => Uri.parse(origin).host.toLowerCase() == host,
     );
