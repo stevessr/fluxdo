@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
 
+import '../../pages/discourse_instances_page.dart';
 import '../../providers/preload_cache_preferences.dart';
 import '../../providers/quick_reading_preferences.dart';
 import '../../services/preload_cache_service.dart';
@@ -13,6 +14,26 @@ import '../settings_model.dart';
 List<SettingsGroup> buildCustomSettingsGroups(BuildContext context) {
   final copy = _CustomSettingsCopy.of(context);
   return [
+    SettingsGroup(
+      title: copy.instanceGroupTitle,
+      icon: Symbols.dns_rounded,
+      items: [
+        ActionModel(
+          id: 'multiDiscourseInstances',
+          title: copy.instanceTitle,
+          subtitle: copy.instanceDescription,
+          icon: Symbols.dns_rounded,
+          wrapSubtitle: true,
+          onTap: (context, ref) {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const DiscourseInstancesPage(),
+              ),
+            );
+          },
+        ),
+      ],
+    ),
     SettingsGroup(
       title: copy.cacheGroupTitle,
       icon: Symbols.cleaning_services_rounded,
@@ -74,6 +95,9 @@ List<SettingsGroup> buildCustomSettingsGroups(BuildContext context) {
 
 class _CustomSettingsCopy {
   const _CustomSettingsCopy({
+    required this.instanceGroupTitle,
+    required this.instanceTitle,
+    required this.instanceDescription,
     required this.cacheGroupTitle,
     required this.preloadCacheTitle,
     required this.preloadCacheDescription,
@@ -86,6 +110,9 @@ class _CustomSettingsCopy {
     required this.quickReadingDescription,
   });
 
+  final String instanceGroupTitle;
+  final String instanceTitle;
+  final String instanceDescription;
   final String cacheGroupTitle;
   final String preloadCacheTitle;
   final String preloadCacheDescription;
@@ -110,6 +137,10 @@ class _CustomSettingsCopy {
   }
 
   static const _zhHans = _CustomSettingsCopy(
+    instanceGroupTitle: '站点实验',
+    instanceTitle: '多 Discourse 实例（实验性）',
+    instanceDescription:
+        '保存并切换多个 Discourse 论坛。每个实例隔离账号注册表、会话快照和 WebView 账号边界；切换在重启后生效。',
     cacheGroupTitle: '实验性缓存',
     preloadCacheTitle: '预加载缓存（实验性）',
     preloadCacheDescription:
@@ -124,6 +155,10 @@ class _CustomSettingsCopy {
   );
 
   static const _zhHant = _CustomSettingsCopy(
+    instanceGroupTitle: '站點實驗',
+    instanceTitle: '多 Discourse 實例（實驗性）',
+    instanceDescription:
+        '儲存並切換多個 Discourse 論壇。每個實例隔離帳號註冊表、工作階段快照和 WebView 帳號邊界；切換在重新啟動後生效。',
     cacheGroupTitle: '實驗性快取',
     preloadCacheTitle: '預載入快取（實驗性）',
     preloadCacheDescription:
@@ -138,6 +173,10 @@ class _CustomSettingsCopy {
   );
 
   static const _en = _CustomSettingsCopy(
+    instanceGroupTitle: 'Site experiments',
+    instanceTitle: 'Multiple Discourse instances (experimental)',
+    instanceDescription:
+        'Save and switch between multiple Discourse forums. Account registries, session snapshots, and WebView account boundaries are isolated per instance. Switching takes effect after restart.',
     cacheGroupTitle: 'Experimental cache',
     preloadCacheTitle: 'Preload cache (experimental)',
     preloadCacheDescription:
