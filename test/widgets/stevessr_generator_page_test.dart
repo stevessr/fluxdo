@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/l10n/s.dart';
@@ -8,6 +9,19 @@ import 'package:fluxdo/widgets/stevessr/stevessr_canvas.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('所有 StevesSR 表情资源均已打包', () async {
+    for (final expression in StevessrExpression.values) {
+      final data = await rootBundle.load(
+        'assets/images/stevessr/${expression.key}.png',
+      );
+      expect(
+        data.lengthInBytes,
+        greaterThan(0),
+        reason: '缺少 StevesSR 表情资源: ${expression.key}',
+      );
+    }
+  });
 
   testWidgets('生成器页面显示预览和基础控件', (tester) async {
     await tester.pumpWidget(
