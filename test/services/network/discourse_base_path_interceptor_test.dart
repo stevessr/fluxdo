@@ -56,6 +56,13 @@ void main() {
         ),
         'https://cdn.example.com/file.png',
       );
+      expect(
+        DiscourseBasePathInterceptor.resolvePath(
+          '/forum',
+          '//cdn.example.com/file.png',
+        ),
+        '//cdn.example.com/file.png',
+      );
     });
   });
 }
