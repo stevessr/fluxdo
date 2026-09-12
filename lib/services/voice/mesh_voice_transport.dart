@@ -49,9 +49,6 @@ class MeshVoiceTransport implements VoiceMediaTransport {
   @override
   bool get muted => _muted;
 
-  /// Kept alive for the lifetime of each peer so the native WebRTC audio
-  /// renderer keeps receiving its remote stream. This also gives a later UI
-  /// layer a stable place to implement per-user volume controls.
   Map<int, MediaStream> get remoteStreams =>
       Map<int, MediaStream>.unmodifiable(_remoteStreams);
 
@@ -65,8 +62,6 @@ class MeshVoiceTransport implements VoiceMediaTransport {
 
     _signalSubscription = context.signals.listen((event) {
       if (_disposed || event.roomId != context.room.id) return;
-      // Serialize inbound SDP/candidate mutations. WebRTC signaling state is
-      // order-sensitive and MessageBus can deliver a batch synchronously.
       _signalTail = _signalTail.then((_) => _handleSignal(event)).catchError(
         (Object error, StackTrace stackTrace) {
           debugPrint('[VoiceMesh] signal handling failed: $error');
@@ -86,8 +81,6 @@ class MeshVoiceTransport implements VoiceMediaTransport {
     _canPublishAudio = _localCanSpeak(_participants);
 
     if (_connected && couldPublish != _canPublishAudio) {
-      // Stage role changes alter whether the mic m-line may publish. Rebuild
-      // the voice-only peers rather than renegotiating a half-mutated set.
       if (_canPublishAudio) {
         await _ensureLocalAudio();
       } else {
@@ -156,8 +149,13 @@ class MeshVoiceTransport implements VoiceMediaTransport {
 
   bool _localCanSpeak(List<VoiceParticipant> participants) {
     if (context.room.roomType != 'stage') return true;
-    final me = participants.where((p) => p.id == context.currentUserId).firstOrNull;
-    final role = me?.role ?? context.room.membership?.role;
+    String? role = context.room.membership?.role;
+    for (final participant in participants) {
+      if (participant.id == context.currentUserId) {
+        role = participant.role;
+        break;
+      }
+    }
     return role == 'moderator' || role == 'speaker';
   }
 
@@ -267,9 +265,16 @@ class MeshVoiceTransport implements VoiceMediaTransport {
         continue;
       }
 
-      final knownParticipant = _participants.any((p) => p.id == remoteUserId);
-      if (!knownParticipant && type != 'offer' && type != 'candidate') continue;
-      if (!knownParticipant && context.room.roomType == 'stage') continue;
+      VoiceParticipant? knownRemote;
+      for (final participant in _participants) {
+        if (participant.id == remoteUserId) {
+          knownRemote = participant;
+          break;
+        }
+      }
+      if (knownRemote == null && type != 'offer' && type != 'candidate') continue;
+      if (knownRemote == null && context.room.roomType == 'stage') continue;
+      if (knownRemote != null && !_shouldMaintainPeer(knownRemote)) continue;
 
       var peer = await _ensurePeer(remoteUserId);
       if (peer == null) continue;
@@ -281,14 +286,11 @@ class MeshVoiceTransport implements VoiceMediaTransport {
 
           final local = await peer.pc.getLocalDescription();
           if (local?.type == 'offer') {
-            if (context.currentUserId > remoteUserId) {
-              // Deterministic glare rule: the higher id keeps its inbound
-              // offer and drops its accidental local one by rebuilding.
+            if (context.currentUserId < remoteUserId) {
               await _destroyPeer(remoteUserId);
               peer = await _ensurePeer(remoteUserId);
               if (peer == null) continue;
             } else {
-              // Lower id owns the normal offer path; ignore a competing one.
               continue;
             }
           }
@@ -375,8 +377,6 @@ class MeshVoiceTransport implements VoiceMediaTransport {
   }
 
   Future<void> _sendEvent(int remoteUserId, Map<String, dynamic> event) async {
-    // Preserve signaling order: an SDP event must follow candidates already
-    // queued before it, matching Discourse's SignalingManager.
     await _flushCandidateQueue(remoteUserId);
     await _enqueueHttp(remoteUserId, [event]);
   }
@@ -414,7 +414,10 @@ class MeshVoiceTransport implements VoiceMediaTransport {
     if (snapshot.isEmpty) return;
 
     final messages = snapshot.entries
-        .map((entry) => {'recipient_id': entry.key, 'events': entry.value})
+        .map((entry) => <String, dynamic>{
+              'recipient_id': entry.key,
+              'events': entry.value,
+            })
         .toList(growable: false);
 
     final Map<String, dynamic> payload;
