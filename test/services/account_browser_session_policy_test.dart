@@ -62,10 +62,9 @@ void main() {
         baseUrl: 'http://forum.example.test/forum',
       );
 
-      expect(
-        AccountBrowserSessionPolicy.snapshotOrigins,
-        ['http://forum.example.test/forum/'],
-      );
+      expect(AccountBrowserSessionPolicy.snapshotOrigins, [
+        'http://forum.example.test/forum/',
+      ]);
       expect(
         AccountBrowserSessionPolicy.isAllowedRestoreOrigin(
           'http://forum.example.test/forum/session',
