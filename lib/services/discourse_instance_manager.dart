@@ -36,21 +36,17 @@ class DiscourseInstanceProfile {
     final baseUrl = DiscourseInstanceRuntime.normalizeBaseUrl(
       json['base_url']?.toString() ?? '',
     );
-    final id = json['id']?.toString().trim();
     return DiscourseInstanceProfile(
-      id: id == null || id.isEmpty ? idForBaseUrl(baseUrl) : id,
+      // 不信任持久化的 id。实例 namespace 必须由 URL 唯一派生，避免损坏的
+      // 注册表让两个不同站点共享账号/Secure Storage 边界。
+      id: idForBaseUrl(baseUrl),
       name: _normalizeName(json['name']?.toString(), baseUrl),
       baseUrl: baseUrl,
     );
   }
 
-  static String idForBaseUrl(String baseUrl) {
-    final normalized = DiscourseInstanceRuntime.normalizeBaseUrl(baseUrl);
-    if (normalized == DiscourseInstanceRuntime.defaultBaseUrl) {
-      return DiscourseInstanceRuntime.defaultInstanceId;
-    }
-    return 'site-${Uri.encodeComponent(normalized.toLowerCase())}';
-  }
+  static String idForBaseUrl(String baseUrl) =>
+      DiscourseInstanceRuntime.instanceIdForBaseUrl(baseUrl);
 
   static String _normalizeName(String? input, String baseUrl) {
     final name = input?.trim();
@@ -81,6 +77,7 @@ class DiscourseInstanceManager {
       DiscourseInstanceProfile.linuxDo,
     ];
     final seenUrls = <String>{DiscourseInstanceRuntime.defaultBaseUrl};
+    final seenIds = <String>{DiscourseInstanceRuntime.defaultInstanceId};
 
     final raw = prefs.getString(DiscourseInstanceRuntime.instancesPrefKey);
     if (raw == null || raw.isEmpty) return result;
@@ -94,8 +91,7 @@ class DiscourseInstanceManager {
           final profile = DiscourseInstanceProfile.fromJson(
             Map<String, dynamic>.from(item),
           );
-          if (profile.id == DiscourseInstanceRuntime.defaultInstanceId ||
-              !seenUrls.add(profile.baseUrl)) {
+          if (!seenUrls.add(profile.baseUrl) || !seenIds.add(profile.id)) {
             continue;
           }
           result.add(profile);
@@ -118,9 +114,19 @@ class DiscourseInstanceManager {
     final selectedId = prefs.getString(
       DiscourseInstanceRuntime.activeInstanceIdPrefKey,
     );
+    final selectedBaseUrl = prefs.getString(
+      DiscourseInstanceRuntime.activeBaseUrlPrefKey,
+    );
     final instances = await listInstances();
+
+    // 同时校验 id 与 baseUrl。active_* 任一损坏/陈旧时回退默认站，而不是
+    // 仅凭一个可碰撞的字符串恢复到错误的账号 namespace。
     return instances.firstWhere(
-      (instance) => instance.id == selectedId,
+      (instance) =>
+          instance.id == selectedId &&
+          (selectedBaseUrl == null ||
+              instance.baseUrl ==
+                  DiscourseInstanceRuntime.normalizeBaseUrl(selectedBaseUrl)),
       orElse: () => DiscourseInstanceProfile.linuxDo,
     );
   }
