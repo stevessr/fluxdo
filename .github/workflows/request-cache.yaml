@@ -6,7 +6,12 @@ on:
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/http_revalidation_interceptor.dart'
       - 'lib/services/network/interceptors/request_coalescing_interceptor.dart'
+      - 'lib/services/network/interceptors/preload_cache_interceptor.dart'
+      - 'lib/services/preload_cache_service.dart'
+      - 'lib/providers/preload_cache_preferences.dart'
+      - 'lib/settings/definitions/custom_settings_defs.dart'
       - 'test/services/network/interceptors/request_cache_interceptors_test.dart'
+      - 'test/services/preload_cache_service_test.dart'
       - '.github/workflows/request-cache.yaml'
   push:
     branches:
@@ -16,7 +21,12 @@ on:
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/http_revalidation_interceptor.dart'
       - 'lib/services/network/interceptors/request_coalescing_interceptor.dart'
+      - 'lib/services/network/interceptors/preload_cache_interceptor.dart'
+      - 'lib/services/preload_cache_service.dart'
+      - 'lib/providers/preload_cache_preferences.dart'
+      - 'lib/settings/definitions/custom_settings_defs.dart'
       - 'test/services/network/interceptors/request_cache_interceptors_test.dart'
+      - 'test/services/preload_cache_service_test.dart'
       - '.github/workflows/request-cache.yaml'
   workflow_dispatch:
 
@@ -53,12 +63,22 @@ jobs:
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/http_revalidation_interceptor.dart \
             lib/services/network/interceptors/request_coalescing_interceptor.dart \
-            test/services/network/interceptors/request_cache_interceptors_test.dart
+            lib/services/network/interceptors/preload_cache_interceptor.dart \
+            lib/services/preload_cache_service.dart \
+            lib/providers/preload_cache_preferences.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            test/services/network/interceptors/request_cache_interceptors_test.dart \
+            test/services/preload_cache_service_test.dart
           git diff --exit-code -- \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/http_revalidation_interceptor.dart \
             lib/services/network/interceptors/request_coalescing_interceptor.dart \
-            test/services/network/interceptors/request_cache_interceptors_test.dart
+            lib/services/network/interceptors/preload_cache_interceptor.dart \
+            lib/services/preload_cache_service.dart \
+            lib/providers/preload_cache_preferences.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            test/services/network/interceptors/request_cache_interceptors_test.dart \
+            test/services/preload_cache_service_test.dart
 
       - name: Analyze request cache path
         run: >-
@@ -66,12 +86,18 @@ jobs:
           lib/services/network/discourse_dio.dart
           lib/services/network/interceptors/http_revalidation_interceptor.dart
           lib/services/network/interceptors/request_coalescing_interceptor.dart
+          lib/services/network/interceptors/preload_cache_interceptor.dart
+          lib/services/preload_cache_service.dart
+          lib/providers/preload_cache_preferences.dart
+          lib/settings/definitions/custom_settings_defs.dart
           test/services/network/interceptors/request_cache_interceptors_test.dart
+          test/services/preload_cache_service_test.dart
 
       - name: Test request cache contracts
         run: >-
           dart tool/flutterw.dart test
           test/services/network/interceptors/request_cache_interceptors_test.dart
+          test/services/preload_cache_service_test.dart
 
       - name: Regression test network stack
         run: >-
