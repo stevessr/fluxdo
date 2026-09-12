@@ -10,6 +10,7 @@ import '../local_notification_service.dart';
 import '../network/cookie/cookie_jar_service.dart';
 import '../network/cookie/csrf_token_service.dart';
 import '../network/discourse_dio.dart';
+import '../network/flux_request_spec.dart';
 import '../../models/notification.dart';
 
 /// iOS 后台任务标识符
@@ -91,9 +92,19 @@ void callbackDispatcher() {
       final response = await dio.post<String>(
         '/message-bus/$clientId/poll',
         data: {channel: lastMessageId.toString()},
-        options: extraHeaders.isNotEmpty
-            ? Options(headers: extraHeaders)
-            : null,
+        options: Options(
+          headers: extraHeaders,
+          extra: const {
+            FluxRequestKeys.isSilent: true,
+            FluxRequestKeys.skipCsrf: true,
+            FluxRequestKeys.skipAuthCheck: true,
+            FluxRequestKeys.skipSessionStateSync: true,
+            FluxRequestKeys.skipCfChallenge: true,
+            FluxRequestKeys.skipNetworkLog: true,
+            FluxRequestKeys.skipRhttpAdapter: true,
+            FluxRequestKeys.noRecovery: true,
+          },
+        ),
       );
 
       if (response.data == null || response.data!.isEmpty) {
