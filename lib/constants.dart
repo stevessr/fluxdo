@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ua_client_hints/ua_client_hints.dart';
 import 'config/discourse_instance_runtime.dart';
 import 'config/site_customization.dart';
 import 'config/sites/linuxdo.dart';
+import 'services/discourse_instance_manager.dart';
 import 'services/windows_webview_environment_service.dart';
 
 /// 应用常量
@@ -54,28 +54,18 @@ class AppConstants {
 
   static Future<void> _loadDiscourseInstanceRuntime() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final enabled =
-          prefs.getBool(DiscourseInstanceRuntime.enabledPrefKey) ?? false;
-      if (!enabled) {
-        DiscourseInstanceRuntime.reset();
-        return;
-      }
-
-      final instanceId =
-          prefs.getString(DiscourseInstanceRuntime.activeInstanceIdPrefKey) ??
-          DiscourseInstanceRuntime.defaultInstanceId;
-      final rawBaseUrl =
-          prefs.getString(DiscourseInstanceRuntime.activeBaseUrlPrefKey) ??
-          DiscourseInstanceRuntime.defaultBaseUrl;
-      final baseUrl = DiscourseInstanceRuntime.normalizeBaseUrl(rawBaseUrl);
+      // 只允许恢复注册表里 id + baseUrl 双匹配的实例。不要直接信任
+      // SharedPreferences 的 active_*：若删除实例时进程意外终止，或者配置
+      // 损坏/被篡改，孤立的 active URL 不能在下次启动重新获得账号边界。
+      final selected = await DiscourseInstanceManager.instance
+          .selectedInstance();
       DiscourseInstanceRuntime.activate(
-        instanceId: instanceId,
-        baseUrl: baseUrl,
+        instanceId: selected.id,
+        baseUrl: selected.baseUrl,
       );
       debugPrint(
         '[AppConstants] Active Discourse instance: '
-        '${DiscourseInstanceRuntime.instanceId} ($baseUrl)',
+        '${DiscourseInstanceRuntime.instanceId} (${selected.baseUrl})',
       );
     } catch (e) {
       DiscourseInstanceRuntime.reset();
