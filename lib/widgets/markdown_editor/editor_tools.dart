@@ -54,7 +54,7 @@ const String kEditorToolImage = 'image';
 final EditorTool _stevessrQuickTool = EditorTool(
   id: 'stevessr',
   icon: const Icon(Icons.auto_awesome_rounded),
-  label: (s) => s.stevessr.insert,
+  label: (_) => S.current.stevessr.insert,
   action: (toolbar) async {
     final selection = toolbar.widget.controller.selection;
     final generated = await StevessrComposerService.openAndUpload(
