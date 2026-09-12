@@ -112,9 +112,7 @@ class LocalNotificationService {
       openNotificationPage(context, page);
       return;
     }
-    navigatorKey.currentState?.push(
-      MaterialPageRoute(builder: (_) => page),
-    );
+    navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => page));
   }
 
   /// 请求通知权限
