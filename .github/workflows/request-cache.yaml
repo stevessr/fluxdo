@@ -11,6 +11,7 @@ on:
       - 'lib/providers/preload_cache_preferences.dart'
       - 'lib/settings/definitions/custom_settings_defs.dart'
       - 'test/services/network/interceptors/request_cache_interceptors_test.dart'
+      - 'test/services/network/interceptors/preload_cache_interceptor_test.dart'
       - 'test/services/preload_cache_service_test.dart'
       - '.github/workflows/request-cache.yaml'
   push:
@@ -26,6 +27,7 @@ on:
       - 'lib/providers/preload_cache_preferences.dart'
       - 'lib/settings/definitions/custom_settings_defs.dart'
       - 'test/services/network/interceptors/request_cache_interceptors_test.dart'
+      - 'test/services/network/interceptors/preload_cache_interceptor_test.dart'
       - 'test/services/preload_cache_service_test.dart'
       - '.github/workflows/request-cache.yaml'
   workflow_dispatch:
@@ -68,6 +70,7 @@ jobs:
             lib/providers/preload_cache_preferences.dart \
             lib/settings/definitions/custom_settings_defs.dart \
             test/services/network/interceptors/request_cache_interceptors_test.dart \
+            test/services/network/interceptors/preload_cache_interceptor_test.dart \
             test/services/preload_cache_service_test.dart
           git diff --exit-code -- \
             lib/services/network/discourse_dio.dart \
@@ -78,6 +81,7 @@ jobs:
             lib/providers/preload_cache_preferences.dart \
             lib/settings/definitions/custom_settings_defs.dart \
             test/services/network/interceptors/request_cache_interceptors_test.dart \
+            test/services/network/interceptors/preload_cache_interceptor_test.dart \
             test/services/preload_cache_service_test.dart
 
       - name: Analyze request cache path
@@ -91,12 +95,14 @@ jobs:
           lib/providers/preload_cache_preferences.dart
           lib/settings/definitions/custom_settings_defs.dart
           test/services/network/interceptors/request_cache_interceptors_test.dart
+          test/services/network/interceptors/preload_cache_interceptor_test.dart
           test/services/preload_cache_service_test.dart
 
       - name: Test request cache contracts
         run: >-
           dart tool/flutterw.dart test
           test/services/network/interceptors/request_cache_interceptors_test.dart
+          test/services/network/interceptors/preload_cache_interceptor_test.dart
           test/services/preload_cache_service_test.dart
 
       - name: Regression test network stack
