@@ -828,6 +828,7 @@ class _EditTopicPageState extends ConsumerState<EditTopicPage> {
                                     minimumLength: _minContentLength,
                                   ),
                                   controller: _contentController,
+                                  enableStevessr: true,
                                   focusNode: _contentFocusNode,
                                   hintText:
                                       context.l10n.createTopic_contentHint,

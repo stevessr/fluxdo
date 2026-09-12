@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/l10n/s.dart';
 import 'package:fluxdo/models/stevessr_render_params.dart';
@@ -13,6 +14,11 @@ void main() {
       TranslationProvider(
         child: MaterialApp(
           locale: const Locale('zh'),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           supportedLocales: AppLocaleUtils.supportedLocales,
           home: const StevessrGeneratorPage(),
         ),
@@ -23,6 +29,30 @@ void main() {
     expect(find.text('StevesSR 图片生成器'), findsOneWidget);
     expect(find.byType(StevessrCanvas), findsOneWidget);
     expect(find.byType(TextField), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('嵌入编辑器模式显示生成并插入按钮', (tester) async {
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocaleUtils.supportedLocales,
+          home: StevessrGeneratorPage(
+            onInsert: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('生成并插入'), findsOneWidget);
+    expect(find.byIcon(Icons.add_photo_alternate_rounded), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

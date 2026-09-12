@@ -300,6 +300,23 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
+  /// 插入已上传的 StevesSR 图片，不再弹出确认框。
+  void insertUploadedImage(
+    UploadResult uploadResult, {
+    String alt = 'StevesSR',
+  }) {
+    _seedUploadCache(uploadResult);
+    final selection = widget.controller.selection;
+    final text = widget.controller.text;
+    final needsLeadingNewline =
+        selection.isValid &&
+        selection.start > 0 &&
+        text[selection.start - 1] != '\n';
+    final prefix = needsLeadingNewline ? '\n' : '';
+    insertText('$prefix${uploadResult.toMarkdown(alt: alt)}\n');
+    widget.focusNode?.requestFocus();
+  }
+
   /// 用指定前后缀包裹选中文本（无选中时插入占位符并选中）
   void wrapSelection(String start, String end, {String? placeholder}) {
     final selection = widget.controller.selection;

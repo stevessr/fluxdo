@@ -10,7 +10,10 @@ import '../widgets/stevessr/stevessr_canvas.dart';
 
 /// StevesSR 离线图片生成器。
 class StevessrGeneratorPage extends StatefulWidget {
-  const StevessrGeneratorPage({super.key});
+  const StevessrGeneratorPage({super.key, this.onInsert});
+
+  /// 嵌入编辑器时的生成并插入回调；为空时仅提供保存/分享。
+  final Future<void> Function(StevessrExportedImage image)? onInsert;
 
   @override
   State<StevessrGeneratorPage> createState() => _StevessrGeneratorPageState();
@@ -170,7 +173,11 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
     await _export(save: false);
   }
 
-  Future<void> _export({required bool save}) async {
+  Future<void> _insert() async {
+    await _export(insert: true);
+  }
+
+  Future<void> _export({bool save = false, bool insert = false}) async {
     if (_isExporting) return;
     setState(() => _isExporting = true);
     try {
@@ -178,6 +185,10 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
         params: _params,
         repaintBoundaryKey: _repaintBoundaryKey,
       );
+      if (insert && widget.onInsert != null) {
+        await widget.onInsert!(image);
+        return;
+      }
       if (save) {
         await StevessrExportService.save(image);
       } else {
@@ -457,6 +468,14 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             ),
             _buildPositionSection(),
             const SizedBox(height: 16),
+            if (widget.onInsert != null) ...[
+              FilledButton.icon(
+                onPressed: _isExporting ? null : _insert,
+                icon: const Icon(Icons.add_photo_alternate_rounded),
+                label: Text(l10n.insert),
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
                 Expanded(

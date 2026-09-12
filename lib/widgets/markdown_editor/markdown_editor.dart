@@ -13,6 +13,7 @@ import 'package:super_clipboard/super_clipboard.dart';
 
 import '../../providers/preferences_provider.dart';
 import '../../services/discourse_cook_service.dart';
+import '../../services/stevessr_composer_service.dart';
 import '../../services/emoji_handler.dart';
 import '../../utils/emoji_shortcodes.dart';
 import '../../utils/platform_utils.dart';
@@ -64,6 +65,9 @@ class MarkdownEditor extends ConsumerStatefulWidget {
   /// 是否显示预览按钮
   final bool showPreviewButton;
 
+  /// 是否在工具面板提供 StevesSR 生成并插入。
+  final bool enableStevessr;
+
   /// 外部预览切换回调（可选）
   /// 提供时，预览按钮将调用此回调而非内部预览切换，
   /// 同时应配合 [isPreview] 传入当前预览状态
@@ -103,6 +107,7 @@ class MarkdownEditor extends ConsumerStatefulWidget {
     this.onEmojiPanelChanged,
     this.mentionDataSource,
     this.showPreviewButton = true,
+    this.enableStevessr = false,
     this.onTogglePreview,
     this.isPreview,
     this.onSwitchToRich,
@@ -247,6 +252,18 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     return _toolsTask = _presentTools(quick: false);
   }
 
+  Future<void> _insertStevessrImage() async {
+    final selection = widget.controller.selection;
+    final generated = await StevessrComposerService.openAndUpload(context);
+    if (!mounted || generated == null) return;
+    if (selection.isValid && selection.end <= widget.controller.text.length) {
+      widget.controller.selection = selection;
+    } else {
+      _focusNode.requestFocus();
+    }
+    _toolbarKey.currentState?.insertUploadedImage(generated.upload);
+  }
+
   Future<void> _presentTools({required bool quick}) async {
     final toolbar = _toolbarKey.currentState;
     if (toolbar == null || _toolsOpen) return;
@@ -344,6 +361,15 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
                       ),
                 ]
               : const [],
+        ),
+      if (widget.enableStevessr)
+        ComposerToolAction(
+          id: 'stevessr',
+          label: S.current.stevessr.insert,
+          icon: const Icon(Icons.auto_awesome_rounded),
+          searchText: 'stevessr image bubble',
+          group: ComposerToolGroup.insert,
+          run: () => run(_insertStevessrImage),
         ),
       if (!ref.read(preferencesProvider).autoPanguSpacing)
         ComposerToolAction(

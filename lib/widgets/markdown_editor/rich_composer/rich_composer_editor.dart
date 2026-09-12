@@ -55,6 +55,7 @@ import '../../../models/mention_user.dart';
 import '../../../services/app_error_handler.dart';
 import '../../../services/discourse/discourse_service.dart';
 import '../../../services/discourse_cook_service.dart';
+import '../../../services/stevessr_composer_service.dart';
 import '../../../services/emoji_alias_service.dart';
 import '../../../services/emoji_handler.dart';
 import '../../../utils/clipboard_image_native.dart';
@@ -133,6 +134,7 @@ class RichComposerEditor extends StatefulWidget {
     this.mentionDataSource,
     this.onFallbackToPlain,
     this.onSwitchToSource,
+    this.enableStevessr = false,
   });
 
   /// 对外真相源镜像(宿主草稿/提交读它)。
@@ -167,6 +169,9 @@ class RichComposerEditor extends StatefulWidget {
   /// (controller.text 即最新 markdown),宿主直接换 MarkdownEditor
   /// 即可,内容无缝衔接。null 时不显示切换按钮。
   final VoidCallback? onSwitchToSource;
+
+  /// 是否在工具面板提供 StevesSR 生成并插入。
+  final bool enableStevessr;
 
   @override
   State<RichComposerEditor> createState() => RichComposerEditorState();
@@ -426,6 +431,20 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     return _toolsTask = _presentTools(quick: false);
   }
 
+  Future<void> _insertStevessrImage() async {
+    final editor = _editor;
+    final selection = editor?.selection;
+    final generated = await StevessrComposerService.openAndUpload(context);
+    if (!mounted || generated == null || editor == null) return;
+    if (selection != null) editor.updateSelection(selection);
+    insertUploadedImage(
+      shortUrl: generated.upload.shortUrl,
+      alt: 'StevesSR',
+      width: generated.upload.width,
+      height: generated.upload.height,
+    );
+  }
+
   Future<void> _presentTools({required bool quick}) async {
     final editor = _editor;
     if (editor == null || _toolsOpen) return;
@@ -516,6 +535,28 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                   .setRichToolbarTools(ids);
             },
             run: () => run(action.run),
+          ),
+        if (widget.enableStevessr)
+          ComposerToolAction(
+            id: 'stevessr',
+            label: S.current.stevessr.insert,
+            icon: const Icon(Icons.auto_awesome_rounded),
+            searchText: 'stevessr image bubble',
+            group: ComposerToolGroup.insert,
+            isPinned: () => container
+                .read(preferencesProvider)
+                .richToolbarTools
+                .contains('stevessr'),
+            togglePinned: () {
+              final ids = List<String>.of(
+                container.read(preferencesProvider).richToolbarTools,
+              );
+              if (!ids.remove('stevessr')) ids.add('stevessr');
+              container
+                  .read(preferencesProvider.notifier)
+                  .setRichToolbarTools(ids);
+            },
+            run: () => run(_insertStevessrImage),
           ),
         if (widget.onSwitchToSource != null)
           ComposerToolAction(

@@ -1682,6 +1682,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                                             ComposerViewMode.source,
                                           ),
                                           controller: _contentController,
+                                          enableStevessr: true,
                                           focusNode: _contentFocusNode,
                                           hintText:
                                               context.l10n.editor_hintText,

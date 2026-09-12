@@ -33,6 +33,7 @@
   "characterHeight": "角色高度",
   "save": "儲存圖片",
   "share": "分享",
+  "insert": "生成並插入",
   "rendering": "生成中…",
   "renderFailed": "圖片生成失敗",
   "png": "PNG",

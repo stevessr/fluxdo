@@ -33,6 +33,7 @@
   "characterHeight": "Character height",
   "save": "Save image",
   "share": "Share",
+  "insert": "Generate and insert",
   "rendering": "Generating…",
   "renderFailed": "Image generation failed",
   "png": "PNG",

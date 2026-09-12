@@ -13,6 +13,7 @@ import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/stevessr_composer_service.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
@@ -382,6 +383,31 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     await prefs.setStringList(_recentReactionEmojisKey, trimmed);
   }
 
+  /// 打开 StevesSR 生成器并把生成图片作为消息串附件加入待发送列表。
+  Future<void> _createStevessrImage() async {
+    if (_isUploadingImage || !mounted) return;
+    setState(() => _isUploadingImage = true);
+    try {
+      final generated = await StevessrComposerService.openAndUpload(context);
+      if (!mounted || generated == null) return;
+      final uploadId = generated.upload.id;
+      if (uploadId == null) {
+        throw StateError('生成图片上传后没有附件 ID');
+      }
+      setState(() {
+        _pendingUploads.add((path: generated.path, uploadId: uploadId));
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('StevesSR 图片上传失败: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
+    }
+  }
+
   /// 多选并逐张上传图片附件；每张选完立即进预览条（uploadId 为 null 表示上传中）
   Future<void> _pickAndUploadImage() async {
     final images = await ImagePicker().pickMultiImage();
@@ -501,12 +527,19 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.file(
-            File(upload.path),
-            width: 64,
-            height: 64,
-            fit: BoxFit.cover,
-          ),
+          child: upload.path.toLowerCase().endsWith('.svg')
+              ? Container(
+                  width: 64,
+                  height: 64,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: const Icon(Icons.image_outlined),
+                )
+              : Image.file(
+                  File(upload.path),
+                  width: 64,
+                  height: 64,
+                  fit: BoxFit.cover,
+                ),
         ),
         if (upload.uploadId == null)
           Positioned.fill(
@@ -1055,6 +1088,14 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                               ? null
                               : _pickAndUploadImage,
                           icon: const Icon(Icons.add_photo_alternate_rounded),
+                        ),
+                        IconButton(
+                          tooltip: '生成 StevesSR 图片',
+                          onPressed: _isUploadingImage
+                              ? null
+                              : _createStevessrImage,
+                          icon: const Icon(Icons.auto_awesome_rounded),
+                          color: theme.colorScheme.primary,
                         ),
                         // 表情按钮
                         IconButton(
