@@ -124,7 +124,7 @@ class PreloadCacheService {
 
     final stamp = _now();
     final temp = File(
-      '${file.path}.tmp-${Process.pid}-${stamp.microsecondsSinceEpoch}',
+      '${file.path}.tmp-$pid-${stamp.microsecondsSinceEpoch}',
     );
     try {
       await temp.writeAsString(_sanitizeForPersistence(html), flush: true);
