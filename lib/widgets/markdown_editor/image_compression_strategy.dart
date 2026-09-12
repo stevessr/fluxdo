@@ -14,6 +14,24 @@ bool get _useNativeCompress =>
 /// 图片输出格式
 enum ImageOutputFormat { jpeg, png, webp }
 
+img.Image _resizeForUpload(img.Image image) {
+  if (image.width <= 1920 && image.height <= 1920) {
+    return image;
+  }
+
+  return img.copyResize(
+    image,
+    width: image.width > image.height ? 1920 : null,
+    height: image.height >= image.width ? 1920 : null,
+    interpolation: img.Interpolation.linear,
+  );
+}
+
+bool _hasTransparentPixels(img.Image image) {
+  if (!image.hasAlpha) return false;
+  return image.any((pixel) => pixel.aNormalized < 1.0);
+}
+
 abstract class ImageCompressionStrategy {
   const ImageCompressionStrategy();
 
@@ -96,15 +114,50 @@ class StaticImageCompressionStrategy extends ImageCompressionStrategy {
     }
 
     final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+    // PNG/WebP 都可能携带 alpha。先检查真实透明像素；一旦存在透明像素，
+    // 使用 Dart image 解码/缩放并无损编码为 PNG，避免原生压缩后端或 JPEG
+    // 路径把 alpha 扁平化。PNG 扩展名同时保证上传 MIME 与实际内容一致。
+    final transparentPng = await _compressTransparentToPng(sourcePath);
+    if (transparentPng != null) {
+      final targetPath = p.join(
+        tempDir.path,
+        'compressed_$timestamp.png',
+      );
+      await File(targetPath).writeAsBytes(transparentPng);
+      return targetPath;
+    }
+
+    // Windows/Linux 的 image 包当前 WebP 压缩回退为 PNG，因此不能继续
+    // 使用 .webp 文件名，否则上传层会得到与文件内容不匹配的 MIME/扩展名。
+    final outputExtension =
+        !_useNativeCompress && format == ImageOutputFormat.webp
+            ? 'png'
+            : extension;
     final targetPath = p.join(
       tempDir.path,
-      'compressed_${DateTime.now().millisecondsSinceEpoch}.$extension',
+      'compressed_$timestamp.$outputExtension',
     );
 
     if (_useNativeCompress) {
       return _compressNative(sourcePath, targetPath, quality);
     }
     return _compressDart(sourcePath, targetPath, quality);
+  }
+
+  Future<List<int>?> _compressTransparentToPng(String sourcePath) async {
+    if (format == ImageOutputFormat.jpeg) return null;
+
+    final bytes = await File(sourcePath).readAsBytes();
+    return Isolate.run<List<int>?>(() {
+      final image = img.decodeImage(bytes);
+      if (image == null || !_hasTransparentPixels(image)) {
+        return null;
+      }
+
+      return img.encodePng(_resizeForUpload(image));
+    });
   }
 
   /// iOS/Android/macOS：使用 flutter_image_compress 原生压缩
@@ -143,20 +196,12 @@ class StaticImageCompressionStrategy extends ImageCompressionStrategy {
       final image = img.decodeImage(bytes);
       if (image == null) return null;
 
-      // 按 1920 上限缩放
-      final resized = (image.width > 1920 || image.height > 1920)
-          ? img.copyResize(
-              image,
-              width: image.width > image.height ? 1920 : null,
-              height: image.height >= image.width ? 1920 : null,
-              interpolation: img.Interpolation.linear,
-            )
-          : image;
+      final resized = _resizeForUpload(image);
 
       return switch (format) {
         ImageOutputFormat.jpeg => img.encodeJpg(resized, quality: quality),
         ImageOutputFormat.png => img.encodePng(resized),
-        // image 包不支持 webp 编码，回退为 png
+        // image 包不支持有损 WebP 参数，桌面端统一回退为 PNG。
         ImageOutputFormat.webp => img.encodePng(resized),
       };
     });
