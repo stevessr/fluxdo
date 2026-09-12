@@ -22,7 +22,7 @@ void main() {
     expect(parsed.belongsToInstance('linux-do'), isFalse);
   });
 
-  test('legacy payload remains supported without an instance boundary', () {
+  test('legacy payload belongs only to the historical default instance', () {
     final parsed = NotificationRoutePayload.parse('topic:123:4');
 
     expect(parsed, isNotNull);
@@ -30,7 +30,8 @@ void main() {
     expect(parsed.isPrivateMessage, isFalse);
     expect(parsed.topicId, 123);
     expect(parsed.postNumber, 4);
-    expect(parsed.belongsToInstance('any-instance'), isTrue);
+    expect(parsed.belongsToInstance('linux-do'), isTrue);
+    expect(parsed.belongsToInstance('site-custom'), isFalse);
   });
 
   test('rejects malformed v2 payload instead of cross-routing', () {
