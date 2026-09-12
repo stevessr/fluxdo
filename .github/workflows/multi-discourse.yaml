@@ -11,12 +11,14 @@ on:
       - 'lib/services/deep_link_service.dart'
       - 'lib/services/discourse/discourse_service.dart'
       - 'lib/services/discourse_instance_manager.dart'
+      - 'lib/services/local_notification_service.dart'
       - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
       - 'lib/services/preload_cache_service.dart'
       - 'lib/services/storage/resilient_secure_storage.dart'
       - 'lib/settings/definitions/custom_settings_defs.dart'
+      - 'lib/utils/notification_route_payload.dart'
       - 'lib/utils/url_helper.dart'
       - 'test/config/discourse_instance_runtime_test.dart'
       - 'test/services/account_browser_session_policy_test.dart'
@@ -24,6 +26,7 @@ on:
       - 'test/services/discourse_instance_manager_test.dart'
       - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
+      - 'test/utils/notification_route_payload_test.dart'
       - 'test/utils/url_helper_test.dart'
       - '.github/workflows/multi-discourse.yaml'
   push:
@@ -38,12 +41,14 @@ on:
       - 'lib/services/deep_link_service.dart'
       - 'lib/services/discourse/discourse_service.dart'
       - 'lib/services/discourse_instance_manager.dart'
+      - 'lib/services/local_notification_service.dart'
       - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
       - 'lib/services/preload_cache_service.dart'
       - 'lib/services/storage/resilient_secure_storage.dart'
       - 'lib/settings/definitions/custom_settings_defs.dart'
+      - 'lib/utils/notification_route_payload.dart'
       - 'lib/utils/url_helper.dart'
       - 'test/config/discourse_instance_runtime_test.dart'
       - 'test/services/account_browser_session_policy_test.dart'
@@ -51,6 +56,7 @@ on:
       - 'test/services/discourse_instance_manager_test.dart'
       - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
+      - 'test/utils/notification_route_payload_test.dart'
       - 'test/utils/url_helper_test.dart'
       - '.github/workflows/multi-discourse.yaml'
   workflow_dispatch:
@@ -93,17 +99,20 @@ jobs:
             lib/services/background/ios_background_fetch.dart \
             lib/services/deep_link_service.dart \
             lib/services/discourse/discourse_service.dart \
+            lib/services/local_notification_service.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
             lib/services/preload_cache_service.dart \
             lib/services/storage/resilient_secure_storage.dart \
             lib/settings/definitions/custom_settings_defs.dart \
+            lib/utils/notification_route_payload.dart \
             lib/utils/url_helper.dart \
             test/config/discourse_instance_runtime_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
             test/services/discourse_instance_manager_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
+            test/utils/notification_route_payload_test.dart \
             test/utils/url_helper_test.dart
           git diff --exit-code -- \
             lib/config/discourse_instance_runtime.dart \
@@ -111,17 +120,20 @@ jobs:
             lib/services/background/ios_background_fetch.dart \
             lib/services/deep_link_service.dart \
             lib/services/discourse/discourse_service.dart \
+            lib/services/local_notification_service.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
             lib/services/preload_cache_service.dart \
             lib/services/storage/resilient_secure_storage.dart \
             lib/settings/definitions/custom_settings_defs.dart \
+            lib/utils/notification_route_payload.dart \
             lib/utils/url_helper.dart \
             test/config/discourse_instance_runtime_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
             test/services/discourse_instance_manager_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
+            test/utils/notification_route_payload_test.dart \
             test/utils/url_helper_test.dart
 
       - name: Analyze multi-instance paths
@@ -135,12 +147,14 @@ jobs:
           lib/services/deep_link_service.dart
           lib/services/discourse/discourse_service.dart
           lib/services/discourse_instance_manager.dart
+          lib/services/local_notification_service.dart
           lib/services/network/cookie/cookie_jar_service.dart
           lib/services/network/discourse_dio.dart
           lib/services/network/interceptors/discourse_base_path_interceptor.dart
           lib/services/preload_cache_service.dart
           lib/services/storage/resilient_secure_storage.dart
           lib/settings/definitions/custom_settings_defs.dart
+          lib/utils/notification_route_payload.dart
           lib/utils/url_helper.dart
           test/config/discourse_instance_runtime_test.dart
           test/services/account_browser_session_policy_test.dart
@@ -148,6 +162,7 @@ jobs:
           test/services/discourse_instance_manager_test.dart
           test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
+          test/utils/notification_route_payload_test.dart
           test/utils/url_helper_test.dart
 
       - name: Test multi-instance contracts
@@ -159,4 +174,5 @@ jobs:
           test/services/discourse_instance_manager_test.dart
           test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
+          test/utils/notification_route_payload_test.dart
           test/utils/url_helper_test.dart
