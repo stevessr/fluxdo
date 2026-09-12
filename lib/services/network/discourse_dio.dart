@@ -11,6 +11,7 @@ import 'interceptors/cf_challenge_terminal_interceptor.dart';
 import 'interceptors/error_interceptor.dart';
 import 'interceptors/http_revalidation_interceptor.dart';
 import 'interceptors/network_log_interceptor.dart';
+import 'interceptors/preload_cache_interceptor.dart';
 import 'interceptors/redirect_interceptor.dart';
 import 'interceptors/request_coalescing_interceptor.dart';
 import 'interceptors/request_header_interceptor.dart';
@@ -66,18 +67,24 @@ class DiscourseDio {
     // 2. 会话代守卫（最先执行，确保过期请求不进入后续拦截器）
     dio.interceptors.add(SessionGuardInterceptor());
 
-    // 3. 同一会话代内，相同 GET 共享正在进行的请求。
+    // 3. 实验性首页 preload cache。
+    // 必须位于请求合并/调度器之前：cache hit 会在 request 阶段直接 resolve，
+    // 不能先让后面的组件 acquire 并发槽或登记 in-flight 请求后再短路。
+    // cache miss 则 handler.next，完整进入原有网络、CF、重试与 Cookie 链。
+    dio.interceptors.add(PreloadCacheInterceptor());
+
+    // 4. 同一会话代内，相同 GET 共享正在进行的请求。
     // 放在调度器之前，重复请求不会占用并发/速率槽位；最终结果由靠后的
     // Finalizer 完成，确保重试、重定向、CF 验证都结束后才唤醒跟随者。
     dio.interceptors.add(RequestCoalescingInterceptor());
 
-    // 4. 并发限制 + 滑动窗口速率限制（null 表示不限制）
+    // 5. 并发限制 + 滑动窗口速率限制（null 表示不限制）
     // 实际参数从 RequestSchedulerConfig 动态读取
     if (maxConcurrent != null) {
       dio.interceptors.add(RequestSchedulerInterceptor());
     }
 
-    // 5. 恢复协调器:全项目唯一的重放引擎
+    // 6. 恢复协调器:全项目唯一的重放引擎
     //
     // 策略顺序即失败归属(首个 canHandle 者独占决策权):
     //   会话自愈 → rhttp 1xx 旁路 → 引擎降级 → 限流等待 → 瞬态重试
@@ -115,21 +122,21 @@ class DiscourseDio {
       );
     }
 
-    // 6. Cookie 管理
+    // 7. Cookie 管理
     if (cookiesEnabled) {
       dio.interceptors.add(AppCookieManager(cookieJarService.cookieJar));
     }
 
-    // 7. 请求头拦截器
+    // 8. 请求头拦截器
     dio.interceptors.add(RequestHeaderInterceptor(CsrfTokenService()));
 
-    // 8. 重定向拦截器
+    // 9. 重定向拦截器
     dio.interceptors.add(RedirectInterceptor(dio));
 
-    // 9. 错误拦截器
+    // 10. 错误拦截器
     dio.interceptors.add(ErrorInterceptor());
 
-    // 10. CF 验证拦截器 + 终态类型化兜底。
+    // 11. CF 验证拦截器 + 终态类型化兜底。
     // 后者不做重试，只确保验证后仍残留的 challenge 不会以裸 403/429
     // 泄漏给业务层并被误显示成“无权限访问资源”。
     if (enableCfChallenge) {
@@ -139,16 +146,16 @@ class DiscourseDio {
       dio.interceptors.add(CfChallengeTerminalInterceptor());
     }
 
-    // 11. 浏览器式条件重验证缓存。
+    // 12. 浏览器式条件重验证缓存。
     // 仅保存带 ETag/Last-Modified 的小型 GET；不自造 TTL，不让动态 Discourse
     // 数据在客户端长期陈旧。304 在这里展开为缓存 body + 最新响应头。
     dio.interceptors.add(HttpRevalidationInterceptor());
 
-    // 12. 请求合并的最终完成点。必须在恢复/重定向/CF/304 展开之后，
+    // 13. 请求合并的最终完成点。必须在恢复/重定向/CF/304 展开之后，
     // 否则跟随者可能收到中间 429/403/304 而不是业务层最终结果。
     dio.interceptors.add(RequestCoalescingFinalizerInterceptor());
 
-    // 13. 网络日志拦截器（最后一个，记录最终结果）
+    // 14. 网络日志拦截器（最后一个，记录最终结果）
     // 注意：Gateway URL 改写已移至 HttpClientAdapter 层（_GatewayAdapterWrapper），
     // 所有拦截器始终看到原始 URL，无需额外处理。
     if (enableNetworkLog) {
