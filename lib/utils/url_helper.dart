@@ -179,7 +179,9 @@ class UrlHelper {
     // debug override 显式传空字符串仍表示“强制按根部署测试”，不触发 fallback。
     final baseUri =
         _debugBaseUriOverride ??
-        (preloaded.isNotEmpty ? preloaded : Uri.parse(AppConstants.baseUrl).path);
+        (preloaded.isNotEmpty
+            ? preloaded
+            : Uri.parse(AppConstants.baseUrl).path);
     if (baseUri.isEmpty || baseUri == '/') {
       return '';
     }
