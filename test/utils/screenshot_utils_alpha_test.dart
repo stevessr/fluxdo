@@ -26,9 +26,8 @@ void main() {
     );
     await tester.pump();
 
-    final bytes = await ScreenshotUtils.captureWidget(
-      boundaryKey,
-      pixelRatio: 1,
+    final bytes = await tester.runAsync(
+      () => ScreenshotUtils.captureWidget(boundaryKey, pixelRatio: 1),
     );
     final png = bytes == null ? null : img.decodePng(bytes);
 
