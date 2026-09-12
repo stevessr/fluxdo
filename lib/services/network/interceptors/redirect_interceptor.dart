@@ -41,6 +41,7 @@ class RedirectInterceptor extends Interceptor {
           lower == 'origin' ||
           lower == 'referer' ||
           lower == 'x-requested-with' ||
+          lower == 'x-shared-session-key' ||
           lower == 'discourse-present' ||
           lower.startsWith('x-csrf-') ||
           lower.startsWith('user-api-') ||
