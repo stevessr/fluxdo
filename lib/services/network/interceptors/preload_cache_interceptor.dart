@@ -7,6 +7,10 @@ import '../../preload_cache_service.dart';
 
 const _preloadRequestTag = 'preload-home';
 const _preloadCacheHitExtra = '_fluxPreloadCacheHit';
+final _dataPreloadedAttributePattern = RegExp(
+  r'''\bdata-preloaded\s*=''',
+  caseSensitive: false,
+);
 
 /// 首页 preload 的实验性持久缓存。
 ///
@@ -72,7 +76,8 @@ class PreloadCacheInterceptor extends Interceptor {
         status >= 200 &&
         status < 300 &&
         data is String &&
-        data.isNotEmpty) {
+        data.isNotEmpty &&
+        _isReusablePreloadHtml(data)) {
       // 写盘不应拉长启动关键路径。失败只记日志，下一次仍可正常走网络。
       unawaited(_persist(data));
     }
@@ -90,5 +95,12 @@ class PreloadCacheInterceptor extends Interceptor {
   bool _isPreloadRequest(RequestOptions options) {
     return options.method.toUpperCase() == 'GET' &&
         options.extra['requestTag'] == _preloadRequestTag;
+  }
+
+  bool _isReusablePreloadHtml(String html) {
+    // Cloudflare challenge / 登录页偶尔也会以 200 HTML 到达响应链。
+    // 只有包含 Discourse bootstrap 属性的页面才允许进入 7 天持久缓存，
+    // 避免在后续 CF 拦截器接管之前把挑战页误写入缓存。
+    return _dataPreloadedAttributePattern.hasMatch(html);
   }
 }
