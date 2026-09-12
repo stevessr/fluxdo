@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import '../config/discourse_instance_runtime.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page.dart';
 import '../pages/webview_login_page.dart';
@@ -113,49 +114,52 @@ class DeepLinkService {
       return;
     }
 
-    final discoursePath = _pathWithinActiveBase(uri);
-
-    // 尝试匹配用户链接 /u/username
-    final userInfo = DiscourseUrlParser.parseUser(discoursePath);
-    if (userInfo != null) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => UserProfilePage(username: userInfo.username),
-        ),
-      );
-      return;
-    }
-
-    // 尝试匹配话题链接（带 ID）：/t/123、/t/123/5、/t/topic-slug/123 等
-    final topicInfo = DiscourseUrlParser.parseTopic(discoursePath);
-    if (topicInfo != null) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TopicDetailPage(
-            topicId: topicInfo.topicId,
-            scrollToPostNumber: topicInfo.postNumber,
+    // 只有活动 Discourse 主 origin + relative-url-root 内的链接才能走原生路由。
+    // 默认 linux.do 子域仍允许由 FluxDO 内置浏览器接管，但不能把子域上的
+    // `/t/123` 误当成主论坛话题。
+    final discoursePath = DiscourseInstanceRuntime.pathWithinInstance(uri);
+    if (discoursePath != null) {
+      // 尝试匹配用户链接 /u/username
+      final userInfo = DiscourseUrlParser.parseUser(discoursePath);
+      if (userInfo != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => UserProfilePage(username: userInfo.username),
           ),
-        ),
-      );
-      return;
-    }
+        );
+        return;
+      }
 
-    // 尝试匹配话题链接（只有 slug）：/t/topic-slug
-    final topicSlug = DiscourseUrlParser.parseTopicSlug(discoursePath);
-    if (topicSlug != null) {
-      _handleTopicBySlug(context, topicSlug);
-      return;
-    }
+      // 尝试匹配话题链接（带 ID）：/t/123、/t/123/5、/t/topic-slug/123 等
+      final topicInfo = DiscourseUrlParser.parseTopic(discoursePath);
+      if (topicInfo != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => TopicDetailPage(
+              topicId: topicInfo.topicId,
+              scrollToPostNumber: topicInfo.postNumber,
+            ),
+          ),
+        );
+        return;
+      }
 
-    // 邮箱链接登录：/session/email-login/{token}
-    if (_isActiveDiscourseHost(uri.host) &&
-        discoursePath.startsWith('/session/email-login/')) {
-      _handleEmailLogin(context, url);
-      return;
+      // 尝试匹配话题链接（只有 slug）：/t/topic-slug
+      final topicSlug = DiscourseUrlParser.parseTopicSlug(discoursePath);
+      if (topicSlug != null) {
+        _handleTopicBySlug(context, topicSlug);
+        return;
+      }
+
+      // 邮箱链接登录：/session/email-login/{token}
+      if (discoursePath.startsWith('/session/email-login/')) {
+        _handleEmailLogin(context, url);
+        return;
+      }
     }
 
     // 当前 Discourse 实例的其他链接：使用内置浏览器
-    if (_isActiveDiscourseHost(uri.host)) {
+    if (DiscourseInstanceRuntime.containsUri(uri)) {
       WebViewPage.open(context, url);
       return;
     }
@@ -266,27 +270,6 @@ class DeepLinkService {
     // 浏览器授权登录回调(仅 auth_redirect,不接管其他 discourse:// 链接)
     if (uri.scheme == 'discourse' && uri.host == 'auth_redirect') return true;
     if (uri.scheme != 'http' && uri.scheme != 'https') return false;
-    return _isActiveDiscourseHost(uri.host);
-  }
-
-  static bool _isActiveDiscourseHost(String host) {
-    final normalizedHost = host.toLowerCase();
-    final baseHost = Uri.parse(AppConstants.baseUrl).host.toLowerCase();
-    return normalizedHost == baseHost || normalizedHost.endsWith('.$baseHost');
-  }
-
-  /// 把 absolute URL 的 path 转成当前 Discourse relative-url-root 内路径。
-  /// 例如 baseUrl=https://example.com/forum 时，/forum/t/1 -> /t/1。
-  static String _pathWithinActiveBase(Uri uri) {
-    final basePath = Uri.parse(AppConstants.baseUrl).path.replaceFirst(
-      RegExp(r'/+$'),
-      '',
-    );
-    if (basePath.isEmpty || basePath == '/') return uri.path;
-    if (uri.path == basePath) return '/';
-    if (uri.path.startsWith('$basePath/')) {
-      return uri.path.substring(basePath.length);
-    }
-    return uri.path;
+    return DiscourseInstanceRuntime.containsUri(uri);
   }
 }
