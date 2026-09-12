@@ -66,6 +66,27 @@ class DiscourseInstanceManager {
 
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
+  /// 当前平台是否能安全访问该实例。
+  ///
+  /// Android manifest 已显式允许 cleartext，可用于局域网/自托管 HTTP；iOS
+  /// 没有全局 ATS 放行，不能把任意 HTTP 实例当成可用配置。这里做中心化
+  /// fail-closed，而不是仅在设置页提示，确保旧配置和直接调用 manager 也
+  /// 无法在 iOS 冷启动时恢复到一个系统网络栈必然拒绝的站点。
+  @visibleForTesting
+  static bool isBaseUrlSupportedOnCurrentPlatform(String baseUrl) {
+    final normalized = DiscourseInstanceRuntime.normalizeBaseUrl(baseUrl);
+    final scheme = Uri.parse(normalized).scheme.toLowerCase();
+    return defaultTargetPlatform != TargetPlatform.iOS || scheme == 'https';
+  }
+
+  static String _normalizeSupportedBaseUrl(String baseUrl) {
+    final normalized = DiscourseInstanceRuntime.normalizeBaseUrl(baseUrl);
+    if (!isBaseUrlSupportedOnCurrentPlatform(normalized)) {
+      throw const FormatException('iOS 仅支持 HTTPS Discourse 地址');
+    }
+    return normalized;
+  }
+
   Future<bool> isEnabled() async {
     final prefs = await _prefs;
     return prefs.getBool(DiscourseInstanceRuntime.enabledPrefKey) ?? false;
@@ -123,11 +144,9 @@ class DiscourseInstanceManager {
 
     late final String normalizedSelectedBaseUrl;
     try {
-      normalizedSelectedBaseUrl = DiscourseInstanceRuntime.normalizeBaseUrl(
-        selectedBaseUrl,
-      );
+      normalizedSelectedBaseUrl = _normalizeSupportedBaseUrl(selectedBaseUrl);
     } catch (e) {
-      debugPrint('[MultiDiscourse] 活动实例地址损坏，回退 linux.do: $e');
+      debugPrint('[MultiDiscourse] 活动实例地址不可用，回退 linux.do: $e');
       return DiscourseInstanceProfile.linuxDo;
     }
 
@@ -146,7 +165,7 @@ class DiscourseInstanceManager {
     required String name,
     required String baseUrl,
   }) async {
-    final normalized = DiscourseInstanceRuntime.normalizeBaseUrl(baseUrl);
+    final normalized = _normalizeSupportedBaseUrl(baseUrl);
     if (normalized == DiscourseInstanceRuntime.defaultBaseUrl) {
       return DiscourseInstanceProfile.linuxDo;
     }
@@ -203,6 +222,9 @@ class DiscourseInstanceManager {
       (item) => item.id == id,
       orElse: () => DiscourseInstanceProfile.linuxDo,
     );
+    if (!isBaseUrlSupportedOnCurrentPlatform(profile.baseUrl)) {
+      throw const FormatException('iOS 仅支持 HTTPS Discourse 地址');
+    }
     await prefs.setString(
       DiscourseInstanceRuntime.activeInstanceIdPrefKey,
       profile.id,
