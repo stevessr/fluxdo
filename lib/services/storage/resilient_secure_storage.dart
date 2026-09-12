@@ -2,6 +2,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../config/discourse_instance_runtime.dart';
+import '../../constants.dart';
 import 'multi_account_registry_normalizer.dart';
 import 'secret_store.dart';
 import 'system_secret_store.dart';
@@ -24,6 +25,7 @@ class ResilientSecureStorage {
   static Future<SharedPreferences>? _legacyPreferences;
 
   Future<String?> read({required String key}) async {
+    await _ensureRuntimeForKey(key);
     final storageKey = _storageKey(key);
     final value = await _store.read(SecretKey.raw(storageKey));
     if (value != null) {
@@ -58,6 +60,7 @@ class ResilientSecureStorage {
   }
 
   Future<void> write({required String key, required String value}) async {
+    await _ensureRuntimeForKey(key);
     final storageKey = _storageKey(key);
     await _store.write(
       SecretKey.raw(storageKey),
@@ -67,9 +70,21 @@ class ResilientSecureStorage {
   }
 
   Future<void> delete({required String key}) async {
+    await _ensureRuntimeForKey(key);
     final storageKey = _storageKey(key);
     await _store.delete(SecretKey.raw(storageKey));
     await (await _preferences).remove('$_legacyFallbackPrefix$storageKey');
+  }
+
+  /// 认证数据在算 namespace 前必须先恢复活动实例。
+  ///
+  /// main() 的启动任务有并行初始化，iOS Workmanager 更是独立 isolate；如果
+  /// 这里直接读取 static 默认值，自定义实例会偶发读写 linux.do 的旧 key。
+  /// AppConstants 内部 Future 去重，因此正常运行期调用几乎没有额外成本。
+  Future<void> _ensureRuntimeForKey(String key) async {
+    if (_isDiscourseAccountKey(key)) {
+      await AppConstants.initDiscourseInstanceRuntime();
+    }
   }
 
   /// 多实例只隔离账号认证边界相关的旧兼容 key。
