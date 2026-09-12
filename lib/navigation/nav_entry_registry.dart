@@ -28,9 +28,12 @@ import 'nav_entry.dart';
 class NavEntryRegistry {
   NavEntryRegistry._();
 
-  /// 构建完整候选列表
+  /// 构建当前站点可用的完整候选列表。
+  ///
+  /// [NavEntry.availableWhen] 在这里统一收口，因此主导航、设置页和按 id
+  /// 查找都不会看到服务端未启用的 capability entry。
   static List<NavEntry> buildAll() {
-    return [
+    final entries = <NavEntry>[
       NavEntry(
         id: NavEntryIds.home,
         kind: NavEntryKind.page,
@@ -116,8 +119,7 @@ class NavEntryRegistry {
         pageBuilder: (ctx, isActive) => VoiceRoomsPage(isActive: isActive),
         requiresLogin: true,
         // Voice is a bundled Discourse core plugin, but remains optional per
-        // site. Do not expose a dead navigation item when the server disabled
-        // it; unlike linux.do site plugins, this gate is generic Discourse data.
+        // site. Unlike linux.do site plugins, this is generic Discourse data.
         availableWhen: () =>
             PreloadedDataService().siteSettingsSync?['voice_enabled'] == true,
       ),
@@ -140,6 +142,10 @@ class NavEntryRegistry {
         requiresLogin: true,
       ),
     ];
+
+    return entries
+        .where((entry) => entry.availableWhen?.call() ?? true)
+        .toList(growable: false);
   }
 
   /// 按 id 查找 entry
