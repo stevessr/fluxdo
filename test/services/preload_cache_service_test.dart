@@ -88,4 +88,28 @@ void main() {
 
     expect(await cache.clearAll(), 0);
   });
+
+  test('strips short-lived session metadata before persistence', () async {
+    const html = '''
+<html>
+<head>
+<meta name="csrf-token" content="stale-csrf">
+<meta content="stale-messagebus" name="shared_session_key">
+</head>
+<body data-sitekey="stale-turnstile">
+<script type="application/json" id="data-preloaded">{"currentUser":"{\\"username\\":\\"alice\\"}"}</script>
+</body>
+</html>
+''';
+
+    await cache.writeCurrentAccount(html);
+    final persisted = await cache.readCurrentAccount();
+
+    expect(persisted, isNotNull);
+    expect(persisted, isNot(contains('stale-csrf')));
+    expect(persisted, isNot(contains('stale-messagebus')));
+    expect(persisted, isNot(contains('stale-turnstile')));
+    expect(persisted, contains('id="data-preloaded"'));
+    expect(persisted, contains('alice'));
+  });
 }
