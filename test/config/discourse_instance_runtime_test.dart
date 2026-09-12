@@ -21,6 +21,15 @@ void main() {
       );
     });
 
+    test('normalizes scheme and host casing', () {
+      expect(
+        DiscourseInstanceRuntime.normalizeBaseUrl(
+          'HTTPS://Forum.Example.COM/forum/',
+        ),
+        'https://forum.example.com/forum',
+      );
+    });
+
     test('rejects non-http schemes and credentials', () {
       expect(
         () => DiscourseInstanceRuntime.normalizeBaseUrl('ftp://example.com'),
@@ -51,6 +60,61 @@ void main() {
       expect(
         DiscourseInstanceRuntime.scopedStorageKey('linux_do_username'),
         'linux_do_username::discourse_instance::site-test',
+      );
+    });
+  });
+
+  group('active instance uri boundary', () {
+    test('custom relative-url-root rejects sibling paths and subdomains', () {
+      DiscourseInstanceRuntime.activate(
+        instanceId: 'site-test',
+        baseUrl: 'https://forum.example.com:8443/forum',
+      );
+
+      expect(
+        DiscourseInstanceRuntime.containsUri(
+          Uri.parse('https://forum.example.com:8443/forum/t/1'),
+        ),
+        isTrue,
+      );
+      expect(
+        DiscourseInstanceRuntime.pathWithinInstance(
+          Uri.parse('https://forum.example.com:8443/forum/t/1'),
+        ),
+        '/t/1',
+      );
+      expect(
+        DiscourseInstanceRuntime.containsUri(
+          Uri.parse('https://forum.example.com:8443/other/t/1'),
+        ),
+        isFalse,
+      );
+      expect(
+        DiscourseInstanceRuntime.containsUri(
+          Uri.parse('https://cdn.forum.example.com:8443/forum/t/1'),
+        ),
+        isFalse,
+      );
+      expect(
+        DiscourseInstanceRuntime.containsUri(
+          Uri.parse('https://forum.example.com/forum/t/1'),
+        ),
+        isFalse,
+      );
+    });
+
+    test('default linux.do keeps existing subdomain handling', () {
+      expect(
+        DiscourseInstanceRuntime.containsUri(
+          Uri.parse('https://meta.linux.do/latest'),
+        ),
+        isTrue,
+      );
+      expect(
+        DiscourseInstanceRuntime.pathWithinInstance(
+          Uri.parse('https://meta.linux.do/t/1'),
+        ),
+        isNull,
       );
     });
   });
