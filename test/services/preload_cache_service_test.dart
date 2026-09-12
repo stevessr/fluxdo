@@ -66,16 +66,19 @@ void main() {
     expect(await cache.readCurrentAccount(), isNull);
   });
 
-  test('disabled experiment stops reads and writes without deleting cache', () async {
-    await cache.writeCurrentAccount('<html>kept</html>');
+  test(
+    'disabled experiment stops reads and writes without deleting cache',
+    () async {
+      await cache.writeCurrentAccount('<html>kept</html>');
 
-    enabled = false;
-    expect(await cache.readCurrentAccount(), isNull);
-    await cache.writeCurrentAccount('<html>ignored</html>');
+      enabled = false;
+      expect(await cache.readCurrentAccount(), isNull);
+      await cache.writeCurrentAccount('<html>ignored</html>');
 
-    enabled = true;
-    expect(await cache.readCurrentAccount(), '<html>kept</html>');
-  });
+      enabled = true;
+      expect(await cache.readCurrentAccount(), '<html>kept</html>');
+    },
+  );
 
   test('clearAll removes caches for every account session', () async {
     await cache.writeCurrentAccount('<html>alice</html>');
