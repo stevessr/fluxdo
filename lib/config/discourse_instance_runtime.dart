@@ -45,11 +45,13 @@ class DiscourseInstanceRuntime {
   /// 从规范化后的站点 URL 派生稳定实例 ID。
   ///
   /// 默认 linux.do 固定沿用历史 ID；自定义实例的 ID 与 URL 一一对应，避免
-  /// 注册表损坏时出现跨实例凭证 namespace 碰撞。
+  /// 注册表损坏时出现跨实例凭证 namespace 碰撞。scheme/host 已在
+  /// [normalizeBaseUrl] 中标准化为小写，但 path 必须保留大小写：HTTP path
+  /// 可以区分 `/Forum` 与 `/forum`，不能再次对整个 URL 调用 toLowerCase()。
   static String instanceIdForBaseUrl(String baseUrl) {
     final normalized = normalizeBaseUrl(baseUrl);
     if (normalized == defaultBaseUrl) return defaultInstanceId;
-    return 'site-${Uri.encodeComponent(normalized.toLowerCase())}';
+    return 'site-${Uri.encodeComponent(normalized)}';
   }
 
   /// 账号/缓存等已有持久化 key 的实例级 namespace。
