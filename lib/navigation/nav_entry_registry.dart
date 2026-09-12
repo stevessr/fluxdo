@@ -12,8 +12,10 @@ import '../pages/private_messages_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/seeking_page.dart';
 import '../pages/topics_screen.dart';
+import '../pages/voice/voice_rooms_page.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/chat/chat_channels_provider.dart';
+import '../services/preloaded_data_service.dart';
 import '../widgets/common/smart_avatar.dart';
 import '../widgets/notification/notification_quick_panel.dart';
 import 'nav_action_bus.dart';
@@ -106,6 +108,20 @@ class NavEntryRegistry {
         customSelectedIconBuilder: (ctx, ref) => _chatIcon(ref, selected: true),
       ),
       NavEntry(
+        id: NavEntryIds.voice,
+        kind: NavEntryKind.page,
+        iconData: Symbols.graphic_eq_rounded,
+        selectedIconData: Symbols.graphic_eq_rounded,
+        label: (_) => 'Voice',
+        pageBuilder: (ctx, isActive) => VoiceRoomsPage(isActive: isActive),
+        requiresLogin: true,
+        // Voice is a bundled Discourse core plugin, but remains optional per
+        // site. Do not expose a dead navigation item when the server disabled
+        // it; unlike linux.do site plugins, this gate is generic Discourse data.
+        availableWhen: () =>
+            PreloadedDataService().siteSettingsSync?['voice_enabled'] == true,
+      ),
+      NavEntry(
         id: NavEntryIds.seeking,
         kind: NavEntryKind.page,
         iconData: Symbols.visibility_rounded,
@@ -134,8 +150,9 @@ class NavEntryRegistry {
     return null;
   }
 
-  /// 根据用户登录状态过滤可用 entry
+  /// 根据用户登录状态与运行时服务端能力过滤可用 entry
   static bool isAvailable(NavEntry entry, User? user) {
+    if (entry.availableWhen != null && !entry.availableWhen!()) return false;
     if (!entry.requiresLogin) return true;
     return user != null;
   }
