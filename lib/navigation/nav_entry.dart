@@ -28,6 +28,7 @@ class NavEntry {
     this.onPanelTap,
     this.onAction,
     this.requiresLogin = false,
+    this.availableWhen,
     this.locked = false,
     this.defaultInBottomNav = false,
     this.customIconBuilder,
@@ -61,6 +62,10 @@ class NavEntry {
 
   /// 需要登录才可见 / 可添加
   final bool requiresLogin;
+
+  /// 可选的运行时能力门控（例如服务端 core plugin 是否启用）。
+  /// 返回 false 时入口不会出现在可选导航项中，已有的持久化 id 也会被过滤。
+  final bool Function()? availableWhen;
 
   /// 不可从底栏移除（home、profile 等必备入口）
   final bool locked;
