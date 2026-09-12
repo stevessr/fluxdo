@@ -3,15 +3,26 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ua_client_hints/ua_client_hints.dart';
+import 'config/discourse_instance_runtime.dart';
 import 'config/site_customization.dart';
 import 'config/sites/linuxdo.dart';
 import 'services/windows_webview_environment_service.dart';
 
 /// 应用常量
 class AppConstants {
-  /// 当前站点自定义配置
-  static final SiteCustomization siteCustomization = linuxdoCustomization;
+  static const SiteCustomization _genericDiscourseCustomization =
+      SiteCustomization();
+
+  /// 当前站点自定义配置。
+  ///
+  /// linux.do 保留原有站点插件/视觉/链接安全规则；试验性自定义 Discourse
+  /// 实例只启用标准 Discourse 能力，避免把 linux.do 私有插件套到其他站点。
+  static SiteCustomization get siteCustomization =>
+      DiscourseInstanceRuntime.isDefaultInstance
+      ? linuxdoCustomization
+      : _genericDiscourseCustomization;
 
   /// 是否启用 WebView Cookie 同步（启动时预热 WebView）
   /// 设为 false 时，不使用 WebView 同步，Cookie 由 Dio Set-Cookie 与本地存储维护
@@ -21,6 +32,7 @@ class AppConstants {
   static String? _cachedUserAgent;
   static final Completer<String> _uaCompleter = Completer<String>();
   static bool _uaInitialized = false;
+  static Future<void>? _discourseRuntimeInitFuture;
 
   /// macOS Safari 真实版本号（从 /Applications/Safari.app 读取），
   /// 用于补齐 WKWebView 默认 UA 缺失的 `Version/x.y`。
@@ -32,9 +44,49 @@ class AppConstants {
   /// 缓存的 Client Hints 请求头（仅移动端可用）
   static Map<String, String>? _cachedClientHints;
 
+  /// 尽早恢复试验性 Discourse 实例运行时。
+  ///
+  /// 该调用被放在 User-Agent 初始化最前面，因此不需要修改所有网络服务的
+  /// 构造器；未启用实验功能或配置损坏时始终安全回退 linux.do。
+  static Future<void> initDiscourseInstanceRuntime() {
+    return _discourseRuntimeInitFuture ??= _loadDiscourseInstanceRuntime();
+  }
+
+  static Future<void> _loadDiscourseInstanceRuntime() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled =
+          prefs.getBool(DiscourseInstanceRuntime.enabledPrefKey) ?? false;
+      if (!enabled) {
+        DiscourseInstanceRuntime.reset();
+        return;
+      }
+
+      final instanceId =
+          prefs.getString(DiscourseInstanceRuntime.activeInstanceIdPrefKey) ??
+          DiscourseInstanceRuntime.defaultInstanceId;
+      final rawBaseUrl =
+          prefs.getString(DiscourseInstanceRuntime.activeBaseUrlPrefKey) ??
+          DiscourseInstanceRuntime.defaultBaseUrl;
+      final baseUrl = DiscourseInstanceRuntime.normalizeBaseUrl(rawBaseUrl);
+      DiscourseInstanceRuntime.activate(
+        instanceId: instanceId,
+        baseUrl: baseUrl,
+      );
+      debugPrint(
+        '[AppConstants] Active Discourse instance: '
+        '${DiscourseInstanceRuntime.instanceId} ($baseUrl)',
+      );
+    } catch (e) {
+      DiscourseInstanceRuntime.reset();
+      debugPrint('[AppConstants] 恢复 Discourse 实例失败，回退 linux.do: $e');
+    }
+  }
+
   /// 初始化 User-Agent（应用启动时调用一次）
   /// 获取 WebView 的真实 UA 并移除 wv 标识（解决 Google 登录问题）
   static Future<void> initUserAgent() async {
+    await initDiscourseInstanceRuntime();
     if (_uaInitialized) return;
     _uaInitialized = true;
 
@@ -297,8 +349,11 @@ class AppConstants {
         '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
   }
 
-  /// linux.do 域名
-  static const String baseUrl = 'https://linux.do';
+  /// 当前 Discourse 实例地址。
+  static String get baseUrl => DiscourseInstanceRuntime.baseUrl;
+
+  /// 当前 Discourse 实例稳定 id。
+  static String get discourseInstanceId => DiscourseInstanceRuntime.instanceId;
 
   /// 请求首页时是否跳过 X-CSRF-Token（用于预热）
   static const bool skipCsrfForHomeRequest = true;
