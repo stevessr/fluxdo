@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fluxdo/config/discourse_instance_runtime.dart';
 import 'package:fluxdo/services/discourse/discourse_service.dart';
 import 'package:fluxdo/utils/url_helper.dart';
 
 void main() {
   setUp(() {
+    DiscourseInstanceRuntime.reset();
     UrlHelper.debugSetOverrides(
       baseUri: '',
       cdnUrl: 'https://cdn.example.com',
@@ -14,6 +16,7 @@ void main() {
 
   tearDown(() {
     UrlHelper.debugClearOverrides();
+    DiscourseInstanceRuntime.reset();
   });
 
   group('UrlHelper.resolveUrl', () {
@@ -30,7 +33,9 @@ void main() {
         'https://linux.do/uploads/short-url/test.pdf',
       );
       expect(
-        UrlHelper.resolveUrl('/uploads/default/optimized/1X/test_2_690x200.png'),
+        UrlHelper.resolveUrl(
+          '/uploads/default/optimized/1X/test_2_690x200.png',
+        ),
         'https://linux.do/uploads/default/optimized/1X/test_2_690x200.png',
       );
     });
@@ -51,24 +56,43 @@ void main() {
         UrlHelper.resolveUrl('/forum/t/topic-slug/123'),
         'https://linux.do/forum/t/topic-slug/123',
       );
+      expect(UrlHelper.resolveUrl('/'), 'https://linux.do/forum');
+    });
+
+    test('uses active instance root before preload exposes baseUri', () {
+      DiscourseInstanceRuntime.activate(
+        instanceId: 'local-forum',
+        baseUrl: 'http://forum.example.test/forum',
+      );
+      UrlHelper.debugClearOverrides();
+
       expect(
-        UrlHelper.resolveUrl('/'),
-        'https://linux.do/forum',
+        UrlHelper.resolveUrl('/t/topic-slug/123'),
+        'http://forum.example.test/forum/t/topic-slug/123',
+      );
+      expect(
+        UrlHelper.resolveUrl('//forum.example.test/uploads/a.png'),
+        'http://forum.example.test/uploads/a.png',
       );
     });
 
-    test('does not rewrite protocol-relative S3 URL when not using CDN helper', () {
-      expect(
-        UrlHelper.resolveUrl('//uploads.example.com/original/1X/test.png'),
-        'https://uploads.example.com/original/1X/test.png',
-      );
-    });
+    test(
+      'does not rewrite protocol-relative S3 URL when not using CDN helper',
+      () {
+        expect(
+          UrlHelper.resolveUrl('//uploads.example.com/original/1X/test.png'),
+          'https://uploads.example.com/original/1X/test.png',
+        );
+      },
+    );
   });
 
   group('UrlHelper.resolveUrlWithCdn', () {
     test('uses CDN for relative media paths', () {
       expect(
-        UrlHelper.resolveUrlWithCdn('/uploads/default/optimized/1X/test_2_690x200.png'),
+        UrlHelper.resolveUrlWithCdn(
+          '/uploads/default/optimized/1X/test_2_690x200.png',
+        ),
         'https://cdn.example.com/uploads/default/optimized/1X/test_2_690x200.png',
       );
       expect(
@@ -90,15 +114,45 @@ void main() {
         'https://cdn.example.com/forum/images/emoji/twitter/smile.png?v=12',
       );
       expect(
-        UrlHelper.resolveUrlWithCdn('/forum/images/emoji/twitter/smile.png?v=12'),
+        UrlHelper.resolveUrlWithCdn(
+          '/forum/images/emoji/twitter/smile.png?v=12',
+        ),
         'https://cdn.example.com/forum/images/emoji/twitter/smile.png?v=12',
       );
     });
 
     test('rewrites protocol-relative S3 URL to S3 CDN', () {
       expect(
-        UrlHelper.resolveUrlWithCdn('//uploads.example.com/original/1X/test.png'),
+        UrlHelper.resolveUrlWithCdn(
+          '//uploads.example.com/original/1X/test.png',
+        ),
         'https://cdn3.example.com/original/1X/test.png',
+      );
+    });
+  });
+
+  group('UrlHelper trust boundary', () {
+    test('generic instance does not implicitly trust arbitrary subdomains', () {
+      DiscourseInstanceRuntime.activate(
+        instanceId: 'generic',
+        baseUrl: 'https://forum.example.com',
+      );
+      UrlHelper.debugSetOverrides(
+        baseUri: '',
+        cdnUrl: null,
+        s3CdnUrl: null,
+        s3BaseUrl: null,
+      );
+
+      expect(
+        UrlHelper.isTrustedImageHost(Uri.parse('https://forum.example.com/a')),
+        isTrue,
+      );
+      expect(
+        UrlHelper.isTrustedImageHost(
+          Uri.parse('https://evil.forum.example.com/a'),
+        ),
+        isFalse,
       );
     });
   });

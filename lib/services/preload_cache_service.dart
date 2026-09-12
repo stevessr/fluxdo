@@ -123,9 +123,7 @@ class PreloadCacheService {
     await _pruneExpired(root);
 
     final stamp = _now();
-    final temp = File(
-      '${file.path}.tmp-$pid-${stamp.microsecondsSinceEpoch}',
-    );
+    final temp = File('${file.path}.tmp-$pid-${stamp.microsecondsSinceEpoch}');
     try {
       await temp.writeAsString(_sanitizeForPersistence(html), flush: true);
       await temp.setLastModified(stamp);

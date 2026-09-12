@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fluxdo/config/discourse_instance_runtime.dart';
 import 'package:fluxdo/services/deep_link_service.dart';
 
 class _RecordingNavigatorObserver extends NavigatorObserver {
@@ -15,11 +16,14 @@ class _RecordingNavigatorObserver extends NavigatorObserver {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(DiscourseInstanceRuntime.reset);
+
   tearDown(() {
     DeepLinkService.instance.dispose();
+    DiscourseInstanceRuntime.reset();
   });
 
-  test('canHandleUri 只接受受支持的 scheme 和 host', () {
+  test('canHandleUri 只接受受支持的 scheme 和当前实例 host', () {
     final service = DeepLinkService.instance;
 
     expect(service.canHandleUri(Uri.parse('https://linux.do/t/123')), isTrue);
@@ -43,7 +47,37 @@ void main() {
     expect(service.canHandleUri(Uri.parse('ftp://linux.do/t/123')), isFalse);
   });
 
-  testWidgets('handleUri 不接管非 linux.do 的话题路径', (tester) async {
+  test('自定义实例只接管当前 origin 和 relative-url-root', () {
+    DiscourseInstanceRuntime.activate(
+      instanceId: 'meta-discourse',
+      baseUrl: 'https://meta.discourse.org/forum',
+    );
+    final service = DeepLinkService.instance;
+
+    expect(
+      service.canHandleUri(
+        Uri.parse('https://meta.discourse.org/forum/t/topic/123'),
+      ),
+      isTrue,
+    );
+    expect(
+      service.canHandleUri(Uri.parse('https://meta.discourse.org/t/123')),
+      isFalse,
+    );
+    expect(
+      service.canHandleUri(
+        Uri.parse('https://cdn.meta.discourse.org/forum/t/123'),
+      ),
+      isFalse,
+    );
+    expect(service.canHandleUri(Uri.parse('https://linux.do/t/123')), isFalse);
+    expect(
+      service.canHandleUri(Uri.parse('https://example.com/forum/t/123')),
+      isFalse,
+    );
+  });
+
+  testWidgets('handleUri 不接管非当前实例的话题路径', (tester) async {
     BuildContext? capturedContext;
 
     await tester.pumpWidget(
