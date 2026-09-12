@@ -62,6 +62,11 @@ dependencies:
   open_filex: ^4.7.0
   file_picker: ^10.3.10
   record: ^7.1.1  # 语音消息录制(AAC-LC,五端)
+  # Discourse Voice mesh transport. Keep the desktop crash hotfix: the current
+  # livekit_client 2.12.0 pins flutter_webrtc exactly to 1.6.0, so LiveKit is
+  # intentionally integrated behind our transport interface before adding its
+  # SDK rather than overriding that safety pin blindly.
+  flutter_webrtc: ^1.6.2+hotfix.1
   intl: ^0.20.2
   url_launcher: ^6.3.1
   font_awesome_flutter: ^11.0.0
@@ -238,61 +243,3 @@ flutter:
   assets:
     - assets/logo.svg
     - assets/logo_modern.svg
-    - assets/logo_modern_light.svg
-    - assets/images/
-    - assets/certs/
-    - assets/ai_brands/
-    - assets/icons/thinking/
-    - assets/polyfill/
-    - assets/cook/
-
-  fonts:
-    - family: MiSans
-      fonts:
-        # MiSans Variable Font，单文件覆盖 100-900 全部 weight。
-        # Flutter 3.41+ FontWeight 会映射到 wght variation axis，因此即使
-        # 不显式声明 weight，TextStyle(fontWeight: FontWeight.wXXX) 也能精准命中。
-        - asset: assets/fonts/MiSansVF.ttf
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
