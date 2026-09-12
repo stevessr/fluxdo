@@ -1,0 +1,57 @@
+name: Format Preload Cache Temp
+
+on:
+  push:
+    branches:
+      - feat/experimental-preload-cache
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feat/experimental-preload-cache
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Format changed Dart files
+        run: |
+          dart format \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/interceptors/preload_cache_interceptor.dart \
+            lib/services/preload_cache_service.dart \
+            lib/providers/preload_cache_preferences.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            test/services/network/interceptors/preload_cache_interceptor_test.dart \
+            test/services/preload_cache_service_test.dart
+
+      - name: Commit formatter output
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No formatter changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/interceptors/preload_cache_interceptor.dart \
+            lib/services/preload_cache_service.dart \
+            lib/providers/preload_cache_preferences.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            test/services/network/interceptors/preload_cache_interceptor_test.dart \
+            test/services/preload_cache_service_test.dart
+          git commit -m 'style: apply Dart formatter to preload cache changes'
+          git push origin HEAD:feat/experimental-preload-cache
