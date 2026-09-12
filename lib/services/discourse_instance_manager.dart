@@ -117,16 +117,27 @@ class DiscourseInstanceManager {
     final selectedBaseUrl = prefs.getString(
       DiscourseInstanceRuntime.activeBaseUrlPrefKey,
     );
-    final instances = await listInstances();
 
+    String? normalizedSelectedBaseUrl;
+    if (selectedBaseUrl != null) {
+      try {
+        normalizedSelectedBaseUrl = DiscourseInstanceRuntime.normalizeBaseUrl(
+          selectedBaseUrl,
+        );
+      } catch (e) {
+        debugPrint('[MultiDiscourse] 活动实例地址损坏，回退 linux.do: $e');
+        return DiscourseInstanceProfile.linuxDo;
+      }
+    }
+
+    final instances = await listInstances();
     // 同时校验 id 与 baseUrl。active_* 任一损坏/陈旧时回退默认站，而不是
     // 仅凭一个可碰撞的字符串恢复到错误的账号 namespace。
     return instances.firstWhere(
       (instance) =>
           instance.id == selectedId &&
-          (selectedBaseUrl == null ||
-              instance.baseUrl ==
-                  DiscourseInstanceRuntime.normalizeBaseUrl(selectedBaseUrl)),
+          (normalizedSelectedBaseUrl == null ||
+              instance.baseUrl == normalizedSelectedBaseUrl),
       orElse: () => DiscourseInstanceProfile.linuxDo,
     );
   }
