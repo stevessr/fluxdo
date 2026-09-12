@@ -25,13 +25,31 @@ class DiscourseInstanceRuntime {
   static Uri get baseUri => Uri.parse(_baseUrl);
 
   static void activate({required String instanceId, required String baseUrl}) {
-    _instanceId = instanceId.trim().isEmpty ? defaultInstanceId : instanceId;
-    _baseUrl = normalizeBaseUrl(baseUrl);
+    final normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+    final canonicalId = instanceIdForBaseUrl(normalizedBaseUrl);
+    final requestedId = instanceId.trim();
+
+    // 自定义实例的 namespace 绝不能信任可损坏/可篡改的持久化 id；它必须
+    // 由规范化 URL 唯一决定，否则两个不同站点可以被错误地映射到同一个
+    // Secure Storage namespace。正常历史数据本来就使用 canonicalId，因此
+    // 这里不会迁移现有有效配置。
+    _instanceId = requestedId == canonicalId ? requestedId : canonicalId;
+    _baseUrl = normalizedBaseUrl;
   }
 
   static void reset() {
     _instanceId = defaultInstanceId;
     _baseUrl = defaultBaseUrl;
+  }
+
+  /// 从规范化后的站点 URL 派生稳定实例 ID。
+  ///
+  /// 默认 linux.do 固定沿用历史 ID；自定义实例的 ID 与 URL 一一对应，避免
+  /// 注册表损坏时出现跨实例凭证 namespace 碰撞。
+  static String instanceIdForBaseUrl(String baseUrl) {
+    final normalized = normalizeBaseUrl(baseUrl);
+    if (normalized == defaultBaseUrl) return defaultInstanceId;
+    return 'site-${Uri.encodeComponent(normalized.toLowerCase())}';
   }
 
   /// 账号/缓存等已有持久化 key 的实例级 namespace。
