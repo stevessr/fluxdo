@@ -24,6 +24,7 @@ import 'notion_settings_page.dart';
 import 'preferences_page.dart';
 import 'reading_settings_page.dart';
 import 'shortcut_settings_page.dart';
+import 'stevessr_generator_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   static const double parallelMasterWidth = PaneBreakpoints.settingsMasterWidth;
@@ -364,8 +365,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               icon: Symbols.dashboard_customize_rounded,
               iconColor: Colors.indigo,
               title: CustomSettingsPage.titleFor(context),
-              onTap: () =>
-                  _openSettingsPage((_) => const CustomSettingsPage()),
+              onTap: () => _openSettingsPage((_) => const CustomSettingsPage()),
             ),
             _buildOptionTile(
               icon: Symbols.network_check_rounded,
@@ -407,6 +407,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onTap: () =>
                     _openSettingsPage((_) => const ShortcutSettingsPage()),
               ),
+            _buildOptionTile(
+              icon: Icons.auto_awesome_rounded,
+              iconColor: Colors.pink,
+              title: l10n.title,
+              onTap: () =>
+                  _openSettingsPage((_) => const StevessrGeneratorPage()),
+            ),
             _buildOptionTile(
               icon: Symbols.info_rounded,
               iconColor: Colors.indigo,
