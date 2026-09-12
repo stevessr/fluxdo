@@ -21,6 +21,7 @@ on:
       - 'test/config/discourse_instance_runtime_test.dart'
       - 'test/services/account_browser_session_policy_test.dart'
       - 'test/services/deep_link_service_test.dart'
+      - 'test/services/discourse_instance_manager_test.dart'
       - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
       - 'test/utils/url_helper_test.dart'
@@ -47,6 +48,7 @@ on:
       - 'test/config/discourse_instance_runtime_test.dart'
       - 'test/services/account_browser_session_policy_test.dart'
       - 'test/services/deep_link_service_test.dart'
+      - 'test/services/discourse_instance_manager_test.dart'
       - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
       - 'test/utils/url_helper_test.dart'
@@ -100,6 +102,7 @@ jobs:
             test/config/discourse_instance_runtime_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
+            test/services/discourse_instance_manager_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
             test/utils/url_helper_test.dart
           git diff --exit-code -- \
@@ -117,6 +120,7 @@ jobs:
             test/config/discourse_instance_runtime_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
+            test/services/discourse_instance_manager_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
             test/utils/url_helper_test.dart
 
@@ -141,6 +145,7 @@ jobs:
           test/config/discourse_instance_runtime_test.dart
           test/services/account_browser_session_policy_test.dart
           test/services/deep_link_service_test.dart
+          test/services/discourse_instance_manager_test.dart
           test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
           test/utils/url_helper_test.dart
@@ -151,6 +156,7 @@ jobs:
           test/config/discourse_instance_runtime_test.dart
           test/services/account_browser_session_policy_test.dart
           test/services/deep_link_service_test.dart
+          test/services/discourse_instance_manager_test.dart
           test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
           test/utils/url_helper_test.dart
