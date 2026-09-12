@@ -52,15 +52,33 @@ void main() {
       );
     });
 
-    test('namespaces custom instance keys', () {
+    test('derives custom namespace from base URL, not persisted id', () {
+      const baseUrl = 'https://forum.example.com';
+      final canonicalId = DiscourseInstanceRuntime.instanceIdForBaseUrl(baseUrl);
+
       DiscourseInstanceRuntime.activate(
-        instanceId: 'site-test',
-        baseUrl: 'https://forum.example.com',
+        instanceId: 'tampered-shared-id',
+        baseUrl: baseUrl,
       );
+
+      expect(DiscourseInstanceRuntime.instanceId, canonicalId);
       expect(
         DiscourseInstanceRuntime.scopedStorageKey('linux_do_username'),
-        'linux_do_username::discourse_instance::site-test',
+        'linux_do_username::discourse_instance::${Uri.encodeComponent(canonicalId)}',
       );
+    });
+
+    test('default URL always restores legacy default identity', () {
+      DiscourseInstanceRuntime.activate(
+        instanceId: 'tampered-custom-id',
+        baseUrl: 'https://LINUX.DO/',
+      );
+
+      expect(
+        DiscourseInstanceRuntime.instanceId,
+        DiscourseInstanceRuntime.defaultInstanceId,
+      );
+      expect(DiscourseInstanceRuntime.isDefaultInstance, isTrue);
     });
   });
 
