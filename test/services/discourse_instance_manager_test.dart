@@ -50,6 +50,22 @@ void main() {
     expect(selected.baseUrl, DiscourseInstanceRuntime.defaultBaseUrl);
   });
 
+  test('selected instance requires both active identity fields', () async {
+    const baseUrl = 'https://forum.example.com/forum';
+    final id = DiscourseInstanceRuntime.instanceIdForBaseUrl(baseUrl);
+    SharedPreferences.setMockInitialValues({
+      DiscourseInstanceRuntime.enabledPrefKey: true,
+      DiscourseInstanceRuntime.instancesPrefKey: jsonEncode([
+        {'id': id, 'name': 'Forum', 'base_url': baseUrl},
+      ]),
+      DiscourseInstanceRuntime.activeInstanceIdPrefKey: id,
+    });
+
+    final selected = await DiscourseInstanceManager.instance.selectedInstance();
+
+    expect(selected.id, DiscourseInstanceRuntime.defaultInstanceId);
+  });
+
   test(
     'selected instance requires active id and URL to describe same site',
     () async {
