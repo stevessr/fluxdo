@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../constants.dart';
 import '../../log/log_writer.dart';
@@ -14,6 +15,13 @@ class RequestHeaderInterceptor extends Interceptor {
   RequestHeaderInterceptor(this._cookieSync);
 
   final CsrfTokenService _cookieSync;
+
+  @visibleForTesting
+  static String xhrOriginForBaseUrl(String baseUrl) => Uri.parse(baseUrl).origin;
+
+  @visibleForTesting
+  static String xhrRefererForBaseUrl(String baseUrl) =>
+      '${baseUrl.replaceFirst(RegExp(r'/+$'), '')}/';
 
   @override
   Future<void> onRequest(
@@ -78,8 +86,8 @@ class RequestHeaderInterceptor extends Interceptor {
     if (options.headers['X-Requested-With'] == 'XMLHttpRequest') {
       // Origin 按 RFC 6454 只能包含 scheme + authority，不能带 Discourse
       // relative_url_root。Referer 则保留完整实例根路径。
-      options.headers['Origin'] = Uri.parse(AppConstants.baseUrl).origin;
-      options.headers['Referer'] = '${AppConstants.baseUrl}/';
+      options.headers['Origin'] = xhrOriginForBaseUrl(AppConstants.baseUrl);
+      options.headers['Referer'] = xhrRefererForBaseUrl(AppConstants.baseUrl);
       // Sec-Fetch-* 系列头：Chrome 从 2019 年起每个请求都自动添加，
       // 缺失会被 Cloudflare Bot Management 识别为非浏览器客户端
       options.headers['Sec-Fetch-Dest'] = 'empty';
