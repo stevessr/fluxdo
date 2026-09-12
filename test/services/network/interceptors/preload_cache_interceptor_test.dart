@@ -109,31 +109,34 @@ Discourse
     expect(response.headers.value('x-fluxdo-preload-cache'), 'fresh-hit');
   });
 
-  test('stale bootstrap cache falls through to the normal network chain', () async {
-    const cachedHtml = '''
+  test(
+    'stale bootstrap cache falls through to the normal network chain',
+    () async {
+      const cachedHtml = '''
 <html>
 <script id="data-preloaded" type="application/json">{"site":"{}","siteSettings":"{}"}</script>
 </html>
 ''';
-    await cache.writeCurrentAccount(cachedHtml);
-    now = now.add(PreloadCacheService.startupFastPathTtl);
+      await cache.writeCurrentAccount(cachedHtml);
+      now = now.add(PreloadCacheService.startupFastPathTtl);
 
-    const liveHtml = '''
+      const liveHtml = '''
 <html>
 <script id="data-preloaded" type="application/json">{"site":"{}","siteSettings":"{}","currentUser":"{\"username\":\"fresh\"}"}</script>
 </html>
 ''';
-    final adapter = _HtmlAdapter(liveHtml);
-    final dio = _testDio(adapter, cache);
+      final adapter = _HtmlAdapter(liveHtml);
+      final dio = _testDio(adapter, cache);
 
-    final response = await dio.get<String>(
-      '/',
-      options: Options(extra: {'requestTag': 'preload-home'}),
-    );
+      final response = await dio.get<String>(
+        '/',
+        options: Options(extra: {'requestTag': 'preload-home'}),
+      );
 
-    expect(adapter.fetchCount, 1);
-    expect(response.data, contains('fresh'));
-  });
+      expect(adapter.fetchCount, 1);
+      expect(response.data, contains('fresh'));
+    },
+  );
 }
 
 Dio _testDio(HttpClientAdapter adapter, PreloadCacheService cache) {
