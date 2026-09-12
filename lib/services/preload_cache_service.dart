@@ -8,22 +8,26 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants.dart';
-import 'storage/resilient_secure_storage.dart';
+import 'network/cookie/cookie_jar_service.dart';
 
 /// 持久化的首页 preload cache。
 ///
 /// - 仅缓存带 `preload-home` 标记的首页 HTML，由网络拦截器接入；
 /// - 最长保留 7 天；
-/// - 以站点 + 当前账号为命名空间，不同账号绝不复用同一份文件；
-/// - 文件名只落不可逆哈希，不额外暴露用户名；
+/// - 以站点 + 当前 `_t` 会话为命名空间，不同账号/不同登录会话绝不复用；
+/// - 文件名只落不可逆哈希，不额外暴露用户名或 token；
 /// - 开关是全局实验开关，关闭后停止读写，但不会隐式删除已有缓存；
 /// - 落盘前剥离 CSRF 与 Turnstile sitekey 等不适合长期复用的元数据；
 /// - 保留 Discourse `shared_session_key`：它本身由服务端以 7 天 TTL 保存，
 ///   且外置 MessageBus 认证依赖该字段，生命周期与本缓存上限一致。
+///
+/// 使用 `_t` 而不是 `linux_do_username` 尤其重要：多账号切换会在目标账号
+/// cookie 已恢复、但用户名 registry 尚未 commit 的事务窗口内触发 preload。
+/// 令牌命名空间能保证这个窗口仍然命中目标账号，而不是旧账号缓存。
 class PreloadCacheService {
   PreloadCacheService._internal()
     : _cacheBaseDirectory = getApplicationCacheDirectory,
-      _accountId = _readCurrentAccountId,
+      _namespaceSeed = _readCurrentSessionNamespaceSeed,
       _isEnabled = _readEnabledPreference,
       _now = DateTime.now;
 
@@ -34,27 +38,28 @@ class PreloadCacheService {
   @visibleForTesting
   PreloadCacheService.testing({
     required Future<Directory> Function() cacheBaseDirectory,
-    required Future<String?> Function() accountId,
+    required Future<String?> Function() namespaceSeed,
     required Future<bool> Function() isEnabled,
     DateTime Function()? now,
   }) : _cacheBaseDirectory = cacheBaseDirectory,
-       _accountId = accountId,
+       _namespaceSeed = namespaceSeed,
        _isEnabled = isEnabled,
        _now = now ?? DateTime.now;
 
   static const Duration cacheTtl = Duration(days: 7);
   static const String enabledPreferenceKey =
       'experiment_preload_cache_enabled';
-  static const String _currentUsernameKey = 'linux_do_username';
   static const String _cacheDirectoryName = 'preload_cache_v1';
 
   final Future<Directory> Function() _cacheBaseDirectory;
-  final Future<String?> Function() _accountId;
+  final Future<String?> Function() _namespaceSeed;
   final Future<bool> Function() _isEnabled;
   final DateTime Function() _now;
 
-  static Future<String?> _readCurrentAccountId() {
-    return ResilientSecureStorage().read(key: _currentUsernameKey);
+  static Future<String?> _readCurrentSessionNamespaceSeed() async {
+    final token = (await CookieJarService().getTToken())?.trim();
+    if (token == null || token.isEmpty || token == 'del') return null;
+    return token;
   }
 
   static Future<bool> _readEnabledPreference() async {
@@ -69,10 +74,8 @@ class PreloadCacheService {
   }
 
   Future<File?> _fileForCurrentAccount({required bool createRoot}) async {
-    final accountId = (await _accountId())?.trim();
-    if (accountId == null || accountId.isEmpty || accountId == 'guest') {
-      return null;
-    }
+    final namespaceSeed = (await _namespaceSeed())?.trim();
+    if (namespaceSeed == null || namespaceSeed.isEmpty) return null;
 
     final root = await _cacheRoot();
     if (createRoot && !await root.exists()) {
@@ -80,12 +83,12 @@ class PreloadCacheService {
     }
 
     final namespace = sha256
-        .convert(utf8.encode('${AppConstants.baseUrl}\n$accountId'))
+        .convert(utf8.encode('${AppConstants.baseUrl}\n$namespaceSeed'))
         .toString();
     return File(p.join(root.path, '$namespace.html'));
   }
 
-  /// 读取当前账号仍在 TTL 内的缓存。过期文件会立即删除。
+  /// 读取当前账号/会话仍在 TTL 内的缓存。过期文件会立即删除。
   Future<String?> readCurrentAccount() async {
     if (!await _isEnabled()) return null;
 
@@ -110,7 +113,7 @@ class PreloadCacheService {
     }
   }
 
-  /// 写入当前账号缓存。调用方可不等待该 Future，避免阻塞 preload 关键路径。
+  /// 写入当前账号/会话缓存。调用方可不等待该 Future，避免阻塞 preload 关键路径。
   Future<void> writeCurrentAccount(String html) async {
     if (html.isEmpty || !await _isEnabled()) return;
 
@@ -143,7 +146,7 @@ class PreloadCacheService {
     }
   }
 
-  /// 统一清理所有账号的 preload cache。
+  /// 统一清理所有账号/会话的 preload cache。
   ///
   /// 返回删除前的缓存文件数量，便于未来 UI 展示统计；清理不受实验开关影响。
   Future<int> clearAll() async {
