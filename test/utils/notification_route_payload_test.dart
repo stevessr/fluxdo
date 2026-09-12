@@ -34,10 +34,7 @@ void main() {
   });
 
   test('rejects malformed v2 payload instead of cross-routing', () {
-    expect(
-      NotificationRoutePayload.parse('discourse:v2:topic::123'),
-      isNull,
-    );
+    expect(NotificationRoutePayload.parse('discourse:v2:topic::123'), isNull);
     expect(
       NotificationRoutePayload.parse('discourse:v2:unknown:linux-do:123'),
       isNull,
