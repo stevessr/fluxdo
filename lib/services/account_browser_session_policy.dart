@@ -18,7 +18,7 @@ class AccountBrowserSessionPolicy {
     'https://connect.linux.do/',
   ];
 
-  /// 非默认实例只把当前 Discourse origin 作为账号浏览器边界。
+  /// 非默认实例只把当前 Discourse root 作为账号浏览器边界。
   static List<String> get appOrigins {
     if (DiscourseInstanceRuntime.isDefaultInstance) {
       return _linuxDoAppOrigins;
@@ -45,10 +45,18 @@ class AccountBrowserSessionPolicy {
     final scheme = uri.scheme.toLowerCase();
     if (scheme != 'https' && scheme != 'http') return false;
 
+    // 通用 Discourse 实例必须严格落在配置的 origin + relative-url-root 内。
+    // 不继承 linux.do 的“主域 + 子域服务”模型，防止把同域其他应用或任意
+    // 子域的浏览器登录态误纳入账号快照。
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      return DiscourseInstanceRuntime.containsUri(
+        uri,
+        allowDefaultSubdomains: false,
+      );
+    }
+
     final host = uri.host.toLowerCase();
     if (CookieJarService.matchesAppHost(host)) {
-      // app-owned origin may be HTTP for local/self-hosted experimental sites,
-      // but must still match the active instance's scheme.
       return scheme == Uri.parse(AppConstants.baseUrl).scheme.toLowerCase();
     }
 
