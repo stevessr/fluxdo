@@ -15,6 +15,7 @@ on:
       - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
+      - 'lib/services/network/interceptors/message_bus_isolation_interceptor.dart'
       - 'lib/services/network/interceptors/redirect_interceptor.dart'
       - 'lib/services/network/interceptors/request_header_interceptor.dart'
       - 'lib/services/preload_cache_service.dart'
@@ -28,6 +29,7 @@ on:
       - 'test/services/discourse_instance_manager_test.dart'
       - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
+      - 'test/services/network/message_bus_isolation_interceptor_test.dart'
       - 'test/services/network/redirect_interceptor_security_test.dart'
       - 'test/services/network/request_header_interceptor_test.dart'
       - 'test/utils/notification_route_payload_test.dart'
@@ -49,6 +51,7 @@ on:
       - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
+      - 'lib/services/network/interceptors/message_bus_isolation_interceptor.dart'
       - 'lib/services/network/interceptors/redirect_interceptor.dart'
       - 'lib/services/network/interceptors/request_header_interceptor.dart'
       - 'lib/services/preload_cache_service.dart'
@@ -62,6 +65,7 @@ on:
       - 'test/services/discourse_instance_manager_test.dart'
       - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
+      - 'test/services/network/message_bus_isolation_interceptor_test.dart'
       - 'test/services/network/redirect_interceptor_security_test.dart'
       - 'test/services/network/request_header_interceptor_test.dart'
       - 'test/utils/notification_route_payload_test.dart'
@@ -110,6 +114,7 @@ jobs:
             lib/services/local_notification_service.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
+            lib/services/network/interceptors/message_bus_isolation_interceptor.dart \
             lib/services/network/interceptors/redirect_interceptor.dart \
             lib/services/network/interceptors/request_header_interceptor.dart \
             lib/services/preload_cache_service.dart \
@@ -122,6 +127,7 @@ jobs:
             test/services/deep_link_service_test.dart \
             test/services/discourse_instance_manager_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
+            test/services/network/message_bus_isolation_interceptor_test.dart \
             test/services/network/redirect_interceptor_security_test.dart \
             test/services/network/request_header_interceptor_test.dart \
             test/utils/notification_route_payload_test.dart \
@@ -135,6 +141,7 @@ jobs:
             lib/services/local_notification_service.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
+            lib/services/network/interceptors/message_bus_isolation_interceptor.dart \
             lib/services/network/interceptors/redirect_interceptor.dart \
             lib/services/network/interceptors/request_header_interceptor.dart \
             lib/services/preload_cache_service.dart \
@@ -147,6 +154,7 @@ jobs:
             test/services/deep_link_service_test.dart \
             test/services/discourse_instance_manager_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
+            test/services/network/message_bus_isolation_interceptor_test.dart \
             test/services/network/redirect_interceptor_security_test.dart \
             test/services/network/request_header_interceptor_test.dart \
             test/utils/notification_route_payload_test.dart \
@@ -167,6 +175,7 @@ jobs:
           lib/services/network/cookie/cookie_jar_service.dart
           lib/services/network/discourse_dio.dart
           lib/services/network/interceptors/discourse_base_path_interceptor.dart
+          lib/services/network/interceptors/message_bus_isolation_interceptor.dart
           lib/services/network/interceptors/redirect_interceptor.dart
           lib/services/network/interceptors/request_header_interceptor.dart
           lib/services/preload_cache_service.dart
@@ -180,6 +189,7 @@ jobs:
           test/services/discourse_instance_manager_test.dart
           test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
+          test/services/network/message_bus_isolation_interceptor_test.dart
           test/services/network/redirect_interceptor_security_test.dart
           test/services/network/request_header_interceptor_test.dart
           test/utils/notification_route_payload_test.dart
@@ -194,6 +204,7 @@ jobs:
           test/services/discourse_instance_manager_test.dart
           test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
+          test/services/network/message_bus_isolation_interceptor_test.dart
           test/services/network/redirect_interceptor_security_test.dart
           test/services/network/request_header_interceptor_test.dart
           test/utils/notification_route_payload_test.dart
