@@ -75,7 +75,8 @@ class ResilientSecureStorage {
   /// 多实例只隔离账号认证边界相关的旧兼容 key。
   ///
   /// 默认 linux.do 仍返回原 key，因此升级不会触发账号迁移或登出；自定义
-  /// 实例的账号注册表、快照、当前用户名和 guest/login 状态互不串线。
+  /// 实例的账号注册表、快照、当前用户名、User API Key 和 guest/login 状态
+  /// 互不串线。
   String _storageKey(String key) {
     if (!_isDiscourseAccountKey(key)) return key;
     return DiscourseInstanceRuntime.scopedStorageKey(key);
@@ -86,7 +87,8 @@ class ResilientSecureStorage {
         key == MultiAccountRegistryNormalizer.registryKey ||
         key == 'multi_account_pending_new_login' ||
         key == 'multi_account_guest_mode' ||
-        key.startsWith('multi_account_snapshot_');
+        key.startsWith('multi_account_snapshot_') ||
+        key.startsWith('user_api_key_');
   }
 
   String _normalizeLegacyValue(String key, String value) {
