@@ -58,21 +58,40 @@ abstract final class StevessrComposerService {
   ///
   /// 如果服务端仍返回 JPEG（例如实例修改了上游阈值），再用更保守的体积
   /// 上限重试一次；第二次仍被转成 JPEG 时直接报错，绝不静默插入白底图。
-  static Future<StevessrUploadedImage> upload(
+  static Future<StevessrUploadedImage> upload(StevessrExportedImage image) {
+    return _upload(
+      image,
+      uploadFile: DiscourseService().uploadImage,
+      temporaryDirectory: getTemporaryDirectory,
+    );
+  }
+
+  @visibleForTesting
+  static Future<StevessrUploadedImage> uploadForTesting(
     StevessrExportedImage image, {
-    @visibleForTesting StevessrUploadFile? uploadFile,
-    @visibleForTesting StevessrTemporaryDirectory? temporaryDirectory,
+    required StevessrUploadFile uploadFile,
+    required StevessrTemporaryDirectory temporaryDirectory,
+  }) {
+    return _upload(
+      image,
+      uploadFile: uploadFile,
+      temporaryDirectory: temporaryDirectory,
+    );
+  }
+
+  static Future<StevessrUploadedImage> _upload(
+    StevessrExportedImage image, {
+    required StevessrUploadFile uploadFile,
+    required StevessrTemporaryDirectory temporaryDirectory,
   }) async {
-    final uploader = uploadFile ?? DiscourseService().uploadImage;
-    final getDirectory = temporaryDirectory ?? getTemporaryDirectory;
-    final directory = await getDirectory();
+    final directory = await temporaryDirectory();
 
     var prepared = await _prepareTransparentRaster(
       image,
       maxBytes: _transparentUploadMaxBytes,
     );
     var file = await _writeTemporaryImage(directory, prepared.image);
-    var upload = await uploader(file.path);
+    var upload = await uploadFile(file.path);
 
     if (prepared.hasTransparency && _isJpegUpload(upload)) {
       prepared = await _prepareTransparentRaster(
@@ -85,7 +104,7 @@ abstract final class StevessrComposerService {
         prepared.image,
         suffix: '_alpha_retry',
       );
-      upload = await uploader(file.path);
+      upload = await uploadFile(file.path);
 
       if (_isJpegUpload(upload)) {
         throw StateError('服务端仍将透明图片转换为 JPEG，已取消插入以避免透明区域变白');
