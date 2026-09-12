@@ -47,8 +47,7 @@ class PreloadCacheService {
        _now = now ?? DateTime.now;
 
   static const Duration cacheTtl = Duration(days: 7);
-  static const String enabledPreferenceKey =
-      'experiment_preload_cache_enabled';
+  static const String enabledPreferenceKey = 'experiment_preload_cache_enabled';
   static const String _cacheDirectoryName = 'preload_cache_v1';
 
   final Future<Directory> Function() _cacheBaseDirectory;
@@ -155,7 +154,10 @@ class PreloadCacheService {
 
     var files = 0;
     try {
-      await for (final entity in root.list(recursive: true, followLinks: false)) {
+      await for (final entity in root.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is File) files++;
       }
       await root.delete(recursive: true);
