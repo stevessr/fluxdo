@@ -117,27 +117,27 @@ class DiscourseInstanceManager {
     final selectedBaseUrl = prefs.getString(
       DiscourseInstanceRuntime.activeBaseUrlPrefKey,
     );
+    if (selectedId == null || selectedBaseUrl == null) {
+      return DiscourseInstanceProfile.linuxDo;
+    }
 
-    String? normalizedSelectedBaseUrl;
-    if (selectedBaseUrl != null) {
-      try {
-        normalizedSelectedBaseUrl = DiscourseInstanceRuntime.normalizeBaseUrl(
-          selectedBaseUrl,
-        );
-      } catch (e) {
-        debugPrint('[MultiDiscourse] 活动实例地址损坏，回退 linux.do: $e');
-        return DiscourseInstanceProfile.linuxDo;
-      }
+    late final String normalizedSelectedBaseUrl;
+    try {
+      normalizedSelectedBaseUrl = DiscourseInstanceRuntime.normalizeBaseUrl(
+        selectedBaseUrl,
+      );
+    } catch (e) {
+      debugPrint('[MultiDiscourse] 活动实例地址损坏，回退 linux.do: $e');
+      return DiscourseInstanceProfile.linuxDo;
     }
 
     final instances = await listInstances();
-    // 同时校验 id 与 baseUrl。active_* 任一损坏/陈旧时回退默认站，而不是
-    // 仅凭一个可碰撞的字符串恢复到错误的账号 namespace。
+    // 同时校验 id 与 baseUrl。active_* 任一缺失、损坏或陈旧时回退默认站，
+    // 不允许凭单个持久化字段恢复到一个未注册/错误的账号 namespace。
     return instances.firstWhere(
       (instance) =>
           instance.id == selectedId &&
-          (normalizedSelectedBaseUrl == null ||
-              instance.baseUrl == normalizedSelectedBaseUrl),
+          instance.baseUrl == normalizedSelectedBaseUrl,
       orElse: () => DiscourseInstanceProfile.linuxDo,
     );
   }
