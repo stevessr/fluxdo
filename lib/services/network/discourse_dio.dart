@@ -11,6 +11,7 @@ import 'interceptors/cf_challenge_terminal_interceptor.dart';
 import 'interceptors/error_interceptor.dart';
 import 'interceptors/http_revalidation_interceptor.dart';
 import 'interceptors/network_log_interceptor.dart';
+import 'interceptors/preload_cache_interceptor.dart';
 import 'interceptors/redirect_interceptor.dart';
 import 'interceptors/request_coalescing_interceptor.dart';
 import 'interceptors/request_header_interceptor.dart';
@@ -77,7 +78,13 @@ class DiscourseDio {
       dio.interceptors.add(RequestSchedulerInterceptor());
     }
 
-    // 5. 恢复协调器:全项目唯一的重放引擎
+    // 5. 实验性首页 preload cache。
+    // 只识别 PreloadedDataService 的 requestTag=preload-home；命中时按当前
+    // 账号读取最多 7 天的独立缓存并在进入恢复/CF 链之前结束请求。放在
+    // coalescing/scheduler 之后，确保它们的 acquire/finalize 生命周期完整。
+    dio.interceptors.add(PreloadCacheInterceptor());
+
+    // 6. 恢复协调器:全项目唯一的重放引擎
     //
     // 策略顺序即失败归属(首个 canHandle 者独占决策权):
     //   会话自愈 → rhttp 1xx 旁路 → 引擎降级 → 限流等待 → 瞬态重试
@@ -115,21 +122,21 @@ class DiscourseDio {
       );
     }
 
-    // 6. Cookie 管理
+    // 7. Cookie 管理
     if (cookiesEnabled) {
       dio.interceptors.add(AppCookieManager(cookieJarService.cookieJar));
     }
 
-    // 7. 请求头拦截器
+    // 8. 请求头拦截器
     dio.interceptors.add(RequestHeaderInterceptor(CsrfTokenService()));
 
-    // 8. 重定向拦截器
+    // 9. 重定向拦截器
     dio.interceptors.add(RedirectInterceptor(dio));
 
-    // 9. 错误拦截器
+    // 10. 错误拦截器
     dio.interceptors.add(ErrorInterceptor());
 
-    // 10. CF 验证拦截器 + 终态类型化兜底。
+    // 11. CF 验证拦截器 + 终态类型化兜底。
     // 后者不做重试，只确保验证后仍残留的 challenge 不会以裸 403/429
     // 泄漏给业务层并被误显示成“无权限访问资源”。
     if (enableCfChallenge) {
@@ -139,16 +146,16 @@ class DiscourseDio {
       dio.interceptors.add(CfChallengeTerminalInterceptor());
     }
 
-    // 11. 浏览器式条件重验证缓存。
+    // 12. 浏览器式条件重验证缓存。
     // 仅保存带 ETag/Last-Modified 的小型 GET；不自造 TTL，不让动态 Discourse
     // 数据在客户端长期陈旧。304 在这里展开为缓存 body + 最新响应头。
     dio.interceptors.add(HttpRevalidationInterceptor());
 
-    // 12. 请求合并的最终完成点。必须在恢复/重定向/CF/304 展开之后，
+    // 13. 请求合并的最终完成点。必须在恢复/重定向/CF/304 展开之后，
     // 否则跟随者可能收到中间 429/403/304 而不是业务层最终结果。
     dio.interceptors.add(RequestCoalescingFinalizerInterceptor());
 
-    // 13. 网络日志拦截器（最后一个，记录最终结果）
+    // 14. 网络日志拦截器（最后一个，记录最终结果）
     // 注意：Gateway URL 改写已移至 HttpClientAdapter 层（_GatewayAdapterWrapper），
     // 所有拦截器始终看到原始 URL，无需额外处理。
     if (enableNetworkLog) {
