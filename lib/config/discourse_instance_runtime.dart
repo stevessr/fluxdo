@@ -10,8 +10,7 @@ class DiscourseInstanceRuntime {
 
   static const String enabledPrefKey =
       'experimental_multi_discourse_enabled_v1';
-  static const String instancesPrefKey =
-      'experimental_discourse_instances_v1';
+  static const String instancesPrefKey = 'experimental_discourse_instances_v1';
   static const String activeInstanceIdPrefKey =
       'experimental_discourse_active_instance_id_v1';
   static const String activeBaseUrlPrefKey =
@@ -48,10 +47,7 @@ class DiscourseInstanceRuntime {
   /// 自定义实例严格限制为同 scheme / host / port，并且路径必须位于配置的
   /// relative-url-root 下。默认 linux.do 为保持既有深链/WebView 行为，允许
   /// linux.do 的子域；默认实例没有 relative-url-root，因此不会扩大路径边界。
-  static bool containsUri(
-    Uri uri, {
-    bool allowDefaultSubdomains = true,
-  }) {
+  static bool containsUri(Uri uri, {bool allowDefaultSubdomains = true}) {
     final base = baseUri;
     if (uri.scheme.toLowerCase() != base.scheme.toLowerCase()) return false;
 
