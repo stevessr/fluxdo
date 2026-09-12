@@ -67,22 +67,22 @@ class DiscourseDio {
     // 2. 会话代守卫（最先执行，确保过期请求不进入后续拦截器）
     dio.interceptors.add(SessionGuardInterceptor());
 
-    // 3. 同一会话代内，相同 GET 共享正在进行的请求。
+    // 3. 实验性首页 preload cache。
+    // 必须位于请求合并/调度器之前：cache hit 会在 request 阶段直接 resolve，
+    // 不能先让后面的组件 acquire 并发槽或登记 in-flight 请求后再短路。
+    // cache miss 则 handler.next，完整进入原有网络、CF、重试与 Cookie 链。
+    dio.interceptors.add(PreloadCacheInterceptor());
+
+    // 4. 同一会话代内，相同 GET 共享正在进行的请求。
     // 放在调度器之前，重复请求不会占用并发/速率槽位；最终结果由靠后的
     // Finalizer 完成，确保重试、重定向、CF 验证都结束后才唤醒跟随者。
     dio.interceptors.add(RequestCoalescingInterceptor());
 
-    // 4. 并发限制 + 滑动窗口速率限制（null 表示不限制）
+    // 5. 并发限制 + 滑动窗口速率限制（null 表示不限制）
     // 实际参数从 RequestSchedulerConfig 动态读取
     if (maxConcurrent != null) {
       dio.interceptors.add(RequestSchedulerInterceptor());
     }
-
-    // 5. 实验性首页 preload cache。
-    // 只识别 PreloadedDataService 的 requestTag=preload-home；命中时按当前
-    // 账号读取最多 7 天的独立缓存并在进入恢复/CF 链之前结束请求。放在
-    // coalescing/scheduler 之后，确保它们的 acquire/finalize 生命周期完整。
-    dio.interceptors.add(PreloadCacheInterceptor());
 
     // 6. 恢复协调器:全项目唯一的重放引擎
     //
