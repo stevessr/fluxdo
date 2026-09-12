@@ -25,16 +25,21 @@ class MessageBusIsolationInterceptor extends Interceptor {
     return path == prefix || path.startsWith('$prefix/');
   }
 
+  @visibleForTesting
+  static void applyIsolationFlags(Map<String, dynamic> extra) {
+    extra[FluxRequestKeys.isSilent] = true;
+    extra[FluxRequestKeys.skipCsrf] = true;
+    extra[FluxRequestKeys.skipAuthCheck] = true;
+    extra[FluxRequestKeys.skipSessionStateSync] = true;
+    extra[FluxRequestKeys.skipCfChallenge] = true;
+    extra[FluxRequestKeys.noRecovery] = true;
+    extra[FluxRequestKeys.skipNetworkLog] = true;
+  }
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     if (isMessageBusRequest(options.uri, _baseUri.toString())) {
-      options.extra[FluxRequestKeys.isSilent] = true;
-      options.extra[FluxRequestKeys.skipCsrf] = true;
-      options.extra[FluxRequestKeys.skipAuthCheck] = true;
-      options.extra[FluxRequestKeys.skipSessionStateSync] = true;
-      options.extra[FluxRequestKeys.skipCfChallenge] = true;
-      options.extra[FluxRequestKeys.noRecovery] = true;
-      options.extra[FluxRequestKeys.skipNetworkLog] = true;
+      applyIsolationFlags(options.extra);
     }
     handler.next(options);
   }
