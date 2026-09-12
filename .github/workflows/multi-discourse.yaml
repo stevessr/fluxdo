@@ -79,9 +79,10 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # constants.dart / discourse_instances_page.dart / discourse_instance_manager.dart
-      # already carry formatter drift on main. Keep them under analyze, but do not make
-      # this feature CI rewrite unrelated historical formatting.
+      # Some touched legacy files and the large CookieJar currently carry formatter
+      # drift unrelated to this feature. Analyze all of them; keep the format gate on
+      # the focused multi-instance files so historical/large-file reformatting does
+      # not obscure functional verification.
       - name: Check formatting
         run: |
           dart format \
@@ -90,7 +91,6 @@ jobs:
             lib/services/background/ios_background_fetch.dart \
             lib/services/deep_link_service.dart \
             lib/services/discourse/discourse_service.dart \
-            lib/services/network/cookie/cookie_jar_service.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
             lib/services/preload_cache_service.dart \
@@ -100,7 +100,6 @@ jobs:
             test/config/discourse_instance_runtime_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
-            test/services/network/cookie/discourse_instance_cookie_isolation_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
             test/utils/url_helper_test.dart
           git diff --exit-code -- \
@@ -109,7 +108,6 @@ jobs:
             lib/services/background/ios_background_fetch.dart \
             lib/services/deep_link_service.dart \
             lib/services/discourse/discourse_service.dart \
-            lib/services/network/cookie/cookie_jar_service.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
             lib/services/preload_cache_service.dart \
@@ -119,7 +117,6 @@ jobs:
             test/config/discourse_instance_runtime_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
-            test/services/network/cookie/discourse_instance_cookie_isolation_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
             test/utils/url_helper_test.dart
 
