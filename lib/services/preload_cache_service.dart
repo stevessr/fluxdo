@@ -187,10 +187,7 @@ class PreloadCacheService {
       '',
     );
     sanitized = sanitized.replaceAll(
-      RegExp(
-        '''\\sdata-sitekey=["'][^"']*["']''',
-        caseSensitive: false,
-      ),
+      RegExp('''\\sdata-sitekey=["'][^"']*["']''', caseSensitive: false),
       '',
     );
     return sanitized;

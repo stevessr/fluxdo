@@ -120,8 +120,7 @@ class _CustomSettingsCopy {
     preloadCacheClearFailed: '清理预加载缓存失败。',
     readingGroupTitle: '阅读增强',
     quickReadingTitle: '快速阅读',
-    quickReadingDescription:
-        '进入话题时立即上报当前所有未读楼层；超过 2000 个楼层时按每批 2000 个分批发送。',
+    quickReadingDescription: '进入话题时立即上报当前所有未读楼层；超过 2000 个楼层时按每批 2000 个分批发送。',
   );
 
   static const _zhHant = _CustomSettingsCopy(
@@ -135,8 +134,7 @@ class _CustomSettingsCopy {
     preloadCacheClearFailed: '清理預載入快取失敗。',
     readingGroupTitle: '閱讀增強',
     quickReadingTitle: '快速閱讀',
-    quickReadingDescription:
-        '進入話題時立即上報目前所有未讀樓層；超過 2000 個樓層時按每批 2000 個分批傳送。',
+    quickReadingDescription: '進入話題時立即上報目前所有未讀樓層；超過 2000 個樓層時按每批 2000 個分批傳送。',
   );
 
   static const _en = _CustomSettingsCopy(

@@ -38,10 +38,11 @@ class PreloadCachePreferencesNotifier
   }
 }
 
-final preloadCachePreferencesProvider = StateNotifierProvider<
-  PreloadCachePreferencesNotifier,
-  PreloadCachePreferences
->((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return PreloadCachePreferencesNotifier(prefs);
-});
+final preloadCachePreferencesProvider =
+    StateNotifierProvider<
+      PreloadCachePreferencesNotifier,
+      PreloadCachePreferences
+    >((ref) {
+      final prefs = ref.watch(sharedPreferencesProvider);
+      return PreloadCachePreferencesNotifier(prefs);
+    });

@@ -28,23 +28,26 @@ void main() {
     }
   });
 
-  test('does not persist a 200 challenge page without data-preloaded', () async {
-    final dio = _testDio(
-      _HtmlAdapter(
-        '<html><title>Just a moment...</title><body>challenge</body></html>',
-      ),
-      cache,
-    );
+  test(
+    'does not persist a 200 challenge page without data-preloaded',
+    () async {
+      final dio = _testDio(
+        _HtmlAdapter(
+          '<html><title>Just a moment...</title><body>challenge</body></html>',
+        ),
+        cache,
+      );
 
-    final response = await dio.get<String>(
-      '/',
-      options: Options(extra: {'requestTag': 'preload-home'}),
-    );
+      final response = await dio.get<String>(
+        '/',
+        options: Options(extra: {'requestTag': 'preload-home'}),
+      );
 
-    expect(response.statusCode, 200);
-    expect(response.data, contains('challenge'));
-    expect(await cache.readCurrentAccount(), isNull);
-  });
+      expect(response.statusCode, 200);
+      expect(response.data, contains('challenge'));
+      expect(await cache.readCurrentAccount(), isNull);
+    },
+  );
 
   test('persists a Discourse bootstrap response with data-preloaded', () async {
     const html = '''
@@ -66,15 +69,16 @@ Discourse
 }
 
 Dio _testDio(HttpClientAdapter adapter, PreloadCacheService cache) {
-  final dio = Dio(
-    BaseOptions(
-      baseUrl: 'https://linux.do',
-      validateStatus: (status) =>
-          status != null && status >= 200 && status < 400,
-    ),
-  )
-    ..httpClientAdapter = adapter
-    ..interceptors.add(PreloadCacheInterceptor(cache: cache));
+  final dio =
+      Dio(
+          BaseOptions(
+            baseUrl: 'https://linux.do',
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 400,
+          ),
+        )
+        ..httpClientAdapter = adapter
+        ..interceptors.add(PreloadCacheInterceptor(cache: cache));
   return dio;
 }
 
