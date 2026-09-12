@@ -26,8 +26,8 @@ typedef StevessrTemporaryDirectory = Future<Directory> Function();
 
 /// 从编辑器快捷入口打开 StevesSR，并把生成结果上传到站点。
 abstract final class StevessrComposerService {
-  // Discourse UploadCreator 当前只会实际进行 PNG/WebP -> JPEG 质量转换，
-  // 当源文件至少达到 75,000 bytes。留出余量，不贴着服务端阈值上传。
+  // Discourse UploadCreator 当前在真正执行图片 -> JPEG 质量转换前，会先跳过
+  // 小于 75,000 bytes 的源文件。留出余量，不贴着服务端阈值上传。
   static const int _transparentUploadMaxBytes = 72 * 1024;
   static const int _transparentRetryMaxBytes = 48 * 1024;
   static const int _minimumUploadDimension = 64;
@@ -117,6 +117,10 @@ abstract final class StevessrComposerService {
     required int maxBytes,
     bool forcePngReencode = false,
   }) async {
+    if (maxBytes <= 0) {
+      throw ArgumentError.value(maxBytes, 'maxBytes', '必须大于 0');
+    }
+
     final extension = source.extension.toLowerCase();
     if (extension != 'png' && extension != 'webp') {
       return (image: source, hasTransparency: false);
@@ -127,11 +131,19 @@ abstract final class StevessrComposerService {
       if (decoded == null ||
           !decoded.hasAlpha ||
           !decoded.any((pixel) => pixel.aNormalized < 1.0)) {
-        return (bytes: source.bytes, hasTransparency: false);
+        return (
+          bytes: source.bytes,
+          hasTransparency: false,
+          wasReencoded: false,
+        );
       }
 
       if (!forcePngReencode && source.bytes.length <= maxBytes) {
-        return (bytes: source.bytes, hasTransparency: true);
+        return (
+          bytes: source.bytes,
+          hasTransparency: true,
+          wasReencoded: false,
+        );
       }
 
       var working = decoded;
@@ -166,11 +178,10 @@ abstract final class StevessrComposerService {
         throw StateError('无法在保留透明度的同时生成可安全上传的 PNG');
       }
 
-      return (bytes: encoded, hasTransparency: true);
+      return (bytes: encoded, hasTransparency: true, wasReencoded: true);
     });
 
-    if (!result.hasTransparency ||
-        (!forcePngReencode && result.bytes.length == source.bytes.length)) {
+    if (!result.hasTransparency || !result.wasReencoded) {
       return (image: source, hasTransparency: result.hasTransparency);
     }
 
