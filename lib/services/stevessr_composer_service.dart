@@ -104,10 +104,7 @@ abstract final class StevessrComposerService {
     StevessrExportedImage image, {
     int maxBytes = _transparentUploadMaxBytes,
   }) async {
-    final prepared = await _prepareTransparentRaster(
-      image,
-      maxBytes: maxBytes,
-    );
+    final prepared = await _prepareTransparentRaster(image, maxBytes: maxBytes);
     return prepared.image;
   }
 
