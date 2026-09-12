@@ -56,7 +56,7 @@ void main() {
       );
     });
 
-    test('custom instance snapshots only the active discourse origin', () {
+    test('custom instance snapshots only the active discourse root', () {
       DiscourseInstanceRuntime.activate(
         instanceId: 'local-discourse',
         baseUrl: 'http://forum.example.test/forum',
@@ -75,6 +75,18 @@ void main() {
       expect(
         AccountBrowserSessionPolicy.isAllowedRestoreOrigin(
           'https://forum.example.test/forum/session',
+        ),
+        isFalse,
+      );
+      expect(
+        AccountBrowserSessionPolicy.isAllowedRestoreOrigin(
+          'http://forum.example.test/other/session',
+        ),
+        isFalse,
+      );
+      expect(
+        AccountBrowserSessionPolicy.isAllowedRestoreOrigin(
+          'http://cdn.forum.example.test/forum/session',
         ),
         isFalse,
       );
