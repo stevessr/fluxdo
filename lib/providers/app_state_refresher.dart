@@ -14,6 +14,8 @@ import 'message_bus/notification_providers.dart';
 import 'message_bus/pm_tracking_providers.dart';
 import 'message_bus/session_channel_providers.dart';
 import 'message_bus/topic_tracking_providers.dart';
+import 'voice/voice_rooms_provider.dart';
+import 'voice/voice_session_provider.dart';
 import 'ldc_providers.dart';
 import 'cdk_providers.dart';
 
@@ -28,7 +30,8 @@ class AppStateRefresher {
   static void refreshAll(ProviderContainer container) {
     // 去抖：2 秒内重复调用直接跳过（如 authStateProvider listener + _goToLogin 同时触发）
     final now = DateTime.now();
-    if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < const Duration(seconds: 2)) {
+    if (_lastRefreshTime != null &&
+        now.difference(_lastRefreshTime!) < const Duration(seconds: 2)) {
       return;
     }
     _lastRefreshTime = now;
@@ -47,6 +50,12 @@ class AppStateRefresher {
   }
 
   static Future<void> resetForLogout(ProviderContainer container) async {
+    // Voice participant sessions are account-bound. Drop the local realtime
+    // state before refreshing auth-scoped providers; if a final leave request
+    // was impossible, the server's presence TTL remains the backstop.
+    container.invalidate(voiceSessionProvider);
+    container.invalidate(voiceRoomsProvider);
+
     container.read(currentUserProvider.notifier).clearCache();
     container.read(userSummaryProvider.notifier).clearCache();
     container.read(bookmarkNameSuggestionsProvider.notifier).clearCache();
@@ -60,8 +69,12 @@ class AppStateRefresher {
     }
     // 重置筛选/排序/标签（会通过 signal listener 触发话题列表刷新，
     // 无需再手动 invalidate 话题列表）
-    container.read(topicFilterProvider.notifier).setFilter(TopicListFilter.latest);
-    container.read(topicSortOrderProvider.notifier).setOrder(TopicSortOrder.defaultOrder);
+    container
+        .read(topicFilterProvider.notifier)
+        .setFilter(TopicListFilter.latest);
+    container
+        .read(topicSortOrderProvider.notifier)
+        .setOrder(TopicSortOrder.defaultOrder);
     container.read(topicSortAscendingProvider.notifier).setAscending(false);
     final pinnedIds = container.read(pinnedCategoriesProvider);
     container.read(tabTagsProvider(null).notifier).state = [];
@@ -93,40 +106,41 @@ class AppStateRefresher {
   /// 用户信息、分类列表（tab 栏依赖）
   static final List<void Function(ProviderContainer container)>
       _coreRefreshers = [
-    (c) => c.invalidate(currentUserProvider),
-    (c) => c.invalidate(categoriesProvider),
-    (c) => c.invalidate(topicTrackingStateMetaProvider),
-    (c) => c.invalidate(topicTrackingStateProvider),
-  ];
+        (c) => c.invalidate(currentUserProvider),
+        (c) => c.invalidate(categoriesProvider),
+        (c) => c.invalidate(topicTrackingStateMetaProvider),
+        (c) => c.invalidate(topicTrackingStateProvider),
+      ];
 
   /// 第二批：非首屏必需，延迟执行以降低并发请求量
   static final List<void Function(ProviderContainer container)>
       _deferredRefreshers = [
-    (c) => c.invalidate(userSummaryProvider),
-    (c) => c.invalidate(notificationListProvider),
-    (c) => c.invalidate(tagsProvider),
-    (c) => c.invalidate(canTagTopicsProvider),
-    (c) {
-      final activeSlugs = c.read(activeCategorySlugsProvider);
-      for (final slug in activeSlugs) {
-        c.invalidate(categoryTopicsProvider(slug));
-      }
-    },
-    (c) => c.invalidate(browsingHistoryProvider),
-    (c) => c.invalidate(bookmarksProvider),
-    (c) => c.invalidate(myTopicsProvider),
-    (c) => c.invalidate(notificationCountStateProvider),
-    (c) => c.invalidate(notificationChannelProvider),
-    (c) => c.invalidate(notificationAlertChannelProvider),
-    (c) => c.invalidate(logoutChannelProvider),
-    (c) => c.invalidate(pmTrackingProvider),
-    (c) => c.invalidate(doNotDisturbProvider),
-    (c) => c.invalidate(userStatusProvider),
-    (c) => c.invalidate(userDraftCountProvider),
-    (c) => c.invalidate(reviewableCountsProvider),
-    (c) => c.invalidate(latestChannelProvider),
-    (c) => c.invalidate(messageBusInitProvider),
-    (c) => c.invalidate(ldcUserInfoProvider),
-    (c) => c.invalidate(cdkUserInfoProvider),
-  ];
+        (c) => c.invalidate(userSummaryProvider),
+        (c) => c.invalidate(notificationListProvider),
+        (c) => c.invalidate(tagsProvider),
+        (c) => c.invalidate(canTagTopicsProvider),
+        (c) {
+          final activeSlugs = c.read(activeCategorySlugsProvider);
+          for (final slug in activeSlugs) {
+            c.invalidate(categoryTopicsProvider(slug));
+          }
+        },
+        (c) => c.invalidate(browsingHistoryProvider),
+        (c) => c.invalidate(bookmarksProvider),
+        (c) => c.invalidate(myTopicsProvider),
+        (c) => c.invalidate(notificationCountStateProvider),
+        (c) => c.invalidate(notificationChannelProvider),
+        (c) => c.invalidate(notificationAlertChannelProvider),
+        (c) => c.invalidate(logoutChannelProvider),
+        (c) => c.invalidate(pmTrackingProvider),
+        (c) => c.invalidate(doNotDisturbProvider),
+        (c) => c.invalidate(userStatusProvider),
+        (c) => c.invalidate(userDraftCountProvider),
+        (c) => c.invalidate(reviewableCountsProvider),
+        (c) => c.invalidate(latestChannelProvider),
+        (c) => c.invalidate(messageBusInitProvider),
+        (c) => c.invalidate(voiceRoomsProvider),
+        (c) => c.invalidate(ldcUserInfoProvider),
+        (c) => c.invalidate(cdkUserInfoProvider),
+      ];
 }
