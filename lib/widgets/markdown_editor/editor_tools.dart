@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../../../l10n/s.dart';
+import '../../services/stevessr_composer_service.dart';
 import 'markdown_toolbar.dart';
 
 /// 编辑器工具定义
@@ -46,6 +47,27 @@ class EditorTool {
 
 /// 图片上传工具的 id（工具栏对其特殊渲染上传进度）
 const String kEditorToolImage = 'image';
+
+/// StevesSR 本身由 MarkdownEditor 的工具面板注册；这里额外提供一个
+/// 只给收起态快捷栏解析的桥接项。这样不会在「更多工具」里重复出现两次，
+/// 同时能复用同一套生成、上传与 Markdown 插入链路。
+final EditorTool _stevessrQuickTool = EditorTool(
+  id: 'stevessr',
+  icon: const Icon(Icons.auto_awesome_rounded),
+  label: (s) => s.stevessr.insert,
+  action: (toolbar) async {
+    final selection = toolbar.widget.controller.selection;
+    final generated = await StevessrComposerService.openAndUpload(
+      toolbar.context,
+    );
+    if (!toolbar.mounted || generated == null) return;
+    if (selection.isValid &&
+        selection.end <= toolbar.widget.controller.text.length) {
+      toolbar.widget.controller.selection = selection;
+    }
+    toolbar.insertUploadedImage(generated.upload);
+  },
+);
 
 /// 全部编辑器工具（顺序即面板网格与工具栏外显顺序）
 final List<EditorTool> editorTools = [
@@ -246,8 +268,21 @@ final List<EditorTool> editorTools = [
   ),
 ];
 
-/// 按注册表顺序过滤出外显工具
+/// 按注册表顺序过滤出外显工具。
+///
+/// StevesSR 是回复/发帖 composer 的一等快捷入口：即使用户的旧偏好列表
+/// 保存于该功能加入之前，也要补进快捷栏，避免新 action 永远被旧配置吞掉。
 List<EditorTool> resolveVisibleTools(List<String> ids) {
-  final byId = {for (final tool in editorTools) tool.id: tool};
-  return [for (final id in ids.toSet()) if (byId[id] != null) byId[id]!];
+  final byId = {
+    for (final tool in editorTools) tool.id: tool,
+    _stevessrQuickTool.id: _stevessrQuickTool,
+  };
+  final resolved = [
+    for (final id in ids.toSet())
+      if (byId[id] != null) byId[id]!,
+  ];
+  if (!resolved.any((tool) => tool.id == _stevessrQuickTool.id)) {
+    resolved.add(_stevessrQuickTool);
+  }
+  return resolved;
 }
