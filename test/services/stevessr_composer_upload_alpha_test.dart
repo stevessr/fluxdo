@@ -63,7 +63,7 @@ void main() {
       );
     }
 
-    final result = await StevessrComposerService.upload(
+    final result = await StevessrComposerService.uploadForTesting(
       StevessrExportedImage(
         bytes: _largeTransparentPng(),
         extension: 'png',
@@ -102,7 +102,7 @@ void main() {
     }
 
     await expectLater(
-      StevessrComposerService.upload(
+      StevessrComposerService.uploadForTesting(
         StevessrExportedImage(
           bytes: _largeTransparentPng(),
           extension: 'png',
