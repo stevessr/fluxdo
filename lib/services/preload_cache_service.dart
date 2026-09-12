@@ -110,7 +110,8 @@ class PreloadCacheService {
     final root = file.parent;
     if (!await root.exists()) return null;
 
-    await _pruneExpired(root);
+    // 启动读取只检查当前会话文件，不在关键路径遍历所有账号缓存。
+    // 全局过期维护留给后台写入路径执行。
     if (!await file.exists()) return null;
 
     try {
