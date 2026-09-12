@@ -72,11 +72,9 @@ class VpnAutoToggleService {
   // ignore: unused_field — 持有引用避免 Timer 被 GC；非 Windows 平台不创建
   Timer? _windowsFallbackTimer;
   static const _windowsFallbackInterval = Duration(seconds: 15);
-  bool _windowsSignalWatchStarted = false;
 
   void _ensureWindowsSignalWatch() {
-    if (_windowsSignalWatchStarted || !Platform.isWindows) return;
-    _windowsSignalWatchStarted = true;
+    if (_windowsFallbackTimer != null || !Platform.isWindows) return;
     SystemProxyService.instance.version.addListener(_redetectWindows);
     _windowsFallbackTimer = Timer.periodic(
       _windowsFallbackInterval,

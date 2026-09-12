@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fluxdo_render/editor.dart'
-    show observeModifierKeyEvent, primaryModifierHeld, shiftModifierHeld;
+    show
+        observeModifierKeyEvent,
+        primaryModifierHeldForReversibleAction,
+        shiftModifierHeld;
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../widgets/crypto/crypto_encrypt_sheet.dart';
 import 'package:file_picker/file_picker.dart';
@@ -22,6 +24,10 @@ import '../../services/toast_service.dart';
 import '../../utils/platform_utils.dart';
 import '../common/fading_edge_scroll_view.dart';
 import '../content/discourse_html_content/image_utils.dart';
+import 'composer_workbench.dart';
+import 'composer_tools_anchor.dart';
+import 'composer_view_mode_switcher.dart';
+import 'cursor_swipe_control.dart';
 import 'composer_shortcuts.dart';
 import 'editor_tools.dart';
 import 'emoji_popover.dart';
@@ -29,6 +35,8 @@ import 'media_upload_helper.dart';
 import 'voice_recorder_sheet.dart';
 import 'image_upload_dialog.dart';
 import 'color_insert_dialog.dart';
+import 'content_actions_button.dart';
+import 'content_actions_providers.dart';
 import 'link_insert_dialog.dart';
 import 'poll_builder_dialog.dart';
 import 'template_insert_dialog.dart';
@@ -43,6 +51,10 @@ class MarkdownToolbar extends StatefulWidget {
 
   /// 内容焦点节点（可选，用于恢复焦点）
   final FocusNode? focusNode;
+
+  /// 正文撤销历史（宿主与正文 TextField 共用同一实例；null = 不显示
+  /// 撤销/恢复按钮，用于不带正文输入框的场景）
+  final UndoHistoryController? undoController;
 
   /// 是否显示预览按钮
   final bool showPreviewButton;
@@ -68,11 +80,10 @@ class MarkdownToolbar extends StatefulWidget {
   /// 表情面板是否可见（控制表情/键盘按钮图标切换）
   final bool isEmojiPanelVisible;
 
-  /// 「更多工具」按钮点击回调
-  /// 提供时为移动端模式：右侧显示「更多」按钮，全部工具收进网格面板
+  /// 展开/收起工具岛，两端共用。
   final VoidCallback? onToggleTools;
 
-  /// 工具面板是否可见（控制「更多工具」按钮高亮）
+  /// 工具岛是否展开（控制入口高亮）。
   final bool isToolsPanelVisible;
 
   /// 外显工具 id 列表（见 editor_tools.dart）
@@ -82,11 +93,18 @@ class MarkdownToolbar extends StatefulWidget {
   /// 桌面端表情悬浮弹层控制器(非 null 时表情按钮被锚点包裹,
   /// 弹层跟随按钮定位且点按钮不触发弹层的 onTapOutside)
   final EmojiPopoverController? emojiPopover;
+  final ComposerToolsAnchor? toolsAnchor;
+
+  final Widget? metaBar;
+  final bool editing;
+  final void Function(int direction, {required bool extend})?
+  onMoveCursorVertical;
 
   const MarkdownToolbar({
     super.key,
     required this.controller,
     this.focusNode,
+    this.undoController,
     this.showPreviewButton = true,
     this.isPreview = false,
     this.onTogglePreview,
@@ -99,6 +117,10 @@ class MarkdownToolbar extends StatefulWidget {
     this.isToolsPanelVisible = false,
     this.visibleToolIds,
     this.emojiPopover,
+    this.toolsAnchor,
+    this.metaBar,
+    this.editing = true,
+    this.onMoveCursorVertical,
   });
 
   @override
@@ -107,6 +129,9 @@ class MarkdownToolbar extends StatefulWidget {
 
 class MarkdownToolbarState extends State<MarkdownToolbar> {
   final _picker = ImagePicker();
+
+  /// 宿主未传 focusNode 时的兑底（只建一次，不能在 build 里 new）
+  FocusNode? _fallbackFocusNode;
   int _uploadingCount = 0;
   String? _uploadProgress; // 批量上传进度，如 "3/22"
   bool get _isUploading => _uploadingCount > 0;
@@ -120,6 +145,7 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleRawKeyEvent);
+    _fallbackFocusNode?.dispose();
     super.dispose();
   }
 
@@ -139,7 +165,7 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         event.logicalKey == LogicalKeyboardKey.keyV &&
         !shiftModifierHeld() &&
         !HardwareKeyboard.instance.isAltPressed &&
-        primaryModifierHeld(event)) {
+        primaryModifierHeldForReversibleAction(event)) {
       _handlePasteImage();
       // 不返回 true：让 TextField 自行处理文本粘贴，
       // 仅在检测到图片时通过上传流程处理
@@ -542,9 +568,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     widget.focusNode?.requestFocus();
   }
 
-  /// 文字颜色:选色对话框 → 选区包一层 `[color=…]` BBCode(discourse
-  /// bbcode-color 插件渲染;富 composer 同款选色面板)。无选区时走
-  /// wrapSelection 占位符路径(插入并选中占位文字)。
+  /// 文字颜色：选色对话框后以 `[color=…]` BBCode 包裹选区。
+  /// 无选区时插入并选中占位文字，和其它格式工具保持一致。
   Future<void> insertColor(BuildContext context) async {
     final value = await showColorInsertDialog(context);
     if (!mounted || value == null) return;
@@ -1096,14 +1121,15 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
 
   /// 构建中部滚动区域的工具按钮
   ///
-  /// [MarkdownToolbar.visibleToolIds] 为 null（桌面端）时显示全部工具，
-  /// 否则只显示用户自定义的外显工具（默认空，全部收进「更多」面板）。
+  /// 两端按用户保存的顺序显示固定工具；null 仅作为独立使用时的兼容默认值。
   List<Widget> _buildToolButtons() {
     final ids = widget.visibleToolIds;
     final tools = ids == null ? editorTools : resolveVisibleTools(ids);
 
     return [
-      for (final tool in tools) _buildToolButton(tool),
+      for (final tool in tools)
+        widget.toolsAnchor?.compactControl(_buildToolButton(tool)) ??
+            _buildToolButton(tool),
       // 图片工具未外显时，上传中在中部显示进度指示
       if (_isUploading && ids != null && !ids.contains(kEditorToolImage))
         _UploadIndicator(progress: _uploadProgress),
@@ -1111,6 +1137,7 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   }
 
   Widget _buildToolButton(EditorTool tool) {
+    final icon = widget.toolsAnchor?.icon(tool.id, tool.icon) ?? tool.icon;
     final s = S.current;
     // 桌面端 tooltip 标注快捷键(如「粗体 (⌘B)」;移动端无物理键盘不标)
     final hint = PlatformUtils.isDesktop ? composerShortcutHint(tool.id) : null;
@@ -1124,21 +1151,21 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
             size: 16,
             color: theme.colorScheme.onSurfaceVariant,
           ),
-          child: tool.icon,
+          child: icon,
         ),
         tooltip: tooltip,
         itemBuilder: (context) => tool.menuItems!(s),
         onSelected: (value) => tool.onMenuSelected!(this, value),
         padding: EdgeInsets.zero,
         iconSize: 20,
-        style: IconButton.styleFrom(visualDensity: VisualDensity.compact),
+        style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
       );
     }
 
     final isImage = tool.id == kEditorToolImage;
     final isUpload = isImage || tool.id == 'attachment';
     return _ToolbarButton(
-      icon: tool.icon,
+      icon: icon,
       onPressed: _isUploading && isUpload ? null : () => tool.action!(this),
       isLoading: isImage && _isUploading,
       label: isImage ? _uploadProgress : null,
@@ -1146,174 +1173,112 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     );
   }
 
-  /// 表情按钮:桌面端(emojiPopover != null)由弹层锚点包裹,且不切
-  /// keyboard 图标(那是移动端"切回键盘"语义,悬浮弹层不收键盘)
-  Widget _buildEmojiButton(ThemeData theme, Color pillColor) {
-    final popover = widget.emojiPopover;
-    final button = _ToolbarPill(
-      color: pillColor,
-      child: IconButton(
-        visualDensity: VisualDensity.compact,
-        icon: FaIcon(
-          widget.isEmojiPanelVisible && popover == null
-              ? FontAwesomeIcons.keyboard
-              : FontAwesomeIcons.faceSmile,
-          size: 20,
-          color: widget.isEmojiPanelVisible
-              ? theme.colorScheme.primary
-              : theme.colorScheme.onSurfaceVariant,
-        ),
-        onPressed: widget.onToggleEmoji,
+  Widget _buildEmojiButton(ThemeData theme) {
+    final button = IconButton(
+      icon: Icon(
+        widget.isEmojiPanelVisible && widget.emojiPopover == null
+            ? Symbols.keyboard_rounded
+            : Symbols.sentiment_satisfied_rounded,
       ),
+      tooltip: S.current.emoji_tab,
+      onPressed: widget.onToggleEmoji,
+      color: widget.isEmojiPanelVisible ? theme.colorScheme.primary : null,
     );
-    if (popover == null) return button;
-    return EmojiPopoverAnchor(controller: popover, child: button);
+    final popover = widget.emojiPopover;
+    return popover == null
+        ? button
+        : EmojiPopoverAnchor(controller: popover, child: button);
   }
+
+  void _moveCursor(int direction, {required bool extend}) {
+    final next = moveTextSelectionByGrapheme(
+      widget.controller.value,
+      direction,
+      extend: extend,
+    );
+    if (next != null) widget.controller.selection = next;
+  }
+
+  Widget _contentActions() {
+    final undo = widget.undoController!;
+    return ContentActionsButton(
+      provider: SourceContentActions(
+        controller: widget.controller,
+        undoController: undo,
+        focusNode: widget.focusNode ?? (_fallbackFocusNode ??= FocusNode()),
+      ),
+      listenable: Listenable.merge([undo, widget.controller]),
+    );
+  }
+
+  Widget _buildToolsButton(ThemeData theme) => ComposerToolsToggle(
+    anchor: widget.toolsAnchor,
+    active: widget.isToolsPanelVisible,
+    compact: !PlatformUtils.isDesktop && !widget.editing,
+    onPressed: widget.onToggleTools,
+  );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final pillColor = theme.colorScheme.surfaceContainerHighest.withValues(
-      alpha: 0.45,
-    );
-    final isMobile = widget.onToggleTools != null;
-
-    return Container(
-      color: theme.colorScheme.surface,
-      child: Focus(
-        canRequestFocus: false,
-        descendantsAreFocusable: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-          child: Row(
-            children: [
-              // 左：表情按钮（胶囊背景，固定）
-              _buildEmojiButton(theme, pillColor),
-              // 中：外显工具（可滚动，无背景）
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: FadingEdgeScrollView(
-                    fadeLeft: true,
-                    fadeRight: true,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(children: _buildToolButtons()),
-                    ),
+    return ComposerWorkbench(
+      toolsAnchor: widget.toolsAnchor,
+      onExpandTools: widget.onToggleTools,
+      metadata: widget.metaBar,
+      editing: widget.editing,
+      controls: [
+        if (!PlatformUtils.isDesktop && widget.undoController != null)
+          _contentActions(),
+        if (!PlatformUtils.isDesktop)
+          SizedBox.square(
+            dimension: 48,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // 保留光标控件的 State，弹出它自己的菜单时失焦也不会丢回调。
+                Visibility(
+                  visible: widget.editing || widget.onToggleTools == null,
+                  maintainState: true,
+                  child: CursorSwipeControl(
+                    onMove: _moveCursor,
+                    onMoveVertical: widget.onMoveCursorVertical,
                   ),
                 ),
-              ),
-              // 右：预览 +「更多」（移动端）/ 混排 + 预览（桌面端），胶囊背景
-              _ToolbarPill(
-                color: pillColor,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!isMobile && widget.showPanguButton)
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(
-                          Symbols.auto_fix_high_rounded,
-                          size: 20,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        onPressed: widget.onApplyPangu,
-                        tooltip: S.current.toolbar_mixOptimize,
-                      ),
-                    if (widget.showPreviewButton)
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(
-                          widget.isPreview
-                              ? Symbols.visibility_off_rounded
-                              : Symbols.visibility_rounded,
-                          size: 20,
-                          color: widget.isPreview
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
-                        ),
-                        onPressed: widget.onTogglePreview,
-                        tooltip: widget.isPreview
-                            ? S.current.common_edit
-                            : S.current.common_preview,
-                      ),
-                    // 源码 → 富文本(与 RichComposer 的「MD」按钮互为
-                    // 往返;富文本开关未开时宿主不传,不显示)
-                    if (widget.onSwitchToRich != null)
-                      Tooltip(
-                        message: '切换到富文本模式',
-                        child: InkWell(
-                          onTap: widget.onSwitchToRich,
-                          borderRadius: BorderRadius.circular(18),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 7,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Symbols.wysiwyg_rounded,
-                                  size: 18,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  'Aa',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    height: 1.0,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.3,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (isMobile)
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        icon: FaIcon(
-                          FontAwesomeIcons.circlePlus,
-                          size: 20,
-                          color: widget.isToolsPanelVisible
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
-                        ),
-                        onPressed: widget.onToggleTools,
-                        tooltip: S.current.toolbar_moreTools,
-                      ),
-                  ],
+                if (!widget.editing && widget.onToggleTools != null)
+                  _buildToolsButton(theme),
+              ],
+            ),
+          ),
+        if (widget.onSwitchToRich != null)
+          ComposerModeButton(rich: false, onPressed: widget.onSwitchToRich),
+        if (widget.showPreviewButton)
+          ComposerPreviewButton(
+            previewing: widget.isPreview,
+            onPressed: widget.onTogglePreview,
+          ),
+      ],
+      tools: Row(
+        children: [
+          _buildEmojiButton(theme),
+          const SizedBox(width: 3),
+          Expanded(
+            child: ComposerCompactTools(
+              anchor: widget.toolsAnchor,
+              child: FadingEdgeScrollView(
+                fadeLeft: true,
+                fadeRight: true,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(children: _buildToolButtons()),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+          if (widget.onToggleTools != null &&
+              (PlatformUtils.isDesktop || widget.editing))
+            _buildToolsButton(theme),
+        ],
       ),
-    );
-  }
-}
-
-/// 工具栏两侧的胶囊背景容器
-class _ToolbarPill extends StatelessWidget {
-  final Color color;
-  final Widget child;
-
-  const _ToolbarPill({required this.color, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(22),
-      ),
-      padding: const EdgeInsets.all(2),
-      child: child,
     );
   }
 }
@@ -1396,7 +1361,7 @@ class _ToolbarButton extends StatelessWidget {
     }
 
     return IconButton(
-      visualDensity: VisualDensity.compact,
+      visualDensity: VisualDensity.standard,
       icon: child,
       onPressed: onPressed,
       tooltip: tooltip,
