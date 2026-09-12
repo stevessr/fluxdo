@@ -13,7 +13,7 @@ import 'network/cookie/cookie_jar_service.dart';
 /// 持久化的首页 preload cache。
 ///
 /// - 仅缓存带 `preload-home` 标记的首页 HTML，由网络拦截器接入；
-/// - 最长保留 7 天；
+/// - 磁盘快照最长保留 7 天，但正常启动只直接复用很新的快照；
 /// - 以站点 + 当前 `_t` 会话为命名空间，不同账号/不同登录会话绝不复用；
 /// - 文件名只落不可逆哈希，不额外暴露用户名或 token；
 /// - 开关是全局实验开关，关闭后停止读写，但不会隐式删除已有缓存；
@@ -46,7 +46,17 @@ class PreloadCacheService {
        _isEnabled = isEnabled,
        _now = now ?? DateTime.now;
 
+  /// 磁盘保留上限。旧快照可用于诊断/未来降级策略，但不代表可在正常
+  /// 联网启动时直接作为最新 Discourse bootstrap 数据。
   static const Duration cacheTtl = Duration(days: 7);
+
+  /// 正常启动允许零网络请求直接命中的窗口。
+  ///
+  /// `currentUser`、`topicTrackingStates`、`topicList` 都属于动态数据；把整个
+  /// bootstrap HTML 无条件复用 7 天虽然快，但会把旧未读数/话题列表当成最新。
+  /// 2 分钟与当前用户静默刷新冷却窗口一致，兼顾快速重启与数据准确性。
+  static const Duration startupFastPathTtl = Duration(minutes: 2);
+
   static const String enabledPreferenceKey = 'experiment_preload_cache_enabled';
   static const String _cacheDirectoryName = 'preload_cache_v1';
 
@@ -87,8 +97,12 @@ class PreloadCacheService {
     return File(p.join(root.path, '$namespace.html'));
   }
 
-  /// 读取当前账号/会话仍在 TTL 内的缓存。过期文件会立即删除。
-  Future<String?> readCurrentAccount() async {
+  /// 读取当前账号/会话缓存。
+  ///
+  /// [maxAge] 只控制本次是否允许复用，不会删除仍在 [cacheTtl] 内的快照。
+  /// 这样启动 fast-path 可以严格限制动态数据的新鲜度，同时磁盘维护仍采用
+  /// 独立的硬 TTL，不把“这次不够新”误当成“缓存文件已经损坏/必须删除”。
+  Future<String?> readCurrentAccount({Duration? maxAge}) async {
     if (!await _isEnabled()) return null;
 
     final file = await _fileForCurrentAccount(createRoot: false);
@@ -105,6 +119,14 @@ class PreloadCacheService {
         await _deleteFileBestEffort(file);
         return null;
       }
+
+      if (maxAge != null) {
+        final age = _now().difference(modifiedAt);
+        if (!age.isNegative && age >= maxAge) {
+          return null;
+        }
+      }
+
       return await file.readAsString();
     } on FileSystemException catch (e) {
       debugPrint('[PreloadCache] 读取缓存失败，回退网络: $e');
