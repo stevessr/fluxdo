@@ -143,8 +143,10 @@ class DiscourseInstanceRuntime {
           scheme: uri.scheme.toLowerCase(),
           host: uri.host.toLowerCase(),
           path: path,
-          query: null,
-          fragment: null,
+          // Uri.replace 的 null 表示“保留原字段”，不是删除。显式空字符串
+          // 才能把用户粘贴进来的 query/fragment 从实例身份中彻底移除。
+          query: '',
+          fragment: '',
         )
         .toString()
         .replaceFirst(RegExp(r'/+$'), '');
