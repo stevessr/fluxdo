@@ -1,0 +1,146 @@
+name: Experimental Multi Discourse
+
+on:
+  pull_request:
+    paths:
+      - 'lib/config/discourse_instance_runtime.dart'
+      - 'lib/constants.dart'
+      - 'lib/pages/discourse_instances_page.dart'
+      - 'lib/services/account_browser_session_policy.dart'
+      - 'lib/services/background/ios_background_fetch.dart'
+      - 'lib/services/deep_link_service.dart'
+      - 'lib/services/discourse/discourse_service.dart'
+      - 'lib/services/discourse_instance_manager.dart'
+      - 'lib/services/network/discourse_dio.dart'
+      - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
+      - 'lib/services/storage/resilient_secure_storage.dart'
+      - 'lib/settings/definitions/custom_settings_defs.dart'
+      - 'lib/utils/url_helper.dart'
+      - 'test/config/discourse_instance_runtime_test.dart'
+      - 'test/services/account_browser_session_policy_test.dart'
+      - 'test/services/deep_link_service_test.dart'
+      - 'test/services/network/discourse_base_path_interceptor_test.dart'
+      - 'test/utils/url_helper_test.dart'
+      - '.github/workflows/multi-discourse.yaml'
+  push:
+    branches:
+      - feat/experimental-multi-discourse
+    paths:
+      - 'lib/config/discourse_instance_runtime.dart'
+      - 'lib/constants.dart'
+      - 'lib/pages/discourse_instances_page.dart'
+      - 'lib/services/account_browser_session_policy.dart'
+      - 'lib/services/background/ios_background_fetch.dart'
+      - 'lib/services/deep_link_service.dart'
+      - 'lib/services/discourse/discourse_service.dart'
+      - 'lib/services/discourse_instance_manager.dart'
+      - 'lib/services/network/discourse_dio.dart'
+      - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
+      - 'lib/services/storage/resilient_secure_storage.dart'
+      - 'lib/settings/definitions/custom_settings_defs.dart'
+      - 'lib/utils/url_helper.dart'
+      - 'test/config/discourse_instance_runtime_test.dart'
+      - 'test/services/account_browser_session_policy_test.dart'
+      - 'test/services/deep_link_service_test.dart'
+      - 'test/services/network/discourse_base_path_interceptor_test.dart'
+      - 'test/utils/url_helper_test.dart'
+      - '.github/workflows/multi-discourse.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: |
+          dart format \
+            lib/config/discourse_instance_runtime.dart \
+            lib/constants.dart \
+            lib/pages/discourse_instances_page.dart \
+            lib/services/account_browser_session_policy.dart \
+            lib/services/background/ios_background_fetch.dart \
+            lib/services/deep_link_service.dart \
+            lib/services/discourse/discourse_service.dart \
+            lib/services/discourse_instance_manager.dart \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/interceptors/discourse_base_path_interceptor.dart \
+            lib/services/storage/resilient_secure_storage.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            lib/utils/url_helper.dart \
+            test/config/discourse_instance_runtime_test.dart \
+            test/services/account_browser_session_policy_test.dart \
+            test/services/deep_link_service_test.dart \
+            test/services/network/discourse_base_path_interceptor_test.dart \
+            test/utils/url_helper_test.dart
+          git diff --exit-code -- \
+            lib/config/discourse_instance_runtime.dart \
+            lib/constants.dart \
+            lib/pages/discourse_instances_page.dart \
+            lib/services/account_browser_session_policy.dart \
+            lib/services/background/ios_background_fetch.dart \
+            lib/services/deep_link_service.dart \
+            lib/services/discourse/discourse_service.dart \
+            lib/services/discourse_instance_manager.dart \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/interceptors/discourse_base_path_interceptor.dart \
+            lib/services/storage/resilient_secure_storage.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            lib/utils/url_helper.dart \
+            test/config/discourse_instance_runtime_test.dart \
+            test/services/account_browser_session_policy_test.dart \
+            test/services/deep_link_service_test.dart \
+            test/services/network/discourse_base_path_interceptor_test.dart \
+            test/utils/url_helper_test.dart
+
+      - name: Analyze multi-instance paths
+        run: >-
+          flutter analyze
+          lib/config/discourse_instance_runtime.dart
+          lib/constants.dart
+          lib/pages/discourse_instances_page.dart
+          lib/services/account_browser_session_policy.dart
+          lib/services/background/ios_background_fetch.dart
+          lib/services/deep_link_service.dart
+          lib/services/discourse/discourse_service.dart
+          lib/services/discourse_instance_manager.dart
+          lib/services/network/discourse_dio.dart
+          lib/services/network/interceptors/discourse_base_path_interceptor.dart
+          lib/services/storage/resilient_secure_storage.dart
+          lib/settings/definitions/custom_settings_defs.dart
+          lib/utils/url_helper.dart
+          test/config/discourse_instance_runtime_test.dart
+          test/services/account_browser_session_policy_test.dart
+          test/services/deep_link_service_test.dart
+          test/services/network/discourse_base_path_interceptor_test.dart
+          test/utils/url_helper_test.dart
+
+      - name: Test multi-instance contracts
+        run: >-
+          dart tool/flutterw.dart test
+          test/config/discourse_instance_runtime_test.dart
+          test/services/account_browser_session_policy_test.dart
+          test/services/deep_link_service_test.dart
+          test/services/network/discourse_base_path_interceptor_test.dart
+          test/utils/url_helper_test.dart
