@@ -1,7 +1,21 @@
 import 'dart:ui';
 
 /// StevesSR 可用的角色表情。
-enum StevessrExpression { neutral, pout, smug, surprised, happy, cry, original }
+enum StevessrExpression {
+  neutral,
+  pout,
+  smug,
+  surprised,
+  happy,
+  cry,
+  original,
+  wink,
+  angry,
+  shy,
+  thinking,
+  sleepy,
+  confused,
+}
 
 /// StevesSR 可用的气泡造型。
 enum StevessrBubble { thought, speech, cloud, shout, rounded, caption }
