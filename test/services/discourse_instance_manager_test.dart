@@ -151,28 +151,31 @@ void main() {
     expect(selected.baseUrl, DiscourseInstanceRuntime.defaultBaseUrl);
   });
 
-  test('removing the selected next-start instance falls back to linux.do', () async {
-    await DiscourseInstanceManager.instance.setEnabled(true);
-    final custom = await DiscourseInstanceManager.instance.addInstance(
-      name: 'Forum',
-      baseUrl: 'https://forum.example.com/forum',
-    );
-    await DiscourseInstanceManager.instance.selectInstance(custom.id);
+  test(
+    'removing the selected next-start instance falls back to linux.do',
+    () async {
+      await DiscourseInstanceManager.instance.setEnabled(true);
+      final custom = await DiscourseInstanceManager.instance.addInstance(
+        name: 'Forum',
+        baseUrl: 'https://forum.example.com/forum',
+      );
+      await DiscourseInstanceManager.instance.selectInstance(custom.id);
 
-    await DiscourseInstanceManager.instance.removeInstance(custom.id);
+      await DiscourseInstanceManager.instance.removeInstance(custom.id);
 
-    final prefs = await SharedPreferences.getInstance();
-    expect(
-      prefs.getString(DiscourseInstanceRuntime.activeInstanceIdPrefKey),
-      DiscourseInstanceRuntime.defaultInstanceId,
-    );
-    expect(
-      prefs.getString(DiscourseInstanceRuntime.activeBaseUrlPrefKey),
-      DiscourseInstanceRuntime.defaultBaseUrl,
-    );
-    expect(
-      (await DiscourseInstanceManager.instance.selectedInstance()).id,
-      DiscourseInstanceRuntime.defaultInstanceId,
-    );
-  });
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString(DiscourseInstanceRuntime.activeInstanceIdPrefKey),
+        DiscourseInstanceRuntime.defaultInstanceId,
+      );
+      expect(
+        prefs.getString(DiscourseInstanceRuntime.activeBaseUrlPrefKey),
+        DiscourseInstanceRuntime.defaultBaseUrl,
+      );
+      expect(
+        (await DiscourseInstanceManager.instance.selectedInstance()).id,
+        DiscourseInstanceRuntime.defaultInstanceId,
+      );
+    },
+  );
 }
