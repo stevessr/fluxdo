@@ -55,9 +55,8 @@ class NotificationRoutePayload {
       }
     }
 
-    // Legacy notifications remain navigable for upgrade compatibility. They do
-    // not carry an instance identity, so only newly-created v2 notifications
-    // can enforce the multi-instance boundary.
+    // 旧版本只支持 linux.do，因此 legacy payload 可安全归属默认实例；切到
+    // 自定义站点后必须拒绝它，否则残留的 topic:123 可能打开新站同编号话题。
     final isMessage = payload.startsWith('message:');
     if (!isMessage && !payload.startsWith('topic:')) return null;
     final parts = payload.substring(isMessage ? 8 : 6).split(':');
@@ -74,6 +73,13 @@ class NotificationRoutePayload {
     );
   }
 
-  bool belongsToInstance(String currentInstanceId) =>
-      instanceId == null || instanceId == currentInstanceId;
+  bool belongsToInstance(
+    String currentInstanceId, {
+    String legacyInstanceId = 'linux-do',
+  }) {
+    final routeInstanceId = instanceId;
+    return routeInstanceId == null
+        ? currentInstanceId == legacyInstanceId
+        : routeInstanceId == currentInstanceId;
+  }
 }
