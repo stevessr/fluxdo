@@ -130,6 +130,8 @@ class DiscourseInstanceRuntime {
       throw const FormatException('请输入有效的 http/https Discourse 地址');
     }
 
+    final scheme = uri.scheme.toLowerCase();
+    final host = uri.host.toLowerCase();
     var path = uri.path;
     if (path == '/') {
       path = '';
@@ -138,17 +140,17 @@ class DiscourseInstanceRuntime {
       if (path.isNotEmpty && !path.startsWith('/')) path = '/$path';
     }
 
-    return uri
-        .replace(
-          scheme: uri.scheme.toLowerCase(),
-          host: uri.host.toLowerCase(),
-          path: path,
-          // Uri.replace 的 null 表示“保留原字段”，不是删除。显式空字符串
-          // 才能把用户粘贴进来的 query/fragment 从实例身份中彻底移除。
-          query: '',
-          fragment: '',
-        )
-        .toString()
-        .replaceFirst(RegExp(r'/+$'), '');
+    // 重建 Uri，而不是用 replace(query: null/fragment: null)：replace 的 null
+    // 表示“沿用旧字段”。同时去掉显式默认端口，避免 :443/:80 为同一论坛
+    // 生成第二套实例身份与凭证 namespace。
+    final isDefaultPort =
+        (scheme == 'https' && uri.hasPort && uri.port == 443) ||
+        (scheme == 'http' && uri.hasPort && uri.port == 80);
+    return Uri(
+      scheme: scheme,
+      host: host,
+      port: uri.hasPort && !isDefaultPort ? uri.port : null,
+      path: path,
+    ).toString();
   }
 }
