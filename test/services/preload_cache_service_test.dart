@@ -5,7 +5,7 @@ import 'package:fluxdo/services/preload_cache_service.dart';
 
 void main() {
   late Directory tempDirectory;
-  late String? accountId;
+  late String? namespaceSeed;
   late bool enabled;
   late DateTime now;
   late PreloadCacheService cache;
@@ -14,12 +14,12 @@ void main() {
     tempDirectory = await Directory.systemTemp.createTemp(
       'fluxdo-preload-cache-test-',
     );
-    accountId = 'alice';
+    namespaceSeed = 'alice-session-token';
     enabled = true;
     now = DateTime.utc(2026, 9, 12, 12);
     cache = PreloadCacheService.testing(
       cacheBaseDirectory: () async => tempDirectory,
-      accountId: () async => accountId,
+      namespaceSeed: () async => namespaceSeed,
       isEnabled: () async => enabled,
       now: () => now,
     );
@@ -31,17 +31,29 @@ void main() {
     }
   });
 
-  test('stores preload cache independently for each account', () async {
+  test('stores preload cache independently for each account session', () async {
     await cache.writeCurrentAccount('<html>alice</html>');
     expect(await cache.readCurrentAccount(), '<html>alice</html>');
 
-    accountId = 'bob';
+    namespaceSeed = 'bob-session-token';
     expect(await cache.readCurrentAccount(), isNull);
     await cache.writeCurrentAccount('<html>bob</html>');
     expect(await cache.readCurrentAccount(), '<html>bob</html>');
 
-    accountId = 'alice';
+    namespaceSeed = 'alice-session-token';
     expect(await cache.readCurrentAccount(), '<html>alice</html>');
+  });
+
+  test('token rotation never reuses the previous session cache', () async {
+    await cache.writeCurrentAccount('<html>old-session</html>');
+
+    namespaceSeed = 'alice-new-session-token';
+    expect(await cache.readCurrentAccount(), isNull);
+    await cache.writeCurrentAccount('<html>new-session</html>');
+    expect(await cache.readCurrentAccount(), '<html>new-session</html>');
+
+    namespaceSeed = 'alice-session-token';
+    expect(await cache.readCurrentAccount(), '<html>old-session</html>');
   });
 
   test('expires cache at seven days and prunes it', () async {
@@ -65,27 +77,22 @@ void main() {
     expect(await cache.readCurrentAccount(), '<html>kept</html>');
   });
 
-  test('clearAll removes caches for every account', () async {
+  test('clearAll removes caches for every account session', () async {
     await cache.writeCurrentAccount('<html>alice</html>');
-    accountId = 'bob';
+    namespaceSeed = 'bob-session-token';
     await cache.writeCurrentAccount('<html>bob</html>');
 
     expect(await cache.clearAll(), 2);
     expect(await cache.readCurrentAccount(), isNull);
 
-    accountId = 'alice';
+    namespaceSeed = 'alice-session-token';
     expect(await cache.readCurrentAccount(), isNull);
   });
 
-  test('guest and missing accounts never use persistent preload cache', () async {
-    accountId = null;
+  test('missing auth session never uses persistent preload cache', () async {
+    namespaceSeed = null;
     await cache.writeCurrentAccount('<html>anonymous</html>');
     expect(await cache.readCurrentAccount(), isNull);
-
-    accountId = 'guest';
-    await cache.writeCurrentAccount('<html>guest</html>');
-    expect(await cache.readCurrentAccount(), isNull);
-
     expect(await cache.clearAll(), 0);
   });
 
