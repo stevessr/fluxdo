@@ -1,0 +1,105 @@
+name: StevesSR Composer
+
+on:
+  pull_request:
+    paths:
+      - 'lib/models/stevessr_render_params.dart'
+      - 'lib/pages/stevessr_generator_page.dart'
+      - 'lib/services/stevessr_composer_service.dart'
+      - 'lib/services/stevessr_export_service.dart'
+      - 'lib/utils/screenshot_utils.dart'
+      - 'lib/widgets/stevessr/**'
+      - 'lib/widgets/markdown_editor/editor_tools.dart'
+      - 'lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart'
+      - 'test/services/stevessr_export_alpha_test.dart'
+      - 'test/utils/screenshot_utils_alpha_test.dart'
+      - 'test/widgets/stevessr_generator_page_test.dart'
+      - 'test/widgets/stevessr_quick_toolbar_test.dart'
+      - '.github/workflows/stevessr.yaml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/models/stevessr_render_params.dart'
+      - 'lib/pages/stevessr_generator_page.dart'
+      - 'lib/services/stevessr_composer_service.dart'
+      - 'lib/services/stevessr_export_service.dart'
+      - 'lib/utils/screenshot_utils.dart'
+      - 'lib/widgets/stevessr/**'
+      - 'lib/widgets/markdown_editor/editor_tools.dart'
+      - 'lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart'
+      - 'test/services/stevessr_export_alpha_test.dart'
+      - 'test/utils/screenshot_utils_alpha_test.dart'
+      - 'test/widgets/stevessr_generator_page_test.dart'
+      - 'test/widgets/stevessr_quick_toolbar_test.dart'
+      - '.github/workflows/stevessr.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+
+      - name: Check formatting
+        run: |
+          dart format \
+            lib/utils/screenshot_utils.dart \
+            lib/widgets/markdown_editor/editor_tools.dart \
+            lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart \
+            test/services/stevessr_export_alpha_test.dart \
+            test/utils/screenshot_utils_alpha_test.dart \
+            test/widgets/stevessr_quick_toolbar_test.dart
+          git diff --exit-code -- \
+            lib/utils/screenshot_utils.dart \
+            lib/widgets/markdown_editor/editor_tools.dart \
+            lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart \
+            test/services/stevessr_export_alpha_test.dart \
+            test/utils/screenshot_utils_alpha_test.dart \
+            test/widgets/stevessr_quick_toolbar_test.dart
+
+      # editor_tools.dart 当前已有一批 nullable l10n analyzer baseline；
+      # 快捷栏测试仍会实际编译/执行该文件。这里对本 PR 其余改动做严格 analyze。
+      - name: Analyze StevesSR composer changes
+        run: >-
+          flutter analyze
+          lib/utils/screenshot_utils.dart
+          lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart
+          test/services/stevessr_export_alpha_test.dart
+          test/utils/screenshot_utils_alpha_test.dart
+          test/widgets/stevessr_quick_toolbar_test.dart
+
+      - name: Test PNG export alpha
+        run: flutter test test/services/stevessr_export_alpha_test.dart
+
+      - name: Test chunked screenshot alpha
+        run: flutter test test/utils/screenshot_utils_alpha_test.dart
+
+      - name: Test generator UI
+        run: flutter test test/widgets/stevessr_generator_page_test.dart
+
+      - name: Test composer quick toolbar
+        run: flutter test test/widgets/stevessr_quick_toolbar_test.dart

@@ -22,9 +22,13 @@ class ScreenshotUtils {
   ///
   /// 内部自动判断：纹理尺寸未超限时直接截图，超限时分块截图拼接，
   /// 始终保持原始 pixelRatio，不降低画质。
-  static Future<Uint8List?> captureWidget(GlobalKey key, {double pixelRatio = 2.0}) async {
+  static Future<Uint8List?> captureWidget(
+    GlobalKey key, {
+    double pixelRatio = 2.0,
+  }) async {
     try {
-      final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary =
+          key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
         debugPrint('[ScreenshotUtils] RenderRepaintBoundary not found');
         return null;
@@ -37,12 +41,16 @@ class ScreenshotUtils {
 
       // 纹理尺寸未超限，直接截图
       if (textureWidth <= _maxTextureSize && textureHeight <= _maxTextureSize) {
-        debugPrint('[ScreenshotUtils] 直接截图 (${widgetWidth}x$widgetHeight @ $pixelRatio)');
+        debugPrint(
+          '[ScreenshotUtils] 直接截图 (${widgetWidth}x$widgetHeight @ $pixelRatio)',
+        );
         return _captureDirectly(boundary, pixelRatio);
       }
 
       // 纹理超限，分块截图拼接，保持原始 pixelRatio
-      debugPrint('[ScreenshotUtils] 分块截图 (${widgetWidth}x$widgetHeight @ $pixelRatio)');
+      debugPrint(
+        '[ScreenshotUtils] 分块截图 (${widgetWidth}x$widgetHeight @ $pixelRatio)',
+      );
       return _captureInChunks(boundary, pixelRatio);
     } catch (e) {
       debugPrint('[ScreenshotUtils] captureWidget error: $e');
@@ -51,7 +59,10 @@ class ScreenshotUtils {
   }
 
   /// 直接截图（用于纹理尺寸不超限的情况）
-  static Future<Uint8List?> _captureDirectly(RenderRepaintBoundary boundary, double pixelRatio) async {
+  static Future<Uint8List?> _captureDirectly(
+    RenderRepaintBoundary boundary,
+    double pixelRatio,
+  ) async {
     final image = await boundary.toImage(pixelRatio: pixelRatio);
     try {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -59,7 +70,10 @@ class ScreenshotUtils {
         debugPrint('[ScreenshotUtils] Failed to get byte data');
         return null;
       }
-      return byteData.buffer.asUint8List();
+      return byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      );
     } finally {
       image.dispose();
     }
@@ -67,7 +81,10 @@ class ScreenshotUtils {
 
   /// 分块截图拼接（用于超长帖）
   /// 使用 image package 在 CPU 端拼接，避免最终合成时再次触碰 GPU 纹理限制
-  static Future<Uint8List?> _captureInChunks(RenderRepaintBoundary boundary, double pixelRatio) async {
+  static Future<Uint8List?> _captureInChunks(
+    RenderRepaintBoundary boundary,
+    double pixelRatio,
+  ) async {
     // ignore: invalid_use_of_protected_member
     final layer = boundary.layer;
     if (layer is! OffsetLayer) {
@@ -84,10 +101,17 @@ class ScreenshotUtils {
     final totalPixelWidth = (widgetWidth * pixelRatio).ceil();
     final totalPixelHeight = (widgetHeight * pixelRatio).ceil();
 
-    debugPrint('[ScreenshotUtils] 分块截图：$chunkCount 块，每块逻辑高度 $chunkLogicalHeight');
+    debugPrint(
+      '[ScreenshotUtils] 分块截图：$chunkCount 块，每块逻辑高度 $chunkLogicalHeight',
+    );
 
-    // 在 CPU 端创建最终图像
-    final fullImage = img.Image(width: totalPixelWidth, height: totalPixelHeight);
+    // PNG 必须显式使用 RGBA。image package 的默认通道数不是这里的契约；
+    // 若目标图退化成 RGB，逐像素写入的 alpha 会在 encodePng 时被直接丢弃。
+    final fullImage = img.Image(
+      width: totalPixelWidth,
+      height: totalPixelHeight,
+      numChannels: 4,
+    );
 
     for (int i = 0; i < chunkCount; i++) {
       final top = i * chunkLogicalHeight;
@@ -100,12 +124,17 @@ class ScreenshotUtils {
 
       try {
         // 获取 RGBA 原始像素数据
-        final byteData = await chunkImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+        final byteData = await chunkImage.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        );
         if (byteData == null) continue;
 
         final chunkPixelWidth = chunkImage.width;
         final chunkPixelHeight = chunkImage.height;
-        final pixels = byteData.buffer.asUint8List();
+        final pixels = byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        );
         final yOffset = (top * pixelRatio).round();
 
         // 逐行复制像素到最终图像
@@ -144,7 +173,8 @@ class ScreenshotUtils {
     try {
       // 创建临时文件
       final tempDir = await getTemporaryDirectory();
-      final name = filename ?? 'fluxdo_share_${DateTime.now().millisecondsSinceEpoch}';
+      final name =
+          filename ?? 'fluxdo_share_${DateTime.now().millisecondsSinceEpoch}';
       final file = File('${tempDir.path}/$name.png');
       await file.writeAsBytes(bytes);
 
