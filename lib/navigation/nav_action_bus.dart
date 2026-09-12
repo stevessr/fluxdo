@@ -194,5 +194,6 @@ class NavEntryIds {
   static const String notifications = 'notifications';
   static const String messages = 'messages';
   static const String chat = 'chat';
+  static const String voice = 'voice';
   static const String seeking = 'seeking';
 }
