@@ -11,6 +11,7 @@ class ComposerToolsAnchor extends ChangeNotifier {
   final targets = <String, GlobalKey>{};
   Completer<ComposerToolAction?>? _result;
   bool expanded = false;
+  bool restoreInput = true;
   bool customizing = false;
   ComposerToolAction? _picked;
   Animation<double>? animation;
@@ -26,22 +27,44 @@ class ComposerToolsAnchor extends ChangeNotifier {
     targets.clear();
     _picked = null;
     customizing = false;
+    restoreInput = true;
     _result = Completer<ComposerToolAction?>();
     expanded = true;
     notifyListeners();
     return _result!.future;
   }
 
-  void collapse([ComposerToolAction? picked]) {
-    if (!expanded) return;
+  void collapse([ComposerToolAction? picked]) =>
+      _collapse(picked, restore: true);
+
+  /// 离开输入、预览或系统返回时收起工具，不重新弹出键盘。
+  void dismiss() => _collapse(null, restore: false);
+
+  void _collapse(ComposerToolAction? picked, {required bool restore}) {
+    if (_result == null ||
+        (!expanded && restoreInput == restore && _picked == picked)) {
+      return;
+    }
     _picked = picked;
+    restoreInput = restore;
     expanded = false;
+    notifyListeners();
+  }
+
+  /// 收起尚未结束时可以反向展开，继续使用同一次展开会话。
+  void reopen() {
+    if (_result == null || expanded) return;
+    _picked = null;
+    restoreInput = true;
+    expanded = true;
     notifyListeners();
   }
 
   void finish() {
     final result = _result;
     _result = null;
+    expanded = false;
+    animation = null;
     targets.clear();
     result?.complete(_picked);
     if (result != null) notifyListeners();
@@ -258,9 +281,9 @@ class ComposerToolsHandle extends StatefulWidget {
   final String label;
   final VoidCallback onActivate;
   final bool expanded;
-  final VoidCallback? onDragStart;
-  final ValueChanged<double>? onDragUpdate;
-  final ValueChanged<double>? onDragEnd;
+  final GestureDragStartCallback? onDragStart;
+  final GestureDragUpdateCallback? onDragUpdate;
+  final GestureDragEndCallback? onDragEnd;
   final VoidCallback? onDragCancel;
   static const height = 24.0;
   @override
@@ -276,19 +299,18 @@ class _ComposerToolsHandleState extends State<ComposerToolsHandle> {
     onTap: widget.onActivate,
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: (_) {
+      onVerticalDragStart: (details) {
         _travel = 0;
-        widget.onDragStart?.call();
+        widget.onDragStart?.call(details);
       },
       onVerticalDragUpdate: (details) {
         _travel += details.delta.dy;
-        widget.onDragUpdate?.call(details.delta.dy);
+        widget.onDragUpdate?.call(details);
       },
-      onVerticalDragCancel:
-          widget.onDragCancel ?? () => widget.onDragEnd?.call(0),
+      onVerticalDragCancel: widget.onDragCancel,
       onVerticalDragEnd: (details) {
         if (widget.onDragEnd != null) {
-          widget.onDragEnd!(details.primaryVelocity ?? 0);
+          widget.onDragEnd!(details);
           return;
         }
         final sign = widget.expanded ? 1 : -1;

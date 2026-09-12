@@ -216,6 +216,17 @@ void main() {
               closeTo(80, .5),
               reason: '托柄拖动应直接改变浮岛高度',
             );
+            final expandedHeight = anchor.rect!.height;
+            await gesture.moveBy(const Offset(0, 30));
+            await tester.pump();
+            expect(
+              expandedHeight - anchor.rect!.height,
+              closeTo(30, .5),
+              reason: '不松手反向拖动仍保持跟手',
+            );
+            await gesture.moveBy(const Offset(0, -30));
+            await tester.pump();
+            expect(anchor.rect!.height, closeTo(expandedHeight, .5));
             await gesture.up();
           }
           await tester.pump();
@@ -295,6 +306,27 @@ void main() {
             findsNothing,
             reason: '空分类不占空间',
           );
+          if (!desktop) {
+            anchor.collapse();
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 30));
+            final gesture = await tester.startGesture(
+              tester.getCenter(
+                find.byKey(const ValueKey('composer-tools-handle')),
+              ),
+            );
+            await gesture.moveBy(const Offset(0, -24));
+            await tester.pump();
+            await gesture.moveBy(const Offset(0, -80));
+            await tester.pump();
+            await gesture.up();
+            await tester.pumpAndSettle();
+            expect(anchor.expanded, isTrue, reason: '打断收起后反向拖动应恢复展开状态');
+            expect(
+              find.byKey(const ValueKey('composer-tools-panel')),
+              findsOneWidget,
+            );
+          }
           final customize = find.text(S.current.toolPanel_customize);
           final toolbarRect = tester.getRect(
             find.byKey(const ValueKey('composer-format-row')),
@@ -440,6 +472,59 @@ void main() {
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('键盘收起后正文不足一屏，顶栏底栏仍能恢复', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 760);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+    final chrome = ComposerChromeController();
+    final scroll = ScrollController();
+    await pumpApp(
+      tester,
+      ComposerChromeScope(
+        controller: chrome,
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: ComposerAutoHideAppBar(
+            child: AppBar(title: const Text('Title')),
+          ),
+          body: ListView(
+            controller: scroll,
+            padding: EdgeInsets.zero,
+            children: const [SizedBox(height: 600)],
+          ),
+          bottomNavigationBar: const ComposerChromeVisibility(
+            child: SizedBox(height: 48, child: Text('Tools')),
+          ),
+        ),
+      ),
+      desktop: false,
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -90));
+    await tester.pumpAndSettle();
+    expect(chrome.hidden, isTrue);
+    tester.view.viewInsets = const FakeViewPadding();
+    await tester.pumpAndSettle();
+    expect(scroll.position.maxScrollExtent, 0);
+    expect(chrome.hidden, isFalse);
+    for (final label in ['Title', 'Tools']) {
+      final opacity = tester.widget<AnimatedOpacity>(
+        find
+            .ancestor(
+              of: find.text(label),
+              matching: find.byType(AnimatedOpacity),
+            )
+            .first,
+      );
+      expect(opacity.opacity, 1);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    scroll.dispose();
+    chrome.dispose();
   });
 
   testWidgets('触底回弹不恢复顶栏，主动反向滚动才恢复', (tester) async {

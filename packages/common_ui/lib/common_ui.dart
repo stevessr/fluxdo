@@ -3,12 +3,13 @@
 /// 目前提供:
 /// - 支持滑动关闭、缩放/链式关闭等交互的弹出菜单封装,替代原生
 ///   [PopupMenuButton] / showMenu,统一全局菜单交互;
-/// - [GlassSurface]:柔光玻璃材质(折射 + 边缘光 + 色散),
+/// - [GlassSurface]:柔光玻璃材质(局部背景折射、边缘光与色散),
 ///   按 [GlassRecipe] 三档场景配方使用。
 library;
 
 export 'src/app_sheet_scaffold.dart';
 export 'src/dismissible_popup_menu.dart';
+export 'src/glass_settings.dart';
 export 'src/glass_surface.dart';
 export 'src/glass_surface_frame.dart';
 export 'src/predictive_back_cupertino_transitions.dart';

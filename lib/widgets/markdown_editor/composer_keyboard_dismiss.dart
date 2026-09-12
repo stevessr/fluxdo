@@ -49,6 +49,34 @@ class ComposerKeyboardDismissController extends ChangeNotifier
   double _lastDelta = 0;
   bool get active => _active;
   double get visibleHeight => math.max(_safeBottom, _height.value);
+  bool get awaitingAndroidControl =>
+      _platform == TargetPlatform.android &&
+      _session != null &&
+      _active &&
+      !_interactive;
+
+  /// Android 未及时授予 IME 控制权时，撤销待定请求并交给系统关闭。
+  /// 先失效会话，迟到的 onReady/取消回调就不能再覆盖新的拖拽状态。
+  bool dismissPendingWithSystemAnimation() =>
+      _finishPendingControl(dismiss: true);
+
+  bool _finishPendingControl({required bool dismiss}) {
+    if (_disposed || !awaitingAndroidControl) return false;
+    final session = _session!;
+    _clear(session);
+    unawaited(
+      _channel
+          .invokeMethod<void>('cancel', {
+            'session': session,
+            'dismiss': dismiss,
+          })
+          .catchError((_) {}),
+    );
+    if (dismiss) {
+      unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+    }
+    return true;
+  }
 
   bool begin(ui.FlutterView view) {
     if (_disposed ||
@@ -149,6 +177,7 @@ class ComposerKeyboardDismissController extends ChangeNotifier
   Future<void> end(double velocity, {bool cancel = false}) async {
     final session = _session;
     if (session == null || _ending) return;
+    if (cancel && _finishPendingControl(dismiss: false)) return;
     _ending = true;
     final dismiss =
         !cancel &&
@@ -275,14 +304,16 @@ class ComposerKeyboardDismissScope extends InheritedWidget {
   const ComposerKeyboardDismissScope({
     super.key,
     required this.controller,
+    this.active = false,
     required super.child,
   });
   final ComposerKeyboardDismissController controller;
+  final bool active;
   static ComposerKeyboardDismissController? maybeOf(BuildContext context) =>
       context
           .dependOnInheritedWidgetOfExactType<ComposerKeyboardDismissScope>()
           ?.controller;
   @override
   bool updateShouldNotify(ComposerKeyboardDismissScope oldWidget) =>
-      controller != oldWidget.controller;
+      controller != oldWidget.controller || active != oldWidget.active;
 }
