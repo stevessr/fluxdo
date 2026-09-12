@@ -25,7 +25,6 @@ import '../../utils/platform_utils.dart';
 import '../common/fading_edge_scroll_view.dart';
 import '../content/discourse_html_content/image_utils.dart';
 import 'composer_workbench.dart';
-import 'composer_keyboard_dismiss.dart';
 import 'composer_tools_anchor.dart';
 import 'composer_view_mode_switcher.dart';
 import 'cursor_swipe_control.dart';
@@ -35,6 +34,7 @@ import 'emoji_popover.dart';
 import 'media_upload_helper.dart';
 import 'voice_recorder_sheet.dart';
 import 'image_upload_dialog.dart';
+import 'color_insert_dialog.dart';
 import 'content_actions_button.dart';
 import 'content_actions_providers.dart';
 import 'link_insert_dialog.dart';
@@ -298,6 +298,23 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         selection: TextSelection.collapsed(offset: newText.length),
       );
     }
+  }
+
+  /// 插入已上传的 StevesSR 图片，不再弹出确认框。
+  void insertUploadedImage(
+    UploadResult uploadResult, {
+    String alt = 'StevesSR',
+  }) {
+    _seedUploadCache(uploadResult);
+    final selection = widget.controller.selection;
+    final text = widget.controller.text;
+    final needsLeadingNewline =
+        selection.isValid &&
+        selection.start > 0 &&
+        text[selection.start - 1] != '\n';
+    final prefix = needsLeadingNewline ? '\n' : '';
+    insertText('$prefix${uploadResult.toMarkdown(alt: alt)}\n');
+    widget.focusNode?.requestFocus();
   }
 
   /// 用指定前后缀包裹选中文本（无选中时插入占位符并选中）
@@ -565,6 +582,15 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       );
     }
 
+    widget.focusNode?.requestFocus();
+  }
+
+  /// 文字颜色：选色对话框后以 `[color=…]` BBCode 包裹选区。
+  /// 无选区时插入并选中占位文字，和其它格式工具保持一致。
+  Future<void> insertColor(BuildContext context) async {
+    final value = await showColorInsertDialog(context);
+    if (!mounted || value == null) return;
+    wrapSelection('[color=$value]', '[/color]', placeholder: '彩色文字');
     widget.focusNode?.requestFocus();
   }
 
@@ -1205,31 +1231,39 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   Widget _buildToolsButton(ThemeData theme) => ComposerToolsToggle(
     anchor: widget.toolsAnchor,
     active: widget.isToolsPanelVisible,
-    compact: false,
+    compact: !PlatformUtils.isDesktop && !widget.editing,
     onPressed: widget.onToggleTools,
   );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final editing =
-        widget.editing ||
-        (ComposerKeyboardDismissScope.maybeOf(context)?.active ?? false);
     return ComposerWorkbench(
       toolsAnchor: widget.toolsAnchor,
       onExpandTools: widget.onToggleTools,
       metadata: widget.metaBar,
-      editing: editing,
+      editing: widget.editing,
       controls: [
         if (!PlatformUtils.isDesktop && widget.undoController != null)
           _contentActions(),
         if (!PlatformUtils.isDesktop)
-          Visibility(
-            visible: editing,
-            maintainState: true,
-            child: CursorSwipeControl(
-              onMove: _moveCursor,
-              onMoveVertical: widget.onMoveCursorVertical,
+          SizedBox.square(
+            dimension: 48,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // 保留光标控件的 State，弹出它自己的菜单时失焦也不会丢回调。
+                Visibility(
+                  visible: widget.editing || widget.onToggleTools == null,
+                  maintainState: true,
+                  child: CursorSwipeControl(
+                    onMove: _moveCursor,
+                    onMoveVertical: widget.onMoveCursorVertical,
+                  ),
+                ),
+                if (!widget.editing && widget.onToggleTools != null)
+                  _buildToolsButton(theme),
+              ],
             ),
           ),
         if (widget.onSwitchToRich != null)
@@ -1257,7 +1291,9 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
               ),
             ),
           ),
-          if (widget.onToggleTools != null) _buildToolsButton(theme),
+          if (widget.onToggleTools != null &&
+              (PlatformUtils.isDesktop || widget.editing))
+            _buildToolsButton(theme),
         ],
       ),
     );

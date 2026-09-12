@@ -14,7 +14,6 @@ import 'package:fluxdo/widgets/markdown_editor/composer_shortcuts.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_switch_fade.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_workbench.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_page_chrome.dart';
-import 'package:fluxdo/widgets/markdown_editor/composer_header_actions.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_view_mode_switcher.dart';
 import 'package:fluxdo/widgets/markdown_editor/markdown_editor.dart';
 import 'package:fluxdo/widgets/markdown_editor/rich_composer/rich_composer_editor.dart';
@@ -1000,6 +999,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     AsyncValue<List<String>> tagsAsync,
   ) {
     // 站点是否装 post-voting 插件:从分类 JSON 是否下发插件字段派生
+    final sitePostVoting = categories.any((c) => c.hasPostVotingFields);
     final locked = _selectedCategory?.onlyPostVotingInThisCategory ?? false;
     return ComposerMetaBar(
       category: _selectedCategory,
@@ -1009,7 +1009,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       selectedTags: _selectedTags,
       allTags: tagsAsync.value ?? const [],
       onTagsChanged: _onTagsChanged,
-      showPostVotingToggle: false,
+      showPostVotingToggle: sitePostVoting,
       postVotingEnabled: _createAsPostVoting || locked,
       postVotingLocked: locked,
       onPostVotingChanged: (v) => setState(() => _createAsPostVoting = v),
@@ -1146,35 +1146,58 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                 ? SystemUiOverlayStyle.light
                 : SystemUiOverlayStyle.dark,
             actions: [
-              ComposerHeaderActions(
-                availableWidth:
-                    MediaQuery.sizeOf(context).width -
-                    MediaQuery.paddingOf(context).horizontal,
-                submitLabel: context.l10n.common_publish,
-                onSubmit: _isSubmitting ? null : _submit,
-                submitting: _isSubmitting,
+              // 预览、舍弃、审核、发布保持直接入口。
+              ComposerPreviewButton(
                 previewing: _showPreview,
-                onTogglePreview: !_isSubmitting ? _togglePreview : null,
-                showDiscard: true,
-                onDiscard: _isSubmitting ? null : _discardDraft,
-                reviewBuilder:
-                    ref.watch(preferencesProvider).aiPostReviewEnabled
-                    ? (builder) => AiPostReviewButton(
-                        titleBuilder: () => _titleController.text,
-                        contentBuilder: () {
-                          _richKey.currentState?.flushToController();
-                          return _contentController.text;
-                        },
-                        target: AiPostReviewTarget.topic,
-                        enabled: !_isSubmitting,
-                        categoryNameBuilder: () => _selectedCategory?.name,
-                        categoryDescriptionBuilder: () =>
-                            _selectedCategory?.description,
-                        tagsBuilder: () => _selectedTags,
-                        builder: (_, reviewing, trigger) =>
-                            builder(reviewing, trigger),
-                      )
-                    : null,
+                onPressed: !_isSubmitting ? _togglePreview : null,
+              ),
+              ComposerDiscardButton(
+                onPressed: _isSubmitting ? null : _discardDraft,
+              ),
+              if (ref.watch(preferencesProvider).aiPostReviewEnabled)
+                AiPostReviewButton(
+                  titleBuilder: () => _titleController.text,
+                  contentBuilder: () {
+                    _richKey.currentState?.flushToController();
+                    return _contentController.text;
+                  },
+                  target: AiPostReviewTarget.topic,
+                  enabled: !_isSubmitting,
+                  categoryNameBuilder: () => _selectedCategory?.name,
+                  categoryDescriptionBuilder: () =>
+                      _selectedCategory?.description,
+                  tagsBuilder: () => _selectedTags,
+                  builder: (anchorContext, isReviewing, trigger) {
+                    return ComposerActionButton(
+                      icon: Symbols.auto_awesome_rounded,
+                      label: context.l10n.aiPostReview_button,
+                      onPressed: trigger,
+                      busy: isReviewing,
+                    );
+                  },
+                ),
+              Padding(
+                padding: EdgeInsets.only(right: desktop ? 16 : 0),
+                child: FilledButton(
+                  onPressed: (_isSubmitting || _isResolvingFeaturedLink)
+                      ? null
+                      : _submit,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(56, 40),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(context.l10n.common_publish),
+                ),
               ),
             ],
           ),
@@ -1236,6 +1259,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                               bodyOverlay:
                                                   _buildCharCountOverlay(),
                                               controller: _contentController,
+                                              enableStevessr: true,
                                               focusNode: _contentFocusNode,
                                               hintText: context
                                                   .l10n
@@ -1414,10 +1438,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
               top: 0,
               left: 0,
               right: 0,
-              child: ComposerTopFade(
-                height: _topChromeInset,
-                statusBarHeight: MediaQuery.viewPaddingOf(context).top,
-              ),
+              child: ComposerTopFade(height: _topChromeInset),
             ),
           ],
         ),
@@ -1432,14 +1453,10 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
           activator: _showQuickPanel,
         for (final activator in composerSubmitActivators())
           activator: () {
-            if (!_isSubmitting) _submit();
+            if (!_isSubmitting && !_isResolvingFeaturedLink) _submit();
           },
       },
-      child: ComposerChromeScope(
-        controller: _chrome,
-        topInset: _topChromeInset,
-        child: page,
-      ),
+      child: ComposerChromeScope(controller: _chrome, child: page),
     );
   }
 }
