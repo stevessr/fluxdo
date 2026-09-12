@@ -76,7 +76,9 @@ class RequestHeaderInterceptor extends Interceptor {
 
     // 4. API 请求（XHR）设置 Origin、Referer 和 Sec-Fetch-* 头
     if (options.headers['X-Requested-With'] == 'XMLHttpRequest') {
-      options.headers['Origin'] = AppConstants.baseUrl;
+      // Origin 按 RFC 6454 只能包含 scheme + authority，不能带 Discourse
+      // relative_url_root。Referer 则保留完整实例根路径。
+      options.headers['Origin'] = Uri.parse(AppConstants.baseUrl).origin;
       options.headers['Referer'] = '${AppConstants.baseUrl}/';
       // Sec-Fetch-* 系列头：Chrome 从 2019 年起每个请求都自动添加，
       // 缺失会被 Cloudflare Bot Management 识别为非浏览器客户端
