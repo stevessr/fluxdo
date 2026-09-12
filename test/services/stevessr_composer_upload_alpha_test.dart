@@ -101,8 +101,8 @@ void main() {
       );
     }
 
-    expect(
-      () => StevessrComposerService.upload(
+    await expectLater(
+      StevessrComposerService.upload(
         StevessrExportedImage(
           bytes: _largeTransparentPng(),
           extension: 'png',
@@ -119,16 +119,19 @@ void main() {
         ),
       ),
     );
+    expect(attempt, 2);
   });
 }
 
 Uint8List _largeTransparentPng() {
   final image = img.Image(width: 512, height: 512, numChannels: 4);
+  var state = 0x12345678;
   for (var y = 0; y < image.height; y++) {
     for (var x = 0; x < image.width; x++) {
-      final r = (x * 31 + y * 17) & 0xff;
-      final g = (x * 13 + y * 47) & 0xff;
-      final b = (x * 53 + y * 7) & 0xff;
+      state = (state * 1664525 + 1013904223) & 0xffffffff;
+      final r = state & 0xff;
+      final g = (state >> 8) & 0xff;
+      final b = (state >> 16) & 0xff;
       final a = x < 12 && y < 12 ? 0 : 255;
       image.setPixelRgba(x, y, r, g, b, a);
     }
