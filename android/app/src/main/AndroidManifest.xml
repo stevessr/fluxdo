@@ -53,44 +53,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
                 <data android:scheme="fluxdo-launch" />
             </intent-filter>
-            <!-- Deep Links for linux.do - 话题链接 -->
+            <!-- Register the entire linux.do host; DeepLinkService routes individual paths. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="linux.do" android:pathPrefix="/t/" />
+                <data android:scheme="https" android:host="linux.do" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" android:host="linux.do" android:pathPrefix="/t/" />
-            </intent-filter>
-            <!-- Deep Links for linux.do - 用户链接 -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="linux.do" android:pathPrefix="/u/" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" android:host="linux.do" android:pathPrefix="/u/" />
-            </intent-filter>
-            <!-- Deep Links for linux.do - 邮箱链接登录 -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="linux.do" android:pathPrefix="/session/email-login/" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" android:host="linux.do" android:pathPrefix="/session/email-login/" />
+                <data android:scheme="http" android:host="linux.do" />
             </intent-filter>
             <!-- Custom URL Scheme -->
             <intent-filter>
