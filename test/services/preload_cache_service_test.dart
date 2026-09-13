@@ -66,6 +66,21 @@ void main() {
     expect(await cache.readCurrentAccount(), isNull);
   });
 
+  test('maxAge rejects stale fast-path without deleting disk cache', () async {
+    await cache.writeCurrentAccount('<html>snapshot</html>');
+
+    now = now.add(PreloadCacheService.startupFastPathTtl);
+    expect(
+      await cache.readCurrentAccount(
+        maxAge: PreloadCacheService.startupFastPathTtl,
+      ),
+      isNull,
+    );
+
+    // maxAge 只是本次新鲜度门槛；仍在 7 天硬 TTL 内的文件继续保留。
+    expect(await cache.readCurrentAccount(), '<html>snapshot</html>');
+  });
+
   test(
     'disabled experiment stops reads and writes without deleting cache',
     () async {

@@ -7,6 +7,10 @@ import '../../preload_cache_service.dart';
 
 const _preloadRequestTag = 'preload-home';
 const _preloadCacheHitExtra = '_fluxPreloadCacheHit';
+final _dataPreloadedScriptPattern = RegExp(
+  r'''<script\b[^>]*\bid=["']data-preloaded["'][^>]*>''',
+  caseSensitive: false,
+);
 final _dataPreloadedAttributePattern = RegExp(
   r'''\bdata-preloaded\s*=''',
   caseSensitive: false,
@@ -15,8 +19,9 @@ final _dataPreloadedAttributePattern = RegExp(
 /// 首页 preload 的实验性持久缓存。
 ///
 /// 只处理 PreloadedDataService 明确打上 `requestTag=preload-home` 的 GET，
-/// 不改变其他 Discourse API 的缓存语义。命中时用本账号 7 天内的 HTML
-/// 快照直接完成请求；未命中则完全沿用原来的网络/CF/重试链。
+/// 不改变其他 Discourse API 的缓存语义。很新的命中会直接完成请求；较旧
+/// 但仍在磁盘硬 TTL 内的快照不会在正常联网启动时短路网络，以免把动态的
+/// currentUser / tracking state / topic list 长时间当成最新数据。
 class PreloadCacheInterceptor extends Interceptor {
   PreloadCacheInterceptor({PreloadCacheService? cache})
     : _cache = cache ?? PreloadCacheService();
@@ -38,14 +43,16 @@ class PreloadCacheInterceptor extends Interceptor {
     }
 
     try {
-      final cached = await _cache.readCurrentAccount();
-      if (cached == null || cached.isEmpty) {
+      final cached = await _cache.readCurrentAccount(
+        maxAge: PreloadCacheService.startupFastPathTtl,
+      );
+      if (cached == null || cached.isEmpty || !_isReusablePreloadHtml(cached)) {
         handler.next(options);
         return;
       }
 
       options.extra[_preloadCacheHitExtra] = true;
-      debugPrint('[PreloadCache] 命中当前账号 preload cache');
+      debugPrint('[PreloadCache] 命中当前账号新鲜 preload cache');
       handler.resolve(
         Response<String>(
           requestOptions: options,
@@ -54,7 +61,7 @@ class PreloadCacheInterceptor extends Interceptor {
           statusMessage: 'OK (preload cache)',
           headers: Headers.fromMap({
             Headers.contentTypeHeader: ['text/html; charset=utf-8'],
-            'x-fluxdo-preload-cache': ['hit'],
+            'x-fluxdo-preload-cache': ['fresh-hit'],
           }),
           extra: const {'preloadCacheHit': true},
         ),
@@ -98,9 +105,11 @@ class PreloadCacheInterceptor extends Interceptor {
   }
 
   bool _isReusablePreloadHtml(String html) {
-    // Cloudflare challenge / 登录页偶尔也会以 200 HTML 到达响应链。
-    // 只有包含 Discourse bootstrap 属性的页面才允许进入 7 天持久缓存，
-    // 避免在后续 CF 拦截器接管之前把挑战页误写入缓存。
-    return _dataPreloadedAttributePattern.hasMatch(html);
+    // 当前 Discourse 使用 <script id="data-preloaded" type="application/json">；
+    // 老版本/部分主题仍可能使用 data-preloaded 属性。两种形态都要识别。
+    // Cloudflare challenge / 登录页即使返回 200，也不会命中这两个 bootstrap
+    // 标记，因此不会被误写成可复用首页快照。
+    return _dataPreloadedScriptPattern.hasMatch(html) ||
+        _dataPreloadedAttributePattern.hasMatch(html);
   }
 }
