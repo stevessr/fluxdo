@@ -73,8 +73,20 @@ void main() {
         'surprised',
         'happy',
         'cry',
-        'original',
+        'angry',
+        'embarrassed',
+        'sleepy',
+        'love',
+        'laughing',
+        'wink',
+        'confused',
+        'thinking',
+        'panic',
       ]),
+    );
+    expect(
+      StevessrExpression.values.map((value) => value.key),
+      isNot(contains('original')),
     );
     expect(
       StevessrBubble.values.map((value) => value.key),
