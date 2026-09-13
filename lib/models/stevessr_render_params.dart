@@ -17,6 +17,14 @@ enum StevessrExpression {
   confused,
   thinking,
   panic,
+  pleading,
+  apologetic,
+  celebrating,
+  dizzy,
+  bored,
+  scared,
+  hungry,
+  grateful,
 }
 
 /// StevesSR 可用的气泡造型。
