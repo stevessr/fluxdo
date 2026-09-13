@@ -27,6 +27,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('StevesSR 图片生成器'), findsOneWidget);
+    expect(find.text('气泡内容'), findsOneWidget);
     expect(find.byType(StevessrCanvas), findsOneWidget);
     expect(find.byType(TextField), findsWidgets);
     expect(tester.takeException(), isNull);
@@ -43,9 +44,7 @@ void main() {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocaleUtils.supportedLocales,
-          home: StevessrGeneratorPage(
-            onInsert: (_) async {},
-          ),
+          home: StevessrGeneratorPage(onInsert: (_) async {}),
         ),
       ),
     );

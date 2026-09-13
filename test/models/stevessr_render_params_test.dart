@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/models/stevessr_render_params.dart';
 
@@ -63,6 +65,38 @@ void main() {
     expect(params.text.runes.length, 500);
   });
 
+  test('气泡图片内容需要有效图片数据并支持清除', () {
+    final withoutImage = StevessrRenderParams.defaults().copyWith(
+      bubbleContent: StevessrBubbleContent.image,
+    );
+    expect(withoutImage.bubbleContent, StevessrBubbleContent.text);
+    expect(withoutImage.usesBubbleImage, isFalse);
+
+    final withImage = StevessrRenderParams.defaults().copyWith(
+      bubbleContent: StevessrBubbleContent.image,
+      bubbleImageBytes: Uint8List.fromList([1, 2, 3]),
+      bubbleImageMimeType: 'image/png',
+    );
+    expect(withImage.bubbleContent, StevessrBubbleContent.image);
+    expect(withImage.usesBubbleImage, isTrue);
+
+    final textMode = withImage.copyWith(
+      bubbleContent: StevessrBubbleContent.text,
+    );
+    expect(textMode.usesBubbleImage, isFalse);
+    expect(
+      textMode
+          .copyWith(bubbleContent: StevessrBubbleContent.image)
+          .usesBubbleImage,
+      isTrue,
+    );
+
+    final cleared = withImage.copyWith(clearBubbleImage: true);
+    expect(cleared.bubbleContent, StevessrBubbleContent.text);
+    expect(cleared.bubbleImageBytes, isNull);
+    expect(cleared.usesBubbleImage, isFalse);
+  });
+
   test('所有枚举都提供稳定的资源 key', () {
     expect(
       StevessrExpression.values.map((value) => value.key),
@@ -106,6 +140,10 @@ void main() {
         'rounded',
         'caption',
       ]),
+    );
+    expect(
+      StevessrBubbleContent.values.map((value) => value.key),
+      containsAll(<String>['text', 'image']),
     );
   });
 }

@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui';
 
 /// StevesSR 可用的角色表情。
@@ -36,6 +37,9 @@ enum StevessrTextAlign { left, center, right }
 
 enum StevessrTail { left, right, none }
 
+/// 气泡内容类型。
+enum StevessrBubbleContent { text, image }
+
 enum StevessrFormat { png, webp, svg }
 
 extension StevessrExpressionKey on StevessrExpression {
@@ -55,6 +59,10 @@ extension StevessrTextAlignKey on StevessrTextAlign {
 }
 
 extension StevessrTailKey on StevessrTail {
+  String get key => name;
+}
+
+extension StevessrBubbleContentKey on StevessrBubbleContent {
   String get key => name;
 }
 
@@ -124,6 +132,9 @@ class StevessrRenderParams {
     required this.padding,
     required this.align,
     required this.tail,
+    this.bubbleContent = StevessrBubbleContent.text,
+    this.bubbleImageBytes,
+    this.bubbleImageMimeType,
     required this.quality,
     required this.bubbleRect,
     required this.characterRect,
@@ -177,9 +188,18 @@ class StevessrRenderParams {
   final double padding;
   final StevessrTextAlign align;
   final StevessrTail tail;
+  final StevessrBubbleContent bubbleContent;
+  final Uint8List? bubbleImageBytes;
+  final String? bubbleImageMimeType;
   final int quality;
   final StevessrRect bubbleRect;
   final StevessrRect characterRect;
+
+  /// 当前是否使用气泡图片作为内容。
+  bool get usesBubbleImage =>
+      bubbleContent == StevessrBubbleContent.image &&
+      bubbleImageBytes != null &&
+      bubbleImageBytes!.isNotEmpty;
 
   /// 将用户输入限制到源 API 的安全范围。
   StevessrRenderParams normalized() {
@@ -200,6 +220,7 @@ class StevessrRenderParams {
     final maxFont = fontMax.clamp(12, 220).toInt();
     final minFont = fontMin.clamp(8, maxFont).toInt();
 
+    final imageBytes = bubbleImageBytes;
     return StevessrRenderParams(
       text: _truncateText(text),
       expression: expression,
@@ -221,6 +242,13 @@ class StevessrRenderParams {
       padding: padding.clamp(0, 180).toDouble(),
       align: align,
       tail: tail,
+      bubbleContent: imageBytes != null && imageBytes.isNotEmpty
+          ? bubbleContent
+          : StevessrBubbleContent.text,
+      bubbleImageBytes: imageBytes,
+      bubbleImageMimeType: imageBytes != null && imageBytes.isNotEmpty
+          ? bubbleImageMimeType
+          : null,
       quality: quality.clamp(20, 100).toInt(),
       bubbleRect: _normalizeBubble(
         bubbleRect,
@@ -302,6 +330,10 @@ class StevessrRenderParams {
     double? padding,
     StevessrTextAlign? align,
     StevessrTail? tail,
+    StevessrBubbleContent? bubbleContent,
+    Uint8List? bubbleImageBytes,
+    String? bubbleImageMimeType,
+    bool clearBubbleImage = false,
     int? quality,
     StevessrRect? bubbleRect,
     StevessrRect? characterRect,
@@ -327,6 +359,13 @@ class StevessrRenderParams {
       padding: padding ?? this.padding,
       align: align ?? this.align,
       tail: tail ?? this.tail,
+      bubbleContent: bubbleContent ?? this.bubbleContent,
+      bubbleImageBytes: clearBubbleImage
+          ? null
+          : bubbleImageBytes ?? this.bubbleImageBytes,
+      bubbleImageMimeType: clearBubbleImage
+          ? null
+          : bubbleImageMimeType ?? this.bubbleImageMimeType,
       quality: quality ?? this.quality,
       bubbleRect: bubbleRect ?? this.bubbleRect,
       characterRect: characterRect ?? this.characterRect,

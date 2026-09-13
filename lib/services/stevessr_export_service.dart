@@ -107,8 +107,17 @@ abstract final class StevessrExportService {
     final imageBase64 = base64Encode(
       asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes),
     );
-    final bubble = _bubbleMarkup(p);
-    final text = _textMarkup(p);
+    final usesBubbleImage = p.usesBubbleImage;
+    final bubble = _bubbleMarkup(
+      p,
+      drawFill: true,
+      drawStroke: !usesBubbleImage,
+    );
+    final bubbleImage = usesBubbleImage ? _bubbleImageMarkup(p) : '';
+    final bubbleStroke = usesBubbleImage
+        ? _bubbleMarkup(p, drawFill: false, drawStroke: true)
+        : '';
+    final text = usesBubbleImage ? '' : _textMarkup(p);
     final c = p.characterRect;
     final background = p.transparent
         ? ''
@@ -117,31 +126,56 @@ abstract final class StevessrExportService {
         '''<svg xmlns="http://www.w3.org/2000/svg" width="${p.width}" height="${p.height}" viewBox="0 0 ${p.width} ${p.height}">
 $background
 $bubble
+$bubbleImage
+$bubbleStroke
 $text
 <image x="${c.x}" y="${c.y}" width="${c.width}" height="${c.height}" preserveAspectRatio="none" href="data:image/png;base64,$imageBase64"/>
 </svg>''';
     return utf8.encode(svg);
   }
 
-  static String _bubbleMarkup(StevessrRenderParams p) {
+  static String _bubbleMarkup(
+    StevessrRenderParams p, {
+    required bool drawFill,
+    required bool drawStroke,
+  }) {
     final r = p.bubbleRect;
     final fill = _color(p.bubbleFill);
     final stroke = _color(p.bubbleStroke);
     final sw = _number(p.bubbleStrokeWidth);
-    final attrs =
-        'fill="$fill" fill-opacity="${_opacity(p.bubbleFill)}" stroke="$stroke" stroke-opacity="${_opacity(p.bubbleStroke)}" stroke-width="$sw" stroke-linejoin="round"';
+    final attrs = _paintAttrs(p, drawFill: drawFill, drawStroke: drawStroke);
     switch (p.bubble) {
       case StevessrBubble.thought:
         final d = _thoughtPath(r);
-        final tail = _bubbleTailCircles(r, p, cloud: false);
+        final tail = _bubbleTailCircles(
+          r,
+          p,
+          cloud: false,
+          drawFill: drawFill,
+          drawStroke: drawStroke,
+        );
         return '<path d="$d" $attrs/>$tail';
       case StevessrBubble.speech:
         final rx = mathMin(r.width, r.height) * .16;
-        final tail = _speechTail(r, p, fill, stroke, sw);
+        final tail = _speechTail(
+          r,
+          p,
+          fill,
+          stroke,
+          sw,
+          drawFill: drawFill,
+          drawStroke: drawStroke,
+        );
         return '$tail<rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="$rx" $attrs/>';
       case StevessrBubble.cloud:
         final d = _cloudPath(r);
-        final tail = _bubbleTailCircles(r, p, cloud: true);
+        final tail = _bubbleTailCircles(
+          r,
+          p,
+          cloud: true,
+          drawFill: drawFill,
+          drawStroke: drawStroke,
+        );
         return '<path d="$d" $attrs/>$tail';
       case StevessrBubble.shout:
         return '<polygon points="${_shoutPoints(r)}" $attrs/>';
@@ -151,9 +185,69 @@ $text
       case StevessrBubble.caption:
         final rx = mathMin(r.width, r.height) * .08;
         final lineWidth = mathMax(2, p.bubbleStrokeWidth * .4);
-        return '<rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="$rx" fill="$fill" fill-opacity="${mathMax(0, p.bubbleFill.a * .94)}" stroke="$stroke" stroke-opacity="${_opacity(p.bubbleStroke)}" stroke-width="$sw"/>'
-            '<path d="M ${r.x + r.width * .08} ${r.y + r.height * .12} H ${r.x + r.width * .92}" stroke="$stroke" stroke-opacity="${mathMin(1, p.bubbleStroke.a * .25)}" stroke-width="$lineWidth" stroke-linecap="round"/>';
+        final captionAttrs = [
+          drawFill
+              ? 'fill="$fill" fill-opacity="${p.bubbleFill.a * .94}"'
+              : 'fill="none"',
+          drawStroke
+              ? 'stroke="$stroke" stroke-opacity="${_opacity(p.bubbleStroke)}" stroke-width="$sw" stroke-linejoin="round"'
+              : 'stroke="none"',
+        ].join(' ');
+        final line = drawStroke
+            ? '<path d="M ${r.x + r.width * .08} ${r.y + r.height * .12} H ${r.x + r.width * .92}" stroke="$stroke" stroke-opacity="${mathMin(1, p.bubbleStroke.a * .25)}" stroke-width="$lineWidth" stroke-linecap="round"/>'
+            : '';
+        return '<rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="$rx" $captionAttrs/>$line';
     }
+  }
+
+  static String _paintAttrs(
+    StevessrRenderParams p, {
+    required bool drawFill,
+    required bool drawStroke,
+  }) {
+    final fill = _color(p.bubbleFill);
+    final stroke = _color(p.bubbleStroke);
+    final fillAttrs = drawFill
+        ? 'fill="$fill" fill-opacity="${_opacity(p.bubbleFill)}"'
+        : 'fill="none"';
+    final strokeAttrs = drawStroke
+        ? 'stroke="$stroke" stroke-opacity="${_opacity(p.bubbleStroke)}" stroke-width="${_number(p.bubbleStrokeWidth)}" stroke-linejoin="round"'
+        : 'stroke="none"';
+    return '$fillAttrs $strokeAttrs';
+  }
+
+  static String _bubbleImageMarkup(StevessrRenderParams p) {
+    final bytes = p.bubbleImageBytes;
+    if (bytes == null || bytes.isEmpty) return '';
+
+    final r = p.bubbleRect;
+    final inset = mathMax(8, p.bubbleStrokeWidth * 1.25);
+    final imageRect = StevessrRect(
+      x: r.x + inset,
+      y: r.y + inset,
+      width: mathMax(1, r.width - inset * 2),
+      height: mathMax(1, r.height - inset * 2),
+    );
+    final clip = _bubbleImageClipPath(p.bubble, imageRect);
+    final mimeType = _xmlEscape(p.bubbleImageMimeType ?? 'image/png');
+    final imageBase64 = base64Encode(bytes);
+    const clipId = 'stevessr-bubble-image-clip';
+    return '<defs><clipPath id="$clipId">$clip</clipPath></defs>'
+        '<image x="${imageRect.x}" y="${imageRect.y}" width="${imageRect.width}" height="${imageRect.height}" preserveAspectRatio="xMidYMid meet" clip-path="url(#$clipId)" href="data:$mimeType;base64,$imageBase64"/>';
+  }
+
+  static String _bubbleImageClipPath(StevessrBubble bubble, StevessrRect rect) {
+    return switch (bubble) {
+      StevessrBubble.thought => '<path d="${_thoughtPath(rect)}"/>',
+      StevessrBubble.speech =>
+        '<rect x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" rx="${mathMin(rect.width, rect.height) * .16}"/>',
+      StevessrBubble.cloud => '<path d="${_cloudPath(rect)}"/>',
+      StevessrBubble.shout => '<polygon points="${_shoutPoints(rect)}"/>',
+      StevessrBubble.rounded =>
+        '<rect x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" rx="${mathMin(rect.width, rect.height) * .22}"/>',
+      StevessrBubble.caption =>
+        '<rect x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" rx="${mathMin(rect.width, rect.height) * .08}"/>',
+    };
   }
 
   static String _textMarkup(StevessrRenderParams p) {
@@ -213,6 +307,8 @@ $text
     StevessrRect r,
     StevessrRenderParams p, {
     required bool cloud,
+    required bool drawFill,
+    required bool drawStroke,
   }) {
     if (p.tail == StevessrTail.none) return '';
     final anchor = p.tail == StevessrTail.right
@@ -223,13 +319,9 @@ $text
     final secondY = r.y + r.height + (cloud ? 73 : 82);
     final firstRadius = mathMax(10, r.height * (cloud ? .055 : .065));
     final secondRadius = mathMax(7, r.height * (cloud ? .035 : .040));
-    final fill = _color(p.bubbleFill);
-    final stroke = _color(p.bubbleStroke);
-    final sw = _number(p.bubbleStrokeWidth);
-    final fillOpacity = _opacity(p.bubbleFill);
-    final strokeOpacity = _opacity(p.bubbleStroke);
-    return '<circle cx="$anchor" cy="$firstY" r="$firstRadius" fill="$fill" fill-opacity="$fillOpacity" stroke="$stroke" stroke-opacity="$strokeOpacity" stroke-width="$sw"/>'
-        '<circle cx="${anchor + direction * r.width * (cloud ? .075 : .085)}" cy="$secondY" r="$secondRadius" fill="$fill" fill-opacity="$fillOpacity" stroke="$stroke" stroke-opacity="$strokeOpacity" stroke-width="$sw"/>';
+    final attrs = _paintAttrs(p, drawFill: drawFill, drawStroke: drawStroke);
+    return '<circle cx="$anchor" cy="$firstY" r="$firstRadius" $attrs/>'
+        '<circle cx="${anchor + direction * r.width * (cloud ? .075 : .085)}" cy="$secondY" r="$secondRadius" $attrs/>';
   }
 
   static String _speechTail(
@@ -237,13 +329,21 @@ $text
     StevessrRenderParams p,
     String fill,
     String stroke,
-    String sw,
-  ) {
+    String sw, {
+    required bool drawFill,
+    required bool drawStroke,
+  }) {
     if (p.tail == StevessrTail.none) return '';
     final points = p.tail == StevessrTail.right
         ? 'M ${r.x + r.width * .70} ${r.y + r.height * .90} L ${r.x + r.width * .88} ${r.y + r.height * 1.14} L ${r.x + r.width * .84} ${r.y + r.height * .82} Z'
         : 'M ${r.x + r.width * .30} ${r.y + r.height * .90} L ${r.x + r.width * .12} ${r.y + r.height * 1.14} L ${r.x + r.width * .16} ${r.y + r.height * .82} Z';
-    return '<path d="$points" fill="$fill" fill-opacity="${_opacity(p.bubbleFill)}" stroke="$stroke" stroke-opacity="${_opacity(p.bubbleStroke)}" stroke-width="$sw" stroke-linejoin="round"/>';
+    final fillAttrs = drawFill
+        ? 'fill="$fill" fill-opacity="${_opacity(p.bubbleFill)}"'
+        : 'fill="none"';
+    final strokeAttrs = drawStroke
+        ? 'stroke="$stroke" stroke-opacity="${_opacity(p.bubbleStroke)}" stroke-width="$sw" stroke-linejoin="round"'
+        : 'stroke="none"';
+    return '<path d="$points" $fillAttrs $strokeAttrs/>';
   }
 
   static String _color(ui.Color color) {

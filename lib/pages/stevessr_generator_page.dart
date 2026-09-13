@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/s.dart';
@@ -20,6 +21,8 @@ class StevessrGeneratorPage extends StatefulWidget {
 }
 
 class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
+  static const _maxBubbleImageBytes = 12 * 1024 * 1024;
+
   final _repaintBoundaryKey = GlobalKey();
   late final TextEditingController _textController;
   late final TextEditingController _widthController;
@@ -116,6 +119,73 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
 
   void _setText(String value) {
     _setParams(_params.copyWith(text: value));
+  }
+
+  void _setBubbleContent(StevessrBubbleContent value) {
+    final hasImage =
+        _params.bubbleImageBytes != null &&
+        _params.bubbleImageBytes!.isNotEmpty;
+    if (value == StevessrBubbleContent.image && !hasImage) {
+      _pickBubbleImage();
+      return;
+    }
+    _setParams(_params.copyWith(bubbleContent: value));
+  }
+
+  Future<void> _pickBubbleImage() async {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+    } catch (error) {
+      if (mounted) {
+        _showMessage('${context.l10n.imageLoadFailed}: $error');
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    final file = result?.files.single;
+    if (file == null) return;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      _showMessage(context.l10n.imageLoadFailed);
+      return;
+    }
+    if (bytes.length > _maxBubbleImageBytes) {
+      _showMessage(context.l10n.imageTooLarge);
+      return;
+    }
+
+    _setParams(
+      _params.copyWith(
+        bubbleContent: StevessrBubbleContent.image,
+        bubbleImageBytes: bytes,
+        bubbleImageMimeType: _imageMimeType(file.extension),
+      ),
+    );
+  }
+
+  void _removeBubbleImage() {
+    _setParams(
+      _params.copyWith(
+        bubbleContent: StevessrBubbleContent.text,
+        clearBubbleImage: true,
+      ),
+    );
+  }
+
+  String _imageMimeType(String? extension) {
+    return switch (extension?.toLowerCase()) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'webp' => 'image/webp',
+      'gif' => 'image/gif',
+      'bmp' => 'image/bmp',
+      _ => 'image/png',
+    };
   }
 
   Color? _parseColor(String value) {
@@ -286,6 +356,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             const SizedBox(height: 16),
             TextField(
               controller: _textController,
+              enabled: _params.bubbleContent == StevessrBubbleContent.text,
               minLines: 3,
               maxLines: 8,
               maxLength: 500,
@@ -296,6 +367,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               onChanged: _setText,
             ),
             const SizedBox(height: 12),
+            _buildBubbleContentControls(),
             _buildEnumDropdown<StevessrExpression>(
               label: l10n.expression,
               value: _params.expression,
@@ -506,6 +578,71 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBubbleContentControls() {
+    final l10n = context.l10n;
+    final imageBytes = _params.bubbleImageBytes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildEnumDropdown<StevessrBubbleContent>(
+          label: l10n.bubbleContent,
+          value: _params.bubbleContent,
+          values: StevessrBubbleContent.values,
+          labelBuilder: (value) => switch (value) {
+            StevessrBubbleContent.text => l10n.text,
+            StevessrBubbleContent.image => l10n.bubbleImage,
+          },
+          onChanged: _setBubbleContent,
+        ),
+        if (_params.bubbleContent == StevessrBubbleContent.image) ...[
+          const SizedBox(height: 12),
+          if (imageBytes != null && imageBytes.isNotEmpty)
+            Container(
+              height: 180,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Image.memory(
+                imageBytes,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    Center(child: Text(l10n.imageLoadFailed)),
+              ),
+            ),
+          if (imageBytes != null && imageBytes.isNotEmpty)
+            const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _isExporting ? null : _pickBubbleImage,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: Text(
+                    imageBytes == null || imageBytes.isEmpty
+                        ? l10n.chooseImage
+                        : l10n.replaceImage,
+                  ),
+                ),
+              ),
+              if (imageBytes != null && imageBytes.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: _isExporting ? null : _removeBubbleImage,
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(l10n.removeImage),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ],
     );
   }
 
