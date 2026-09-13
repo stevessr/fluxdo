@@ -14,7 +14,6 @@ import '../providers/selected_topic_provider.dart';
 import '../providers/shortcut_provider.dart';
 import '../providers/discourse_providers.dart';
 import '../services/dynamic_content_suspension_service.dart';
-import '../services/preloaded_data_service.dart';
 import '../utils/platform_utils.dart';
 import '../utils/blur_config.dart';
 import '../utils/responsive.dart';
@@ -178,7 +177,7 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
     // 手机/平板单栏：只显示 master;栈非空时 detail 在本页体内全宽投影
     // (平行视界栈是唯一真相,不 push 合成路由,宽窄切换 State 原地保留)
     // 平板双栏：显示 master + detail
-    final workspace = HomeWorkspaceScope(
+    return HomeWorkspaceScope(
       onShowFeed: _showFeed,
       onShowCategory: _showCategory,
       onShowTag: _showTag,
@@ -221,79 +220,6 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
               : null,
         ),
       ),
-    );
-
-    // 进度 UI 只重建自身，workspace 作为 child 复用，避免网络回调/解析批次
-    // 重建整棵 MasterDetailLayout。所有活动阶段都使用确定 value，并明确显示
-    // 当前阶段与总百分比，不再出现来回播放的不定进度动画。
-    return ValueListenableBuilder<PreloadProgress>(
-      valueListenable: PreloadedDataService().preloadProgressListenable,
-      child: workspace,
-      builder: (context, progress, child) {
-        if (!progress.isActive) return child!;
-        final fraction = progress.fraction ?? 0.0;
-        final theme = Theme.of(context);
-        return Stack(
-          children: [
-            child!,
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              child: IgnorePointer(
-                child: Semantics(
-                  label: progress.semanticsLabel,
-                  value: '${progress.percent}%',
-                  child: Material(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    elevation: 1,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  progress.semanticsLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                '${progress.percent}%',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(999),
-                            child: LinearProgressIndicator(
-                              value: fraction,
-                              minHeight: 4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 

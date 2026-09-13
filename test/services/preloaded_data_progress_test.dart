@@ -1,123 +1,72 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fluxdo/services/preloaded_data_service.dart';
 
 void main() {
-  group('PreloadProgress', () {
-    test('uses determinate overall progress before topic parsing starts', () {
-      const requesting = PreloadProgress(phase: PreloadPhase.requesting);
-      const halfDownloaded = PreloadProgress(
-        phase: PreloadPhase.requesting,
-        receivedBytes: 50,
-        totalBytes: 100,
-      );
-      const scanning = PreloadProgress(phase: PreloadPhase.scanning);
-      const halfWork = PreloadProgress(
-        phase: PreloadPhase.hydratingCore,
-        completedWorkUnits: 50,
-        totalWorkUnits: 100,
-      );
+  late String preloadSource;
+  late String topicsSource;
+  late String providerSource;
 
-      expect(requesting.isActive, isTrue);
-      expect(requesting.fraction, 0.02);
-      expect(halfDownloaded.downloadPercent, 50);
-      expect(halfDownloaded.fraction, closeTo(0.235, 0.000001));
-      expect(scanning.isActive, isTrue);
-      expect(scanning.fraction, 0.45);
-      expect(halfWork.fraction, closeTo(0.725, 0.000001));
-      expect(halfWork.percent, 73);
-    });
-
-    test('reports and clamps parsed topic progress', () {
-      const half = PreloadProgress(
-        phase: PreloadPhase.parsingTopics,
-        parsedTopics: 12,
-        totalTopics: 24,
-        completedWorkUnits: 50,
-        totalWorkUnits: 100,
-      );
-      const overflow = PreloadProgress(
-        phase: PreloadPhase.parsingTopics,
-        parsedTopics: 30,
-        totalTopics: 24,
-        completedWorkUnits: 100,
-        totalWorkUnits: 100,
-      );
-
-      expect(half.fraction, closeTo(0.725, 0.000001));
-      expect(half.semanticsLabel, contains('12 / 24'));
-      expect(overflow.fraction, 1.0);
-      expect(overflow.percent, 100);
-    });
-
-    test('complete and failed phases stop the active indicator', () {
-      const complete = PreloadProgress(phase: PreloadPhase.complete);
-      const failed = PreloadProgress(phase: PreloadPhase.failed);
-
-      expect(complete.isActive, isFalse);
-      expect(complete.fraction, 1.0);
-      expect(failed.isActive, isFalse);
-      expect(failed.fraction, isNull);
-    });
+  setUpAll(() {
+    preloadSource = File(
+      'lib/services/preloaded_data_service.dart',
+    ).readAsStringSync();
+    topicsSource = File('lib/pages/topics_screen.dart').readAsStringSync();
+    providerSource = File(
+      'lib/providers/topic_list/topic_list_provider.dart',
+    ).readAsStringSync();
   });
 
-  group('progressive preload source contracts', () {
-    late String serviceSource;
-    late String providerSource;
-    late String screenSource;
+  test('preload uses upstream loading wait semantics', () {
+    expect(preloadSource, contains('bool _loading = false;'));
+    expect(preloadSource, isNot(contains('_loadingFuture')));
 
-    setUpAll(() {
-      serviceSource = File(
-        'lib/services/preloaded_data_service.dart',
-      ).readAsStringSync();
-      providerSource = File(
-        'lib/providers/topic_list/topic_list_provider.dart',
-      ).readAsStringSync();
-      screenSource = File('lib/pages/topics_screen.dart').readAsStringSync();
-    });
+    final start = preloadSource.indexOf(
+      'Future<void> _waitForActiveLoad() async',
+    );
+    final end = preloadSource.indexOf(
+      'Future<void> _loadPreloadedDataInternal',
+      start,
+    );
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
 
-    test('topic list decoding stays incremental and generation guarded', () {
-      expect(serviceSource, contains('_topicParseBatchSize = 24'));
-      expect(serviceSource, contains('_topicParseConcurrency = 2'));
-      expect(serviceSource, contains('Future.wait<List<Topic>>'));
-      expect(serviceSource, contains('completedWorkUnits'));
-      expect(serviceSource, contains('getInitialTopicListFirstBatch'));
-      expect(serviceSource, contains('progressiveTopicListListenable'));
-      expect(serviceSource, contains('rawTopics.sublist(start, end)'));
-      expect(serviceSource, contains('final firstBatch = await parseBatch(0)'));
-      expect(
-        serviceSource,
-        contains('for (final start in starts) parseBatch(start)'),
-      );
-      expect(
-        serviceSource,
-        contains('_publishTopicListSnapshot(snapshot, finalSnapshot: isFinal)'),
-      );
-      expect(
-        serviceSource,
-        contains('if (!_isCurrent(revision, generation)) return;'),
-      );
-    });
+    final body = preloadSource.substring(start, end);
+    expect(body, contains('while (_loading)'));
+    expect(body, contains('Duration(milliseconds: 50)'));
+    expect(body, contains('Future<void> _ensureLoaded() async'));
+    expect(body, contains('if (_loading)'));
+    expect(body, contains('if (_loaded) return;'));
+  });
 
-    test('provider preserves live topics and closes progressive listeners', () {
-      expect(
-        providerSource,
-        contains('_mergeProgressivePreloadedSnapshot(snapshot)'),
-      );
-      expect(providerSource, contains('scheduleMicrotask'));
-      expect(providerSource, contains('detachProgressiveListener'));
-      expect(providerSource, contains('Future<void>.delayed(Duration.zero'));
-      expect(providerSource, contains('if (topicIds.add(topic.id)) topic'));
-    });
+  test('top preload progress and progressive feed plumbing stay removed', () {
+    expect(preloadSource, isNot(contains('PreloadProgress')));
+    expect(preloadSource, isNot(contains('preloadProgressListenable')));
+    expect(topicsSource, isNot(contains('LinearProgressIndicator')));
+    expect(topicsSource, isNot(contains('preloadProgressListenable')));
+    expect(providerSource, isNot(contains('progressiveTopicListListenable')));
+    expect(providerSource, isNot(contains('getInitialTopicListFirstBatch')));
+  });
 
-    test('top progress overlay does not rebuild the workspace tree', () {
-      expect(screenSource, contains('ValueListenableBuilder<PreloadProgress>'));
-      expect(screenSource, contains('child: workspace'));
-      expect(screenSource, contains('LinearProgressIndicator'));
-      expect(screenSource, contains('progress.percent'));
-      expect(screenSource, contains('minHeight: 4'));
-      expect(serviceSource, contains('onReceiveProgress:'));
-    });
+  test('topic list decode starts before core hydration wait', () {
+    final start = preloadSource.indexOf(
+      'Future<bool> _parsePreloadedDataString',
+    );
+    final end = preloadSource.indexOf(
+      'void _parseTopicListFromPreloaded',
+      start,
+    );
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+
+    final body = preloadSource.substring(start, end);
+    final topicStart = body.indexOf('_parseTopicListFromPreloaded(');
+    final coreWait = body.indexOf(
+      'await Future.wait<Map<String, dynamic>>(coreDecodes)',
+    );
+    expect(topicStart, greaterThanOrEqualTo(0));
+    expect(coreWait, greaterThan(topicStart));
+    expect(body, contains('if (userSettingsRaw.isNotEmpty)'));
+    expect(body, contains('if (siteRaw.isNotEmpty)'));
   });
 }
