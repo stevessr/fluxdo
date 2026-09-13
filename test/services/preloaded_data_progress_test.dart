@@ -21,7 +21,9 @@ void main() {
     expect(preloadSource, contains('bool _loading = false;'));
     expect(preloadSource, isNot(contains('_loadingFuture')));
 
-    final start = preloadSource.indexOf('Future<void> _ensureLoaded() async');
+    final start = preloadSource.indexOf(
+      'Future<void> _waitForActiveLoad() async',
+    );
     final end = preloadSource.indexOf(
       'Future<void> _loadPreloadedDataInternal',
       start,
@@ -30,9 +32,10 @@ void main() {
     expect(end, greaterThan(start));
 
     final body = preloadSource.substring(start, end);
-    expect(body, contains('if (_loading)'));
     expect(body, contains('while (_loading)'));
     expect(body, contains('Duration(milliseconds: 50)'));
+    expect(body, contains('Future<void> _ensureLoaded() async'));
+    expect(body, contains('if (_loading)'));
     expect(body, contains('if (_loaded) return;'));
   });
 
