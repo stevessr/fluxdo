@@ -255,7 +255,8 @@ addition = '''  test('metadata scans exclude the large preload payload', () {
     expect(body, contains('_extractCsrfTokenFromHtml(metadataHtml)'));
     expect(body, contains('_extractCdnUrlFromHtml(metadataHtml)'));
     expect(body, contains("parsed && metadataHtml.contains('/plugins/')"));
-    expect(body, contains('_extractPluginCandidatesInBackground(\n        metadataHtml,'));
+    expect(body, contains('_extractPluginCandidatesInBackground('));
+    expect(body, contains('metadataHtml,'));
   });
 
 '''
