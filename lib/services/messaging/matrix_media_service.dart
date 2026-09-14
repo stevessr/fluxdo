@@ -196,6 +196,7 @@ class MatrixMediaService {
     if (uri == null ||
         uri.scheme != 'mxc' ||
         uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
         uri.query.isNotEmpty ||
         uri.fragment.isNotEmpty) {
       return null;
@@ -204,7 +205,10 @@ class MatrixMediaService {
         .where((segment) => segment.isNotEmpty)
         .toList(growable: false);
     if (segments.length != 1) return null;
-    return MatrixMxcUri(serverName: uri.host, mediaId: segments.single);
+    return MatrixMxcUri(
+      serverName: uri.authority,
+      mediaId: segments.single,
+    );
   }
 
   Options _authorizedOptions() => Options(
