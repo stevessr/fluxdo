@@ -21,6 +21,9 @@ class MatrixMessagingProvider implements MessagingProvider {
     readReceipts: true,
     typing: true,
     reactions: true,
+    // The REST reducer can render remote m.replace events, but the common
+    // provider does not expose an edit-send operation yet. Keep this false so
+    // shared UI does not advertise an unsupported action.
     edits: false,
     threads: false,
     media: false,
@@ -46,7 +49,7 @@ class MatrixMessagingProvider implements MessagingProvider {
             preview: room.lastMessage?.body,
             unreadCount: room.unreadCount,
             lastActivity: room.lastMessage?.timestamp,
-            encrypted: room.lastMessage?.encrypted ?? false,
+            encrypted: room.encrypted,
           ),
         )
         .toList(growable: false);
@@ -66,6 +69,8 @@ class MatrixMessagingProvider implements MessagingProvider {
             body: message.body,
             timestamp: message.timestamp,
             encrypted: message.encrypted,
+            edited: message.edited,
+            reactions: message.reactions,
           ),
         )
         .toList(growable: false);
