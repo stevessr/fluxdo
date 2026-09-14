@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/messaging/telegram_web_policy.dart';
+
 /// Experimental Telegram integration.
 ///
 /// Telegram Web remains the safe fallback while the native MTProto provider is
@@ -30,12 +32,6 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
     // Fluxdo uses flutter_inappwebview 6.2.0-beta.3. That prerelease includes
     // the Linux implementation in addition to the other supported platforms.
     return defaultTargetPlatform != TargetPlatform.fuchsia;
-  }
-
-  bool _isEmbeddedTelegramUrl(WebUri uri) {
-    if (uri.scheme.toLowerCase() != 'https') return false;
-    final host = uri.host.toLowerCase();
-    return host == 'telegram.org' || host.endsWith('.telegram.org');
   }
 
   Future<bool> _launchExternalUri(WebUri uri) async {
@@ -255,24 +251,27 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
                   return false;
                 },
                 shouldOverrideUrlLoading: (controller, action) async {
-                  final uri = action.request.url;
-                  if (uri == null) return NavigationActionPolicy.ALLOW;
+                  final webUri = action.request.url;
+                  if (webUri == null) return NavigationActionPolicy.ALLOW;
 
-                  // Never interfere with subframe/resource navigation. Only
-                  // constrain what can replace the visible top-level document.
-                  if (!action.isForMainFrame) {
-                    return NavigationActionPolicy.ALLOW;
-                  }
+                  final uri = Uri.tryParse(webUri.toString());
+                  if (uri == null) return NavigationActionPolicy.CANCEL;
 
-                  if (_isEmbeddedTelegramUrl(uri)) {
-                    return NavigationActionPolicy.ALLOW;
+                  final disposition = TelegramWebPolicy.classify(
+                    uri,
+                    isMainFrame: action.isForMainFrame,
+                  );
+                  switch (disposition) {
+                    case TelegramWebNavigationDisposition.embedded:
+                    case TelegramWebNavigationDisposition.subframe:
+                      return NavigationActionPolicy.ALLOW;
+                    case TelegramWebNavigationDisposition.external:
+                      final launched = await _launchExternalUri(webUri);
+                      if (!launched && mounted) {
+                        setState(() => _error = '无法打开链接：$webUri');
+                      }
+                      return NavigationActionPolicy.CANCEL;
                   }
-
-                  final launched = await _launchExternalUri(uri);
-                  if (!launched && mounted) {
-                    setState(() => _error = '无法打开链接：$uri');
-                  }
-                  return NavigationActionPolicy.CANCEL;
                 },
               ),
             ),
