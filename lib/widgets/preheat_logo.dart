@@ -13,7 +13,15 @@ class PreheatLogo extends StatefulWidget {
   final AppIconStyle style;
   final double size;
 
-  const PreheatLogo({super.key, required this.style, this.size = 108});
+  /// false 时直接显示最终静态状态，不启动任何 ticker/呼吸光晕。
+  final bool animate;
+
+  const PreheatLogo({
+    super.key,
+    required this.style,
+    this.size = 108,
+    this.animate = true,
+  });
 
   @override
   State<PreheatLogo> createState() => _PreheatLogoState();
@@ -36,14 +44,28 @@ class _PreheatLogoState extends State<PreheatLogo>
   @override
   void initState() {
     super.initState();
-    _entry
-      ..addStatusListener((status) {
-        // 绘制完成后才开始光晕呼吸
-        if (status == AnimationStatus.completed) {
-          _glow.repeat(reverse: true);
-        }
-      })
-      ..forward();
+    _entry.addStatusListener((status) {
+      // 绘制完成后才开始光晕呼吸。省电模式保持最终静态帧。
+      if (status == AnimationStatus.completed && widget.animate) {
+        _glow.repeat(reverse: true);
+      }
+    });
+    _applyAnimationPolicy(restart: true);
+  }
+
+  void _applyAnimationPolicy({required bool restart}) {
+    if (!widget.animate) {
+      _entry.stop();
+      _glow.stop();
+      _entry.value = 1.0;
+      _glow.value = 0.0;
+      return;
+    }
+    if (restart) {
+      _glow.stop();
+      _glow.value = 0.0;
+      _entry.forward(from: 0.0);
+    }
   }
 
   @override
@@ -61,6 +83,9 @@ class _PreheatLogoState extends State<PreheatLogo>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.style != widget.style) {
       _rebuildShapes();
+    }
+    if (oldWidget.animate != widget.animate) {
+      _applyAnimationPolicy(restart: widget.animate);
     }
   }
 
@@ -85,22 +110,29 @@ class _PreheatLogoState extends State<PreheatLogo>
     return AnimatedBuilder(
       animation: Listenable.merge([_entry, _glow]),
       builder: (context, _) {
-        // 光晕随填充出现而渐亮,之后跟随 _glow 缓慢呼吸
-        final glowIn = _segment(_entry.value, 0.45, 1.0, Curves.easeIn);
-        final breathe = Curves.easeInOutSine.transform(_glow.value);
+        // 光晕随填充出现而渐亮,之后跟随 _glow 缓慢呼吸。
+        // 静态模式彻底关闭 glow，避免省电时残留阴影动画/离屏开销。
+        final glowIn = widget.animate
+            ? _segment(_entry.value, 0.45, 1.0, Curves.easeIn)
+            : 0.0;
+        final breathe = widget.animate
+            ? Curves.easeInOutSine.transform(_glow.value)
+            : 0.0;
         final glowAlpha = glowIn * (0.12 + 0.10 * breathe);
         final glowBlur = 36.0 + 16.0 * breathe;
 
         return Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.primary.withValues(alpha: glowAlpha),
-                blurRadius: glowBlur,
-              ),
-            ],
-          ),
+          decoration: glowAlpha <= 0
+              ? null
+              : BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: colorScheme.primary.withValues(alpha: glowAlpha),
+                      blurRadius: glowBlur,
+                    ),
+                  ],
+                ),
           child: RepaintBoundary(
             child: CustomPaint(
               size: Size.square(widget.size),
