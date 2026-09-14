@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../services/matrix_client_service.dart';
 
-class MatrixRoomPageV2 extends StatefulWidget {
-  const MatrixRoomPageV2({
+class MatrixRoomPage extends StatefulWidget {
+  const MatrixRoomPage({
     super.key,
     required this.client,
     required this.room,
@@ -15,11 +15,13 @@ class MatrixRoomPageV2 extends StatefulWidget {
   final MatrixRoomSummary room;
 
   @override
-  State<MatrixRoomPageV2> createState() => _MatrixRoomPageV2State();
+  State<MatrixRoomPage> createState() => _MatrixRoomPageState();
 }
 
-class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
+class _MatrixRoomPageState extends State<MatrixRoomPage>
+    with WidgetsBindingObserver {
   static const Duration _typingIdleDelay = Duration(seconds: 5);
+  static const Duration _foregroundRefreshInterval = Duration(seconds: 20);
   static const List<String> _quickReactions = <String>[
     '👍',
     '❤️',
@@ -33,22 +35,40 @@ class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
   final ScrollController _scrollController = ScrollController();
 
   Timer? _typingStopTimer;
+  Timer? _refreshTimer;
   bool _typingSent = false;
   bool _loading = true;
   bool _loadingOlder = false;
+  bool _refreshingLatest = false;
   bool _sending = false;
+  bool _paginationInitialized = false;
+  bool _historyExhausted = false;
   String? _error;
-  String? _nextToken;
+  String? _nextOlderToken;
   List<MatrixMessage> _messages = const <MatrixMessage>[];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startForegroundRefresh();
     unawaited(_loadLatest());
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startForegroundRefresh();
+      unawaited(_refreshLatestSilently());
+    } else {
+      _stopForegroundRefresh();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopForegroundRefresh();
     _typingStopTimer?.cancel();
     if (_typingSent) {
       unawaited(_setTyping(false));
@@ -58,10 +78,44 @@ class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
     super.dispose();
   }
 
+  void _startForegroundRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(
+      _foregroundRefreshInterval,
+      (_) => unawaited(_refreshLatestSilently()),
+    );
+  }
+
+  void _stopForegroundRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
+
+  Future<void> _refreshLatestSilently() async {
+    if (!mounted ||
+        _loading ||
+        _loadingOlder ||
+        _sending ||
+        _refreshingLatest) {
+      return;
+    }
+    await _loadLatest(
+      showSpinner: false,
+      scrollToBottom: false,
+      preservePaginationCursor: true,
+      surfaceErrors: false,
+    );
+  }
+
   Future<void> _loadLatest({
     bool showSpinner = true,
     bool scrollToBottom = true,
+    bool preservePaginationCursor = false,
+    bool surfaceErrors = true,
   }) async {
+    if (_refreshingLatest) return;
+    _refreshingLatest = true;
+
     if (showSpinner && mounted) {
       setState(() {
         _loading = true;
@@ -74,24 +128,35 @@ class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
       if (!mounted) return;
       setState(() {
         _messages = page.messages;
-        _nextToken = page.endToken;
-        _error = null;
+        if (!preservePaginationCursor || !_paginationInitialized) {
+          _nextOlderToken = page.endToken;
+          _historyExhausted = page.endToken == null || page.endToken!.isEmpty;
+          _paginationInitialized = true;
+        }
+        if (surfaceErrors) _error = null;
       });
       if (_messages.isNotEmpty) {
         unawaited(_markRead(_messages.last.eventId));
       }
       if (scrollToBottom) _scrollToBottom();
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || !surfaceErrors) return;
       setState(() => _error = error.toString());
     } finally {
+      _refreshingLatest = false;
       if (showSpinner && mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _loadOlder() async {
-    final token = _nextToken;
-    if (token == null || token.isEmpty || _loadingOlder) return;
+    final token = _nextOlderToken;
+    if (token == null ||
+        token.isEmpty ||
+        _historyExhausted ||
+        _loadingOlder ||
+        _refreshingLatest) {
+      return;
+    }
 
     final beforePixels = _scrollController.hasClients
         ? _scrollController.position.pixels
@@ -111,11 +176,15 @@ class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
         from: token,
       );
       if (!mounted) return;
+      final next = page.endToken;
       setState(() {
         _messages = page.messages;
-        // A homeserver returning the same token forever must not create an
-        // infinite "load older" loop.
-        _nextToken = page.endToken == token ? null : page.endToken;
+        if (next == null || next.isEmpty || next == token) {
+          _nextOlderToken = null;
+          _historyExhausted = true;
+        } else {
+          _nextOlderToken = next;
+        }
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -183,7 +252,10 @@ class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
     try {
       await widget.client.sendText(widget.room.roomId, text);
       _composerController.clear();
-      await _loadLatest(showSpinner: false);
+      await _loadLatest(
+        showSpinner: false,
+        preservePaginationCursor: true,
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -242,9 +314,11 @@ class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
         message.eventId,
         reaction,
       );
-      // Re-fetch the newest page so the just-sent relation becomes part of the
-      // room event accumulator and its count is visible immediately.
-      await _loadLatest(showSpinner: false, scrollToBottom: false);
+      await _loadLatest(
+        showSpinner: false,
+        scrollToBottom: false,
+        preservePaginationCursor: true,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已发送 reaction $reaction')),
@@ -269,7 +343,9 @@ class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
   @override
   Widget build(BuildContext context) {
     final currentUserId = widget.client.session?.userId;
-    final hasOlder = _nextToken != null && _nextToken!.isNotEmpty;
+    final hasOlder = !_historyExhausted &&
+        _nextOlderToken != null &&
+        _nextOlderToken!.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -291,9 +367,14 @@ class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
         actions: <Widget>[
           IconButton(
             tooltip: '刷新最新消息',
-            onPressed: _loading
+            onPressed: _loading || _refreshingLatest
                 ? null
-                : () => unawaited(_loadLatest(scrollToBottom: false)),
+                : () => unawaited(
+                    _loadLatest(
+                      scrollToBottom: false,
+                      preservePaginationCursor: true,
+                    ),
+                  ),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -337,7 +418,10 @@ class _MatrixRoomPageV2State extends State<MatrixRoomPageV2> {
             child: _loading && _messages.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : RefreshIndicator(
-                    onRefresh: () => _loadLatest(scrollToBottom: false),
+                    onRefresh: () => _loadLatest(
+                      scrollToBottom: false,
+                      preservePaginationCursor: true,
+                    ),
                     child: ListView.builder(
                       controller: _scrollController,
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -527,4 +611,13 @@ class _MatrixMessageBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+@Deprecated('Use MatrixRoomPage')
+class MatrixRoomPageV2 extends MatrixRoomPage {
+  const MatrixRoomPageV2({
+    super.key,
+    required super.client,
+    required super.room,
+  });
 }
