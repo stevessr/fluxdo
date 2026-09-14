@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'messaging/matrix_room_metadata.dart';
+import 'messaging/matrix_timeline_event_cache.dart';
 import 'messaging/matrix_timeline_reducer.dart';
 
 /// Lightweight Matrix Client-Server API adapter used by the experimental chat
@@ -32,11 +33,12 @@ class MatrixClientService {
   final Map<String, MatrixRoomSummary> _roomCache =
       <String, MatrixRoomSummary>{};
 
-  /// Raw history already loaded for each room. Keeping relation events across
-  /// page boundaries means an edit/reaction fetched on a newer page can still
-  /// be applied when its target message is fetched later from older history.
-  final Map<String, Map<String, Map<String, dynamic>>> _timelineEventCache =
-      <String, Map<String, Map<String, dynamic>>>{};
+  /// Raw history already loaded for recently used rooms. Keeping relation
+  /// events across page boundaries means an edit/reaction fetched on a newer
+  /// page can still be applied when its target message is fetched later from
+  /// older history, while the bounded cache prevents unbounded growth.
+  final MatrixTimelineEventCache _timelineEventCache =
+      MatrixTimelineEventCache();
 
   MatrixSession? get session => _session;
   bool get isLoggedIn => _session != null;
@@ -260,7 +262,7 @@ class MatrixClientService {
 
       for (final roomId in left.keys) {
         _roomCache.remove(roomId);
-        _timelineEventCache.remove(roomId);
+        _timelineEventCache.removeRoom(roomId);
       }
 
       final nextBatch = data['next_batch'];
@@ -305,19 +307,11 @@ class MatrixClientService {
       );
       final data = _asMap(response.data);
       final chunk = _asList(data['chunk']);
-      final roomEvents = _timelineEventCache.putIfAbsent(
-        roomId,
-        () => <String, Map<String, dynamic>>{},
-      );
-      for (final rawEvent in chunk) {
-        final event = _asMap(rawEvent);
-        final eventId = event['event_id'];
-        if (eventId is String && eventId.isNotEmpty) {
-          roomEvents[eventId] = event;
-        }
-      }
+      _timelineEventCache.addAll(roomId, chunk);
 
-      final reduced = _timelineReducer.reduce(roomEvents.values);
+      final reduced = _timelineReducer.reduce(
+        _timelineEventCache.eventsFor(roomId),
+      );
       final end = data['end'];
 
       return MatrixMessagePage(
@@ -338,6 +332,13 @@ class MatrixClientService {
   }) async {
     final page = await loadMessagePage(roomId, limit: limit);
     return page.messages;
+  }
+
+  /// Releases raw timeline relation state for a room once its page is closed.
+  /// The room list cache is intentionally preserved so returning to the chat
+  /// hub does not force another full `/sync`.
+  void releaseTimeline(String roomId) {
+    _timelineEventCache.removeRoom(roomId);
   }
 
   Future<void> sendText(String roomId, String body) async {
