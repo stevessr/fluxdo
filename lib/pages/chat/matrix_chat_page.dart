@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../../services/matrix_client_service.dart';
 import '../../services/messaging/matrix_homeserver_discovery.dart';
+import '../../services/messaging/matrix_sso_service.dart';
 import 'matrix_room_page.dart';
+import 'matrix_sso_login_page.dart';
 
 class MatrixChatPage extends StatefulWidget {
   const MatrixChatPage({super.key});
@@ -15,6 +20,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
   final MatrixClientService _client = MatrixClientService();
   final MatrixHomeserverDiscoveryService _discovery =
       MatrixHomeserverDiscoveryService();
+  final MatrixSsoService _sso = MatrixSsoService();
   final TextEditingController _homeserverController = TextEditingController(
     text: 'https://matrix.org',
   );
@@ -25,6 +31,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
 
   bool _loading = true;
   bool _submitting = false;
+  bool _ssoSubmitting = false;
   bool _discovering = false;
   bool _homeserverEdited = false;
   bool _tokenMode = false;
@@ -32,6 +39,8 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
   String? _discoveryStatus;
   MatrixSession? _session;
   List<MatrixRoomSummary> _rooms = const <MatrixRoomSummary>[];
+
+  bool get _loginBusy => _submitting || _ssoSubmitting || _discovering;
 
   @override
   void initState() {
@@ -120,7 +129,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
   }
 
   Future<void> _discoverHomeserver() async {
-    if (_discovering || _submitting) return;
+    if (_loginBusy) return;
     try {
       await _resolveHomeserver(preferMatrixId: _matrixIdCandidate != null);
     } catch (error) {
@@ -130,7 +139,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
   }
 
   Future<void> _signIn() async {
-    if (_submitting || _discovering) return;
+    if (_loginBusy) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _submitting = true;
@@ -159,17 +168,87 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
           password: _passwordController.text,
         );
       }
-      if (!mounted) return;
-      _passwordController.clear();
-      _tokenController.clear();
-      setState(() => _session = session);
-      await _loadRooms(showSpinner: false, forceFull: true);
+      await _completeLogin(session);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _signInWithSso() async {
+    if (_loginBusy) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _ssoSubmitting = true;
+      _error = null;
+    });
+
+    try {
+      final discovery = await _resolveHomeserver(
+        preferMatrixId: !_homeserverEdited && _matrixIdCandidate != null,
+      );
+      final capabilities = await _sso.loadLoginCapabilities(discovery.baseUrl);
+      if (!capabilities.supportsSso) {
+        throw const MatrixSsoException(
+          '此 homeserver 没有公布 m.login.sso 登录流程。',
+        );
+      }
+
+      final state = _newSsoState();
+      final callbackUri = Uri(
+        scheme: 'fluxdo',
+        host: 'matrix-sso',
+        path: '/callback',
+        queryParameters: <String, String>{'state': state},
+      );
+      final initialUri = _sso.buildRedirectUri(
+        homeserver: discovery.baseUrl,
+        callbackUri: callbackUri,
+      );
+
+      if (!mounted) return;
+      final loginToken = await Navigator.of(context).push<String>(
+        MaterialPageRoute<String>(
+          builder: (_) => MatrixSsoLoginPage(
+            initialUri: initialUri,
+            callbackUri: callbackUri,
+          ),
+        ),
+      );
+      if (loginToken == null || loginToken.isEmpty) return;
+
+      final exchange = await _sso.exchangeLoginToken(
+        homeserver: discovery.baseUrl,
+        loginToken: loginToken,
+      );
+      final session = await _client.loginWithAccessToken(
+        homeserver: discovery.baseUrl,
+        userId: exchange.userId,
+        accessToken: exchange.accessToken,
+      );
+      await _completeLogin(session);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _ssoSubmitting = false);
+    }
+  }
+
+  Future<void> _completeLogin(MatrixSession session) async {
+    if (!mounted) return;
+    _passwordController.clear();
+    _tokenController.clear();
+    setState(() => _session = session);
+    await _loadRooms(showSpinner: false, forceFull: true);
+  }
+
+  String _newSsoState() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(24, (_) => random.nextInt(256));
+    return base64Url.encode(bytes).replaceAll('=', '');
   }
 
   Future<void> _loadRooms({
@@ -282,7 +361,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '实验性 Matrix：增量 /sync、历史分页、已读、typing、reaction 聚合与 edit 已启用；E2EE 仍等待 SDK provider。',
+                      '实验性 Matrix：增量 /sync、历史分页、已读、typing、reaction 聚合、edit 与 SSO 已启用；E2EE 仍等待 SDK provider。',
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
@@ -391,7 +470,6 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
   }
 
   Widget _buildLogin() {
-    final busy = _submitting || _discovering;
     return Scaffold(
       appBar: AppBar(title: const Text('Matrix 登录')),
       body: SafeArea(
@@ -417,8 +495,8 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                     const SizedBox(height: 8),
                     Text(
                       _tokenMode
-                          ? '适用于 SSO 登录后取得 access token 的服务器。Token 仅保存在系统安全存储；User ID 可由 /whoami 自动识别。'
-                          : '完整 Matrix ID 会先按规范自动发现 homeserver；显式填写的服务器则先验证 /_matrix/client/versions，再发送登录请求。',
+                          ? '适用于已有 access token 的服务器。完整 User ID 可用于自动发现 homeserver；Token 仅保存在系统安全存储。'
+                          : '完整 Matrix ID 会先按规范自动发现 homeserver；也可以直接使用 SSO，无需向 Fluxdo 输入密码。',
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -426,7 +504,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                       controller: _homeserverController,
                       keyboardType: TextInputType.url,
                       autocorrect: false,
-                      enabled: !busy,
+                      enabled: !_loginBusy,
                       onChanged: (_) {
                         _homeserverEdited = true;
                         if (_discoveryStatus != null) {
@@ -439,7 +517,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
                           tooltip: '自动发现并验证 homeserver',
-                          onPressed: busy ? null : _discoverHomeserver,
+                          onPressed: _loginBusy ? null : _discoverHomeserver,
                           icon: _discovering
                               ? const SizedBox.square(
                                   dimension: 18,
@@ -474,7 +552,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                       TextField(
                         controller: _userIdController,
                         autocorrect: false,
-                        enabled: !busy,
+                        enabled: !_loginBusy,
                         decoration: const InputDecoration(
                           labelText: 'User ID（可选，可用于自动发现/校验）',
                           hintText: '@name:example.org',
@@ -487,7 +565,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                         obscureText: true,
                         autocorrect: false,
                         enableSuggestions: false,
-                        enabled: !busy,
+                        enabled: !_loginBusy,
                         onSubmitted: (_) => _signIn(),
                         decoration: const InputDecoration(
                           labelText: 'Access token',
@@ -499,7 +577,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                         controller: _usernameController,
                         autofillHints: const <String>[AutofillHints.username],
                         autocorrect: false,
-                        enabled: !busy,
+                        enabled: !_loginBusy,
                         decoration: const InputDecoration(
                           labelText: '用户名 / Matrix ID',
                           hintText: '@name:example.org',
@@ -513,7 +591,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                         obscureText: true,
                         enableSuggestions: false,
                         autocorrect: false,
-                        enabled: !busy,
+                        enabled: !_loginBusy,
                         onSubmitted: (_) => _signIn(),
                         decoration: const InputDecoration(
                           labelText: '密码',
@@ -525,9 +603,9 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('使用 Access Token'),
-                      subtitle: const Text('密码登录不可用或 homeserver 使用 SSO 时启用'),
+                      subtitle: const Text('已有 token 或需要手动导入会话时启用'),
                       value: _tokenMode,
-                      onChanged: busy
+                      onChanged: _loginBusy
                           ? null
                           : (value) => setState(() {
                               _tokenMode = value;
@@ -545,8 +623,8 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                     ],
                     const SizedBox(height: 16),
                     FilledButton.icon(
-                      onPressed: busy ? null : _signIn,
-                      icon: busy
+                      onPressed: _loginBusy ? null : _signIn,
+                      icon: _submitting || _discovering
                           ? const SizedBox.square(
                               dimension: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
@@ -557,8 +635,21 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                             ? '发现服务器中…'
                             : _submitting
                             ? '连接中…'
-                            : '登录',
+                            : _tokenMode
+                            ? '导入 Access Token'
+                            : '密码登录',
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _loginBusy ? null : _signInWithSso,
+                      icon: _ssoSubmitting
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.passkey_rounded),
+                      label: Text(_ssoSubmitting ? 'SSO 登录中…' : '使用 SSO 登录'),
                     ),
                   ],
                 ),
