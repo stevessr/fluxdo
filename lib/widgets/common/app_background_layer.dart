@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../services/power_saving_mode_service.dart';
 import '../../theme/app_background.dart';
 import '../../theme/neutral_ramps.dart';
 
@@ -21,14 +22,29 @@ class AppBackgroundLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: PowerSavingModeService.instance,
+      builder: (context, _) => _buildLayer(
+        context,
+        powerSaving: PowerSavingModeService.instance.isEnabled,
+      ),
+    );
+  }
+
+  Widget _buildLayer(BuildContext context, {required bool powerSaving}) {
     final brightness = Theme.of(context).brightness;
     final scrim = background.scrimFor(brightness);
 
     // 解码尺寸限制在屏幕长边 × dpr（上限 4096），避免原图全尺寸
     // 解码造成的内存尖峰；文件本体保留原图，不做转码。
+    // 省电模式进一步把背景目标 DPR 限到 1.5。背景位于内容后方，轻微
+    // 降采样几乎不可见，却能显著减少大图解码、纹理上传与显存带宽。
     final mq = MediaQuery.of(context);
     final longEdge = math.max(mq.size.width, mq.size.height);
-    final cacheWidth = (longEdge * mq.devicePixelRatio).clamp(0, 4096).round();
+    final targetDpr = powerSaving
+        ? math.min(mq.devicePixelRatio, 1.5)
+        : mq.devicePixelRatio;
+    final cacheWidth = (longEdge * targetDpr).clamp(0, 4096).round();
 
     Widget image = Image.file(
       File(background.imagePath!),
@@ -44,7 +60,8 @@ class AppBackgroundLayer extends StatelessWidget {
       ),
     );
 
-    if (background.blurSigma > 0) {
+    // ImageFiltered blur 会持续增加离屏渲染/采样成本；省电时直接跳过。
+    if (!powerSaving && background.blurSigma > 0) {
       image = ImageFiltered(
         imageFilter: ui.ImageFilter.blur(
           sigmaX: background.blurSigma,

@@ -14,6 +14,7 @@ import '../services/discourse/discourse_service.dart';
 import '../services/emoji_handler.dart';
 import '../services/log/log_writer.dart';
 import '../services/migration_service.dart';
+import '../services/power_saving_mode_service.dart';
 import '../utils/dialog_utils.dart';
 import '../widgets/common/ambient_background.dart';
 import '../widgets/common/error_view.dart';
@@ -39,6 +40,9 @@ class _PreheatGateState extends State<PreheatGate> {
   @override
   void initState() {
     super.initState();
+    // 尽早读取系统省电状态；结果通过 ChangeNotifier 触发本门禁重建。
+    // 不阻塞 preload/首屏，平台通道慢或不可用时保持正常视觉策略。
+    unawaited(PowerSavingModeService.instance.initialize());
     _readIconStyle();
     // 延迟到下一帧执行，确保 context 可用（_preload 内部可能弹 Dialog）
     _loadFuture = Future.microtask(() => _preload());
@@ -134,49 +138,73 @@ class _PreheatGateState extends State<PreheatGate> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _loadFuture,
-      builder: (context, snapshot) {
-        // 无论加载状态如何，都设置 context
-        // 避免 CF 验证等待 context 而 context 等待加载完成导致的死锁
-        BrowserTrustCoordinator.instance.setNavigatorContext(context);
+    return AnimatedBuilder(
+      animation: PowerSavingModeService.instance,
+      builder: (context, _) {
+        final powerSaving = PowerSavingModeService.instance.isEnabled;
+        return FutureBuilder<bool>(
+          future: _loadFuture,
+          builder: (context, snapshot) {
+            // 无论加载状态如何，都设置 context
+            // 避免 CF 验证等待 context 而 context 等待加载完成导致的死锁
+            BrowserTrustCoordinator.instance.setNavigatorContext(context);
 
-        Widget currentWidget;
-        if (snapshot.connectionState != ConnectionState.done) {
-          currentWidget = _PreheatLoading(
-            key: const ValueKey('loading'),
-            onSkip: _skip,
-            iconStyle: _iconStyle,
-          );
-        } else if (snapshot.data == true) {
-          currentWidget = KeyedSubtree(
-            key: const ValueKey('content'),
-            child: widget.child,
-          );
-        } else {
-          currentWidget = _PreheatFailed(
-            key: const ValueKey('error'),
-            error: _error,
-            onRetry: _retry,
-          );
-        }
+            Widget currentWidget;
+            if (snapshot.connectionState != ConnectionState.done) {
+              currentWidget = _PreheatLoading(
+                key: const ValueKey('loading'),
+                onSkip: _skip,
+                iconStyle: _iconStyle,
+                powerSaving: powerSaving,
+              );
+            } else if (snapshot.data == true) {
+              currentWidget = KeyedSubtree(
+                key: const ValueKey('content'),
+                child: widget.child,
+              );
+            } else {
+              currentWidget = _PreheatFailed(
+                key: const ValueKey('error'),
+                error: _error,
+                onRetry: _retry,
+              );
+            }
 
-        return AnimatedSwitcher(
-          // 数据已经 ready 后不再额外做半秒以上的“假加载”。保留一个很短的
-          // 淡入/缩放只用于遮住布局切换，不让动画本身成为启动延迟的一部分。
-          duration: const Duration(milliseconds: 220),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeOut,
-          transitionBuilder: (child, animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.985, end: 1.0).animate(animation),
-                child: child,
-              ),
+            if (powerSaving) {
+              // 把系统省电状态映射到 Flutter 的标准“减少动态”信号，当前
+              // 页面子树里尊重 MediaQuery.disableAnimations 的组件会自动
+              // 切换到静态/瞬时过渡；门禁自己的动画则在下方显式旁路。
+              final mediaQuery = MediaQuery.maybeOf(context);
+              if (mediaQuery != null) {
+                currentWidget = MediaQuery(
+                  data: mediaQuery.copyWith(disableAnimations: true),
+                  child: currentWidget,
+                );
+              }
+              return currentWidget;
+            }
+
+            return AnimatedSwitcher(
+              // 数据已经 ready 后不再额外做半秒以上的“假加载”。保留一个很短的
+              // 淡入/缩放只用于遮住布局切换，不让动画本身成为启动延迟的一部分。
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeOut,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(
+                      begin: 0.985,
+                      end: 1.0,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+              child: currentWidget,
             );
           },
-          child: currentWidget,
         );
       },
     );
@@ -186,8 +214,14 @@ class _PreheatGateState extends State<PreheatGate> {
 class _PreheatLoading extends StatefulWidget {
   final VoidCallback? onSkip;
   final AppIconStyle iconStyle;
+  final bool powerSaving;
 
-  const _PreheatLoading({super.key, this.onSkip, required this.iconStyle});
+  const _PreheatLoading({
+    super.key,
+    this.onSkip,
+    required this.iconStyle,
+    required this.powerSaving,
+  });
 
   @override
   State<_PreheatLoading> createState() => _PreheatLoadingState();
@@ -222,6 +256,9 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final hasAcrylic = Platform.isMacOS || Platform.isWindows;
+    final animationDuration = widget.powerSaving
+        ? Duration.zero
+        : const Duration(milliseconds: 400);
 
     return Scaffold(
       backgroundColor: hasAcrylic ? Colors.transparent : colorScheme.surface,
@@ -232,7 +269,11 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                PreheatLogo(style: widget.iconStyle, size: 108),
+                PreheatLogo(
+                  style: widget.iconStyle,
+                  size: 108,
+                  animate: !widget.powerSaving,
+                ),
                 const SizedBox(height: 24),
                 Text(
                   'FluxDO',
@@ -243,7 +284,13 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
                   ),
                 ),
                 const SizedBox(height: 56),
-                const LoadingSpinner(size: 40),
+                widget.powerSaving
+                    ? Icon(
+                        Icons.hourglass_top_rounded,
+                        size: 40,
+                        color: colorScheme.primary,
+                      )
+                    : const LoadingSpinner(size: 40),
               ],
             ),
           ),
@@ -255,16 +302,16 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 跳过按钮常驻树中,超时后淡入上移出现
+                  // 跳过按钮常驻树中,超时后淡入上移出现；省电时瞬时切换。
                   IgnorePointer(
                     ignoring: !_showSkip,
                     child: AnimatedOpacity(
                       opacity: _showSkip ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 400),
+                      duration: animationDuration,
                       curve: Curves.easeOut,
                       child: AnimatedSlide(
                         offset: _showSkip ? Offset.zero : const Offset(0, 0.4),
-                        duration: const Duration(milliseconds: 400),
+                        duration: animationDuration,
                         curve: Curves.easeOutCubic,
                         child: TextButton(
                           onPressed: widget.onSkip,
