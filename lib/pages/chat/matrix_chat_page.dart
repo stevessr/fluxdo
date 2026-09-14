@@ -648,7 +648,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                               dimension: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.passkey_rounded),
+                          : const Icon(Icons.vpn_key_rounded),
                       label: Text(_ssoSubmitting ? 'SSO 登录中…' : '使用 SSO 登录'),
                     ),
                   ],
