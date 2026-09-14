@@ -12,7 +12,7 @@ import '../pages/drafts_page.dart';
 import '../pages/groups_page.dart';
 import '../pages/leaderboard_page.dart';
 import '../pages/profile_page.dart';
-import '../pages/chat/chat_page.dart';
+import '../pages/chat/chat_hub_page.dart';
 import '../pages/seeking_page.dart';
 import '../pages/private_messages_page.dart';
 import '../pages/topics_screen.dart';
@@ -48,7 +48,7 @@ class NavEntryRegistry {
         iconData: Symbols.chat_rounded,
         selectedIconData: Symbols.chat_rounded,
         label: (ctx) => ctx.l10n.nav_chat,
-        pageBuilder: (ctx, isActive) => const ChatPage(),
+        pageBuilder: (ctx, isActive) => const ChatHubPage(),
         defaultInBottomNav: true,
         requiresLogin: true,
       ),
