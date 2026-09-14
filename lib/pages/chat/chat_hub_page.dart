@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'chat_page.dart';
+import 'chat_protocol.dart';
 import 'matrix_chat_page.dart';
 import 'telegram_chat_page.dart';
 
@@ -17,11 +21,37 @@ class ChatHubPage extends StatefulWidget {
 }
 
 class _ChatHubPageState extends State<ChatHubPage> {
-  int _selected = 0;
+  static const _selectedProtocolKey = 'experimental_chat_protocol_v1';
+
+  ChatProtocol _selected = ChatProtocol.discourse;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreSelection());
+  }
+
+  Future<void> _restoreSelection() async {
+    final preferences = await SharedPreferences.getInstance();
+    final restored = chatProtocolFromStorage(
+      preferences.getString(_selectedProtocolKey),
+    );
+    if (!mounted || restored == _selected) return;
+    setState(() => _selected = restored);
+  }
+
+  Future<void> _selectProtocol(ChatProtocol protocol) async {
+    if (_selected != protocol && mounted) {
+      setState(() => _selected = protocol);
+    }
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_selectedProtocolKey, protocol.storageValue);
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final selectedIndex = chatProtocolOrder.indexOf(_selected);
 
     return Column(
       children: <Widget>[
@@ -32,40 +62,29 @@ class _ChatHubPageState extends State<ChatHubPage> {
             bottom: false,
             child: SizedBox(
               height: 52,
-              child: ListView(
+              child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                children: <Widget>[
-                  _ProtocolChip(
-                    icon: Icons.forum_rounded,
-                    label: 'Discourse',
-                    selected: _selected == 0,
-                    onSelected: () => setState(() => _selected = 0),
-                  ),
-                  const SizedBox(width: 8),
-                  _ProtocolChip(
-                    icon: Icons.hub_rounded,
-                    label: 'Matrix',
-                    experimental: true,
-                    selected: _selected == 1,
-                    onSelected: () => setState(() => _selected = 1),
-                  ),
-                  const SizedBox(width: 8),
-                  _ProtocolChip(
-                    icon: Icons.send_rounded,
-                    label: 'Telegram',
-                    experimental: true,
-                    selected: _selected == 2,
-                    onSelected: () => setState(() => _selected = 2),
-                  ),
-                ],
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                itemCount: chatProtocolOrder.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final protocol = chatProtocolOrder[index];
+                  return _ProtocolChip(
+                    protocol: protocol,
+                    selected: _selected == protocol,
+                    onSelected: () => unawaited(_selectProtocol(protocol)),
+                  );
+                },
               ),
             ),
           ),
         ),
         Expanded(
           child: IndexedStack(
-            index: _selected,
+            index: selectedIndex < 0 ? 0 : selectedIndex,
             children: const <Widget>[
               ChatPage(),
               MatrixChatPage(),
@@ -80,17 +99,13 @@ class _ChatHubPageState extends State<ChatHubPage> {
 
 class _ProtocolChip extends StatelessWidget {
   const _ProtocolChip({
-    required this.icon,
-    required this.label,
+    required this.protocol,
     required this.selected,
     required this.onSelected,
-    this.experimental = false,
   });
 
-  final IconData icon;
-  final String label;
+  final ChatProtocol protocol;
   final bool selected;
-  final bool experimental;
   final VoidCallback onSelected;
 
   @override
@@ -98,12 +113,12 @@ class _ProtocolChip extends StatelessWidget {
     return ChoiceChip(
       selected: selected,
       onSelected: (_) => onSelected(),
-      avatar: Icon(icon, size: 17),
+      avatar: Icon(protocol.icon, size: 17),
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(label),
-          if (experimental) ...<Widget>[
+          Text(protocol.label),
+          if (protocol.experimental) ...<Widget>[
             const SizedBox(width: 5),
             Text(
               'LAB',
