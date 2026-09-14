@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'messaging/matrix_room_metadata.dart';
+import 'messaging/matrix_timeline_reducer.dart';
+
 /// Lightweight Matrix Client-Server API adapter used by the experimental chat
 /// hub.
 ///
@@ -19,6 +22,7 @@ class MatrixClientService {
        _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _sessionStorageKey = 'experimental_matrix_session_v1';
+  static const _timelineReducer = MatrixTimelineReducer();
 
   final Dio _dio;
   final FlutterSecureStorage _secureStorage;
@@ -168,11 +172,11 @@ class MatrixClientService {
 
   /// Loads joined rooms using Matrix incremental sync.
   ///
-  /// The first call requests the compact state needed by the room list. The
-  /// returned `next_batch` token is retained in memory. Later calls pass it as
-  /// `since`, merge only changed rooms into [_roomCache], and remove rooms that
-  /// appear in the `leave` section. [forceFull] intentionally discards this
-  /// state and starts a new initial sync.
+  /// The first call requests only compact room-list state plus a short timeline
+  /// window. The returned `next_batch` token is retained in memory. Later calls
+  /// pass it as `since`, merge only changed rooms into [_roomCache], and remove
+  /// rooms that appear in the `leave` section. [forceFull] intentionally
+  /// discards this state and starts a new initial sync.
   Future<List<MatrixRoomSummary>> loadRooms({bool forceFull = false}) async {
     final current = _requireSession();
     if (forceFull) _resetSyncState();
@@ -183,9 +187,13 @@ class MatrixClientService {
           'types': <String>[
             'm.room.name',
             'm.room.canonical_alias',
+            'm.room.encryption',
           ],
         },
-        'timeline': <String, dynamic>{'limit': 1},
+        // A small window prevents a reaction/edit from replacing the room
+        // preview while keeping initial sync substantially lighter than a full
+        // timeline. Relation events are reduced locally below.
+        'timeline': <String, dynamic>{'limit': 12},
         'ephemeral': <String, dynamic>{'types': <String>[]},
         'account_data': <String, dynamic>{'types': <String>[]},
       },
@@ -213,53 +221,34 @@ class MatrixClientService {
         final roomId = entry.key;
         final roomData = _asMap(entry.value);
         final previous = _roomCache[roomId];
-        final state = _asMap(roomData['state']);
-        final stateEvents = _asList(state['events']);
         final timeline = _asMap(roomData['timeline']);
         final timelineEvents = _asList(timeline['events']);
         final unread = _asMap(roomData['unread_notifications']);
 
-        String? name;
-        String? alias;
-        for (final rawEvent in stateEvents) {
-          final event = _asMap(rawEvent);
-          final type = event['type'];
-          final content = _asMap(event['content']);
-          if (type == 'm.room.name') {
-            final value = content['name'];
-            if (value is String && value.trim().isNotEmpty) {
-              name = value.trim();
-            }
-          } else if (type == 'm.room.canonical_alias') {
-            final value = content['alias'];
-            if (value is String && value.trim().isNotEmpty) {
-              alias = value.trim();
-            }
-          }
-        }
+        final metadata = resolveMatrixRoomMetadata(
+          roomId: roomId,
+          roomData: roomData,
+          previousName: previous?.name,
+          previousEncrypted: previous?.encrypted ?? false,
+        );
 
         MatrixMessage? lastMessage = previous?.lastMessage;
         if (timelineEvents.isNotEmpty) {
-          for (final rawEvent in timelineEvents.reversed) {
-            final parsed = _parseMessage(
-              _asMap(rawEvent),
-              allowUnsupported: true,
-            );
-            if (parsed != null) {
-              lastMessage = parsed;
-              break;
-            }
+          final reduced = _timelineReducer.reduce(timelineEvents);
+          if (reduced.isNotEmpty) {
+            lastMessage = MatrixMessage.fromReduced(reduced.last);
           }
         }
 
         final hasUnreadCount = unread.containsKey('notification_count');
         _roomCache[roomId] = MatrixRoomSummary(
           roomId: roomId,
-          name: name ?? alias ?? previous?.name ?? roomId,
+          name: metadata.name,
           lastMessage: lastMessage,
           unreadCount: hasUnreadCount
               ? _asInt(unread['notification_count'])
               : previous?.unreadCount ?? 0,
+          encrypted: metadata.encrypted,
         );
       }
 
@@ -284,9 +273,13 @@ class MatrixClientService {
     }
   }
 
-  Future<List<MatrixMessage>> loadMessages(
+  /// Loads a page of room events and returns Matrix's backwards-pagination
+  /// token. Relation events are reduced into their target messages so edits and
+  /// reactions do not appear as standalone timeline rows.
+  Future<MatrixMessagePage> loadMessagePage(
     String roomId, {
     int limit = 50,
+    String? from,
   }) async {
     final current = _requireSession();
     final encodedRoomId = Uri.encodeComponent(roomId);
@@ -297,26 +290,33 @@ class MatrixClientService {
         queryParameters: <String, dynamic>{
           'dir': 'b',
           'limit': limit.clamp(1, 100),
+          if (from != null && from.isNotEmpty) 'from': from,
         },
         options: _authorizedOptions(current),
       );
       final data = _asMap(response.data);
       final chunk = _asList(data['chunk']);
-      final messages = <MatrixMessage>[];
+      final reduced = _timelineReducer.reduce(chunk);
+      final end = data['end'];
 
-      for (final rawEvent in chunk) {
-        final parsed = _parseMessage(
-          _asMap(rawEvent),
-          allowUnsupported: false,
-        );
-        if (parsed != null) messages.add(parsed);
-      }
-
-      // /messages with dir=b returns newest first; the UI renders oldest first.
-      return messages.reversed.toList(growable: false);
+      return MatrixMessagePage(
+        messages: reduced
+            .map(MatrixMessage.fromReduced)
+            .toList(growable: false),
+        endToken: end is String && end.isNotEmpty ? end : null,
+      );
     } on DioException catch (error) {
       throw MatrixClientException(_matrixErrorMessage(error));
     }
+  }
+
+  /// Compatibility wrapper for callers that only need the newest page.
+  Future<List<MatrixMessage>> loadMessages(
+    String roomId, {
+    int limit = 50,
+  }) async {
+    final page = await loadMessagePage(roomId, limit: limit);
+    return page.messages;
   }
 
   Future<void> sendText(String roomId, String body) async {
@@ -448,63 +448,6 @@ class MatrixClientService {
     );
   }
 
-  MatrixMessage? _parseMessage(
-    Map<String, dynamic> event, {
-    required bool allowUnsupported,
-  }) {
-    final type = event['type'];
-    final sender = event['sender'] as String? ?? 'unknown';
-    final timestamp = DateTime.fromMillisecondsSinceEpoch(
-      _asInt(event['origin_server_ts']),
-    );
-    final eventId = event['event_id'] as String? ??
-        '${sender}_${timestamp.microsecondsSinceEpoch}';
-
-    if (type == 'm.room.encrypted') {
-      return MatrixMessage(
-        eventId: eventId,
-        sender: sender,
-        body: 'Encrypted message (E2EE is not enabled in this experiment yet)',
-        timestamp: timestamp,
-        encrypted: true,
-      );
-    }
-
-    if (type != 'm.room.message') {
-      return allowUnsupported
-          ? MatrixMessage(
-              eventId: eventId,
-              sender: sender,
-              body: 'Room activity',
-              timestamp: timestamp,
-            )
-          : null;
-    }
-
-    final content = _asMap(event['content']);
-    final msgType = content['msgtype'] as String?;
-    final body = content['body'] as String?;
-    if (body == null || body.isEmpty) return null;
-
-    if (msgType != 'm.text' && msgType != 'm.notice' && msgType != 'm.emote') {
-      return MatrixMessage(
-        eventId: eventId,
-        sender: sender,
-        body: allowUnsupported ? '[$msgType] $body' : body,
-        timestamp: timestamp,
-        msgType: msgType,
-      );
-    }
-
-    return MatrixMessage(
-      eventId: eventId,
-      sender: sender,
-      body: msgType == 'm.emote' ? '* $body' : body,
-      timestamp: timestamp,
-      msgType: msgType,
-    );
-  }
-
   static String _newTransactionId() =>
       'fluxdo-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
 
@@ -588,12 +531,24 @@ class MatrixRoomSummary {
     required this.name,
     this.lastMessage,
     this.unreadCount = 0,
+    this.encrypted = false,
   });
 
   final String roomId;
   final String name;
   final MatrixMessage? lastMessage;
   final int unreadCount;
+  final bool encrypted;
+}
+
+class MatrixMessagePage {
+  const MatrixMessagePage({
+    required this.messages,
+    this.endToken,
+  });
+
+  final List<MatrixMessage> messages;
+  final String? endToken;
 }
 
 class MatrixMessage {
@@ -604,7 +559,24 @@ class MatrixMessage {
     required this.timestamp,
     this.encrypted = false,
     this.msgType,
+    this.edited = false,
+    this.redacted = false,
+    this.reactions = const <String, int>{},
   });
+
+  factory MatrixMessage.fromReduced(MatrixReducedMessage message) {
+    return MatrixMessage(
+      eventId: message.eventId,
+      sender: message.senderId,
+      body: message.body,
+      timestamp: message.timestamp,
+      encrypted: message.encrypted,
+      msgType: message.msgType,
+      edited: message.edited,
+      redacted: message.redacted,
+      reactions: message.reactions,
+    );
+  }
 
   final String eventId;
   final String sender;
@@ -612,6 +584,9 @@ class MatrixMessage {
   final DateTime timestamp;
   final bool encrypted;
   final String? msgType;
+  final bool edited;
+  final bool redacted;
+  final Map<String, int> reactions;
 }
 
 class MatrixClientException implements Exception {
