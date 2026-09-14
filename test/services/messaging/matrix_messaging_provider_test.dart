@@ -97,7 +97,13 @@ class _FakeMatrixClientService extends MatrixClientService {
       ];
 
   @override
-  Future<void> sendText(String roomId, String body) async {
+  Future<void> sendText(
+    String roomId,
+    String body, {
+    String? replyToEventId,
+    String? threadRootEventId,
+    bool threadFallback = false,
+  }) async {
     sentText = (roomId, body);
   }
 
