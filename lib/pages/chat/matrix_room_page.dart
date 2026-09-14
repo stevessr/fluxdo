@@ -18,6 +18,8 @@ class MatrixRoomPage extends StatefulWidget {
   State<MatrixRoomPage> createState() => _MatrixRoomPageState();
 }
 
+enum _MessageAction { reply, thread, reaction }
+
 class _MatrixRoomPageState extends State<MatrixRoomPage>
     with WidgetsBindingObserver {
   static const Duration _typingIdleDelay = Duration(seconds: 5);
@@ -46,6 +48,12 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   String? _error;
   String? _nextOlderToken;
   List<MatrixMessage> _messages = const <MatrixMessage>[];
+
+  MatrixMessage? _replyTarget;
+  String? _composerThreadRootEventId;
+  bool _composerThreadFallback = false;
+
+  bool get _sendingDisabled => widget.room.encrypted || _sending;
 
   @override
   void initState() {
@@ -214,6 +222,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   }
 
   void _onComposerChanged(String value) {
+    if (widget.room.encrypted) return;
     _typingStopTimer?.cancel();
     if (value.trim().isEmpty) {
       unawaited(_setTyping(false));
@@ -230,7 +239,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   }
 
   Future<void> _setTyping(bool typing) async {
-    if (_typingSent == typing) return;
+    if (widget.room.encrypted || _typingSent == typing) return;
     _typingSent = typing;
     try {
       await widget.client.setTyping(
@@ -244,14 +253,23 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
 
   Future<void> _send() async {
     final text = _composerController.text.trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty || _sendingDisabled) return;
 
     _typingStopTimer?.cancel();
     unawaited(_setTyping(false));
     setState(() => _sending = true);
     try {
-      await widget.client.sendText(widget.room.roomId, text);
+      await widget.client.sendText(
+        widget.room.roomId,
+        text,
+        replyToEventId: _replyTarget?.eventId,
+        threadRootEventId: _composerThreadRootEventId,
+        threadFallback: _composerThreadFallback,
+      );
       _composerController.clear();
+      if (mounted) {
+        setState(_clearComposerRelation);
+      }
       await _loadLatest(
         showSpinner: false,
         preservePaginationCursor: true,
@@ -264,8 +282,83 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
     }
   }
 
+  void _clearComposerRelation() {
+    _replyTarget = null;
+    _composerThreadRootEventId = null;
+    _composerThreadFallback = false;
+  }
+
+  void _prepareReply(MatrixMessage message) {
+    if (widget.room.encrypted || message.encrypted || message.redacted) return;
+    setState(() {
+      _replyTarget = message;
+      // Replying to an event already inside a thread should remain inside the
+      // same thread. This is a genuine threaded reply, not a fallback relation.
+      _composerThreadRootEventId = message.threadRootEventId;
+      _composerThreadFallback = false;
+    });
+  }
+
+  void _prepareThreadReply(MatrixMessage message) {
+    if (widget.room.encrypted || message.encrypted || message.redacted) return;
+    setState(() {
+      _replyTarget = message;
+      _composerThreadRootEventId =
+          message.threadRootEventId ?? message.eventId;
+      // The reply target gives non-thread-aware clients continuity while the
+      // m.thread relation always points at the actual root.
+      _composerThreadFallback = true;
+    });
+  }
+
+  Future<void> _showMessageActions(MatrixMessage message) async {
+    if (widget.room.encrypted || message.encrypted || message.redacted) return;
+    final action = await showModalBottomSheet<_MessageAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.reply_rounded),
+              title: const Text('回复'),
+              subtitle: message.threadRootEventId == null
+                  ? const Text('发送普通 Matrix rich reply')
+                  : const Text('在当前 thread 内回复此消息'),
+              onTap: () => Navigator.of(context).pop(_MessageAction.reply),
+            ),
+            ListTile(
+              leading: const Icon(Icons.forum_outlined),
+              title: Text(
+                message.threadRootEventId == null ? '开启线程' : '继续线程',
+              ),
+              subtitle: const Text('使用 m.thread，并附带兼容 reply fallback'),
+              onTap: () => Navigator.of(context).pop(_MessageAction.thread),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_reaction_outlined),
+              title: const Text('Reaction'),
+              onTap: () => Navigator.of(context).pop(_MessageAction.reaction),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+
+    switch (action) {
+      case _MessageAction.reply:
+        _prepareReply(message);
+      case _MessageAction.thread:
+        _prepareThreadReply(message);
+      case _MessageAction.reaction:
+        await _showReactionPicker(message);
+    }
+  }
+
   Future<void> _showReactionPicker(MatrixMessage message) async {
-    if (message.encrypted || message.redacted) return;
+    if (widget.room.encrypted || message.encrypted || message.redacted) return;
     final reaction = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -346,6 +439,9 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
     final hasOlder = !_historyExhausted &&
         _nextOlderToken != null &&
         _nextOlderToken!.isNotEmpty;
+    final messagesById = <String, MatrixMessage>{
+      for (final message in _messages) message.eventId: message,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -392,7 +488,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '此房间启用了 E2EE；轻量 REST provider 尚未解密，密文消息会明确显示为占位符。',
+                        '此房间启用了 E2EE；轻量 REST provider 尚未解密。为避免泄漏明文，发送、回复、thread、reaction 与 typing 已禁用。',
                         style: TextStyle(fontSize: 12),
                       ),
                     ),
@@ -456,12 +552,19 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
                         final messageIndex = index - (hasOlder ? 1 : 0);
                         final message = _messages[messageIndex];
                         final own = message.sender == currentUserId;
+                        final replyTarget = message.replyToEventId == null
+                            ? null
+                            : messagesById[message.replyToEventId];
                         return _MatrixMessageBubble(
                           message: message,
                           own: own,
-                          onLongPress: message.encrypted || message.redacted
+                          replyTarget: replyTarget,
+                          onLongPress:
+                              widget.room.encrypted ||
+                                  message.encrypted ||
+                                  message.redacted
                               ? null
-                              : () => _showReactionPicker(message),
+                              : () => _showMessageActions(message),
                         );
                       },
                     ),
@@ -470,34 +573,49 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
           SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 8, 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              padding: const EdgeInsets.fromLTRB(12, 4, 8, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      controller: _composerController,
-                      minLines: 1,
-                      maxLines: 6,
-                      textInputAction: TextInputAction.newline,
-                      onChanged: _onComposerChanged,
-                      decoration: const InputDecoration(
-                        hintText: '发送 Matrix 消息…',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
+                  if (_replyTarget != null && !widget.room.encrypted)
+                    _ComposerRelationBar(
+                      message: _replyTarget!,
+                      threadRootEventId: _composerThreadRootEventId,
+                      threadFallback: _composerThreadFallback,
+                      onClear: () => setState(_clearComposerRelation),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  IconButton.filled(
-                    tooltip: '发送',
-                    onPressed: _sending ? null : _send,
-                    icon: _sending
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send_rounded),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                          controller: _composerController,
+                          enabled: !widget.room.encrypted,
+                          minLines: 1,
+                          maxLines: 6,
+                          textInputAction: TextInputAction.newline,
+                          onChanged: _onComposerChanged,
+                          decoration: InputDecoration(
+                            hintText: widget.room.encrypted
+                                ? 'E2EE provider 接入前禁止明文发送'
+                                : '发送 Matrix 消息…',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton.filled(
+                        tooltip: widget.room.encrypted ? 'E2EE 尚未启用' : '发送',
+                        onPressed: _sendingDisabled ? null : _send,
+                        icon: _sending
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.send_rounded),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -509,15 +627,83 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   }
 }
 
+class _ComposerRelationBar extends StatelessWidget {
+  const _ComposerRelationBar({
+    required this.message,
+    required this.threadRootEventId,
+    required this.threadFallback,
+    required this.onClear,
+  });
+
+  final MatrixMessage message;
+  final String? threadRootEventId;
+  final bool threadFallback;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final inThread = threadRootEventId != null;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            inThread ? Icons.forum_outlined : Icons.reply_rounded,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  inThread
+                      ? threadFallback
+                            ? '在线程中回复 ${message.sender}'
+                            : '回复 thread 中的 ${message.sender}'
+                      : '回复 ${message.sender}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                Text(
+                  message.body,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: '取消关系',
+            onPressed: onClear,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close_rounded, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MatrixMessageBubble extends StatelessWidget {
   const _MatrixMessageBubble({
     required this.message,
     required this.own,
+    this.replyTarget,
     this.onLongPress,
   });
 
   final MatrixMessage message;
   final bool own;
+  final MatrixMessage? replyTarget;
   final VoidCallback? onLongPress;
 
   @override
@@ -553,6 +739,31 @@ class _MatrixMessageBubble extends StatelessWidget {
                   ),
                 ),
               if (!own) const SizedBox(height: 3),
+              if (message.replyToEventId != null) ...<Widget>[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border(
+                      left: BorderSide(color: colorScheme.primary, width: 3),
+                    ),
+                  ),
+                  child: Text(
+                    replyTarget == null
+                        ? '↪ ${message.replyToEventId}'
+                        : '↪ ${replyTarget!.sender}: ${replyTarget!.body}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
               Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -567,6 +778,24 @@ class _MatrixMessageBubble extends StatelessWidget {
                   Flexible(child: Text(message.body)),
                 ],
               ),
+              if (message.isThreadReply || message.threadCount > 0) ...<Widget>[
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 6,
+                  children: <Widget>[
+                    if (message.isThreadReply)
+                      _RelationChip(
+                        icon: Icons.forum_outlined,
+                        label: 'Thread',
+                      ),
+                    if (message.threadCount > 0)
+                      _RelationChip(
+                        icon: Icons.forum_rounded,
+                        label: '${message.threadCount} 条线程回复',
+                      ),
+                  ],
+                ),
+              ],
               if (reactionEntries.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 7),
                 Wrap(
@@ -613,11 +842,29 @@ class _MatrixMessageBubble extends StatelessWidget {
   }
 }
 
-@Deprecated('Use MatrixRoomPage')
-class MatrixRoomPageV2 extends MatrixRoomPage {
-  const MatrixRoomPageV2({
-    super.key,
-    required super.client,
-    required super.room,
-  });
+class _RelationChip extends StatelessWidget {
+  const _RelationChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: colors.secondaryContainer.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, size: 13),
+          const SizedBox(width: 4),
+          Text(label, style: Theme.of(context).textTheme.labelSmall),
+        ],
+      ),
+    );
+  }
 }
