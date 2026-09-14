@@ -25,6 +25,7 @@ workspace:
   - packages/m3e_ui
   - packages/pangutext
   - packages/paper_shaders
+
 dependencies:
   flutter:
     sdk: flutter
@@ -180,7 +181,7 @@ dependencies:
   screen_brightness: ^2.1.11 # 播放器竖滑手势调 app 亮度(仅移动端调用)
   just_audio: ^0.10.6 # 原生上传音频播放(FluxdoRender audioBuilder)
   # just_audio 本身不包含 Windows/Linux 实现。
-  # - Windows: MediaKit(libmpv-2.dll 随 media_kit_libs_windows_video
+  # - Windows: media_kit 后端(libmpv-2.dll 随 media_kit_libs_windows_video
   #   打包,与视频共用)。
   # - Linux: 自写 GStreamer 桥(services/audio/just_audio_gst.dart),经
   #   audioplayers_linux 走 GNOME runtime 自带的 GStreamer。音频不改走
@@ -254,3 +255,48 @@ flutter:
         # Flutter 3.41+ FontWeight 会映射到 wght variation axis，因此即使
         # 不显式声明 weight，TextStyle(fontWeight: FontWeight.wXXX) 也能精准命中。
         - asset: assets/fonts/MiSansVF.ttf
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
