@@ -12,6 +12,7 @@ on:
       - 'lib/pages/chat/**'
       - 'lib/services/matrix_client_service.dart'
       - 'lib/widgets/markdown_editor/**'
+      - 'test/pages/chat/**'
       - 'tool/gen_l10n.dart'
       - 'tool/gen_slang_compat.dart'
       - 'tool/project_prep.dart'
@@ -32,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -58,9 +59,11 @@ jobs:
           dart format
           lib/navigation/nav_entry_registry.dart
           lib/pages/chat/chat_hub_page.dart
+          lib/pages/chat/chat_protocol.dart
           lib/pages/chat/matrix_chat_page.dart
           lib/pages/chat/telegram_chat_page.dart
           lib/services/matrix_client_service.dart
+          test/pages/chat/chat_protocol_test.dart
 
       # Analyze the app itself. The repository also contains standalone
       # DevTools/plugin example packages with their own dependency lifecycle;
@@ -68,12 +71,15 @@ jobs:
       - name: Analyze app sources
         run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
 
+      - name: Test protocol hub persistence
+        run: flutter test test/pages/chat/chat_protocol_test.dart --no-pub
+
   android-smoke:
     name: Flutter 3.47 Android arm64 smoke
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
