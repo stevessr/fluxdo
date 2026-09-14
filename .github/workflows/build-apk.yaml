@@ -33,8 +33,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: '3.44.0'
-  # 与 Flutter 3.44 默认 NDK 对齐（flutter.ndkVersion = 28.2.13676358）
+  FLUTTER_VERSION: '3.47.2'
+  # 与 Flutter 3.47 默认 NDK 对齐（flutter.ndkVersion = 28.2.13676358）
   # 旧值 27.3 会导致：先装 27.3，Gradle 再装 28.2，甚至再装 27.0
   ANDROID_NDK_VERSION: '28.2.13676358'
 
