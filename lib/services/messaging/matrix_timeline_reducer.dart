@@ -3,7 +3,7 @@
 ///
 /// It deliberately does not depend on Dio, Flutter, or matrix-dart-sdk so the
 /// same semantics can be exercised by the lightweight REST adapter and by a
-/// future Extera-backed provider.
+/// future SDK-backed provider.
 class MatrixReducedMessage {
   const MatrixReducedMessage({
     required this.eventId,
@@ -15,6 +15,9 @@ class MatrixReducedMessage {
     this.edited = false,
     this.redacted = false,
     this.reactions = const <String, int>{},
+    this.replyToEventId,
+    this.threadRootEventId,
+    this.threadCount = 0,
   });
 
   final String eventId;
@@ -27,12 +30,27 @@ class MatrixReducedMessage {
   final bool redacted;
   final Map<String, int> reactions;
 
+  /// Event referenced by a genuine rich reply. Thread fallback replies with
+  /// `is_falling_back: true` are intentionally excluded from this field.
+  final String? replyToEventId;
+
+  /// Root event for an `m.thread` relation, or null for the main timeline.
+  final String? threadRootEventId;
+
+  /// Bundled server-side count when this event is a thread root.
+  final int threadCount;
+
+  bool get isThreadReply => threadRootEventId != null;
+
   MatrixReducedMessage copyWith({
     String? body,
     String? msgType,
     bool? edited,
     bool? redacted,
     Map<String, int>? reactions,
+    String? replyToEventId,
+    String? threadRootEventId,
+    int? threadCount,
   }) {
     return MatrixReducedMessage(
       eventId: eventId,
@@ -44,6 +62,9 @@ class MatrixReducedMessage {
       edited: edited ?? this.edited,
       redacted: redacted ?? this.redacted,
       reactions: reactions ?? this.reactions,
+      replyToEventId: replyToEventId ?? this.replyToEventId,
+      threadRootEventId: threadRootEventId ?? this.threadRootEventId,
+      threadCount: threadCount ?? this.threadCount,
     );
   }
 }
@@ -71,8 +92,10 @@ class MatrixTimelineReducer {
     final replacements = <String, _Replacement>{};
     final reactions = <String, Map<String, Set<String>>>{};
 
-    // First collect original messages. Relation events are handled separately
-    // so an edit or reaction never becomes a fake timeline message/room preview.
+    // First collect original messages. Replacement and annotation relation
+    // events are handled separately so they never become fake timeline rows.
+    // Thread events remain visible in this lightweight client, but are tagged
+    // so the UI can distinguish them from the main timeline.
     for (final event in events) {
       final eventId = _eventId(event);
       if (eventId.isEmpty) continue;
@@ -85,6 +108,7 @@ class MatrixTimelineReducer {
           body: 'Encrypted message (E2EE is not enabled in this experiment yet)',
           timestamp: _timestamp(event),
           encrypted: true,
+          threadCount: _bundledThreadCount(event),
         );
         continue;
       }
@@ -97,12 +121,26 @@ class MatrixTimelineReducer {
       final body = content['body'];
       if (body is! String || body.isEmpty) continue;
       final msgType = content['msgtype'] as String?;
+      final threadRoot = relation['rel_type'] == 'm.thread'
+          ? _nonEmptyString(relation['event_id'])
+          : null;
+      final reply = _asMap(relation['m.in_reply_to']);
+      final replyTarget = _nonEmptyString(reply['event_id']);
+      final isThreadFallback =
+          threadRoot != null && relation['is_falling_back'] == true;
+      final renderedBody = replyTarget == null
+          ? body
+          : _stripLegacyReplyFallback(body);
+
       messages[eventId] = MatrixReducedMessage(
         eventId: eventId,
         senderId: _sender(event),
-        body: msgType == 'm.emote' ? '* $body' : body,
+        body: msgType == 'm.emote' ? '* $renderedBody' : renderedBody,
         timestamp: _timestamp(event),
         msgType: msgType,
+        replyToEventId: isThreadFallback ? null : replyTarget,
+        threadRootEventId: threadRoot,
+        threadCount: _bundledThreadCount(event),
       );
     }
 
@@ -110,10 +148,18 @@ class MatrixTimelineReducer {
     for (final eventId in redactedEventIds) {
       final original = messages[eventId];
       if (original == null) continue;
-      messages[eventId] = original.copyWith(
+      messages[eventId] = MatrixReducedMessage(
+        eventId: original.eventId,
+        senderId: original.senderId,
         body: 'Message redacted',
+        timestamp: original.timestamp,
+        msgType: original.msgType,
+        encrypted: original.encrypted,
+        edited: original.edited,
         redacted: true,
         reactions: const <String, int>{},
+        threadRootEventId: original.threadRootEventId,
+        threadCount: original.threadCount,
       );
     }
 
@@ -235,6 +281,31 @@ class MatrixTimelineReducer {
       });
     return result;
   }
+
+  static String _stripLegacyReplyFallback(String body) {
+    final lines = body.split('\n');
+    var index = 0;
+    while (index < lines.length && lines[index].startsWith('> ')) {
+      index++;
+    }
+    if (index > 0 && index < lines.length && lines[index].isEmpty) {
+      index++;
+    }
+    return lines.sublist(index).join('\n');
+  }
+
+  static int _bundledThreadCount(Map<String, dynamic> event) {
+    final unsigned = _asMap(event['unsigned']);
+    final relations = _asMap(unsigned['m.relations']);
+    final thread = _asMap(relations['m.thread']);
+    final value = thread['count'];
+    if (value is int) return value < 0 ? 0 : value;
+    if (value is num) return value < 0 ? 0 : value.toInt();
+    return 0;
+  }
+
+  static String? _nonEmptyString(dynamic value) =>
+      value is String && value.isNotEmpty ? value : null;
 
   static String _eventId(Map<String, dynamic> event) =>
       event['event_id'] as String? ?? '';
