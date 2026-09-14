@@ -1,13 +1,14 @@
-/// Builds the content object for an unencrypted Matrix `m.room.message` text
-/// event while keeping reply/thread relation semantics in one testable place.
-Map<String, dynamic> buildMatrixTextMessageContent(
-  String body, {
+/// Applies Matrix reply/thread relation metadata to [content].
+///
+/// Rich replies intentionally do not use `rel_type`. Thread events always
+/// point at the thread root and can optionally include a rich-reply fallback
+/// for clients which do not render threads.
+void attachMatrixRelation(
+  Map<String, dynamic> content, {
   String? replyToEventId,
   String? threadRootEventId,
   bool threadFallback = false,
 }) {
-  final content = <String, dynamic>{'msgtype': 'm.text', 'body': body};
-
   if (threadRootEventId != null && threadRootEventId.isNotEmpty) {
     content['m.relates_to'] = <String, dynamic>{
       'rel_type': 'm.thread',
@@ -17,11 +18,26 @@ Map<String, dynamic> buildMatrixTextMessageContent(
       if (threadFallback) 'is_falling_back': true,
     };
   } else if (replyToEventId != null && replyToEventId.isNotEmpty) {
-    // Rich replies are special: they intentionally do not use rel_type.
     content['m.relates_to'] = <String, dynamic>{
       'm.in_reply_to': <String, dynamic>{'event_id': replyToEventId},
     };
   }
+}
 
+/// Builds the content object for an unencrypted Matrix `m.room.message` text
+/// event while keeping reply/thread relation semantics in one testable place.
+Map<String, dynamic> buildMatrixTextMessageContent(
+  String body, {
+  String? replyToEventId,
+  String? threadRootEventId,
+  bool threadFallback = false,
+}) {
+  final content = <String, dynamic>{'msgtype': 'm.text', 'body': body};
+  attachMatrixRelation(
+    content,
+    replyToEventId: replyToEventId,
+    threadRootEventId: threadRootEventId,
+    threadFallback: threadFallback,
+  );
   return content;
 }
