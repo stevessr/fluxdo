@@ -11,6 +11,10 @@ on:
       - 'lib/navigation/nav_entry_registry.dart'
       - 'lib/pages/chat/**'
       - 'lib/services/matrix_client_service.dart'
+      - 'lib/widgets/markdown_editor/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/gen_slang_compat.dart'
+      - 'tool/project_prep.dart'
       - '.github/workflows/experimental-matrix-telegram.yaml'
   workflow_dispatch:
 
@@ -24,7 +28,7 @@ env:
 
 jobs:
   analyze:
-    name: Flutter 3.47 analyze
+    name: Flutter 3.47 app analyze
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -44,12 +48,11 @@ jobs:
           flutter --version
           dart --version
 
-      - name: Resolve dependencies
-        run: flutter pub get
+      - name: Prepare generated app sources
+        run: dart tool/project_prep.dart test
 
-      # Keep formatter drift from hiding real Flutter/Dart compatibility errors.
-      # The branch is experimental, so normalize a disposable CI workspace first
-      # and let the analyzer/build be the hard compatibility gates.
+      # Formatter drift is useful migration feedback, but it should not hide
+      # actual Flutter/Dart compatibility diagnostics in an experimental branch.
       - name: Normalize experimental formatting
         run: >-
           dart format
@@ -59,12 +62,14 @@ jobs:
           lib/pages/chat/telegram_chat_page.dart
           lib/services/matrix_client_service.dart
 
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      # Analyze the app itself. The repository also contains standalone
+      # DevTools/plugin example packages with their own dependency lifecycle;
+      # root-wide analysis mixes those unrelated packages into this migration.
+      - name: Analyze app sources
+        run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
 
   android-smoke:
     name: Flutter 3.47 Android arm64 smoke
-    needs: analyze
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -132,8 +137,8 @@ jobs:
             fi
           done
 
-      - name: Resolve dependencies
-        run: flutter pub get
+      - name: Prepare generated app sources
+        run: dart tool/project_prep.dart app
 
       - name: Build debug APK
         run: flutter build apk --debug --target-platform android-arm64 --no-pub
