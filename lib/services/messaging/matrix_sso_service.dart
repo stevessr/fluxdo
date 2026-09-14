@@ -49,12 +49,12 @@ class MatrixSsoException implements Exception {
   String toString() => message;
 }
 
-/// Small SSO-specific companion to [MatrixClientService].
+/// Small SSO-specific companion to the lightweight Matrix REST client.
 ///
 /// It deliberately owns only login-flow discovery, SSO redirect construction,
 /// and one-time `m.login.token` exchange. Session verification/persistence stays
-/// in MatrixClientService so SSO and access-token import converge on the same
-/// storage path.
+/// in the main client so SSO and access-token import converge on one storage
+/// path.
 class MatrixSsoService {
   MatrixSsoService({Dio? dio}) : _dio = dio ?? Dio();
 
@@ -132,7 +132,6 @@ class MatrixSsoService {
       path: '${base.path}$suffix'.replaceAll('//', '/'),
       queryParameters: <String, String>{
         'redirectUrl': callbackUri.toString(),
-        'action': 'login',
       },
     );
   }
