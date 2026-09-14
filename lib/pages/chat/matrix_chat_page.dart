@@ -1,8 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../services/matrix_client_service.dart';
+import 'matrix_room_page.dart';
 
 class MatrixChatPage extends StatefulWidget {
   const MatrixChatPage({super.key});
@@ -87,7 +86,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
       _passwordController.clear();
       _tokenController.clear();
       setState(() => _session = session);
-      await _loadRooms(showSpinner: false);
+      await _loadRooms(showSpinner: false, forceFull: true);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -96,7 +95,10 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
     }
   }
 
-  Future<void> _loadRooms({bool showSpinner = true}) async {
+  Future<void> _loadRooms({
+    bool showSpinner = true,
+    bool forceFull = false,
+  }) async {
     if (_session == null) return;
     if (showSpinner && mounted) {
       setState(() {
@@ -106,9 +108,12 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
     }
 
     try {
-      final rooms = await _client.loadRooms();
+      final rooms = await _client.loadRooms(forceFull: forceFull);
       if (!mounted) return;
-      setState(() => _rooms = rooms);
+      setState(() {
+        _rooms = rooms;
+        _error = null;
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -127,6 +132,15 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
     });
   }
 
+  Future<void> _handleMenu(String value) async {
+    switch (value) {
+      case 'full-sync':
+        await _loadRooms(forceFull: true);
+      case 'logout':
+        await _logout();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading && _session == null) {
@@ -141,14 +155,12 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
         title: const Text('Matrix'),
         actions: <Widget>[
           IconButton(
-            tooltip: '增量刷新房间',
+            tooltip: '增量同步',
             onPressed: _loading ? null : _loadRooms,
             icon: const Icon(Icons.refresh_rounded),
           ),
           PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'logout') _logout();
-            },
+            onSelected: (value) => _handleMenu(value),
             itemBuilder: (context) => <PopupMenuEntry<String>>[
               PopupMenuItem<String>(
                 enabled: false,
@@ -160,8 +172,21 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
               ),
               const PopupMenuDivider(),
               const PopupMenuItem<String>(
+                value: 'full-sync',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.sync_rounded),
+                  title: Text('重建房间同步缓存'),
+                  subtitle: Text('丢弃 next_batch 并重新执行初始 /sync'),
+                ),
+              ),
+              const PopupMenuItem<String>(
                 value: 'logout',
-                child: Text('退出 Matrix'),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.logout_rounded),
+                  title: Text('退出 Matrix'),
+                ),
               ),
             ],
           ),
@@ -179,7 +204,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '实验性 Matrix：房间列表使用增量 /sync；支持文本、已读、typing 与 reaction。E2EE 暂显示占位符。',
+                      '实验性 Matrix：增量 /sync、历史分页、已读、typing、reaction 聚合与 edit 已启用；E2EE 仍等待 SDK provider。',
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
@@ -229,10 +254,20 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                                   : room.name.characters.first.toUpperCase(),
                             ),
                           ),
-                          title: Text(
-                            room.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          title: Row(
+                            children: <Widget>[
+                              if (room.encrypted) ...<Widget>[
+                                const Icon(Icons.lock_outline_rounded, size: 15),
+                                const SizedBox(width: 5),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  room.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                           subtitle: last == null
                               ? Text(
@@ -240,20 +275,10 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 )
-                              : Row(
-                                  children: <Widget>[
-                                    if (last.encrypted) ...<Widget>[
-                                      const Icon(Icons.lock_outline, size: 14),
-                                      const SizedBox(width: 4),
-                                    ],
-                                    Expanded(
-                                      child: Text(
-                                        last.body,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
+                              : Text(
+                                  last.body,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                           trailing: room.unreadCount > 0
                               ? Badge(
@@ -267,7 +292,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                           onTap: () async {
                             await Navigator.of(context).push<void>(
                               MaterialPageRoute<void>(
-                                builder: (_) => MatrixRoomPage(
+                                builder: (_) => MatrixRoomPageV2(
                                   client: _client,
                                   room: room,
                                 ),
@@ -409,385 +434,6 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                 ),
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class MatrixRoomPage extends StatefulWidget {
-  const MatrixRoomPage({
-    super.key,
-    required this.client,
-    required this.room,
-  });
-
-  final MatrixClientService client;
-  final MatrixRoomSummary room;
-
-  @override
-  State<MatrixRoomPage> createState() => _MatrixRoomPageState();
-}
-
-class _MatrixRoomPageState extends State<MatrixRoomPage> {
-  static const Duration _typingIdleDelay = Duration(seconds: 5);
-  static const List<String> _quickReactions = <String>[
-    '👍',
-    '❤️',
-    '😂',
-    '🎉',
-    '👀',
-    '🔥',
-  ];
-
-  final TextEditingController _composerController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-
-  Timer? _typingStopTimer;
-  bool _typingSent = false;
-  bool _loading = true;
-  bool _sending = false;
-  String? _error;
-  List<MatrixMessage> _messages = const <MatrixMessage>[];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMessages();
-  }
-
-  @override
-  void dispose() {
-    _typingStopTimer?.cancel();
-    if (_typingSent) {
-      unawaited(_setTyping(false));
-    }
-    _composerController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadMessages() async {
-    try {
-      final messages = await widget.client.loadMessages(widget.room.roomId);
-      if (!mounted) return;
-      setState(() {
-        _messages = messages;
-        _error = null;
-      });
-      if (messages.isNotEmpty) {
-        unawaited(_markRead(messages.last.eventId));
-      }
-      _scrollToBottom();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _markRead(String eventId) async {
-    try {
-      await widget.client.markRead(widget.room.roomId, eventId);
-    } catch (_) {
-      // Read receipts are best-effort and should not block viewing a room.
-    }
-  }
-
-  void _onComposerChanged(String value) {
-    _typingStopTimer?.cancel();
-    if (value.trim().isEmpty) {
-      unawaited(_setTyping(false));
-      return;
-    }
-
-    if (!_typingSent) {
-      unawaited(_setTyping(true));
-    }
-    _typingStopTimer = Timer(
-      _typingIdleDelay,
-      () => unawaited(_setTyping(false)),
-    );
-  }
-
-  Future<void> _setTyping(bool typing) async {
-    if (_typingSent == typing) return;
-    _typingSent = typing;
-    try {
-      await widget.client.setTyping(
-        widget.room.roomId,
-        typing: typing,
-      );
-    } catch (_) {
-      // Typing is ephemeral. Network failures should not disturb composing.
-    }
-  }
-
-  Future<void> _send() async {
-    final text = _composerController.text.trim();
-    if (text.isEmpty || _sending) return;
-
-    _typingStopTimer?.cancel();
-    unawaited(_setTyping(false));
-    setState(() => _sending = true);
-    try {
-      await widget.client.sendText(widget.room.roomId, text);
-      _composerController.clear();
-      await _loadMessages();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  Future<void> _showReactionPicker(MatrixMessage message) async {
-    if (message.encrypted) return;
-    final reaction = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text(
-                '发送 Reaction',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _quickReactions
-                    .map(
-                      (emoji) => ActionChip(
-                        label: Text(
-                          emoji,
-                          style: const TextStyle(fontSize: 22),
-                        ),
-                        onPressed: () => Navigator.of(context).pop(emoji),
-                      ),
-                    )
-                    .toList(growable: false),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                '当前实验 UI 只发送 m.reaction；服务端聚合计数展示将在 SDK/E2EE 层接入后补齐。',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (reaction == null || !mounted) return;
-
-    try {
-      await widget.client.sendReaction(
-        widget.room.roomId,
-        message.eventId,
-        reaction,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已发送 reaction $reaction')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
-    }
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final currentUserId = widget.client.session?.userId;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.room.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: <Widget>[
-          IconButton(
-            tooltip: '刷新',
-            onPressed: _loading
-                ? null
-                : () {
-                    setState(() => _loading = true);
-                    _loadMessages();
-                  },
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: Column(
-        children: <Widget>[
-          if (_error != null)
-            Material(
-              color: Theme.of(context).colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  children: <Widget>[
-                    const Icon(Icons.error_outline, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(_error!)),
-                  ],
-                ),
-              ),
-            ),
-          Expanded(
-            child: _loading && _messages.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-                    onRefresh: _loadMessages,
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 16,
-                      ),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, index) {
-                        final message = _messages[index];
-                        final own = message.sender == currentUserId;
-                        return _MatrixMessageBubble(
-                          message: message,
-                          own: own,
-                          onLongPress: message.encrypted
-                              ? null
-                              : () => _showReactionPicker(message),
-                        );
-                      },
-                    ),
-                  ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 8, 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      controller: _composerController,
-                      minLines: 1,
-                      maxLines: 6,
-                      textInputAction: TextInputAction.newline,
-                      onChanged: _onComposerChanged,
-                      decoration: const InputDecoration(
-                        hintText: '发送 Matrix 消息…',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  IconButton.filled(
-                    tooltip: '发送',
-                    onPressed: _sending ? null : _send,
-                    icon: _sending
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send_rounded),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MatrixMessageBubble extends StatelessWidget {
-  const _MatrixMessageBubble({
-    required this.message,
-    required this.own,
-    this.onLongPress,
-  });
-
-  final MatrixMessage message;
-  final bool own;
-  final VoidCallback? onLongPress;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final time = TimeOfDay.fromDateTime(message.timestamp).format(context);
-
-    return Align(
-      alignment: own ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onLongPress: onLongPress,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 560),
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: own
-                ? colorScheme.primaryContainer
-                : colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              if (!own)
-                Text(
-                  message.sender,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              if (!own) const SizedBox(height: 3),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  if (message.encrypted) ...<Widget>[
-                    const Icon(Icons.lock_outline_rounded, size: 16),
-                    const SizedBox(width: 5),
-                  ],
-                  Flexible(child: Text(message.body)),
-                ],
-              ),
-              const SizedBox(height: 3),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  time,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),
