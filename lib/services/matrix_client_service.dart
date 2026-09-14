@@ -32,6 +32,12 @@ class MatrixClientService {
   final Map<String, MatrixRoomSummary> _roomCache =
       <String, MatrixRoomSummary>{};
 
+  /// Raw history already loaded for each room. Keeping relation events across
+  /// page boundaries means an edit/reaction fetched on a newer page can still
+  /// be applied when its target message is fetched later from older history.
+  final Map<String, Map<String, Map<String, dynamic>>> _timelineEventCache =
+      <String, Map<String, Map<String, dynamic>>>{};
+
   MatrixSession? get session => _session;
   bool get isLoggedIn => _session != null;
 
@@ -254,6 +260,7 @@ class MatrixClientService {
 
       for (final roomId in left.keys) {
         _roomCache.remove(roomId);
+        _timelineEventCache.remove(roomId);
       }
 
       final nextBatch = data['next_batch'];
@@ -274,8 +281,10 @@ class MatrixClientService {
   }
 
   /// Loads a page of room events and returns Matrix's backwards-pagination
-  /// token. Relation events are reduced into their target messages so edits and
-  /// reactions do not appear as standalone timeline rows.
+  /// token. Relation events are accumulated per room and reduced together so
+  /// edits/reactions remain correct even when their target message crosses a
+  /// page boundary. [messages] therefore contains the accumulated loaded
+  /// timeline, not just the latest response chunk.
   Future<MatrixMessagePage> loadMessagePage(
     String roomId, {
     int limit = 50,
@@ -296,7 +305,19 @@ class MatrixClientService {
       );
       final data = _asMap(response.data);
       final chunk = _asList(data['chunk']);
-      final reduced = _timelineReducer.reduce(chunk);
+      final roomEvents = _timelineEventCache.putIfAbsent(
+        roomId,
+        () => <String, Map<String, dynamic>>{},
+      );
+      for (final rawEvent in chunk) {
+        final event = _asMap(rawEvent);
+        final eventId = event['event_id'];
+        if (eventId is String && eventId.isNotEmpty) {
+          roomEvents[eventId] = event;
+        }
+      }
+
+      final reduced = _timelineReducer.reduce(roomEvents.values);
       final end = data['end'];
 
       return MatrixMessagePage(
@@ -310,7 +331,7 @@ class MatrixClientService {
     }
   }
 
-  /// Compatibility wrapper for callers that only need the newest page.
+  /// Compatibility wrapper for callers that only need the newest loaded page.
   Future<List<MatrixMessage>> loadMessages(
     String roomId, {
     int limit = 50,
@@ -430,6 +451,7 @@ class MatrixClientService {
   void _resetSyncState() {
     _syncToken = null;
     _roomCache.clear();
+    _timelineEventCache.clear();
   }
 
   MatrixSession _requireSession() {
@@ -547,6 +569,7 @@ class MatrixMessagePage {
     this.endToken,
   });
 
+  /// All messages loaded for the room so far, after relation reduction.
   final List<MatrixMessage> messages;
   final String? endToken;
 }
