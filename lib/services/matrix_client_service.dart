@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Minimal Matrix Client-Server API adapter used by the experimental chat hub.
+/// Lightweight Matrix Client-Server API adapter used by the experimental chat
+/// hub.
 ///
-/// This intentionally stays dependency-light so Matrix can be tested without
-/// raising Fluxdo's Dart SDK constraint to match Extera's current Matrix SDK.
-/// It supports unencrypted rooms only; encrypted events are surfaced as
-/// placeholders instead of being silently discarded.
+/// The adapter deliberately keeps the dependency surface small while the
+/// branch validates the multi-protocol architecture. It supports unencrypted
+/// rooms and exposes encrypted events as placeholders. Room refreshes use the
+/// Matrix `/sync` next_batch token so subsequent refreshes only fetch deltas
+/// instead of re-downloading the full joined-room state.
 class MatrixClientService {
   MatrixClientService({
     Dio? dio,
@@ -22,6 +24,9 @@ class MatrixClientService {
   final FlutterSecureStorage _secureStorage;
 
   MatrixSession? _session;
+  String? _syncToken;
+  final Map<String, MatrixRoomSummary> _roomCache =
+      <String, MatrixRoomSummary>{};
 
   MatrixSession? get session => _session;
   bool get isLoggedIn => _session != null;
@@ -35,7 +40,14 @@ class MatrixClientService {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return null;
-      _session = MatrixSession.fromJson(decoded);
+      final restored = MatrixSession.fromJson(decoded);
+      if (restored.homeserver.isEmpty ||
+          restored.accessToken.isEmpty ||
+          restored.userId.isEmpty) {
+        throw const FormatException('Incomplete Matrix session');
+      }
+      _session = restored;
+      _resetSyncState();
       return _session;
     } catch (_) {
       await _secureStorage.delete(key: _sessionStorageKey);
@@ -86,44 +98,54 @@ class MatrixClientService {
 
   /// Saves an already-issued access token. This is useful for homeservers that
   /// disable password login and require SSO or external authentication.
+  ///
+  /// [userId] is optional because `/account/whoami` can provide the canonical
+  /// user ID. If supplied, it is verified against the token owner.
   Future<MatrixSession> loginWithAccessToken({
     required String homeserver,
-    required String userId,
+    String? userId,
     required String accessToken,
   }) async {
     final baseUrl = _normalizeHomeserver(homeserver);
-    final candidate = MatrixSession(
-      homeserver: baseUrl,
-      accessToken: accessToken.trim(),
-      userId: userId.trim(),
-    );
-
-    if (candidate.accessToken.isEmpty || candidate.userId.isEmpty) {
-      throw const MatrixClientException('User ID and access token are required.');
+    final normalizedToken = accessToken.trim();
+    if (normalizedToken.isEmpty) {
+      throw const MatrixClientException('Access token is required.');
     }
 
-    // Verify the token before persisting it.
+    final provisional = MatrixSession(
+      homeserver: baseUrl,
+      accessToken: normalizedToken,
+      userId: userId?.trim() ?? '',
+    );
+
     try {
       final response = await _dio.get<dynamic>(
         '$baseUrl/_matrix/client/v3/account/whoami',
-        options: _authorizedOptions(candidate),
+        options: _authorizedOptions(provisional),
       );
       final data = _asMap(response.data);
       final verifiedUserId = data['user_id'] as String?;
       if (verifiedUserId == null || verifiedUserId.isEmpty) {
         throw const MatrixClientException('Matrix token verification failed.');
       }
-      if (verifiedUserId != candidate.userId) {
+      if (provisional.userId.isNotEmpty &&
+          verifiedUserId != provisional.userId) {
         throw MatrixClientException(
-          'Token belongs to $verifiedUserId, not ${candidate.userId}.',
+          'Token belongs to $verifiedUserId, not ${provisional.userId}.',
         );
       }
+
+      final session = MatrixSession(
+        homeserver: baseUrl,
+        accessToken: normalizedToken,
+        userId: verifiedUserId,
+        deviceId: data['device_id'] as String?,
+      );
+      await _persistSession(session);
+      return session;
     } on DioException catch (error) {
       throw MatrixClientException(_matrixErrorMessage(error));
     }
-
-    await _persistSession(candidate);
-    return candidate;
   }
 
   Future<void> logout() async {
@@ -140,14 +162,21 @@ class MatrixClientService {
     }
 
     _session = null;
+    _resetSyncState();
     await _secureStorage.delete(key: _sessionStorageKey);
   }
 
-  Future<List<MatrixRoomSummary>> loadRooms() async {
+  /// Loads joined rooms using Matrix incremental sync.
+  ///
+  /// The first call requests the compact state needed by the room list. The
+  /// returned `next_batch` token is retained in memory. Later calls pass it as
+  /// `since`, merge only changed rooms into [_roomCache], and remove rooms that
+  /// appear in the `leave` section. [forceFull] intentionally discards this
+  /// state and starts a new initial sync.
+  Future<List<MatrixRoomSummary>> loadRooms({bool forceFull = false}) async {
     final current = _requireSession();
+    if (forceFull) _resetSyncState();
 
-    // A single /sync request returns room state and the latest event for every
-    // joined room, avoiding one request per room.
     final filter = jsonEncode(<String, dynamic>{
       'room': <String, dynamic>{
         'state': <String, dynamic>{
@@ -158,27 +187,32 @@ class MatrixClientService {
         },
         'timeline': <String, dynamic>{'limit': 1},
         'ephemeral': <String, dynamic>{'types': <String>[]},
+        'account_data': <String, dynamic>{'types': <String>[]},
       },
       'presence': <String, dynamic>{'types': <String>[]},
     });
 
+    final queryParameters = <String, dynamic>{
+      'timeout': 0,
+      'filter': filter,
+      if (_syncToken != null) 'since': _syncToken,
+    };
+
     try {
       final response = await _dio.get<dynamic>(
         '${current.homeserver}/_matrix/client/v3/sync',
-        queryParameters: <String, dynamic>{
-          'timeout': 0,
-          'filter': filter,
-        },
+        queryParameters: queryParameters,
         options: _authorizedOptions(current),
       );
       final data = _asMap(response.data);
       final rooms = _asMap(data['rooms']);
       final joined = _asMap(rooms['join']);
+      final left = _asMap(rooms['leave']);
 
-      final result = <MatrixRoomSummary>[];
       for (final entry in joined.entries) {
         final roomId = entry.key;
         final roomData = _asMap(entry.value);
+        final previous = _roomCache[roomId];
         final state = _asMap(roomData['state']);
         final stateEvents = _asList(state['events']);
         final timeline = _asMap(roomData['timeline']);
@@ -193,36 +227,57 @@ class MatrixClientService {
           final content = _asMap(event['content']);
           if (type == 'm.room.name') {
             final value = content['name'];
-            if (value is String && value.trim().isNotEmpty) name = value.trim();
+            if (value is String && value.trim().isNotEmpty) {
+              name = value.trim();
+            }
           } else if (type == 'm.room.canonical_alias') {
             final value = content['alias'];
-            if (value is String && value.trim().isNotEmpty) alias = value.trim();
+            if (value is String && value.trim().isNotEmpty) {
+              alias = value.trim();
+            }
           }
         }
 
-        MatrixMessage? lastMessage;
+        MatrixMessage? lastMessage = previous?.lastMessage;
         if (timelineEvents.isNotEmpty) {
-          lastMessage = _parseMessage(
-            _asMap(timelineEvents.last),
-            allowUnsupported: true,
-          );
+          for (final rawEvent in timelineEvents.reversed) {
+            final parsed = _parseMessage(
+              _asMap(rawEvent),
+              allowUnsupported: true,
+            );
+            if (parsed != null) {
+              lastMessage = parsed;
+              break;
+            }
+          }
         }
 
-        result.add(
-          MatrixRoomSummary(
-            roomId: roomId,
-            name: name ?? alias ?? roomId,
-            lastMessage: lastMessage,
-            unreadCount: _asInt(unread['notification_count']),
-          ),
+        final hasUnreadCount = unread.containsKey('notification_count');
+        _roomCache[roomId] = MatrixRoomSummary(
+          roomId: roomId,
+          name: name ?? alias ?? previous?.name ?? roomId,
+          lastMessage: lastMessage,
+          unreadCount: hasUnreadCount
+              ? _asInt(unread['notification_count'])
+              : previous?.unreadCount ?? 0,
         );
       }
 
-      result.sort((a, b) {
-        final aTs = a.lastMessage?.timestamp.millisecondsSinceEpoch ?? 0;
-        final bTs = b.lastMessage?.timestamp.millisecondsSinceEpoch ?? 0;
-        return bTs.compareTo(aTs);
-      });
+      for (final roomId in left.keys) {
+        _roomCache.remove(roomId);
+      }
+
+      final nextBatch = data['next_batch'];
+      if (nextBatch is String && nextBatch.isNotEmpty) {
+        _syncToken = nextBatch;
+      }
+
+      final result = _roomCache.values.toList(growable: false)
+        ..sort((a, b) {
+          final aTs = a.lastMessage?.timestamp.millisecondsSinceEpoch ?? 0;
+          final bTs = b.lastMessage?.timestamp.millisecondsSinceEpoch ?? 0;
+          return bTs.compareTo(aTs);
+        });
       return result;
     } on DioException catch (error) {
       throw MatrixClientException(_matrixErrorMessage(error));
@@ -270,8 +325,7 @@ class MatrixClientService {
     if (trimmed.isEmpty) return;
 
     final encodedRoomId = Uri.encodeComponent(roomId);
-    final transactionId =
-        'fluxdo-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+    final transactionId = _newTransactionId();
 
     try {
       await _dio.put<void>(
@@ -288,12 +342,94 @@ class MatrixClientService {
     }
   }
 
+  Future<void> sendReaction(
+    String roomId,
+    String eventId,
+    String key,
+  ) async {
+    final current = _requireSession();
+    final reaction = key.trim();
+    if (reaction.isEmpty) return;
+
+    final encodedRoomId = Uri.encodeComponent(roomId);
+    final transactionId = _newTransactionId();
+
+    try {
+      await _dio.put<void>(
+        '${current.homeserver}/_matrix/client/v3/rooms/'
+        '$encodedRoomId/send/m.reaction/$transactionId',
+        data: <String, dynamic>{
+          'm.relates_to': <String, dynamic>{
+            'rel_type': 'm.annotation',
+            'event_id': eventId,
+            'key': reaction,
+          },
+        },
+        options: _authorizedOptions(current),
+      );
+    } on DioException catch (error) {
+      throw MatrixClientException(_matrixErrorMessage(error));
+    }
+  }
+
+  /// Sends a public read receipt for [eventId].
+  Future<void> markRead(String roomId, String eventId) async {
+    final current = _requireSession();
+    if (eventId.isEmpty) return;
+
+    final encodedRoomId = Uri.encodeComponent(roomId);
+    final encodedEventId = Uri.encodeComponent(eventId);
+    try {
+      await _dio.post<void>(
+        '${current.homeserver}/_matrix/client/v3/rooms/'
+        '$encodedRoomId/receipt/m.read/$encodedEventId',
+        data: const <String, dynamic>{},
+        options: _authorizedOptions(current),
+      );
+    } on DioException catch (error) {
+      throw MatrixClientException(_matrixErrorMessage(error));
+    }
+  }
+
+  /// Updates the current user's typing state for a room.
+  Future<void> setTyping(
+    String roomId, {
+    required bool typing,
+    int timeoutMs = 30000,
+  }) async {
+    final current = _requireSession();
+    final encodedRoomId = Uri.encodeComponent(roomId);
+    final encodedUserId = Uri.encodeComponent(current.userId);
+
+    try {
+      await _dio.put<void>(
+        '${current.homeserver}/_matrix/client/v3/rooms/'
+        '$encodedRoomId/typing/$encodedUserId',
+        data: <String, dynamic>{
+          'typing': typing,
+          if (typing) 'timeout': timeoutMs.clamp(1000, 120000),
+        },
+        options: _authorizedOptions(current),
+      );
+    } on DioException catch (error) {
+      throw MatrixClientException(_matrixErrorMessage(error));
+    }
+  }
+
   Future<void> _persistSession(MatrixSession session) async {
+    final changedAccount = _session?.homeserver != session.homeserver ||
+        _session?.userId != session.userId;
     _session = session;
+    if (changedAccount) _resetSyncState();
     await _secureStorage.write(
       key: _sessionStorageKey,
       value: jsonEncode(session.toJson()),
     );
+  }
+
+  void _resetSyncState() {
+    _syncToken = null;
+    _roomCache.clear();
   }
 
   MatrixSession _requireSession() {
@@ -356,6 +492,7 @@ class MatrixClientService {
         sender: sender,
         body: allowUnsupported ? '[$msgType] $body' : body,
         timestamp: timestamp,
+        msgType: msgType,
       );
     }
 
@@ -364,8 +501,12 @@ class MatrixClientService {
       sender: sender,
       body: msgType == 'm.emote' ? '* $body' : body,
       timestamp: timestamp,
+      msgType: msgType,
     );
   }
+
+  static String _newTransactionId() =>
+      'fluxdo-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
 
   static String _normalizeHomeserver(String value) {
     var normalized = value.trim();
@@ -462,6 +603,7 @@ class MatrixMessage {
     required this.body,
     required this.timestamp,
     this.encrypted = false,
+    this.msgType,
   });
 
   final String eventId;
@@ -469,6 +611,7 @@ class MatrixMessage {
   final String body;
   final DateTime timestamp;
   final bool encrypted;
+  final String? msgType;
 }
 
 class MatrixClientException implements Exception {
