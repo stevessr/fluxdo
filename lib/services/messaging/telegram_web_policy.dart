@@ -1,0 +1,35 @@
+enum TelegramWebNavigationDisposition {
+  /// Keep the top-level page inside Fluxdo's embedded Telegram Web surface.
+  embedded,
+
+  /// Do not interfere with a resource/sub-frame request belonging to Telegram
+  /// Web. The top-level origin policy remains responsible for what is visible.
+  subframe,
+
+  /// Hand the navigation to the operating system instead of replacing the
+  /// embedded Telegram document.
+  external,
+}
+
+/// Security boundary for the Telegram Web fallback.
+///
+/// Only HTTPS pages on telegram.org itself or one of its subdomains may replace
+/// the embedded top-level document. This deliberately excludes short links such
+/// as t.me and similarly-spelled attacker domains; those are handled by the OS.
+abstract final class TelegramWebPolicy {
+  static bool isTrustedTopLevelUri(Uri uri) {
+    if (uri.scheme.toLowerCase() != 'https') return false;
+    final host = uri.host.toLowerCase();
+    return host == 'telegram.org' || host.endsWith('.telegram.org');
+  }
+
+  static TelegramWebNavigationDisposition classify(
+    Uri uri, {
+    required bool isMainFrame,
+  }) {
+    if (!isMainFrame) return TelegramWebNavigationDisposition.subframe;
+    return isTrustedTopLevelUri(uri)
+        ? TelegramWebNavigationDisposition.embedded
+        : TelegramWebNavigationDisposition.external;
+  }
+}
