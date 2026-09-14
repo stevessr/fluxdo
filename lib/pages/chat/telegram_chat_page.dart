@@ -211,6 +211,8 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
                   mediaPlaybackRequiresUserGesture: false,
                   allowsInlineMediaPlayback: true,
                   useShouldOverrideUrlLoading: true,
+                  useOnDownloadStart: true,
+                  supportMultipleWindows: true,
                   supportZoom: false,
                   transparentBackground: false,
                 ),
