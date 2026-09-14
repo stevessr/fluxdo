@@ -49,7 +49,8 @@ class PowerSavingModeService extends ChangeNotifier with WidgetsBindingObserver 
         notifyListeners();
       }
 
-      if (defaultTargetPlatform == TargetPlatform.android &&
+      if (!kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.android &&
           (changed || next)) {
         await _applyAndroidDisplayPolicy(powerSaving: next);
       }
