@@ -5,11 +5,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// Experimental Telegram integration.
 ///
-/// Telegram Web is intentionally used as the first transport because Fluxdo
-/// already ships flutter_inappwebview. It gives the branch a usable Telegram
-/// client without introducing TDLib native binaries. The page is isolated so
-/// it can later be swapped for a native MTProto/TDLib adapter without changing
-/// the chat hub navigation.
+/// Telegram Web remains the safe fallback while the native MTProto provider is
+/// still experimental. Keep the embedded surface constrained to Telegram's own
+/// HTTPS origins and hand downloads, target=_blank windows and external links
+/// back to the operating system.
 class TelegramChatPage extends StatefulWidget {
   const TelegramChatPage({super.key});
 
@@ -22,22 +21,79 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
 
   InAppWebViewController? _controller;
   double _progress = 0;
+  bool _canGoBack = false;
+  bool _canGoForward = false;
   String? _error;
 
   bool get _webViewSupported {
     if (kIsWeb) return true;
-    // Fluxdo already uses flutter_inappwebview 6.2.0-beta.3, whose federated
-    // plugin includes Android/iOS/macOS/Windows/Linux implementations.
+    // Fluxdo uses flutter_inappwebview 6.2.0-beta.3. That prerelease includes
+    // the Linux implementation in addition to the other supported platforms.
     return defaultTargetPlatform != TargetPlatform.fuchsia;
   }
 
+  bool _isEmbeddedTelegramUrl(WebUri uri) {
+    if (uri.scheme.toLowerCase() != 'https') return false;
+    final host = uri.host.toLowerCase();
+    return host == 'telegram.org' || host.endsWith('.telegram.org');
+  }
+
+  Future<bool> _launchExternalUri(WebUri uri) async {
+    final externalUri = Uri.tryParse(uri.toString());
+    if (externalUri == null) return false;
+
+    try {
+      if (!await canLaunchUrl(externalUri)) return false;
+      return launchUrl(externalUri, mode: LaunchMode.externalApplication);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = '无法打开外部链接：$error');
+      }
+      return false;
+    }
+  }
+
+  Future<void> _updateNavigationState() async {
+    final controller = _controller;
+    if (controller == null) return;
+
+    try {
+      final results = await Future.wait<bool>([
+        controller.canGoBack(),
+        controller.canGoForward(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _canGoBack = results[0];
+        _canGoForward = results[1];
+      });
+    } catch (_) {
+      // Some platform implementations may not expose history state during a
+      // provisional navigation. The next successful load will retry it.
+    }
+  }
+
+  Future<void> _goBack() async {
+    final controller = _controller;
+    if (controller == null || !await controller.canGoBack()) return;
+    await controller.goBack();
+    await _updateNavigationState();
+  }
+
+  Future<void> _goForward() async {
+    final controller = _controller;
+    if (controller == null || !await controller.canGoForward()) return;
+    await controller.goForward();
+    await _updateNavigationState();
+  }
+
   Future<void> _reload() async {
+    if (mounted) setState(() => _error = null);
     await _controller?.reload();
   }
 
   Future<void> _openExternally() async {
-    final uri = Uri.parse(_telegramUrl.toString());
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await _launchExternalUri(_telegramUrl);
   }
 
   @override
@@ -46,12 +102,23 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
       appBar: AppBar(
         title: const Text('Telegram'),
         actions: <Widget>[
-          if (_webViewSupported)
+          if (_webViewSupported) ...<Widget>[
+            IconButton(
+              tooltip: '后退',
+              onPressed: _canGoBack ? _goBack : null,
+              icon: const Icon(Icons.arrow_back_rounded),
+            ),
+            IconButton(
+              tooltip: '前进',
+              onPressed: _canGoForward ? _goForward : null,
+              icon: const Icon(Icons.arrow_forward_rounded),
+            ),
             IconButton(
               tooltip: '刷新',
               onPressed: _reload,
               icon: const Icon(Icons.refresh_rounded),
             ),
+          ],
           IconButton(
             tooltip: '在外部浏览器打开',
             onPressed: _openExternally,
@@ -71,7 +138,7 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '实验性 Telegram：当前复用 Telegram Web；后续可替换为纯 Dart MTProto / TDLib provider。',
+                      '实验性 Telegram：Telegram Web 仅在内嵌页打开 telegram.org；外链、新窗口与下载交给系统处理。后续可替换为 native MTProto provider。',
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
@@ -101,7 +168,7 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          '可以先使用 Telegram Web 外部浏览器；原生 MTProto adapter 会作为下一阶段实现。',
+                          '可以先使用 Telegram Web 外部浏览器；native MTProto adapter 会作为下一阶段实现。',
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 18),
@@ -154,6 +221,11 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
                   if (!mounted) return;
                   setState(() => _error = null);
                 },
+                onLoadStop: (controller, url) async {
+                  if (!mounted) return;
+                  setState(() => _progress = 1);
+                  await _updateNavigationState();
+                },
                 onProgressChanged: (controller, progress) {
                   if (!mounted) return;
                   setState(() => _progress = progress / 100);
@@ -164,26 +236,41 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
                     _error = '${error.type}: ${error.description}';
                   });
                 },
+                onDownloadStartRequest: (controller, request) async {
+                  final launched = await _launchExternalUri(request.url);
+                  if (!launched && mounted) {
+                    setState(() {
+                      _error = '无法交给系统下载：${request.url}';
+                    });
+                  }
+                },
+                onCreateWindow: (controller, action) async {
+                  final uri = action.request.url;
+                  if (uri != null) {
+                    await _launchExternalUri(uri);
+                  }
+                  // We intentionally do not create a second embedded WebView.
+                  return false;
+                },
                 shouldOverrideUrlLoading: (controller, action) async {
                   final uri = action.request.url;
                   if (uri == null) return NavigationActionPolicy.ALLOW;
 
-                  final scheme = uri.scheme.toLowerCase();
-                  if (scheme == 'http' || scheme == 'https') {
+                  // Never interfere with subframe/resource navigation. Only
+                  // constrain what can replace the visible top-level document.
+                  if (!action.isForMainFrame) {
                     return NavigationActionPolicy.ALLOW;
                   }
 
-                  // tg://, mailto:, tel: and other app links should leave the
-                  // embedded browser instead of failing inside WebView.
-                  final externalUri = Uri.tryParse(uri.toString());
-                  if (externalUri != null && await canLaunchUrl(externalUri)) {
-                    await launchUrl(
-                      externalUri,
-                      mode: LaunchMode.externalApplication,
-                    );
-                    return NavigationActionPolicy.CANCEL;
+                  if (_isEmbeddedTelegramUrl(uri)) {
+                    return NavigationActionPolicy.ALLOW;
                   }
-                  return NavigationActionPolicy.ALLOW;
+
+                  final launched = await _launchExternalUri(uri);
+                  if (!launched && mounted) {
+                    setState(() => _error = '无法打开链接：$uri');
+                  }
+                  return NavigationActionPolicy.CANCEL;
                 },
               ),
             ),
