@@ -73,6 +73,7 @@ void main() {
     expect(messages.single.redacted, isTrue);
     expect(messages.single.body, 'Message redacted');
     expect(messages.single.reactions, isEmpty);
+    expect(messages.single.replyToEventId, isNull);
   });
 
   test('consumes bundled m.replace when the edit is outside the chunk', () {
@@ -93,6 +94,92 @@ void main() {
 
     expect(messages.single.body, 'bundled edit');
     expect(messages.single.edited, isTrue);
+  });
+
+  test('parses rich reply and strips legacy text fallback', () {
+    final reply = _message(
+      r'$reply',
+      '@bob:example.org',
+      '> <@alice:example.org> old line\n> second old line\n\nnew reply',
+      200,
+    );
+    final content = reply['content'] as Map<String, dynamic>;
+    content['m.relates_to'] = <String, dynamic>{
+      'm.in_reply_to': <String, dynamic>{'event_id': r'$root'},
+    };
+
+    final messages = reducer.reduce(<Map<String, dynamic>>[
+      _message(r'$root', '@alice:example.org', 'original', 100),
+      reply,
+    ]);
+
+    final reducedReply = messages.last;
+    expect(reducedReply.replyToEventId, r'$root');
+    expect(reducedReply.threadRootEventId, isNull);
+    expect(reducedReply.body, 'new reply');
+  });
+
+  test('marks thread fallback without treating fallback target as real reply', () {
+    final threadEvent = _threadMessage(
+      r'$thread1',
+      r'$root',
+      '@bob:example.org',
+      'thread message',
+      200,
+      replyTarget: r'$root',
+      isFallingBack: true,
+    );
+
+    final messages = reducer.reduce(<Map<String, dynamic>>[
+      _message(r'$root', '@alice:example.org', 'root', 100),
+      threadEvent,
+    ]);
+
+    final message = messages.last;
+    expect(message.threadRootEventId, r'$root');
+    expect(message.isThreadReply, isTrue);
+    expect(message.replyToEventId, isNull);
+  });
+
+  test('preserves genuine replies inside a thread', () {
+    final messages = reducer.reduce(<Map<String, dynamic>>[
+      _message(r'$root', '@alice:example.org', 'root', 100),
+      _threadMessage(
+        r'$thread1',
+        r'$root',
+        '@bob:example.org',
+        'first thread message',
+        200,
+      ),
+      _threadMessage(
+        r'$thread2',
+        r'$root',
+        '@carol:example.org',
+        'reply in thread',
+        300,
+        replyTarget: r'$thread1',
+        isFallingBack: false,
+      ),
+    ]);
+
+    final reply = messages.last;
+    expect(reply.threadRootEventId, r'$root');
+    expect(reply.replyToEventId, r'$thread1');
+  });
+
+  test('reads bundled thread count on the root event', () {
+    final root = _message(r'$root', '@alice:example.org', 'root', 100);
+    root['unsigned'] = <String, dynamic>{
+      'm.relations': <String, dynamic>{
+        'm.thread': <String, dynamic>{
+          'count': 7,
+          'current_user_participated': true,
+        },
+      },
+    };
+
+    final messages = reducer.reduce(<Map<String, dynamic>>[root]);
+    expect(messages.single.threadCount, 7);
   });
 
   test('keeps encrypted events explicit and sorts messages chronologically', () {
@@ -127,6 +214,27 @@ Map<String, dynamic> _message(
   'origin_server_ts': timestamp,
   'content': <String, dynamic>{'msgtype': 'm.text', 'body': body},
 };
+
+Map<String, dynamic> _threadMessage(
+  String eventId,
+  String root,
+  String sender,
+  String body,
+  int timestamp, {
+  String? replyTarget,
+  bool? isFallingBack,
+}) {
+  final relation = <String, dynamic>{
+    'rel_type': 'm.thread',
+    'event_id': root,
+    if (replyTarget != null)
+      'm.in_reply_to': <String, dynamic>{'event_id': replyTarget},
+    if (isFallingBack != null) 'is_falling_back': isFallingBack,
+  };
+  final event = _message(eventId, sender, body, timestamp);
+  (event['content'] as Map<String, dynamic>)['m.relates_to'] = relation;
+  return event;
+}
 
 Map<String, dynamic> _edit(
   String eventId,
