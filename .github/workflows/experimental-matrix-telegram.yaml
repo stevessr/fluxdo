@@ -11,16 +11,22 @@ on:
       - 'lib/navigation/nav_entry_registry.dart'
       - 'lib/pages/chat/**'
       - 'lib/services/matrix_client_service.dart'
+      - 'lib/services/messaging/**'
       - 'lib/widgets/markdown_editor/**'
       - 'test/pages/chat/**'
+      - 'test/services/messaging/**'
       - 'tool/gen_l10n.dart'
       - 'tool/gen_slang_compat.dart'
       - 'tool/project_prep.dart'
       - '.github/workflows/experimental-matrix-telegram.yaml'
   workflow_dispatch:
 
+# v2 intentionally uses a new group so the already-running Flutter 3.47 APK
+# baseline from the previous workflow revision can finish while this iteration
+# validates the protocol-neutral messaging layer. Subsequent v2 pushes still
+# cancel stale v2 runs normally.
 concurrency:
-  group: experimental-matrix-telegram-${{ github.ref }}
+  group: experimental-matrix-telegram-v2-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -63,7 +69,9 @@ jobs:
           lib/pages/chat/matrix_chat_page.dart
           lib/pages/chat/telegram_chat_page.dart
           lib/services/matrix_client_service.dart
+          lib/services/messaging
           test/pages/chat/chat_protocol_test.dart
+          test/services/messaging
 
       # Analyze the app itself. The repository also contains standalone
       # DevTools/plugin example packages with their own dependency lifecycle;
@@ -73,6 +81,9 @@ jobs:
 
       - name: Test protocol hub persistence
         run: flutter test test/pages/chat/chat_protocol_test.dart --no-pub
+
+      - name: Test protocol-neutral messaging semantics
+        run: flutter test test/services/messaging --no-pub
 
   android-smoke:
     name: Flutter 3.47 Android arm64 smoke
