@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'messaging/matrix_message_content.dart';
 import 'messaging/matrix_room_metadata.dart';
 import 'messaging/matrix_timeline_event_cache.dart';
 import 'messaging/matrix_timeline_reducer.dart';
@@ -341,7 +342,13 @@ class MatrixClientService {
     _timelineEventCache.removeRoom(roomId);
   }
 
-  Future<void> sendText(String roomId, String body) async {
+  Future<void> sendText(
+    String roomId,
+    String body, {
+    String? replyToEventId,
+    String? threadRootEventId,
+    bool threadFallback = false,
+  }) async {
     final current = _requireSession();
     final trimmed = body.trim();
     if (trimmed.isEmpty) return;
@@ -353,10 +360,12 @@ class MatrixClientService {
       await _dio.put<void>(
         '${current.homeserver}/_matrix/client/v3/rooms/'
         '$encodedRoomId/send/m.room.message/$transactionId',
-        data: <String, dynamic>{
-          'msgtype': 'm.text',
-          'body': trimmed,
-        },
+        data: buildMatrixTextMessageContent(
+          trimmed,
+          replyToEventId: replyToEventId,
+          threadRootEventId: threadRootEventId,
+          threadFallback: threadFallback,
+        ),
         options: _authorizedOptions(current),
       );
     } on DioException catch (error) {
@@ -586,6 +595,9 @@ class MatrixMessage {
     this.edited = false,
     this.redacted = false,
     this.reactions = const <String, int>{},
+    this.replyToEventId,
+    this.threadRootEventId,
+    this.threadCount = 0,
   });
 
   factory MatrixMessage.fromReduced(MatrixReducedMessage message) {
@@ -599,6 +611,9 @@ class MatrixMessage {
       edited: message.edited,
       redacted: message.redacted,
       reactions: message.reactions,
+      replyToEventId: message.replyToEventId,
+      threadRootEventId: message.threadRootEventId,
+      threadCount: message.threadCount,
     );
   }
 
@@ -611,6 +626,11 @@ class MatrixMessage {
   final bool edited;
   final bool redacted;
   final Map<String, int> reactions;
+  final String? replyToEventId;
+  final String? threadRootEventId;
+  final int threadCount;
+
+  bool get isThreadReply => threadRootEventId != null;
 }
 
 class MatrixClientException implements Exception {
