@@ -26,13 +26,9 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
 
   bool get _webViewSupported {
     if (kIsWeb) return true;
-    return switch (defaultTargetPlatform) {
-      TargetPlatform.android ||
-      TargetPlatform.iOS ||
-      TargetPlatform.macOS ||
-      TargetPlatform.windows => true,
-      TargetPlatform.linux || TargetPlatform.fuchsia => false,
-    };
+    // Fluxdo already uses flutter_inappwebview 6.2.0-beta.3, whose federated
+    // plugin includes Android/iOS/macOS/Windows/Linux implementations.
+    return defaultTargetPlatform != TargetPlatform.fuchsia;
   }
 
   Future<void> _reload() async {
