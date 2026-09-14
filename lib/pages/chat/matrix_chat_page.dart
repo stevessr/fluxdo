@@ -196,6 +196,9 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
         );
       }
 
+      final providerId = await _selectSsoIdentityProvider(capabilities);
+      if (providerId == null) return;
+
       final state = _newSsoState();
       final callbackUri = Uri(
         scheme: 'fluxdo',
@@ -206,6 +209,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
       final initialUri = _sso.buildRedirectUri(
         homeserver: discovery.baseUrl,
         callbackUri: callbackUri,
+        identityProviderId: providerId.isEmpty ? null : providerId,
       );
 
       if (!mounted) return;
@@ -235,6 +239,45 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
     } finally {
       if (mounted) setState(() => _ssoSubmitting = false);
     }
+  }
+
+  Future<String?> _selectSsoIdentityProvider(
+    MatrixLoginCapabilities capabilities,
+  ) async {
+    final providers = capabilities.identityProviders;
+    if (providers.isEmpty) return '';
+    if (providers.length == 1) return providers.single.id;
+    if (!mounted) return null;
+
+    return showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+          children: <Widget>[
+            const ListTile(
+              title: Text(
+                '选择 SSO 登录提供商',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text('Homeserver 公布了多个 identity provider。'),
+            ),
+            ...providers.map(
+              (provider) => ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: Text(provider.name),
+                subtitle: provider.brand == null || provider.brand!.isEmpty
+                    ? Text(provider.id)
+                    : Text('${provider.brand} · ${provider.id}'),
+                onTap: () => Navigator.of(context).pop(provider.id),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _completeLogin(MatrixSession session) async {
@@ -399,7 +442,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                     )
                   : ListView.separated(
                       itemCount: _rooms.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final room = _rooms[index];
                         final last = room.lastMessage;
@@ -447,14 +490,18 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                                 )
                               : null,
                           onTap: () async {
-                            await Navigator.of(context).push<void>(
-                              MaterialPageRoute<void>(
-                                builder: (_) => MatrixRoomPage(
-                                  client: _client,
-                                  room: room,
+                            try {
+                              await Navigator.of(context).push<void>(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => MatrixRoomPage(
+                                    client: _client,
+                                    room: room,
+                                  ),
                                 ),
-                              ),
-                            );
+                              );
+                            } finally {
+                              _client.releaseTimeline(room.roomId);
+                            }
                             if (mounted) {
                               await _loadRooms(showSpinner: false);
                             }
