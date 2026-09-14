@@ -12,18 +12,36 @@ providers:
 - **Telegram (LAB)** — Telegram Web embedded through Fluxdo's existing
   `flutter_inappwebview` dependency.
 
+## Toolchain experiment
+
+The branch pins **Flutter 3.47.2 / Dart 3.13.2** in `.fvmrc` and has a dedicated
+`Experimental Matrix Telegram` workflow. The workflow prepares generated Fluxdo
+sources through `tool/project_prep.dart`, analyzes the app sources separately
+from standalone DevTools/plugin-example packages, and independently performs an
+Android arm64 debug APK smoke build.
+
+The Android defaults relevant to Fluxdo remain compatible with the existing
+project setup (compile/target SDK 36, minSdk 24, NDK 28.2.13676358), so this
+experiment does not force an unrelated Android Gradle/Kotlin migration.
+
 ## Matrix
 
 The Matrix experiment currently supports:
 
 - password login (`m.login.password`);
-- importing an existing access token (useful for SSO homeservers);
+- importing an existing access token (useful for SSO homeservers), with the
+  canonical Matrix user ID resolved through `/account/whoami`;
 - encrypted local session persistence through `flutter_secure_storage`;
-- joined-room discovery through a single filtered `/sync` request;
+- joined-room discovery through filtered `/sync`;
+- incremental room refresh using the returned `next_batch` token instead of
+  repeating a full initial sync on every refresh;
 - room ordering using the latest timeline event;
 - unread notification count;
 - paged room history (initial 50 events);
 - sending plain-text `m.room.message` events;
+- public `m.read` read receipts when a room is opened;
+- debounced typing notifications;
+- sending `m.reaction` annotations from a quick reaction picker;
 - explicit placeholders for `m.room.encrypted` events.
 
 The adapter intentionally does **not** pretend that encrypted events are plain
@@ -31,17 +49,17 @@ text. Full Matrix E2EE requires device keys, Olm/Megolm sessions, verification,
 key backup/recovery, and cross-signing; that work belongs in a dedicated crypto
 provider.
 
-### Why not directly depend on Extera yet?
+### Extera / matrix-dart-sdk path
 
-Extera is a useful source for the mature Matrix direction, but its current
-Matrix SDK path effectively requires builds using Dart >= 3.11.1. Fluxdo still
-advertises Dart `^3.10.4` as its minimum. For this experiment, the REST adapter
-keeps the existing toolchain contract and avoids making Matrix a hard build-time
-requirement for the rest of the app.
+Extera is still the preferred reference for the mature Matrix direction. Its
+current Matrix SDK fork (`stevessr/matrix-dart-sdk`, Matrix 11.x snapshot)
+requires Dart >= 3.11, so the Flutter 3.47.2 / Dart 3.13.2 experiment removes the
+previous toolchain blocker.
 
-The Matrix UI/service boundary is deliberately isolated so the REST client can
-later be replaced by an Extera/matrix-dart-sdk backed implementation without
-changing the protocol hub.
+The lightweight REST adapter remains useful as a low-dependency fallback and as
+a protocol-boundary prototype. Replacing its crypto/message implementation with
+Extera's SDK can now be evaluated independently, without changing the Chat hub
+or Discourse provider.
 
 ## Telegram
 
@@ -70,14 +88,16 @@ verified on Android, iOS, Windows, Linux, and macOS.
 
 ## Known limitations / next steps
 
-- Matrix E2EE is not implemented yet.
-- Matrix room avatars, typing, reactions, receipts, threads, edits, media and
-  push notifications are not mapped yet.
-- Matrix room display-name fallback is intentionally conservative; unnamed DMs
-  may show their room ID until member-summary mapping is added.
+- Matrix E2EE is not implemented yet; encrypted events are deliberately not
+  shown as plaintext.
+- Matrix reaction aggregation/display, threads, edits, media, room avatars,
+  membership-derived DM names and push notifications still need mapping.
+- Incremental `/sync` is currently driven by UI refresh; a cancellable long-poll
+  sync loop should replace periodic/manual refresh once account lifecycle and
+  background execution semantics are settled.
 - Telegram is Web-backed rather than mapped into Fluxdo's native message bubble
   model.
 - Experimental strings are currently local to these LAB pages; move them into
   the generated localization catalog once the UX stabilizes.
-- Add protocol-level notification aggregation only after account/session
-  lifecycle semantics are finalized.
+- Keep Telegram Web as a fallback while a pure-Dart MTProto or TDLib transport is
+  experimentally introduced behind the same provider boundary.
