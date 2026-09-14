@@ -590,17 +590,22 @@ class BrowserTrustCoordinator {
       // cookies；此时主文档已经解析到 data-preloaded，cookie 也已经落入 WebView。
       final html = await _readPreloadedSnapshot(c, cancellation: cancellation);
       if (cancellation.isCancelled) return false;
+      final hasSnapshot = html != null && html.isNotEmpty;
       _log(
-        'startup WebView snapshot captured=${html != null && html.isNotEmpty}, '
-        'syncing cookies reason=$reason',
+        'startup WebView snapshot captured=$hasSnapshot, '
+        'syncing cookies + hydrating reason=$reason',
       );
-      await _syncCookiesFromController(c);
-      if (cancellation.isCancelled) return false;
 
-      final hydrated =
-          html != null &&
-          html.isNotEmpty &&
-          await _preload.hydrateFromHtml(html);
+      // Cookie boundary sync and preload JSON hydration are independent once the
+      // document-start snapshot has been captured. Start both immediately and
+      // wait for both before disposing the WebView; this turns two serial chunks
+      // on the startup critical path into max(sync, hydrate) instead of their sum.
+      final cookieSyncFuture = _syncCookiesFromController(c);
+      final hydrateFuture = hasSnapshot
+          ? _preload.hydrateFromHtml(html)
+          : Future<bool>.value(false);
+      final hydrated = await hydrateFuture;
+      await cookieSyncFuture;
       if (cancellation.isCancelled) return false;
       _log(
         'startup WebView snapshot html=${html != null && html.isNotEmpty} hydrated=$hydrated reason=$reason',
@@ -650,6 +655,10 @@ class BrowserTrustCoordinator {
     required BrowserTrustRunCancellation cancellation,
   }) async {
     final deadline = DateTime.now().add(_domSnapshotTimeout);
+    // The preload element usually appears very early in HTML parsing. Poll
+    // aggressively for the first few hundred milliseconds, then back off to the
+    // old 250ms cadence so slow/CF pages do not spam the JS bridge.
+    var pollDelay = const Duration(milliseconds: 25);
     while (!cancellation.isCancelled && DateTime.now().isBefore(deadline)) {
       try {
         final raw = await controller.evaluateJavascript(
@@ -662,9 +671,13 @@ class BrowserTrustCoordinator {
         }
       } catch (_) {}
       await Future.any<void>([
-        Future<void>.delayed(const Duration(milliseconds: 250)),
+        Future<void>.delayed(pollDelay),
         cancellation.whenCancelled,
       ]);
+      final currentDelayMs = pollDelay.inMilliseconds;
+      pollDelay = Duration(
+        milliseconds: currentDelayMs < 125 ? currentDelayMs * 2 : 250,
+      );
     }
     return null;
   }

@@ -48,6 +48,25 @@ void main() {
     expect(providerSource, isNot(contains('getInitialTopicListFirstBatch')));
   });
 
+  test('metadata scans exclude the large preload payload', () {
+    final start = preloadSource.indexOf(
+      'Future<bool> _parsePreloadedDataFromHtml',
+    );
+    final end = preloadSource.indexOf('void _extractCsrfTokenFromHtml', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+
+    final body = preloadSource.substring(start, end);
+    expect(body, contains('int? payloadStart;'));
+    expect(body, contains('int? payloadEnd;'));
+    expect(body, contains('final metadataHtml ='));
+    expect(body, contains('_extractCsrfTokenFromHtml(metadataHtml)'));
+    expect(body, contains('_extractCdnUrlFromHtml(metadataHtml)'));
+    expect(body, contains("parsed && metadataHtml.contains('/plugins/')"));
+    expect(body, contains('_extractPluginCandidatesInBackground('));
+    expect(body, contains('metadataHtml,'));
+  });
+
   test('topic list decode starts before core hydration wait', () {
     final start = preloadSource.indexOf(
       'Future<bool> _parsePreloadedDataString',

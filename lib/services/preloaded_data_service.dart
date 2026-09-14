@@ -687,6 +687,8 @@ class PreloadedDataService {
     // Metadata extraction below then overlaps with JSON decoding instead of delaying it.
     String? dataString;
     var htmlEntityEncoded = false;
+    int? payloadStart;
+    int? payloadEnd;
 
     // 新版形态：<script type="application/json" id="data-preloaded">{...}</script>
     // 内容是原始 JSON，不做 HTML 实体解码（否则正文中字面的 &quot; 会被误还原）
@@ -699,6 +701,8 @@ class PreloadedDataService {
       final end = html.indexOf('</script>', start);
       if (end > start) {
         dataString = html.substring(start, end);
+        payloadStart = start;
+        payloadEnd = end;
       }
     }
 
@@ -711,6 +715,8 @@ class PreloadedDataService {
       }
       dataString = match.group(1)!;
       htmlEntityEncoded = true;
+      payloadStart = match.start;
+      payloadEnd = match.end;
     }
 
     final parseFuture = _parsePreloadedDataString(
@@ -720,21 +726,33 @@ class PreloadedDataService {
       generation: generation,
     );
 
+    // Do not rescan the usually huge preload JSON for every tiny metadata
+    // regexp. Remove only the payload bytes once, preserving the surrounding
+    // document so meta/setup/plugin tags are still discoverable. This cuts UI
+    // isolate string scanning substantially on large home payloads.
+    final metadataHtml = payloadStart != null && payloadEnd != null
+        ? '${html.substring(0, payloadStart)}${html.substring(payloadEnd)}'
+        : html;
+
     // These small HTML metadata scans run while the preload isolate is decoding.
-    _extractCsrfTokenFromHtml(html);
-    _extractSharedSessionKeyFromHtml(html);
-    _extractTurnstileSitekeyFromHtml(html);
-    _extractBaseUriFromHtml(html);
-    _extractCdnUrlFromHtml(html);
+    _extractCsrfTokenFromHtml(metadataHtml);
+    _extractSharedSessionKeyFromHtml(metadataHtml);
+    _extractTurnstileSitekeyFromHtml(metadataHtml);
+    _extractBaseUriFromHtml(metadataHtml);
+    _extractCdnUrlFromHtml(metadataHtml);
 
     final parsed = await parseFuture;
     if (!_isCurrent(revision, generation)) return false;
 
     // Plugin discovery is useful for later browser bootstrap, but must not compete
     // with the startup-critical preload JSON decode for CPU/memory bandwidth.
-    if (parsed) {
+    if (parsed && metadataHtml.contains('/plugins/')) {
+      // WebView preload snapshots intentionally contain only data-preloaded,
+      // metas and discourse setup, so they should not pay for a pointless
+      // plugin-discovery isolate. Native full HTML still discovers plugins, but
+      // scans the compact payload-free view instead of duplicating the JSON.
       _extractPluginCandidatesInBackground(
-        html,
+        metadataHtml,
         revision: revision,
         generation: generation,
       );
