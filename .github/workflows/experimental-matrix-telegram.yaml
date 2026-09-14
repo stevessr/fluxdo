@@ -1,0 +1,136 @@
+name: Experimental Matrix Telegram
+
+on:
+  push:
+    branches:
+      - feat/experimental-matrix-telegram
+    paths:
+      - '.fvmrc'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'lib/navigation/nav_entry_registry.dart'
+      - 'lib/pages/chat/**'
+      - 'lib/services/matrix_client_service.dart'
+      - '.github/workflows/experimental-matrix-telegram.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: experimental-matrix-telegram-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.47.2'
+  ANDROID_NDK_VERSION: '28.2.13676358'
+
+jobs:
+  analyze:
+    name: Flutter 3.47 analyze
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Toolchain
+        run: |
+          flutter --version
+          dart --version
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Check experimental formatting
+        run: >-
+          dart format --output=none --set-exit-if-changed
+          lib/navigation/nav_entry_registry.dart
+          lib/pages/chat/chat_hub_page.dart
+          lib/pages/chat/matrix_chat_page.dart
+          lib/pages/chat/telegram_chat_page.dart
+          lib/services/matrix_client_service.dart
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+  android-smoke:
+    name: Flutter 3.47 Android arm64 smoke
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+          cache-cleanup: never
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Prepare Rust target
+        run: |
+          rustup target add aarch64-linux-android
+          if ! command -v cargo-ndk >/dev/null 2>&1; then
+            cargo install cargo-ndk --locked
+          fi
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            ndk;${{ env.ANDROID_NDK_VERSION }}
+            platforms;android-36
+            platforms;android-31
+            cmake;3.22.1
+          log-accepted-android-sdk-licenses: false
+
+      - name: Configure Android NDK
+        run: |
+          set -euo pipefail
+          ndk_path="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
+          test -d "${ndk_path}"
+          echo "ANDROID_NDK_HOME=${ndk_path}" >> "${GITHUB_ENV}"
+          echo "ANDROID_NDK_ROOT=${ndk_path}" >> "${GITHUB_ENV}"
+          props="android/local.properties"
+          touch "$props"
+          for key_val in \
+            "sdk.dir=${ANDROID_HOME}" \
+            "ndk.dir=${ndk_path}" \
+            "flutter.ndkVersion=${ANDROID_NDK_VERSION}"; do
+            key="${key_val%%=*}"
+            if grep -q "^${key}=" "$props" 2>/dev/null; then
+              sed -i "s|^${key}=.*|${key_val}|" "$props"
+            else
+              echo "${key_val}" >> "$props"
+            fi
+          done
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Build debug APK
+        run: flutter build apk --debug --target-platform android-arm64 --no-pub
