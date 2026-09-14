@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/matrix_client_service.dart';
@@ -139,7 +141,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
         title: const Text('Matrix'),
         actions: <Widget>[
           IconButton(
-            tooltip: '刷新房间',
+            tooltip: '增量刷新房间',
             onPressed: _loading ? null : _loadRooms,
             icon: const Icon(Icons.refresh_rounded),
           ),
@@ -177,7 +179,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '实验性 Matrix：当前支持未加密房间；E2EE 消息暂显示为占位符。',
+                      '实验性 Matrix：房间列表使用增量 /sync；支持文本、已读、typing 与 reaction。E2EE 暂显示占位符。',
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
@@ -303,12 +305,15 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                     const Text(
                       '连接 Matrix homeserver',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       _tokenMode
-                          ? '适用于 SSO 登录后取得 access token 的服务器。Token 仅保存在系统安全存储。'
+                          ? '适用于 SSO 登录后取得 access token 的服务器。Token 仅保存在系统安全存储；User ID 可由 /whoami 自动识别。'
                           : '使用 Matrix Client-Server API 登录，不会经过 Fluxdo 服务器。',
                       textAlign: TextAlign.center,
                     ),
@@ -329,7 +334,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                         controller: _userIdController,
                         autocorrect: false,
                         decoration: const InputDecoration(
-                          labelText: 'User ID',
+                          labelText: 'User ID（可选，仅用于校验）',
                           hintText: '@name:example.org',
                           border: OutlineInputBorder(),
                         ),
@@ -340,6 +345,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                         obscureText: true,
                         autocorrect: false,
                         enableSuggestions: false,
+                        onSubmitted: (_) => _signIn(),
                         decoration: const InputDecoration(
                           labelText: 'Access token',
                           border: OutlineInputBorder(),
@@ -425,9 +431,21 @@ class MatrixRoomPage extends StatefulWidget {
 }
 
 class _MatrixRoomPageState extends State<MatrixRoomPage> {
+  static const Duration _typingIdleDelay = Duration(seconds: 5);
+  static const List<String> _quickReactions = <String>[
+    '👍',
+    '❤️',
+    '😂',
+    '🎉',
+    '👀',
+    '🔥',
+  ];
+
   final TextEditingController _composerController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  Timer? _typingStopTimer;
+  bool _typingSent = false;
   bool _loading = true;
   bool _sending = false;
   String? _error;
@@ -441,6 +459,10 @@ class _MatrixRoomPageState extends State<MatrixRoomPage> {
 
   @override
   void dispose() {
+    _typingStopTimer?.cancel();
+    if (_typingSent) {
+      unawaited(_setTyping(false));
+    }
     _composerController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -454,6 +476,9 @@ class _MatrixRoomPageState extends State<MatrixRoomPage> {
         _messages = messages;
         _error = null;
       });
+      if (messages.isNotEmpty) {
+        unawaited(_markRead(messages.last.eventId));
+      }
       _scrollToBottom();
     } catch (error) {
       if (!mounted) return;
@@ -463,10 +488,49 @@ class _MatrixRoomPageState extends State<MatrixRoomPage> {
     }
   }
 
+  Future<void> _markRead(String eventId) async {
+    try {
+      await widget.client.markRead(widget.room.roomId, eventId);
+    } catch (_) {
+      // Read receipts are best-effort and should not block viewing a room.
+    }
+  }
+
+  void _onComposerChanged(String value) {
+    _typingStopTimer?.cancel();
+    if (value.trim().isEmpty) {
+      unawaited(_setTyping(false));
+      return;
+    }
+
+    if (!_typingSent) {
+      unawaited(_setTyping(true));
+    }
+    _typingStopTimer = Timer(
+      _typingIdleDelay,
+      () => unawaited(_setTyping(false)),
+    );
+  }
+
+  Future<void> _setTyping(bool typing) async {
+    if (_typingSent == typing) return;
+    _typingSent = typing;
+    try {
+      await widget.client.setTyping(
+        widget.room.roomId,
+        typing: typing,
+      );
+    } catch (_) {
+      // Typing is ephemeral. Network failures should not disturb composing.
+    }
+  }
+
   Future<void> _send() async {
     final text = _composerController.text.trim();
     if (text.isEmpty || _sending) return;
 
+    _typingStopTimer?.cancel();
+    unawaited(_setTyping(false));
     setState(() => _sending = true);
     try {
       await widget.client.sendText(widget.room.roomId, text);
@@ -477,6 +541,66 @@ class _MatrixRoomPageState extends State<MatrixRoomPage> {
       setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _showReactionPicker(MatrixMessage message) async {
+    if (message.encrypted) return;
+    final reaction = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                '发送 Reaction',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _quickReactions
+                    .map(
+                      (emoji) => ActionChip(
+                        label: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 22),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(emoji),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '当前实验 UI 只发送 m.reaction；服务端聚合计数展示将在 SDK/E2EE 层接入后补齐。',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (reaction == null || !mounted) return;
+
+    try {
+      await widget.client.sendReaction(
+        widget.room.roomId,
+        message.eventId,
+        reaction,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已发送 reaction $reaction')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
     }
   }
 
@@ -505,10 +629,12 @@ class _MatrixRoomPageState extends State<MatrixRoomPage> {
         actions: <Widget>[
           IconButton(
             tooltip: '刷新',
-            onPressed: _loading ? null : () {
-              setState(() => _loading = true);
-              _loadMessages();
-            },
+            onPressed: _loading
+                ? null
+                : () {
+                    setState(() => _loading = true);
+                    _loadMessages();
+                  },
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -548,6 +674,9 @@ class _MatrixRoomPageState extends State<MatrixRoomPage> {
                         return _MatrixMessageBubble(
                           message: message,
                           own: own,
+                          onLongPress: message.encrypted
+                              ? null
+                              : () => _showReactionPicker(message),
                         );
                       },
                     ),
@@ -566,6 +695,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage> {
                       minLines: 1,
                       maxLines: 6,
                       textInputAction: TextInputAction.newline,
+                      onChanged: _onComposerChanged,
                       decoration: const InputDecoration(
                         hintText: '发送 Matrix 消息…',
                         border: OutlineInputBorder(),
@@ -595,10 +725,15 @@ class _MatrixRoomPageState extends State<MatrixRoomPage> {
 }
 
 class _MatrixMessageBubble extends StatelessWidget {
-  const _MatrixMessageBubble({required this.message, required this.own});
+  const _MatrixMessageBubble({
+    required this.message,
+    required this.own,
+    this.onLongPress,
+  });
 
   final MatrixMessage message;
   final bool own;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -607,50 +742,53 @@ class _MatrixMessageBubble extends StatelessWidget {
 
     return Align(
       alignment: own ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 560),
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: own
-              ? colorScheme.primaryContainer
-              : colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            if (!own)
-              Text(
-                message.sender,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.w600,
+      child: GestureDetector(
+        onLongPress: onLongPress,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 560),
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: own
+                ? colorScheme.primaryContainer
+                : colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              if (!own)
+                Text(
+                  message.sender,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            if (!own) const SizedBox(height: 3),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                if (message.encrypted) ...<Widget>[
-                  const Icon(Icons.lock_outline_rounded, size: 16),
-                  const SizedBox(width: 5),
+              if (!own) const SizedBox(height: 3),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  if (message.encrypted) ...<Widget>[
+                    const Icon(Icons.lock_outline_rounded, size: 16),
+                    const SizedBox(width: 5),
+                  ],
+                  Flexible(child: Text(message.body)),
                 ],
-                Flexible(child: Text(message.body)),
-              ],
-            ),
-            const SizedBox(height: 3),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                time,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 3),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  time,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
