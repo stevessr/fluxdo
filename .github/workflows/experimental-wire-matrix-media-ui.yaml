@@ -1,0 +1,184 @@
+name: Wire Matrix media UI once
+
+on:
+  push:
+    branches:
+      - feat/experimental-matrix-telegram
+    paths:
+      - '.github/workflows/experimental-wire-matrix-media-ui.yaml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/experimental-matrix-telegram
+          fetch-depth: 0
+
+      - name: Patch Matrix room composer
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/pages/chat/matrix_room_page.dart')
+          text = path.read_text()
+
+          def replace_once(old, new):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match, got {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "import 'package:flutter/material.dart';\n\nimport '../../services/matrix_client_service.dart';",
+              "import 'package:file_picker/file_picker.dart';\nimport 'package:flutter/material.dart';\nimport 'package:mime/mime.dart';\n\nimport '../../services/matrix_client_service.dart';\nimport '../../services/messaging/matrix_media_service.dart';",
+          )
+          replace_once(
+              '  bool _sending = false;\n',
+              '  bool _sending = false;\n  bool _uploadingMedia = false;\n',
+          )
+          replace_once(
+              '  bool get _sendingDisabled => widget.room.encrypted || _sending;\n',
+              '  bool get _sendingDisabled =>\n      widget.room.encrypted || _sending || _uploadingMedia;\n',
+          )
+          replace_once(
+              '        _loadingOlder ||\n        _sending ||\n        _refreshingLatest) {',
+              '        _loadingOlder ||\n        _sending ||\n        _uploadingMedia ||\n        _refreshingLatest) {',
+          )
+
+          media_method = r'''  Future<void> _pickAndSendMedia() async {
+            if (_sendingDisabled) return;
+            final session = widget.client.session;
+            if (session == null) {
+              setState(() => _error = 'Matrix 会话已失效，请重新登录。');
+              return;
+            }
+
+            final result = await FilePicker.platform.pickFiles(
+              allowMultiple: false,
+              withData: false,
+            );
+            if (result == null || result.files.isEmpty || !mounted) return;
+            final file = result.files.single;
+
+            setState(() {
+              _uploadingMedia = true;
+              _error = null;
+            });
+            try {
+              final media = MatrixMediaService(session: session);
+              int? serverMaxBytes;
+              try {
+                serverMaxBytes = await media.maxUploadBytes();
+              } on MatrixMediaException {
+                // Some older homeservers do not expose media/config. Keep a
+                // conservative in-memory cap until streaming upload lands.
+              }
+
+              const memorySafetyCap = 128 * 1024 * 1024;
+              final effectiveMax = serverMaxBytes != null &&
+                      serverMaxBytes < memorySafetyCap
+                  ? serverMaxBytes
+                  : memorySafetyCap;
+              if (file.size > effectiveMax) {
+                throw MatrixMediaException(
+                  '附件 ${file.name} 为 ${_formatBytes(file.size)}；当前允许上限为 '
+                  '${_formatBytes(effectiveMax)}。',
+                );
+              }
+
+              final bytes = await file.xFile.readAsBytes();
+              if (bytes.length > effectiveMax) {
+                throw MatrixMediaException(
+                  '读取后的附件超过 ${_formatBytes(effectiveMax)}，已停止上传。',
+                );
+              }
+              final headerLength = bytes.length < 64 ? bytes.length : 64;
+              final contentType = lookupMimeType(
+                    file.name,
+                    headerBytes: bytes.sublist(0, headerLength),
+                  ) ??
+                  'application/octet-stream';
+
+              final uploaded = await media.upload(
+                bytes: bytes,
+                filename: file.name,
+                contentType: contentType,
+              );
+              await media.sendUpload(
+                widget.room.roomId,
+                uploaded,
+                replyToEventId: _replyTarget?.eventId,
+                threadRootEventId: _composerThreadRootEventId,
+                threadFallback: _composerThreadFallback,
+              );
+              if (!mounted) return;
+              setState(_clearComposerRelation);
+              await _loadLatest(
+                showSpinner: false,
+                preservePaginationCursor: true,
+              );
+            } catch (error) {
+              if (!mounted) return;
+              setState(() => _error = error.toString());
+            } finally {
+              if (mounted) setState(() => _uploadingMedia = false);
+            }
+          }
+
+          static String _formatBytes(int bytes) {
+            if (bytes < 1024) return '$bytes B';
+            final kib = bytes / 1024;
+            if (kib < 1024) return '${kib.toStringAsFixed(1)} KiB';
+            final mib = kib / 1024;
+            return '${mib.toStringAsFixed(1)} MiB';
+          }
+
+'''
+          replace_once('  void _clearComposerRelation() {\n', media_method + '  void _clearComposerRelation() {\n')
+
+          replace_once(
+              '''                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Expanded(
+                        child: TextField(''',
+              '''                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      IconButton(
+                        tooltip: widget.room.encrypted
+                            ? 'E2EE 尚未启用，不能上传明文附件'
+                            : '发送附件',
+                        onPressed: _sendingDisabled ? null : _pickAndSendMedia,
+                        icon: _uploadingMedia
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.attach_file_rounded),
+                      ),
+                      const SizedBox(width: 2),
+                      Expanded(
+                        child: TextField(''',
+          )
+
+          path.write_text(text)
+          PY
+
+          git diff --check
+          git diff -- lib/pages/chat/matrix_room_page.dart
+
+      - name: Commit media composer wiring
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/pages/chat/matrix_room_page.dart
+          git commit -m 'feat(matrix): wire unencrypted media upload into composer'
+          git push origin HEAD:feat/experimental-matrix-telegram
