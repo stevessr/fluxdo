@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:fluxdo/services/matrix_client_service.dart';
 import 'package:fluxdo/services/messaging/matrix_messaging_provider.dart';
 import 'package:fluxdo/services/messaging/messaging_provider.dart';
@@ -83,20 +84,23 @@ class _FakeMatrixClientService extends MatrixClientService {
   bool get isLoggedIn => true;
 
   @override
-  Future<List<MatrixRoomSummary>> loadRooms({bool forceFull = false}) async =>
-      <MatrixRoomSummary>[
-        MatrixRoomSummary(
-          roomId: '!room:example.org',
-          name: 'Example Room',
-          unreadCount: 3,
-          lastMessage: MatrixMessage(
-            eventId: r'$latest',
-            sender: '@alice:example.org',
-            body: 'latest',
-            timestamp: DateTime.fromMillisecondsSinceEpoch(20),
-          ),
-        ),
-      ];
+  Future<List<MatrixRoomSummary>> loadRooms({
+    bool forceFull = false,
+    Duration timeout = Duration.zero,
+    CancelToken? cancelToken,
+  }) async => <MatrixRoomSummary>[
+    MatrixRoomSummary(
+      roomId: '!room:example.org',
+      name: 'Example Room',
+      unreadCount: 3,
+      lastMessage: MatrixMessage(
+        eventId: r'$latest',
+        sender: '@alice:example.org',
+        body: 'latest',
+        timestamp: DateTime.fromMillisecondsSinceEpoch(20),
+      ),
+    ),
+  ];
 
   @override
   Future<List<MatrixMessage>> loadMessages(
