@@ -1,6 +1,8 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../config/discourse_instance_runtime.dart';
+import '../../constants.dart';
 import 'multi_account_registry_normalizer.dart';
 import 'secret_store.dart';
 import 'system_secret_store.dart';
@@ -23,7 +25,9 @@ class ResilientSecureStorage {
   static Future<SharedPreferences>? _legacyPreferences;
 
   Future<String?> read({required String key}) async {
-    final value = await _store.read(SecretKey.raw(key));
+    await _ensureRuntimeForKey(key);
+    final storageKey = _storageKey(key);
+    final value = await _store.read(SecretKey.raw(storageKey));
     if (value != null) {
       final normalized = _normalizeLegacyValue(key, value);
       if (normalized != value) {
@@ -31,7 +35,7 @@ class ResilientSecureStorage {
           // Reading the account list doubles as a one-time migration for
           // duplicate rows left by older builds. Failure to persist the
           // cleanup must not make an otherwise readable secret unavailable.
-          await _store.write(SecretKey.raw(key), normalized);
+          await _store.write(SecretKey.raw(storageKey), normalized);
         } catch (_) {}
       }
       return normalized;
@@ -39,13 +43,13 @@ class ResilientSecureStorage {
 
     // 只迁移旧版本曾写入的明文 fallback；新代码永不再写该位置。
     final preferences = await _preferences;
-    final legacyKey = '$_legacyFallbackPrefix$key';
+    final legacyKey = '$_legacyFallbackPrefix$storageKey';
     final legacyValue = preferences.getString(legacyKey);
     if (legacyValue == null) return null;
     final normalizedLegacyValue = _normalizeLegacyValue(key, legacyValue);
     try {
       await _store.write(
-        SecretKey.raw(key, fallbackPolicy: SecretFallbackPolicy.deny),
+        SecretKey.raw(storageKey, fallbackPolicy: SecretFallbackPolicy.deny),
         normalizedLegacyValue,
       );
       await preferences.remove(legacyKey);
@@ -56,13 +60,51 @@ class ResilientSecureStorage {
   }
 
   Future<void> write({required String key, required String value}) async {
-    await _store.write(SecretKey.raw(key), _normalizeLegacyValue(key, value));
-    await (await _preferences).remove('$_legacyFallbackPrefix$key');
+    await _ensureRuntimeForKey(key);
+    final storageKey = _storageKey(key);
+    await _store.write(
+      SecretKey.raw(storageKey),
+      _normalizeLegacyValue(key, value),
+    );
+    await (await _preferences).remove('$_legacyFallbackPrefix$storageKey');
   }
 
   Future<void> delete({required String key}) async {
-    await _store.delete(SecretKey.raw(key));
-    await (await _preferences).remove('$_legacyFallbackPrefix$key');
+    await _ensureRuntimeForKey(key);
+    final storageKey = _storageKey(key);
+    await _store.delete(SecretKey.raw(storageKey));
+    await (await _preferences).remove('$_legacyFallbackPrefix$storageKey');
+  }
+
+  /// 认证数据在算 namespace 前必须先恢复活动实例。
+  ///
+  /// main() 的启动任务有并行初始化，iOS Workmanager 更是独立 isolate；如果
+  /// 这里直接读取 static 默认值，自定义实例会偶发读写 linux.do 的旧 key。
+  /// AppConstants 内部 Future 去重，因此正常运行期调用几乎没有额外成本。
+  Future<void> _ensureRuntimeForKey(String key) async {
+    if (_isDiscourseAccountKey(key)) {
+      await AppConstants.initDiscourseInstanceRuntime();
+    }
+  }
+
+  /// 多实例只隔离账号认证边界相关的旧兼容 key。
+  ///
+  /// 默认 linux.do 仍返回原 key，因此升级不会触发账号迁移或登出；自定义
+  /// 实例的账号注册表、快照、当前用户名、CSRF、User API Key 和
+  /// guest/login 状态互不串线。
+  String _storageKey(String key) {
+    if (!_isDiscourseAccountKey(key)) return key;
+    return DiscourseInstanceRuntime.scopedStorageKey(key);
+  }
+
+  bool _isDiscourseAccountKey(String key) {
+    return key == 'linux_do_username' ||
+        key == 'linux_do_csrf_token' ||
+        key == MultiAccountRegistryNormalizer.registryKey ||
+        key == 'multi_account_pending_new_login' ||
+        key == 'multi_account_guest_mode' ||
+        key.startsWith('multi_account_snapshot_') ||
+        key.startsWith('user_api_key_');
   }
 
   String _normalizeLegacyValue(String key, String value) {
