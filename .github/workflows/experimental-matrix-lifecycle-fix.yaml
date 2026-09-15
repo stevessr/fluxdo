@@ -1,0 +1,46 @@
+name: Apply Matrix lifecycle correctness patch
+
+on:
+  push:
+    branches:
+      - feat/experimental-matrix-telegram
+    paths:
+      - '.github/workflows/experimental-matrix-lifecycle-fix.yaml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: feat/experimental-matrix-telegram
+          fetch-depth: 0
+
+      - name: Apply lifecycle patch
+        run: python3 tool/experimental_matrix_lifecycle_fix.py
+
+      - name: Validate patch
+        run: |
+          git diff --check
+          git diff -- \
+            lib/pages/chat/matrix_thread_page.dart \
+            lib/pages/chat/matrix_room_page.dart \
+            lib/services/matrix_client_service.dart \
+            lib/services/messaging/matrix_timeline_event_cache.dart
+
+      - name: Commit lifecycle fixes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            lib/pages/chat/matrix_thread_page.dart \
+            lib/pages/chat/matrix_room_page.dart \
+            lib/services/matrix_client_service.dart \
+            lib/services/messaging/matrix_timeline_event_cache.dart
+          git commit -m 'fix(matrix): close thread and timeline lifecycle gaps'
+          git push origin HEAD:feat/experimental-matrix-telegram
