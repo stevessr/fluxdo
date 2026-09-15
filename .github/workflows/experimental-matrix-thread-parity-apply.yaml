@@ -1,0 +1,44 @@
+name: Apply Matrix thread interaction parity
+
+on:
+  push:
+    branches:
+      - feat/experimental-matrix-telegram
+    paths:
+      - '.github/workflows/experimental-matrix-thread-parity-apply.yaml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: feat/experimental-matrix-telegram
+          fetch-depth: 0
+
+      - name: Apply Thread interaction parity
+        run: |
+          python3 tool/experimental_matrix_thread_parity.py
+          python3 tool/experimental_matrix_thread_parity_tests.py
+
+      - name: Validate patch
+        run: |
+          git diff --check
+          git diff -- \
+            lib/pages/chat/matrix_thread_page.dart \
+            test/pages/chat/matrix_thread_page_test.dart
+
+      - name: Commit Thread interaction parity
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            lib/pages/chat/matrix_thread_page.dart \
+            test/pages/chat/matrix_thread_page_test.dart
+          git commit -m 'feat(matrix): bring thread interactions to room parity'
+          git push origin HEAD:feat/experimental-matrix-telegram
