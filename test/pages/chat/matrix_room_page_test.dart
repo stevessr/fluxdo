@@ -44,8 +44,17 @@ void main() {
     expect(find.textContaining('Thread ·'), findsOneWidget);
 
     // The underlying room stays mounted while the Thread route is on top.
-    // Even a background -> foreground transition must not restart its timer.
+    // Follow Flutter's real lifecycle transition graph so AppLifecycleListener
+    // observers see a valid background -> foreground sequence.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
