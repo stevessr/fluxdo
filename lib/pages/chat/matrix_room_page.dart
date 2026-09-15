@@ -7,7 +7,7 @@ import 'package:mime/mime.dart';
 import '../../services/matrix_client_service.dart';
 import '../../services/messaging/matrix_media_service.dart';
 import 'matrix_message_media_view.dart';
-import 'matrix_thread_page.dart';
+import 'matrix_thread_page.dart' as thread_ui;
 
 class MatrixRoomPage extends StatefulWidget {
   const MatrixRoomPage({
@@ -523,7 +523,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   Future<void> _openThread(MatrixMessage root) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => MatrixThreadPage(
+        builder: (_) => thread_ui.MatrixThreadPage(
           client: widget.client,
           room: widget.room,
           root: root,

@@ -534,55 +534,6 @@ class MatrixClientService {
     );
   }
 
-  static List<Map<String, dynamic>> _threadRelationsForRoot(
-    String rootEventId,
-    Iterable<dynamic> rawEvents,
-  ) {
-    final events = rawEvents
-        .map(_asMap)
-        .where((event) => event.isNotEmpty)
-        .toList(growable: false);
-    final includedIds = <String>{};
-    final included = <Map<String, dynamic>>[];
-
-    for (final event in events) {
-      final content = _asMap(event['content']);
-      final relation = _asMap(content['m.relates_to']);
-      if (relation['rel_type'] == 'm.thread' &&
-          relation['event_id'] == rootEventId) {
-        included.add(event);
-        final eventId = event['event_id'];
-        if (eventId is String && eventId.isNotEmpty) includedIds.add(eventId);
-      }
-    }
-
-    var changed = true;
-    while (changed) {
-      changed = false;
-      for (final event in events) {
-        final eventId = event['event_id'];
-        if (eventId is String && includedIds.contains(eventId)) continue;
-        final targetId = _relationTarget(event);
-        if (targetId == null || !includedIds.contains(targetId)) continue;
-        included.add(event);
-        if (eventId is String && eventId.isNotEmpty) includedIds.add(eventId);
-        changed = true;
-      }
-    }
-    return included;
-  }
-
-  static String? _relationTarget(Map<String, dynamic> event) {
-    if (event['type'] == 'm.room.redaction') {
-      final content = _asMap(event['content']);
-      final target = event['redacts'] ?? content['redacts'];
-      return target is String && target.isNotEmpty ? target : null;
-    }
-    final relation = _asMap(_asMap(event['content'])['m.relates_to']);
-    final target = relation['event_id'];
-    return target is String && target.isNotEmpty ? target : null;
-  }
-
   static String _newTransactionId() =>
       'fluxdo-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
 
