@@ -7,7 +7,8 @@ import 'messaging_provider.dart';
 /// This is deliberately a thin mapping layer. When the Extera-backed Matrix SDK
 /// implementation is ready, it can implement [MessagingProvider] directly and
 /// replace this adapter without leaking Matrix SDK classes into shared chat UI.
-class MatrixMessagingProvider implements MessagingProvider {
+class MatrixMessagingProvider
+    implements MessagingProvider, MessagingMutationProvider {
   MatrixMessagingProvider(this.client);
 
   final MatrixClientService client;
@@ -21,10 +22,8 @@ class MatrixMessagingProvider implements MessagingProvider {
     readReceipts: true,
     typing: true,
     reactions: true,
-    // The REST reducer can render remote m.replace events, but the common
-    // provider does not expose an edit-send operation yet. Keep this false so
-    // shared UI does not advertise an unsupported action.
-    edits: false,
+    edits: true,
+    redactions: true,
     threads: false,
     media: false,
     e2ee: false,
@@ -85,10 +84,8 @@ class MatrixMessagingProvider implements MessagingProvider {
       client.markRead(conversationId, messageId);
 
   @override
-  Future<void> setTyping(
-    String conversationId, {
-    required bool typing,
-  }) => client.setTyping(conversationId, typing: typing);
+  Future<void> setTyping(String conversationId, {required bool typing}) =>
+      client.setTyping(conversationId, typing: typing);
 
   @override
   Future<void> sendReaction(
@@ -96,4 +93,15 @@ class MatrixMessagingProvider implements MessagingProvider {
     String messageId,
     String reaction,
   ) => client.sendReaction(conversationId, messageId, reaction);
+
+  @override
+  Future<void> editText(String conversationId, String messageId, String body) =>
+      client.editText(conversationId, messageId, body);
+
+  @override
+  Future<void> redactMessage(
+    String conversationId,
+    String messageId, {
+    String? reason,
+  }) => client.redactEvent(conversationId, messageId, reason: reason);
 }

@@ -6,11 +6,7 @@
 /// stay outside this interface. This lets Fluxdo replace the lightweight Matrix
 /// REST implementation with an Extera/matrix-sdk adapter later without making
 /// the chat hub or shared message widgets depend on SDK types.
-enum MessagingTransport {
-  discourse,
-  matrix,
-  telegram,
-}
+enum MessagingTransport { discourse, matrix, telegram }
 
 class MessagingCapabilities {
   const MessagingCapabilities({
@@ -19,6 +15,7 @@ class MessagingCapabilities {
     this.typing = false,
     this.reactions = false,
     this.edits = false,
+    this.redactions = false,
     this.threads = false,
     this.media = false,
     this.e2ee = false,
@@ -29,6 +26,7 @@ class MessagingCapabilities {
   final bool typing;
   final bool reactions;
   final bool edits;
+  final bool redactions;
   final bool threads;
   final bool media;
   final bool e2ee;
@@ -95,14 +93,24 @@ abstract interface class MessagingProvider {
 
   Future<void> markRead(String conversationId, String messageId);
 
-  Future<void> setTyping(
-    String conversationId, {
-    required bool typing,
-  });
+  Future<void> setTyping(String conversationId, {required bool typing});
 
   Future<void> sendReaction(
     String conversationId,
     String messageId,
     String reaction,
   );
+}
+
+/// Optional mutation surface for providers which can modify already-sent
+/// messages. Keeping this separate avoids forcing protocols without equivalent
+/// semantics to advertise fake implementations.
+abstract interface class MessagingMutationProvider {
+  Future<void> editText(String conversationId, String messageId, String body);
+
+  Future<void> redactMessage(
+    String conversationId,
+    String messageId, {
+    String? reason,
+  });
 }

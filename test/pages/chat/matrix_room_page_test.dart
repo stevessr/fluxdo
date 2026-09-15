@@ -15,7 +15,9 @@ void main() {
     final client = _FakeMatrixClient();
 
     await tester.pumpWidget(
-      MaterialApp(home: MatrixRoomPage(client: client, room: room)),
+      MaterialApp(
+        home: MatrixRoomPage(client: client, room: room),
+      ),
     );
     await tester.pump();
 
@@ -28,13 +30,53 @@ void main() {
     expect(client.releasedRoomId, room.roomId);
   });
 
+  testWidgets('edits and redacts own plaintext text messages', (tester) async {
+    final client = _FakeMatrixClient(withOwnMessage: true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatrixRoomPage(client: client, room: room),
+      ),
+    );
+    await tester.pump();
+
+    await tester.longPress(find.text('my message'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑消息'), findsOneWidget);
+    expect(find.text('撤回消息'), findsOneWidget);
+    await tester.tap(find.text('编辑消息'));
+    await tester.pumpAndSettle();
+    final editDialog = find.byType(AlertDialog);
+    final editField = find.descendant(
+      of: editDialog,
+      matching: find.byType(TextFormField),
+    );
+    await tester.enterText(editField, 'updated message');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(client.edits, <String>[r'$mine|updated message']);
+
+    await tester.longPress(find.text('my message'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('撤回消息'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认撤回'));
+    await tester.pumpAndSettle();
+    expect(client.redactions, <String>[r'$mine']);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+  });
+
   testWidgets('pauses room polling while a thread route is visible', (
     tester,
   ) async {
     final client = _FakeMatrixClient(withThread: true);
 
     await tester.pumpWidget(
-      MaterialApp(home: MatrixRoomPage(client: client, room: room)),
+      MaterialApp(
+        home: MatrixRoomPage(client: client, room: room),
+      ),
     );
     await tester.pump();
     expect(client.loadPageCalls, 1);
@@ -77,12 +119,15 @@ void main() {
 }
 
 class _FakeMatrixClient extends matrix.MatrixClientService {
-  _FakeMatrixClient({this.withThread = false});
+  _FakeMatrixClient({this.withThread = false, this.withOwnMessage = false});
 
   final bool withThread;
+  final bool withOwnMessage;
   int loadPageCalls = 0;
   int releaseTimelineCalls = 0;
   String? releasedRoomId;
+  final List<String> edits = <String>[];
+  final List<String> redactions = <String>[];
 
   @override
   matrix.MatrixSession? get session => const matrix.MatrixSession(
@@ -98,10 +143,21 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
     String? from,
   }) async {
     loadPageCalls++;
-    if (!withThread) {
-      return const matrix.MatrixMessagePage(
-        messages: <matrix.MatrixMessage>[],
+    if (withOwnMessage) {
+      return matrix.MatrixMessagePage(
+        messages: <matrix.MatrixMessage>[
+          matrix.MatrixMessage(
+            eventId: r'$mine',
+            sender: '@me:example.org',
+            body: 'my message',
+            timestamp: DateTime.fromMillisecondsSinceEpoch(100),
+            msgType: 'm.text',
+          ),
+        ],
       );
+    }
+    if (!withThread) {
+      return const matrix.MatrixMessagePage(messages: <matrix.MatrixMessage>[]);
     }
     return matrix.MatrixMessagePage(
       messages: <matrix.MatrixMessage>[
@@ -122,9 +178,7 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
     String threadRootEventId, {
     int limit = 50,
     String? from,
-  }) async => const matrix.MatrixThreadPage(
-    messages: <matrix.MatrixMessage>[],
-  );
+  }) async => const matrix.MatrixThreadPage(messages: <matrix.MatrixMessage>[]);
 
   @override
   void releaseTimeline(String roomId) {
@@ -141,4 +195,18 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
     required bool typing,
     int timeoutMs = 30000,
   }) async {}
+
+  @override
+  Future<void> editText(String roomId, String eventId, String body) async {
+    edits.add('$eventId|$body');
+  }
+
+  @override
+  Future<void> redactEvent(
+    String roomId,
+    String eventId, {
+    String? reason,
+  }) async {
+    redactions.add(eventId);
+  }
 }

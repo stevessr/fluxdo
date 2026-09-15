@@ -50,6 +50,37 @@ void main() {
     });
   });
 
+  test('text edit uses m.replace with canonical m.new_content', () {
+    final content = buildMatrixTextReplacementContent(
+      '  corrected text  ',
+      targetEventId: r'$target',
+    );
+
+    expect(content, <String, dynamic>{
+      'msgtype': 'm.text',
+      'body': '* corrected text',
+      'm.new_content': <String, dynamic>{
+        'msgtype': 'm.text',
+        'body': 'corrected text',
+      },
+      'm.relates_to': <String, dynamic>{
+        'rel_type': 'm.replace',
+        'event_id': r'$target',
+      },
+    });
+  });
+
+  test('text edit rejects empty replacement targets and bodies', () {
+    expect(
+      () => buildMatrixTextReplacementContent(' ', targetEventId: r'$target'),
+      throwsArgumentError,
+    );
+    expect(
+      () => buildMatrixTextReplacementContent('hello', targetEventId: ' '),
+      throwsArgumentError,
+    );
+  });
+
   test('image media content keeps metadata and thread relation', () {
     final content = buildMatrixMediaMessageContent(
       contentUri: 'mxc://example.org/media',

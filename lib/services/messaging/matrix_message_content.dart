@@ -42,6 +42,41 @@ Map<String, dynamic> buildMatrixTextMessageContent(
   return content;
 }
 
+/// Builds the content object for an unencrypted Matrix text edit.
+///
+/// Matrix edits are replacement relations. The top-level body is a legacy
+/// fallback for clients without edit support, while `m.new_content` contains
+/// the canonical replacement body.
+Map<String, dynamic> buildMatrixTextReplacementContent(
+  String body, {
+  required String targetEventId,
+}) {
+  final replacement = body.trim();
+  final target = targetEventId.trim();
+  if (replacement.isEmpty) {
+    throw ArgumentError.value(body, 'body', 'Replacement body cannot be empty');
+  }
+  if (target.isEmpty) {
+    throw ArgumentError.value(
+      targetEventId,
+      'targetEventId',
+      'Replacement target event id cannot be empty',
+    );
+  }
+  return <String, dynamic>{
+    'msgtype': 'm.text',
+    'body': '* $replacement',
+    'm.new_content': <String, dynamic>{
+      'msgtype': 'm.text',
+      'body': replacement,
+    },
+    'm.relates_to': <String, dynamic>{
+      'rel_type': 'm.replace',
+      'event_id': target,
+    },
+  };
+}
+
 /// Builds an unencrypted Matrix attachment event.
 ///
 /// The transport layer only needs to provide the already-uploaded MXC URI and

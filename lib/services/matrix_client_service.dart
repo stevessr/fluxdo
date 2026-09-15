@@ -18,12 +18,10 @@ import 'messaging/matrix_timeline_reducer.dart';
 /// Matrix `/sync` next_batch token so subsequent refreshes only fetch deltas
 /// instead of re-downloading the full joined-room state.
 class MatrixClientService {
-  MatrixClientService({
-    Dio? dio,
-    FlutterSecureStorage? secureStorage,
-  }) : _dio = dio ?? Dio(),
-       _ownsDio = dio == null,
-       _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  MatrixClientService({Dio? dio, FlutterSecureStorage? secureStorage})
+    : _dio = dio ?? Dio(),
+      _ownsDio = dio == null,
+      _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _sessionStorageKey = 'experimental_matrix_session_v1';
   static const _timelineReducer = MatrixTimelineReducer();
@@ -430,11 +428,65 @@ class MatrixClientService {
     }
   }
 
-  Future<void> sendReaction(
+  Future<void> editText(String roomId, String eventId, String body) async {
+    final current = _requireSession();
+    final targetEventId = eventId.trim();
+    final replacement = body.trim();
+    if (targetEventId.isEmpty) {
+      throw const MatrixClientException('Edit target event id is required.');
+    }
+    if (replacement.isEmpty) return;
+
+    final encodedRoomId = Uri.encodeComponent(roomId);
+    final transactionId = _newTransactionId();
+    try {
+      await _dio.put<void>(
+        '${current.homeserver}/_matrix/client/v3/rooms/'
+        '$encodedRoomId/send/m.room.message/$transactionId',
+        data: buildMatrixTextReplacementContent(
+          replacement,
+          targetEventId: targetEventId,
+        ),
+        options: _authorizedOptions(current),
+      );
+    } on DioException catch (error) {
+      throw MatrixClientException(_matrixErrorMessage(error));
+    }
+  }
+
+  Future<void> redactEvent(
     String roomId,
-    String eventId,
-    String key,
-  ) async {
+    String eventId, {
+    String? reason,
+  }) async {
+    final current = _requireSession();
+    final targetEventId = eventId.trim();
+    if (targetEventId.isEmpty) {
+      throw const MatrixClientException(
+        'Redaction target event id is required.',
+      );
+    }
+
+    final encodedRoomId = Uri.encodeComponent(roomId);
+    final encodedEventId = Uri.encodeComponent(targetEventId);
+    final transactionId = _newTransactionId();
+    final normalizedReason = reason?.trim();
+    try {
+      await _dio.put<void>(
+        '${current.homeserver}/_matrix/client/v3/rooms/'
+        '$encodedRoomId/redact/$encodedEventId/$transactionId',
+        data: <String, dynamic>{
+          if (normalizedReason != null && normalizedReason.isNotEmpty)
+            'reason': normalizedReason,
+        },
+        options: _authorizedOptions(current),
+      );
+    } on DioException catch (error) {
+      throw MatrixClientException(_matrixErrorMessage(error));
+    }
+  }
+
+  Future<void> sendReaction(String roomId, String eventId, String key) async {
     final current = _requireSession();
     final reaction = key.trim();
     if (reaction.isEmpty) return;
@@ -511,7 +563,8 @@ class MatrixClientService {
   }
 
   Future<void> _persistSession(MatrixSession session) async {
-    final changedAccount = _session?.homeserver != session.homeserver ||
+    final changedAccount =
+        _session?.homeserver != session.homeserver ||
         _session?.userId != session.userId;
     _session = session;
     if (changedAccount) _resetSyncState();
@@ -638,20 +691,14 @@ class MatrixRoomSummary {
 }
 
 class MatrixMessagePage {
-  const MatrixMessagePage({
-    required this.messages,
-    this.endToken,
-  });
+  const MatrixMessagePage({required this.messages, this.endToken});
 
   final List<MatrixMessage> messages;
   final String? endToken;
 }
 
 class MatrixThreadPage {
-  const MatrixThreadPage({
-    required this.messages,
-    this.nextToken,
-  });
+  const MatrixThreadPage({required this.messages, this.nextToken});
 
   final List<MatrixMessage> messages;
   final String? nextToken;

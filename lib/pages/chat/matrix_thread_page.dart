@@ -8,6 +8,8 @@ import '../../services/matrix_client_service.dart';
 import '../../services/messaging/matrix_media_service.dart';
 import 'matrix_message_media_view.dart';
 
+enum _ThreadMessageAction { reaction, edit, redact }
+
 class MatrixThreadPage extends StatefulWidget {
   const MatrixThreadPage({
     super.key,
@@ -140,10 +142,7 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
     if (widget.room.encrypted || _typingSent == typing) return;
     _typingSent = typing;
     try {
-      await widget.client.setTyping(
-        widget.room.roomId,
-        typing: typing,
-      );
+      await widget.client.setTyping(widget.room.roomId, typing: typing);
     } catch (_) {
       // Typing is ephemeral. Keep composing even if the request fails.
     }
@@ -212,7 +211,8 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
         );
       }
 
-      final contentType = lookupMimeType(file.name) ?? 'application/octet-stream';
+      final contentType =
+          lookupMimeType(file.name) ?? 'application/octet-stream';
       var lastRenderedProgress = -1.0;
       final uploaded = await widget.mediaService.uploadStream(
         stream: file.xFile.openRead(),
@@ -246,6 +246,148 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
           _uploadProgress = null;
         });
       }
+    }
+  }
+
+  bool _canEditMessage(MatrixMessage message) {
+    final currentUserId = widget.client.session?.userId;
+    return !widget.room.encrypted &&
+        !message.encrypted &&
+        !message.redacted &&
+        currentUserId != null &&
+        message.sender == currentUserId &&
+        message.msgType == 'm.text' &&
+        !message.hasMedia;
+  }
+
+  bool _canRedactMessage(MatrixMessage message) {
+    final currentUserId = widget.client.session?.userId;
+    return !widget.room.encrypted &&
+        !message.encrypted &&
+        !message.redacted &&
+        currentUserId != null &&
+        message.sender == currentUserId;
+  }
+
+  Future<void> _showMessageActions(
+    MatrixMessage message, {
+    required bool allowMutation,
+  }) async {
+    if (widget.room.encrypted || message.encrypted || message.redacted) return;
+    final canEdit = allowMutation && _canEditMessage(message);
+    final canRedact = allowMutation && _canRedactMessage(message);
+    final action = await showModalBottomSheet<_ThreadMessageAction>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.add_reaction_outlined),
+              title: const Text('Reaction'),
+              onTap: () =>
+                  Navigator.of(context).pop(_ThreadMessageAction.reaction),
+            ),
+            if (canEdit)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('编辑消息'),
+                onTap: () =>
+                    Navigator.of(context).pop(_ThreadMessageAction.edit),
+              ),
+            if (canRedact)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded),
+                title: const Text('撤回消息'),
+                onTap: () =>
+                    Navigator.of(context).pop(_ThreadMessageAction.redact),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _ThreadMessageAction.reaction:
+        await _showReactionPicker(message);
+      case _ThreadMessageAction.edit:
+        await _editMessage(message);
+      case _ThreadMessageAction.redact:
+        await _redactMessage(message);
+    }
+  }
+
+  Future<void> _editMessage(MatrixMessage message) async {
+    if (!_canEditMessage(message)) return;
+    var draft = message.body;
+    try {
+      final replacement = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('编辑消息'),
+          content: TextFormField(
+            initialValue: message.body,
+            autofocus: true,
+            minLines: 1,
+            maxLines: 8,
+            onChanged: (value) => draft = value,
+            decoration: const InputDecoration(
+              hintText: '新的消息内容',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(draft.trim()),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || replacement == null || replacement.isEmpty) return;
+      if (replacement == message.body.trim()) return;
+      await widget.client.editText(
+        widget.room.roomId,
+        message.eventId,
+        replacement,
+      );
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
+  Future<void> _redactMessage(MatrixMessage message) async {
+    if (!_canRedactMessage(message)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('撤回消息？'),
+        content: const Text('这会通过 Matrix redaction 撤回该 Thread 事件，且无法恢复。'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认撤回'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    try {
+      await widget.client.redactEvent(widget.room.roomId, message.eventId);
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
     }
   }
 
@@ -343,7 +485,7 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '此 Thread 属于 E2EE 房间；SDK crypto provider 接入前禁止发送明文、reaction 与附件。',
+                        '此 Thread 属于 E2EE 房间；SDK crypto provider 接入前禁止发送明文、reaction、编辑/撤回与附件。',
                         style: TextStyle(fontSize: 12),
                       ),
                     ),
@@ -377,11 +519,15 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
                         own: widget.root.sender == currentUserId,
                         mediaService: widget.mediaService,
                         label: 'Thread root',
-                        onLongPress: widget.room.encrypted ||
+                        onLongPress:
+                            widget.room.encrypted ||
                                 widget.root.encrypted ||
                                 widget.root.redacted
                             ? null
-                            : () => _showReactionPicker(widget.root),
+                            : () => _showMessageActions(
+                                widget.root,
+                                allowMutation: false,
+                              ),
                       ),
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
@@ -396,7 +542,9 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
                             icon: _loadingMore
                                 ? const SizedBox.square(
                                     dimension: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Icon(Icons.history_rounded),
                             label: Text(_loadingMore ? '加载中…' : '加载更多关系'),
@@ -410,11 +558,15 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
                           replyTarget: message.replyToEventId == null
                               ? null
                               : messagesById[message.replyToEventId],
-                          onLongPress: widget.room.encrypted ||
+                          onLongPress:
+                              widget.room.encrypted ||
                                   message.encrypted ||
                                   message.redacted
                               ? null
-                              : () => _showReactionPicker(message),
+                              : () => _showMessageActions(
+                                  message,
+                                  allowMutation: true,
+                                ),
                         ),
                       if (_messages.isEmpty && !_loading)
                         const Padding(
@@ -467,7 +619,9 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
                   const SizedBox(width: 6),
                   IconButton.filled(
                     tooltip: '回复 Thread',
-                    onPressed: widget.room.encrypted || _composerBusy ? null : _send,
+                    onPressed: widget.room.encrypted || _composerBusy
+                        ? null
+                        : _send,
                     icon: _sending
                         ? const SizedBox.square(
                             dimension: 18,
