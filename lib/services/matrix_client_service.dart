@@ -41,6 +41,14 @@ class MatrixClientService {
   final MatrixTimelineEventCache _timelineEventCache =
       MatrixTimelineEventCache();
 
+  /// Dedicated bounded cache for relation pages used by thread views. Keeping
+  /// it separate prevents recursive relation events from polluting the room's
+  /// main timeline cache.
+  final MatrixTimelineEventCache _threadEventCache = MatrixTimelineEventCache(
+    maxRooms: 8,
+    maxEventsPerRoom: 800,
+  );
+
   MatrixSession? get session => _session;
   bool get isLoggedIn => _session != null;
 
@@ -180,12 +188,6 @@ class MatrixClientService {
   }
 
   /// Loads joined rooms using Matrix incremental sync.
-  ///
-  /// The first call requests only compact room-list state plus a short timeline
-  /// window. The returned `next_batch` token is retained in memory. Later calls
-  /// pass it as `since`, merge only changed rooms into [_roomCache], and remove
-  /// rooms that appear in the `leave` section. [forceFull] intentionally
-  /// discards this state and starts a new initial sync.
   Future<List<MatrixRoomSummary>> loadRooms({bool forceFull = false}) async {
     final current = _requireSession();
     if (forceFull) _resetSyncState();
@@ -199,9 +201,6 @@ class MatrixClientService {
             'm.room.encryption',
           ],
         },
-        // A small window prevents a reaction/edit from replacing the room
-        // preview while keeping initial sync substantially lighter than a full
-        // timeline. Relation events are reduced locally below.
         'timeline': <String, dynamic>{'limit': 12},
         'ephemeral': <String, dynamic>{'types': <String>[]},
         'account_data': <String, dynamic>{'types': <String>[]},
@@ -244,8 +243,9 @@ class MatrixClientService {
         MatrixMessage? lastMessage = previous?.lastMessage;
         if (timelineEvents.isNotEmpty) {
           final reduced = _timelineReducer.reduce(timelineEvents);
-          if (reduced.isNotEmpty) {
-            lastMessage = MatrixMessage.fromReduced(reduced.last);
+          final visible = reduced.where((message) => !message.isThreadReply);
+          if (visible.isNotEmpty) {
+            lastMessage = MatrixMessage.fromReduced(visible.last);
           }
         }
 
@@ -283,11 +283,9 @@ class MatrixClientService {
     }
   }
 
-  /// Loads a page of room events and returns Matrix's backwards-pagination
-  /// token. Relation events are accumulated per room and reduced together so
-  /// edits/reactions remain correct even when their target message crosses a
-  /// page boundary. [messages] therefore contains the accumulated loaded
-  /// timeline, not just the latest response chunk.
+  /// Loads room history while accumulating relation events across pages.
+  /// Thread replies are intentionally hidden from the main timeline and are
+  /// exposed through [loadThreadPage] instead.
   Future<MatrixMessagePage> loadMessagePage(
     String roomId, {
     int limit = 50,
@@ -310,9 +308,9 @@ class MatrixClientService {
       final chunk = _asList(data['chunk']);
       _timelineEventCache.addAll(roomId, chunk);
 
-      final reduced = _timelineReducer.reduce(
-        _timelineEventCache.eventsFor(roomId),
-      );
+      final reduced = _timelineReducer
+          .reduce(_timelineEventCache.eventsFor(roomId))
+          .where((message) => !message.isThreadReply);
       final end = data['end'];
 
       return MatrixMessagePage(
@@ -326,7 +324,59 @@ class MatrixClientService {
     }
   }
 
-  /// Compatibility wrapper for callers that only need the newest loaded page.
+  /// Loads one page of recursive relations under a thread root.
+  ///
+  /// Matrix explicitly advises clients not to filter the relations endpoint by
+  /// `rel_type=m.thread` when rebuilding a thread, because that would omit edits
+  /// and reactions attached to threaded events. We therefore request recursive
+  /// relations without a rel_type and filter the closure locally.
+  Future<MatrixThreadPage> loadThreadPage(
+    String roomId,
+    String threadRootEventId, {
+    int limit = 50,
+    String? from,
+  }) async {
+    final current = _requireSession();
+    if (threadRootEventId.isEmpty) {
+      throw const MatrixClientException('Thread root event id is required.');
+    }
+    final encodedRoomId = Uri.encodeComponent(roomId);
+    final encodedRootId = Uri.encodeComponent(threadRootEventId);
+    final cacheKey = '$roomId\u0000$threadRootEventId';
+
+    try {
+      final response = await _dio.get<dynamic>(
+        '${current.homeserver}/_matrix/client/v1/rooms/$encodedRoomId/'
+        'relations/$encodedRootId',
+        queryParameters: <String, dynamic>{
+          'dir': 'b',
+          'limit': limit.clamp(1, 100),
+          'recurse': true,
+          if (from != null && from.isNotEmpty) 'from': from,
+        },
+        options: _authorizedOptions(current),
+      );
+      final data = _asMap(response.data);
+      _threadEventCache.addAll(cacheKey, _asList(data['chunk']));
+      final relations = _threadRelationsForRoot(
+        threadRootEventId,
+        _threadEventCache.eventsFor(cacheKey),
+      );
+      final reduced = _timelineReducer
+          .reduce(relations)
+          .where((message) => message.threadRootEventId == threadRootEventId)
+          .map(MatrixMessage.fromReduced)
+          .toList(growable: false);
+      final next = data['next_batch'];
+      return MatrixThreadPage(
+        messages: reduced,
+        nextToken: next is String && next.isNotEmpty ? next : null,
+      );
+    } on DioException catch (error) {
+      throw MatrixClientException(_matrixErrorMessage(error));
+    }
+  }
+
   Future<List<MatrixMessage>> loadMessages(
     String roomId, {
     int limit = 50,
@@ -335,11 +385,13 @@ class MatrixClientService {
     return page.messages;
   }
 
-  /// Releases raw timeline relation state for a room once its page is closed.
-  /// The room list cache is intentionally preserved so returning to the chat
-  /// hub does not force another full `/sync`.
+  /// Releases raw room timeline relation state once its page is closed.
   void releaseTimeline(String roomId) {
     _timelineEventCache.removeRoom(roomId);
+  }
+
+  void releaseThread(String roomId, String threadRootEventId) {
+    _threadEventCache.removeRoom('$roomId\u0000$threadRootEventId');
   }
 
   Future<void> sendText(
@@ -403,7 +455,6 @@ class MatrixClientService {
     }
   }
 
-  /// Sends a public read receipt for [eventId].
   Future<void> markRead(String roomId, String eventId) async {
     final current = _requireSession();
     if (eventId.isEmpty) return;
@@ -422,7 +473,6 @@ class MatrixClientService {
     }
   }
 
-  /// Updates the current user's typing state for a room.
   Future<void> setTyping(
     String roomId, {
     required bool typing,
@@ -462,6 +512,7 @@ class MatrixClientService {
     _syncToken = null;
     _roomCache.clear();
     _timelineEventCache.clear();
+    _threadEventCache.clear();
   }
 
   MatrixSession _requireSession() {
@@ -478,6 +529,55 @@ class MatrixClientService {
         'Authorization': 'Bearer ${session.accessToken}',
       },
     );
+  }
+
+  static List<Map<String, dynamic>> _threadRelationsForRoot(
+    String rootEventId,
+    Iterable<dynamic> rawEvents,
+  ) {
+    final events = rawEvents
+        .map(_asMap)
+        .where((event) => event.isNotEmpty)
+        .toList(growable: false);
+    final includedIds = <String>{};
+    final included = <Map<String, dynamic>>[];
+
+    for (final event in events) {
+      final content = _asMap(event['content']);
+      final relation = _asMap(content['m.relates_to']);
+      if (relation['rel_type'] == 'm.thread' &&
+          relation['event_id'] == rootEventId) {
+        included.add(event);
+        final eventId = event['event_id'];
+        if (eventId is String && eventId.isNotEmpty) includedIds.add(eventId);
+      }
+    }
+
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final event in events) {
+        final eventId = event['event_id'];
+        if (eventId is String && includedIds.contains(eventId)) continue;
+        final targetId = _relationTarget(event);
+        if (targetId == null || !includedIds.contains(targetId)) continue;
+        included.add(event);
+        if (eventId is String && eventId.isNotEmpty) includedIds.add(eventId);
+        changed = true;
+      }
+    }
+    return included;
+  }
+
+  static String? _relationTarget(Map<String, dynamic> event) {
+    if (event['type'] == 'm.room.redaction') {
+      final content = _asMap(event['content']);
+      final target = event['redacts'] ?? content['redacts'];
+      return target is String && target.isNotEmpty ? target : null;
+    }
+    final relation = _asMap(_asMap(event['content'])['m.relates_to']);
+    final target = relation['event_id'];
+    return target is String && target.isNotEmpty ? target : null;
   }
 
   static String _newTransactionId() =>
@@ -579,9 +679,18 @@ class MatrixMessagePage {
     this.endToken,
   });
 
-  /// All messages loaded for the room so far, after relation reduction.
   final List<MatrixMessage> messages;
   final String? endToken;
+}
+
+class MatrixThreadPage {
+  const MatrixThreadPage({
+    required this.messages,
+    this.nextToken,
+  });
+
+  final List<MatrixMessage> messages;
+  final String? nextToken;
 }
 
 class MatrixMessage {
@@ -598,6 +707,14 @@ class MatrixMessage {
     this.replyToEventId,
     this.threadRootEventId,
     this.threadCount = 0,
+    this.mediaUri,
+    this.filename,
+    this.mimeType,
+    this.mediaSize,
+    this.thumbnailUri,
+    this.width,
+    this.height,
+    this.durationMs,
   });
 
   factory MatrixMessage.fromReduced(MatrixReducedMessage message) {
@@ -614,6 +731,14 @@ class MatrixMessage {
       replyToEventId: message.replyToEventId,
       threadRootEventId: message.threadRootEventId,
       threadCount: message.threadCount,
+      mediaUri: message.mediaUri,
+      filename: message.filename,
+      mimeType: message.mimeType,
+      mediaSize: message.mediaSize,
+      thumbnailUri: message.thumbnailUri,
+      width: message.width,
+      height: message.height,
+      durationMs: message.durationMs,
     );
   }
 
@@ -629,8 +754,18 @@ class MatrixMessage {
   final String? replyToEventId;
   final String? threadRootEventId;
   final int threadCount;
+  final String? mediaUri;
+  final String? filename;
+  final String? mimeType;
+  final int? mediaSize;
+  final String? thumbnailUri;
+  final int? width;
+  final int? height;
+  final int? durationMs;
 
   bool get isThreadReply => threadRootEventId != null;
+  bool get hasMedia => mediaUri != null;
+  bool get isImage => msgType == 'm.image';
 }
 
 class MatrixClientException implements Exception {
