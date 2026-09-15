@@ -12,13 +12,17 @@ providers:
 - **Telegram (LAB)** — Telegram Web embedded through Fluxdo's existing
   `flutter_inappwebview` dependency.
 
+Protocol pages are lazily instantiated and kept alive only after first use, so
+opening Discourse does not eagerly initialize Matrix networking or a Telegram
+WebView.
+
 ## Toolchain experiment
 
 The branch pins **Flutter 3.47.2 / Dart 3.13.2** in `.fvmrc` and has a dedicated
 `Experimental Matrix Telegram` workflow. The workflow prepares generated Fluxdo
 sources through `tool/project_prep.dart`, analyzes the app sources separately
-from standalone DevTools/plugin-example packages, and independently performs an
-Android arm64 debug APK smoke build.
+from standalone DevTools/plugin-example packages, runs the chat/messaging test
+suites, and independently performs an Android arm64 debug APK smoke build.
 
 The Android defaults relevant to Fluxdo remain compatible with the existing
 project setup (compile/target SDK 36, minSdk 24, NDK 28.2.13676358), so this
@@ -26,28 +30,59 @@ experiment does not force an unrelated Android Gradle/Kotlin migration.
 
 ## Matrix
 
-The Matrix experiment currently supports:
+The lightweight Matrix adapter currently supports:
 
-- password login (`m.login.password`);
-- importing an existing access token (useful for SSO homeservers), with the
-  canonical Matrix user ID resolved through `/account/whoami`;
+- password login (`m.login.password`), access-token import and SSO;
+- Matrix homeserver discovery through `.well-known` with explicit endpoint
+  validation;
+- canonical Matrix user ID verification through `/account/whoami`;
 - encrypted local session persistence through `flutter_secure_storage`;
-- joined-room discovery through filtered `/sync`;
-- incremental room refresh using the returned `next_batch` token instead of
-  repeating a full initial sync on every refresh;
-- room ordering using the latest timeline event;
-- unread notification count;
-- paged room history (initial 50 events);
-- sending plain-text `m.room.message` events;
-- public `m.read` read receipts when a room is opened;
-- debounced typing notifications;
-- sending `m.reaction` annotations from a quick reaction picker;
-- explicit placeholders for `m.room.encrypted` events.
+- joined-room discovery through a filtered initial `/sync`;
+- incremental room state using `next_batch` / `since`;
+- lifecycle-aware, cancellable 30-second `/sync` long polling while the Matrix
+  page is active, with cancellation on background/logout/manual full-sync and
+  bounded retry delay after transport failures;
+- room ordering using the latest visible timeline event and unread counts;
+- `m.heroes`-based room-name fallback without requesting full membership state
+  for every large room;
+- paged room history with bounded relation-event caches across pages;
+- Matrix rich replies and `m.thread` relations, including fallback reply
+  metadata for clients without thread rendering;
+- dedicated Thread pages with pagination, read receipts, typing notifications,
+  reactions and attachment sending;
+- public `m.read` read receipts and debounced typing notifications;
+- reaction sending plus local aggregation with sender/key de-duplication;
+- standard text edits through `m.replace` + `m.new_content`;
+- standard event redaction through `/rooms/{roomId}/redact/{eventId}/{txnId}`;
+- edit/redaction actions for the current user's eligible plaintext messages in
+  both Room and Thread views;
+- plaintext image/file uploads using streaming IO rather than loading the whole
+  attachment into the Dart heap;
+- authenticated Matrix media download/thumbnail endpoints, bounded in-memory
+  media caching, request coalescing and streamed temporary-file downloads;
+- a short-lived `/media/config` cache to avoid querying upload limits for every
+  attachment;
+- explicit placeholders for `m.room.encrypted` events rather than pretending
+  they are plaintext.
+
+Room polling is paused while a dedicated Thread route is visible, including
+across app background/resume transitions, so the Room and Thread views do not
+create redundant history requests underneath one another.
 
 The adapter intentionally does **not** pretend that encrypted events are plain
 text. Full Matrix E2EE requires device keys, Olm/Megolm sessions, verification,
-key backup/recovery, and cross-signing; that work belongs in a dedicated crypto
-provider.
+key backup/recovery, cross-signing and encrypted-media handling; that work
+belongs in a dedicated SDK/crypto provider. Plaintext send/reply/thread,
+reaction, edit/redaction, typing and attachment actions stay disabled in E2EE
+rooms until that provider exists.
+
+### Provider boundary
+
+The common messaging abstraction exposes protocol capabilities rather than
+assuming every backend has identical semantics. Matrix additionally implements
+an optional mutation provider for edit/redaction, so future Discourse or
+Telegram adapters do not need fake mutation methods merely to satisfy the base
+interface.
 
 ### Extera / matrix-dart-sdk path
 
@@ -59,7 +94,8 @@ previous toolchain blocker.
 The lightweight REST adapter remains useful as a low-dependency fallback and as
 a protocol-boundary prototype. Replacing its crypto/message implementation with
 Extera's SDK can now be evaluated independently, without changing the Chat hub
-or Discourse provider.
+or Discourse provider. The SDK dependency also needs a deliberate license review
+before it is made part of Fluxdo's default dependency graph.
 
 ## Telegram
 
@@ -67,6 +103,10 @@ Telegram starts with the complete official Web client embedded in-app. This is
 not a bot-only integration: users can sign in to their normal Telegram account
 and use the full Web UI, while cookies/session data remain managed by the
 existing WebView stack.
+
+The WebView integration keeps Telegram-owned navigation inside the embedded
+client, routes custom/external schemes outside the WebView, handles the current
+InAppWebView download callback and avoids progress-driven rebuild churn.
 
 This choice avoids shipping platform-specific TDLib (`tdjson`) binaries in the
 first experiment. Fluxdo already depends on `flutter_inappwebview
@@ -89,12 +129,15 @@ verified on Android, iOS, Windows, Linux, and macOS.
 ## Known limitations / next steps
 
 - Matrix E2EE is not implemented yet; encrypted events are deliberately not
-  shown as plaintext.
-- Matrix reaction aggregation/display, threads, edits, media, room avatars,
-  membership-derived DM names and push notifications still need mapping.
-- Incremental `/sync` is currently driven by UI refresh; a cancellable long-poll
-  sync loop should replace periodic/manual refresh once account lifecycle and
-  background execution semantics are settled.
+  shown as plaintext and plaintext mutation/send controls stay disabled there.
+- The REST adapter does not yet implement device verification, cross-signing,
+  key backup/recovery, encrypted attachments, push notifications, room avatars
+  or the complete member/presence model. These are better candidates for the
+  SDK-backed provider than for hand-written crypto/state logic.
+- The room list now receives live `/sync` deltas, while an open Room view still
+  owns its own bounded history refresh lifecycle. A later provider can fan live
+  timeline deltas into the active Room cache so the dedicated Room poll can be
+  removed entirely.
 - Telegram is Web-backed rather than mapped into Fluxdo's native message bubble
   model.
 - Experimental strings are currently local to these LAB pages; move them into
