@@ -132,6 +132,44 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('keeps invalidation that arrives during an in-flight refresh', (
+    tester,
+  ) async {
+    final client = _FakeMatrixClient();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatrixRoomPage(client: client, room: room),
+      ),
+    );
+    await tester.pump();
+    expect(client.loadPageCalls, 1);
+
+    final refreshGate = Completer<matrix.MatrixMessagePage>();
+    client.nextLoadGate = refreshGate;
+    client.roomUpdates.publish(room.roomId);
+    await tester.pump();
+    await tester.pump();
+    expect(client.loadPageCalls, 2);
+
+    // A newer delta arrives after the request started. It must remain pending
+    // and trigger one more refresh when the blocked request completes.
+    client.roomUpdates.publish(room.roomId);
+    await tester.pump();
+    expect(client.loadPageCalls, 2);
+
+    refreshGate.complete(
+      const matrix.MatrixMessagePage(messages: <matrix.MatrixMessage>[]),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(client.loadPageCalls, 3);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+  });
+
   testWidgets('coalesces room invalidations while a thread route is visible', (
     tester,
   ) async {
@@ -178,6 +216,7 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
   final List<String> edits = <String>[];
   final List<String> redactions = <String>[];
   Completer<void>? sendGate;
+  Completer<matrix.MatrixMessagePage>? nextLoadGate;
   int sendCalls = 0;
 
   @override
@@ -194,6 +233,11 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
     String? from,
   }) async {
     loadPageCalls++;
+    final gate = nextLoadGate;
+    if (gate != null) {
+      nextLoadGate = null;
+      return gate.future;
+    }
     if (withOwnMessage) {
       return matrix.MatrixMessagePage(
         messages: <matrix.MatrixMessage>[
