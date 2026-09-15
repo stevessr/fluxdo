@@ -1,0 +1,75 @@
+name: Apply Matrix event-driven room refresh
+
+on:
+  push:
+    branches:
+      - feat/experimental-matrix-telegram
+    paths:
+      - '.github/workflows/experimental-matrix-room-updates-apply.yaml'
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.47.2'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: feat/experimental-matrix-telegram
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Apply event-driven room refresh patch
+        run: python3 tool/experimental_matrix_room_updates.py
+
+      - name: Format changed surface
+        run: >-
+          dart format
+          lib/pages/chat/matrix_room_page.dart
+          lib/services/matrix_client_service.dart
+          lib/services/messaging/matrix_room_update_bus.dart
+          test/pages/chat/matrix_room_page_test.dart
+          test/services/messaging/matrix_room_update_bus_test.dart
+
+      - name: Prepare generated test sources
+        run: dart tool/project_prep.dart test
+
+      - name: Analyze app sources
+        run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
+
+      - name: Test room invalidation semantics
+        run: >-
+          flutter test
+          test/pages/chat/matrix_room_page_test.dart
+          test/services/messaging/matrix_room_update_bus_test.dart
+          test/services/messaging/matrix_room_sync_controller_test.dart
+          --no-pub
+
+      - name: Validate patch shape
+        run: git diff --check
+
+      - name: Commit event-driven room refresh
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            lib/pages/chat/matrix_room_page.dart \
+            lib/services/matrix_client_service.dart \
+            lib/services/messaging/matrix_room_update_bus.dart \
+            test/pages/chat/matrix_room_page_test.dart \
+            test/services/messaging/matrix_room_update_bus_test.dart
+          git commit -m 'feat(matrix): refresh rooms from sync invalidations'
+          git push origin HEAD:feat/experimental-matrix-telegram
