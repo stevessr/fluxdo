@@ -40,6 +40,28 @@ void main() {
     await sub.cancel();
     bus.dispose();
   });
+
+  test('dispose closes watchers and ignores late publishes', () async {
+    final bus = MatrixRoomUpdateBus();
+    final values = <String>[];
+    final closed = Completer<void>();
+    final sub = bus.watch('!a:example.org').listen(
+      values.add,
+      onDone: closed.complete,
+    );
+
+    bus.publish('!a:example.org');
+    await _flushAsync();
+    expect(values, <String>['!a:example.org']);
+
+    bus.dispose();
+    await closed.future;
+    bus.publish('!a:example.org');
+    await _flushAsync();
+    expect(values, <String>['!a:example.org']);
+
+    await sub.cancel();
+  });
 }
 
 Future<void> _flushAsync() async {
