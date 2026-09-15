@@ -1,5 +1,6 @@
 import 'package:fluxdo/pages/chat/matrix_thread_page.dart';
 import 'package:fluxdo/services/matrix_client_service.dart' as matrix;
+import 'package:fluxdo/services/messaging/matrix_media_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,10 +21,16 @@ void main() {
     tester,
   ) async {
     final client = _FakeMatrixClient();
+    final media = MatrixMediaService(session: client.session!);
 
     await tester.pumpWidget(
       MaterialApp(
-        home: MatrixThreadPage(client: client, room: room, root: root),
+        home: MatrixThreadPage(
+          client: client,
+          room: room,
+          root: root,
+          mediaService: media,
+        ),
       ),
     );
     await tester.pump();
@@ -34,16 +41,23 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump();
     expect(client.releaseThreadCalls, 1);
+    media.dispose();
   });
 
   testWidgets('stops pagination when homeserver repeats next_batch token', (
     tester,
   ) async {
     final client = _FakeMatrixClient(repeatPaginationToken: true);
+    final media = MatrixMediaService(session: client.session!);
 
     await tester.pumpWidget(
       MaterialApp(
-        home: MatrixThreadPage(client: client, room: room, root: root),
+        home: MatrixThreadPage(
+          client: client,
+          room: room,
+          root: root,
+          mediaService: media,
+        ),
       ),
     );
     await tester.pump();
@@ -54,6 +68,10 @@ void main() {
 
     expect(client.loadThreadCalls, 2);
     expect(find.text('加载更多关系'), findsNothing);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+    media.dispose();
   });
 }
 
