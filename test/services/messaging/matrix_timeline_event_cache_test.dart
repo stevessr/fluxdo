@@ -51,6 +51,26 @@ void main() {
       expect(cache.eventCount('!c:test'), 1);
     });
 
+    test('removeWhere evicts matching room-key families only', () {
+      final cache = MatrixTimelineEventCache(maxRooms: 4, maxEventsPerRoom: 10);
+      final separator = String.fromCharCode(0);
+      final aPrefix = '!a:test$separator';
+      final aOne = '${aPrefix}thread-one';
+      final aTwo = '${aPrefix}thread-two';
+      final bOne = '!b:test${separator}thread-one';
+
+      cache.addAll(aOne, <Map<String, dynamic>>[event(r'$a1', 1)]);
+      cache.addAll(aTwo, <Map<String, dynamic>>[event(r'$a2', 2)]);
+      cache.addAll(bOne, <Map<String, dynamic>>[event(r'$b1', 3)]);
+
+      cache.removeWhere((key) => key.startsWith(aPrefix));
+
+      expect(cache.eventCount(aOne), 0);
+      expect(cache.eventCount(aTwo), 0);
+      expect(cache.eventCount(bOne), 1);
+      expect(cache.roomCount, 1);
+    });
+
     test('removeRoom and clear release retained events', () {
       final cache = MatrixTimelineEventCache(maxRooms: 2, maxEventsPerRoom: 10);
       cache.addAll('!a:test', <Map<String, dynamic>>[event(r'$a', 1)]);
