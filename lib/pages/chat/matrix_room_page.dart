@@ -6,6 +6,8 @@ import 'package:mime/mime.dart';
 
 import '../../services/matrix_client_service.dart';
 import '../../services/messaging/matrix_media_service.dart';
+import 'matrix_message_media_view.dart';
+import 'matrix_thread_page.dart';
 
 class MatrixRoomPage extends StatefulWidget {
   const MatrixRoomPage({
@@ -47,6 +49,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   bool _refreshingLatest = false;
   bool _sending = false;
   bool _uploadingMedia = false;
+  double? _uploadProgress;
   bool _paginationInitialized = false;
   bool _historyExhausted = false;
   String? _error;
@@ -305,6 +308,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
 
     setState(() {
       _uploadingMedia = true;
+      _uploadProgress = 0;
       _error = null;
     });
     try {
@@ -313,15 +317,12 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
       try {
         serverMaxBytes = await media.maxUploadBytes();
       } on MatrixMediaException {
-        // Some older homeservers do not expose media/config. Keep a
-        // conservative in-memory cap until streaming upload lands.
+        // Legacy homeservers may omit media/config. Streaming avoids heap OOM,
+        // but keep a generous network-safety ceiling for the LAB provider.
       }
 
-      const memorySafetyCap = 128 * 1024 * 1024;
-      final effectiveMax =
-          serverMaxBytes != null && serverMaxBytes < memorySafetyCap
-          ? serverMaxBytes
-          : memorySafetyCap;
+      const fallbackUploadLimit = 512 * 1024 * 1024;
+      final effectiveMax = serverMaxBytes ?? fallbackUploadLimit;
       if (file.size > effectiveMax) {
         throw MatrixMediaException(
           '附件 ${file.name} 为 ${_formatBytes(file.size)}；当前允许上限为 '
@@ -329,23 +330,20 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
         );
       }
 
-      final bytes = await file.xFile.readAsBytes();
-      if (bytes.length > effectiveMax) {
-        throw MatrixMediaException(
-          '读取后的附件超过 ${_formatBytes(effectiveMax)}，已停止上传。',
-        );
-      }
-      final headerLength = bytes.length < 64 ? bytes.length : 64;
-      final contentType = lookupMimeType(
-            file.name,
-            headerBytes: bytes.sublist(0, headerLength),
-          ) ??
-          'application/octet-stream';
-
-      final uploaded = await media.upload(
-        bytes: bytes,
+      final contentType = lookupMimeType(file.name) ?? 'application/octet-stream';
+      var lastRenderedProgress = -1.0;
+      final uploaded = await media.uploadStream(
+        stream: file.xFile.openRead(),
+        length: file.size,
         filename: file.name,
         contentType: contentType,
+        onSendProgress: (sent, total) {
+          if (!mounted || total <= 0) return;
+          final progress = (sent / total).clamp(0.0, 1.0);
+          if (progress < 1 && progress - lastRenderedProgress < 0.01) return;
+          lastRenderedProgress = progress;
+          setState(() => _uploadProgress = progress);
+        },
       );
       await media.sendUpload(
         widget.room.roomId,
@@ -364,7 +362,12 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _uploadingMedia = false);
+      if (mounted) {
+        setState(() {
+          _uploadingMedia = false;
+          _uploadProgress = null;
+        });
+      }
     }
   }
 
@@ -516,6 +519,25 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
     }
   }
 
+  Future<void> _openThread(MatrixMessage root) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MatrixThreadPage(
+          client: widget.client,
+          room: widget.room,
+          root: root,
+        ),
+      ),
+    );
+    if (mounted) {
+      await _loadLatest(
+        showSpinner: false,
+        scrollToBottom: false,
+        preservePaginationCursor: true,
+      );
+    }
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
@@ -652,7 +674,11 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
                         return _MatrixMessageBubble(
                           message: message,
                           own: own,
+                          session: widget.client.session,
                           replyTarget: replyTarget,
+                          onOpenThread: message.threadCount > 0
+                              ? () => _openThread(message)
+                              : null,
                           onLongPress:
                               widget.room.encrypted ||
                                   message.encrypted ||
@@ -687,9 +713,12 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
                             : '发送附件',
                         onPressed: _sendingDisabled ? null : _pickAndSendMedia,
                         icon: _uploadingMedia
-                            ? const SizedBox.square(
+                            ? SizedBox.square(
                                 dimension: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  value: _uploadProgress,
+                                ),
                               )
                             : const Icon(Icons.attach_file_rounded),
                       ),
@@ -804,14 +833,18 @@ class _MatrixMessageBubble extends StatelessWidget {
   const _MatrixMessageBubble({
     required this.message,
     required this.own,
+    this.session,
     this.replyTarget,
     this.onLongPress,
+    this.onOpenThread,
   });
 
   final MatrixMessage message;
   final bool own;
+  final MatrixSession? session;
   final MatrixMessage? replyTarget;
   final VoidCallback? onLongPress;
+  final VoidCallback? onOpenThread;
 
   @override
   Widget build(BuildContext context) {
@@ -885,21 +918,18 @@ class _MatrixMessageBubble extends StatelessWidget {
                   Flexible(child: Text(message.body)),
                 ],
               ),
-              if (message.isThreadReply || message.threadCount > 0) ...<Widget>[
+              if (message.hasMedia && session != null)
+                MatrixMessageMediaView(message: message, session: session!),
+              if (message.threadCount > 0) ...<Widget>[
                 const SizedBox(height: 7),
                 Wrap(
                   spacing: 6,
                   children: <Widget>[
-                    if (message.isThreadReply)
-                      _RelationChip(
-                        icon: Icons.forum_outlined,
-                        label: 'Thread',
-                      ),
-                    if (message.threadCount > 0)
-                      _RelationChip(
-                        icon: Icons.forum_rounded,
-                        label: '${message.threadCount} 条线程回复',
-                      ),
+                    _RelationChip(
+                      icon: Icons.forum_rounded,
+                      label: '${message.threadCount} 条线程回复',
+                      onTap: onOpenThread,
+                    ),
                   ],
                 ),
               ],
@@ -950,27 +980,36 @@ class _MatrixMessageBubble extends StatelessWidget {
 }
 
 class _RelationChip extends StatelessWidget {
-  const _RelationChip({required this.icon, required this.label});
+  const _RelationChip({
+    required this.icon,
+    required this.label,
+    this.onTap,
+  });
 
   final IconData icon;
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: colors.secondaryContainer.withValues(alpha: 0.75),
+    return Material(
+      color: colors.secondaryContainer.withValues(alpha: 0.75),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
         borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(icon, size: 13),
-          const SizedBox(width: 4),
-          Text(label, style: Theme.of(context).textTheme.labelSmall),
-        ],
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, size: 13),
+              const SizedBox(width: 4),
+              Text(label, style: Theme.of(context).textTheme.labelSmall),
+            ],
+          ),
+        ),
       ),
     );
   }
