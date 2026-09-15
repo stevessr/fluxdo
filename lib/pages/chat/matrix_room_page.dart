@@ -44,6 +44,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   Timer? _typingStopTimer;
   Timer? _refreshTimer;
   MatrixMediaService? _mediaService;
+  bool _threadRouteActive = false;
   bool _typingSent = false;
   bool _loading = true;
   bool _loadingOlder = false;
@@ -75,8 +76,10 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _startForegroundRefresh();
-      unawaited(_refreshLatestSilently());
+      if (!_threadRouteActive) {
+        _startForegroundRefresh();
+        unawaited(_refreshLatestSilently());
+      }
     } else {
       _stopForegroundRefresh();
     }
@@ -99,6 +102,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   }
 
   void _startForegroundRefresh() {
+    if (_threadRouteActive) return;
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
       _foregroundRefreshInterval,
@@ -113,6 +117,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
 
   Future<void> _refreshLatestSilently() async {
     if (!mounted ||
+        _threadRouteActive ||
         _loading ||
         _loadingOlder ||
         _sending ||
@@ -541,6 +546,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
       return;
     }
     final mediaService = _mediaFor(session);
+    _threadRouteActive = true;
     _stopForegroundRefresh();
     try {
       await Navigator.of(context).push<void>(
@@ -554,7 +560,9 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
         ),
       );
     } finally {
-      if (mounted) {
+      _threadRouteActive = false;
+      if (mounted &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
         _startForegroundRefresh();
         await _loadLatest(
           showSpinner: false,
