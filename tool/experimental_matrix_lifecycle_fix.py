@@ -142,14 +142,6 @@ client = replace_once(
     "      final relations = filterMatrixThreadRelations(\n",
     'shared thread relation helper',
 )
-
-# Remove the now-duplicated private relation helper block. It is located before
-# _persistSession and consists of _threadRelationsForRoot + _relationTarget.
-start = client.find("  static List<Map<String, dynamic>> _threadRelationsForRoot(")
-end = client.find("  Future<void> _persistSession", start)
-if start == -1 or end == -1 or end <= start:
-    raise SystemExit('private thread helper block not found')
-client = client[:start] + client[end:]
 client_path.write_text(client)
 
 print('Matrix lifecycle patch applied successfully')
