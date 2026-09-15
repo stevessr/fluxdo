@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fluxdo/pages/chat/matrix_room_page.dart';
 import 'package:fluxdo/services/matrix_client_service.dart' as matrix;
 import 'package:flutter/material.dart';
@@ -95,6 +97,41 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('explicit post-send refresh consumes older pending invalidation', (
+    tester,
+  ) async {
+    final client = _FakeMatrixClient(withOwnMessage: true);
+    final sendGate = Completer<void>();
+    client.sendGate = sendGate;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatrixRoomPage(client: client, room: room),
+      ),
+    );
+    await tester.pump();
+    expect(client.loadPageCalls, 1);
+
+    await tester.enterText(find.byType(TextField).last, 'hello');
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pump();
+    expect(client.sendCalls, 1);
+
+    // The sync invalidation arrives while send is busy, so it must be pending.
+    client.roomUpdates.publish(room.roomId);
+    await tester.pump();
+    expect(client.loadPageCalls, 1);
+
+    // Finishing send performs its explicit latest fetch. That fetch should
+    // consume the older pending invalidation instead of issuing another fetch.
+    sendGate.complete();
+    await tester.pumpAndSettle();
+    expect(client.loadPageCalls, 2);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+  });
+
   testWidgets('coalesces room invalidations while a thread route is visible', (
     tester,
   ) async {
@@ -140,6 +177,8 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
   String? releasedRoomId;
   final List<String> edits = <String>[];
   final List<String> redactions = <String>[];
+  Completer<void>? sendGate;
+  int sendCalls = 0;
 
   @override
   matrix.MatrixSession? get session => const matrix.MatrixSession(
@@ -200,6 +239,19 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
 
   @override
   void releaseThread(String roomId, String threadRootEventId) {}
+
+  @override
+  Future<void> sendText(
+    String roomId,
+    String body, {
+    String? replyToEventId,
+    String? threadRootEventId,
+    bool threadFallback = false,
+  }) async {
+    sendCalls++;
+    final gate = sendGate;
+    if (gate != null) await gate.future;
+  }
 
   @override
   Future<void> setTyping(

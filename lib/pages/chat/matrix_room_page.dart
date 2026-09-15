@@ -142,6 +142,11 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
     bool surfaceErrors = true,
   }) async {
     if (_refreshingLatest) return;
+
+    // This fetch is newer than every invalidation observed before it starts, so
+    // let it consume that pending signal. Any `/sync` delta that arrives while
+    // the request is in flight will set the flag again and be drained later.
+    _pendingTimelineRefresh = false;
     _refreshingLatest = true;
 
     if (showSpinner && mounted) {
