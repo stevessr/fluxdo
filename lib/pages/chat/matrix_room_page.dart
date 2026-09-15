@@ -24,7 +24,6 @@ enum _MessageAction { reply, thread, reaction, edit, redact }
 class _MatrixRoomPageState extends State<MatrixRoomPage>
     with WidgetsBindingObserver {
   static const Duration _typingIdleDelay = Duration(seconds: 5);
-  static const Duration _foregroundRefreshInterval = Duration(seconds: 20);
   static const List<String> _quickReactions = <String>[
     '👍',
     '❤️',
@@ -38,9 +37,11 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   final ScrollController _scrollController = ScrollController();
 
   Timer? _typingStopTimer;
-  Timer? _refreshTimer;
+  StreamSubscription<String>? _roomUpdateSubscription;
   MatrixMediaService? _mediaService;
   bool _threadRouteActive = false;
+  bool _appResumed = true;
+  bool _pendingTimelineRefresh = false;
   bool _typingSent = false;
   bool _loading = true;
   bool _loadingOlder = false;
@@ -65,26 +66,31 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _startForegroundRefresh();
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _appResumed =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
+    _roomUpdateSubscription = widget.client.roomUpdates
+        .watch(widget.room.roomId)
+        .listen(_handleRoomTimelineUpdate);
     unawaited(_loadLatest());
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      if (!_threadRouteActive) {
-        _startForegroundRefresh();
-        unawaited(_refreshLatestSilently());
-      }
-    } else {
-      _stopForegroundRefresh();
+    _appResumed = state == AppLifecycleState.resumed;
+    if (_appResumed && !_threadRouteActive) {
+      _resumePendingTimelineRefresh();
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _stopForegroundRefresh();
+    final roomUpdateSubscription = _roomUpdateSubscription;
+    _roomUpdateSubscription = null;
+    if (roomUpdateSubscription != null) {
+      unawaited(roomUpdateSubscription.cancel());
+    }
     _typingStopTimer?.cancel();
     if (_typingSent) {
       unawaited(_setTyping(false));
@@ -97,30 +103,30 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
     super.dispose();
   }
 
-  void _startForegroundRefresh() {
-    if (_threadRouteActive) return;
-    _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(
-      _foregroundRefreshInterval,
-      (_) => unawaited(_refreshLatestSilently()),
-    );
+  void _handleRoomTimelineUpdate(String roomId) {
+    if (!mounted || roomId != widget.room.roomId) return;
+    _pendingTimelineRefresh = true;
+    _resumePendingTimelineRefresh();
   }
 
-  void _stopForegroundRefresh() {
-    _refreshTimer?.cancel();
-    _refreshTimer = null;
+  bool get _canDrainTimelineRefresh =>
+      mounted &&
+      _appResumed &&
+      !_threadRouteActive &&
+      !_loading &&
+      !_loadingOlder &&
+      !_sending &&
+      !_uploadingMedia &&
+      !_refreshingLatest;
+
+  void _resumePendingTimelineRefresh() {
+    if (!_pendingTimelineRefresh || !_canDrainTimelineRefresh) return;
+    unawaited(_drainPendingTimelineRefresh());
   }
 
-  Future<void> _refreshLatestSilently() async {
-    if (!mounted ||
-        _threadRouteActive ||
-        _loading ||
-        _loadingOlder ||
-        _sending ||
-        _uploadingMedia ||
-        _refreshingLatest) {
-      return;
-    }
+  Future<void> _drainPendingTimelineRefresh() async {
+    if (!_pendingTimelineRefresh || !_canDrainTimelineRefresh) return;
+    _pendingTimelineRefresh = false;
     await _loadLatest(
       showSpinner: false,
       scrollToBottom: false,
@@ -167,6 +173,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
     } finally {
       _refreshingLatest = false;
       if (showSpinner && mounted) setState(() => _loading = false);
+      _resumePendingTimelineRefresh();
     }
   }
 
@@ -224,6 +231,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
       setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _loadingOlder = false);
+      _resumePendingTimelineRefresh();
     }
   }
 
@@ -287,6 +295,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
       setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _sending = false);
+      _resumePendingTimelineRefresh();
     }
   }
 
@@ -376,6 +385,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
           _uploadProgress = null;
         });
       }
+      _resumePendingTimelineRefresh();
     }
   }
 
@@ -656,7 +666,6 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
     }
     final mediaService = _mediaFor(session);
     _threadRouteActive = true;
-    _stopForegroundRefresh();
     try {
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
@@ -670,15 +679,10 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
       );
     } finally {
       _threadRouteActive = false;
-      if (mounted &&
-          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-        _startForegroundRefresh();
-        await _loadLatest(
-          showSpinner: false,
-          scrollToBottom: false,
-          preservePaginationCursor: true,
-        );
-      }
+      _appResumed =
+          WidgetsBinding.instance.lifecycleState == null ||
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+      _resumePendingTimelineRefresh();
     }
   }
 

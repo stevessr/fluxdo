@@ -68,7 +68,34 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('pauses room polling while a thread route is visible', (
+  testWidgets('refreshes only for the current room sync invalidation', (
+    tester,
+  ) async {
+    final client = _FakeMatrixClient();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatrixRoomPage(client: client, room: room),
+      ),
+    );
+    await tester.pump();
+    expect(client.loadPageCalls, 1);
+
+    client.roomUpdates.publish('!other:example.org');
+    await tester.pump();
+    await tester.pump();
+    expect(client.loadPageCalls, 1);
+
+    client.roomUpdates.publish(room.roomId);
+    await tester.pump();
+    await tester.pump();
+    expect(client.loadPageCalls, 2);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+  });
+
+  testWidgets('coalesces room invalidations while a thread route is visible', (
     tester,
   ) async {
     final client = _FakeMatrixClient(withThread: true);
@@ -85,32 +112,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Thread ·'), findsOneWidget);
 
-    // The underlying room stays mounted while the Thread route is on top.
-    // Follow Flutter's real lifecycle transition graph so AppLifecycleListener
-    // observers see a valid background -> foreground sequence.
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    client.roomUpdates.publish(room.roomId);
+    client.roomUpdates.publish(room.roomId);
     await tester.pump();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     await tester.pump();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    await tester.pump();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-    await tester.pump();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    await tester.pump();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pump();
-
-    // The room refresh interval is 20 seconds. Advancing beyond it while the
-    // thread route is visible must not issue another room /messages request.
-    await tester.pump(const Duration(seconds: 21));
     expect(client.loadPageCalls, 1);
 
     final navigator = tester.state<NavigatorState>(find.byType(Navigator));
     navigator.pop();
     await tester.pumpAndSettle();
 
-    // Returning performs one immediate latest refresh and restarts the timer.
+    // Multiple deltas while the thread was open collapse into one refresh.
     expect(client.loadPageCalls, 2);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));

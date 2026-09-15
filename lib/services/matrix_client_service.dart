@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'messaging/matrix_message_content.dart';
 import 'messaging/matrix_room_metadata.dart';
+import 'messaging/matrix_room_update_bus.dart';
 import 'messaging/matrix_thread_relations.dart';
 import 'messaging/matrix_timeline_event_cache.dart';
 import 'messaging/matrix_timeline_reducer.dart';
@@ -34,6 +35,11 @@ class MatrixClientService {
   String? _syncToken;
   final Map<String, MatrixRoomSummary> _roomCache =
       <String, MatrixRoomSummary>{};
+
+  /// Broadcasts room IDs whose `/sync` timeline contained at least one event.
+  /// Consumers use this as an invalidation signal and fetch history through
+  /// `/messages`; raw sync events intentionally never enter the history LRU.
+  final MatrixRoomUpdateBus roomUpdates = MatrixRoomUpdateBus();
 
   /// Raw history already loaded for recently used rooms. Keeping relation
   /// events across page boundaries means an edit/reaction fetched on a newer
@@ -235,6 +241,7 @@ class MatrixClientService {
       final rooms = _asMap(data['rooms']);
       final joined = _asMap(rooms['join']);
       final left = _asMap(rooms['leave']);
+      final timelineChangedRooms = <String>{};
 
       for (final entry in joined.entries) {
         final roomId = entry.key;
@@ -242,6 +249,9 @@ class MatrixClientService {
         final previous = _roomCache[roomId];
         final timeline = _asMap(roomData['timeline']);
         final timelineEvents = _asList(timeline['events']);
+        if (timelineEvents.isNotEmpty) {
+          timelineChangedRooms.add(roomId);
+        }
         final unread = _asMap(roomData['unread_notifications']);
 
         final metadata = resolveMatrixRoomMetadata(
@@ -283,6 +293,7 @@ class MatrixClientService {
       if (nextBatch is String && nextBatch.isNotEmpty) {
         _syncToken = nextBatch;
       }
+      roomUpdates.publishAll(timelineChangedRooms);
 
       final result = _roomCache.values.toList(growable: false)
         ..sort((a, b) {
@@ -567,6 +578,7 @@ class MatrixClientService {
   void dispose() {
     _session = null;
     _resetSyncState();
+    roomUpdates.dispose();
     if (_ownsDio) {
       _dio.close(force: true);
     }
