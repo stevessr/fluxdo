@@ -43,6 +43,13 @@ void main() {
     await tester.pump();
     expect(find.textContaining('Thread ·'), findsOneWidget);
 
+    // The underlying room stays mounted while the Thread route is on top.
+    // Even a background -> foreground transition must not restart its timer.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
     // The room refresh interval is 20 seconds. Advancing beyond it while the
     // thread route is visible must not issue another room /messages request.
     await tester.pump(const Duration(seconds: 21));
