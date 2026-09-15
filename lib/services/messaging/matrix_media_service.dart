@@ -145,19 +145,11 @@ class MatrixMediaService {
     final encodedRoomId = Uri.encodeComponent(roomId);
     final transactionId =
         'fluxdo-media-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
-    final isImage = upload.contentType.toLowerCase().startsWith('image/');
-    final content = <String, dynamic>{
-      'msgtype': isImage ? 'm.image' : 'm.file',
-      'body': upload.filename,
-      'filename': upload.filename,
-      'url': upload.contentUri,
-      'info': <String, dynamic>{
-        'mimetype': upload.contentType,
-        'size': upload.size,
-      },
-    };
-    attachMatrixRelation(
-      content,
+    final content = buildMatrixMediaMessageContent(
+      contentUri: upload.contentUri,
+      filename: upload.filename,
+      contentType: upload.contentType,
+      size: upload.size,
       replyToEventId: replyToEventId,
       threadRootEventId: threadRootEventId,
       threadFallback: threadFallback,
