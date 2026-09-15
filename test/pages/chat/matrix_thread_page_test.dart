@@ -9,6 +9,11 @@ void main() {
     roomId: '!room:example.org',
     name: 'Example Room',
   );
+  const encryptedRoom = matrix.MatrixRoomSummary(
+    roomId: '!encrypted:example.org',
+    name: 'Encrypted Room',
+    encrypted: true,
+  );
   final root = matrix.MatrixMessage(
     eventId: r'$root',
     sender: '@alice:example.org',
@@ -135,6 +140,68 @@ void main() {
     await tester.pump();
     media.dispose();
   });
+
+  testWidgets('sends text as a thread relation with a reply fallback', (
+    tester,
+  ) async {
+    final client = _FakeMatrixClient();
+    final media = MatrixMediaService(session: client.session!);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatrixThreadPage(
+          client: client,
+          room: room,
+          root: root,
+          mediaService: media,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'thread reply');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+
+    expect(
+      client.sentTexts,
+      <String>[r'thread reply|$root|$reply|true'],
+    );
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+    media.dispose();
+  });
+
+  testWidgets('keeps plaintext composer and attachment actions disabled for E2EE', (
+    tester,
+  ) async {
+    final client = _FakeMatrixClient();
+    final media = MatrixMediaService(session: client.session!);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatrixThreadPage(
+          client: client,
+          room: encryptedRoom,
+          root: root,
+          mediaService: media,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('SDK crypto provider'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
+    final attachButton = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.attach_file_rounded),
+    );
+    expect(attachButton.onPressed, isNull);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+    media.dispose();
+  });
 }
 
 class _FakeMatrixClient extends matrix.MatrixClientService {
@@ -146,6 +213,7 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
   final List<String> readEventIds = <String>[];
   final List<bool> typingStates = <bool>[];
   final List<String> sentReactions = <String>[];
+  final List<String> sentTexts = <String>[];
 
   @override
   matrix.MatrixSession? get session => const matrix.MatrixSession(
@@ -211,5 +279,7 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
     String? replyToEventId,
     String? threadRootEventId,
     bool threadFallback = false,
-  }) async {}
+  }) async {
+    sentTexts.add('$body|$threadRootEventId|$replyToEventId|$threadFallback');
+  }
 }
