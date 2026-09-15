@@ -12,11 +12,11 @@ class MatrixMessageMediaView extends StatefulWidget {
   const MatrixMessageMediaView({
     super.key,
     required this.message,
-    required this.session,
+    required this.mediaService,
   });
 
   final MatrixMessage message;
-  final MatrixSession session;
+  final MatrixMediaService mediaService;
 
   @override
   State<MatrixMessageMediaView> createState() => _MatrixMessageMediaViewState();
@@ -37,8 +37,7 @@ class _MatrixMessageMediaViewState extends State<MatrixMessageMediaView> {
   @override
   void didUpdateWidget(covariant MatrixMessageMediaView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.session.accessToken != widget.session.accessToken ||
-        oldWidget.session.homeserver != widget.session.homeserver ||
+    if (!identical(oldWidget.mediaService, widget.mediaService) ||
         oldWidget.message.mediaUri != widget.message.mediaUri ||
         oldWidget.message.thumbnailUri != widget.message.thumbnailUri) {
       _configure();
@@ -46,7 +45,7 @@ class _MatrixMessageMediaViewState extends State<MatrixMessageMediaView> {
   }
 
   void _configure() {
-    _media = MatrixMediaService(session: widget.session);
+    _media = widget.mediaService;
     _error = null;
     _thumbnailFuture = widget.message.isImage && widget.message.mediaUri != null
         ? _loadThumbnail()
@@ -56,7 +55,7 @@ class _MatrixMessageMediaViewState extends State<MatrixMessageMediaView> {
   Future<Uint8List> _loadThumbnail() {
     final thumbnail = widget.message.thumbnailUri;
     if (thumbnail != null) {
-      return _media.downloadBytes(
+      return _media.downloadPreviewBytes(
         thumbnail,
         maxBytes: MatrixMediaService.defaultThumbnailLimitBytes,
       );

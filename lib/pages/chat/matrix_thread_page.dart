@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/matrix_client_service.dart';
+import '../../services/messaging/matrix_media_service.dart';
 import 'matrix_message_media_view.dart';
 
 class MatrixThreadPage extends StatefulWidget {
@@ -11,11 +12,13 @@ class MatrixThreadPage extends StatefulWidget {
     required this.client,
     required this.room,
     required this.root,
+    required this.mediaService,
   });
 
   final MatrixClientService client;
   final MatrixRoomSummary room;
   final MatrixMessage root;
+  final MatrixMediaService mediaService;
 
   @override
   State<MatrixThreadPage> createState() => _MatrixThreadPageState();
@@ -173,7 +176,7 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
                       _ThreadMessageCard(
                         message: widget.root,
                         own: widget.root.sender == currentUserId,
-                        session: session,
+                        mediaService: widget.mediaService,
                         label: 'Thread root',
                       ),
                       const Padding(
@@ -199,7 +202,7 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
                         _ThreadMessageCard(
                           message: message,
                           own: message.sender == currentUserId,
-                          session: session,
+                          mediaService: widget.mediaService,
                           replyTarget: message.replyToEventId == null
                               ? null
                               : messagesById[message.replyToEventId],
@@ -259,14 +262,14 @@ class _ThreadMessageCard extends StatelessWidget {
   const _ThreadMessageCard({
     required this.message,
     required this.own,
-    required this.session,
+    required this.mediaService,
     this.replyTarget,
     this.label,
   });
 
   final MatrixMessage message;
   final bool own;
-  final MatrixSession? session;
+  final MatrixMediaService mediaService;
   final MatrixMessage? replyTarget;
   final String? label;
 
@@ -316,8 +319,11 @@ class _ThreadMessageCard extends StatelessWidget {
             ],
             const SizedBox(height: 4),
             Text(message.body),
-            if (message.hasMedia && session != null)
-              MatrixMessageMediaView(message: message, session: session!),
+            if (message.hasMedia)
+              MatrixMessageMediaView(
+                message: message,
+                mediaService: mediaService,
+              ),
             if (message.reactions.isNotEmpty) ...<Widget>[
               const SizedBox(height: 6),
               Wrap(

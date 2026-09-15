@@ -43,6 +43,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
 
   Timer? _typingStopTimer;
   Timer? _refreshTimer;
+  MatrixMediaService? _mediaService;
   bool _typingSent = false;
   bool _loading = true;
   bool _loadingOlder = false;
@@ -90,6 +91,8 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
       unawaited(_setTyping(false));
     }
     widget.client.releaseTimeline(widget.room.roomId);
+    _mediaService?.dispose();
+    _mediaService = null;
     _composerController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -292,6 +295,17 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
     }
   }
 
+  MatrixMediaService _mediaFor(MatrixSession session) {
+    final current = _mediaService;
+    if (current != null &&
+        current.session.homeserver == session.homeserver &&
+        current.session.accessToken == session.accessToken) {
+      return current;
+    }
+    current?.dispose();
+    return _mediaService = MatrixMediaService(session: session);
+  }
+
   Future<void> _pickAndSendMedia() async {
     if (_sendingDisabled) return;
     final session = widget.client.session;
@@ -313,7 +327,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
       _error = null;
     });
     try {
-      final media = MatrixMediaService(session: session);
+      final media = _mediaFor(session);
       int? serverMaxBytes;
       try {
         serverMaxBytes = await media.maxUploadBytes();
@@ -521,12 +535,19 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
   }
 
   Future<void> _openThread(MatrixMessage root) async {
+    final session = widget.client.session;
+    if (session == null) {
+      if (mounted) setState(() => _error = 'Matrix 会话已失效，请重新登录。');
+      return;
+    }
+    final mediaService = _mediaFor(session);
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => thread_ui.MatrixThreadPage(
           client: widget.client,
           room: widget.room,
           root: root,
+          mediaService: mediaService,
         ),
       ),
     );
@@ -552,7 +573,9 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
 
   @override
   Widget build(BuildContext context) {
-    final currentUserId = widget.client.session?.userId;
+    final session = widget.client.session;
+    final currentUserId = session?.userId;
+    final mediaService = session == null ? null : _mediaFor(session);
     final hasOlder = !_historyExhausted &&
         _nextOlderToken != null &&
         _nextOlderToken!.isNotEmpty;
@@ -675,7 +698,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
                         return _MatrixMessageBubble(
                           message: message,
                           own: own,
-                          session: widget.client.session,
+                          mediaService: mediaService,
                           replyTarget: replyTarget,
                           onOpenThread: message.threadCount > 0
                               ? () => _openThread(message)
@@ -834,7 +857,7 @@ class _MatrixMessageBubble extends StatelessWidget {
   const _MatrixMessageBubble({
     required this.message,
     required this.own,
-    this.session,
+    this.mediaService,
     this.replyTarget,
     this.onLongPress,
     this.onOpenThread,
@@ -842,7 +865,7 @@ class _MatrixMessageBubble extends StatelessWidget {
 
   final MatrixMessage message;
   final bool own;
-  final MatrixSession? session;
+  final MatrixMediaService? mediaService;
   final MatrixMessage? replyTarget;
   final VoidCallback? onLongPress;
   final VoidCallback? onOpenThread;
@@ -919,8 +942,11 @@ class _MatrixMessageBubble extends StatelessWidget {
                   Flexible(child: Text(message.body)),
                 ],
               ),
-              if (message.hasMedia && session != null)
-                MatrixMessageMediaView(message: message, session: session!),
+              if (message.hasMedia && mediaService != null)
+                MatrixMessageMediaView(
+                  message: message,
+                  mediaService: mediaService!,
+                ),
               if (message.threadCount > 0) ...<Widget>[
                 const SizedBox(height: 7),
                 Wrap(
