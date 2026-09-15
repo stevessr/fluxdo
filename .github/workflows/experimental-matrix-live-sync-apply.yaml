@@ -1,0 +1,71 @@
+name: Apply Matrix live sync controller
+
+on:
+  push:
+    branches:
+      - feat/experimental-matrix-telegram
+    paths:
+      - '.github/workflows/experimental-matrix-live-sync-apply.yaml'
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.47.2'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: feat/experimental-matrix-telegram
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Apply live sync patch
+        run: python3 tool/experimental_matrix_live_sync.py
+
+      - name: Format live sync surface
+        run: >-
+          dart format
+          lib/pages/chat/matrix_chat_page.dart
+          lib/services/matrix_client_service.dart
+          lib/services/messaging/matrix_room_sync_controller.dart
+          test/services/messaging/matrix_room_sync_controller_test.dart
+
+      - name: Prepare generated test sources
+        run: dart tool/project_prep.dart test
+
+      - name: Analyze app sources
+        run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
+
+      - name: Test live sync controller
+        run: >-
+          flutter test
+          test/services/messaging/matrix_room_sync_controller_test.dart
+          --no-pub
+
+      - name: Validate patch shape
+        run: git diff --check
+
+      - name: Commit live sync controller
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            lib/pages/chat/matrix_chat_page.dart \
+            lib/services/matrix_client_service.dart \
+            lib/services/messaging/matrix_room_sync_controller.dart \
+            test/services/messaging/matrix_room_sync_controller_test.dart
+          git commit -m 'feat(matrix): add lifecycle-aware long poll sync'
+          git push origin HEAD:feat/experimental-matrix-telegram
