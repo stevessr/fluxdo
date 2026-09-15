@@ -22,6 +22,7 @@ jobs:
         with:
           ref: feat/experimental-matrix-telegram
           fetch-depth: 0
+          submodules: recursive
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
