@@ -32,7 +32,9 @@ jobs:
           cache: true
 
       - name: Apply Matrix mutation patch
-        run: python3 tool/experimental_matrix_mutations.py
+        run: |
+          python3 tool/experimental_matrix_mutations.py
+          python3 tool/experimental_matrix_mutations_ui_fix.py
 
       - name: Format mutation surface
         run: >-
