@@ -1,0 +1,66 @@
+name: Apply Matrix room refresh coalescing
+
+on:
+  push:
+    branches:
+      - feat/experimental-matrix-telegram
+    paths:
+      - '.github/workflows/experimental-matrix-room-refresh-coalescing-apply.yaml'
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.47.2'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: feat/experimental-matrix-telegram
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Apply refresh coalescing patch
+        run: python3 tool/experimental_matrix_room_refresh_coalescing.py
+
+      - name: Format changed surface
+        run: >-
+          dart format
+          lib/pages/chat/matrix_room_page.dart
+          test/pages/chat/matrix_room_page_test.dart
+
+      - name: Prepare generated test sources
+        run: dart tool/project_prep.dart test
+
+      - name: Analyze app sources
+        run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
+
+      - name: Test chat and messaging semantics
+        run: |
+          flutter test test/pages/chat --no-pub
+          flutter test test/services/messaging --no-pub
+
+      - name: Validate patch shape
+        run: git diff --check
+
+      - name: Commit refresh coalescing
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            lib/pages/chat/matrix_room_page.dart \
+            test/pages/chat/matrix_room_page_test.dart
+          git commit -m 'perf(matrix): coalesce explicit room refreshes'
+          git push origin HEAD:feat/experimental-matrix-telegram
