@@ -18,6 +18,14 @@ class MatrixReducedMessage {
     this.replyToEventId,
     this.threadRootEventId,
     this.threadCount = 0,
+    this.mediaUri,
+    this.filename,
+    this.mimeType,
+    this.mediaSize,
+    this.thumbnailUri,
+    this.width,
+    this.height,
+    this.durationMs,
   });
 
   final String eventId;
@@ -40,7 +48,19 @@ class MatrixReducedMessage {
   /// Bundled server-side count when this event is a thread root.
   final int threadCount;
 
+  /// Matrix Content URI for an unencrypted attachment.
+  final String? mediaUri;
+  final String? filename;
+  final String? mimeType;
+  final int? mediaSize;
+  final String? thumbnailUri;
+  final int? width;
+  final int? height;
+  final int? durationMs;
+
   bool get isThreadReply => threadRootEventId != null;
+  bool get hasMedia => mediaUri != null;
+  bool get isImage => msgType == 'm.image';
 
   MatrixReducedMessage copyWith({
     String? body,
@@ -65,6 +85,14 @@ class MatrixReducedMessage {
       replyToEventId: replyToEventId ?? this.replyToEventId,
       threadRootEventId: threadRootEventId ?? this.threadRootEventId,
       threadCount: threadCount ?? this.threadCount,
+      mediaUri: mediaUri,
+      filename: filename,
+      mimeType: mimeType,
+      mediaSize: mediaSize,
+      thumbnailUri: thumbnailUri,
+      width: width,
+      height: height,
+      durationMs: durationMs,
     );
   }
 }
@@ -94,8 +122,8 @@ class MatrixTimelineReducer {
 
     // First collect original messages. Replacement and annotation relation
     // events are handled separately so they never become fake timeline rows.
-    // Thread events remain visible in this lightweight client, but are tagged
-    // so the UI can distinguish them from the main timeline.
+    // Thread events remain tagged so callers can either hide them from the
+    // main timeline or render them inside a dedicated thread view.
     for (final event in events) {
       final eventId = _eventId(event);
       if (eventId.isEmpty) continue;
@@ -118,9 +146,12 @@ class MatrixTimelineReducer {
       final relation = _asMap(content['m.relates_to']);
       if (relation['rel_type'] == 'm.replace') continue;
 
-      final body = content['body'];
-      if (body is! String || body.isEmpty) continue;
       final msgType = content['msgtype'] as String?;
+      final mediaUri = _mediaUriForMessage(content, msgType);
+      final rawBody = content['body'];
+      final body = rawBody is String ? rawBody : '';
+      if (body.isEmpty && mediaUri == null) continue;
+
       final threadRoot = relation['rel_type'] == 'm.thread'
           ? _nonEmptyString(relation['event_id'])
           : null;
@@ -131,20 +162,35 @@ class MatrixTimelineReducer {
       final renderedBody = replyTarget == null
           ? body
           : _stripLegacyReplyFallback(body);
+      final info = _asMap(content['info']);
+      final filename = _nonEmptyString(content['filename']) ??
+          (mediaUri != null && renderedBody.isNotEmpty ? renderedBody : null);
+      final displayBody = renderedBody.isNotEmpty
+          ? renderedBody
+          : filename ?? _fallbackMediaLabel(msgType);
 
       messages[eventId] = MatrixReducedMessage(
         eventId: eventId,
         senderId: _sender(event),
-        body: msgType == 'm.emote' ? '* $renderedBody' : renderedBody,
+        body: msgType == 'm.emote' ? '* $displayBody' : displayBody,
         timestamp: _timestamp(event),
         msgType: msgType,
         replyToEventId: isThreadFallback ? null : replyTarget,
         threadRootEventId: threadRoot,
         threadCount: _bundledThreadCount(event),
+        mediaUri: mediaUri,
+        filename: filename,
+        mimeType: _nonEmptyString(info['mimetype']),
+        mediaSize: _nonNegativeInt(info['size']),
+        thumbnailUri: _validMxcUri(info['thumbnail_url']),
+        width: _positiveInt(info['w']),
+        height: _positiveInt(info['h']),
+        durationMs: _nonNegativeInt(info['duration']),
       );
     }
 
-    // Redact original messages without dropping their timeline position.
+    // Redact original messages without dropping their timeline position or
+    // thread placement. Attachment pointers are deliberately stripped.
     for (final eventId in redactedEventIds) {
       final original = messages[eventId];
       if (original == null) continue;
@@ -302,6 +348,51 @@ class MatrixTimelineReducer {
     if (value is int) return value < 0 ? 0 : value;
     if (value is num) return value < 0 ? 0 : value.toInt();
     return 0;
+  }
+
+  static String? _mediaUriForMessage(
+    Map<String, dynamic> content,
+    String? msgType,
+  ) {
+    if (msgType != 'm.image' &&
+        msgType != 'm.file' &&
+        msgType != 'm.audio' &&
+        msgType != 'm.video') {
+      return null;
+    }
+    return _validMxcUri(content['url']);
+  }
+
+  static String _fallbackMediaLabel(String? msgType) => switch (msgType) {
+    'm.image' => 'Image',
+    'm.audio' => 'Audio',
+    'm.video' => 'Video',
+    _ => 'Attachment',
+  };
+
+  static String? _validMxcUri(dynamic value) {
+    if (value is! String || !value.startsWith('mxc://')) return null;
+    final uri = Uri.tryParse(value);
+    if (uri == null || uri.scheme != 'mxc' || uri.authority.isEmpty) return null;
+    final segments = uri.pathSegments.where((part) => part.isNotEmpty).toList();
+    if (segments.length != 1 || uri.query.isNotEmpty || uri.fragment.isNotEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  static int? _nonNegativeInt(dynamic value) {
+    final parsed = switch (value) {
+      int number => number,
+      num number => number.toInt(),
+      _ => int.tryParse(value?.toString() ?? ''),
+    };
+    return parsed != null && parsed >= 0 ? parsed : null;
+  }
+
+  static int? _positiveInt(dynamic value) {
+    final parsed = _nonNegativeInt(value);
+    return parsed != null && parsed > 0 ? parsed : null;
   }
 
   static String? _nonEmptyString(dynamic value) =>
