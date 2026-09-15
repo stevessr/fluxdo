@@ -40,7 +40,7 @@ void main() {
     expect(client.loadPageCalls, 1);
 
     await tester.tap(find.text('1 条线程回复'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.textContaining('Thread ·'), findsOneWidget);
 
     // The underlying room stays mounted while the Thread route is on top.
@@ -57,8 +57,7 @@ void main() {
 
     final navigator = tester.state<NavigatorState>(find.byType(Navigator));
     navigator.pop();
-    await tester.pump();
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // Returning performs one immediate latest refresh and restarts the timer.
     expect(client.loadPageCalls, 2);
