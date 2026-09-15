@@ -82,6 +82,44 @@ void main() {
     await _flushAsync();
     controller.dispose();
   });
+
+  test('restart creates a new generation and ignores the old late result', () async {
+    final first = Completer<List<MatrixRoomSummary>>();
+    final restarted = Completer<List<MatrixRoomSummary>>();
+    final emissions = <List<MatrixRoomSummary>>[];
+    var calls = 0;
+
+    final controller = MatrixRoomSyncController(
+      pull: ({required timeout, cancelToken}) {
+        calls++;
+        return calls == 1 ? first.future : restarted.future;
+      },
+      onRooms: emissions.add,
+    );
+
+    controller.start();
+    expect(calls, 1);
+    controller.stop();
+    controller.start();
+    expect(calls, 2);
+    expect(controller.isRunning, isTrue);
+
+    restarted.complete(const <MatrixRoomSummary>[roomA]);
+    await _flushAsync();
+    expect(emissions, hasLength(1));
+    expect(emissions.single.single.roomId, roomA.roomId);
+
+    first.complete(const <MatrixRoomSummary>[]);
+    await _flushAsync();
+    expect(
+      emissions,
+      hasLength(1),
+      reason: 'the previous generation must never overwrite restarted sync',
+    );
+
+    controller.stop();
+    controller.dispose();
+  });
 }
 
 Future<void> _flushAsync() async {
