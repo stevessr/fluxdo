@@ -53,12 +53,20 @@ class MatrixHomeserverDiscoveryException implements Exception {
 /// instead of silently redirecting credentials to a guessed endpoint.
 class MatrixHomeserverDiscoveryService {
   MatrixHomeserverDiscoveryService({Dio? dio})
-    : _get = _dioTransport(dio ?? Dio());
+    : this._withDio(dio ?? Dio(), ownsDio: dio == null);
+
+  MatrixHomeserverDiscoveryService._withDio(
+    Dio dio, {
+    required bool ownsDio,
+  }) : _get = _dioTransport(dio),
+       _ownedDio = ownsDio ? dio : null;
 
   MatrixHomeserverDiscoveryService.withTransport(MatrixDiscoveryGet transport)
-    : _get = transport;
+    : _get = transport,
+      _ownedDio = null;
 
   final MatrixDiscoveryGet _get;
+  final Dio? _ownedDio;
 
   Future<MatrixHomeserverDiscoveryResult> discover(String input) async {
     final normalized = input.trim();
@@ -141,6 +149,10 @@ class MatrixHomeserverDiscoveryService {
       versions: versions,
       serverName: serverName,
     );
+  }
+
+  void dispose() {
+    _ownedDio?.close(force: true);
   }
 
   static String? serverNameFromInput(String input) {

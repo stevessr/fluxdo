@@ -50,6 +50,9 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
 
   @override
   void dispose() {
+    _client.dispose();
+    _discovery.dispose();
+    _sso.dispose();
     _homeserverController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();

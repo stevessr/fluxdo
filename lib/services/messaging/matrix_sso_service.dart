@@ -56,9 +56,12 @@ class MatrixSsoException implements Exception {
 /// in the main client so SSO and access-token import converge on one storage
 /// path.
 class MatrixSsoService {
-  MatrixSsoService({Dio? dio}) : _dio = dio ?? Dio();
+  MatrixSsoService({Dio? dio})
+    : _dio = dio ?? Dio(),
+      _ownsDio = dio == null;
 
   final Dio _dio;
+  final bool _ownsDio;
 
   Future<MatrixLoginCapabilities> loadLoginCapabilities(
     String homeserver,
@@ -169,6 +172,12 @@ class MatrixSsoService {
       );
     } on DioException catch (error) {
       throw MatrixSsoException(_matrixErrorMessage(error));
+    }
+  }
+
+  void dispose() {
+    if (_ownsDio) {
+      _dio.close(force: true);
     }
   }
 

@@ -63,6 +63,7 @@ class MatrixMediaService {
   static const int defaultDownloadLimitBytes = 64 * 1024 * 1024;
   static const int defaultFileDownloadLimitBytes = 512 * 1024 * 1024;
   static const int defaultThumbnailLimitBytes = 12 * 1024 * 1024;
+  static const Duration mediaConfigCacheTtl = Duration(minutes: 5);
 
   final MatrixSession session;
   final Dio _dio;
@@ -70,12 +71,24 @@ class MatrixMediaService {
   final MatrixMediaMemoryCache _previewCache;
   final Map<String, Future<Uint8List>> _previewRequests =
       <String, Future<Uint8List>>{};
+  DateTime? _mediaConfigFetchedAt;
+  int? _cachedMaxUploadBytes;
+  bool _hasMediaConfigCache = false;
 
   Map<String, String> get authorizationHeaders => <String, String>{
     'Authorization': 'Bearer ${session.accessToken}',
   };
 
-  Future<int?> maxUploadBytes() async {
+  Future<int?> maxUploadBytes({bool forceRefresh = false}) async {
+    final now = DateTime.now();
+    final fetchedAt = _mediaConfigFetchedAt;
+    if (!forceRefresh &&
+        _hasMediaConfigCache &&
+        fetchedAt != null &&
+        now.difference(fetchedAt) < mediaConfigCacheTtl) {
+      return _cachedMaxUploadBytes;
+    }
+
     try {
       final response = await _dio.get<dynamic>(
         '${session.homeserver}/_matrix/client/v1/media/config',
@@ -83,10 +96,17 @@ class MatrixMediaService {
       );
       final data = _asMap(response.data);
       final value = data['m.upload.size'];
-      if (value is int) return value;
-      if (value is num) return value.toInt();
-      return int.tryParse(value?.toString() ?? '');
+      final parsed = switch (value) {
+        int number => number,
+        num number => number.toInt(),
+        _ => int.tryParse(value?.toString() ?? ''),
+      };
+      _cachedMaxUploadBytes = parsed != null && parsed >= 0 ? parsed : null;
+      _mediaConfigFetchedAt = now;
+      _hasMediaConfigCache = true;
+      return _cachedMaxUploadBytes;
     } on DioException catch (error) {
+      // Do not cache transient network failures; the next upload may retry.
       throw MatrixMediaException(_matrixErrorMessage(error));
     }
   }
@@ -401,6 +421,9 @@ class MatrixMediaService {
   void dispose() {
     _previewRequests.clear();
     _previewCache.clear();
+    _mediaConfigFetchedAt = null;
+    _cachedMaxUploadBytes = null;
+    _hasMediaConfigCache = false;
     if (_ownsDio) {
       _dio.close(force: true);
     }

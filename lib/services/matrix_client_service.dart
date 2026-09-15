@@ -22,12 +22,14 @@ class MatrixClientService {
     Dio? dio,
     FlutterSecureStorage? secureStorage,
   }) : _dio = dio ?? Dio(),
+       _ownsDio = dio == null,
        _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _sessionStorageKey = 'experimental_matrix_session_v1';
   static const _timelineReducer = MatrixTimelineReducer();
 
   final Dio _dio;
+  final bool _ownsDio;
   final FlutterSecureStorage _secureStorage;
 
   MatrixSession? _session;
@@ -497,6 +499,14 @@ class MatrixClientService {
       );
     } on DioException catch (error) {
       throw MatrixClientException(_matrixErrorMessage(error));
+    }
+  }
+
+  void dispose() {
+    _session = null;
+    _resetSyncState();
+    if (_ownsDio) {
+      _dio.close(force: true);
     }
   }
 
