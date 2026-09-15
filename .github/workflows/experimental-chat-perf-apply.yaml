@@ -1,0 +1,69 @@
+name: Apply experimental chat performance wave
+
+on:
+  push:
+    branches:
+      - feat/experimental-matrix-telegram
+    paths:
+      - '.github/workflows/experimental-chat-perf-apply.yaml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: feat/experimental-matrix-telegram
+          fetch-depth: 0
+
+      - name: Apply lazy protocol, route lifecycle and Telegram fixes
+        run: |
+          python3 tool/experimental_chat_lazy_perf_wave.py
+          python3 tool/experimental_chat_lazy_perf_tests.py
+
+      - name: Apply streamed Matrix attachment downloads
+        run: python3 tool/experimental_matrix_stream_download_perf.py
+
+      - name: Validate patch shape
+        run: |
+          git diff --check
+          git diff -- \
+            lib/pages/chat/chat_hub_page.dart \
+            lib/pages/chat/matrix_room_page.dart \
+            lib/pages/chat/matrix_message_media_view.dart \
+            lib/pages/chat/telegram_chat_page.dart \
+            lib/services/messaging/matrix_media_service.dart \
+            lib/services/messaging/matrix_media_temp_file.dart \
+            lib/services/messaging/matrix_media_temp_file_io.dart \
+            lib/services/messaging/matrix_media_temp_file_stub.dart \
+            lib/services/messaging/matrix_timeline_reducer.dart \
+            lib/services/messaging/telegram_web_policy.dart \
+            test/pages/chat/matrix_room_page_test.dart \
+            test/services/messaging/matrix_timeline_reducer_test.dart \
+            test/services/messaging/telegram_web_policy_test.dart
+
+      - name: Commit performance wave
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            lib/pages/chat/chat_hub_page.dart \
+            lib/pages/chat/matrix_room_page.dart \
+            lib/pages/chat/matrix_message_media_view.dart \
+            lib/pages/chat/telegram_chat_page.dart \
+            lib/services/messaging/matrix_media_service.dart \
+            lib/services/messaging/matrix_media_temp_file.dart \
+            lib/services/messaging/matrix_media_temp_file_io.dart \
+            lib/services/messaging/matrix_media_temp_file_stub.dart \
+            lib/services/messaging/matrix_timeline_reducer.dart \
+            lib/services/messaging/telegram_web_policy.dart \
+            test/pages/chat/matrix_room_page_test.dart \
+            test/services/messaging/matrix_timeline_reducer_test.dart \
+            test/services/messaging/telegram_web_policy_test.dart
+          git commit -m 'perf(experimental): lazy-load protocols and stream Matrix media'
+          git push origin HEAD:feat/experimental-matrix-telegram
