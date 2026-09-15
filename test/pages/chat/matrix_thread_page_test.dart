@@ -17,7 +17,7 @@ void main() {
     threadCount: 1,
   );
 
-  testWidgets('loads thread immediately on first mount and releases on dispose', (
+  testWidgets('loads thread immediately, marks read and releases on dispose', (
     tester,
   ) async {
     final client = _FakeMatrixClient();
@@ -36,7 +36,9 @@ void main() {
     await tester.pump();
 
     expect(client.loadThreadCalls, 1);
+    expect(client.readEventIds, <String>[r'$reply']);
     expect(find.text('loaded thread reply'), findsOneWidget);
+    expect(find.byIcon(Icons.attach_file_rounded), findsOneWidget);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump();
@@ -73,6 +75,66 @@ void main() {
     await tester.pump();
     media.dispose();
   });
+
+  testWidgets('sends typing once and clears it after idle timeout', (
+    tester,
+  ) async {
+    final client = _FakeMatrixClient();
+    final media = MatrixMediaService(session: client.session!);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatrixThreadPage(
+          client: client,
+          room: room,
+          root: root,
+          mediaService: media,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'hello');
+    await tester.pump();
+    expect(client.typingStates, <bool>[true]);
+
+    await tester.pump(const Duration(seconds: 6));
+    expect(client.typingStates, <bool>[true, false]);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+    media.dispose();
+  });
+
+  testWidgets('long press can react to a thread message', (tester) async {
+    final client = _FakeMatrixClient();
+    final media = MatrixMediaService(session: client.session!);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatrixThreadPage(
+          client: client,
+          room: room,
+          root: root,
+          mediaService: media,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.longPress(find.text('loaded thread reply'));
+    await tester.pumpAndSettle();
+    expect(find.text('👍'), findsOneWidget);
+    await tester.tap(find.text('👍'));
+    await tester.pumpAndSettle();
+
+    expect(client.sentReactions, <String>[r'$reply|👍']);
+    expect(client.loadThreadCalls, 2);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+    media.dispose();
+  });
 }
 
 class _FakeMatrixClient extends matrix.MatrixClientService {
@@ -81,6 +143,9 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
   final bool repeatPaginationToken;
   int loadThreadCalls = 0;
   int releaseThreadCalls = 0;
+  final List<String> readEventIds = <String>[];
+  final List<bool> typingStates = <bool>[];
+  final List<String> sentReactions = <String>[];
 
   @override
   matrix.MatrixSession? get session => const matrix.MatrixSession(
@@ -114,6 +179,29 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
   @override
   void releaseThread(String roomId, String threadRootEventId) {
     releaseThreadCalls++;
+  }
+
+  @override
+  Future<void> markRead(String roomId, String eventId) async {
+    readEventIds.add(eventId);
+  }
+
+  @override
+  Future<void> setTyping(
+    String roomId, {
+    required bool typing,
+    int timeoutMs = 30000,
+  }) async {
+    typingStates.add(typing);
+  }
+
+  @override
+  Future<void> sendReaction(
+    String roomId,
+    String eventId,
+    String key,
+  ) async {
+    sentReactions.add('$eventId|$key');
   }
 
   @override
