@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 
 import '../matrix_client_service.dart';
+import 'matrix_media_memory_cache.dart';
 import 'matrix_message_content.dart';
 
 class MatrixMxcUri {
@@ -41,13 +42,23 @@ class MatrixMediaException implements Exception {
 /// must be handled by the future crypto-aware SDK provider instead of silently
 /// uploading plaintext bytes.
 class MatrixMediaService {
-  MatrixMediaService({required this.session, Dio? dio}) : _dio = dio ?? Dio();
+  MatrixMediaService({
+    required this.session,
+    Dio? dio,
+    MatrixMediaMemoryCache? previewCache,
+  }) : _dio = dio ?? Dio(),
+       _ownsDio = dio == null,
+       _previewCache = previewCache ?? MatrixMediaMemoryCache();
 
   static const int defaultDownloadLimitBytes = 64 * 1024 * 1024;
   static const int defaultThumbnailLimitBytes = 12 * 1024 * 1024;
 
   final MatrixSession session;
   final Dio _dio;
+  final bool _ownsDio;
+  final MatrixMediaMemoryCache _previewCache;
+  final Map<String, Future<Uint8List>> _previewRequests =
+      <String, Future<Uint8List>>{};
 
   Map<String, String> get authorizationHeaders => <String, String>{
     'Authorization': 'Bearer ${session.accessToken}',
@@ -233,16 +244,54 @@ class MatrixMediaService {
     return _downloadUriBytes(downloadUri(contentUri), maxBytes: maxBytes);
   }
 
+  /// Downloads an already-generated Matrix preview object with bounded
+  /// LRU caching and in-flight request coalescing.
+  Future<Uint8List> downloadPreviewBytes(
+    String contentUri, {
+    int maxBytes = defaultThumbnailLimitBytes,
+  }) {
+    return _cachedPreview(
+      downloadUri(contentUri),
+      maxBytes: maxBytes,
+    );
+  }
+
   Future<Uint8List> downloadThumbnailBytes(
     String contentUri, {
     int width = 640,
     int height = 640,
     int maxBytes = defaultThumbnailLimitBytes,
   }) {
-    return _downloadUriBytes(
+    return _cachedPreview(
       thumbnailUri(contentUri, width: width, height: height),
       maxBytes: maxBytes,
     );
+  }
+
+  Future<Uint8List> _cachedPreview(
+    Uri uri, {
+    required int maxBytes,
+  }) {
+    final key = '${uri.toString()}|limit=$maxBytes';
+    final cached = _previewCache.get(key);
+    if (cached != null) return Future<Uint8List>.value(cached);
+
+    final pending = _previewRequests[key];
+    if (pending != null) return pending;
+
+    late final Future<Uint8List> request;
+    request = _downloadUriBytes(uri, maxBytes: maxBytes)
+        .then((bytes) {
+          _previewCache.put(key, bytes);
+          return bytes;
+        })
+        .whenComplete(() {
+          if (identical(_previewRequests[key], request)) {
+            _previewRequests.remove(key);
+          }
+        });
+    _previewRequests[key] = request;
+    return request;
   }
 
   Future<Uint8List> _downloadUriBytes(
@@ -308,6 +357,14 @@ class MatrixMediaService {
       serverName: uri.authority,
       mediaId: segments.single,
     );
+  }
+
+  void dispose() {
+    _previewRequests.clear();
+    _previewCache.clear();
+    if (_ownsDio) {
+      _dio.close(force: true);
+    }
   }
 
   Options _authorizedOptions() => Options(
