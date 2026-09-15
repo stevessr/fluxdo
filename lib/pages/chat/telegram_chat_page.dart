@@ -40,7 +40,10 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
 
     try {
       if (!await canLaunchUrl(externalUri)) return false;
-      return launchUrl(externalUri, mode: LaunchMode.externalApplication);
+      return await launchUrl(
+        externalUri,
+        mode: LaunchMode.externalApplication,
+      );
     } catch (error) {
       if (mounted) {
         setState(() => _error = '无法打开外部链接：$error');
@@ -226,7 +229,9 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
                 },
                 onProgressChanged: (controller, progress) {
                   if (!mounted) return;
-                  setState(() => _progress = progress / 100);
+                  final next = progress / 100;
+                  if (next < 1 && (next - _progress).abs() < 0.02) return;
+                  setState(() => _progress = next);
                 },
                 onReceivedError: (controller, request, error) {
                   if (request.isForMainFrame != true || !mounted) return;
@@ -234,13 +239,19 @@ class _TelegramChatPageState extends State<TelegramChatPage> {
                     _error = '${error.type}: ${error.description}';
                   });
                 },
-                onDownloadStartRequest: (controller, request) async {
+                onDownloadStarting: (controller, request) async {
+                  final parsed = Uri.tryParse(request.url.toString());
+                  if (parsed != null &&
+                      TelegramWebPolicy.shouldUseWebViewDownload(parsed)) {
+                    return DownloadStartResponse(handled: false);
+                  }
                   final launched = await _launchExternalUri(request.url);
                   if (!launched && mounted) {
                     setState(() {
                       _error = '无法交给系统下载：${request.url}';
                     });
                   }
+                  return DownloadStartResponse(handled: true);
                 },
                 onCreateWindow: (controller, action) async {
                   final uri = action.request.url;

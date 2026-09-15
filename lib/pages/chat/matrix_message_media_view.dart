@@ -1,12 +1,9 @@
-import 'package:cross_file/cross_file.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-
 import '../../services/matrix_client_service.dart';
 import '../../services/messaging/matrix_media_service.dart';
+import '../../services/messaging/matrix_media_temp_file.dart';
 
 class MatrixMessageMediaView extends StatefulWidget {
   const MatrixMessageMediaView({
@@ -93,12 +90,23 @@ class _MatrixMessageMediaViewState extends State<MatrixMessageMediaView> {
           'Web 端暂不支持把带认证头的 Matrix 附件交给系统打开。',
         );
       }
-      final bytes = await _media.downloadBytes(uri);
-      final temp = await getTemporaryDirectory();
-      final safeName = _safeFilename(widget.message.filename ?? widget.message.body);
-      final path = p.join(temp.path, 'fluxdo-matrix-${widget.message.eventId.hashCode}-$safeName');
-      final file = XFile.fromData(bytes, name: safeName);
-      await file.saveTo(path);
+      final knownSize = widget.message.mediaSize;
+      if (knownSize != null &&
+          knownSize > MatrixMediaService.defaultFileDownloadLimitBytes) {
+        throw MatrixMediaException(
+          '附件 ${_formatBytes(knownSize)} 超过当前流式下载上限 '
+          '${_formatBytes(MatrixMediaService.defaultFileDownloadLimitBytes)}。',
+        );
+      }
+      final download = await _media.openDownload(
+        uri,
+        maxBytes: MatrixMediaService.defaultFileDownloadLimitBytes,
+      );
+      final path = await saveMatrixMediaStreamToTemp(
+        stream: download.stream,
+        filename: widget.message.filename ?? widget.message.body,
+        uniqueKey: widget.message.eventId,
+      );
       final result = await OpenFilex.open(path);
       if (result.type != ResultType.done && result.type != ResultType.noAppToOpen) {
         throw MatrixMediaException(result.message);
@@ -111,14 +119,6 @@ class _MatrixMessageMediaViewState extends State<MatrixMessageMediaView> {
     } finally {
       if (mounted) setState(() => _opening = false);
     }
-  }
-
-  static String _safeFilename(String value) {
-    final base = p.basename(value.trim());
-    final cleaned = base.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_');
-    return cleaned.isEmpty || cleaned == '.' || cleaned == '..'
-        ? 'attachment'
-        : cleaned;
   }
 
   @override

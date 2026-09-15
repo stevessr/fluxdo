@@ -57,6 +57,27 @@ void main() {
       );
     });
 
+    test('keeps blob/data downloads inside the trusted WebView engine', () {
+      expect(
+        TelegramWebPolicy.shouldUseWebViewDownload(
+          Uri.parse('blob:https://web.telegram.org/id'),
+        ),
+        isTrue,
+      );
+      expect(
+        TelegramWebPolicy.shouldUseWebViewDownload(
+          Uri.parse('data:application/octet-stream;base64,AA=='),
+        ),
+        isTrue,
+      );
+      expect(
+        TelegramWebPolicy.shouldUseWebViewDownload(
+          Uri.parse('https://example.com/file.zip'),
+        ),
+        isFalse,
+      );
+    });
+
     test('does not interfere with subframe/resource navigation', () {
       expect(
         TelegramWebPolicy.classify(

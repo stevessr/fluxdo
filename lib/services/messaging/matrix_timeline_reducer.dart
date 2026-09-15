@@ -373,7 +373,12 @@ class MatrixTimelineReducer {
   static String? _validMxcUri(dynamic value) {
     if (value is! String || !value.startsWith('mxc://')) return null;
     final uri = Uri.tryParse(value);
-    if (uri == null || uri.scheme != 'mxc' || uri.authority.isEmpty) return null;
+    if (uri == null ||
+        uri.scheme != 'mxc' ||
+        uri.authority.isEmpty ||
+        uri.userInfo.isNotEmpty) {
+      return null;
+    }
     final segments = uri.pathSegments.where((part) => part.isNotEmpty).toList();
     if (segments.length != 1 || uri.query.isNotEmpty || uri.fragment.isNotEmpty) {
       return null;

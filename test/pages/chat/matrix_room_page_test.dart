@@ -27,9 +27,44 @@ void main() {
     expect(client.releaseTimelineCalls, 1);
     expect(client.releasedRoomId, room.roomId);
   });
+
+  testWidgets('pauses room polling while a thread route is visible', (
+    tester,
+  ) async {
+    final client = _FakeMatrixClient(withThread: true);
+
+    await tester.pumpWidget(
+      MaterialApp(home: MatrixRoomPage(client: client, room: room)),
+    );
+    await tester.pump();
+    expect(client.loadPageCalls, 1);
+
+    await tester.tap(find.text('1 条线程回复'));
+    await tester.pump();
+    expect(find.textContaining('Thread ·'), findsOneWidget);
+
+    // The room refresh interval is 20 seconds. Advancing beyond it while the
+    // thread route is visible must not issue another room /messages request.
+    await tester.pump(const Duration(seconds: 21));
+    expect(client.loadPageCalls, 1);
+
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.pop();
+    await tester.pump();
+    await tester.pump();
+
+    // Returning performs one immediate latest refresh and restarts the timer.
+    expect(client.loadPageCalls, 2);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+  });
 }
 
 class _FakeMatrixClient extends matrix.MatrixClientService {
+  _FakeMatrixClient({this.withThread = false});
+
+  final bool withThread;
   int loadPageCalls = 0;
   int releaseTimelineCalls = 0;
   String? releasedRoomId;
@@ -48,16 +83,42 @@ class _FakeMatrixClient extends matrix.MatrixClientService {
     String? from,
   }) async {
     loadPageCalls++;
-    return const matrix.MatrixMessagePage(
-      messages: <matrix.MatrixMessage>[],
+    if (!withThread) {
+      return const matrix.MatrixMessagePage(
+        messages: <matrix.MatrixMessage>[],
+      );
+    }
+    return matrix.MatrixMessagePage(
+      messages: <matrix.MatrixMessage>[
+        matrix.MatrixMessage(
+          eventId: r'$root',
+          sender: '@alice:example.org',
+          body: 'thread root',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(100),
+          threadCount: 1,
+        ),
+      ],
     );
   }
+
+  @override
+  Future<matrix.MatrixThreadPage> loadThreadPage(
+    String roomId,
+    String threadRootEventId, {
+    int limit = 50,
+    String? from,
+  }) async => const matrix.MatrixThreadPage(
+    messages: <matrix.MatrixMessage>[],
+  );
 
   @override
   void releaseTimeline(String roomId) {
     releaseTimelineCalls++;
     releasedRoomId = roomId;
   }
+
+  @override
+  void releaseThread(String roomId, String threadRootEventId) {}
 
   @override
   Future<void> setTyping(

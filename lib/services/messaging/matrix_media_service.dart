@@ -13,6 +13,16 @@ class MatrixMxcUri {
   final String mediaId;
 }
 
+class MatrixMediaDownload {
+  const MatrixMediaDownload({
+    required this.stream,
+    this.contentLength,
+  });
+
+  final Stream<List<int>> stream;
+  final int? contentLength;
+}
+
 class MatrixMediaUpload {
   const MatrixMediaUpload({
     required this.contentUri,
@@ -51,6 +61,7 @@ class MatrixMediaService {
        _previewCache = previewCache ?? MatrixMediaMemoryCache();
 
   static const int defaultDownloadLimitBytes = 64 * 1024 * 1024;
+  static const int defaultFileDownloadLimitBytes = 512 * 1024 * 1024;
   static const int defaultThumbnailLimitBytes = 12 * 1024 * 1024;
 
   final MatrixSession session;
@@ -237,6 +248,13 @@ class MatrixMediaService {
     );
   }
 
+  Future<MatrixMediaDownload> openDownload(
+    String contentUri, {
+    int maxBytes = defaultFileDownloadLimitBytes,
+  }) {
+    return _openUriDownload(downloadUri(contentUri), maxBytes: maxBytes);
+  }
+
   Future<Uint8List> downloadBytes(
     String contentUri, {
     int maxBytes = defaultDownloadLimitBytes,
@@ -294,7 +312,7 @@ class MatrixMediaService {
     return request;
   }
 
-  Future<Uint8List> _downloadUriBytes(
+  Future<MatrixMediaDownload> _openUriDownload(
     Uri uri, {
     required int maxBytes,
   }) async {
@@ -322,21 +340,42 @@ class MatrixMediaService {
         throw const MatrixMediaException('Matrix media download 返回空内容。');
       }
 
-      final builder = BytesBuilder(copy: false);
-      var received = 0;
-      await for (final chunk in body.stream) {
-        received += chunk.length;
-        if (received > maxBytes) {
-          throw MatrixMediaException(
-            'Matrix media 下载超过客户端上限 $maxBytes bytes，已中止。',
-          );
+      Stream<List<int>> boundedStream() async* {
+        var received = 0;
+        try {
+          await for (final chunk in body.stream) {
+            received += chunk.length;
+            if (received > maxBytes) {
+              throw MatrixMediaException(
+                'Matrix media 下载超过客户端上限 $maxBytes bytes，已中止。',
+              );
+            }
+            yield chunk;
+          }
+        } on DioException catch (error) {
+          throw MatrixMediaException(_matrixErrorMessage(error));
         }
-        builder.add(chunk);
       }
-      return builder.takeBytes();
+
+      return MatrixMediaDownload(
+        stream: boundedStream(),
+        contentLength: declaredLength,
+      );
     } on DioException catch (error) {
       throw MatrixMediaException(_matrixErrorMessage(error));
     }
+  }
+
+  Future<Uint8List> _downloadUriBytes(
+    Uri uri, {
+    required int maxBytes,
+  }) async {
+    final download = await _openUriDownload(uri, maxBytes: maxBytes);
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in download.stream) {
+      builder.add(chunk);
+    }
+    return builder.takeBytes();
   }
 
   static MatrixMxcUri? parseMxcUri(String value) {

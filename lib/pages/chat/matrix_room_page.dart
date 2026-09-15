@@ -541,22 +541,27 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
       return;
     }
     final mediaService = _mediaFor(session);
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => thread_ui.MatrixThreadPage(
-          client: widget.client,
-          room: widget.room,
-          root: root,
-          mediaService: mediaService,
+    _stopForegroundRefresh();
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => thread_ui.MatrixThreadPage(
+            client: widget.client,
+            room: widget.room,
+            root: root,
+            mediaService: mediaService,
+          ),
         ),
-      ),
-    );
-    if (mounted) {
-      await _loadLatest(
-        showSpinner: false,
-        scrollToBottom: false,
-        preservePaginationCursor: true,
       );
+    } finally {
+      if (mounted) {
+        _startForegroundRefresh();
+        await _loadLatest(
+          showSpinner: false,
+          scrollToBottom: false,
+          preservePaginationCursor: true,
+        );
+      }
     }
   }
 

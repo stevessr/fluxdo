@@ -218,6 +218,18 @@ void main() {
     expect(invalid.mediaUri, isNull);
   });
 
+  test('rejects MXC userinfo before media reaches transport', () {
+    final event = _imageMessage(r'$userinfo', 100);
+    final content = event['content'] as Map<String, dynamic>;
+    content['url'] = 'mxc://user@example.org/media123';
+
+    final messages = reducer.reduce(<Map<String, dynamic>>[event]);
+
+    expect(messages, hasLength(1));
+    expect(messages.single.hasMedia, isFalse);
+    expect(messages.single.mediaUri, isNull);
+  });
+
   test('keeps encrypted events explicit and sorts messages chronologically', () {
     final messages = reducer.reduce(<Map<String, dynamic>>[
       <String, dynamic>{

@@ -24,6 +24,9 @@ class _ChatHubPageState extends State<ChatHubPage> {
   static const _selectedProtocolKey = 'experimental_chat_protocol_v1';
 
   ChatProtocol _selected = ChatProtocol.discourse;
+  final Set<ChatProtocol> _activated = <ChatProtocol>{};
+  bool _selectionReady = false;
+  bool _selectionTouched = false;
 
   @override
   void initState() {
@@ -32,20 +35,59 @@ class _ChatHubPageState extends State<ChatHubPage> {
   }
 
   Future<void> _restoreSelection() async {
-    final preferences = await SharedPreferences.getInstance();
-    final restored = chatProtocolFromStorage(
-      preferences.getString(_selectedProtocolKey),
-    );
-    if (!mounted || restored == _selected) return;
-    setState(() => _selected = restored);
+    ChatProtocol restored = ChatProtocol.discourse;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      restored = chatProtocolFromStorage(
+        preferences.getString(_selectedProtocolKey),
+      );
+    } catch (_) {
+      // Preferences are an optimization. Fall back to Discourse if the
+      // platform store is temporarily unavailable.
+    }
+    if (!mounted) return;
+    setState(() {
+      if (!_selectionTouched) {
+        _selected = restored;
+      }
+      _activated.add(_selected);
+      _selectionReady = true;
+    });
   }
 
   Future<void> _selectProtocol(ChatProtocol protocol) async {
-    if (_selected != protocol && mounted) {
-      setState(() => _selected = protocol);
+    if (mounted) {
+      setState(() {
+        _selectionTouched = true;
+        _selectionReady = true;
+        _selected = protocol;
+        _activated.add(protocol);
+      });
     }
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(_selectedProtocolKey, protocol.storageValue);
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(
+        _selectedProtocolKey,
+        protocol.storageValue,
+      );
+    } catch (_) {
+      // The visible protocol switch should still succeed if persistence
+      // fails; the next launch will simply use the fallback.
+    }
+  }
+
+  Widget _pageFor(ChatProtocol protocol) {
+    if (!_activated.contains(protocol)) {
+      if (!_selectionReady && protocol == _selected) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      return const SizedBox.shrink();
+    }
+    return switch (protocol) {
+      ChatProtocol.discourse => const ChatPage(),
+      ChatProtocol.matrix => const MatrixChatPage(),
+      ChatProtocol.telegram => const TelegramChatPage(),
+    };
   }
 
   @override
@@ -85,11 +127,9 @@ class _ChatHubPageState extends State<ChatHubPage> {
         Expanded(
           child: IndexedStack(
             index: selectedIndex < 0 ? 0 : selectedIndex,
-            children: const <Widget>[
-              ChatPage(),
-              MatrixChatPage(),
-              TelegramChatPage(),
-            ],
+            children: chatProtocolOrder
+                .map(_pageFor)
+                .toList(growable: false),
           ),
         ),
       ],
