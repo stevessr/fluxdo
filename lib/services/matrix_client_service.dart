@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'messaging/matrix_message_content.dart';
 import 'messaging/matrix_room_metadata.dart';
+import 'messaging/matrix_thread_relations.dart';
 import 'messaging/matrix_timeline_event_cache.dart';
 import 'messaging/matrix_timeline_reducer.dart';
 
@@ -264,6 +265,8 @@ class MatrixClientService {
       for (final roomId in left.keys) {
         _roomCache.remove(roomId);
         _timelineEventCache.removeRoom(roomId);
+        final threadPrefix = '$roomId\u0000';
+        _threadEventCache.removeWhere((key) => key.startsWith(threadPrefix));
       }
 
       final nextBatch = data['next_batch'];
@@ -358,7 +361,7 @@ class MatrixClientService {
       );
       final data = _asMap(response.data);
       _threadEventCache.addAll(cacheKey, _asList(data['chunk']));
-      final relations = _threadRelationsForRoot(
+      final relations = filterMatrixThreadRelations(
         threadRootEventId,
         _threadEventCache.eventsFor(cacheKey),
       );

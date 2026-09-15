@@ -45,6 +45,10 @@ class MatrixTimelineEventCache {
 
   void removeRoom(String roomId) => _rooms.remove(roomId);
 
+  void removeWhere(bool Function(String roomId) test) {
+    _rooms.removeWhere((roomId, _) => test(roomId));
+  }
+
   void clear() => _rooms.clear();
 
   int eventCount(String roomId) => _rooms[roomId]?.length ?? 0;

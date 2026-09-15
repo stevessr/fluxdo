@@ -27,6 +27,7 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
 
   bool _loading = true;
   bool _loadingMore = false;
+  bool _requestInFlight = false;
   bool _sending = false;
   String? _error;
   String? _nextToken;
@@ -47,7 +48,8 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
   }
 
   Future<void> _load({String? from, bool more = false}) async {
-    if (more ? _loadingMore : _loading) return;
+    if (_requestInFlight) return;
+    _requestInFlight = true;
     setState(() {
       if (more) {
         _loadingMore = true;
@@ -65,11 +67,13 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
       if (!mounted) return;
       setState(() {
         _messages = page.messages;
-        _nextToken = page.nextToken;
+        final next = page.nextToken;
+        _nextToken = next == from ? null : next;
       });
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
+      _requestInFlight = false;
       if (mounted) {
         setState(() {
           _loading = false;
@@ -138,7 +142,7 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
         actions: <Widget>[
           IconButton(
             tooltip: '刷新 Thread',
-            onPressed: _loading ? null : () => _load(),
+            onPressed: _requestInFlight ? null : () => _load(),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -179,7 +183,7 @@ class _MatrixThreadPageState extends State<MatrixThreadPage> {
                       if (_nextToken != null)
                         Center(
                           child: TextButton.icon(
-                            onPressed: _loadingMore
+                            onPressed: _requestInFlight
                                 ? null
                                 : () => _load(from: _nextToken, more: true),
                             icon: _loadingMore

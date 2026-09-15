@@ -89,6 +89,7 @@ class _MatrixRoomPageState extends State<MatrixRoomPage>
     if (_typingSent) {
       unawaited(_setTyping(false));
     }
+    widget.client.releaseTimeline(widget.room.roomId);
     _composerController.dispose();
     _scrollController.dispose();
     super.dispose();
