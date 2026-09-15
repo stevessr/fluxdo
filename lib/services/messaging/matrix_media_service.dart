@@ -43,6 +43,9 @@ class MatrixMediaException implements Exception {
 class MatrixMediaService {
   MatrixMediaService({required this.session, Dio? dio}) : _dio = dio ?? Dio();
 
+  static const int defaultDownloadLimitBytes = 64 * 1024 * 1024;
+  static const int defaultThumbnailLimitBytes = 12 * 1024 * 1024;
+
   final MatrixSession session;
   final Dio _dio;
 
@@ -70,7 +73,30 @@ class MatrixMediaService {
     required Uint8List bytes,
     required String filename,
     required String contentType,
+    ProgressCallback? onSendProgress,
+  }) {
+    return uploadStream(
+      stream: Stream<List<int>>.value(bytes),
+      length: bytes.length,
+      filename: filename,
+      contentType: contentType,
+      onSendProgress: onSendProgress,
+    );
+  }
+
+  /// Streams an unencrypted attachment directly into the Matrix media API.
+  /// This avoids retaining a second full-file copy in Dart heap for desktop and
+  /// mobile file-picker uploads.
+  Future<MatrixMediaUpload> uploadStream({
+    required Stream<List<int>> stream,
+    required int length,
+    required String filename,
+    required String contentType,
+    ProgressCallback? onSendProgress,
   }) async {
+    if (length < 0) {
+      throw const MatrixMediaException('附件长度不能为负数。');
+    }
     final safeFilename = filename.trim().isEmpty ? 'attachment' : filename.trim();
     final safeContentType = contentType.trim().isEmpty
         ? 'application/octet-stream'
@@ -80,11 +106,13 @@ class MatrixMediaService {
       final response = await _dio.post<dynamic>(
         '${session.homeserver}/_matrix/media/v3/upload',
         queryParameters: <String, dynamic>{'filename': safeFilename},
-        data: bytes,
+        data: stream,
+        onSendProgress: onSendProgress,
         options: Options(
           headers: <String, dynamic>{
             ...authorizationHeaders,
             Headers.contentTypeHeader: safeContentType,
+            Headers.contentLengthHeader: length,
           },
           responseType: ResponseType.json,
         ),
@@ -100,7 +128,7 @@ class MatrixMediaService {
         contentUri: contentUri,
         filename: safeFilename,
         contentType: safeContentType,
-        size: bytes.length,
+        size: length,
       );
     } on DioException catch (error) {
       throw MatrixMediaException(_matrixErrorMessage(error));
@@ -172,20 +200,99 @@ class MatrixMediaService {
     );
   }
 
-  Future<Uint8List> downloadBytes(String contentUri) async {
+  Uri thumbnailUri(
+    String contentUri, {
+    int width = 640,
+    int height = 640,
+    String method = 'scale',
+    bool animated = false,
+  }) {
+    final mxc = parseMxcUri(contentUri);
+    if (mxc == null) {
+      throw MatrixMediaException('无效的 Matrix content URI：$contentUri');
+    }
+    final base = Uri.parse(session.homeserver);
+    final baseSegments = base.pathSegments.where((segment) => segment.isNotEmpty);
+    return base.replace(
+      pathSegments: <String>[
+        ...baseSegments,
+        '_matrix',
+        'client',
+        'v1',
+        'media',
+        'thumbnail',
+        mxc.serverName,
+        mxc.mediaId,
+      ],
+      queryParameters: <String, String>{
+        'width': width.clamp(32, 2048).toString(),
+        'height': height.clamp(32, 2048).toString(),
+        'method': method == 'crop' ? 'crop' : 'scale',
+        'animated': animated.toString(),
+      },
+      fragment: null,
+    );
+  }
+
+  Future<Uint8List> downloadBytes(
+    String contentUri, {
+    int maxBytes = defaultDownloadLimitBytes,
+  }) {
+    return _downloadUriBytes(downloadUri(contentUri), maxBytes: maxBytes);
+  }
+
+  Future<Uint8List> downloadThumbnailBytes(
+    String contentUri, {
+    int width = 640,
+    int height = 640,
+    int maxBytes = defaultThumbnailLimitBytes,
+  }) {
+    return _downloadUriBytes(
+      thumbnailUri(contentUri, width: width, height: height),
+      maxBytes: maxBytes,
+    );
+  }
+
+  Future<Uint8List> _downloadUriBytes(
+    Uri uri, {
+    required int maxBytes,
+  }) async {
+    if (maxBytes <= 0) {
+      throw const MatrixMediaException('下载大小上限必须大于 0。');
+    }
     try {
-      final response = await _dio.get<List<int>>(
-        downloadUri(contentUri).toString(),
+      final response = await _dio.get<ResponseBody>(
+        uri.toString(),
         options: Options(
           headers: authorizationHeaders,
-          responseType: ResponseType.bytes,
+          responseType: ResponseType.stream,
         ),
       );
-      final data = response.data;
-      if (data == null) {
+      final declaredLength = int.tryParse(
+        response.headers.value(Headers.contentLengthHeader) ?? '',
+      );
+      if (declaredLength != null && declaredLength > maxBytes) {
+        throw MatrixMediaException(
+          'Matrix media 大小 $declaredLength bytes 超过客户端上限 $maxBytes bytes。',
+        );
+      }
+      final body = response.data;
+      if (body == null) {
         throw const MatrixMediaException('Matrix media download 返回空内容。');
       }
-      return Uint8List.fromList(data);
+
+      final builder = BytesBuilder(copy: false);
+      var received = 0;
+      await for (final chunk in body.stream) {
+        received += chunk.length;
+        if (received > maxBytes) {
+          throw MatrixMediaException(
+            'Matrix media 下载超过客户端上限 $maxBytes bytes，已中止。',
+          );
+        }
+        builder.add(chunk);
+      }
+      return builder.takeBytes();
     } on DioException catch (error) {
       throw MatrixMediaException(_matrixErrorMessage(error));
     }
