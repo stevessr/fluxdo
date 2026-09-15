@@ -6,6 +6,7 @@ on:
       - feat/experimental-matrix-telegram
     paths:
       - '.github/workflows/experimental-matrix-lifecycle-fix.yaml'
+      - 'tool/experimental_matrix_lifecycle_fix.py'
 
 permissions:
   contents: write
