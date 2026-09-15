@@ -41,3 +41,41 @@ Map<String, dynamic> buildMatrixTextMessageContent(
   );
   return content;
 }
+
+/// Builds an unencrypted Matrix attachment event.
+///
+/// The transport layer only needs to provide the already-uploaded MXC URI and
+/// metadata. E2EE attachments deliberately use a different provider because
+/// encrypted media uses the `file` object instead of the plaintext `url` field.
+Map<String, dynamic> buildMatrixMediaMessageContent({
+  required String contentUri,
+  required String filename,
+  required String contentType,
+  required int size,
+  String? replyToEventId,
+  String? threadRootEventId,
+  bool threadFallback = false,
+}) {
+  final normalizedType = contentType.trim().toLowerCase();
+  final msgType = normalizedType.startsWith('image/') ? 'm.image' : 'm.file';
+  final safeFilename = filename.trim().isEmpty ? 'attachment' : filename.trim();
+  final content = <String, dynamic>{
+    'msgtype': msgType,
+    'body': safeFilename,
+    'filename': safeFilename,
+    'url': contentUri,
+    'info': <String, dynamic>{
+      'mimetype': contentType.trim().isEmpty
+          ? 'application/octet-stream'
+          : contentType.trim(),
+      'size': size < 0 ? 0 : size,
+    },
+  };
+  attachMatrixRelation(
+    content,
+    replyToEventId: replyToEventId,
+    threadRootEventId: threadRootEventId,
+    threadFallback: threadFallback,
+  );
+  return content;
+}
