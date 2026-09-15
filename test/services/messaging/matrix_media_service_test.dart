@@ -55,5 +55,34 @@ void main() {
       expect(service.authorizationHeaders['Authorization'], 'Bearer secret-token');
       expect(uri.query, isEmpty);
     });
+
+    test('builds bounded authenticated thumbnail endpoint', () {
+      final service = MatrixMediaService(session: session);
+      final uri = service.thumbnailUri(
+        'mxc://media.example:8448/abc123',
+        width: 9000,
+        height: 1,
+        method: 'crop',
+        animated: true,
+      );
+
+      expect(uri.pathSegments, <String>[
+        'base',
+        '_matrix',
+        'client',
+        'v1',
+        'media',
+        'thumbnail',
+        'media.example:8448',
+        'abc123',
+      ]);
+      expect(uri.queryParameters, <String, String>{
+        'width': '2048',
+        'height': '32',
+        'method': 'crop',
+        'animated': 'true',
+      });
+      expect(uri.queryParameters.containsKey('access_token'), isFalse);
+    });
   });
 }
