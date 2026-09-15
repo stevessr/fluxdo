@@ -62,9 +62,10 @@ void main() {
     expect(messages.single.edited, isFalse);
   });
 
-  test('keeps a redacted message position but strips relations', () {
+  test('keeps a redacted message position but strips relations and media', () {
+    final media = _imageMessage(r'$message', 100);
     final messages = reducer.reduce(<Map<String, dynamic>>[
-      _message(r'$message', '@alice:example.org', 'hello', 100),
+      media,
       _reaction(r'$reaction', r'$message', '@bob:example.org', '👍', 110),
       _redaction(r'$redaction', r'$message', 120),
     ]);
@@ -74,6 +75,8 @@ void main() {
     expect(messages.single.body, 'Message redacted');
     expect(messages.single.reactions, isEmpty);
     expect(messages.single.replyToEventId, isNull);
+    expect(messages.single.mediaUri, isNull);
+    expect(messages.single.thumbnailUri, isNull);
   });
 
   test('consumes bundled m.replace when the edit is outside the chunk', () {
@@ -182,6 +185,39 @@ void main() {
     expect(messages.single.threadCount, 7);
   });
 
+  test('preserves unencrypted image metadata without exposing invalid MXC', () {
+    final messages = reducer.reduce(<Map<String, dynamic>>[
+      _imageMessage(r'$image', 100),
+      <String, dynamic>{
+        'type': 'm.room.message',
+        'event_id': r'$bad',
+        'sender': '@alice:example.org',
+        'origin_server_ts': 200,
+        'content': <String, dynamic>{
+          'msgtype': 'm.file',
+          'body': 'bad.bin',
+          'url': 'https://evil.invalid/file',
+          'info': <String, dynamic>{'size': 10},
+        },
+      },
+    ]);
+
+    final image = messages.first;
+    expect(image.hasMedia, isTrue);
+    expect(image.isImage, isTrue);
+    expect(image.mediaUri, 'mxc://example.org/media123');
+    expect(image.thumbnailUri, 'mxc://example.org/thumb123');
+    expect(image.filename, 'photo.png');
+    expect(image.mimeType, 'image/png');
+    expect(image.mediaSize, 12345);
+    expect(image.width, 800);
+    expect(image.height, 600);
+
+    final invalid = messages.last;
+    expect(invalid.hasMedia, isFalse);
+    expect(invalid.mediaUri, isNull);
+  });
+
   test('keeps encrypted events explicit and sorts messages chronologically', () {
     final messages = reducer.reduce(<Map<String, dynamic>>[
       <String, dynamic>{
@@ -214,6 +250,27 @@ Map<String, dynamic> _message(
   'origin_server_ts': timestamp,
   'content': <String, dynamic>{'msgtype': 'm.text', 'body': body},
 };
+
+Map<String, dynamic> _imageMessage(String eventId, int timestamp) =>
+    <String, dynamic>{
+      'type': 'm.room.message',
+      'event_id': eventId,
+      'sender': '@alice:example.org',
+      'origin_server_ts': timestamp,
+      'content': <String, dynamic>{
+        'msgtype': 'm.image',
+        'body': 'photo.png',
+        'filename': 'photo.png',
+        'url': 'mxc://example.org/media123',
+        'info': <String, dynamic>{
+          'mimetype': 'image/png',
+          'size': 12345,
+          'w': 800,
+          'h': 600,
+          'thumbnail_url': 'mxc://example.org/thumb123',
+        },
+      },
+    };
 
 Map<String, dynamic> _threadMessage(
   String eventId,
