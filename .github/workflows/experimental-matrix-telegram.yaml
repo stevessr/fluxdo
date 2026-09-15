@@ -21,10 +21,6 @@ on:
       - '.github/workflows/experimental-matrix-telegram.yaml'
   workflow_dispatch:
 
-# v2 intentionally uses a new group so the already-running Flutter 3.47 APK
-# baseline from the previous workflow revision can finish while this iteration
-# validates the protocol-neutral messaging layer. Subsequent v2 pushes still
-# cancel stale v2 runs normally.
 concurrency:
   group: experimental-matrix-telegram-v2-${{ github.ref }}
   cancel-in-progress: true
@@ -58,8 +54,8 @@ jobs:
       - name: Prepare generated app sources
         run: dart tool/project_prep.dart test
 
-      # Formatter drift is useful migration feedback, but it should not hide
-      # actual Flutter/Dart compatibility diagnostics in an experimental branch.
+      # Normalize the whole experimental messaging surface so newly split room,
+      # media and thread widgets cannot silently drift from the pinned SDK.
       - name: Normalize experimental formatting
         run: >-
           dart format
@@ -67,10 +63,13 @@ jobs:
           lib/pages/chat/chat_hub_page.dart
           lib/pages/chat/chat_protocol.dart
           lib/pages/chat/matrix_chat_page.dart
+          lib/pages/chat/matrix_room_page.dart
+          lib/pages/chat/matrix_thread_page.dart
+          lib/pages/chat/matrix_message_media_view.dart
           lib/pages/chat/telegram_chat_page.dart
           lib/services/matrix_client_service.dart
           lib/services/messaging
-          test/pages/chat/chat_protocol_test.dart
+          test/pages/chat
           test/services/messaging
 
       # Analyze the app itself. The repository also contains standalone
@@ -79,8 +78,8 @@ jobs:
       - name: Analyze app sources
         run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
 
-      - name: Test protocol hub persistence
-        run: flutter test test/pages/chat/chat_protocol_test.dart --no-pub
+      - name: Test chat protocol and Matrix UI state
+        run: flutter test test/pages/chat --no-pub
 
       - name: Test protocol-neutral messaging semantics
         run: flutter test test/services/messaging --no-pub
