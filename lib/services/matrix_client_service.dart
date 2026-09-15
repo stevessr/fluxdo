@@ -189,7 +189,15 @@ class MatrixClientService {
   }
 
   /// Loads joined rooms using Matrix incremental sync.
-  Future<List<MatrixRoomSummary>> loadRooms({bool forceFull = false}) async {
+  ///
+  /// [timeout] is forwarded to the homeserver's `/sync` endpoint. Use zero for
+  /// an immediate/manual refresh and a bounded non-zero duration for long
+  /// polling. [cancelToken] lets page lifecycle and logout abort a blocked sync.
+  Future<List<MatrixRoomSummary>> loadRooms({
+    bool forceFull = false,
+    Duration timeout = Duration.zero,
+    CancelToken? cancelToken,
+  }) async {
     final current = _requireSession();
     if (forceFull) _resetSyncState();
 
@@ -209,8 +217,9 @@ class MatrixClientService {
       'presence': <String, dynamic>{'types': <String>[]},
     });
 
+    final timeoutMs = timeout.inMilliseconds.clamp(0, 60000);
     final queryParameters = <String, dynamic>{
-      'timeout': 0,
+      'timeout': timeoutMs,
       'filter': filter,
       if (_syncToken != null) 'since': _syncToken,
     };
@@ -220,6 +229,7 @@ class MatrixClientService {
         '${current.homeserver}/_matrix/client/v3/sync',
         queryParameters: queryParameters,
         options: _authorizedOptions(current),
+        cancelToken: cancelToken,
       );
       final data = _asMap(response.data);
       final rooms = _asMap(data['rooms']);

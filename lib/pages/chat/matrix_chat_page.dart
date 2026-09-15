@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/matrix_client_service.dart';
 import '../../services/messaging/matrix_homeserver_discovery.dart';
+import '../../services/messaging/matrix_room_sync_controller.dart';
 import '../../services/messaging/matrix_sso_service.dart';
 import 'matrix_room_page.dart';
 import 'matrix_sso_login_page.dart';
@@ -16,7 +18,8 @@ class MatrixChatPage extends StatefulWidget {
   State<MatrixChatPage> createState() => _MatrixChatPageState();
 }
 
-class _MatrixChatPageState extends State<MatrixChatPage> {
+class _MatrixChatPageState extends State<MatrixChatPage>
+    with WidgetsBindingObserver {
   final MatrixClientService _client = MatrixClientService();
   final MatrixHomeserverDiscoveryService _discovery =
       MatrixHomeserverDiscoveryService();
@@ -28,8 +31,10 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _userIdController = TextEditingController();
   final TextEditingController _tokenController = TextEditingController();
+  late final MatrixRoomSyncController _roomSync;
 
   bool _loading = true;
+  bool _appResumed = true;
   bool _submitting = false;
   bool _ssoSubmitting = false;
   bool _discovering = false;
@@ -45,11 +50,33 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
   @override
   void initState() {
     super.initState();
-    _restore();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _appResumed =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
+    _roomSync = MatrixRoomSyncController(
+      pull: ({required timeout, cancelToken}) =>
+          _client.loadRooms(timeout: timeout, cancelToken: cancelToken),
+      onRooms: _handleLiveRooms,
+      onError: _handleLiveSyncError,
+    );
+    unawaited(_restore());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appResumed = state == AppLifecycleState.resumed;
+    if (_appResumed) {
+      _startLiveSync();
+    } else {
+      _roomSync.stop();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _roomSync.dispose();
     _client.dispose();
     _discovery.dispose();
     _sso.dispose();
@@ -59,6 +86,24 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
     _userIdController.dispose();
     _tokenController.dispose();
     super.dispose();
+  }
+
+  void _handleLiveRooms(List<MatrixRoomSummary> rooms) {
+    if (!mounted || _session == null) return;
+    setState(() {
+      _rooms = rooms;
+      _error = null;
+    });
+  }
+
+  void _handleLiveSyncError(Object error) {
+    if (!mounted || _session == null || !_appResumed) return;
+    setState(() => _error = 'Matrix 实时同步：$error');
+  }
+
+  void _startLiveSync() {
+    if (!mounted || !_appResumed || _session == null) return;
+    _roomSync.start();
   }
 
   Future<void> _restore() async {
@@ -78,11 +123,10 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
   }
 
   String? get _matrixIdCandidate {
-    final value = (_tokenMode
-            ? _userIdController.text
-            : _usernameController.text)
-        .trim();
-    return MatrixHomeserverDiscoveryService.serverNameFromInput(value) != null &&
+    final value =
+        (_tokenMode ? _userIdController.text : _usernameController.text).trim();
+    return MatrixHomeserverDiscoveryService.serverNameFromInput(value) !=
+                null &&
             value.startsWith('@')
         ? value
         : null;
@@ -194,9 +238,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
       );
       final capabilities = await _sso.loadLoginCapabilities(discovery.baseUrl);
       if (!capabilities.supportsSso) {
-        throw const MatrixSsoException(
-          '此 homeserver 没有公布 m.login.sso 登录流程。',
-        );
+        throw const MatrixSsoException('此 homeserver 没有公布 m.login.sso 登录流程。');
       }
 
       final providerId = await _selectSsoIdentityProvider(capabilities);
@@ -302,6 +344,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
     bool forceFull = false,
   }) async {
     if (_session == null) return;
+    _roomSync.stop();
     if (showSpinner && mounted) {
       setState(() {
         _loading = true;
@@ -321,10 +364,12 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
       setState(() => _error = error.toString());
     } finally {
       if (showSpinner && mounted) setState(() => _loading = false);
+      _startLiveSync();
     }
   }
 
   Future<void> _logout() async {
+    _roomSync.stop();
     await _client.logout();
     if (!mounted) return;
     setState(() {
@@ -407,7 +452,7 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '实验性 Matrix：增量 /sync、历史分页、已读、typing、reaction 聚合、edit 与 SSO 已启用；E2EE 仍等待 SDK provider。',
+                      '实验性 Matrix：30 秒可取消长轮询 /sync、历史分页、已读、typing、reaction、edit/redaction 与 SSO 已启用；E2EE 仍等待 SDK provider。',
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
@@ -460,7 +505,10 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                           title: Row(
                             children: <Widget>[
                               if (room.encrypted) ...<Widget>[
-                                const Icon(Icons.lock_outline_rounded, size: 15),
+                                const Icon(
+                                  Icons.lock_outline_rounded,
+                                  size: 15,
+                                ),
                                 const SizedBox(width: 5),
                               ],
                               Expanded(
@@ -571,7 +619,9 @@ class _MatrixChatPageState extends State<MatrixChatPage> {
                           icon: _discovering
                               ? const SizedBox.square(
                                   dimension: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Icon(Icons.travel_explore_rounded),
                         ),
