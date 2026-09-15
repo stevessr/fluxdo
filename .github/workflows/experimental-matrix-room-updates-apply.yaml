@@ -49,12 +49,11 @@ jobs:
       - name: Analyze app sources
         run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
 
-      - name: Test room invalidation semantics
+      - name: Test room UI and full messaging semantics
         run: >-
           flutter test
           test/pages/chat/matrix_room_page_test.dart
-          test/services/messaging/matrix_room_update_bus_test.dart
-          test/services/messaging/matrix_room_sync_controller_test.dart
+          test/services/messaging
           --no-pub
 
       - name: Validate patch shape
