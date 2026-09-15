@@ -86,13 +86,18 @@ void main() {
   test('restart creates a new generation and ignores the old late result', () async {
     final first = Completer<List<MatrixRoomSummary>>();
     final restarted = Completer<List<MatrixRoomSummary>>();
+    final steady = Completer<List<MatrixRoomSummary>>();
     final emissions = <List<MatrixRoomSummary>>[];
     var calls = 0;
 
     final controller = MatrixRoomSyncController(
       pull: ({required timeout, cancelToken}) {
         calls++;
-        return calls == 1 ? first.future : restarted.future;
+        return switch (calls) {
+          1 => first.future,
+          2 => restarted.future,
+          _ => steady.future,
+        };
       },
       onRooms: emissions.add,
     );
@@ -108,6 +113,7 @@ void main() {
     await _flushAsync();
     expect(emissions, hasLength(1));
     expect(emissions.single.single.roomId, roomA.roomId);
+    expect(calls, 3, reason: 'the restarted generation should keep long polling');
 
     first.complete(const <MatrixRoomSummary>[]);
     await _flushAsync();
@@ -118,6 +124,8 @@ void main() {
     );
 
     controller.stop();
+    steady.complete(const <MatrixRoomSummary>[]);
+    await _flushAsync();
     controller.dispose();
   });
 }
