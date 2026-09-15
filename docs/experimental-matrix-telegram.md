@@ -42,6 +42,14 @@ The lightweight Matrix adapter currently supports:
 - lifecycle-aware, cancellable 30-second `/sync` long polling while the Matrix
   page is active, with cancellation on background/logout/manual full-sync and
   bounded retry delay after transport failures;
+- event-driven active-Room refresh: `/sync` only broadcasts the IDs of rooms
+  whose timeline changed, and the open Room requests a fresh `/messages` page
+  only for its own room instead of polling history every 20 seconds;
+- Room invalidation coalescing while the app is backgrounded, a Thread route is
+  visible, or history/send/upload work is already in flight;
+- explicit Room refreshes consume older pending invalidations, while a newer
+  `/sync` delta arriving during that request remains pending and triggers one
+  follow-up refresh;
 - room ordering using the latest visible timeline event and unread counts;
 - `m.heroes`-based room-name fallback without requesting full membership state
   for every large room;
@@ -65,9 +73,10 @@ The lightweight Matrix adapter currently supports:
 - explicit placeholders for `m.room.encrypted` events rather than pretending
   they are plaintext.
 
-Room polling is paused while a dedicated Thread route is visible, including
-across app background/resume transitions, so the Room and Thread views do not
-create redundant history requests underneath one another.
+The room-update signal deliberately contains only room IDs. Raw `/sync` timeline
+events are not copied into the paged-history LRU, so live room-list traffic does
+not evict relation/history data for recently opened rooms. The active Room owns
+its `/messages` cache and uses `/sync` only as an invalidation source.
 
 The adapter intentionally does **not** pretend that encrypted events are plain
 text. Full Matrix E2EE requires device keys, Olm/Megolm sessions, verification,
@@ -134,10 +143,10 @@ verified on Android, iOS, Windows, Linux, and macOS.
   key backup/recovery, encrypted attachments, push notifications, room avatars
   or the complete member/presence model. These are better candidates for the
   SDK-backed provider than for hand-written crypto/state logic.
-- The room list now receives live `/sync` deltas, while an open Room view still
-  owns its own bounded history refresh lifecycle. A later provider can fan live
-  timeline deltas into the active Room cache so the dedicated Room poll can be
-  removed entirely.
+- The live Room invalidation layer intentionally refetches the bounded latest
+  `/messages` page instead of merging raw `/sync` events into history. A future
+  SDK-backed provider can replace this invalidation/refetch boundary with its
+  native timeline cache without changing Room UI semantics.
 - Telegram is Web-backed rather than mapped into Fluxdo's native message bubble
   model.
 - Experimental strings are currently local to these LAB pages; move them into
