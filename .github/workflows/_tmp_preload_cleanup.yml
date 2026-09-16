@@ -1,0 +1,36 @@
+name: Temporary Preload Diff Cleanup
+
+on:
+  push:
+    branches:
+      - perf/preload-native-fastpath-v3
+    paths:
+      - .github/workflows/_tmp_preload_cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: perf/preload-native-fastpath-v3
+          fetch-depth: 0
+      - name: Restore unrelated generated files
+        run: |
+          git fetch origin main
+          git checkout origin/main -- \
+            pubspec.lock \
+            macos/Flutter/GeneratedPluginRegistrant.swift \
+            windows/flutter/generated_plugin_registrant.cc \
+            windows/flutter/generated_plugins.cmake
+          rm .github/workflows/_tmp_preload_cleanup.yml
+      - name: Commit cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: keep preload patch scoped'
+          git push origin HEAD:perf/preload-native-fastpath-v3
