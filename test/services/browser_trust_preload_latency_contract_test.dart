@@ -11,6 +11,23 @@ void main() {
     ).readAsStringSync();
   });
 
+  test('native preload probe runs before startup WebView fallback', () {
+    final start = source.indexOf('Future<void> _ensurePreloadedInternal');
+    final end = source.indexOf('void _startBrowserTrustAfterPreload', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+
+    final body = source.substring(start, end);
+    final nativeProbe = body.indexOf(
+      '_preload.ensureLoaded(suppressCfChallenge: true)',
+    );
+    final webViewFallback = body.indexOf('_hydratePreloadThroughWebView(');
+    expect(nativeProbe, greaterThanOrEqualTo(0));
+    expect(webViewFallback, greaterThan(nativeProbe));
+    expect(body, contains('if (!_clearanceRecentlyRejected)'));
+    expect(body, isNot(contains('_isNativePreloadTrusted')));
+  });
+
   test('startup WebView preload avoids full-load and bootstrap waits', () {
     final start = source.indexOf('Future<bool> _hydratePreloadThroughWebView');
     final end = source.indexOf('Future<void> _navigateToHome', start);
