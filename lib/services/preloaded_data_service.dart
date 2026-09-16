@@ -9,6 +9,7 @@ import '../models/category.dart';
 import 'auth_session.dart';
 import 'preloaded_data_decoder.dart';
 import 'network/discourse_dio.dart';
+import 'network/flux_request_spec.dart';
 import 'network/cookie/csrf_token_service.dart';
 import 'cf_challenge_service.dart';
 import 'cf_clearance_refresh_service.dart';
@@ -114,8 +115,8 @@ class PreloadedDataService {
   }
 
   /// 确保预加载数据已准备好
-  Future<void> ensureLoaded() async {
-    await _ensureLoaded();
+  Future<void> ensureLoaded({bool suppressCfChallenge = false}) async {
+    await _ensureLoaded(suppressCfChallenge: suppressCfChallenge);
   }
 
   /// 获取 currentUser 数据（包含通知计数等）
@@ -599,7 +600,7 @@ class PreloadedDataService {
   ///
   /// 等待语义与 upstream/dev 保持一致：若已有 preload 正在执行，则以
   /// 50ms 间隔等待它结束；成功后直接复用，失败后当前调用者重新加载。
-  Future<void> _ensureLoaded() async {
+  Future<void> _ensureLoaded({bool suppressCfChallenge = false}) async {
     if (_loaded) return;
     if (_loading) {
       await _waitForActiveLoad();
@@ -608,6 +609,7 @@ class PreloadedDataService {
     await _loadPreloadedData(
       revision: _dataRevision,
       generation: AuthSession().generation,
+      suppressCfChallenge: suppressCfChallenge,
     );
   }
 
@@ -615,6 +617,7 @@ class PreloadedDataService {
   Future<void> _loadPreloadedData({
     required int revision,
     required int generation,
+    bool suppressCfChallenge = false,
   }) async {
     if (_loading) return;
     _loading = true;
@@ -622,6 +625,7 @@ class PreloadedDataService {
       await _loadPreloadedDataInternal(
         revision: revision,
         generation: generation,
+        suppressCfChallenge: suppressCfChallenge,
       );
     } finally {
       _loading = false;
@@ -631,6 +635,7 @@ class PreloadedDataService {
   Future<void> _loadPreloadedDataInternal({
     required int revision,
     required int generation,
+    required bool suppressCfChallenge,
   }) async {
     try {
       // 发起 HTTP 请求获取数据
@@ -640,9 +645,16 @@ class PreloadedDataService {
         options: Options(
           headers: {'Accept': 'text/html'},
           extra: {
-            if (AppConstants.skipCsrfForHomeRequest) 'skipCsrf': true,
+            if (AppConstants.skipCsrfForHomeRequest)
+              FluxRequestKeys.skipCsrf: true,
+            // 首页 bootstrap 决定首屏可用时间，永远排在后台请求之前。
+            FluxRequestKeys.priority: FluxRequestPriority.high,
+            // native probe 只负责判断正常 HTTP 是否已经可用。真的撞 CF 时
+            // 立即把控制权还给 BrowserTrustCoordinator，避免先弹一次验证
+            // 再创建 startup WebView，形成重复的浏览器成本。
+            if (suppressCfChallenge) FluxRequestKeys.skipCfChallenge: true,
             // 诊断标注:首页 HTML 是 CF 盾高发路径,日志里需可辨识
-            'requestTag': 'preload-home',
+            FluxRequestKeys.requestTag: 'preload-home',
           },
         ),
       );

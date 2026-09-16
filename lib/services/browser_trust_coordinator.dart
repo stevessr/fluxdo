@@ -75,7 +75,6 @@ class BrowserTrustCoordinator {
   BrowserTrustCoordinator._();
   static final BrowserTrustCoordinator instance = BrowserTrustCoordinator._();
 
-  static const Duration _trustedClearanceMinTtl = Duration(minutes: 10);
   static const Duration _requestClearanceMinTtl = Duration(seconds: 30);
   static const Duration _webViewPreloadTimeout = Duration(seconds: 25);
   static const Duration _domSnapshotTimeout = Duration(seconds: 12);
@@ -270,21 +269,30 @@ class BrowserTrustCoordinator {
   }
 
   Future<void> _ensurePreloadedInternal({required String reason}) async {
-    final nativeTrusted = await _isNativePreloadTrusted();
-    if (nativeTrusted) {
+    // A missing/short-lived cf_clearance is not proof that the homepage needs a
+    // browser. Discourse may answer native HTTP normally, and the preload cache
+    // interceptor may satisfy this request without touching the network at all.
+    // Probe native first and suppress CF UI for this one attempt; a genuine CF
+    // rejection falls through to the startup WebView below.
+    if (!_clearanceRecentlyRejected) {
       _lastPreloadPath = BrowserTrustPreloadPath.native;
-      _log('preload path=native reason=$reason');
+      _log('preload path=native_probe reason=$reason');
       try {
-        await _preload.ensureLoaded();
-        _log('native preload success reason=$reason');
+        await _preload.ensureLoaded(suppressCfChallenge: true);
+        _log('native preload fast path success reason=$reason');
         _startBrowserTrustAfterPreload(reason: reason, path: 'native');
         return;
       } catch (e) {
         _log(
-          'trusted native preload failed, switching to startup WebView: $e',
+          'native preload fast path unavailable, switching to startup WebView: $e',
           level: 'warning',
         );
       }
+    } else {
+      _log(
+        'skip native preload probe after recent CF rejection reason=$reason',
+        level: 'warning',
+      );
     }
 
     _log('preload path=startup_webview reason=$reason');
@@ -692,42 +700,6 @@ class BrowserTrustCoordinator {
       allowLowConfidenceSessionCookies: true,
       trusted: true,
     );
-  }
-
-  Future<bool> _isNativePreloadTrusted() async {
-    if (_clearanceRecentlyRejected) {
-      _log(
-        'native trust check: untrusted, clearance recently rejected by server',
-        level: 'warning',
-      );
-      return false;
-    }
-    if (!_jar.isInitialized) {
-      await _jar.initialize();
-    }
-    final clearance = await _jar.getCanonicalCookie('cf_clearance');
-    if (clearance == null || clearance.value.isEmpty) {
-      _log('native trust check: untrusted, no cf_clearance');
-      return false;
-    }
-    if (!CookieJarService.matchesAppHost(clearance.domain)) {
-      _log(
-        'native trust check: untrusted, domain=${clearance.domain}',
-        level: 'warning',
-      );
-      return false;
-    }
-    final expiresAt = clearance.expiresAt?.toLocal();
-    if (expiresAt == null) {
-      _log('native trust check: trusted, no expires');
-      return true;
-    }
-    final ttl = expiresAt.difference(DateTime.now());
-    final trusted = ttl >= _trustedClearanceMinTtl;
-    _log(
-      'native trust check: trusted=$trusted ttl=${ttl.inSeconds}s expires=${expiresAt.toIso8601String()}',
-    );
-    return trusted;
   }
 
   Future<bool> _isRequestGateTrusted() async {

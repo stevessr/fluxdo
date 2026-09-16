@@ -34,9 +34,34 @@ void main() {
     final body = preloadSource.substring(start, end);
     expect(body, contains('while (_loading)'));
     expect(body, contains('Duration(milliseconds: 50)'));
-    expect(body, contains('Future<void> _ensureLoaded() async'));
+    expect(
+      body,
+      contains(
+        'Future<void> _ensureLoaded({bool suppressCfChallenge = false}) async',
+      ),
+    );
     expect(body, contains('if (_loading)'));
     expect(body, contains('if (_loaded) return;'));
+  });
+
+  test('native preload probe is high priority and can suppress CF UI', () {
+    expect(preloadSource, contains("import 'network/flux_request_spec.dart';"));
+
+    final start = preloadSource.indexOf(
+      'Future<void> _loadPreloadedDataInternal',
+    );
+    final end = preloadSource.indexOf('bool _isCurrent', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+
+    final body = preloadSource.substring(start, end);
+    expect(
+      body,
+      contains('FluxRequestKeys.priority: FluxRequestPriority.high'),
+    );
+    expect(body, contains('if (suppressCfChallenge)'));
+    expect(body, contains('FluxRequestKeys.skipCfChallenge: true'));
+    expect(body, contains("FluxRequestKeys.requestTag: 'preload-home'"));
   });
 
   test('top preload progress and progressive feed plumbing stay removed', () {
