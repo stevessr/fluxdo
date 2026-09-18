@@ -247,6 +247,7 @@ flutter:
     - assets/polyfill/
     - assets/cook/
     - assets/images/stevessr/
+    - assets/images/touhou/
 
   fonts:
     - family: MiSans
