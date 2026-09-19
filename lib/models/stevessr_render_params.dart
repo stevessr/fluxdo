@@ -65,7 +65,7 @@ enum StevessrCharacter {
   sumireko,
   maribel,
   keine,
-  deepseek
+  deepseek,
 }
 
 extension StevessrCharacterKey on StevessrCharacter {
