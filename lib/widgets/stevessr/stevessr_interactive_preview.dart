@@ -65,12 +65,20 @@ class _StevessrInteractivePreviewState
   }
 
   void _startElementGesture(ScaleStartDetails details) {
+    assert(() {
+      debugPrint('EDITOR_START target=$_target focal=${details.focalPoint}');
+      return true;
+    }());
     _gestureRect = _selectedRect;
     _gestureFocalPoint = details.focalPoint;
     _gestureViewportScale = _viewport.value.getMaxScaleOnAxis();
   }
 
   void _updateElementGesture(ScaleUpdateDetails details) {
+    assert(() {
+      debugPrint('EDITOR_UPDATE target=$_target focal=${details.focalPoint} scale=${details.scale}');
+      return true;
+    }());
     final start = _gestureRect;
     if (start == null) return;
     final dx =
