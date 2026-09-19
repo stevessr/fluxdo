@@ -31,6 +31,28 @@ void main() {
       expect(tiers[3].videoBitrate, greaterThanOrEqualTo(12000));
     });
 
+    test('站点上限会直接收紧压缩码率预算', () {
+      final defaultTiers = videoProfilesFor(const Duration(minutes: 2));
+      final oneMiBTiers = videoProfilesFor(
+        const Duration(minutes: 2),
+        maxBytes: 1024 * 1024,
+      );
+
+      expect(
+        oneMiBTiers.first.videoBitrate,
+        lessThan(defaultTiers.first.videoBitrate),
+      );
+      expect(
+        audioProfilesFor(
+          const Duration(minutes: 10),
+          maxBytes: 512 * 1024,
+        ).first.audioBitrate,
+        lessThan(
+          audioProfilesFor(const Duration(minutes: 10)).first.audioBitrate,
+        ),
+      );
+    });
+
     test('短视频预算高 → HEVC 720p 起步;HEVC 分辨率阈值放宽', () {
       final tiers = videoProfilesFor(const Duration(seconds: 30));
       expect(tiers[0].audioBitrate, 32000);
