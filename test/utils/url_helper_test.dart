@@ -132,6 +132,40 @@ void main() {
   });
 
   group('UrlHelper trust boundary', () {
+    test('generic instance trusts configured CDN hosts exactly', () {
+      DiscourseInstanceRuntime.activate(
+        instanceId: 'generic',
+        baseUrl: 'https://forum.example.com',
+      );
+      UrlHelper.debugSetOverrides(
+        baseUri: '',
+        cdnUrl: 'https://cdn.example.net',
+        s3CdnUrl: 'https://s3-cdn.example.net',
+        s3BaseUrl: '//bucket.example.net',
+      );
+
+      expect(
+        UrlHelper.isTrustedImageHost(Uri.parse('https://cdn.example.net/a')),
+        isTrue,
+      );
+      expect(
+        UrlHelper.isTrustedImageHost(Uri.parse('https://s3-cdn.example.net/a')),
+        isTrue,
+      );
+      expect(
+        UrlHelper.isTrustedImageHost(
+          Uri.parse('https://evil.cdn.example.net/a'),
+        ),
+        isFalse,
+      );
+      expect(
+        UrlHelper.isTrustedImageHost(
+          Uri.parse('https://sub.s3-cdn.example.net/a'),
+        ),
+        isFalse,
+      );
+    });
+
     test('generic instance does not implicitly trust arbitrary subdomains', () {
       DiscourseInstanceRuntime.activate(
         instanceId: 'generic',
