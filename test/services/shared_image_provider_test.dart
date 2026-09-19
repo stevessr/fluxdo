@@ -1,6 +1,5 @@
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fluxdo/services/blob_image_cache.dart';
 import 'package:fluxdo/services/discourse_cache_manager.dart';
 import 'package:fluxdo/services/sticker_thumbnail_provider.dart';
 
