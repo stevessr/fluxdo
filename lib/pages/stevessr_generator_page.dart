@@ -223,14 +223,20 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
 
   double? _parseDouble(String value) => double.tryParse(value.trim());
 
-  // Pixel-size changes preserve the composition in normalized coordinates.
-  // Viewport zoom/pan is intentionally not part of these export parameters.
-  StevessrRect _scaledRect(StevessrRect rect, double sx, double sy) {
+  // Pixel-size changes preserve the composition and both objects' aspect
+  // ratios. Letterbox the old canvas when the target aspect ratio changes.
+  // Viewport zoom/pan is intentionally not part of the export parameters.
+  StevessrRect _scaledRect(
+    StevessrRect rect,
+    double scale,
+    double offsetX,
+    double offsetY,
+  ) {
     return StevessrRect(
-      x: rect.x * sx,
-      y: rect.y * sy,
-      width: rect.width * sx,
-      height: rect.height * sy,
+      x: rect.x * scale + offsetX,
+      y: rect.y * scale + offsetY,
+      width: rect.width * scale,
+      height: rect.height * scale,
     );
   }
 
@@ -246,18 +252,19 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
       if (syncSizeFields) _syncSizeFields();
       return;
     }
-    final sx = width / previous.width;
-    final sy = height / previous.height;
-    final textScale = math.min(sx, sy);
+    final scale = math.min(width / previous.width, height / previous.height);
+    final offsetX = (width - previous.width * scale) / 2;
+    final offsetY = (height - previous.height * scale) / 2;
     _setParams(previous.copyWith(
       width: width,
       height: height,
-      bubbleRect: _scaledRect(previous.bubbleRect, sx, sy),
-      characterRect: _scaledRect(previous.characterRect, sx, sy),
-      bubbleStrokeWidth: previous.bubbleStrokeWidth * textScale,
-      padding: previous.padding * textScale,
-      fontMin: (previous.fontMin * textScale).round(),
-      fontMax: (previous.fontMax * textScale).round(),
+      bubbleRect: _scaledRect(previous.bubbleRect, scale, offsetX, offsetY),
+      characterRect:
+          _scaledRect(previous.characterRect, scale, offsetX, offsetY),
+      bubbleStrokeWidth: previous.bubbleStrokeWidth * scale,
+      padding: previous.padding * scale,
+      fontMin: (previous.fontMin * scale).round(),
+      fontMax: (previous.fontMax * scale).round(),
     ));
     _syncRectFields();
     _syncController(_strokeWidthController, _formatNumber(_params.bubbleStrokeWidth));
