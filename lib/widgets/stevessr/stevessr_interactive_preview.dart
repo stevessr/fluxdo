@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/stevessr_render_params.dart';
@@ -41,6 +42,7 @@ class _StevessrInteractivePreviewState
   StevessrRect? _gestureRect;
   Offset _gestureFocalPoint = Offset.zero;
   Offset? _resizeLastGlobalPoint;
+  bool _resizing = false;
   double _gestureViewportScale = 1;
   double _sceneScaleX = 1;
   double _sceneScaleY = 1;
@@ -65,22 +67,14 @@ class _StevessrInteractivePreviewState
   }
 
   void _startElementGesture(ScaleStartDetails details) {
-    assert(() {
-      debugPrint('EDITOR_START target=$_target focal=${details.focalPoint}');
-      return true;
-    }());
+    if (_resizing) return;
     _gestureRect = _selectedRect;
     _gestureFocalPoint = details.focalPoint;
     _gestureViewportScale = _viewport.value.getMaxScaleOnAxis();
   }
 
   void _updateElementGesture(ScaleUpdateDetails details) {
-    assert(() {
-      debugPrint(
-        'EDITOR_UPDATE target=$_target focal=${details.focalPoint} scale=${details.scale}',
-      );
-      return true;
-    }());
+    if (_resizing) return;
     final start = _gestureRect;
     if (start == null) return;
     final dx =
@@ -103,14 +97,13 @@ class _StevessrInteractivePreviewState
     );
   }
 
-  void _resizeWithHandle(DragUpdateDetails details) {
-    final previous = _resizeLastGlobalPoint ?? details.globalPosition;
-    _resizeLastGlobalPoint = details.globalPosition;
-    final delta = details.globalPosition - previous;
+  void _resizeWithPointer(PointerMoveEvent event) {
+    final previous = _resizeLastGlobalPoint ?? event.position;
+    _resizeLastGlobalPoint = event.position;
+    final delta = event.position - previous;
     final scale = _viewport.value.getMaxScaleOnAxis();
     final current = _selectedRect;
-    // Use global pointer movement: DragUpdateDetails.delta is already in the
-    // target's local coordinates and would double-apply viewport zoom.
+    // Use global pointer movement to avoid applying the viewport zoom twice.
     final dx = delta.dx / (_sceneScaleX * scale);
     final dy = delta.dy / (_sceneScaleY * scale);
     // Retain the element's aspect ratio when resizing by its bottom-right
@@ -161,14 +154,22 @@ class _StevessrInteractivePreviewState
               Positioned(
                 right: 0,
                 bottom: 0,
-                child: GestureDetector(
+                child: Listener(
                   key: const ValueKey('stevessr-element-resize'),
                   behavior: HitTestBehavior.opaque,
-                  onPanStart: (details) =>
-                      _resizeLastGlobalPoint = details.globalPosition,
-                  onPanUpdate: _resizeWithHandle,
-                  onPanEnd: (_) => _resizeLastGlobalPoint = null,
-                  onPanCancel: () => _resizeLastGlobalPoint = null,
+                  onPointerDown: (event) {
+                    _resizing = true;
+                    _resizeLastGlobalPoint = event.position;
+                  },
+                  onPointerMove: _resizeWithPointer,
+                  onPointerUp: (_) {
+                    _resizing = false;
+                    _resizeLastGlobalPoint = null;
+                  },
+                  onPointerCancel: (_) {
+                    _resizing = false;
+                    _resizeLastGlobalPoint = null;
+                  },
                   child: Container(
                     width: 28,
                     height: 28,
