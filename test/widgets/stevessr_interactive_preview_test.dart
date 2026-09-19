@@ -76,10 +76,14 @@ void main() {
     expect(params.bubbleRect, initialBubble);
 
     final beforeResize = params.characterRect;
-    await tester.drag(
-      find.byKey(const ValueKey('stevessr-element-resize')),
-      const Offset(-32, -32),
+    final resizeDrag = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('stevessr-element-resize'))),
     );
+    await resizeDrag.moveBy(const Offset(-16, -16));
+    await tester.pump();
+    await resizeDrag.moveBy(const Offset(-16, -16));
+    await tester.pump();
+    await resizeDrag.up();
     await tester.pump();
     expect(params.characterRect.width, lessThan(beforeResize.width));
     expect(params.characterRect.height, lessThan(beforeResize.height));
@@ -114,10 +118,14 @@ void main() {
     final previousCharacter = params.characterRect;
     final previousBubble = params.bubbleRect;
     final oldTranslation = transform.value.getTranslation();
-    await tester.drag(
-      find.byKey(const ValueKey('stevessr-viewport')),
-      const Offset(30, 20),
+    final panDrag = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('stevessr-viewport'))),
     );
+    await panDrag.moveBy(const Offset(15, 10));
+    await tester.pump();
+    await panDrag.moveBy(const Offset(15, 10));
+    await tester.pump();
+    await panDrag.up();
     await tester.pump();
     expect(transform.value.getTranslation().x, isNot(oldTranslation.x));
     expect(params.characterRect, previousCharacter);
