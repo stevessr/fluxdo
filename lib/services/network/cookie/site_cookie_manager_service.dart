@@ -589,7 +589,7 @@ class SiteCookieManagerService {
     required String domain,
     required String path,
   }) {
-    return '$name\\u0000\${_normalizeHost(domain)}\\u0000\${_normalizePath(path)}';
+    return '$name\u0000${_normalizeHost(domain)}\u0000${_normalizePath(path)}';
   }
 
   static Uri _parseHttpUrl(String value) {
