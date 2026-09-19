@@ -411,7 +411,8 @@ class SiteCookieManagerService {
       await _deleteCookieStorageOnly(original);
     }
 
-    final verified = await _verifyWrite(origin.toString(), canonical);
+    final verifyUrl = Uri(scheme: scheme, host: host, path: path).toString();
+    final verified = await _verifyWrite(verifyUrl, canonical);
     if (!verified) {
       throw StateError('Cookie write could not be verified in WebView storage.');
     }
