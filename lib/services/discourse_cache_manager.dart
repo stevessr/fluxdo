@@ -153,7 +153,11 @@ ImageProvider sharedImageProvider(
   // discourseImageProvider 已经按 URL 将头像路由到全局 avatar bucket。
   // 即使调用方启用 thumbnailMode，也不能让头像动图走可能污染 alpha
   // 的单帧贴纸缩略图管线。
-  final effectiveBucket = source is BlobImageProvider ? source.bucket : bucket;
+  final effectiveBucket = source is BlobImageProvider
+      ? source.bucket
+      : source is AvifImageProvider
+      ? source.bucket
+      : bucket;
   if (thumbnailMode &&
       effectiveBucket != BlobImageCache.avatarBucket &&
       (cacheWidth != null || cacheHeight != null) &&
