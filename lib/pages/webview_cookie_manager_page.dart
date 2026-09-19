@@ -4,10 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/network/cookie/site_cookie_manager_service.dart';
 
 class WebViewCookieManagerPage extends StatefulWidget {
-  const WebViewCookieManagerPage({
-    super.key,
-    required this.currentUrl,
-  });
+  const WebViewCookieManagerPage({super.key, required this.currentUrl});
 
   final String currentUrl;
 
@@ -24,8 +21,7 @@ class WebViewCookieManagerPage extends StatefulWidget {
       _WebViewCookieManagerPageState();
 }
 
-class _WebViewCookieManagerPageState
-    extends State<WebViewCookieManagerPage> {
+class _WebViewCookieManagerPageState extends State<WebViewCookieManagerPage> {
   final SiteCookieManagerService _service = SiteCookieManagerService.instance;
 
   List<ManagedSiteCookie> _cookies = const [];
@@ -75,14 +71,16 @@ class _WebViewCookieManagerPageState
 
   List<ManagedSiteCookie> get _visibleCookies {
     final query = _query.trim().toLowerCase();
-    return _cookies.where((cookie) {
-      if (_hostFilter != null && cookie.domain != _hostFilter) return false;
-      if (query.isEmpty) return true;
-      return cookie.name.toLowerCase().contains(query) ||
-          cookie.value.toLowerCase().contains(query) ||
-          cookie.domain.toLowerCase().contains(query) ||
-          cookie.path.toLowerCase().contains(query);
-    }).toList(growable: false);
+    return _cookies
+        .where((cookie) {
+          if (_hostFilter != null && cookie.domain != _hostFilter) return false;
+          if (query.isEmpty) return true;
+          return cookie.name.toLowerCase().contains(query) ||
+              cookie.value.toLowerCase().contains(query) ||
+              cookie.domain.toLowerCase().contains(query) ||
+              cookie.path.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
   }
 
   @override
@@ -179,12 +177,13 @@ class _WebViewCookieManagerPageState
             Material(
               color: Theme.of(context).colorScheme.secondaryContainer,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
-                    Expanded(
-                      child: Text('已选择 ${_selected.length} 项'),
-                    ),
+                    Expanded(child: Text('已选择 ${_selected.length} 项')),
                     TextButton.icon(
                       onPressed: _deleteSelected,
                       icon: const Icon(Icons.delete_outline_rounded),
@@ -213,19 +212,14 @@ class _WebViewCookieManagerPageState
         icon: Icons.error_outline_rounded,
         title: '无法读取 Cookie',
         message: _error!,
-        action: FilledButton(
-          onPressed: _reload,
-          child: const Text('重试'),
-        ),
+        action: FilledButton(onPressed: _reload, child: const Text('重试')),
       );
     }
     if (visible.isEmpty) {
       return _EmptyState(
         icon: Icons.cookie_outlined,
         title: _cookies.isEmpty ? '当前站点没有 Cookie' : '没有匹配项',
-        message: _cookies.isEmpty
-            ? '可以使用右上角 + 手动添加 Cookie。'
-            : '尝试修改搜索词或域名筛选。',
+        message: _cookies.isEmpty ? '可以使用右上角 + 手动添加 Cookie。' : '尝试修改搜索词或域名筛选。',
       );
     }
 
@@ -327,9 +321,7 @@ class _WebViewCookieManagerPageState
     if (_hosts.isEmpty && _currentHost.isEmpty) return;
     if (cookie?.partitioned == true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Partitioned Cookie 为避免分区副本冲突，请删除后重新创建。'),
-        ),
+        const SnackBar(content: Text('Partitioned Cookie 为避免分区副本冲突，请删除后重新创建。')),
       );
       return;
     }
@@ -344,7 +336,8 @@ class _WebViewCookieManagerPageState
       text: cookie?.expiresAt?.toUtc().toIso8601String() ?? '',
     );
 
-    var selectedHost = cookie?.host ??
+    var selectedHost =
+        cookie?.host ??
         (_hosts.contains(_currentHost)
             ? _currentHost
             : (_hosts.isNotEmpty ? _hosts.first : _currentHost));
@@ -529,7 +522,8 @@ class _WebViewCookieManagerPageState
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Secure'),
                         value: secure,
-                        onChanged: saving ||
+                        onChanged:
+                            saving ||
                                 sameSite == CookieSameSite.none ||
                                 partitioned
                             ? null
@@ -541,8 +535,7 @@ class _WebViewCookieManagerPageState
                         value: httpOnly,
                         onChanged: saving
                             ? null
-                            : (value) =>
-                                setSheetState(() => httpOnly = value),
+                            : (value) => setSheetState(() => httpOnly = value),
                       ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -715,14 +708,14 @@ class _WebViewCookieManagerPageState
       _selected.clear();
       await _reload();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(success)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(success)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('操作失败：$e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失败：$e')));
       await _reload();
     }
   }
@@ -755,10 +748,7 @@ class _CookieFlag extends StatelessWidget {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall,
-      ),
+      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
     );
   }
 }
@@ -792,14 +782,8 @@ class _EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-            ),
-            if (action != null) ...[
-              const SizedBox(height: 16),
-              action!,
-            ],
+            Text(message, textAlign: TextAlign.center),
+            if (action != null) ...[const SizedBox(height: 16), action!],
           ],
         ),
       ),

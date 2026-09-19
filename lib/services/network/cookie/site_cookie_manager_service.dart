@@ -187,7 +187,8 @@ class SiteCookieManagerService {
           rawDomain: cookie.domain,
           hostOnly: cookie.hostOnly,
           path: path,
-          expiresAt: cookie.expiresAt ??
+          expiresAt:
+              cookie.expiresAt ??
               (cookie.maxAge == null
                   ? null
                   : cookie.creationTime.add(Duration(seconds: cookie.maxAge!))),
@@ -222,8 +223,11 @@ class SiteCookieManagerService {
       final host = hosts.contains(originHost) ? originHost : owner;
       final scheme = host == scope.host.toLowerCase() ? scope.scheme : 'https';
       probes.add(
-        Uri(scheme: scheme, host: host, path: _normalizePath(cookie.path))
-            .toString(),
+        Uri(
+          scheme: scheme,
+          host: host,
+          path: _normalizePath(cookie.path),
+        ).toString(),
       );
     }
 
@@ -253,11 +257,7 @@ class SiteCookieManagerService {
         if (!hosts.contains(owner)) continue;
 
         var path = info.path == null ? '/' : _normalizePath(info.path!);
-        var key = cookieIdentityKey(
-          name: info.name,
-          domain: owner,
-          path: path,
-        );
+        var key = cookieIdentityKey(name: info.name, domain: owner, path: path);
         var existing = byIdentity[key];
 
         if (info.path == null) {
@@ -363,7 +363,9 @@ class SiteCookieManagerService {
       throw ArgumentError('Invalid cookie name.');
     }
     if (_invalidCookieValue.hasMatch(draft.value)) {
-      throw ArgumentError('Cookie value contains unsupported control characters.');
+      throw ArgumentError(
+        'Cookie value contains unsupported control characters.',
+      );
     }
 
     final path = _normalizePath(draft.path);
@@ -371,11 +373,15 @@ class SiteCookieManagerService {
     final hostOnly = rawDomain == null || rawDomain.isEmpty;
     final domain = hostOnly ? host : _normalizeHost(rawDomain);
     if (!hostOnly && host != domain && !host.endsWith('.$domain')) {
-      throw ArgumentError('Domain must be the cookie host or one of its parents.');
+      throw ArgumentError(
+        'Domain must be the cookie host or one of its parents.',
+      );
     }
 
     final secure =
-        draft.secure || draft.sameSite == CookieSameSite.none || draft.partitioned;
+        draft.secure ||
+        draft.sameSite == CookieSameSite.none ||
+        draft.partitioned;
     final scheme = secure ? 'https' : scope.scheme;
     final origin = Uri(scheme: scheme, host: host, path: '/');
     final canonical = CanonicalCookie(
@@ -423,16 +429,15 @@ class SiteCookieManagerService {
     final verifyUrl = Uri(scheme: scheme, host: host, path: path).toString();
     final verified = await _verifyWrite(verifyUrl, canonical);
     if (!verified) {
-      throw StateError('Cookie write could not be verified in WebView storage.');
+      throw StateError(
+        'Cookie write could not be verified in WebView storage.',
+      );
     }
 
     CookieStoreObserver.instance.notifyExternalChange();
   }
 
-  Future<void> deleteCookie(
-    String currentUrl,
-    ManagedSiteCookie cookie,
-  ) async {
+  Future<void> deleteCookie(String currentUrl, ManagedSiteCookie cookie) async {
     _parseHttpUrl(currentUrl);
     if (!_jar.isInitialized) await _jar.initialize();
 
@@ -511,8 +516,10 @@ class SiteCookieManagerService {
 
   Future<void> clearHosts(String currentUrl, Iterable<String> rawHosts) async {
     final scope = _parseHttpUrl(currentUrl);
-    final selected =
-        rawHosts.map(_normalizeHost).where((e) => e.isNotEmpty).toSet();
+    final selected = rawHosts
+        .map(_normalizeHost)
+        .where((e) => e.isNotEmpty)
+        .toSet();
     if (selected.isEmpty) return;
 
     final allowed = (await discoverRelatedHosts(currentUrl)).toSet()
@@ -588,8 +595,7 @@ class SiteCookieManagerService {
       if (info.path == null) continue;
 
       final owner = _normalizeNullableHost(info.domain) ?? cookie.host;
-      if (owner == cookie.domain &&
-          _normalizePath(info.path!) == cookie.path) {
+      if (owner == cookie.domain && _normalizePath(info.path!) == cookie.path) {
         return true;
       }
     }
@@ -622,11 +628,7 @@ class SiteCookieManagerService {
 
   static String _cookieUrl(ManagedSiteCookie cookie) {
     final scheme = cookie.secure ? 'https' : 'http';
-    return Uri(
-      scheme: scheme,
-      host: cookie.host,
-      path: cookie.path,
-    ).toString();
+    return Uri(scheme: scheme, host: cookie.host, path: cookie.path).toString();
   }
 
   static String? _cookieOwner(String? domain, String? originHost) {

@@ -22,7 +22,8 @@ void main() {
     }
   });
 
-  test('exact identity delete preserves same-name cookies on other paths', () async {
+  test('exact identity delete preserves same-name cookies on other paths',
+      () async {
     final uri = Uri.parse('https://example.com/');
     await jar.saveCanonicalCookies(
       uri,

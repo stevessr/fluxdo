@@ -285,9 +285,9 @@ class EnhancedPersistCookieJar implements base.CookieJar {
     required String path,
   }) {
     final normalizedDomain = domain.trim().toLowerCase().replaceFirst(
-      RegExp(r'^\.'),
-      '',
-    );
+          RegExp(r'^\.'),
+          '',
+        );
     final normalizedPath = path.isEmpty ? '/' : path;
     if (name.isEmpty || normalizedDomain.isEmpty) return Future.value(0);
 
