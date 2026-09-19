@@ -44,7 +44,7 @@ void main() {
     );
 
     expect(params.width, 2048);
-    expect(params.height, 320);
+    expect(params.height, 128);
     expect(params.fontMin, 8);
     expect(params.fontMax, 220);
     expect(params.fontWeight, 100);
@@ -53,9 +53,9 @@ void main() {
     expect(params.padding, 0);
     expect(params.quality, 20);
     expect(params.bubbleRect.x, closeTo(106, 0.001));
-    expect(params.bubbleRect.height, closeTo(98, 0.001));
-    expect(params.characterRect.width, 64);
-    expect(params.characterRect.height, 64);
+    expect(params.bubbleRect.height, closeTo(39, 0.001));
+    expect(params.characterRect.width, 24);
+    expect(params.characterRect.height, 24);
   });
 
   test('文本最多保留 500 个 rune', () {
