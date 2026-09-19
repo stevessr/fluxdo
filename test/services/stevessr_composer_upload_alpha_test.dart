@@ -201,7 +201,9 @@ void main() {
             throw AssertionError('Oversized images must not be uploaded');
           },
           temporaryDirectory: () async {
-            throw AssertionError('Oversized images must not be written to disk');
+            throw AssertionError(
+              'Oversized images must not be written to disk',
+            );
           },
         ),
         throwsA(
