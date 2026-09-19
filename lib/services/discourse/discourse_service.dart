@@ -131,7 +131,7 @@ abstract class _DiscourseServiceBase {
   Future<void> saveUsername(String username, {int? requestGeneration});
 }
 
-/// Linux.do API 服务
+/// 当前活动 Discourse 实例的 API 服务。
 class DiscourseService extends _DiscourseServiceBase
     with
         _AuthMixin,
@@ -157,7 +157,7 @@ class DiscourseService extends _DiscourseServiceBase
         _ChatMixin,
         _GroupsMixin,
         _AiBotMixin {
-  static const String baseUrl = AppConstants.baseUrl;
+  static String get baseUrl => AppConstants.baseUrl;
   static const String _usernameKey = 'linux_do_username';
   static const _summaryCacheDuration = Duration(minutes: 5);
 

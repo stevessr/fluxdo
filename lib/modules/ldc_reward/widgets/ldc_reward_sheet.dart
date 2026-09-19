@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+import '../../../config/discourse_instance_runtime.dart';
 import '../../../l10n/s.dart';
 import '../../../utils/dialog_utils.dart';
 import '../../../services/toast_service.dart';
@@ -30,6 +31,7 @@ class RewardTargetInfo {
 
 /// 显示打赏底部弹窗
 void showLdcRewardSheet(BuildContext context, RewardTargetInfo target) {
+  if (!DiscourseInstanceRuntime.isDefaultInstance) return;
   showAppBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -91,6 +93,7 @@ class _LdcRewardSheetState extends ConsumerState<_LdcRewardSheet> {
   }
 
   Future<void> _submit() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return;
     if (!_isAmountValid || _isSubmitting) return;
 
     final amount = _currentAmount!;

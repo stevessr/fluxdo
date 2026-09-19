@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/discourse_instance_runtime.dart';
 import '../models/cdk_user_info.dart';
 import '../services/account_manager.dart';
 import '../services/auth_session.dart';
@@ -59,6 +60,7 @@ class CdkUserInfoNotifier extends AsyncNotifier<CdkUserInfo?> {
 
   @override
   Future<CdkUserInfo?> build() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return null;
     final generation = AuthSession().generation;
     final prefs = await SharedPreferences.getInstance();
     ref.watch(currentUserProvider.select((value) => value.value?.username));
@@ -127,6 +129,7 @@ class CdkUserInfoNotifier extends AsyncNotifier<CdkUserInfo?> {
   }
 
   Future<CdkUserInfo?> _doFetchUserInfo(String username, int generation) async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return null;
     final prefs = await SharedPreferences.getInstance();
     if (!AuthSession().isValid(generation) ||
         await _currentUsername() != username ||
@@ -158,6 +161,10 @@ class CdkUserInfoNotifier extends AsyncNotifier<CdkUserInfo?> {
   }
 
   Future<void> refresh() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      state = const AsyncValue.data(null);
+      return;
+    }
     final generation = AuthSession().generation;
     final username = await _currentUsername();
     if (!AuthSession().isValid(generation) || username == null) return;
@@ -189,6 +196,10 @@ class CdkUserInfoNotifier extends AsyncNotifier<CdkUserInfo?> {
   }
 
   Future<void> clear() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      state = const AsyncValue.data(null);
+      return;
+    }
     final generation = AuthSession().generation;
     final username = await _currentUsername();
     if (!AuthSession().isValid(generation) ||
@@ -206,6 +217,10 @@ class CdkUserInfoNotifier extends AsyncNotifier<CdkUserInfo?> {
   }
 
   Future<void> disable() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      state = const AsyncValue.data(null);
+      return;
+    }
     final generation = AuthSession().generation;
     final username = await _currentUsername();
     if (!AuthSession().isValid(generation) ||

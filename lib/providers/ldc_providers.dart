@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/discourse_instance_runtime.dart';
 import '../models/ldc_user_info.dart';
 import '../services/account_manager.dart';
 import '../services/auth_session.dart';
@@ -63,6 +64,7 @@ class LdcUserInfoNotifier extends AsyncNotifier<LdcUserInfo?> {
 
   @override
   Future<LdcUserInfo?> build() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return null;
     final generation = AuthSession().generation;
     final prefs = await SharedPreferences.getInstance();
     // watch username 使切换后重新读取，但 identity 以安全存储为准，避免
@@ -133,6 +135,7 @@ class LdcUserInfoNotifier extends AsyncNotifier<LdcUserInfo?> {
   }
 
   Future<LdcUserInfo?> _doFetchUserInfo(String username, int generation) async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return null;
     final prefs = await SharedPreferences.getInstance();
     if (!AuthSession().isValid(generation) ||
         await _currentUsername() != username ||
@@ -165,6 +168,10 @@ class LdcUserInfoNotifier extends AsyncNotifier<LdcUserInfo?> {
   }
 
   Future<void> refresh() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      state = const AsyncValue.data(null);
+      return;
+    }
     final generation = AuthSession().generation;
     final username = await _currentUsername();
     if (!AuthSession().isValid(generation) || username == null) return;
@@ -196,6 +203,10 @@ class LdcUserInfoNotifier extends AsyncNotifier<LdcUserInfo?> {
   }
 
   Future<void> clear() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      state = const AsyncValue.data(null);
+      return;
+    }
     final generation = AuthSession().generation;
     final username = await _currentUsername();
     if (!AuthSession().isValid(generation) ||
@@ -213,6 +224,10 @@ class LdcUserInfoNotifier extends AsyncNotifier<LdcUserInfo?> {
   }
 
   Future<void> disable() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      state = const AsyncValue.data(null);
+      return;
+    }
     final generation = AuthSession().generation;
     final username = await _currentUsername();
     if (!AuthSession().isValid(generation) ||

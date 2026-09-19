@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/discourse_instance_runtime.dart';
+import '../constants.dart';
 import '../l10n/s.dart';
 import '../services/auth_session.dart';
 import '../services/cf_challenge_service.dart';
@@ -37,6 +39,7 @@ import 'webview_login_page.dart';
 ///
 /// linux.do 的 hcaptcha sitekey 写死, 后续可从 PreloadedDataService 动态拿。
 const String _kLinuxDoHcaptchaSiteKey = 'a776b4ac-8c4c-441e-986a-c6ee9ed8cf08';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -44,8 +47,7 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage>
-    with TickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   String? _savedUsername;
   String? _savedPassword;
   bool _credentialsLoaded = false;
@@ -93,7 +95,10 @@ class _LoginPageState extends State<LoginPage>
 
   @override
   void dispose() {
-    if (identical(UserApiKeyLoginFlow.instance.onFlowFinished, _onBrowserAuthFinished)) {
+    if (identical(
+      UserApiKeyLoginFlow.instance.onFlowFinished,
+      _onBrowserAuthFinished,
+    )) {
       UserApiKeyLoginFlow.instance.onFlowFinished = null;
     }
     _entryController.dispose();
@@ -104,6 +109,10 @@ class _LoginPageState extends State<LoginPage>
   /// 深链 fluxdo://auth_redirect 回 App,由 UserApiKeyLoginFlow 完成
   /// OTP 兑换与登录收口,这里只负责发起和成功后 pop。
   Future<void> _loginWithBrowserAuth() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      await _loginWithWebView('${AppConstants.baseUrl}/login');
+      return;
+    }
     if (_browserAuthLaunching) return;
     setState(() => _browserAuthLaunching = true);
     UserApiKeyLoginFlow.instance.onFlowFinished = _onBrowserAuthFinished;
@@ -125,6 +134,10 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Future<void> _loadSavedCredentials() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      if (mounted) setState(() => _credentialsLoaded = true);
+      return;
+    }
     try {
       final saved = await CredentialStoreService().load();
       if (!mounted) return;
@@ -175,6 +188,10 @@ class _LoginPageState extends State<LoginPage>
     required String password,
     required bool rememberCredentials,
   }) async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      await _loginWithWebView('${AppConstants.baseUrl}/login');
+      return false;
+    }
     final service = DiscourseService();
 
     // Step 0: jar 必须有 cf_clearance, 否则 native dio 任何请求都被 CF 当 bot
@@ -207,9 +224,7 @@ class _LoginPageState extends State<LoginPage>
       hcaptchaCreateEndpoint: hcaptchaEndpoint,
       onNeedSecondFactor: (need) => showTwoFactorDialog(
         context,
-        hint: need.totpEnabled
-            ? '请输入身份验证器 App 显示的 6 位验证码'
-            : '此账号需要二步验证',
+        hint: need.totpEnabled ? '请输入身份验证器 App 显示的 6 位验证码' : '此账号需要二步验证',
         onUseBackupCode: () => _loginWithWebView(),
       ),
     );
@@ -250,8 +265,7 @@ class _LoginPageState extends State<LoginPage>
     final msg = switch (f.kind) {
       LoginErrorKind.invalidCredentials => '用户名或密码错误',
       LoginErrorKind.secondFactorRequired => f.message ?? '二步验证失败',
-      LoginErrorKind.notActivated =>
-        '账号未激活,请到邮箱 ${f.sentToEmail ?? ''} 完成激活',
+      LoginErrorKind.notActivated => '账号未激活,请到邮箱 ${f.sentToEmail ?? ''} 完成激活',
       LoginErrorKind.notApproved => '账号尚未通过审核',
       LoginErrorKind.passwordExpired => '密码已过期,请用浏览器登录重设密码',
       LoginErrorKind.network => f.message ?? '网络异常',
@@ -343,7 +357,9 @@ class _LoginPageState extends State<LoginPage>
                           _entry(
                             1,
                             Text(
-                              'LINUX.DO',
+                              DiscourseInstanceRuntime.isDefaultInstance
+                                  ? 'LINUX.DO'
+                                  : Uri.parse(AppConstants.baseUrl).host,
                               textAlign: TextAlign.center,
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
@@ -356,7 +372,9 @@ class _LoginPageState extends State<LoginPage>
                           _entry(
                             2,
                             Text(
-                              context.l10n.login_slogan,
+                              DiscourseInstanceRuntime.isDefaultInstance
+                                  ? context.l10n.login_slogan
+                                  : AppConstants.baseUrl,
                               textAlign: TextAlign.center,
                               style: theme.textTheme.titleMedium?.copyWith(
                                 color: scheme.onSurfaceVariant.withValues(
@@ -420,15 +438,44 @@ class _LoginPageState extends State<LoginPage>
                 color: scheme.outlineVariant.withValues(alpha: 0.4),
               ),
             ),
-            child: !_credentialsLoaded
+            child: !DiscourseInstanceRuntime.isDefaultInstance
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '使用当前 Discourse 的标准登录页面，兼容站点自己的 OAuth、'
+                          'Passkey、验证码和注册策略。',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        FilledButton.icon(
+                          onPressed: () => _loginWithWebView(
+                            '${AppConstants.baseUrl}/login',
+                          ),
+                          icon: const Icon(Symbols.open_in_browser_rounded),
+                          label: Text(context.l10n.webviewLogin_title),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 52),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : !_credentialsLoaded
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 48),
                     child: Center(child: LoadingSpinner(size: 40)),
                   )
                 : LoginForm(
                     onSubmit: _handleSubmit,
-                    onForgotPassword: () =>
-                        _loginWithWebView('https://linux.do/password-reset'),
+                    onForgotPassword: () => _loginWithWebView(
+                      '${AppConstants.baseUrl}/password-reset',
+                    ),
                     savedUsername: _savedUsername,
                     savedPassword: _savedPassword,
                   ),
@@ -440,6 +487,9 @@ class _LoginPageState extends State<LoginPage>
 
   /// 分割线 + 其他方式登录 (扫码 / 浏览器授权 / OAuth 等)
   Widget _buildAltLogin(BuildContext context, ColorScheme scheme) {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -510,9 +560,13 @@ class _LoginPageState extends State<LoginPage>
 
   /// 扫码登录:跳转扫码页,成功后 pop 登录页
   Future<void> _loginWithQrScan() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const QrLoginScanPage()),
-    );
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      await _loginWithWebView('${AppConstants.baseUrl}/login');
+      return;
+    }
+    final result = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const QrLoginScanPage()));
     if (result == true && mounted) {
       Navigator.of(context).pop(true);
     }
