@@ -260,6 +260,10 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
       fontMax: (previous.fontMax * textScale).round(),
     ));
     _syncRectFields();
+    _syncController(_strokeWidthController, _formatNumber(_params.bubbleStrokeWidth));
+    _syncController(_paddingController, _formatNumber(_params.padding));
+    _syncController(_fontMinController, '${_params.fontMin}');
+    _syncController(_fontMaxController, '${_params.fontMax}');
     if (syncSizeFields) _syncSizeFields();
   }
 
@@ -310,7 +314,8 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
         .map((size) => '${size.$1}x${size.$2}')
         .toSet();
     return DropdownButtonFormField<String>(
-      value: presetKeys.contains(current) ? current : 'custom',
+      key: ValueKey('size-preset-$current'),
+      initialValue: presetKeys.contains(current) ? current : 'custom',
       decoration: const InputDecoration(
         labelText: '生成尺寸（像素）',
         border: OutlineInputBorder(),
@@ -456,9 +461,6 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             child: SizedBox(
               height: height,
               child: StevessrInteractivePreview(
-                key: ValueKey(
-                  'editor-${_params.width}x${_params.height}',
-                ),
                 params: _params,
                 logicalWidth: previewWidth,
                 repaintBoundaryKey: _repaintBoundaryKey,
