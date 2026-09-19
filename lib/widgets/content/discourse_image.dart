@@ -157,10 +157,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
 
     // Lightbox(无 heroTag:纯点击打开,无飞行)
     if (widget.enableLightbox && !_isSvg) {
-      return GestureDetector(
-        onTap: _openLightbox,
-        child: imageWidget,
-      );
+      return GestureDetector(onTap: _openLightbox, child: imageWidget);
     }
 
     return imageWidget;
@@ -299,7 +296,9 @@ class _DiscourseImageState extends State<DiscourseImage> {
       _resolvedUrl!,
       heroTag: widget.heroTag,
       thumbnailUrl: _resolvedUrl,
-      galleryImages: widget.galleryImages.isNotEmpty ? widget.galleryImages : null,
+      galleryImages: widget.galleryImages.isNotEmpty
+          ? widget.galleryImages
+          : null,
       initialIndex: widget.initialIndex,
       enableShare: true,
       // 与源端同源:_viewerStyle 一处给出,两侧不可能不一致
@@ -308,5 +307,4 @@ class _DiscourseImageState extends State<DiscourseImage> {
       heroSourceCircular: args.circular,
     );
   }
-
 }
