@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config/discourse_instance_runtime.dart';
 import '../providers/core_providers.dart';
 import '../providers/ldc_providers.dart';
 import '../pages/webview_page.dart';
@@ -27,6 +28,9 @@ class LdcBalanceCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      return const SizedBox.shrink();
+    }
     final ldcUserInfo = ref.watch(ldcUserInfoProvider);
 
     // 授权过期时强制显示错误卡片（即使有旧数据缓存）；其他错误仅在无旧数据时显示
