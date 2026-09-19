@@ -76,7 +76,9 @@ class _StevessrInteractivePreviewState
 
   void _updateElementGesture(ScaleUpdateDetails details) {
     assert(() {
-      debugPrint('EDITOR_UPDATE target=$_target focal=${details.focalPoint} scale=${details.scale}');
+      debugPrint(
+        'EDITOR_UPDATE target=$_target focal=${details.focalPoint} scale=${details.scale}',
+      );
       return true;
     }());
     final start = _gestureRect;
