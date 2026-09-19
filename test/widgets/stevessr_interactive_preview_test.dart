@@ -62,10 +62,14 @@ void main() {
     final overlay = find.byKey(const ValueKey('stevessr-element-overlay'));
     expect(overlay, findsOneWidget);
     // Drag the character by its interior rather than by its corner handle.
-    await tester.dragFrom(
+    final characterDrag = await tester.startGesture(
       tester.getCenter(overlay) - const Offset(28, 28),
-      const Offset(32, 16),
     );
+    await characterDrag.moveBy(const Offset(16, 8));
+    await tester.pump();
+    await characterDrag.moveBy(const Offset(16, 8));
+    await tester.pump();
+    await characterDrag.up();
     await tester.pump();
     expect(params.characterRect.x, greaterThan(initialCharacter.x));
     expect(params.characterRect.y, greaterThan(initialCharacter.y));
@@ -83,10 +87,14 @@ void main() {
     await tester.tap(find.text('气泡'));
     await tester.pump();
     final beforeBubble = params.bubbleRect;
-    await tester.dragFrom(
+    final bubbleDrag = await tester.startGesture(
       tester.getCenter(overlay) - const Offset(30, 20),
-      const Offset(24, 12),
     );
+    await bubbleDrag.moveBy(const Offset(12, 6));
+    await tester.pump();
+    await bubbleDrag.moveBy(const Offset(12, 6));
+    await tester.pump();
+    await bubbleDrag.up();
     await tester.pump();
     expect(params.bubbleRect.x, greaterThan(beforeBubble.x));
 
