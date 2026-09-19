@@ -65,7 +65,7 @@ void main() {
     final characterDrag = await tester.startGesture(
       tester.getCenter(overlay) - const Offset(28, 28),
     );
-    await characterDrag.moveBy(const Offset(16, 8));
+    await characterDrag.moveBy(const Offset(24, 12));
     await tester.pump();
     await characterDrag.moveBy(const Offset(16, 8));
     await tester.pump();
@@ -79,7 +79,7 @@ void main() {
     final resizeDrag = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('stevessr-element-resize'))),
     );
-    await resizeDrag.moveBy(const Offset(-16, -16));
+    await resizeDrag.moveBy(const Offset(-24, -24));
     await tester.pump();
     await resizeDrag.moveBy(const Offset(-16, -16));
     await tester.pump();
@@ -94,7 +94,7 @@ void main() {
     final bubbleDrag = await tester.startGesture(
       tester.getCenter(overlay) - const Offset(30, 20),
     );
-    await bubbleDrag.moveBy(const Offset(12, 6));
+    await bubbleDrag.moveBy(const Offset(18, 9));
     await tester.pump();
     await bubbleDrag.moveBy(const Offset(12, 6));
     await tester.pump();
@@ -121,7 +121,7 @@ void main() {
     final panDrag = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('stevessr-viewport'))),
     );
-    await panDrag.moveBy(const Offset(15, 10));
+    await panDrag.moveBy(const Offset(25, 15));
     await tester.pump();
     await panDrag.moveBy(const Offset(15, 10));
     await tester.pump();
