@@ -231,7 +231,7 @@ class _StevessrInteractivePreviewState
           child: Text(
             _target == StevessrEditTarget.canvas
                 ? '拖动空白处平移画布，双指或滚轮缩放；画布视图不影响导出。'
-                : '拖动选中元素移动，拖动右下角调整大小，双指捏合可缩放；空白处可移动画布。',
+                : '拖动选中元素移动，拖动右下角调整大小，双指捏合可缩放；切换到「画布」可平移和缩放画布。',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
@@ -263,6 +263,10 @@ class _StevessrInteractivePreviewState
                     alignment: Alignment.center,
                     minScale: 0.25,
                     maxScale: 6.0,
+                    // Do not let the parent viewport's ScaleGestureRecognizer
+                    // compete with object drag/pinch recognizers.
+                    panEnabled: _target == StevessrEditTarget.canvas,
+                    scaleEnabled: _target == StevessrEditTarget.canvas,
                     boundaryMargin: const EdgeInsets.all(1200),
                     child: SizedBox(
                       width: width,
