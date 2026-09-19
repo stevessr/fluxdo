@@ -103,15 +103,18 @@ class _WebViewCookieManagerPageState
             icon: const Icon(Icons.refresh_rounded),
           ),
           PopupMenuButton<String>(
-            onSelected: (value) {
+            onSelected: (value) async {
               switch (value) {
                 case 'clear_current':
-                  _clearHosts({_currentHost});
+                  await _clearHosts({_currentHost});
+                  break;
                 case 'clear_filter':
                   final host = _hostFilter;
-                  if (host != null) _clearHosts({host});
+                  if (host != null) await _clearHosts({host});
+                  break;
                 case 'clear_all_related':
-                  _clearHosts(_hosts.toSet());
+                  await _clearHosts(_hosts.toSet());
+                  break;
               }
             },
             itemBuilder: (context) => [
