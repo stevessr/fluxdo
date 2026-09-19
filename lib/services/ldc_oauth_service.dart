@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:html/parser.dart' as html_parser;
+import '../config/discourse_instance_runtime.dart';
 import 'auth_session.dart';
 import 'network/discourse_dio.dart';
 import 'network/exceptions/oauth_exception.dart';
@@ -20,6 +21,9 @@ class LdcOAuthService {
   }
 
   Future<String> getAuthUrl() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      throw StateError('LINUX DO companion OAuth is unavailable for this Discourse instance');
+    }
     final response = await _dio.get(
       '$baseUrl/api/v1/oauth/login',
       options: Options(extra: {'skipCsrf': true}),
@@ -32,6 +36,7 @@ class LdcOAuthService {
     String state, {
     int? requestGeneration,
   }) async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return;
     if (requestGeneration != null &&
         !AuthSession().isValid(requestGeneration)) {
       return;
@@ -54,6 +59,7 @@ class LdcOAuthService {
   }
 
   Future<void> logout() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return;
     await _dio.get(
       '$baseUrl/api/v1/oauth/logout',
       options: Options(extra: {'skipCsrf': true}),
@@ -66,6 +72,7 @@ class LdcOAuthService {
   /// 同一个限速窗口。中间插一个相对长的 gap, 让服务端限速窗口完全 reset,
   /// 也更像真人"先退出再重新登录"的操作节奏。
   Future<bool> reauthorize(BuildContext context) async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return false;
     try {
       await logout();
     } catch (_) {
@@ -77,6 +84,7 @@ class LdcOAuthService {
   }
 
   Future<LdcUserInfo?> getUserInfo() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return null;
     final generation = AuthSession().generation;
     try {
       final response = await _dio.get(
@@ -95,6 +103,7 @@ class LdcOAuthService {
   }
 
   Future<bool> authorize(BuildContext context) async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return false;
     final generation = AuthSession().generation;
     final String authUrl;
     try {
