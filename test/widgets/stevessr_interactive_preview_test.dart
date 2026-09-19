@@ -61,15 +61,13 @@ void main() {
 
     final overlay = find.byKey(const ValueKey('stevessr-element-overlay'));
     expect(overlay, findsOneWidget);
-    // Record the actual hit-test chain to diagnose nested viewport gestures.
+    // Flutter's scale recognizer begins after touch slop. Move once more
+    // after recognition so the next frame carries an actual translation.
     final touchPoint = tester.getCenter(overlay) - const Offset(28, 28);
-    final hit = tester.hitTestOnBinding(touchPoint);
-    debugPrint(
-      'EDITOR_HIT rect=${tester.getRect(overlay)} touch=$touchPoint '
-      'path=${hit.path.map((entry) => entry.target.runtimeType).toList()}',
-    );
     final characterDrag = await tester.startGesture(touchPoint);
     await characterDrag.moveBy(const Offset(24, 12));
+    await tester.pump();
+    await characterDrag.moveBy(const Offset(16, 8));
     await tester.pump();
     await characterDrag.moveBy(const Offset(16, 8));
     await tester.pump();
@@ -102,6 +100,8 @@ void main() {
     await tester.pump();
     await bubbleDrag.moveBy(const Offset(12, 6));
     await tester.pump();
+    await bubbleDrag.moveBy(const Offset(12, 6));
+    await tester.pump();
     await bubbleDrag.up();
     await tester.pump();
     expect(params.bubbleRect.x, greaterThan(beforeBubble.x));
@@ -126,6 +126,8 @@ void main() {
       tester.getCenter(find.byKey(const ValueKey('stevessr-viewport'))),
     );
     await panDrag.moveBy(const Offset(25, 15));
+    await tester.pump();
+    await panDrag.moveBy(const Offset(15, 10));
     await tester.pump();
     await panDrag.moveBy(const Offset(15, 10));
     await tester.pump();
