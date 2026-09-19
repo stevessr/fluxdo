@@ -14,6 +14,8 @@ on:
       - 'lib/services/local_notification_service.dart'
       - 'lib/services/media_transcoder/media_compressor.dart'
       - 'lib/widgets/markdown_editor/media_upload_helper.dart'
+      - 'lib/pages/login_page.dart'
+      - 'lib/pages/webview_login_page.dart'
       - 'lib/pages/profile_page.dart'
       - 'lib/providers/cdk_providers.dart'
       - 'lib/providers/ldc_providers.dart'
@@ -49,6 +51,7 @@ on:
       - 'test/services/network/message_bus_isolation_interceptor_test.dart'
       - 'test/services/network/redirect_interceptor_security_test.dart'
       - 'test/services/network/request_header_interceptor_test.dart'
+      - 'test/services/storage/resilient_secure_storage_instance_scope_test.dart'
       - 'test/utils/notification_route_payload_test.dart'
       - 'test/utils/url_helper_test.dart'
       - '.github/workflows/multi-discourse.yaml'
@@ -65,6 +68,8 @@ on:
       - 'lib/services/discourse/discourse_service.dart'
       - 'lib/services/discourse_instance_manager.dart'
       - 'lib/services/local_notification_service.dart'
+      - 'lib/pages/login_page.dart'
+      - 'lib/pages/webview_login_page.dart'
       - 'lib/pages/profile_page.dart'
       - 'lib/providers/cdk_providers.dart'
       - 'lib/providers/ldc_providers.dart'
@@ -102,6 +107,7 @@ on:
       - 'test/services/network/message_bus_isolation_interceptor_test.dart'
       - 'test/services/network/redirect_interceptor_security_test.dart'
       - 'test/services/network/request_header_interceptor_test.dart'
+      - 'test/services/storage/resilient_secure_storage_instance_scope_test.dart'
       - 'test/utils/notification_route_payload_test.dart'
       - 'test/utils/url_helper_test.dart'
       - '.github/workflows/multi-discourse.yaml'
@@ -148,6 +154,8 @@ jobs:
             lib/services/local_notification_service.dart \
             lib/services/media_transcoder/media_compressor.dart \
             lib/widgets/markdown_editor/media_upload_helper.dart \
+            lib/pages/login_page.dart \
+            lib/pages/webview_login_page.dart \
             lib/pages/profile_page.dart \
             lib/providers/cdk_providers.dart \
             lib/providers/ldc_providers.dart \
@@ -181,6 +189,7 @@ jobs:
             test/services/network/message_bus_isolation_interceptor_test.dart \
             test/services/network/redirect_interceptor_security_test.dart \
             test/services/network/request_header_interceptor_test.dart \
+            test/services/storage/resilient_secure_storage_instance_scope_test.dart \
             test/utils/notification_route_payload_test.dart \
             test/utils/url_helper_test.dart
           git diff --exit-code -- \
@@ -190,6 +199,8 @@ jobs:
             lib/services/deep_link_service.dart \
             lib/services/discourse/discourse_service.dart \
             lib/services/local_notification_service.dart \
+            lib/pages/login_page.dart \
+            lib/pages/webview_login_page.dart \
             lib/pages/profile_page.dart \
             lib/providers/cdk_providers.dart \
             lib/providers/ldc_providers.dart \
@@ -225,6 +236,7 @@ jobs:
             test/services/network/message_bus_isolation_interceptor_test.dart \
             test/services/network/redirect_interceptor_security_test.dart \
             test/services/network/request_header_interceptor_test.dart \
+            test/services/storage/resilient_secure_storage_instance_scope_test.dart \
             test/utils/notification_route_payload_test.dart \
             test/utils/url_helper_test.dart
 
@@ -242,6 +254,8 @@ jobs:
           lib/services/local_notification_service.dart
           lib/services/media_transcoder/media_compressor.dart
           lib/widgets/markdown_editor/media_upload_helper.dart
+          lib/pages/login_page.dart
+          lib/pages/webview_login_page.dart
           lib/pages/profile_page.dart
           lib/providers/cdk_providers.dart
           lib/providers/ldc_providers.dart
@@ -277,6 +291,7 @@ jobs:
           test/services/network/message_bus_isolation_interceptor_test.dart
           test/services/network/redirect_interceptor_security_test.dart
           test/services/network/request_header_interceptor_test.dart
+          test/services/storage/resilient_secure_storage_instance_scope_test.dart
           test/utils/notification_route_payload_test.dart
           test/utils/url_helper_test.dart
 
@@ -296,5 +311,6 @@ jobs:
           test/services/network/message_bus_isolation_interceptor_test.dart
           test/services/network/redirect_interceptor_security_test.dart
           test/services/network/request_header_interceptor_test.dart
+          test/services/storage/resilient_secure_storage_instance_scope_test.dart
           test/utils/notification_route_payload_test.dart
           test/utils/url_helper_test.dart
