@@ -25,12 +25,8 @@ void main() {
     );
     final storage = ResilientSecureStorage();
 
-    final usernameKey = storage.debugStorageKeyFor(
-      'login_credential_username',
-    );
-    final passwordKey = storage.debugStorageKeyFor(
-      'login_credential_password',
-    );
+    final usernameKey = storage.debugStorageKeyFor('login_credential_username');
+    final passwordKey = storage.debugStorageKeyFor('login_credential_password');
 
     expect(usernameKey, contains('discourse_instance'));
     expect(passwordKey, contains('discourse_instance'));
