@@ -47,8 +47,14 @@ class AudioProfile {
 
 /// 视频压缩档。
 class VideoProfile {
-  const VideoProfile(this.label, this.videoBitrate, this.audioBitrate,
-      this.height, this.fps, this.codec);
+  const VideoProfile(
+    this.label,
+    this.videoBitrate,
+    this.audioBitrate,
+    this.height,
+    this.fps,
+    this.codec,
+  );
   final String label;
   final int videoBitrate;
   final int audioBitrate;
@@ -67,15 +73,9 @@ List<AudioProfile> audioProfilesFor(
   final seconds = math.max(1, duration.inMilliseconds / 1000);
   final targetBytes = _targetBytesFor(maxBytes);
   final budget = math.max(12000, (targetBytes * 8 / seconds).floor());
-  AudioProfile p(String label, double factor) => AudioProfile(
-        label,
-        (budget * factor).floor().clamp(12000, 96000),
-      );
-  return [
-    p('快速压缩', 0.72),
-    p('二次压缩', 0.45),
-    p('极限压缩', 0.28),
-  ];
+  AudioProfile p(String label, double factor) =>
+      AudioProfile(label, (budget * factor).floor().clamp(12000, 96000));
+  return [p('快速压缩', 0.72), p('二次压缩', 0.45), p('极限压缩', 0.28)];
 }
 
 /// 视频三档:码率预算递降,分辨率/帧率**按每档实际码率动态选**
@@ -120,16 +120,12 @@ List<VideoProfile> videoProfilesFor(
 
 /// 压缩结果。
 class CompressResult {
-  const CompressResult.ok(this.path)
-      : cancelled = false,
-        error = null;
+  const CompressResult.ok(this.path) : cancelled = false, error = null;
   const CompressResult.cancelled()
-      : path = null,
-        cancelled = true,
-        error = null;
-  const CompressResult.failed(this.error)
-      : path = null,
-        cancelled = false;
+    : path = null,
+      cancelled = true,
+      error = null;
+  const CompressResult.failed(this.error) : path = null, cancelled = false;
 
   final String? path;
   final bool cancelled;
@@ -170,13 +166,13 @@ Future<CompressResult> compressMediaToFit(
               label: p.label,
               codec: 'aac',
               spec: (String out) => TranscodeSpec(
-                    input: inputPath,
-                    output: out,
-                    audioOnly: true,
-                    audioBitrate: p.audioBitrate,
-                    audioSampleRate: 16000,
-                    audioChannels: 1,
-                  ),
+                input: inputPath,
+                output: out,
+                audioOnly: true,
+                audioBitrate: p.audioBitrate,
+                audioSampleRate: 16000,
+                audioChannels: 1,
+              ),
               ext: 'm4a',
             ),
         ]
@@ -186,14 +182,14 @@ Future<CompressResult> compressMediaToFit(
               label: p.label,
               codec: p.codec,
               spec: (String out) => TranscodeSpec(
-                    input: inputPath,
-                    output: out,
-                    audioBitrate: p.audioBitrate,
-                    videoBitrate: p.videoBitrate,
-                    videoCodec: p.codec,
-                    maxHeight: p.height,
-                    fps: p.fps,
-                  ),
+                input: inputPath,
+                output: out,
+                audioBitrate: p.audioBitrate,
+                videoBitrate: p.videoBitrate,
+                videoCodec: p.codec,
+                maxHeight: p.height,
+                fps: p.fps,
+              ),
               ext: 'mp4',
             ),
         ];
@@ -214,7 +210,9 @@ Future<CompressResult> compressMediaToFit(
       }
       final size = await File(out).length();
       if (size < maxBytes) {
-        onStatus?.call('${tier.label}完成 ${(size / 1048576).toStringAsFixed(1)}MB');
+        onStatus?.call(
+          '${tier.label}完成 ${(size / 1048576).toStringAsFixed(1)}MB',
+        );
         return CompressResult.ok(out);
       }
       onStatus?.call('结果 ${(size / 1048576).toStringAsFixed(1)}MB,继续压小…');
