@@ -5,6 +5,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/widgets/markdown_editor/media_upload_helper.dart';
 
 void main() {
+  group('site upload limits', () {
+    test('reads max_attachment_size_kb as number or string', () {
+      expect(
+        mediaUploadLimitBytesFromSettings({'max_attachment_size_kb': 2048}),
+        2 * 1024 * 1024,
+      );
+      expect(
+        mediaUploadLimitBytesFromSettings({'max_attachment_size_kb': '5120'}),
+        5 * 1024 * 1024,
+      );
+    });
+
+    test('falls back only when site setting is unavailable or invalid', () {
+      expect(
+        mediaUploadLimitBytesFromSettings(null, fallbackBytes: 1234),
+        1234,
+      );
+      expect(
+        mediaUploadLimitBytesFromSettings(
+          {'max_attachment_size_kb': 0},
+          fallbackBytes: 4321,
+        ),
+        4321,
+      );
+      expect(
+        mediaUploadLimitBytesFromSettings(
+          {'max_attachment_size_kb': 1024},
+          fallbackBytes: 4321,
+        ),
+        1024 * 1024,
+      );
+    });
+  });
+
   test('upload:// 短链 → /uploads/short-url/<b62>.xz(去原扩展)', () {
     expect(
       mediaShortUrlToXzPath('upload://lwDn83PDeB3xOUoEeZI9v77qGJa.mp4'),
