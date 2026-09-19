@@ -4,6 +4,7 @@ import 'package:native_animated_image/native_animated_image.dart'
 import 'avif_image_provider.dart';
 export 'avif_image_provider.dart' show AvifImageProvider;
 import 'blob_image_cache.dart';
+import 'sticker_thumbnail_provider.dart';
 export 'blob_image_cache.dart' show BlobImageCache, BlobImageProvider;
 import 'dio_http_client.dart' show DownloadPriority;
 export 'dio_http_client.dart' show DownloadPriority;
@@ -122,6 +123,67 @@ ImageProvider discourseImageProvider(
     scale: scale,
     priority: priority,
   );
+}
+
+/// 统一网络图片 Provider 入口：相同的 URL、bucket、解码尺寸和播放模式
+/// 会得到相等的 Flutter ImageCache key，避免不同组件各自选择解码路径。
+///
+/// URL（包括查询参数）原样参与身份计算：Discourse 的优化图尺寸、
+/// 签名 URL 与权限参数可能改变返回字节，不能删除或重新排序。
+/// bucket 保留不同用途的生命周期与隔离策略；账号 ID 不参与图片身份。
+///
+/// 仅缩略图模式允许把动画转换为持久化的单帧 PNG；正文及查看器必须
+/// 使用完整动画。头像动图始终走 alpha-safe 的标准编码图片解码路径。
+ImageProvider sharedImageProvider(
+  String url, {
+  String bucket = BlobImageCache.contentBucket,
+  double scale = 1.0,
+  DownloadPriority priority = DownloadPriority.normal,
+  int? cacheWidth,
+  int? cacheHeight,
+  bool thumbnailMode = false,
+}) {
+  final source = discourseImageProvider(
+    url,
+    bucket: bucket,
+    scale: scale,
+    priority: priority,
+  );
+
+  // discourseImageProvider 已经按 URL 将头像路由到全局 avatar bucket。
+  // 即使调用方启用 thumbnailMode，也不能让头像动图走可能污染 alpha
+  // 的单帧贴纸缩略图管线。
+  final effectiveBucket = source is BlobImageProvider ? source.bucket : bucket;
+  if (thumbnailMode &&
+      effectiveBucket != BlobImageCache.avatarBucket &&
+      (cacheWidth != null || cacheHeight != null) &&
+      StickerThumbnailProvider.supports(url)) {
+    final targetSize = cacheWidth == null
+        ? cacheHeight!
+        : cacheHeight == null
+        ? cacheWidth
+        : (cacheWidth > cacheHeight ? cacheWidth : cacheHeight);
+    return StickerThumbnailProvider(
+      url,
+      targetSize: targetSize,
+      bucket: effectiveBucket,
+      scale: scale,
+    );
+  }
+
+  // 只有普通静态图片才包 ResizeImage；完整动画的特殊解码器保留
+  // 各自的帧/alpha 语义。fit 与正文 LazyImage 的 decode key 保持一致。
+  if (source is BlobImageProvider &&
+      !isNativeAnimatedUrl(url) &&
+      (cacheWidth != null || cacheHeight != null)) {
+    return ResizeImage(
+      source,
+      width: cacheWidth,
+      height: cacheHeight,
+      policy: ResizeImagePolicy.fit,
+    );
+  }
+  return source;
 }
 
 /// 创建站点配置/装饰图片 Provider。
