@@ -39,6 +39,7 @@ import 'webview_login_page.dart';
 ///
 /// linux.do 的 hcaptcha sitekey 写死, 后续可从 PreloadedDataService 动态拿。
 const String _kLinuxDoHcaptchaSiteKey = 'a776b4ac-8c4c-441e-986a-c6ee9ed8cf08';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -46,8 +47,7 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage>
-    with TickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   String? _savedUsername;
   String? _savedPassword;
   bool _credentialsLoaded = false;
@@ -95,7 +95,10 @@ class _LoginPageState extends State<LoginPage>
 
   @override
   void dispose() {
-    if (identical(UserApiKeyLoginFlow.instance.onFlowFinished, _onBrowserAuthFinished)) {
+    if (identical(
+      UserApiKeyLoginFlow.instance.onFlowFinished,
+      _onBrowserAuthFinished,
+    )) {
       UserApiKeyLoginFlow.instance.onFlowFinished = null;
     }
     _entryController.dispose();
@@ -221,9 +224,7 @@ class _LoginPageState extends State<LoginPage>
       hcaptchaCreateEndpoint: hcaptchaEndpoint,
       onNeedSecondFactor: (need) => showTwoFactorDialog(
         context,
-        hint: need.totpEnabled
-            ? '请输入身份验证器 App 显示的 6 位验证码'
-            : '此账号需要二步验证',
+        hint: need.totpEnabled ? '请输入身份验证器 App 显示的 6 位验证码' : '此账号需要二步验证',
         onUseBackupCode: () => _loginWithWebView(),
       ),
     );
@@ -264,8 +265,7 @@ class _LoginPageState extends State<LoginPage>
     final msg = switch (f.kind) {
       LoginErrorKind.invalidCredentials => '用户名或密码错误',
       LoginErrorKind.secondFactorRequired => f.message ?? '二步验证失败',
-      LoginErrorKind.notActivated =>
-        '账号未激活,请到邮箱 ${f.sentToEmail ?? ''} 完成激活',
+      LoginErrorKind.notActivated => '账号未激活,请到邮箱 ${f.sentToEmail ?? ''} 完成激活',
       LoginErrorKind.notApproved => '账号尚未通过审核',
       LoginErrorKind.passwordExpired => '密码已过期,请用浏览器登录重设密码',
       LoginErrorKind.network => f.message ?? '网络异常',
@@ -454,8 +454,9 @@ class _LoginPageState extends State<LoginPage>
                         ),
                         const SizedBox(height: 20),
                         FilledButton.icon(
-                          onPressed: () =>
-                              _loginWithWebView('${AppConstants.baseUrl}/login'),
+                          onPressed: () => _loginWithWebView(
+                            '${AppConstants.baseUrl}/login',
+                          ),
                           icon: const Icon(Symbols.open_in_browser_rounded),
                           label: Text(context.l10n.webviewLogin_title),
                           style: FilledButton.styleFrom(
@@ -563,9 +564,9 @@ class _LoginPageState extends State<LoginPage>
       await _loginWithWebView('${AppConstants.baseUrl}/login');
       return;
     }
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const QrLoginScanPage()),
-    );
+    final result = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const QrLoginScanPage()));
     if (result == true && mounted) {
       Navigator.of(context).pop(true);
     }
