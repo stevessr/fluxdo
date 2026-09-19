@@ -187,7 +187,10 @@ class SiteCookieManagerService {
           rawDomain: cookie.domain,
           hostOnly: cookie.hostOnly,
           path: path,
-          expiresAt: cookie.expiresAt,
+          expiresAt: cookie.expiresAt ??
+              (cookie.maxAge == null
+                  ? null
+                  : cookie.creationTime.add(Duration(seconds: cookie.maxAge!))),
           secure: cookie.secure,
           httpOnly: cookie.httpOnly,
           sameSite: cookie.sameSite,
@@ -349,6 +352,12 @@ class SiteCookieManagerService {
       throw ArgumentError('Cookie host is outside the current site scope.');
     }
 
+    if (original != null && draft.partitioned != original.partitioned) {
+      throw ArgumentError(
+        'Partitioned cannot be toggled in place; delete and recreate the cookie.',
+      );
+    }
+
     final name = draft.name.trim();
     if (name.isEmpty || _invalidCookieName.hasMatch(name)) {
       throw ArgumentError('Invalid cookie name.');
@@ -463,6 +472,11 @@ class SiteCookieManagerService {
         .toList(growable: false);
 
     await _writer.deleteExactCookiesBatch(requests);
+    for (final cookie in unique) {
+      if (await _stillContainsExactCookie(cookie)) {
+        await _deleteWebViewIdentity(cookie);
+      }
+    }
 
     final jar = _jar.cookieJar;
     if (jar is EnhancedPersistCookieJar) {
@@ -521,22 +535,7 @@ class SiteCookieManagerService {
   }
 
   Future<void> _deleteCookieStorageOnly(ManagedSiteCookie cookie) async {
-    final deleted = await _writer.deleteExactCookie(
-      url: _cookieUrl(cookie),
-      name: cookie.name,
-      domain: cookie.hostOnly ? null : (cookie.rawDomain ?? cookie.domain),
-      path: cookie.path,
-    );
-    if (!deleted && cookie.inWebView) {
-      await _writer.nukeAllVariants(
-        url: _cookieUrl(cookie),
-        name: cookie.name,
-        domainCandidates: [
-          cookie.hostOnly ? null : (cookie.rawDomain ?? cookie.domain),
-        ],
-        pathCandidates: [cookie.path],
-      );
-    }
+    await _deleteWebViewIdentity(cookie);
 
     final jar = _jar.cookieJar;
     if (jar is EnhancedPersistCookieJar) {
@@ -547,6 +546,24 @@ class SiteCookieManagerService {
       );
     } else if (cookie.inJar) {
       await jar.delete(Uri.parse(_cookieUrl(cookie)), true);
+    }
+  }
+
+  Future<void> _deleteWebViewIdentity(ManagedSiteCookie cookie) async {
+    if (!cookie.inWebView) return;
+
+    // Apple stores may contain multiple matching partition variants. Delete one
+    // exact object at a time and re-read, instead of using nukeAllVariants
+    // (which is intentionally broader and can remove same-name cookies on
+    // unrelated paths).
+    for (var attempt = 0; attempt < 4; attempt++) {
+      await _writer.deleteExactCookie(
+        url: _cookieUrl(cookie),
+        name: cookie.name,
+        domain: cookie.hostOnly ? null : (cookie.rawDomain ?? cookie.domain),
+        path: cookie.path,
+      );
+      if (!await _stillContainsExactCookie(cookie)) return;
     }
   }
 
