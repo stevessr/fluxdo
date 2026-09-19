@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config/discourse_instance_runtime.dart';
 import '../providers/cdk_providers.dart';
 import '../pages/webview_page.dart';
 import '../services/network/exceptions/oauth_exception.dart';
@@ -25,6 +26,9 @@ class CdkBalanceCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      return const SizedBox.shrink();
+    }
     final cdkUserInfo = ref.watch(cdkUserInfoProvider);
 
     // 授权过期时强制显示错误卡片（即使有旧数据缓存）；其他错误仅在无旧数据时显示
