@@ -214,12 +214,12 @@ void main() {
           ),
         ),
       );
-      expect(source.length, greaterThanOrEqualTo(
-        StevessrComposerService.maxGeneratorUploadBytes,
-      ));
+      expect(
+        source.length,
+        greaterThanOrEqualTo(StevessrComposerService.maxGeneratorUploadBytes),
+      );
     }
   });
-
 }
 
 Uint8List _largeTransparentPng() {
