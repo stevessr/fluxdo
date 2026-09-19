@@ -255,19 +255,28 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
     final scale = math.min(width / previous.width, height / previous.height);
     final offsetX = (width - previous.width * scale) / 2;
     final offsetY = (height - previous.height * scale) / 2;
-    _setParams(previous.copyWith(
-      width: width,
-      height: height,
-      bubbleRect: _scaledRect(previous.bubbleRect, scale, offsetX, offsetY),
-      characterRect:
-          _scaledRect(previous.characterRect, scale, offsetX, offsetY),
-      bubbleStrokeWidth: previous.bubbleStrokeWidth * scale,
-      padding: previous.padding * scale,
-      fontMin: (previous.fontMin * scale).round(),
-      fontMax: (previous.fontMax * scale).round(),
-    ));
+    _setParams(
+      previous.copyWith(
+        width: width,
+        height: height,
+        bubbleRect: _scaledRect(previous.bubbleRect, scale, offsetX, offsetY),
+        characterRect: _scaledRect(
+          previous.characterRect,
+          scale,
+          offsetX,
+          offsetY,
+        ),
+        bubbleStrokeWidth: previous.bubbleStrokeWidth * scale,
+        padding: previous.padding * scale,
+        fontMin: (previous.fontMin * scale).round(),
+        fontMax: (previous.fontMax * scale).round(),
+      ),
+    );
     _syncRectFields();
-    _syncController(_strokeWidthController, _formatNumber(_params.bubbleStrokeWidth));
+    _syncController(
+      _strokeWidthController,
+      _formatNumber(_params.bubbleStrokeWidth),
+    );
     _syncController(_paddingController, _formatNumber(_params.padding));
     _syncController(_fontMinController, '${_params.fontMin}');
     _syncController(_fontMaxController, '${_params.fontMax}');
@@ -302,7 +311,10 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
     _syncController(_characterXController, _formatNumber(character.x));
     _syncController(_characterYController, _formatNumber(character.y));
     _syncController(_characterWidthController, _formatNumber(character.width));
-    _syncController(_characterHeightController, _formatNumber(character.height));
+    _syncController(
+      _characterHeightController,
+      _formatNumber(character.height),
+    );
   }
 
   void _dragBubble(StevessrRect rect) {
@@ -333,10 +345,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             value: '${size.$1}x${size.$2}',
             child: Text('${size.$1} × ${size.$2}'),
           ),
-        const DropdownMenuItem(
-          value: 'custom',
-          child: Text('自定义尺寸（使用下方宽高）'),
-        ),
+        const DropdownMenuItem(value: 'custom', child: Text('自定义尺寸（使用下方宽高）')),
       ],
       onChanged: (value) {
         if (value == null || value == 'custom') return;
@@ -452,10 +461,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
   }
 
   Widget _buildPreviewArea(double availableWidth) {
-    final previewWidth = math.min(
-      math.max(240.0, availableWidth - 64),
-      560.0,
-    );
+    final previewWidth = math.min(math.max(240.0, availableWidth - 64), 560.0);
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = constraints.maxHeight.isFinite
