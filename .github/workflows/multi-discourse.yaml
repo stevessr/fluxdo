@@ -14,6 +14,17 @@ on:
       - 'lib/services/local_notification_service.dart'
       - 'lib/services/media_transcoder/media_compressor.dart'
       - 'lib/widgets/markdown_editor/media_upload_helper.dart'
+      - 'lib/pages/profile_page.dart'
+      - 'lib/providers/cdk_providers.dart'
+      - 'lib/providers/ldc_providers.dart'
+      - 'lib/services/account_manager.dart'
+      - 'lib/services/cdk_oauth_service.dart'
+      - 'lib/services/ldc_oauth_service.dart'
+      - 'lib/widgets/cdk_balance_card.dart'
+      - 'lib/widgets/ldc_balance_card.dart'
+      - 'lib/modules/ldc_reward/providers/ldc_reward_provider.dart'
+      - 'lib/modules/ldc_reward/widgets/ldc_reward_config_tile.dart'
+      - 'lib/modules/ldc_reward/widgets/ldc_reward_sheet.dart'
       - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
@@ -31,6 +42,7 @@ on:
       - 'test/services/discourse_instance_manager_test.dart'
       - 'test/services/media_compressor_test.dart'
       - 'test/widgets/markdown_editor/media_upload_helper_test.dart'
+      - 'test/services/account_manager_instance_scope_test.dart'
       - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
       - 'test/services/network/message_bus_isolation_interceptor_test.dart'
@@ -52,6 +64,19 @@ on:
       - 'lib/services/discourse/discourse_service.dart'
       - 'lib/services/discourse_instance_manager.dart'
       - 'lib/services/local_notification_service.dart'
+      - 'lib/pages/profile_page.dart'
+      - 'lib/providers/cdk_providers.dart'
+      - 'lib/providers/ldc_providers.dart'
+      - 'lib/services/account_manager.dart'
+      - 'lib/services/cdk_oauth_service.dart'
+      - 'lib/services/ldc_oauth_service.dart'
+      - 'lib/services/media_transcoder/media_compressor.dart'
+      - 'lib/widgets/markdown_editor/media_upload_helper.dart'
+      - 'lib/widgets/cdk_balance_card.dart'
+      - 'lib/widgets/ldc_balance_card.dart'
+      - 'lib/modules/ldc_reward/providers/ldc_reward_provider.dart'
+      - 'lib/modules/ldc_reward/widgets/ldc_reward_config_tile.dart'
+      - 'lib/modules/ldc_reward/widgets/ldc_reward_sheet.dart'
       - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
@@ -67,6 +92,9 @@ on:
       - 'test/services/account_browser_session_policy_test.dart'
       - 'test/services/deep_link_service_test.dart'
       - 'test/services/discourse_instance_manager_test.dart'
+      - 'test/services/account_manager_instance_scope_test.dart'
+      - 'test/services/media_compressor_test.dart'
+      - 'test/widgets/markdown_editor/media_upload_helper_test.dart'
       - 'test/services/network/cookie/discourse_instance_cookie_isolation_test.dart'
       - 'test/services/network/discourse_base_path_interceptor_test.dart'
       - 'test/services/network/message_bus_isolation_interceptor_test.dart'
@@ -118,6 +146,17 @@ jobs:
             lib/services/local_notification_service.dart \
             lib/services/media_transcoder/media_compressor.dart \
             lib/widgets/markdown_editor/media_upload_helper.dart \
+            lib/pages/profile_page.dart \
+            lib/providers/cdk_providers.dart \
+            lib/providers/ldc_providers.dart \
+            lib/services/account_manager.dart \
+            lib/services/cdk_oauth_service.dart \
+            lib/services/ldc_oauth_service.dart \
+            lib/widgets/cdk_balance_card.dart \
+            lib/widgets/ldc_balance_card.dart \
+            lib/modules/ldc_reward/providers/ldc_reward_provider.dart \
+            lib/modules/ldc_reward/widgets/ldc_reward_config_tile.dart \
+            lib/modules/ldc_reward/widgets/ldc_reward_sheet.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
             lib/services/network/interceptors/message_bus_isolation_interceptor.dart \
@@ -134,6 +173,7 @@ jobs:
             test/services/discourse_instance_manager_test.dart \
             test/services/media_compressor_test.dart \
             test/widgets/markdown_editor/media_upload_helper_test.dart \
+            test/services/account_manager_instance_scope_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
             test/services/network/message_bus_isolation_interceptor_test.dart \
             test/services/network/redirect_interceptor_security_test.dart \
@@ -147,6 +187,19 @@ jobs:
             lib/services/deep_link_service.dart \
             lib/services/discourse/discourse_service.dart \
             lib/services/local_notification_service.dart \
+            lib/pages/profile_page.dart \
+            lib/providers/cdk_providers.dart \
+            lib/providers/ldc_providers.dart \
+            lib/services/account_manager.dart \
+            lib/services/cdk_oauth_service.dart \
+            lib/services/ldc_oauth_service.dart \
+            lib/services/media_transcoder/media_compressor.dart \
+            lib/widgets/markdown_editor/media_upload_helper.dart \
+            lib/widgets/cdk_balance_card.dart \
+            lib/widgets/ldc_balance_card.dart \
+            lib/modules/ldc_reward/providers/ldc_reward_provider.dart \
+            lib/modules/ldc_reward/widgets/ldc_reward_config_tile.dart \
+            lib/modules/ldc_reward/widgets/ldc_reward_sheet.dart \
             lib/services/network/discourse_dio.dart \
             lib/services/network/interceptors/discourse_base_path_interceptor.dart \
             lib/services/network/interceptors/message_bus_isolation_interceptor.dart \
@@ -161,6 +214,9 @@ jobs:
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
             test/services/discourse_instance_manager_test.dart \
+            test/services/account_manager_instance_scope_test.dart \
+            test/services/media_compressor_test.dart \
+            test/widgets/markdown_editor/media_upload_helper_test.dart \
             test/services/network/discourse_base_path_interceptor_test.dart \
             test/services/network/message_bus_isolation_interceptor_test.dart \
             test/services/network/redirect_interceptor_security_test.dart \
@@ -182,6 +238,17 @@ jobs:
           lib/services/local_notification_service.dart
           lib/services/media_transcoder/media_compressor.dart
           lib/widgets/markdown_editor/media_upload_helper.dart
+          lib/pages/profile_page.dart
+          lib/providers/cdk_providers.dart
+          lib/providers/ldc_providers.dart
+          lib/services/account_manager.dart
+          lib/services/cdk_oauth_service.dart
+          lib/services/ldc_oauth_service.dart
+          lib/widgets/cdk_balance_card.dart
+          lib/widgets/ldc_balance_card.dart
+          lib/modules/ldc_reward/providers/ldc_reward_provider.dart
+          lib/modules/ldc_reward/widgets/ldc_reward_config_tile.dart
+          lib/modules/ldc_reward/widgets/ldc_reward_sheet.dart
           lib/services/network/cookie/cookie_jar_service.dart
           lib/services/network/discourse_dio.dart
           lib/services/network/interceptors/discourse_base_path_interceptor.dart
@@ -199,6 +266,7 @@ jobs:
           test/services/discourse_instance_manager_test.dart
           test/services/media_compressor_test.dart
           test/widgets/markdown_editor/media_upload_helper_test.dart
+          test/services/account_manager_instance_scope_test.dart
           test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
           test/services/network/message_bus_isolation_interceptor_test.dart
@@ -214,6 +282,9 @@ jobs:
           test/services/account_browser_session_policy_test.dart
           test/services/deep_link_service_test.dart
           test/services/discourse_instance_manager_test.dart
+          test/services/account_manager_instance_scope_test.dart
+          test/services/media_compressor_test.dart
+          test/widgets/markdown_editor/media_upload_helper_test.dart
           test/services/network/cookie/discourse_instance_cookie_isolation_test.dart
           test/services/network/discourse_base_path_interceptor_test.dart
           test/services/network/message_bus_isolation_interceptor_test.dart
