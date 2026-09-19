@@ -180,13 +180,19 @@ class RedirectInterceptor extends Interceptor {
         // A 307/308 must never silently lose the POST/PUT body. Conversely,
         // replaying an authenticated write body onto a different origin is
         // unsafe, even after removing credential headers.
-        if (!sameOrigin && body != null) {
+        if (body != null &&
+            (!sameOrigin ||
+                (DiscourseInstanceRuntime.containsUri(
+                      original.uri,
+                      allowDefaultSubdomains: false,
+                    ) &&
+                    !sameDiscourseScope))) {
           return handler.reject(
             DioException(
               requestOptions: original,
               response: response,
               type: DioExceptionType.badResponse,
-              message: '拒绝向外部站点重放带有请求体的重定向',
+              message: '拒绝向活动论坛范围外重放带有请求体的重定向',
             ),
           );
         }
