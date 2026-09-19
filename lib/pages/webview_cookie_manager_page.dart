@@ -228,7 +228,7 @@ class _WebViewCookieManagerPageState extends State<WebViewCookieManagerPage> {
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
         itemCount: visible.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 6),
+        separatorBuilder: (_, _) => const SizedBox(height: 6),
         itemBuilder: (context, index) {
           final cookie = visible[index];
           final selected = _selected.contains(cookie.identityKey);
