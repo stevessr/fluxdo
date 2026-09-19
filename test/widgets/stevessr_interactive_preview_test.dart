@@ -64,8 +64,10 @@ void main() {
     // Record the actual hit-test chain to diagnose nested viewport gestures.
     final touchPoint = tester.getCenter(overlay) - const Offset(28, 28);
     final hit = tester.hitTestOnBinding(touchPoint);
-    debugPrint('EDITOR_HIT rect=${tester.getRect(overlay)} touch=$touchPoint '
-        'path=${hit.path.map((entry) => entry.target.runtimeType).toList()}');
+    debugPrint(
+      'EDITOR_HIT rect=${tester.getRect(overlay)} touch=$touchPoint '
+      'path=${hit.path.map((entry) => entry.target.runtimeType).toList()}',
+    );
     final characterDrag = await tester.startGesture(touchPoint);
     await characterDrag.moveBy(const Offset(24, 12));
     await tester.pump();
