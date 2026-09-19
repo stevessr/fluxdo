@@ -160,6 +160,7 @@ void main() {
         'sumireko',
         'maribel',
         'keine',
+        'deepseek',
       ]),
     );
     expect(

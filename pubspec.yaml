@@ -6,9 +6,9 @@ version: 0.2.28+2026090421
 environment:
   sdk: ^3.10.4
 
-# sqlite3(经 sqflite_common_ffi 引入)的 build hook 默认在构建期从 GitHub
-# 下载预编译库,Flatpak 离线沙箱内必然失败;指向 vendored amalgamation
-# 改为源码编译,五端统一版本与编译选项。详见 third_party/sqlite3/README.md。
+# sqlite3(经 sqflite_common_ffi 引入) 的 build hook 默认在构建期从 GitHub
+# 下载预编译库，Flatpak 离线沙箱内必然失败;指向 vendored amalgamation
+# 改为源码编译，五端统一版本与编译选项。详见 third_party/sqlite3/README.md。
 hooks:
   user_defines:
     sqlite3:
@@ -43,10 +43,10 @@ dependencies:
   native_dio_adapter: ^1.6.0
   flutter_secure_storage: ^10.3.1
   flutter_inappwebview: ^6.2.0-beta.3
-  # 编辑器 1:1 预览:跑 Discourse 官方 markdown-it cook bundle
-  # (Android/Win/Linux=QuickJS,iOS/macOS=JavaScriptCore,均走 FFI)
+  # 编辑器 1:1 预览：跑 Discourse 官方 markdown-it cook bundle
+  # (Android/Win/Linux=QuickJS,iOS/macOS=JavaScriptCore，均走 FFI)
   flutter_js: ^0.8.7
-  # 自研:native Rust 解码动图(GIF/APNG/动画 WebP),绕开 Flutter Skia
+  # 自研:native Rust 解码动图 (GIF/APNG/动画 WebP),绕开 Flutter Skia
   # multi_frame_codec 在 disposal=2 等场景下的 #85831 bug。
   # 源码:https://github.com/Lingyan000/native_animated_image
   native_animated_image: ^0.3.4
@@ -61,7 +61,7 @@ dependencies:
   cross_file: ^0.3.4+2
   open_filex: ^4.7.0
   file_picker: ^10.3.10
-  record: ^7.1.1  # 语音消息录制(AAC-LC,五端)
+  record: ^7.1.1  # 语音消息录制 (AAC-LC，五端)
   intl: ^0.20.2
   url_launcher: ^6.3.1
   font_awesome_flutter: ^11.0.0
@@ -79,8 +79,8 @@ dependencies:
   markdown: ^7.3.1
   emoji_extension: ^1.3.0
   image_picker: ^1.2.1
-  # 扫码登录:已登录设备展示二维码(qr_flutter),待登录设备相机扫码
-  # (mobile_scanner: Android/iOS/macOS) 或从相册解码(zxing2,全平台兜底)
+  # 扫码登录:已登录设备展示二维码 (qr_flutter),待登录设备相机扫码
+  # (mobile_scanner: Android/iOS/macOS) 或从相册解码 (zxing2，全平台兜底)
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.4.0
   zxing2: ^0.2.4
@@ -101,25 +101,25 @@ dependencies:
     path: packages/fluxdo_render
   flutter_local_notifications: ^21.0.0
   jovial_svg: ^1.1.29
-  # kroki.io mermaid 出图的 zlib+base64url 编码(纯 Dart,web 可用;
-  # 本已是 image 等包的传递依赖,显式声明)
+  # kroki.io mermaid 出图的 zlib+base64url 编码 (纯 Dart,web 可用;
+  # 本已是 image 等包的传递依赖，显式声明)
   archive: ^4.0.9
   html: ^0.15.5
   extended_nested_scroll_view: ^6.2.1
   popover: ^0.4.0
   uuid: ^4.5.2
-  # User API Key 授权自愈:RSA 密钥对生成/PKCS1 解密(payload 与 OTP 均为
-  # 服务端用客户端公钥加密回传,见 discourse user_api_keys_controller)
+  # User API Key 授权自愈:RSA 密钥对生成/PKCS1 解密 (payload 与 OTP 均为
+  # 服务端用客户端公钥加密回传，见 discourse user_api_keys_controller)
   pointycastle: ^4.0.0
   # Windows 深链前提:discourse://、fluxdo:// 协议需写入 HKCU 注册表
-  # (3.x 被 device_info_plus 12.3.0 的 ^2.1.0 约束挡住,升级时一并跟进)
+  # (3.x 被 device_info_plus 12.3.0 的 ^2.1.0 约束挡住，升级时一并跟进)
   win32_registry: ^2.1.0
   path_provider: ^2.1.5
   path: ^1.9.1
   # 「改名上传」媒体修复的魔数嗅探(MediaCompatService):.xz 等白名单
   # 扩展名内实为 mp4/mp3,靠 magic bytes 还原真实容器
   mime: ^2.0.0
-  # MediaCompatService 本地副本文件名(sha1(url),确定性、重启可复用)
+  # MediaCompatService 本地副本文件名 (sha1(url),确定性、重启可复用)
   crypto: ^3.0.7
   hive_ce: ^2.19.3
   hive_ce_flutter: ^2.3.4
@@ -136,14 +136,14 @@ dependencies:
   ota_update: ^7.1.0
   app_links: ^7.1.1
   chat_bottom_container: ^0.4.0
-  # AVIF 解码器(libavif + dav1d)。之前在 v0.2.x 移除,但 native_animated_image
-  # 内置的 zenavif (rav1d-safe) 在 ARM SIMD path 有 panic bug,会 crash app
+  # AVIF 解码器 (libavif + dav1d)。之前在 v0.2.x 移除，但 native_animated_image
+  # 内置的 zenavif (rav1d-safe) 在 ARM SIMD path 有 panic bug，会 crash app
   # (mc_arm.rs:5905 usize underflow)。flutter_avif 用 C 的 libavif/dav1d,
-  # 工业标准、稳定,直到 native_animated_image v0.3.0 砍掉 AVIF 之前必须保留。
+  # 工业标准、稳定，直到 native_animated_image v0.3.0 砍掉 AVIF 之前必须保留。
   flutter_avif: ^3.1.0
   # 显式引 platform_interface(flutter_avif 的传递依赖):AvifFastBridge
-  # 直连它的 FFI 符号表(FlutterAvifImpl.flutterAvifFFI),绕开每帧 protobuf
-  # 解析 + 双重拷贝的慢桥,见 lib/services/avif_fast_bridge.dart。
+  # 直连它的 FFI 符号表 (FlutterAvifImpl.flutterAvifFFI),绕开每帧 protobuf
+  # 解析 + 双重拷贝的慢桥，见 lib/services/avif_fast_bridge.dart。
   flutter_avif_platform_interface: ^3.1.0
   catcher_2: ^2.1.5
   logging: ^1.3.0
@@ -162,32 +162,32 @@ dependencies:
   workmanager: ^0.9.0+3            # iOS BGTaskScheduler
 
   video_player: any
-  # video_player 官方无 Windows/Linux 后端,两平台经 video_player_media_kit
+  # video_player 官方无 Windows/Linux 后端，两平台经 video_player_media_kit
   # 桥接到 media_kit(libmpv);移动端 + macOS 维持官方后端。
   video_player_media_kit: ^2.0.0
-  # Windows 的 libmpv-2.dll。video 包是 audio 包的超集,音频侧
-  # (just_audio_media_kit)共用同一份 dll,不再单独引 *_windows_audio。
+  # Windows 的 libmpv-2.dll。video 包是 audio 包的超集，音频侧
+  # (just_audio_media_kit) 共用同一份 dll，不再单独引 *_windows_audio。
   media_kit_libs_windows_video: ^1.0.11
-  # Linux 的 media_kit 初始化桩:不打包 libmpv,运行期 dlopen 系统/flatpak
-  # 内置的 libmpv.so.2(flatpak manifest 自建 mpv 模块,见 flatpak/*.yml);
+  # Linux 的 media_kit 初始化桩:不打包 libmpv，运行期 dlopen 系统/flatpak
+  # 内置的 libmpv.so.2(flatpak manifest 自建 mpv 模块，见 flatpak/*.yml);
   # 其 CMake 会在 configure 期联网下载 mimalloc —— flatpak 禁网沙箱里由
   # scripts/ci/linux/patch_plugins.sh 指向 vendored 副本。
   media_kit_libs_linux: ^1.2.1
-  # 视频播放期间防熄屏(自绘播放器直接依赖)。1.4+ 依赖 package_info_plus ^9
-  # / win32 ^6,与项目锁定的 device_info_plus 12.3.0(win32 ^5)和
-  # package_info_plus ^8 冲突,停在 1.3.x。
+  # 视频播放期间防熄屏 (自绘播放器直接依赖)。1.4+ 依赖 package_info_plus ^9
+  # / win32 ^6，与项目锁定的 device_info_plus 12.3.0(win32 ^5) 和
+  # package_info_plus ^8 冲突，停在 1.3.x。
   wakelock_plus: ^1.3.3
-  volume_controller: ^3.6.0 # 播放器竖滑手势调系统音量(仅移动端调用)
-  screen_brightness: ^2.1.11 # 播放器竖滑手势调 app 亮度(仅移动端调用)
-  just_audio: ^0.10.6 # 原生上传音频播放(FluxdoRender audioBuilder)
+  volume_controller: ^3.6.0 # 播放器竖滑手势调系统音量 (仅移动端调用)
+  screen_brightness: ^2.1.11 # 播放器竖滑手势调 app 亮度 (仅移动端调用)
+  just_audio: ^0.10.6 # 原生上传音频播放 (FluxdoRender audioBuilder)
   # just_audio 本身不包含 Windows/Linux 实现。
-  # - Windows: media_kit 后端(libmpv-2.dll 随 media_kit_libs_windows_video
-  #   打包,与视频共用)。
-  # - Linux: 自写 GStreamer 桥(services/audio/just_audio_gst.dart),经
+  # - Windows: media_kit 后端 (libmpv-2.dll 随 media_kit_libs_windows_video
+  #   打包，与视频共用)。
+  # - Linux: 自写 GStreamer 桥 (services/audio/just_audio_gst.dart),经
   #   audioplayers_linux 走 GNOME runtime 自带的 GStreamer。音频不改走
-  #   media_kit:GStreamer 桥已稳定,换后端无收益(视频引入 libmpv 是
+  #   media_kit:GStreamer 桥已稳定，换后端无收益 (视频引入 libmpv 是
   #   因为视频别无后端可选)。
-  #   只依赖 audioplayers_linux + platform_interface,不拉 audioplayers 主包,
+  #   只依赖 audioplayers_linux + platform_interface，不拉 audioplayers 主包，
   #   避免给 Android/iOS 等平台塞进用不到的实现插件。
   just_audio_media_kit: ^2.1.0
   just_audio_platform_interface: ^4.6.0 # JustAudioGst 实现平台接口
@@ -200,7 +200,7 @@ dependencies:
   dio_compatibility_layer: ^0.1.1
   ffi: any
   # 性能诊断:掉帧时 app 内连接自身 VM Service 抓取当帧 timeline,
-  # 自动归并出耗时 widget(debug/profile 有效,release 无 VM Service)
+  # 自动归并出耗时 widget(debug/profile 有效，release 无 VM Service)
   vm_service: ^15.2.0
   full_svg_flutter: ^1.3.0
 dependency_overrides:
@@ -248,6 +248,7 @@ flutter:
     - assets/cook/
     - assets/images/stevessr/
     - assets/images/touhou/
+    - assets/images/llm/
 
   fonts:
     - family: MiSans

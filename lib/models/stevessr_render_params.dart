@@ -65,6 +65,7 @@ enum StevessrCharacter {
   sumireko,
   maribel,
   keine,
+  deepseek
 }
 
 extension StevessrCharacterKey on StevessrCharacter {
@@ -105,6 +106,7 @@ extension StevessrCharacterKey on StevessrCharacter {
     StevessrCharacter.sumireko => '宇佐见堇子',
     StevessrCharacter.maribel => '玛艾露贝莉·赫恩',
     StevessrCharacter.keine => '上白泽慧音',
+    StevessrCharacter.deepseek => '鲸鲸子',
   };
 }
 
