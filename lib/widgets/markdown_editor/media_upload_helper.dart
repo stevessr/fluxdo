@@ -152,11 +152,12 @@ Future<String?> uploadMediaFileAsTag(
     var uploadName = name;
     final size = await File(path).length();
     final maxBytes = activeMediaUploadLimitBytes();
-    final atOrOverLimit = maxBytes != null &&
+    final exceedsLimit =
+        maxBytes != null &&
         (DiscourseInstanceRuntime.isDefaultInstance
             ? size >= maxBytes
             : size > maxBytes);
-    if (atOrOverLimit) {
+    if (maxBytes != null && exceedsLimit) {
       if (!context.mounted) return null;
       final compressed = await compressMediaWithDialog(
         context,
