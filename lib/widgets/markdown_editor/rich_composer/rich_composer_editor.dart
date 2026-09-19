@@ -439,7 +439,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     if (selection != null) editor.updateSelection(selection);
     insertUploadedImage(
       shortUrl: generated.upload.shortUrl,
-      alt: 'StevesSR',
+      alt: '表情包',
       width: generated.upload.width,
       height: generated.upload.height,
     );

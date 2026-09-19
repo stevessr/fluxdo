@@ -131,6 +131,43 @@ void main() {
       isNot(contains('original')),
     );
     expect(
+      StevessrCharacter.values.map((value) => value.key),
+      containsAll(<String>[
+        'reimu',
+        'marisa',
+        'flandre',
+        'remilia',
+        'sakuya',
+        'patchouli',
+        'koishi',
+        'satori',
+        'okuu',
+        'okuu_rin',
+        'yuyuko',
+        'youmu',
+        'yukari',
+        'cirno',
+        'sanae',
+        'suika',
+        'suwako',
+        'tenshi',
+        'kokoro',
+        'kaguya',
+        'einin',
+        'aya',
+        'akyuu',
+        'renko',
+        'sumireko',
+        'maribel',
+        'keine',
+      ]),
+    );
+    expect(
+      StevessrCharacter.values.map((value) => value.displayName),
+      containsAll(<String>['博丽灵梦', '雾雨魔理沙', '琪露诺', '蕾米莉亚·斯卡蕾特']),
+    );
+    expect(StevessrCharacter.original.displayName, '');
+    expect(
       StevessrBubble.values.map((value) => value.key),
       containsAll(<String>[
         'thought',

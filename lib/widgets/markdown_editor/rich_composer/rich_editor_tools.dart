@@ -101,7 +101,7 @@ class RichToolSnapshot {
 final RichEditorTool _stevessrQuickTool = RichEditorTool(
   id: 'stevessr',
   icon: FontAwesomeIcons.image,
-  label: '生成 StevesSR 图片',
+  label: '生成表情包图片',
   run: (c) async {
     final context = navigatorKey.currentContext;
     if (context == null) return;
@@ -112,7 +112,7 @@ final RichEditorTool _stevessrQuickTool = RichEditorTool(
     c.state.insertAtom(
       ImageRun(
         src: generated.upload.shortUrl,
-        alt: 'StevesSR',
+        alt: '表情包',
         width: generated.upload.width?.toDouble(),
         height: generated.upload.height?.toDouble(),
       ),

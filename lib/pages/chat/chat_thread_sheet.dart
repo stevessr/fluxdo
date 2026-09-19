@@ -401,7 +401,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('StevesSR 图片上传失败: $error')));
+        ).showSnackBar(SnackBar(content: Text('表情包图片上传失败: $error')));
       }
     } finally {
       if (mounted) setState(() => _isUploadingImage = false);
@@ -1090,7 +1090,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                           icon: const Icon(Icons.add_photo_alternate_rounded),
                         ),
                         IconButton(
-                          tooltip: '生成 StevesSR 图片',
+                          tooltip: '生成表情包图片',
                           onPressed: _isUploadingImage
                               ? null
                               : _createStevessrImage,

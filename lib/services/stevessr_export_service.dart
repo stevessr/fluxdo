@@ -28,6 +28,7 @@ class StevessrExportedImage {
 /// 将预览画布导出为 PNG、WebP 或 SVG。
 abstract final class StevessrExportService {
   static const _assetPrefix = 'assets/images/stevessr/';
+  static const _touhouAssetPrefix = 'assets/images/touhou/';
 
   static Future<StevessrExportedImage> render({
     required StevessrRenderParams params,
@@ -98,12 +99,15 @@ abstract final class StevessrExportService {
     await file.writeAsBytes(image.bytes, flush: true);
     return ShareUtils.shareFile(
       XFile(file.path, mimeType: image.mimeType),
-      subject: 'StevesSR',
+      subject: '表情包',
     );
   }
 
   static Future<List<int>> _buildSvg(StevessrRenderParams p) async {
-    final asset = await rootBundle.load('$_assetPrefix${p.expression.key}.png');
+    final characterAsset = p.character == StevessrCharacter.original
+        ? '$_assetPrefix${p.expression.key}.png'
+        : '$_touhouAssetPrefix${p.character.key}.png';
+    final asset = await rootBundle.load(characterAsset);
     final imageBase64 = base64Encode(
       asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes),
     );

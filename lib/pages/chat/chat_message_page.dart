@@ -623,7 +623,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('StevesSR 图片上传失败: $error')));
+        ).showSnackBar(SnackBar(content: Text('表情包图片上传失败: $error')));
       }
     } finally {
       if (mounted) setState(() => _isUploadingImage = false);
@@ -2039,7 +2039,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               : _createStevessrImage,
                           icon: const Icon(Icons.auto_awesome_rounded),
                           color: theme.colorScheme.primary,
-                          tooltip: '生成 StevesSR 图片',
+                          tooltip: '生成表情包图片',
                         ),
                         // 表情与贴纸切换按钮
                         IconButton(

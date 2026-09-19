@@ -20,8 +20,17 @@ class StevessrCanvas extends StatelessWidget {
   final GlobalKey? repaintBoundaryKey;
 
   static const _assetPrefix = 'assets/images/stevessr/';
+  static const _touhouAssetPrefix = 'assets/images/touhou/';
 
-  String get _expressionAsset => '$_assetPrefix${params.expression.key}.png';
+  /// 角色立绘资产路径：original 渲染表情素材（表情由 expression 决定），
+  /// 其余角色渲染 touhou 目录下的立绘。
+  String get _expressionAsset {
+    final character = params.character;
+    if (character != StevessrCharacter.original) {
+      return '$_touhouAssetPrefix${character.key}.png';
+    }
+    return '$_assetPrefix${params.expression.key}.png';
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -328,7 +328,9 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: StevessrCanvas(
-                key: ValueKey('canvas-${_params.expression.key}'),
+                key: ValueKey(
+                  'canvas-${_params.character.key}-${_params.expression.key}',
+                ),
                 repaintBoundaryKey: _repaintBoundaryKey,
                 params: _params,
                 logicalWidth: previewWidth,
@@ -368,6 +370,17 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             ),
             const SizedBox(height: 12),
             _buildBubbleContentControls(),
+            _buildEnumDropdown<StevessrCharacter>(
+              label: l10n.character,
+              value: _params.character,
+              values: StevessrCharacter.values,
+              labelBuilder: (value) => value == StevessrCharacter.original
+                  ? l10n.originalCharacter
+                  : value.displayName,
+              onChanged: (value) =>
+                  _setParams(_params.copyWith(character: value)),
+            ),
+            const SizedBox(height: 12),
             _buildEnumDropdown<StevessrExpression>(
               label: l10n.expression,
               value: _params.expression,

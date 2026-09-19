@@ -1,7 +1,9 @@
 {
   "@@locale": "en",
-  "title": "StevesSR Image Generator",
+  "title": "Sticker Generator",
   "description": "Generate character speech-bubble images offline",
+  "character": "Character",
+  "originalCharacter": "Default",
   "text": "Text",
   "bubbleContent": "Bubble content",
   "bubbleImage": "Image",

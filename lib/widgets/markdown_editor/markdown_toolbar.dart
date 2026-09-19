@@ -300,11 +300,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
-  /// 插入已上传的 StevesSR 图片，不再弹出确认框。
-  void insertUploadedImage(
-    UploadResult uploadResult, {
-    String alt = 'StevesSR',
-  }) {
+  /// 插入已上传的表情包图片，不再弹出确认框。
+  void insertUploadedImage(UploadResult uploadResult, {String alt = '表情包'}) {
     _seedUploadCache(uploadResult);
     final selection = widget.controller.selection;
     final text = widget.controller.text;

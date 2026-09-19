@@ -31,6 +31,83 @@ enum StevessrExpression {
 /// StevesSR 可用的气泡造型。
 enum StevessrBubble { thought, speech, cloud, shout, rounded, caption }
 
+/// 生成器可选的角色立绘。
+///
+/// [StevessrCharacter.original] 渲染 `assets/images/stevessr/` 下的表情
+/// 素材（此时由 [StevessrExpression] 决定表情）；其余值渲染
+/// `assets/images/touhou/` 下的东方 Project 角色立绘，表情维度不生效。
+enum StevessrCharacter {
+  original,
+  reimu,
+  marisa,
+  flandre,
+  remilia,
+  sakuya,
+  patchouli,
+  koishi,
+  satori,
+  okuu,
+  okuuRin,
+  yuyuko,
+  youmu,
+  yukari,
+  cirno,
+  sanae,
+  suika,
+  suwako,
+  tenshi,
+  kokoro,
+  kaguya,
+  einin,
+  aya,
+  akyuu,
+  renko,
+  sumireko,
+  maribel,
+  keine,
+}
+
+extension StevessrCharacterKey on StevessrCharacter {
+  /// 资源文件名（ASCII key）。
+  String get key => switch (this) {
+    StevessrCharacter.original => '',
+    StevessrCharacter.okuuRin => 'okuu_rin',
+    _ => name,
+  };
+
+  /// 下拉列表显示名；东方角色用官方中文译名。
+  String get displayName => switch (this) {
+    StevessrCharacter.original => '',
+    StevessrCharacter.reimu => '博丽灵梦',
+    StevessrCharacter.marisa => '雾雨魔理沙',
+    StevessrCharacter.flandre => '芙兰朵露·斯卡蕾特',
+    StevessrCharacter.remilia => '蕾米莉亚·斯卡蕾特',
+    StevessrCharacter.sakuya => '十六夜咲夜',
+    StevessrCharacter.patchouli => '帕秋莉·诺蕾姬',
+    StevessrCharacter.koishi => '古明地恋',
+    StevessrCharacter.satori => '古明地觉',
+    StevessrCharacter.okuu => '灵乌路空',
+    StevessrCharacter.okuuRin => '火焰猫燐',
+    StevessrCharacter.yuyuko => '西行寺幽幽子',
+    StevessrCharacter.youmu => '魂魄妖梦',
+    StevessrCharacter.yukari => '八云紫',
+    StevessrCharacter.cirno => '琪露诺',
+    StevessrCharacter.sanae => '东风谷早苗',
+    StevessrCharacter.suika => '伊吹萃香',
+    StevessrCharacter.suwako => '洩矢诹访子',
+    StevessrCharacter.tenshi => '比那名居天子',
+    StevessrCharacter.kokoro => '秦心',
+    StevessrCharacter.kaguya => '蓬莱山辉夜',
+    StevessrCharacter.einin => '八意永琳',
+    StevessrCharacter.aya => '射命丸文',
+    StevessrCharacter.akyuu => '稗田阿求',
+    StevessrCharacter.renko => '宇佐见莲子',
+    StevessrCharacter.sumireko => '宇佐见堇子',
+    StevessrCharacter.maribel => '玛艾露贝莉·赫恩',
+    StevessrCharacter.keine => '上白泽慧音',
+  };
+}
+
 enum StevessrFont { sans, serif, mono, rounded }
 
 enum StevessrTextAlign { left, center, right }
@@ -114,6 +191,7 @@ class StevessrRenderParams {
   const StevessrRenderParams({
     required this.text,
     required this.expression,
+    this.character = StevessrCharacter.original,
     required this.bubble,
     required this.format,
     required this.width,
@@ -170,6 +248,7 @@ class StevessrRenderParams {
 
   final String text;
   final StevessrExpression expression;
+  final StevessrCharacter character;
   final StevessrBubble bubble;
   final StevessrFormat format;
   final int width;
@@ -224,6 +303,7 @@ class StevessrRenderParams {
     return StevessrRenderParams(
       text: _truncateText(text),
       expression: expression,
+      character: character,
       bubble: bubble,
       format: format,
       width: safeWidth,
@@ -312,6 +392,7 @@ class StevessrRenderParams {
   StevessrRenderParams copyWith({
     String? text,
     StevessrExpression? expression,
+    StevessrCharacter? character,
     StevessrBubble? bubble,
     StevessrFormat? format,
     int? width,
@@ -341,6 +422,7 @@ class StevessrRenderParams {
     return StevessrRenderParams(
       text: text ?? this.text,
       expression: expression ?? this.expression,
+      character: character ?? this.character,
       bubble: bubble ?? this.bubble,
       format: format ?? this.format,
       width: width ?? this.width,

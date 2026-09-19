@@ -26,7 +26,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('StevesSR 图片生成器'), findsOneWidget);
+    expect(find.text('表情包生成器'), findsOneWidget);
     expect(find.text('气泡内容'), findsOneWidget);
     expect(find.byType(StevessrCanvas), findsOneWidget);
     expect(find.byType(TextField), findsWidgets);
@@ -101,5 +101,49 @@ void main() {
         }
       }
     }
+  });
+
+  testWidgets('画布支持所有 touhou 角色并回退表情素材', (tester) async {
+    final boundaryKey = GlobalKey();
+    var params = StevessrRenderParams.defaults();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: StevessrCanvas(
+              params: params,
+              logicalWidth: 320,
+              repaintBoundaryKey: boundaryKey,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    for (final character in StevessrCharacter.values) {
+      params = params.copyWith(character: character);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: StevessrCanvas(
+                params: params,
+                logicalWidth: 320,
+                repaintBoundaryKey: boundaryKey,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(StevessrCanvas), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+
+    // original 角色（默认）回退到表情素材，画布仍正常渲染。
+    final original = StevessrRenderParams.defaults();
+    expect(original.character, StevessrCharacter.original);
   });
 }

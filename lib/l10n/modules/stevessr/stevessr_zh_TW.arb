@@ -1,7 +1,9 @@
 {
   "@@locale": "zh_TW",
-  "title": "StevesSR 圖片生成器",
-  "description": "離線生成角色對話泡泡圖片",
+  "title": "表情包產生器",
+  "description": "離線生成角色泡泡圖片",
+  "character": "角色",
+  "originalCharacter": "預設",
   "text": "文字",
   "bubbleContent": "泡泡內容",
   "bubbleImage": "圖片",
