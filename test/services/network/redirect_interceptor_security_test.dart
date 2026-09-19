@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fluxdo/config/discourse_instance_runtime.dart';
 import 'package:fluxdo/services/network/flux_request_spec.dart';
 import 'package:fluxdo/services/network/interceptors/redirect_interceptor.dart';
 
 void main() {
+  tearDown(DiscourseInstanceRuntime.reset);
   group('RedirectInterceptor origin boundary', () {
     test('treats default and explicit ports as the same origin', () {
       expect(
@@ -44,6 +46,75 @@ void main() {
         ),
         isFalse,
       );
+    });
+  });
+
+  group('RedirectInterceptor instance boundary', () {
+    test('same-origin sibling paths are outside a sub-path forum', () {
+      DiscourseInstanceRuntime.activate(
+        instanceId: 'ignored',
+        baseUrl: 'https://forum.example.com/forum',
+      );
+      final source = Uri.parse('https://forum.example.com/forum/posts.json');
+
+      expect(
+        RedirectInterceptor.isSameDiscourseScope(
+          source,
+          Uri.parse('https://forum.example.com/forum/t/1'),
+        ),
+        isTrue,
+      );
+      expect(
+        RedirectInterceptor.isSameOrigin(
+          source,
+          Uri.parse('https://forum.example.com/other/login'),
+        ),
+        isTrue,
+      );
+      expect(
+        RedirectInterceptor.isSameDiscourseScope(
+          source,
+          Uri.parse('https://forum.example.com/other/login'),
+        ),
+        isFalse,
+      );
+      expect(
+        RedirectInterceptor.isSameDiscourseScope(
+          source,
+          Uri.parse('https://forum.example.com/forum-other/login'),
+        ),
+        isFalse,
+      );
+    });
+
+    test('a redirect from outside the forum cannot regain its credentials', () {
+      DiscourseInstanceRuntime.activate(
+        instanceId: 'ignored',
+        baseUrl: 'https://forum.example.com/forum',
+      );
+      expect(
+        RedirectInterceptor.isSameDiscourseScope(
+          Uri.parse('https://forum.example.com/other/login'),
+          Uri.parse('https://forum.example.com/forum/session'),
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('RedirectInterceptor method handling', () {
+    test('303 converts writes to GET but keeps HEAD', () {
+      expect(RedirectInterceptor.redirectedMethod(303, 'POST'), 'GET');
+      expect(RedirectInterceptor.redirectedMethod(303, 'PUT'), 'GET');
+      expect(RedirectInterceptor.redirectedMethod(303, 'HEAD'), 'HEAD');
+    });
+
+    test('301/302 convert POST, but 307/308 preserve methods and body', () {
+      expect(RedirectInterceptor.redirectedMethod(301, 'POST'), 'GET');
+      expect(RedirectInterceptor.redirectedMethod(302, 'POST'), 'GET');
+      expect(RedirectInterceptor.redirectedMethod(302, 'PUT'), 'PUT');
+      expect(RedirectInterceptor.redirectedMethod(307, 'POST'), 'POST');
+      expect(RedirectInterceptor.redirectedMethod(308, 'PUT'), 'PUT');
     });
   });
 
