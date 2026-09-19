@@ -22,7 +22,9 @@ class CdkOAuthService {
 
   Future<String> getAuthUrl() async {
     if (!DiscourseInstanceRuntime.isDefaultInstance) {
-      throw StateError('LINUX DO companion OAuth is unavailable for this Discourse instance');
+      throw StateError(
+        'LINUX DO companion OAuth is unavailable for this Discourse instance',
+      );
     }
     final response = await _dio.get(
       '$baseUrl/api/v1/oauth/login',
