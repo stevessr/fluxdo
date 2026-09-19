@@ -40,6 +40,7 @@ class _StevessrInteractivePreviewState
   StevessrEditTarget _target = StevessrEditTarget.character;
   StevessrRect? _gestureRect;
   Offset _gestureFocalPoint = Offset.zero;
+  Offset? _resizeLastGlobalPoint;
   double _gestureViewportScale = 1;
   double _sceneScaleX = 1;
   double _sceneScaleY = 1;
@@ -93,10 +94,15 @@ class _StevessrInteractivePreviewState
   }
 
   void _resizeWithHandle(DragUpdateDetails details) {
+    final previous = _resizeLastGlobalPoint ?? details.globalPosition;
+    _resizeLastGlobalPoint = details.globalPosition;
+    final delta = details.globalPosition - previous;
     final scale = _viewport.value.getMaxScaleOnAxis();
     final current = _selectedRect;
-    final dx = details.delta.dx / (_sceneScaleX * scale);
-    final dy = details.delta.dy / (_sceneScaleY * scale);
+    // Use global pointer movement: DragUpdateDetails.delta is already in the
+    // target's local coordinates and would double-apply viewport zoom.
+    final dx = delta.dx / (_sceneScaleX * scale);
+    final dy = delta.dy / (_sceneScaleY * scale);
     // Retain the element's aspect ratio when resizing by its bottom-right
     // handle. A two-finger pinch on the element also scales uniformly.
     final ratio = current.width / current.height;
@@ -147,7 +153,11 @@ class _StevessrInteractivePreviewState
                 child: GestureDetector(
                   key: const ValueKey('stevessr-element-resize'),
                   behavior: HitTestBehavior.opaque,
+                  onPanStart: (details) =>
+                      _resizeLastGlobalPoint = details.globalPosition,
                   onPanUpdate: _resizeWithHandle,
+                  onPanEnd: (_) => _resizeLastGlobalPoint = null,
+                  onPanCancel: () => _resizeLastGlobalPoint = null,
                   child: Container(
                     width: 28,
                     height: 28,
