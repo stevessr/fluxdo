@@ -94,7 +94,13 @@ class UrlHelper {
       );
       final baseHost = baseUri?.host.toLowerCase() ?? '';
       if (baseHost.isEmpty) return false;
-      return host == baseHost || host.endsWith('.$baseHost');
+      if (host == baseHost) return true;
+      // linux.do historically treats its configured CDN families as a trusted
+      // subdomain namespace. Generic Discourse instances only trust the exact
+      // host the site actually advertised; do not silently promote arbitrary
+      // sibling/subdomain hosts.
+      return DiscourseInstanceRuntime.isDefaultInstance &&
+          host.endsWith('.$baseHost');
     }
 
     final siteBase = Uri.tryParse(AppConstants.baseUrl)?.host.toLowerCase();
