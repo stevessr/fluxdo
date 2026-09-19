@@ -197,11 +197,10 @@ class _DiscourseImageState extends State<DiscourseImage> {
         : _kMaxDecodeHeight;
 
     return Image(
-      image: ResizeImage(
-        discourseImageProvider(_resolvedUrl!),
-        width: cacheWidth,
-        height: cacheHeight,
-        policy: ResizeImagePolicy.fit,
+      image: sharedImageProvider(
+        _resolvedUrl!,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
       ),
       width: widget.width,
       height: widget.height,
