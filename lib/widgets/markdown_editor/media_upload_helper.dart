@@ -1,10 +1,8 @@
-/// 音视频改名上传公共链路(社区「媒体上传」脚本思路的 App 端实现):
-/// 选文件 → 4MB 前置检查 → `.xz` 改名上传(绕站点扩展名白名单)→
-/// 生成 `<audio>/<video>` HTML 标签文本插 raw(cook 原样保留)。
+/// 多 Discourse 媒体上传公共链路。
 ///
-/// 播放兼容:标签 `type` 写原文件真实 MIME(网页端浏览器/本 app
-/// AVFoundation 按它选解码器);`src` 用 `/uploads/short-url/<b62>.xz`
-/// 相对路径(Rails 动态路由 302 到真实存储,CDN 域名下会 404)。
+/// linux.do 保留社区现有的 4MB + `.xz` 媒体隧道；其他 Discourse 实例
+/// 使用标准 /uploads.json 能力、站点下发的 max_attachment_size_kb 与
+/// authorized_extensions，不把 linux.do 的私有绕过策略扩散到别的站点。
 library;
 
 import 'dart:async';
@@ -16,6 +14,7 @@ import 'package:mime/mime.dart' show lookupMimeType;
 import 'package:path_provider/path_provider.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
+import '../../config/discourse_instance_runtime.dart';
 import '../../services/app_error_handler.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/media_transcoder/media_compressor.dart';
@@ -26,7 +25,7 @@ import '../../services/preloaded_data_service.dart';
 /// `authorized_extensions`(staff 追加 `authorized_extensions_for_staff`)
 /// 动态派生,与网页端 `lib/uploads.js` 的 authorizedExtensions 同口径:
 /// 小写、剥空白与点、按 `|` 拆、滤掉带 `*` 的通配项。
-/// 音视频不走这里 —— 那条走 `.xz` 改名绕白名单,见文件头注释。
+/// linux.do 的音视频隧道不走这里；通用实例则使用该名单做前置校验。
 ///
 /// 返回 null = 不设限(任一名单含 `*`,官方 authorizesAllExtensions
 /// 同款判定;或 siteSettings 未加载 —— 此时让服务端裁决,好过拿一份
@@ -59,6 +58,55 @@ List<String> _extensionsToList(String raw) => raw
     .where((ext) => ext.isNotEmpty && !ext.contains('*'))
     .toList();
 
+/// 从标准 Discourse site settings 读取附件体积上限。
+///
+/// 返回 null 表示设置尚未加载或站点没有提供可用限制，此时交给服务端裁决。
+/// linux.do 在 preload 尚未完成时保留历史 4MiB 回退。
+int? activeMediaUploadLimitBytes() {
+  return mediaUploadLimitBytesFromSettings(
+    PreloadedDataService().siteSettingsSync,
+    fallbackBytes: DiscourseInstanceRuntime.isDefaultInstance
+        ? kMaxMediaBytes
+        : null,
+  );
+}
+
+int? mediaUploadLimitBytesFromSettings(
+  Map<String, dynamic>? settings, {
+  int? fallbackBytes,
+}) {
+  final raw = settings?['max_attachment_size_kb'];
+  final int? kb;
+  if (raw is num) {
+    kb = raw.toInt();
+  } else if (raw is String) {
+    kb = int.tryParse(raw.trim());
+  } else {
+    kb = null;
+  }
+  if (kb == null || kb <= 0) return fallbackBytes;
+  return kb * 1024;
+}
+
+bool _extensionAllowedForGenericInstance(String filename) {
+  final allowed = attachmentAllowedExtensions();
+  if (allowed == null) return true;
+  final dot = filename.lastIndexOf('.');
+  if (dot < 0 || dot == filename.length - 1) return false;
+  return allowed.contains(filename.substring(dot + 1).toLowerCase());
+}
+
+String _formatUploadLimit(int bytes) {
+  final mib = bytes / (1024 * 1024);
+  if (mib >= 1) {
+    final value = mib == mib.roundToDouble()
+        ? mib.toInt().toString()
+        : mib.toStringAsFixed(1);
+    return '$value MB';
+  }
+  return '${(bytes / 1024).round()} KB';
+}
+
 /// `upload://<base62>.<ext>` → `/uploads/short-url/<base62>.xz` 播放路径。
 String mediaShortUrlToXzPath(String shortUrl) {
   if (shortUrl.startsWith('upload://')) {
@@ -90,8 +138,8 @@ String buildMediaTag({
       '</video>';
 }
 
-/// 已有本地媒体文件 → 上传 → 标签文本。失败弹 SnackBar 并返回 null
-/// (4MB 超限的提示文案来自 [uploadMediaAsXz] 的异常信息)。
+/// 已有本地媒体文件 → 按当前实例能力压缩/上传 → 可插入正文的文本。
+/// linux.do 生成历史媒体 HTML；通用 Discourse 使用标准 media markdown。
 Future<String?> uploadMediaFileAsTag(
   BuildContext context, {
   required String path,
@@ -102,23 +150,41 @@ Future<String?> uploadMediaFileAsTag(
   try {
     var uploadPath = path;
     var uploadName = name;
-    // 超 4MB 先压缩(原生转码,进度对话框可取消);压缩产物换用
-    // 新文件名算 MIME(m4a/mp4)。取消/失败返回 null(已提示)。
     final size = await File(path).length();
-    if (size >= kMaxMediaBytes) {
+    final maxBytes = activeMediaUploadLimitBytes();
+    final atOrOverLimit = maxBytes != null &&
+        (DiscourseInstanceRuntime.isDefaultInstance
+            ? size >= maxBytes
+            : size > maxBytes);
+    if (atOrOverLimit) {
       if (!context.mounted) return null;
       final compressed = await compressMediaWithDialog(
         context,
         path: path,
         isAudio: isAudio,
+        maxBytes: maxBytes,
       );
       if (compressed == null) return null;
       uploadPath = compressed;
       uploadName = compressed.split(Platform.pathSeparator).last;
     }
+
+    final service = DiscourseService();
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      if (!_extensionAllowedForGenericInstance(uploadName)) {
+        final dot = uploadName.lastIndexOf('.');
+        final ext = dot >= 0 ? uploadName.substring(dot) : uploadName;
+        throw Exception('当前 Discourse 不允许上传 $ext 文件');
+      }
+      final result = await service.uploadFile(uploadPath);
+      // 标准 Discourse 会把 |audio / |video upload markdown cook 成媒体元素，
+      // 不依赖 linux.do 的 xz 路由和自定义 raw HTML。
+      return result.toAutoMarkdown(alt: name);
+    }
+
     final mime = lookupMimeType(uploadName) ??
         (isAudio ? 'audio/mpeg' : 'video/mp4');
-    final result = await DiscourseService().uploadMediaAsXz(uploadPath);
+    final result = await service.uploadMediaAsXz(uploadPath);
     return buildMediaTag(
       isAudio: isAudio,
       srcPath: mediaShortUrlToXzPath(result.shortUrl),
@@ -164,11 +230,16 @@ Future<String?> compressMediaWithDialog(
   BuildContext context, {
   required String path,
   required bool isAudio,
+  int maxBytes = kMaxMediaBytes,
 }) async {
   final transcoder = MediaTranscoder.forCurrentPlatform();
   if (transcoder == null) {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(content: Text('当前平台不支持压缩,请压到 4MB 内再上传')),
+      SnackBar(
+        content: Text(
+          '当前平台不支持压缩,请压到 \${_formatUploadLimit(maxBytes)} 内再上传',
+        ),
+      ),
     );
     return null;
   }
@@ -181,6 +252,7 @@ Future<String?> compressMediaWithDialog(
     path,
     isAudio: isAudio,
     outputDir: tempDir.path,
+    maxBytes: maxBytes,
     onStatus: (s) => status.value = s,
   );
 
