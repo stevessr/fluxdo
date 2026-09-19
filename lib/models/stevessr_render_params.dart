@@ -282,10 +282,10 @@ class StevessrRenderParams {
       bubbleImageBytes != null &&
       bubbleImageBytes!.isNotEmpty;
 
-  /// 将用户输入限制到源 API 的安全范围。
+  /// 限制导出范围，同时允许 128/256 等常见表情尺寸。
   StevessrRenderParams normalized() {
-    final safeWidth = width.clamp(320, 2048).toInt();
-    final safeHeight = height.clamp(320, 2048).toInt();
+    final safeWidth = width.clamp(128, 2048).toInt();
+    final safeHeight = height.clamp(128, 2048).toInt();
     final defaultBubble = StevessrRect(
       x: (safeWidth * .052).roundToDouble(),
       y: (safeHeight * .053).roundToDouble(),
@@ -361,10 +361,10 @@ class StevessrRenderParams {
           ? value.y.clamp(-safeHeight, safeHeight * 2).toDouble()
           : fallback.y,
       width: value.width.isFinite
-          ? value.width.clamp(120, safeWidth * 1.5).toDouble()
+          ? value.width.clamp(32, safeWidth * 1.5).toDouble()
           : fallback.width,
       height: value.height.isFinite
-          ? value.height.clamp(90, safeHeight * 1.5).toDouble()
+          ? value.height.clamp(32, safeHeight * 1.5).toDouble()
           : fallback.height,
     );
   }
@@ -383,10 +383,10 @@ class StevessrRenderParams {
           ? value.y.clamp(-safeHeight, safeHeight * 2).toDouble()
           : fallback.y,
       width: value.width.isFinite
-          ? value.width.clamp(64, safeWidth * 2).toDouble()
+          ? value.width.clamp(24, safeWidth * 2).toDouble()
           : fallback.width,
       height: value.height.isFinite
-          ? value.height.clamp(64, safeHeight * 2).toDouble()
+          ? value.height.clamp(24, safeHeight * 2).toDouble()
           : fallback.height,
     );
   }
