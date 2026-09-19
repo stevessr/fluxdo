@@ -51,10 +51,9 @@ class _StevessrInteractivePreviewState
     super.dispose();
   }
 
-  StevessrRect get _selectedRect =>
-      _target == StevessrEditTarget.character
-          ? widget.params.characterRect
-          : widget.params.bubbleRect;
+  StevessrRect get _selectedRect => _target == StevessrEditTarget.character
+      ? widget.params.characterRect
+      : widget.params.bubbleRect;
 
   void _commitRect(StevessrRect rect) {
     if (_target == StevessrEditTarget.character) {
@@ -73,20 +72,24 @@ class _StevessrInteractivePreviewState
   void _updateElementGesture(ScaleUpdateDetails details) {
     final start = _gestureRect;
     if (start == null) return;
-    final dx = (details.focalPoint.dx - _gestureFocalPoint.dx) /
+    final dx =
+        (details.focalPoint.dx - _gestureFocalPoint.dx) /
         (_sceneScaleX * _gestureViewportScale);
-    final dy = (details.focalPoint.dy - _gestureFocalPoint.dy) /
+    final dy =
+        (details.focalPoint.dy - _gestureFocalPoint.dy) /
         (_sceneScaleY * _gestureViewportScale);
     // Scaling around the original center prevents a two-finger pinch from
     // jumping to a new position. Focal-point translation is applied once.
     final width = start.width * details.scale;
     final height = start.height * details.scale;
-    _commitRect(start.copyWith(
-      x: start.x + dx - (width - start.width) / 2,
-      y: start.y + dy - (height - start.height) / 2,
-      width: width,
-      height: height,
-    ));
+    _commitRect(
+      start.copyWith(
+        x: start.x + dx - (width - start.width) / 2,
+        y: start.y + dy - (height - start.height) / 2,
+        width: width,
+        height: height,
+      ),
+    );
   }
 
   void _resizeWithHandle(DragUpdateDetails details) {
@@ -99,9 +102,7 @@ class _StevessrInteractivePreviewState
     final ratio = current.width / current.height;
     // Follow the dominant drag axis so moving just left *or* just up can
     // shrink the object, without forcing both pointer axes to move at once.
-    final effectiveDelta = dx.abs() >= (dy * ratio).abs()
-        ? dx
-        : dy * ratio;
+    final effectiveDelta = dx.abs() >= (dy * ratio).abs() ? dx : dy * ratio;
     final width = math.max(1.0, current.width + effectiveDelta);
     _commitRect(current.copyWith(width: width, height: width / ratio));
   }
@@ -136,9 +137,7 @@ class _StevessrInteractivePreviewState
         onScaleUpdate: _updateElementGesture,
         onScaleEnd: (_) => _gestureRect = null,
         child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border.all(color: color, width: 2),
-          ),
+          decoration: BoxDecoration(border: Border.all(color: color, width: 2)),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -229,8 +228,7 @@ class _StevessrInteractivePreviewState
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              _viewportSize =
-                  Size(constraints.maxWidth, constraints.maxHeight);
+              _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
               final width = math.max(
                 1.0,
                 math.min(
