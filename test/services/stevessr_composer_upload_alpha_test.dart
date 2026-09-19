@@ -10,51 +10,24 @@ import 'package:image/image.dart' as img;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('透明 StevesSR 上传副本保持 alpha 且压到 Discourse 安全阈值内', () async {
-    final source = _largeTransparentPng();
-    expect(source.length, greaterThan(72 * 1024));
-
-    final prepared =
-        await StevessrComposerService.prepareTransparentUploadForTesting(
-          StevessrExportedImage(
-            bytes: source,
-            extension: 'png',
-            mimeType: 'image/png',
-          ),
-        );
-
-    expect(prepared.extension, 'png');
-    expect(prepared.mimeType, 'image/png');
-    expect(prepared.bytes.length, lessThanOrEqualTo(72 * 1024));
-
-    final decoded = img.decodePng(prepared.bytes);
-    expect(decoded, isNotNull);
-    expect(decoded!.hasAlpha, isTrue);
-    expect(decoded.getPixel(0, 0).a.toInt(), 0);
-  });
-
-  test('服务端仍转 JPEG 时用更小透明 PNG 重试而不是插入白底图', () async {
+  test('透明 StevesSR 上传保持原字节、原尺寸和原扩展名', () async {
     final tempDir = await Directory.systemTemp.createTemp(
-      'fluxdo-stevessr-alpha-',
+      'fluxdo-stevessr-alpha-original-',
     );
     addTearDown(() => tempDir.delete(recursive: true));
 
-    final uploadedPaths = <String>[];
-    final uploadedSizes = <int>[];
-    var attempt = 0;
+    final source = _largeTransparentPng();
+    Uint8List? uploadedBytes;
+    String? uploadedPath;
+    bool? preserveImageFormat;
 
-    Future<UploadResult> fakeUpload(String path) async {
-      uploadedPaths.add(path);
-      uploadedSizes.add(await File(path).length());
-      attempt++;
-      if (attempt == 1) {
-        return UploadResult(
-          shortUrl: 'upload://flattened',
-          url: 'https://example.test/flattened.jpg',
-          originalFilename: 'flattened.jpg',
-          extension: 'jpg',
-        );
-      }
+    Future<UploadResult> fakeUpload(
+      String path,
+      bool shouldPreserveImageFormat,
+    ) async {
+      uploadedPath = path;
+      uploadedBytes = await File(path).readAsBytes();
+      preserveImageFormat = shouldPreserveImageFormat;
       return UploadResult(
         shortUrl: 'upload://transparent',
         url: 'https://example.test/transparent.png',
@@ -65,7 +38,7 @@ void main() {
 
     final result = await StevessrComposerService.uploadForTesting(
       StevessrExportedImage(
-        bytes: _largeTransparentPng(),
+        bytes: source,
         extension: 'png',
         mimeType: 'image/png',
       ),
@@ -73,30 +46,116 @@ void main() {
       temporaryDirectory: () async => tempDir,
     );
 
-    expect(attempt, 2);
-    expect(result.upload.extension, 'png');
-    expect(result.path, uploadedPaths.last);
-    expect(uploadedSizes.first, lessThanOrEqualTo(72 * 1024));
-    expect(uploadedSizes.last, lessThanOrEqualTo(48 * 1024));
+    expect(preserveImageFormat, isTrue);
+    expect(uploadedPath, endsWith('.png'));
+    expect(uploadedBytes, orderedEquals(source));
+    expect(result.path, uploadedPath);
 
-    final retried = img.decodePng(await File(result.path).readAsBytes());
-    expect(retried, isNotNull);
-    expect(retried!.getPixel(0, 0).a.toInt(), 0);
+    final decoded = img.decodePng(uploadedBytes!);
+    expect(decoded, isNotNull);
+    expect(decoded!.width, 512);
+    expect(decoded.height, 512);
+    expect(decoded.getPixel(0, 0).a.toInt(), 0);
   });
 
-  test('两次都被服务端转 JPEG 时拒绝插入', () async {
+  test('透明 raster 不再被上传层固定改写成 PNG', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'fluxdo-stevessr-alpha-format-',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+
+    // 这里复用可解码的 alpha fixture，测试关注 composer 是否改写导出结果；
+    // 真正的 WebP 编码由 StevessrExportService 负责。
+    final source = _largeTransparentPng();
+    Uint8List? uploadedBytes;
+    String? uploadedPath;
+    bool? preserveImageFormat;
+
+    Future<UploadResult> fakeUpload(
+      String path,
+      bool shouldPreserveImageFormat,
+    ) async {
+      uploadedPath = path;
+      uploadedBytes = await File(path).readAsBytes();
+      preserveImageFormat = shouldPreserveImageFormat;
+      return UploadResult(
+        shortUrl: 'upload://transparent-webp',
+        url: 'https://example.test/transparent.webp',
+        originalFilename: 'transparent.webp',
+        extension: 'webp',
+      );
+    }
+
+    await StevessrComposerService.uploadForTesting(
+      StevessrExportedImage(
+        bytes: source,
+        extension: 'webp',
+        mimeType: 'image/webp',
+      ),
+      uploadFile: fakeUpload,
+      temporaryDirectory: () async => tempDir,
+    );
+
+    expect(preserveImageFormat, isTrue);
+    expect(uploadedPath, endsWith('.webp'));
+    expect(uploadedBytes, orderedEquals(source));
+  });
+
+  test('不透明图片继续走普通 composer 上传路径', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'fluxdo-stevessr-opaque-',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+
+    bool? preserveImageFormat;
+    Future<UploadResult> fakeUpload(
+      String path,
+      bool shouldPreserveImageFormat,
+    ) async {
+      preserveImageFormat = shouldPreserveImageFormat;
+      return UploadResult(
+        shortUrl: 'upload://opaque',
+        url: 'https://example.test/opaque.png',
+        originalFilename: 'opaque.png',
+        extension: 'png',
+      );
+    }
+
+    await StevessrComposerService.uploadForTesting(
+      StevessrExportedImage(
+        bytes: _opaquePng(),
+        extension: 'png',
+        mimeType: 'image/png',
+      ),
+      uploadFile: fakeUpload,
+      temporaryDirectory: () async => tempDir,
+    );
+
+    expect(preserveImageFormat, isFalse);
+  });
+
+  test('服务端仍把透明图片转 JPEG 时拒绝插入且不做低清重试', () async {
     final tempDir = await Directory.systemTemp.createTemp(
       'fluxdo-stevessr-alpha-reject-',
     );
     addTearDown(() => tempDir.delete(recursive: true));
 
+    final source = _largeTransparentPng();
     var attempt = 0;
-    Future<UploadResult> fakeUpload(String path) async {
+    bool? preserveImageFormat;
+    Uint8List? uploadedBytes;
+
+    Future<UploadResult> fakeUpload(
+      String path,
+      bool shouldPreserveImageFormat,
+    ) async {
       attempt++;
+      preserveImageFormat = shouldPreserveImageFormat;
+      uploadedBytes = await File(path).readAsBytes();
       return UploadResult(
-        shortUrl: 'upload://flattened-$attempt',
-        url: 'https://example.test/flattened-$attempt.jpg',
-        originalFilename: 'flattened-$attempt.jpg',
+        shortUrl: 'upload://flattened',
+        url: 'https://example.test/flattened.jpg',
+        originalFilename: 'flattened.jpg',
         extension: 'jpg',
       );
     }
@@ -104,7 +163,7 @@ void main() {
     await expectLater(
       StevessrComposerService.uploadForTesting(
         StevessrExportedImage(
-          bytes: _largeTransparentPng(),
+          bytes: source,
           extension: 'png',
           mimeType: 'image/png',
         ),
@@ -119,7 +178,10 @@ void main() {
         ),
       ),
     );
-    expect(attempt, 2);
+
+    expect(attempt, 1);
+    expect(preserveImageFormat, isTrue);
+    expect(uploadedBytes, orderedEquals(source));
   });
 }
 
@@ -134,6 +196,16 @@ Uint8List _largeTransparentPng() {
       final b = (state >> 16) & 0xff;
       final a = x < 12 && y < 12 ? 0 : 255;
       image.setPixelRgba(x, y, r, g, b, a);
+    }
+  }
+  return Uint8List.fromList(img.encodePng(image));
+}
+
+Uint8List _opaquePng() {
+  final image = img.Image(width: 64, height: 64, numChannels: 4);
+  for (var y = 0; y < image.height; y++) {
+    for (var x = 0; x < image.width; x++) {
+      image.setPixelRgba(x, y, 20, 40, 60, 255);
     }
   }
   return Uint8List.fromList(img.encodePng(image));
