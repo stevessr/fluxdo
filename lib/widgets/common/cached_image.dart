@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../../services/blob_image_cache.dart';
 import '../../services/discourse_cache_manager.dart';
 
 /// 统一的缓存网络图片组件
