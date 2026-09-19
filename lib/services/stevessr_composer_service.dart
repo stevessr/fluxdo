@@ -27,6 +27,10 @@ typedef StevessrTemporaryDirectory = Future<Directory> Function();
 
 /// 从编辑器快捷入口打开 StevesSR，并把生成结果上传到站点。
 abstract final class StevessrComposerService {
+  // linux.do's 4 MiB image upload ceiling. Discourse rejects files at or
+  // above its configured limit; this is unrelated to JPEG conversion savings.
+  static const int maxGeneratorUploadBytes = 4 * 1024 * 1024;
+
   /// 打开生成器，点击「生成并插入」后上传图片并返回附件信息。
   /// 用户取消时返回 null。
   static Future<StevessrUploadedImage?> openAndUpload(BuildContext context) {
@@ -82,6 +86,15 @@ abstract final class StevessrComposerService {
     required StevessrUploadFile uploadFile,
     required StevessrTemporaryDirectory temporaryDirectory,
   }) async {
+    // Check the exported payload *before* decoding alpha or writing a file.
+    // Never silently downscale/re-encode a user's chosen PNG/WebP/SVG.
+    if (image.bytes.length >= maxGeneratorUploadBytes) {
+      throw StateError(
+        '图片大小已达到或超过 4 MB（linux.do 上传上限），'
+        '请手动调整导出尺寸或格式后重试；不会自动降低画质。',
+      );
+    }
+
     final directory = await temporaryDirectory();
     final hasTransparency = await _hasTransparency(image);
     final file = await _writeTemporaryImage(directory, image);
