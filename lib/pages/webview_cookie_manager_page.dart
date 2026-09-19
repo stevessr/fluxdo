@@ -537,9 +537,13 @@ class _WebViewCookieManagerPageState
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Partitioned (CHIPS)'),
-                        subtitle: const Text('启用后会自动要求 Secure'),
+                        subtitle: Text(
+                          cookie == null
+                              ? '启用后会自动要求 Secure'
+                              : '现有 Cookie 的分区属性需删除后重建',
+                        ),
                         value: partitioned,
-                        onChanged: saving
+                        onChanged: saving || cookie != null
                             ? null
                             : (value) {
                                 setSheetState(() {
