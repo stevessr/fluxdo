@@ -19,10 +19,8 @@ class StevessrUploadedImage {
   final UploadResult upload;
 }
 
-typedef StevessrUploadFile = Future<UploadResult> Function(
-  String path,
-  bool preserveImageFormat,
-);
+typedef StevessrUploadFile =
+    Future<UploadResult> Function(String path, bool preserveImageFormat);
 typedef StevessrTemporaryDirectory = Future<Directory> Function();
 
 /// 从编辑器快捷入口打开 StevesSR，并把生成结果上传到站点。
