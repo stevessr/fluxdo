@@ -8,18 +8,8 @@ void main() {
     final result = StevessrRenderParams.defaults().copyWith(
       width: 128,
       height: 256,
-      bubbleRect: const StevessrRect(
-        x: 10,
-        y: 10,
-        width: 48,
-        height: 48,
-      ),
-      characterRect: const StevessrRect(
-        x: 42,
-        y: 70,
-        width: 76,
-        height: 100,
-      ),
+      bubbleRect: const StevessrRect(x: 10, y: 10, width: 48, height: 48),
+      characterRect: const StevessrRect(x: 42, y: 70, width: 76, height: 100),
     );
     expect(result.width, 128);
     expect(result.height, 256);
@@ -27,18 +17,11 @@ void main() {
     expect(result.characterRect.height, 100);
   });
 
-  testWidgets('拖拽角色和气泡会修改导出坐标，缩放画布只修改视图', (
-    tester,
-  ) async {
+  testWidgets('拖拽角色和气泡会修改导出坐标，缩放画布只修改视图', (tester) async {
     var params = StevessrRenderParams.defaults().copyWith(
       width: 512,
       height: 512,
-      bubbleRect: const StevessrRect(
-        x: 30,
-        y: 30,
-        width: 220,
-        height: 140,
-      ),
+      bubbleRect: const StevessrRect(x: 30, y: 30, width: 220, height: 140),
       characterRect: const StevessrRect(
         x: 150,
         y: 220,
@@ -62,14 +45,11 @@ void main() {
                   params: params,
                   logicalWidth: 400,
                   repaintBoundaryKey: boundaryKey,
-                  onCharacterRectChanged: (rect) =>
-                      update(() => params = params.copyWith(
-                            characterRect: rect,
-                          )),
+                  onCharacterRectChanged: (rect) => update(
+                    () => params = params.copyWith(characterRect: rect),
+                  ),
                   onBubbleRectChanged: (rect) =>
-                      update(() => params = params.copyWith(
-                            bubbleRect: rect,
-                          )),
+                      update(() => params = params.copyWith(bubbleRect: rect)),
                 ),
               ),
             ),
