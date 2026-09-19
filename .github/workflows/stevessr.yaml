@@ -119,6 +119,9 @@ jobs:
           test/utils/screenshot_utils_alpha_test.dart
           test/widgets/stevessr_quick_toolbar_test.dart
 
+      - name: Test interactive preview and canvas dimensions
+        run: flutter test test/widgets/stevessr_interactive_preview_test.dart test/models/stevessr_render_params_test.dart
+
       - name: Test PNG export alpha
         run: flutter test test/services/stevessr_export_alpha_test.dart
 
@@ -130,9 +133,6 @@ jobs:
 
       - name: Test generator UI
         run: flutter test test/widgets/stevessr_generator_page_test.dart
-
-      - name: Test interactive preview and canvas dimensions
-        run: flutter test test/widgets/stevessr_interactive_preview_test.dart test/models/stevessr_render_params_test.dart
 
       - name: Test composer quick toolbar
         run: flutter test test/widgets/stevessr_quick_toolbar_test.dart
