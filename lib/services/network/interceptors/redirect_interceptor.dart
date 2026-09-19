@@ -1,6 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../config/discourse_instance_runtime.dart';
+import '../cookie/app_cookie_manager.dart';
+
 import '../flux_request_spec.dart';
 
 /// 重定向拦截器
@@ -21,6 +24,33 @@ class RedirectInterceptor extends Interceptor {
     return source.scheme.toLowerCase() == target.scheme.toLowerCase() &&
         source.host.toLowerCase() == target.host.toLowerCase() &&
         _effectivePort(source) == _effectivePort(target);
+  }
+
+  /// Only requests inside the active instance's origin AND relative root may
+  /// retain Discourse credentials. A sibling application on the same host is
+  /// not the same authentication boundary as a sub-path Discourse deployment.
+  @visibleForTesting
+  static bool isSameDiscourseScope(Uri source, Uri target) =>
+      isSameOrigin(source, target) &&
+      DiscourseInstanceRuntime.containsUri(
+        source,
+        allowDefaultSubdomains: false,
+      ) &&
+      DiscourseInstanceRuntime.containsUri(
+        target,
+        allowDefaultSubdomains: false,
+      );
+
+  /// HTTP redirect semantics: 303 becomes GET (except HEAD), while 301/302
+  /// change POST into GET; 307/308 and other methods retain their method/body.
+  @visibleForTesting
+  static String redirectedMethod(int statusCode, String originalMethod) {
+    final method = originalMethod.toUpperCase();
+    if (statusCode == 303 && method != 'HEAD') return 'GET';
+    if ((statusCode == 301 || statusCode == 302) && method == 'POST') {
+      return 'GET';
+    }
+    return method;
   }
 
   /// 为重定向复制 header。Cookie 无论是否同源都删除，由 CookieManager 按
@@ -87,6 +117,7 @@ class RedirectInterceptor extends Interceptor {
     final statusCode = response.statusCode;
     if (statusCode == 301 ||
         statusCode == 302 ||
+        statusCode == 303 ||
         statusCode == 307 ||
         statusCode == 308) {
       final location = response.headers.value('location');
@@ -106,35 +137,102 @@ class RedirectInterceptor extends Interceptor {
           );
         }
 
-        // 解析重定向 URL
-        final redirectUri = Uri.parse(location);
-        final absoluteUri = redirectUri.isAbsolute
-            ? redirectUri
-            : response.requestOptions.uri.resolveUri(redirectUri);
-        final absoluteUrl = absoluteUri.toString();
-        final sameOrigin = isSameOrigin(
-          response.requestOptions.uri,
+        // Reject malformed / non-HTTP redirects before they enter the shared
+        // client. In particular, a Location must not be able to introduce
+        // userinfo credentials or an unsupported protocol.
+        late final Uri absoluteUri;
+        try {
+          absoluteUri = response.requestOptions.uri.resolve(location);
+        } on FormatException catch (error) {
+          return handler.reject(
+            DioException(
+              requestOptions: response.requestOptions,
+              response: response,
+              type: DioExceptionType.badResponse,
+              error: error,
+              message: '无效的重定向地址',
+            ),
+          );
+        }
+        if ((absoluteUri.scheme != 'http' && absoluteUri.scheme != 'https') ||
+            absoluteUri.host.isEmpty ||
+            absoluteUri.userInfo.isNotEmpty) {
+          return handler.reject(
+            DioException(
+              requestOptions: response.requestOptions,
+              response: response,
+              type: DioExceptionType.badResponse,
+              message: '重定向目标不是有效的 HTTP(S) 地址',
+            ),
+          );
+        }
+
+        final original = response.requestOptions;
+        final sameOrigin = isSameOrigin(original.uri, absoluteUri);
+        final sameDiscourseScope = isSameDiscourseScope(
+          original.uri,
           absoluteUri,
         );
+        final method = redirectedMethod(statusCode, original.method);
+        final preservesBody = method != 'GET' && method != 'HEAD';
+        final body = preservesBody ? original.data : null;
+
+        // A 307/308 must never silently lose the POST/PUT body. Conversely,
+        // replaying an authenticated write body onto a different origin is
+        // unsafe, even after removing credential headers.
+        if (!sameOrigin && body != null) {
+          return handler.reject(
+            DioException(
+              requestOptions: original,
+              response: response,
+              type: DioExceptionType.badResponse,
+              message: '拒绝向外部站点重放带有请求体的重定向',
+            ),
+          );
+        }
+
+        final headers = sanitizedHeadersForRedirect(
+          original.headers,
+          sameOrigin: sameDiscourseScope,
+        );
+        if (!preservesBody) {
+          headers.removeWhere((key, _) {
+            final lower = key.toLowerCase();
+            return lower == 'content-type' ||
+                lower == 'content-length' ||
+                lower == 'transfer-encoding';
+          });
+        }
+
+        final extra = redirectExtra(
+          original.extra,
+          sameOrigin: sameDiscourseScope,
+          redirectCount: redirectCount,
+        );
+        // A same-host redirect out of a custom forum's relative root must
+        // not reload the forum's root-path session cookie via CookieManager.
+        if (sameOrigin &&
+            !sameDiscourseScope &&
+            !DiscourseInstanceRuntime.containsUri(
+              absoluteUri,
+              allowDefaultSubdomains: false,
+            )) {
+          extra[AppCookieManager.skipCookieManagerExtraKey] = true;
+        }
 
         final newOptions = Options(
-          method: response.requestOptions.method,
-          headers: sanitizedHeadersForRedirect(
-            response.requestOptions.headers,
-            sameOrigin: sameOrigin,
-          ),
-          extra: redirectExtra(
-            response.requestOptions.extra,
-            sameOrigin: sameOrigin,
-            redirectCount: redirectCount,
-          ),
-          responseType: response.requestOptions.responseType,
-          validateStatus: response.requestOptions.validateStatus,
+          method: method,
+          headers: headers,
+          extra: extra,
+          responseType: original.responseType,
+          validateStatus: original.validateStatus,
+          followRedirects: false,
         );
 
         try {
           final redirectResponse = await _dio.request(
-            absoluteUrl,
+            absoluteUri.toString(),
+            data: body,
             options: newOptions,
           );
           return handler.resolve(redirectResponse);
