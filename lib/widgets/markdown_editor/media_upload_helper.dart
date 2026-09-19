@@ -183,8 +183,8 @@ Future<String?> uploadMediaFileAsTag(
       return result.toAutoMarkdown(alt: name);
     }
 
-    final mime = lookupMimeType(uploadName) ??
-        (isAudio ? 'audio/mpeg' : 'video/mp4');
+    final mime =
+        lookupMimeType(uploadName) ?? (isAudio ? 'audio/mpeg' : 'video/mp4');
     final result = await service.uploadMediaAsXz(uploadPath);
     return buildMediaTag(
       isAudio: isAudio,
@@ -197,8 +197,9 @@ Future<String?> uploadMediaFileAsTag(
       final msg = e is Exception
           ? e.toString().replaceFirst('Exception: ', '')
           : '媒体上传失败';
-      ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(msg)));
     } else {
       AppErrorHandler.handleUnexpected(e, s);
     }
@@ -237,9 +238,7 @@ Future<String?> compressMediaWithDialog(
   if (transcoder == null) {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
-        content: Text(
-          '当前平台不支持压缩,请压到 \${_formatUploadLimit(maxBytes)} 内再上传',
-        ),
+        content: Text('当前平台不支持压缩,请压到 \${_formatUploadLimit(maxBytes)} 内再上传'),
       ),
     );
     return null;
@@ -271,8 +270,9 @@ Future<String?> compressMediaWithDialog(
   final r = result ?? await resultFuture;
   if (r.isOk) return r.path;
   if (!r.cancelled && r.error != null && context.mounted) {
-    ScaffoldMessenger.maybeOf(context)
-        ?.showSnackBar(SnackBar(content: Text(r.error!)));
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(r.error!)));
   }
   return null;
 }
