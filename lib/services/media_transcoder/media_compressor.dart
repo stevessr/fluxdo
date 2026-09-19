@@ -17,8 +17,26 @@ import 'media_transcoder.dart';
 /// 站点上传体积上限(linux.do 4MB)。
 const int kMaxMediaBytes = 4 * 1024 * 1024;
 
-/// 压缩目标(留 96KB 容器/元数据余量,脚本同款)。
+/// 默认压缩目标(留 96KB 容器/元数据余量,保持 linux.do 旧行为)。
 const int kTargetMediaBytes = kMaxMediaBytes - 96 * 1024;
+
+int _targetBytesFor(int maxBytes) {
+  if (maxBytes <= 0) return kTargetMediaBytes;
+  // 小上限不能固定减 96KB，否则极端站点会把有效预算减成负数。
+  final reserve = math.min(96 * 1024, math.max(8 * 1024, maxBytes ~/ 8));
+  return math.max(1, maxBytes - reserve);
+}
+
+String _formatLimit(int bytes) {
+  final mib = bytes / (1024 * 1024);
+  if (mib >= 1) {
+    final value = mib == mib.roundToDouble()
+        ? mib.toInt().toString()
+        : mib.toStringAsFixed(1);
+    return '${value}MB';
+  }
+  return '${(bytes / 1024).round()}KB';
+}
 
 /// 音频压缩档(码率系数递降)。
 class AudioProfile {
@@ -42,9 +60,13 @@ class VideoProfile {
 }
 
 /// 音频三档(脚本 profiles factor 0.72/0.45/0.28,b:a 钳 12k..96k)。
-List<AudioProfile> audioProfilesFor(Duration duration) {
+List<AudioProfile> audioProfilesFor(
+  Duration duration, {
+  int maxBytes = kMaxMediaBytes,
+}) {
   final seconds = math.max(1, duration.inMilliseconds / 1000);
-  final budget = math.max(12000, (kTargetMediaBytes * 8 / seconds).floor());
+  final targetBytes = _targetBytesFor(maxBytes);
+  final budget = math.max(12000, (targetBytes * 8 / seconds).floor());
   AudioProfile p(String label, double factor) => AudioProfile(
         label,
         (budget * factor).floor().clamp(12000, 96000),
@@ -61,9 +83,13 @@ List<AudioProfile> audioProfilesFor(Duration duration) {
 /// 折扣系数 0.92/0.66/0.42(原脚本 0.74 起步的 safety margin 过大,
 /// 第一档直接丢 26% 码率;硬编/x264 的码率控制没那么不准,超了还有
 /// 下一档兜底)。
-List<VideoProfile> videoProfilesFor(Duration duration) {
+List<VideoProfile> videoProfilesFor(
+  Duration duration, {
+  int maxBytes = kMaxMediaBytes,
+}) {
   final seconds = math.max(1, duration.inMilliseconds / 1000);
-  final budget = math.max(24000, (kTargetMediaBytes * 8 / seconds).floor());
+  final targetBytes = _targetBytesFor(maxBytes);
+  final budget = math.max(24000, (targetBytes * 8 / seconds).floor());
   final audio = budget > 180000 ? 32000 : (budget > 80000 ? 24000 : 16000);
 
   // 码率 → 该码率下观感最优的分辨率/帧率档(bpp 经验值)。
@@ -120,8 +146,12 @@ Future<CompressResult> compressMediaToFit(
   String inputPath, {
   required bool isAudio,
   required String outputDir,
+  int maxBytes = kMaxMediaBytes,
   void Function(String status)? onStatus,
 }) async {
+  if (maxBytes <= 0) {
+    return const CompressResult.failed('站点上传大小限制无效');
+  }
   final notReady = await transcoder.ensureReady(onStatus: onStatus);
   if (notReady != null) return CompressResult.failed(notReady);
 
@@ -135,7 +165,7 @@ Future<CompressResult> compressMediaToFit(
 
   final profiles = audioOnly
       ? [
-          for (final p in audioProfilesFor(info.duration))
+          for (final p in audioProfilesFor(info.duration, maxBytes: maxBytes))
             (
               label: p.label,
               codec: 'aac',
@@ -151,7 +181,7 @@ Future<CompressResult> compressMediaToFit(
             ),
         ]
       : [
-          for (final p in videoProfilesFor(info.duration))
+          for (final p in videoProfilesFor(info.duration, maxBytes: maxBytes))
             (
               label: p.label,
               codec: p.codec,
@@ -183,7 +213,7 @@ Future<CompressResult> compressMediaToFit(
         return const CompressResult.cancelled();
       }
       final size = await File(out).length();
-      if (size < kMaxMediaBytes) {
+      if (size < maxBytes) {
         onStatus?.call('${tier.label}完成 ${(size / 1048576).toStringAsFixed(1)}MB');
         return CompressResult.ok(out);
       }
@@ -196,6 +226,8 @@ Future<CompressResult> compressMediaToFit(
     }
   }
   return CompressResult.failed(
-    lastError != null ? '压缩失败:$lastError' : '压缩后仍超过 4MB,请手动处理后再上传',
+    lastError != null
+        ? '压缩失败:$lastError'
+        : '压缩后仍超过 ${_formatLimit(maxBytes)},请手动处理后再上传',
   );
 }
