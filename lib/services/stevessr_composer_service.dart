@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -20,17 +19,14 @@ class StevessrUploadedImage {
   final UploadResult upload;
 }
 
-typedef StevessrUploadFile = Future<UploadResult> Function(String path);
+typedef StevessrUploadFile = Future<UploadResult> Function(
+  String path,
+  bool preserveImageFormat,
+);
 typedef StevessrTemporaryDirectory = Future<Directory> Function();
 
 /// 从编辑器快捷入口打开 StevesSR，并把生成结果上传到站点。
 abstract final class StevessrComposerService {
-  // Discourse UploadCreator 当前在真正执行图片 -> JPEG 质量转换前，会先跳过
-  // 小于 75,000 bytes 的源文件。留出余量，不贴着服务端阈值上传。
-  static const int _transparentUploadMaxBytes = 72 * 1024;
-  static const int _transparentRetryMaxBytes = 48 * 1024;
-  static const int _minimumUploadDimension = 64;
-
   /// 打开生成器，点击「生成并插入」后上传图片并返回附件信息。
   /// 用户取消时返回 null。
   static Future<StevessrUploadedImage?> openAndUpload(BuildContext context) {
@@ -50,17 +46,20 @@ abstract final class StevessrComposerService {
 
   /// 将生成结果写入临时文件并上传。
   ///
-  /// Discourse 会根据站点隐藏的图片质量设置，把较大的 PNG 转成 JPEG；
-  /// 该转换会用白色背景 flatten，透明像素因此会变白。对确实含 alpha 的
-  /// raster 图片，仅对“上传副本”做 PNG 无损重编码并在必要时逐步缩放，
-  /// 保证文件低于服务端 JPEG 转换的最小收益阈值。本地保存/分享仍使用原图。
+  /// 透明 PNG 不能走 Discourse 默认的 PNG -> JPEG 质量转换，否则 alpha 会被
+  /// flatten 成白底。这里不再为了躲避服务端转换而把图片强制重编码成 PNG、
+  /// 更不会为了卡进 75 KiB 阈值而缩小分辨率；上传层会请求服务端保留原格式。
   ///
-  /// 如果服务端仍返回 JPEG（例如实例修改了上游阈值），再用更保守的体积
-  /// 上限重试一次；第二次仍被转成 JPEG 时直接报错，绝不静默插入白底图。
+  /// 因此，生成器选中的格式、编码质量和像素尺寸都会原样进入上传链路。
+  /// 如果服务端实例仍然无视“保留格式”请求并返回 JPEG，则直接拒绝插入，
+  /// 避免静默得到白底或低清图片。
   static Future<StevessrUploadedImage> upload(StevessrExportedImage image) {
     return _upload(
       image,
-      uploadFile: DiscourseService().uploadImage,
+      uploadFile: (path, preserveImageFormat) => DiscourseService().uploadImage(
+        path,
+        preserveImageFormat: preserveImageFormat,
+      ),
       temporaryDirectory: getTemporaryDirectory,
     );
   }
@@ -84,30 +83,12 @@ abstract final class StevessrComposerService {
     required StevessrTemporaryDirectory temporaryDirectory,
   }) async {
     final directory = await temporaryDirectory();
+    final hasTransparency = await _hasTransparency(image);
+    final file = await _writeTemporaryImage(directory, image);
+    final upload = await uploadFile(file.path, hasTransparency);
 
-    var prepared = await _prepareTransparentRaster(
-      image,
-      maxBytes: _transparentUploadMaxBytes,
-    );
-    var file = await _writeTemporaryImage(directory, prepared.image);
-    var upload = await uploadFile(file.path);
-
-    if (prepared.hasTransparency && _isJpegUpload(upload)) {
-      prepared = await _prepareTransparentRaster(
-        image,
-        maxBytes: _transparentRetryMaxBytes,
-        forcePngReencode: true,
-      );
-      file = await _writeTemporaryImage(
-        directory,
-        prepared.image,
-        suffix: '_alpha_retry',
-      );
-      upload = await uploadFile(file.path);
-
-      if (_isJpegUpload(upload)) {
-        throw StateError('服务端仍将透明图片转换为 JPEG，已取消插入以避免透明区域变白');
-      }
+    if (hasTransparency && _isJpegUpload(upload)) {
+      throw StateError('服务端将透明图片转换为 JPEG，已取消插入以避免透明区域变白');
     }
 
     final url = upload.url;
@@ -117,97 +98,15 @@ abstract final class StevessrComposerService {
     return StevessrUploadedImage(path: file.path, upload: upload);
   }
 
-  @visibleForTesting
-  static Future<StevessrExportedImage> prepareTransparentUploadForTesting(
-    StevessrExportedImage image, {
-    int maxBytes = _transparentUploadMaxBytes,
-  }) async {
-    final prepared = await _prepareTransparentRaster(image, maxBytes: maxBytes);
-    return prepared.image;
-  }
-
-  static Future<({StevessrExportedImage image, bool hasTransparency})>
-  _prepareTransparentRaster(
-    StevessrExportedImage source, {
-    required int maxBytes,
-    bool forcePngReencode = false,
-  }) async {
-    if (maxBytes <= 0) {
-      throw ArgumentError.value(maxBytes, 'maxBytes', '必须大于 0');
-    }
-
+  static Future<bool> _hasTransparency(StevessrExportedImage source) async {
     final extension = source.extension.toLowerCase();
-    if (extension != 'png' && extension != 'webp') {
-      return (image: source, hasTransparency: false);
-    }
+    if (extension != 'png' && extension != 'webp') return false;
 
-    final result = await Isolate.run(() {
+    return Isolate.run(() {
       final decoded = img.decodeImage(source.bytes);
-      if (decoded == null ||
-          !decoded.hasAlpha ||
-          !decoded.any((pixel) => pixel.aNormalized < 1.0)) {
-        return (
-          bytes: source.bytes,
-          hasTransparency: false,
-          wasReencoded: false,
-        );
-      }
-
-      if (!forcePngReencode && source.bytes.length <= maxBytes) {
-        return (
-          bytes: source.bytes,
-          hasTransparency: true,
-          wasReencoded: false,
-        );
-      }
-
-      var working = decoded;
-      var encoded = Uint8List.fromList(img.encodePng(working));
-
-      while (encoded.length > maxBytes &&
-          (working.width > _minimumUploadDimension ||
-              working.height > _minimumUploadDimension)) {
-        final estimatedScale = math.sqrt(maxBytes / encoded.length) * 0.92;
-        final scale = estimatedScale.clamp(0.50, 0.90).toDouble();
-        final nextWidth = math.max(
-          _minimumUploadDimension,
-          (working.width * scale).floor(),
-        );
-        final nextHeight = math.max(
-          _minimumUploadDimension,
-          (working.height * scale).floor(),
-        );
-
-        if (nextWidth == working.width && nextHeight == working.height) break;
-
-        working = img.copyResize(
-          working,
-          width: nextWidth,
-          height: nextHeight,
-          interpolation: img.Interpolation.linear,
-        );
-        encoded = Uint8List.fromList(img.encodePng(working));
-      }
-
-      if (encoded.length > maxBytes) {
-        throw StateError('无法在保留透明度的同时生成可安全上传的 PNG');
-      }
-
-      return (bytes: encoded, hasTransparency: true, wasReencoded: true);
+      if (decoded == null || !decoded.hasAlpha) return false;
+      return decoded.any((pixel) => pixel.aNormalized < 1.0);
     });
-
-    if (!result.hasTransparency || !result.wasReencoded) {
-      return (image: source, hasTransparency: result.hasTransparency);
-    }
-
-    return (
-      image: StevessrExportedImage(
-        bytes: result.bytes,
-        extension: 'png',
-        mimeType: 'image/png',
-      ),
-      hasTransparency: true,
-    );
   }
 
   static Future<File> _writeTemporaryImage(
