@@ -1,0 +1,74 @@
+name: WebView Cookie Manager
+
+on:
+  pull_request:
+    paths:
+      - 'lib/pages/webview_page.dart'
+      - 'lib/pages/webview_cookie_manager_page.dart'
+      - 'lib/services/network/cookie/site_cookie_cleanup_service.dart'
+      - 'lib/services/network/cookie/site_cookie_manager_service.dart'
+      - 'lib/services/network/cookie/raw_cookie_writer.dart'
+      - 'packages/enhanced_cookie_jar/lib/src/enhanced_persist_cookie_jar.dart'
+      - 'packages/enhanced_cookie_jar/test/delete_cookie_identity_test.dart'
+      - 'test/services/site_cookie_manager_service_test.dart'
+      - '.github/workflows/webview-cookie-manager.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: |
+          dart format \
+            lib/pages/webview_cookie_manager_page.dart \
+            lib/services/network/cookie/site_cookie_manager_service.dart \
+            packages/enhanced_cookie_jar/lib/src/enhanced_persist_cookie_jar.dart \
+            packages/enhanced_cookie_jar/test/delete_cookie_identity_test.dart \
+            test/services/site_cookie_manager_service_test.dart
+          git diff --exit-code -- \
+            lib/pages/webview_cookie_manager_page.dart \
+            lib/services/network/cookie/site_cookie_manager_service.dart \
+            packages/enhanced_cookie_jar/lib/src/enhanced_persist_cookie_jar.dart \
+            packages/enhanced_cookie_jar/test/delete_cookie_identity_test.dart \
+            test/services/site_cookie_manager_service_test.dart
+
+      - name: Analyze cookie manager
+        run: >-
+          flutter analyze
+          lib/pages/webview_page.dart
+          lib/pages/webview_cookie_manager_page.dart
+          lib/services/network/cookie/site_cookie_manager_service.dart
+          packages/enhanced_cookie_jar/lib/src/enhanced_persist_cookie_jar.dart
+          test/services/site_cookie_manager_service_test.dart
+
+      - name: Test app cookie manager contracts
+        run: >-
+          dart tool/flutterw.dart test
+          test/services/site_cookie_manager_service_test.dart
+
+      - name: Test enhanced cookie jar identity deletion
+        working-directory: packages/enhanced_cookie_jar
+        run: dart test test/delete_cookie_identity_test.dart

@@ -273,6 +273,41 @@ class EnhancedPersistCookieJar implements base.CookieJar {
     });
   }
 
+  /// 按浏览器 Cookie identity 精确删除一组分区变体。
+  ///
+  /// identity 使用 `(name, normalizedDomain, path)`。partitionKey 故意不参与
+  /// 匹配：WebView 平台 API 并不能在所有平台稳定暴露 partition key，而同一
+  /// identity 的 CHIPS / 非 CHIPS 副本同时存在时，浏览器管理器中的“删除”
+  /// 应收敛两边状态，避免某一分区副本随后重新灌回。
+  Future<int> deleteCookieIdentity({
+    required String name,
+    required String domain,
+    required String path,
+  }) {
+    final normalizedDomain = domain.trim().toLowerCase().replaceFirst(
+          RegExp(r'^\.'),
+          '',
+        );
+    final normalizedPath = path.isEmpty ? '/' : path;
+    if (name.isEmpty || normalizedDomain.isEmpty) return Future.value(0);
+
+    return _synchronized(() async {
+      final all = [...await _readAll()];
+      final before = all.length;
+      all.removeWhere(
+        (cookie) =>
+            cookie.name == name &&
+            cookie.normalizedDomain == normalizedDomain &&
+            cookie.path == normalizedPath,
+      );
+      final removed = before - all.length;
+      if (removed > 0) {
+        await _writeAll(all);
+      }
+      return removed;
+    });
+  }
+
   /// 按名称显式删除与 [uri] 站点相关的所有 cookie，返回删除条数。
   ///
   /// 与写入"已过期同名 cookie"的删除方式不同，本方法绕过 [CanonicalCookie.isFresherThan]
