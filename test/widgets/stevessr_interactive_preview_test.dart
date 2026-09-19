@@ -61,10 +61,12 @@ void main() {
 
     final overlay = find.byKey(const ValueKey('stevessr-element-overlay'));
     expect(overlay, findsOneWidget);
-    // Drag the character by its interior rather than by its corner handle.
-    final characterDrag = await tester.startGesture(
-      tester.getCenter(overlay) - const Offset(28, 28),
-    );
+    // Record the actual hit-test chain to diagnose nested viewport gestures.
+    final touchPoint = tester.getCenter(overlay) - const Offset(28, 28);
+    final hit = tester.hitTestOnBinding(touchPoint);
+    debugPrint('EDITOR_HIT rect=${tester.getRect(overlay)} touch=$touchPoint '
+        'path=${hit.path.map((entry) => entry.target.runtimeType).toList()}');
+    final characterDrag = await tester.startGesture(touchPoint);
     await characterDrag.moveBy(const Offset(24, 12));
     await tester.pump();
     await characterDrag.moveBy(const Offset(16, 8));
