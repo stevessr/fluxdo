@@ -15,6 +15,8 @@ on:
       - 'test/services/stevessr_export_alpha_test.dart'
       - 'test/utils/screenshot_utils_alpha_test.dart'
       - 'test/widgets/stevessr_generator_page_test.dart'
+      - 'test/widgets/stevessr_interactive_preview_test.dart'
+      - 'test/models/stevessr_render_params_test.dart'
       - 'test/widgets/stevessr_quick_toolbar_test.dart'
       - '.github/workflows/stevessr.yaml'
   push:
@@ -33,6 +35,8 @@ on:
       - 'test/services/stevessr_export_alpha_test.dart'
       - 'test/utils/screenshot_utils_alpha_test.dart'
       - 'test/widgets/stevessr_generator_page_test.dart'
+      - 'test/widgets/stevessr_interactive_preview_test.dart'
+      - 'test/models/stevessr_render_params_test.dart'
       - 'test/widgets/stevessr_quick_toolbar_test.dart'
       - '.github/workflows/stevessr.yaml'
   workflow_dispatch:
@@ -69,20 +73,30 @@ jobs:
       - name: Check formatting
         run: |
           dart format \
+            lib/models/stevessr_render_params.dart \
+            lib/pages/stevessr_generator_page.dart \
+            lib/widgets/stevessr/stevessr_interactive_preview.dart \
             lib/services/stevessr_composer_service.dart \
             lib/utils/screenshot_utils.dart \
             lib/widgets/markdown_editor/editor_tools.dart \
             lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart \
             test/services/stevessr_composer_upload_alpha_test.dart \
+            test/widgets/stevessr_interactive_preview_test.dart \
+            test/models/stevessr_render_params_test.dart \
             test/services/stevessr_export_alpha_test.dart \
             test/utils/screenshot_utils_alpha_test.dart \
             test/widgets/stevessr_quick_toolbar_test.dart
           git diff --exit-code -- \
+            lib/models/stevessr_render_params.dart \
+            lib/pages/stevessr_generator_page.dart \
+            lib/widgets/stevessr/stevessr_interactive_preview.dart \
             lib/services/stevessr_composer_service.dart \
             lib/utils/screenshot_utils.dart \
             lib/widgets/markdown_editor/editor_tools.dart \
             lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart \
             test/services/stevessr_composer_upload_alpha_test.dart \
+            test/widgets/stevessr_interactive_preview_test.dart \
+            test/models/stevessr_render_params_test.dart \
             test/services/stevessr_export_alpha_test.dart \
             test/utils/screenshot_utils_alpha_test.dart \
             test/widgets/stevessr_quick_toolbar_test.dart
@@ -92,10 +106,15 @@ jobs:
       - name: Analyze StevesSR composer changes
         run: >-
           flutter analyze
+          lib/models/stevessr_render_params.dart
+          lib/pages/stevessr_generator_page.dart
+          lib/widgets/stevessr/stevessr_interactive_preview.dart
           lib/services/stevessr_composer_service.dart
           lib/utils/screenshot_utils.dart
           lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart
           test/services/stevessr_composer_upload_alpha_test.dart
+          test/widgets/stevessr_interactive_preview_test.dart
+          test/models/stevessr_render_params_test.dart
           test/services/stevessr_export_alpha_test.dart
           test/utils/screenshot_utils_alpha_test.dart
           test/widgets/stevessr_quick_toolbar_test.dart
@@ -111,6 +130,9 @@ jobs:
 
       - name: Test generator UI
         run: flutter test test/widgets/stevessr_generator_page_test.dart
+
+      - name: Test interactive preview and canvas dimensions
+        run: flutter test test/widgets/stevessr_interactive_preview_test.dart test/models/stevessr_render_params_test.dart
 
       - name: Test composer quick toolbar
         run: flutter test test/widgets/stevessr_quick_toolbar_test.dart
