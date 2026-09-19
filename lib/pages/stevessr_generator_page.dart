@@ -7,7 +7,7 @@ import '../l10n/s.dart';
 import '../models/stevessr_render_params.dart';
 import '../services/stevessr_export_service.dart';
 import '../utils/share_utils.dart';
-import '../widgets/stevessr/stevessr_canvas.dart';
+import '../widgets/stevessr/stevessr_interactive_preview.dart';
 
 /// StevesSR 离线图片生成器。
 class StevessrGeneratorPage extends StatefulWidget {
@@ -22,6 +22,18 @@ class StevessrGeneratorPage extends StatefulWidget {
 
 class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
   static const _maxBubbleImageBytes = 12 * 1024 * 1024;
+  static const _minCanvasDimension = 128;
+  static const _maxCanvasDimension = 2048;
+  static const _sizePresets = <(int, int)>[
+    (128, 128),
+    (256, 256),
+    (512, 512),
+    (1024, 1024),
+    (1254, 1254),
+    (2048, 2048),
+    (1024, 768),
+    (1080, 1920),
+  ];
 
   final _repaintBoundaryKey = GlobalKey();
   late final TextEditingController _textController;
@@ -211,8 +223,119 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
 
   double? _parseDouble(String value) => double.tryParse(value.trim());
 
+  // Pixel-size changes preserve the composition in normalized coordinates.
+  // Viewport zoom/pan is intentionally not part of these export parameters.
+  StevessrRect _scaledRect(StevessrRect rect, double sx, double sy) {
+    return StevessrRect(
+      x: rect.x * sx,
+      y: rect.y * sy,
+      width: rect.width * sx,
+      height: rect.height * sy,
+    );
+  }
+
+  void _resizeCanvas(int width, int height, {bool syncSizeFields = false}) {
+    if (width < _minCanvasDimension ||
+        height < _minCanvasDimension ||
+        width > _maxCanvasDimension ||
+        height > _maxCanvasDimension) {
+      return;
+    }
+    final previous = _params;
+    if (previous.width == width && previous.height == height) {
+      if (syncSizeFields) _syncSizeFields();
+      return;
+    }
+    final sx = width / previous.width;
+    final sy = height / previous.height;
+    final textScale = math.min(sx, sy);
+    _setParams(previous.copyWith(
+      width: width,
+      height: height,
+      bubbleRect: _scaledRect(previous.bubbleRect, sx, sy),
+      characterRect: _scaledRect(previous.characterRect, sx, sy),
+      bubbleStrokeWidth: previous.bubbleStrokeWidth * textScale,
+      padding: previous.padding * textScale,
+      fontMin: (previous.fontMin * textScale).round(),
+      fontMax: (previous.fontMax * textScale).round(),
+    ));
+    _syncRectFields();
+    if (syncSizeFields) _syncSizeFields();
+  }
+
   void _updateSize({int? width, int? height}) {
-    _setParams(_params.copyWith(width: width, height: height));
+    if (width == null && height == null) return;
+    _resizeCanvas(width ?? _params.width, height ?? _params.height);
+  }
+
+  void _syncController(TextEditingController controller, String value) {
+    if (controller.text == value) return;
+    controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+
+  void _syncSizeFields() {
+    _syncController(_widthController, '${_params.width}');
+    _syncController(_heightController, '${_params.height}');
+  }
+
+  void _syncRectFields() {
+    final bubble = _params.bubbleRect;
+    final character = _params.characterRect;
+    _syncController(_bubbleXController, _formatNumber(bubble.x));
+    _syncController(_bubbleYController, _formatNumber(bubble.y));
+    _syncController(_bubbleWidthController, _formatNumber(bubble.width));
+    _syncController(_bubbleHeightController, _formatNumber(bubble.height));
+    _syncController(_characterXController, _formatNumber(character.x));
+    _syncController(_characterYController, _formatNumber(character.y));
+    _syncController(_characterWidthController, _formatNumber(character.width));
+    _syncController(_characterHeightController, _formatNumber(character.height));
+  }
+
+  void _dragBubble(StevessrRect rect) {
+    _setParams(_params.copyWith(bubbleRect: rect));
+    _syncRectFields();
+  }
+
+  void _dragCharacter(StevessrRect rect) {
+    _setParams(_params.copyWith(characterRect: rect));
+    _syncRectFields();
+  }
+
+  Widget _buildSizePresetSelector() {
+    final current = '${_params.width}x${_params.height}';
+    final presetKeys = _sizePresets
+        .map((size) => '${size.$1}x${size.$2}')
+        .toSet();
+    return DropdownButtonFormField<String>(
+      value: presetKeys.contains(current) ? current : 'custom',
+      decoration: const InputDecoration(
+        labelText: '生成尺寸（像素）',
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        for (final size in _sizePresets)
+          DropdownMenuItem(
+            value: '${size.$1}x${size.$2}',
+            child: Text('${size.$1} × ${size.$2}'),
+          ),
+        const DropdownMenuItem(
+          value: 'custom',
+          child: Text('自定义尺寸（使用下方宽高）'),
+        ),
+      ],
+      onChanged: (value) {
+        if (value == null || value == 'custom') return;
+        final parts = value.split('x');
+        _resizeCanvas(
+          int.parse(parts[0]),
+          int.parse(parts[1]),
+          syncSizeFields: true,
+        );
+      },
+    );
   }
 
   void _updateBubbleRect() {
@@ -317,28 +440,35 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
   }
 
   Widget _buildPreviewArea(double availableWidth) {
-    final previewWidth = math.min(math.max(240.0, availableWidth - 32), 560.0);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: Center(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: StevessrCanvas(
+    final previewWidth = math.min(
+      math.max(240.0, availableWidth - 64),
+      560.0,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = constraints.maxHeight.isFinite
+            ? math.max(1.0, constraints.maxHeight - 48)
+            : 480.0;
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Card(
+            clipBehavior: Clip.antiAlias,
+            child: SizedBox(
+              height: height,
+              child: StevessrInteractivePreview(
                 key: ValueKey(
-                  'canvas-${_params.character.key}-${_params.expression.key}',
+                  'editor-${_params.width}x${_params.height}',
                 ),
-                repaintBoundaryKey: _repaintBoundaryKey,
                 params: _params,
                 logicalWidth: previewWidth,
+                repaintBoundaryKey: _repaintBoundaryKey,
+                onCharacterRectChanged: _dragCharacter,
+                onBubbleRectChanged: _dragBubble,
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -409,6 +539,8 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               },
               onChanged: (value) => _setParams(_params.copyWith(format: value)),
             ),
+            const SizedBox(height: 12),
+            _buildSizePresetSelector(),
             const SizedBox(height: 12),
             Row(
               children: [
