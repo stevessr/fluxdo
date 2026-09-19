@@ -106,6 +106,19 @@ void main() {
       );
     });
 
+    test('AVIF 头像也不会被误判为贴纸缩略图', () {
+      const url =
+          'https://linux.do/user_avatar/linux.do/example/96/123.avif?v=1';
+      final avatar = sharedImageProvider(
+        url,
+        cacheWidth: 96,
+        cacheHeight: 96,
+        thumbnailMode: true,
+      );
+      expect(avatar, isA<AvifImageProvider>());
+      expect((avatar as AvifImageProvider).bucket, BlobImageCache.avatarBucket);
+    });
+
     test('动画头像即使启用缩略图模式也保留 alpha-safe 路由', () {
       const url =
           'https://linux.do/user_avatar/linux.do/example/96/123_2.gif?v=1';
