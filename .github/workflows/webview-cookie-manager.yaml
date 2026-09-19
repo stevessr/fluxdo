@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -26,7 +26,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
           submodules: recursive
 
       - name: Setup Flutter
@@ -49,24 +48,12 @@ jobs:
             packages/enhanced_cookie_jar/lib/src/enhanced_persist_cookie_jar.dart \
             packages/enhanced_cookie_jar/test/delete_cookie_identity_test.dart \
             test/services/site_cookie_manager_service_test.dart
-          git diff --check
-          if ! git diff --quiet -- \
+          git diff --exit-code -- \
             lib/pages/webview_cookie_manager_page.dart \
             lib/services/network/cookie/site_cookie_manager_service.dart \
             packages/enhanced_cookie_jar/lib/src/enhanced_persist_cookie_jar.dart \
             packages/enhanced_cookie_jar/test/delete_cookie_identity_test.dart \
-            test/services/site_cookie_manager_service_test.dart; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add \
-              lib/pages/webview_cookie_manager_page.dart \
-              lib/services/network/cookie/site_cookie_manager_service.dart \
-              packages/enhanced_cookie_jar/lib/src/enhanced_persist_cookie_jar.dart \
-              packages/enhanced_cookie_jar/test/delete_cookie_identity_test.dart \
-              test/services/site_cookie_manager_service_test.dart
-            git commit -m "style(cookie): apply dart format"
-            git push origin "HEAD:${{ github.head_ref }}"
-          fi
+            test/services/site_cookie_manager_service_test.dart
 
       - name: Analyze cookie manager
         run: >-
