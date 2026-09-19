@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -90,12 +91,15 @@ class ResilientSecureStorage {
   /// 多实例只隔离账号认证边界相关的旧兼容 key。
   ///
   /// 默认 linux.do 仍返回原 key，因此升级不会触发账号迁移或登出；自定义
-  /// 实例的账号注册表、快照、当前用户名、CSRF、User API Key 和
-  /// guest/login 状态互不串线。
+  /// 实例的账号注册表、快照、当前用户名、CSRF、User API Key、保存的登录
+  /// 凭证和 guest/login 状态互不串线。
   String _storageKey(String key) {
     if (!_isDiscourseAccountKey(key)) return key;
     return DiscourseInstanceRuntime.scopedStorageKey(key);
   }
+
+  @visibleForTesting
+  String debugStorageKeyFor(String key) => _storageKey(key);
 
   bool _isDiscourseAccountKey(String key) {
     return key == 'linux_do_username' ||
