@@ -194,6 +194,15 @@ class _StevessrInteractivePreviewState
     );
   }
 
+  void _selectTarget(StevessrEditTarget target) {
+    // A resize handle can move while its pointer is down. Do not allow its
+    // transient pointer-capture state to disable dragging the next layer.
+    _resizing = false;
+    _resizeLastGlobalPoint = null;
+    _gestureRect = null;
+    setState(() => _target = target);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -213,7 +222,7 @@ class _StevessrInteractivePreviewState
                     StevessrEditTarget.bubble => '气泡',
                   }),
                   selected: _target == target,
-                  onSelected: (_) => setState(() => _target = target),
+                  onSelected: (_) => _selectTarget(target),
                 ),
                 const SizedBox(width: 6),
               ],
