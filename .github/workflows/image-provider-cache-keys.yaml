@@ -1,0 +1,77 @@
+name: Shared Image Provider
+
+on:
+  pull_request:
+    paths:
+      - 'lib/services/discourse_cache_manager.dart'
+      - 'lib/widgets/common/cached_image.dart'
+      - 'lib/widgets/common/smart_avatar.dart'
+      - 'lib/widgets/content/discourse_image.dart'
+      - 'test/services/shared_image_provider_test.dart'
+      - '.github/workflows/image-provider-cache-keys.yaml'
+  push:
+    branches:
+      - perf/unify-image-provider-cache-keys
+    paths:
+      - 'lib/services/discourse_cache_manager.dart'
+      - 'lib/widgets/common/cached_image.dart'
+      - 'lib/widgets/common/smart_avatar.dart'
+      - 'lib/widgets/content/discourse_image.dart'
+      - 'test/services/shared_image_provider_test.dart'
+      - '.github/workflows/image-provider-cache-keys.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          cache: true
+
+      - name: Prepare generated assets
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+
+      - name: Check image provider formatting
+        run: |
+          dart format \
+            lib/services/discourse_cache_manager.dart \
+            lib/widgets/common/cached_image.dart \
+            lib/widgets/common/smart_avatar.dart \
+            lib/widgets/content/discourse_image.dart \
+            test/services/shared_image_provider_test.dart
+          git diff --exit-code -- \
+            lib/services/discourse_cache_manager.dart \
+            lib/widgets/common/cached_image.dart \
+            lib/widgets/common/smart_avatar.dart \
+            lib/widgets/content/discourse_image.dart \
+            test/services/shared_image_provider_test.dart
+
+      - name: Analyze image providers
+        run: |
+          flutter analyze \
+            lib/services/discourse_cache_manager.dart \
+            lib/widgets/common/cached_image.dart \
+            lib/widgets/common/smart_avatar.dart \
+            lib/widgets/content/discourse_image.dart \
+            test/services/shared_image_provider_test.dart
+
+      - name: Test shared cache identities
+        run: |
+          dart tool/flutterw.dart test test/services/shared_image_provider_test.dart
+          dart tool/flutterw.dart test test/services/blob_image_cache_test.dart
