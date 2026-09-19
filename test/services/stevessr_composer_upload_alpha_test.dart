@@ -198,12 +198,10 @@ void main() {
             mimeType: 'image/png',
           ),
           uploadFile: (path, preserveImageFormat) async {
-            fail('Oversized images must not be uploaded');
-            throw StateError('unreachable');
+            throw AssertionError('Oversized images must not be uploaded');
           },
           temporaryDirectory: () async {
-            fail('Oversized images must not be written to disk');
-            throw StateError('unreachable');
+            throw AssertionError('Oversized images must not be written to disk');
           },
         ),
         throwsA(
