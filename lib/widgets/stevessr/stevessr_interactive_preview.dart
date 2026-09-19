@@ -97,9 +97,12 @@ class _StevessrInteractivePreviewState
     // Retain the element's aspect ratio when resizing by its bottom-right
     // handle. A two-finger pinch on the element also scales uniformly.
     final ratio = current.width / current.height;
-    final proposedWidth = math.max(1.0, current.width + dx);
-    final proposedHeight = math.max(1.0, current.height + dy);
-    final width = math.max(proposedWidth, proposedHeight * ratio);
+    // Follow the dominant drag axis so moving just left *or* just up can
+    // shrink the object, without forcing both pointer axes to move at once.
+    final effectiveDelta = dx.abs() >= (dy * ratio).abs()
+        ? dx
+        : dy * ratio;
+    final width = math.max(1.0, current.width + effectiveDelta);
     _commitRect(current.copyWith(width: width, height: width / ratio));
   }
 
@@ -127,6 +130,7 @@ class _StevessrInteractivePreviewState
       width: rect.width * scaleX,
       height: rect.height * scaleY,
       child: GestureDetector(
+        key: const ValueKey('stevessr-element-overlay'),
         behavior: HitTestBehavior.opaque,
         onScaleStart: _startElementGesture,
         onScaleUpdate: _updateElementGesture,
@@ -142,6 +146,7 @@ class _StevessrInteractivePreviewState
                 right: 0,
                 bottom: 0,
                 child: GestureDetector(
+                  key: const ValueKey('stevessr-element-resize'),
                   behavior: HitTestBehavior.opaque,
                   onPanUpdate: _resizeWithHandle,
                   child: Container(
@@ -243,6 +248,7 @@ class _StevessrInteractivePreviewState
                 child: ColoredBox(
                   color: scheme.surfaceContainerLowest,
                   child: InteractiveViewer(
+                    key: const ValueKey('stevessr-viewport'),
                     transformationController: _viewport,
                     constrained: false,
                     alignment: Alignment.center,
