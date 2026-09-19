@@ -102,6 +102,10 @@ void main() {
     await tester.pump();
     await bubbleDrag.moveBy(const Offset(12, 6));
     await tester.pump();
+    // The small bubble takes more motion to pass Flutter's scale touch slop.
+    // Send an additional update *after* recognition, not merely pointer up.
+    await bubbleDrag.moveBy(const Offset(16, 8));
+    await tester.pump();
     await bubbleDrag.up();
     await tester.pump();
     expect(params.bubbleRect.x, greaterThan(beforeBubble.x));
