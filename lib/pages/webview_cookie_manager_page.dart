@@ -325,6 +325,14 @@ class _WebViewCookieManagerPageState
 
   Future<void> _showEditor([ManagedSiteCookie? cookie]) async {
     if (_hosts.isEmpty && _currentHost.isEmpty) return;
+    if (cookie?.partitioned == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Partitioned Cookie 为避免分区副本冲突，请删除后重新创建。'),
+        ),
+      );
+      return;
+    }
 
     final nameController = TextEditingController(text: cookie?.name ?? '');
     final valueController = TextEditingController(text: cookie?.value ?? '');
@@ -337,7 +345,9 @@ class _WebViewCookieManagerPageState
     );
 
     var selectedHost = cookie?.host ??
-        (_hosts.contains(_currentHost) ? _currentHost : _hosts.first);
+        (_hosts.contains(_currentHost)
+            ? _currentHost
+            : (_hosts.isNotEmpty ? _hosts.first : _currentHost));
     var secure = cookie?.secure ?? true;
     var httpOnly = cookie?.httpOnly ?? false;
     var partitioned = cookie?.partitioned ?? false;
