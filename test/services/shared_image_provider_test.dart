@@ -23,10 +23,7 @@ void main() {
         cacheHeight: 128,
       );
       final fromOtherWidget = ResizeImage(
-        const BlobImageProvider(
-          staticUrl,
-          bucket: BlobImageCache.avatarBucket,
-        ),
+        const BlobImageProvider(staticUrl, bucket: BlobImageCache.avatarBucket),
         width: 128,
         height: 128,
         policy: ResizeImagePolicy.fit,
@@ -64,10 +61,7 @@ void main() {
 
     test('带查询参数的 GIF 仍使用完整动画路由', () {
       const url = 'https://linux.do/uploads/default/a.gif?v=2';
-      expect(
-        sharedImageProvider(url),
-        equals(discourseImageProvider(url)),
-      );
+      expect(sharedImageProvider(url), equals(discourseImageProvider(url)));
       expect(sharedImageProvider(url), isNot(isA<BlobImageProvider>()));
     });
 
@@ -133,8 +127,10 @@ void main() {
         bucket: BlobImageCache.avatarBucket,
       );
       expect(fromContent, isA<BlobImageProvider>());
-      expect((fromContent as BlobImageProvider).bucket,
-          BlobImageCache.avatarBucket);
+      expect(
+        (fromContent as BlobImageProvider).bucket,
+        BlobImageCache.avatarBucket,
+      );
       expect(fromContent, equals(fromAvatar));
     });
   });
