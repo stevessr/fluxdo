@@ -37,6 +37,7 @@ on:
       - 'lib/utils/notification_route_payload.dart'
       - 'lib/utils/url_helper.dart'
       - 'test/config/discourse_instance_runtime_test.dart'
+      - 'test/modules/ldc_reward/ldc_reward_instance_scope_test.dart'
       - 'test/services/account_browser_session_policy_test.dart'
       - 'test/services/deep_link_service_test.dart'
       - 'test/services/discourse_instance_manager_test.dart'
@@ -89,6 +90,7 @@ on:
       - 'lib/utils/notification_route_payload.dart'
       - 'lib/utils/url_helper.dart'
       - 'test/config/discourse_instance_runtime_test.dart'
+      - 'test/modules/ldc_reward/ldc_reward_instance_scope_test.dart'
       - 'test/services/account_browser_session_policy_test.dart'
       - 'test/services/deep_link_service_test.dart'
       - 'test/services/discourse_instance_manager_test.dart'
@@ -168,6 +170,7 @@ jobs:
             lib/utils/notification_route_payload.dart \
             lib/utils/url_helper.dart \
             test/config/discourse_instance_runtime_test.dart \
+            test/modules/ldc_reward/ldc_reward_instance_scope_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
             test/services/discourse_instance_manager_test.dart \
@@ -211,6 +214,7 @@ jobs:
             lib/utils/notification_route_payload.dart \
             lib/utils/url_helper.dart \
             test/config/discourse_instance_runtime_test.dart \
+            test/modules/ldc_reward/ldc_reward_instance_scope_test.dart \
             test/services/account_browser_session_policy_test.dart \
             test/services/deep_link_service_test.dart \
             test/services/discourse_instance_manager_test.dart \
@@ -261,6 +265,7 @@ jobs:
           lib/utils/notification_route_payload.dart
           lib/utils/url_helper.dart
           test/config/discourse_instance_runtime_test.dart
+          test/modules/ldc_reward/ldc_reward_instance_scope_test.dart
           test/services/account_browser_session_policy_test.dart
           test/services/deep_link_service_test.dart
           test/services/discourse_instance_manager_test.dart
@@ -279,6 +284,7 @@ jobs:
         run: >-
           dart tool/flutterw.dart test
           test/config/discourse_instance_runtime_test.dart
+          test/modules/ldc_reward/ldc_reward_instance_scope_test.dart
           test/services/account_browser_session_policy_test.dart
           test/services/deep_link_service_test.dart
           test/services/discourse_instance_manager_test.dart
