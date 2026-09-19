@@ -147,14 +147,11 @@ class _SmartAvatarState extends State<SmartAvatar> {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final decodeSide = (innerSize * dpr * 2).round().clamp(1, 512);
     return Image(
-      image: ResizeImage(
-        BlobImageProvider(
-          widget.imageUrl!,
-          bucket: BlobImageCache.avatarBucket,
-        ),
-        width: decodeSide,
-        height: decodeSide,
-        policy: ResizeImagePolicy.fit,
+      image: sharedImageProvider(
+        widget.imageUrl!,
+        bucket: BlobImageCache.avatarBucket,
+        cacheWidth: decodeSide,
+        cacheHeight: decodeSide,
       ),
       width: innerSize,
       height: innerSize,
