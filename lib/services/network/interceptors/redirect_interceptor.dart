@@ -173,7 +173,7 @@ class RedirectInterceptor extends Interceptor {
           original.uri,
           absoluteUri,
         );
-        final method = redirectedMethod(statusCode, original.method);
+        final method = redirectedMethod(statusCode!, original.method);
         final preservesBody = method != 'GET' && method != 'HEAD';
         final body = preservesBody ? original.data : null;
 
