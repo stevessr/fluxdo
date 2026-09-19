@@ -487,8 +487,8 @@ class SiteCookieManagerService {
     }
     if (residual.isNotEmpty) {
       throw StateError(
-        'Failed to remove \${residual.length} WebView cookie(s): '
-        '\${residual.take(4).join(', ')}',
+        'Failed to remove ${residual.length} WebView cookie(s): '
+        '${residual.take(4).join(', ')}',
       );
     }
 
@@ -617,7 +617,7 @@ class SiteCookieManagerService {
   }
 
   static String _normalizeHost(String value) {
-    return value.trim().toLowerCase().replaceFirst(RegExp(r'^\\.'), '');
+    return value.trim().toLowerCase().replaceFirst(RegExp(r'^\.'), '');
   }
 
   static String? _normalizeNullableHost(String? value) {
