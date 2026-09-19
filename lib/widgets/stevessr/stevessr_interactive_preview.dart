@@ -119,9 +119,10 @@ class _StevessrInteractivePreviewState
     final applied = next / scale;
     final center = Offset(_viewportSize.width / 2, _viewportSize.height / 2);
     final zoom = Matrix4.identity()
-      ..translate(center.dx, center.dy)
-      ..scale(applied)
-      ..translate(-center.dx, -center.dy);
+      ..setEntry(0, 0, applied)
+      ..setEntry(1, 1, applied)
+      ..setEntry(0, 3, center.dx * (1 - applied))
+      ..setEntry(1, 3, center.dy * (1 - applied));
     _viewport.value = zoom..multiply(_viewport.value);
   }
 
