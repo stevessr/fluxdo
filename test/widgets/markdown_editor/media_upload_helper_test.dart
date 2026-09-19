@@ -23,17 +23,15 @@ void main() {
         1234,
       );
       expect(
-        mediaUploadLimitBytesFromSettings(
-          {'max_attachment_size_kb': 0},
-          fallbackBytes: 4321,
-        ),
+        mediaUploadLimitBytesFromSettings({
+          'max_attachment_size_kb': 0,
+        }, fallbackBytes: 4321),
         4321,
       );
       expect(
-        mediaUploadLimitBytesFromSettings(
-          {'max_attachment_size_kb': 1024},
-          fallbackBytes: 4321,
-        ),
+        mediaUploadLimitBytesFromSettings({
+          'max_attachment_size_kb': 1024,
+        }, fallbackBytes: 4321),
         1024 * 1024,
       );
     });
@@ -44,10 +42,7 @@ void main() {
       mediaShortUrlToXzPath('upload://lwDn83PDeB3xOUoEeZI9v77qGJa.mp4'),
       '/uploads/short-url/lwDn83PDeB3xOUoEeZI9v77qGJa.xz',
     );
-    expect(
-      mediaShortUrlToXzPath('upload://abc'),
-      '/uploads/short-url/abc.xz',
-    );
+    expect(mediaShortUrlToXzPath('upload://abc'), '/uploads/short-url/abc.xz');
     // 非短链兜底:仅换扩展
     expect(
       mediaShortUrlToXzPath('/uploads/default/original/1X/a.mp3'),
@@ -86,7 +81,9 @@ void main() {
       mime: 'video/mp4',
     );
     expect(tag, contains('<video width="640" height="360" controls>'));
-    expect(tag,
-        contains('<source src="/uploads/short-url/xyz.xz" type="video/mp4">'));
+    expect(
+      tag,
+      contains('<source src="/uploads/short-url/xyz.xz" type="video/mp4">'),
+    );
   });
 }
