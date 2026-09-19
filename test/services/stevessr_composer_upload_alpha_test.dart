@@ -11,12 +11,14 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('透明 StevesSR 上传保持原字节、原尺寸和原扩展名', () async {
+    // Must remain larger than the old, incorrect 72 KiB conversion workaround.
     final tempDir = await Directory.systemTemp.createTemp(
       'fluxdo-stevessr-alpha-original-',
     );
     addTearDown(() => tempDir.delete(recursive: true));
 
     final source = _largeTransparentPng();
+    expect(source.length, greaterThan(72 * 1024));
     Uint8List? uploadedBytes;
     String? uploadedPath;
     bool? preserveImageFormat;
@@ -183,6 +185,41 @@ void main() {
     expect(preserveImageFormat, isTrue);
     expect(uploadedBytes, orderedEquals(source));
   });
+  test('4 MiB 或更大的生成图明确拒绝，且不会压缩、写盘或发起上传', () async {
+    for (final extraByte in <int>[0, 1]) {
+      final source = Uint8List(
+        StevessrComposerService.maxGeneratorUploadBytes + extraByte,
+      );
+      await expectLater(
+        StevessrComposerService.uploadForTesting(
+          StevessrExportedImage(
+            bytes: source,
+            extension: 'png',
+            mimeType: 'image/png',
+          ),
+          uploadFile: (path, preserveImageFormat) async {
+            fail('Oversized images must not be uploaded');
+            throw StateError('unreachable');
+          },
+          temporaryDirectory: () async {
+            fail('Oversized images must not be written to disk');
+            throw StateError('unreachable');
+          },
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('4 MB'),
+          ),
+        ),
+      );
+      expect(source.length, greaterThanOrEqualTo(
+        StevessrComposerService.maxGeneratorUploadBytes,
+      ));
+    }
+  });
+
 }
 
 Uint8List _largeTransparentPng() {
