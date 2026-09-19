@@ -1,16 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:native_animated_image/native_animated_image.dart'
-    show NativeAnimatedImageProvider;
 
 import '../../services/blob_image_cache.dart';
 import '../../services/discourse_cache_manager.dart';
-import '../../services/sticker_thumbnail_provider.dart';
 
 /// 统一的缓存网络图片组件
 ///
-/// 自动按 URL 后缀 + 是否有 target size 选 backend:
+/// 通过 [sharedImageProvider] 统一选择 decoder 与 Flutter ImageCache key:
 ///
 /// **有 [memCacheWidth] / [memCacheHeight] 的 sticker 场景**(grid thumbnail):
 /// - `.avif` / `.gif` / `.webp` / `.apng` → [StickerThumbnailProvider]
@@ -23,7 +20,7 @@ import '../../services/sticker_thumbnail_provider.dart';
 ///   (Rust pipeline,绕开 Skia multi_frame_codec 的 #85831 bug)
 ///
 /// **静态图**(PNG / JPEG):
-/// - 走 [CachedNetworkImageProvider] + 可选 [ResizeImage]
+/// - 走 [BlobImageProvider] + 可选 [ResizeImage]
 ///
 /// 直接使用 Flutter [Image] + [frameBuilder],不依赖 OctoImage,
 /// 避免每张图加载时创建 Stack + 2 FadeWidget + 2 AnimationController 的开销。
@@ -85,10 +82,13 @@ class CachedImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasTargetSize = memCacheWidth != null || memCacheHeight != null;
-    final targetSize =
-        hasTargetSize ? (memCacheWidth ?? memCacheHeight)! : null;
-
-    final provider = _resolveProvider(hasTargetSize, targetSize);
+    final provider = sharedImageProvider(
+      url,
+      bucket: bucket,
+      cacheWidth: hasTargetSize ? memCacheWidth : null,
+      cacheHeight: hasTargetSize ? memCacheHeight : null,
+      thumbnailMode: thumbnailMode,
+    );
 
     return Image(
       image: provider,
@@ -112,53 +112,6 @@ class CachedImage extends StatelessWidget {
       scheduleMicrotask(() => provider.evict());
       return inner(context, error, stackTrace);
     };
-  }
-
-  ImageProvider _resolveProvider(bool hasTargetSize, int? targetSize) {
-    // sticker thumbnail 场景:任意动态格式都走统一的 thumbnail PNG cache
-    if (thumbnailMode &&
-        hasTargetSize &&
-        StickerThumbnailProvider.supports(url)) {
-      return StickerThumbnailProvider(
-        url,
-        targetSize: targetSize!,
-        bucket: bucket,
-      );
-    }
-
-    final lower = url.toLowerCase();
-
-    // 完整 AVIF 动画(长按预览 / 大图):flutter_avif (libavif + dav1d) 解码
-    if (lower.endsWith('.avif')) {
-      return AvifImageProvider(url, bucket: bucket);
-    }
-
-    // 完整 GIF / animated WebP / APNG 动画:NativeAnimatedImageProvider 走
-    // Rust pipeline,绕 Skia multi_frame_codec 的 #85831 bug。
-    //
-    // 安全性(v0.3.0 后):native_animated_image 已经把 AVIF 解码彻底剥离,
-    // 即使 URL 后缀失真(`.gif/.webp` 实际是 AVIF bytes),Rust 端 AVIF
-    // magic 现在返 UnsupportedFormat,触发 provider 内置 Flutter codec
-    // fallback,不会再撞 zenavif crash。
-    if (lower.endsWith('.gif') ||
-        lower.endsWith('.webp') ||
-        lower.endsWith('.apng')) {
-      return NativeAnimatedImageProvider.fromBytesProvider(
-        loader: () => BlobImageCache.fetch(bucket, url),
-        tag: url,
-      );
-    }
-
-    // 静态格式:blob 直寻址 + ResizeImage(节省内存)
-    ImageProvider provider = BlobImageProvider(url, bucket: bucket);
-    if (hasTargetSize) {
-      provider = ResizeImage(
-        provider,
-        width: memCacheWidth,
-        height: memCacheHeight,
-      );
-    }
-    return provider;
   }
 
   Widget _buildFrame(
