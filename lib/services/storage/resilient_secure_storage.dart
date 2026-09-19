@@ -104,7 +104,8 @@ class ResilientSecureStorage {
         key == 'multi_account_pending_new_login' ||
         key == 'multi_account_guest_mode' ||
         key.startsWith('multi_account_snapshot_') ||
-        key.startsWith('user_api_key_');
+        key.startsWith('user_api_key_') ||
+        key.startsWith('login_credential_');
   }
 
   String _normalizeLegacyValue(String key, String value) {
