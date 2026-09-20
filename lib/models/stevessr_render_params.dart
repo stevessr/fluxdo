@@ -119,7 +119,7 @@ enum StevessrTail { left, right, none }
 /// 气泡内容类型。
 enum StevessrBubbleContent { text, image }
 
-enum StevessrFormat { png, webp, svg }
+enum StevessrFormat { png, webp, avif, jpeg, svg }
 
 extension StevessrExpressionKey on StevessrExpression {
   String get key => name;
