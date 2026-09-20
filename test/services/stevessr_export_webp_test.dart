@@ -11,8 +11,14 @@ void main() {
     final image = img.Image(width: 32, height: 32, numChannels: 4);
     for (var y = 0; y < image.height; y++) {
       for (var x = 0; x < image.width; x++) {
-        image.setPixelRgba(x, y, 235, 40 + x, 90 + y,
-            transparent && x < 12 ? 0 : 255);
+        image.setPixelRgba(
+          x,
+          y,
+          235,
+          40 + x,
+          90 + y,
+          transparent && x < 12 ? 0 : 255,
+        );
       }
     }
     return img.encodePng(image);
@@ -48,8 +54,18 @@ void main() {
       final expected = before.getPixel(x, y);
       final actual = after.getPixel(x, y);
       expect(
-        [actual.r.toInt(), actual.g.toInt(), actual.b.toInt(), actual.a.toInt()],
-        [expected.r.toInt(), expected.g.toInt(), expected.b.toInt(), expected.a.toInt()],
+        [
+          actual.r.toInt(),
+          actual.g.toInt(),
+          actual.b.toInt(),
+          actual.a.toInt(),
+        ],
+        [
+          expected.r.toInt(),
+          expected.g.toInt(),
+          expected.b.toInt(),
+          expected.a.toInt(),
+        ],
       );
     }
   });
