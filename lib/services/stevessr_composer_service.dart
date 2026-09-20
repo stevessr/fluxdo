@@ -95,10 +95,18 @@ abstract final class StevessrComposerService {
     final directory = await temporaryDirectory();
     final hasTransparency = await _hasTransparency(image);
     final file = await _writeTemporaryImage(directory, image);
-    final upload = await uploadFile(file.path, hasTransparency);
+    // AVIF may be rejected or re-encoded by a particular Discourse instance.
+    // Request format preservation even when the exported AVIF is opaque.
+    final upload = await uploadFile(
+      file.path,
+      hasTransparency || image.extension.toLowerCase() == 'avif',
+    );
 
     if (hasTransparency && _isJpegUpload(upload)) {
       throw StateError('服务端将透明图片转换为 JPEG，已取消插入以避免透明区域变白');
+    }
+    if (image.extension.toLowerCase() == 'avif' && _isJpegUpload(upload)) {
+      throw StateError('服务端将 AVIF 转换为 JPEG，已取消插入以保留所选格式');
     }
 
     final url = upload.url;
@@ -109,6 +117,9 @@ abstract final class StevessrComposerService {
   }
 
   static Future<bool> _hasTransparency(StevessrExportedImage source) async {
+    if (source.containsTransparency != null) {
+      return source.containsTransparency!;
+    }
     final extension = source.extension.toLowerCase();
     if (extension != 'png' && extension != 'webp') return false;
 
