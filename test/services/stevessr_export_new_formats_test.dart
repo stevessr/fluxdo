@@ -25,21 +25,25 @@ void main() {
     return img.encodePng(image);
   }
 
-  test('generator model exposes AVIF and JPEG without changing PNG default', () {
-    expect(StevessrFormat.values, contains(StevessrFormat.avif));
-    expect(StevessrFormat.values, contains(StevessrFormat.jpeg));
-    expect(StevessrRenderParams.defaults().format, StevessrFormat.png);
-    expect(
-      StevessrRenderParams.defaults()
-          .copyWith(format: StevessrFormat.avif)
-          .normalized()
-          .format,
-      StevessrFormat.avif,
-    );
-  });
+  test(
+    'generator model exposes AVIF and JPEG without changing PNG default',
+    () {
+      expect(StevessrFormat.values, contains(StevessrFormat.avif));
+      expect(StevessrFormat.values, contains(StevessrFormat.jpeg));
+      expect(StevessrRenderParams.defaults().format, StevessrFormat.png);
+      expect(
+        StevessrRenderParams.defaults()
+            .copyWith(format: StevessrFormat.avif)
+            .normalized()
+            .format,
+        StevessrFormat.avif,
+      );
+    },
+  );
 
-  testWidgets('JPEG export is real JPEG with the requested pixel dimensions',
-      (tester) async {
+  testWidgets('JPEG export is real JPEG with the requested pixel dimensions', (
+    tester,
+  ) async {
     final bytes = await tester.runAsync(
       () => StevessrExportService.encodeJpegPng(
         makePng(transparent: false),
@@ -55,8 +59,9 @@ void main() {
     expect(decoded.height, 20);
   });
 
-  testWidgets('JPEG export refuses to flatten transparent PNG pixels',
-      (tester) async {
+  testWidgets('JPEG export refuses to flatten transparent PNG pixels', (
+    tester,
+  ) async {
     final future = tester.runAsync(
       () => StevessrExportService.encodeJpegPng(
         makePng(transparent: true),
@@ -65,11 +70,13 @@ void main() {
     );
     await expectLater(
       future,
-      throwsA(isA<StateError>().having(
-        (error) => error.message,
-        'message',
-        contains('JPEG 不支持透明像素'),
-      )),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('JPEG 不支持透明像素'),
+        ),
+      ),
     );
   });
 }
