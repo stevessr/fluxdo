@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import '../models/stevessr_render_params.dart';
 import '../utils/image_save_utils.dart';
 import '../utils/screenshot_utils.dart';
@@ -44,14 +46,7 @@ abstract final class StevessrExportService {
         );
       case StevessrFormat.webp:
         final png = await _capturePng(p, repaintBoundaryKey);
-        final webp = await FlutterImageCompress.compressWithList(
-          png,
-          quality: p.quality,
-          format: CompressFormat.webp,
-        );
-        if (webp.isEmpty) {
-          throw StateError('WebP 编码失败');
-        }
+        final webp = await encodeWebpPng(png, quality: p.quality);
         return StevessrExportedImage(
           bytes: webp,
           extension: 'webp',
@@ -64,6 +59,30 @@ abstract final class StevessrExportService {
           mimeType: 'image/svg+xml',
         );
     }
+  }
+
+  /// WebP 编码不能依赖 flutter_image_compress：它没有 Linux/Windows
+  /// 实现，macOS 也不支持 WebP。统一在 isolate 中编码，以免桌面端保存失败，
+  /// 或在大画布转换时阻塞预览。质量 100 使用无损 WebP；有损编码的 alpha
+  /// 仍以 100% 质量保存，避免透明边缘出现白边/黑边。
+  @visibleForTesting
+  static Future<Uint8List> encodeWebpPng(
+    Uint8List png, {
+    required int quality,
+  }) async {
+    if (png.isEmpty) throw StateError('待编码 PNG 数据为空');
+    final webp = await compute(
+      _encodeWebpBytes,
+      (png: png, quality: quality.clamp(20, 100).toInt()),
+    );
+    if (webp.length < 16 ||
+        webp[0] != 0x52 || webp[1] != 0x49 ||
+        webp[2] != 0x46 || webp[3] != 0x46 ||
+        webp[8] != 0x57 || webp[9] != 0x45 ||
+        webp[10] != 0x42 || webp[11] != 0x50) {
+      throw StateError('WebP 编码失败：输出格式无效');
+    }
+    return webp;
   }
 
   static Future<Uint8List> _capturePng(
@@ -368,4 +387,18 @@ $text
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&apos;');
+}
+
+/// 顶层函数才能被 compute 移入后台 isolate。
+Uint8List _encodeWebpBytes(({Uint8List png, int quality}) request) {
+  final image = img.decodePng(request.png);
+  if (image == null) throw FormatException('无法解码画布 PNG');
+  return img.encodeWebP(
+    image,
+    singleFrame: true,
+    lossless: request.quality == 100,
+    quality: request.quality,
+    alphaQuality: 100,
+    exact: true,
+  );
 }
