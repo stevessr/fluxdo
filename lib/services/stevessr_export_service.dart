@@ -100,15 +100,19 @@ abstract final class StevessrExportService {
     required int quality,
   }) async {
     if (png.isEmpty) throw StateError('待编码 PNG 数据为空');
-    final webp = await compute(
-      _encodeWebpBytes,
-      (png: png, quality: quality.clamp(20, 100).toInt()),
-    );
+    final webp = await compute(_encodeWebpBytes, (
+      png: png,
+      quality: quality.clamp(20, 100).toInt(),
+    ));
     if (webp.length < 16 ||
-        webp[0] != 0x52 || webp[1] != 0x49 ||
-        webp[2] != 0x46 || webp[3] != 0x46 ||
-        webp[8] != 0x57 || webp[9] != 0x45 ||
-        webp[10] != 0x42 || webp[11] != 0x50) {
+        webp[0] != 0x52 ||
+        webp[1] != 0x49 ||
+        webp[2] != 0x46 ||
+        webp[3] != 0x46 ||
+        webp[8] != 0x57 ||
+        webp[9] != 0x45 ||
+        webp[10] != 0x42 ||
+        webp[11] != 0x50) {
       throw StateError('WebP 编码失败：输出格式无效');
     }
     return webp;
@@ -136,8 +140,10 @@ abstract final class StevessrExportService {
     // ISO BMFF: [box size][ftyp][major/compatible brands].
     // Reject empty/PNG output rather than handing a mislabeled file to save.
     if (encoded.length < 20 ||
-        encoded[4] != 0x66 || encoded[5] != 0x74 ||
-        encoded[6] != 0x79 || encoded[7] != 0x70 ||
+        encoded[4] != 0x66 ||
+        encoded[5] != 0x74 ||
+        encoded[6] != 0x79 ||
+        encoded[7] != 0x70 ||
         !_hasAvifBrand(encoded)) {
       throw StateError('AVIF 编码失败：输出格式无效');
     }
@@ -147,8 +153,10 @@ abstract final class StevessrExportService {
   static bool _hasAvifBrand(Uint8List bytes) {
     final limit = math.min(bytes.length - 3, 40);
     for (var i = 8; i < limit; i += 4) {
-      if (bytes[i] == 0x61 && bytes[i + 1] == 0x76 &&
-          bytes[i + 2] == 0x69 && bytes[i + 3] == 0x66) {
+      if (bytes[i] == 0x61 &&
+          bytes[i + 1] == 0x76 &&
+          bytes[i + 2] == 0x69 &&
+          bytes[i + 3] == 0x66) {
         return true; // avif
       }
     }
@@ -161,13 +169,15 @@ abstract final class StevessrExportService {
     required int quality,
   }) async {
     if (png.isEmpty) throw StateError('待编码 PNG 数据为空');
-    final jpeg = await compute(
-      _encodeJpegBytes,
-      (png: png, quality: quality.clamp(20, 100).toInt()),
-    );
+    final jpeg = await compute(_encodeJpegBytes, (
+      png: png,
+      quality: quality.clamp(20, 100).toInt(),
+    ));
     if (jpeg.length < 4 ||
-        jpeg[0] != 0xff || jpeg[1] != 0xd8 ||
-        jpeg[jpeg.length - 2] != 0xff || jpeg.last != 0xd9) {
+        jpeg[0] != 0xff ||
+        jpeg[1] != 0xd8 ||
+        jpeg[jpeg.length - 2] != 0xff ||
+        jpeg.last != 0xd9) {
       throw StateError('JPEG 编码失败：输出格式无效');
     }
     return jpeg;
