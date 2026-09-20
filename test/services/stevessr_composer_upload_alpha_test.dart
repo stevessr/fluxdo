@@ -103,6 +103,77 @@ void main() {
     expect(uploadedBytes, orderedEquals(source));
   });
 
+  test('透明 AVIF 上传保留原始格式和字节，拒绝服务端 JPEG 回退', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'fluxdo-stevessr-avif-upload-',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+    // Upload tests exercise the format/metadata path, not native AVIF encoding.
+    final source = Uint8List.fromList([
+      0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70,
+      0x61, 0x76, 0x69, 0x66, 0, 0, 0, 0,
+      0x61, 0x76, 0x69, 0x66,
+    ]);
+    var calls = 0;
+    await expectLater(
+      StevessrComposerService.uploadForTesting(
+        StevessrExportedImage(
+          bytes: source,
+          extension: 'avif',
+          mimeType: 'image/avif',
+          containsTransparency: true,
+        ),
+        uploadFile: (path, preserveImageFormat) async {
+          calls++;
+          expect(path, endsWith('.avif'));
+          expect(await File(path).readAsBytes(), orderedEquals(source));
+          expect(preserveImageFormat, isTrue);
+          return UploadResult(
+            shortUrl: 'upload://avif-jpeg-reencode',
+            url: 'https://example.test/avif-jpeg-reencode.jpg',
+            originalFilename: 'avif-jpeg-reencode.jpg',
+            extension: 'jpg',
+          );
+        },
+        temporaryDirectory: () async => tempDir,
+      ),
+      throwsA(isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        contains('避免透明区域变白'),
+      )),
+    );
+    expect(calls, 1);
+  });
+
+  test('不透明 AVIF 也要求站点保留上传格式', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'fluxdo-stevessr-avif-opaque-',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+    bool? preserveImageFormat;
+    await StevessrComposerService.uploadForTesting(
+      StevessrExportedImage(
+        bytes: Uint8List.fromList([1, 2, 3, 4]),
+        extension: 'avif',
+        mimeType: 'image/avif',
+        containsTransparency: false,
+      ),
+      uploadFile: (path, preserve) async {
+        preserveImageFormat = preserve;
+        expect(path, endsWith('.avif'));
+        return UploadResult(
+          shortUrl: 'upload://opaque-avif',
+          url: 'https://example.test/opaque.avif',
+          originalFilename: 'opaque.avif',
+          extension: 'avif',
+        );
+      },
+      temporaryDirectory: () async => tempDir,
+    );
+    expect(preserveImageFormat, isTrue);
+  });
+
   test('不透明图片继续走普通 composer 上传路径', () async {
     final tempDir = await Directory.systemTemp.createTemp(
       'fluxdo-stevessr-opaque-',
