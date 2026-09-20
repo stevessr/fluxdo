@@ -59,17 +59,12 @@ void main() {
     expect(decoded.height, 20);
   });
 
-  testWidgets('JPEG export refuses to flatten transparent PNG pixels', (
-    tester,
-  ) async {
-    final future = tester.runAsync(
-      () => StevessrExportService.encodeJpegPng(
+  test('JPEG export refuses to flatten transparent PNG pixels', () async {
+    await expectLater(
+      StevessrExportService.encodeJpegPng(
         makePng(transparent: true),
         quality: 80,
       ),
-    );
-    await expectLater(
-      future,
       throwsA(
         isA<StateError>().having(
           (error) => error.message,
