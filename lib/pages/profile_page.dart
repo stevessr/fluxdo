@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/discourse_instance_runtime.dart';
+import '../constants.dart';
 import '../models/user.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/selected_topic_provider.dart';
@@ -124,13 +126,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           .read(discourseServiceProvider)
           .getCurrentUsername();
       if (!AuthSession().isValid(generation)) return;
-      final ldcEnabled = username != null
+      final linuxDoCompanions =
+          DiscourseInstanceRuntime.isDefaultInstance && username != null;
+      final ldcEnabled = linuxDoCompanions
           ? prefs.getBool(
                   AccountManager.accountScopedKey('ldc_enabled', username),
                 ) ??
                 false
           : false;
-      final cdkEnabled = username != null
+      final cdkEnabled = linuxDoCompanions
           ? prefs.getBool(
                   AccountManager.accountScopedKey('cdk_enabled', username),
                 ) ??
@@ -321,6 +325,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _reauthorizeLdc() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return;
     final generation = AuthSession().generation;
     final service = LdcOAuthService();
     if (!mounted) return;
@@ -338,6 +343,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _reauthorizeCdk() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return;
     final generation = AuthSession().generation;
     final service = CdkOAuthService();
     if (!mounted) return;
@@ -357,11 +363,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   Future<void> _openProfileEdit() async {
     final username = ref.read(currentUserProvider).value?.username;
     if (username != null && username.isNotEmpty) {
+      final encodedUsername = Uri.encodeComponent(username);
       await WebViewPage.open(
         context,
-        'https://linux.do/u/$username/preferences/account',
+        '${AppConstants.baseUrl}/u/$encodedUsername/preferences/account',
         title: context.l10n.profile_editProfile,
-        injectCss: '''
+        // 这段布局覆盖只针对 linux.do 当前主题结构。通用 Discourse 让站点
+        // 自己渲染标准偏好页面，避免主题/版本不同导致内容被强制 fixed。
+        injectCss: DiscourseInstanceRuntime.isDefaultInstance
+            ? '''
           .new-user-content-wrapper {
             position: fixed !important;
             top: 0 !important;
@@ -377,7 +387,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           .d-header {
             display: none !important;
           }
-        ''',
+        '''
+            : null,
       );
 
       // 返回后静默刷新数据
@@ -680,6 +691,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   /// LDC/CDK 余额卡片（共用组件）
   Widget _buildBalanceCards() {
+    // LDC/CDK 是 linux.do 私有伴生服务。切到其他 Discourse 后即使同名用户
+    // 的旧偏好仍在本地，也绝不能渲染卡片或向 linux.do 子服务发请求。
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      return const SizedBox.shrink();
+    }
     // 仅本页首次成为活跃 tab 后才渲染余额卡片;未激活时返回空,不建 Consumer、
     // 不 watch provider,从而不触发 cdk/ldc user-info 请求。
     if (!_balanceEverActive) return const SizedBox.shrink();
@@ -1120,7 +1136,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           onPressed: _goToLogin,
           icon: const Icon(Symbols.login_rounded, size: 20),
           label: Text(
-            context.l10n.profile_loginLinuxDo,
+            DiscourseInstanceRuntime.isDefaultInstance
+                ? context.l10n.profile_loginLinuxDo
+                : context.l10n.profile_loginForMore,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
           ),
           style: FilledButton.styleFrom(

@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+import '../config/discourse_instance_runtime.dart';
 import '../constants.dart';
 import '../providers/preferences_provider.dart';
 import '../services/credential_store_service.dart';
@@ -384,9 +385,13 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       return;
     }
 
-    // 验证是否为有效的邮箱登录链接
+    // 只接受当前活动实例（含 relative_url_root）内的邮箱登录链接。
     final uri = Uri.tryParse(text);
-    if (uri == null || !uri.path.startsWith('/session/email-login/')) {
+    final discoursePath = uri == null
+        ? null
+        : DiscourseInstanceRuntime.pathWithinInstance(uri);
+    if (discoursePath == null ||
+        !discoursePath.startsWith('/session/email-login/')) {
       ToastService.showError(S.current.webviewLogin_emailLoginInvalidLink);
       return;
     }
@@ -404,10 +409,19 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
     if (!autoFill) return;
 
     final urlStr = url?.toString() ?? '';
-    final host = Uri.tryParse(urlStr)?.host;
-    if (host == null || host != Uri.parse(AppConstants.baseUrl).host) return;
+    final currentUri = Uri.tryParse(urlStr);
+    if (currentUri == null ||
+        !DiscourseInstanceRuntime.containsUri(
+          currentUri,
+          allowDefaultSubdomains: false,
+        )) {
+      return;
+    }
+    final discoursePath = DiscourseInstanceRuntime.pathWithinInstance(
+      currentUri,
+    );
     // 邮箱链接登录页无需自动填充
-    if (urlStr.contains('/session/email-login/')) return;
+    if (discoursePath?.startsWith('/session/email-login/') == true) return;
 
     final credentials = await _credentialStore.load();
     final hasCredentials =

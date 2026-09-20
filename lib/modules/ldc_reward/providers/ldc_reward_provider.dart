@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../config/discourse_instance_runtime.dart';
 import '../../../l10n/s.dart';
 import '../../../services/account_manager.dart';
 import '../../../services/auth_session.dart';
@@ -38,6 +39,7 @@ class LdcRewardCredentialsNotifier
 
   @override
   Future<LdcRewardCredentials?> build() async {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) return null;
     final generation = AuthSession().generation;
     final store = ref.watch(ldcRewardCredentialStoreProvider);
     final credentials = await store.load();
@@ -46,6 +48,10 @@ class LdcRewardCredentialsNotifier
 
   /// 保存凭证
   Future<void> save(String clientId, String clientSecret) {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      state = const AsyncData(null);
+      return Future.value();
+    }
     final credentials = LdcRewardCredentials(
       clientId: clientId,
       clientSecret: clientSecret,
@@ -62,6 +68,10 @@ class LdcRewardCredentialsNotifier
 
   /// 清除凭证
   Future<void> clear() {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      state = const AsyncData(null);
+      return Future.value();
+    }
     final generation = AuthSession().generation;
     final store = ref.read(ldcRewardCredentialStoreProvider);
     return _enqueueMutation(() async {
@@ -125,6 +135,10 @@ Future<LdcRewardResult> executeReward({
   required int postId,
   String? remark,
 }) async {
+  if (!DiscourseInstanceRuntime.isDefaultInstance) {
+    return LdcRewardResult.error('LDC 打赏仅适用于 LINUX DO 实例');
+  }
+
   // 防重复检查
   final remaining = _RewardCooldown.check(topicId, postId, userId);
   if (remaining != null) {

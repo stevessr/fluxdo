@@ -8,8 +8,10 @@ import '../cf_challenge_service.dart';
 import 'cookie/csrf_token_service.dart';
 import 'interceptors/cf_challenge_interceptor.dart';
 import 'interceptors/cf_challenge_terminal_interceptor.dart';
+import 'interceptors/discourse_base_path_interceptor.dart';
 import 'interceptors/error_interceptor.dart';
 import 'interceptors/http_revalidation_interceptor.dart';
+import 'interceptors/message_bus_isolation_interceptor.dart';
 import 'interceptors/network_log_interceptor.dart';
 import 'interceptors/preload_cache_interceptor.dart';
 import 'interceptors/redirect_interceptor.dart';
@@ -38,9 +40,10 @@ class DiscourseDio {
     bool enableCookies = true,
     bool enableNetworkLog = true,
   }) {
+    final effectiveBaseUrl = baseUrl ?? AppConstants.baseUrl;
     final dio = Dio(
       BaseOptions(
-        baseUrl: baseUrl ?? AppConstants.baseUrl,
+        baseUrl: effectiveBaseUrl,
         connectTimeout: connectTimeout,
         receiveTimeout: receiveTimeout,
         headers: defaultHeaders,
@@ -64,27 +67,37 @@ class DiscourseDio {
     // 由请求侧的 FluxRequestKeys.skipRhttpAdapter 逐请求声明,不在这里分档。
     configurePlatformAdapter(dio);
 
-    // 2. 会话代守卫（最先执行，确保过期请求不进入后续拦截器）
+    // 2. Discourse relative-url-root 前缀必须最先补齐。项目历史 API 调用
+    // 普遍使用 `/latest.json` 这种根路径；若实例部署在 /forum，Dio 原生 URI
+    // 合并会把该请求解析回域名根目录。这里统一改成 /forum/latest.json，
+    // 后续缓存、调度、日志和恢复层看到的都是最终站内路径。
+    dio.interceptors.add(DiscourseBasePathInterceptor(effectiveBaseUrl));
+
+    // MessageBus 可能位于主站或独立 origin。relative-root 补齐后立即把它
+    // 标记为纯消息通道，禁止它触发当前论坛的 auth/session/CF 恢复副作用。
+    dio.interceptors.add(MessageBusIsolationInterceptor(effectiveBaseUrl));
+
+    // 3. 会话代守卫（确保过期请求不进入后续拦截器）
     dio.interceptors.add(SessionGuardInterceptor());
 
-    // 3. 实验性首页 preload cache。
+    // 4. 实验性首页 preload cache。
     // 必须位于请求合并/调度器之前：cache hit 会在 request 阶段直接 resolve，
     // 不能先让后面的组件 acquire 并发槽或登记 in-flight 请求后再短路。
     // cache miss 则 handler.next，完整进入原有网络、CF、重试与 Cookie 链。
     dio.interceptors.add(PreloadCacheInterceptor());
 
-    // 4. 同一会话代内，相同 GET 共享正在进行的请求。
+    // 5. 同一会话代内，相同 GET 共享正在进行的请求。
     // 放在调度器之前，重复请求不会占用并发/速率槽位；最终结果由靠后的
     // Finalizer 完成，确保重试、重定向、CF 验证都结束后才唤醒跟随者。
     dio.interceptors.add(RequestCoalescingInterceptor());
 
-    // 5. 并发限制 + 滑动窗口速率限制（null 表示不限制）
+    // 6. 并发限制 + 滑动窗口速率限制（null 表示不限制）
     // 实际参数从 RequestSchedulerConfig 动态读取
     if (maxConcurrent != null) {
       dio.interceptors.add(RequestSchedulerInterceptor());
     }
 
-    // 6. 恢复协调器:全项目唯一的重放引擎
+    // 7. 恢复协调器:全项目唯一的重放引擎
     //
     // 策略顺序即失败归属(首个 canHandle 者独占决策权):
     //   会话自愈 → rhttp 1xx 旁路 → 引擎降级 → 限流等待 → 瞬态重试
@@ -122,21 +135,21 @@ class DiscourseDio {
       );
     }
 
-    // 7. Cookie 管理
+    // 8. Cookie 管理
     if (cookiesEnabled) {
       dio.interceptors.add(AppCookieManager(cookieJarService.cookieJar));
     }
 
-    // 8. 请求头拦截器
+    // 9. 请求头拦截器
     dio.interceptors.add(RequestHeaderInterceptor(CsrfTokenService()));
 
-    // 9. 重定向拦截器
+    // 10. 重定向拦截器
     dio.interceptors.add(RedirectInterceptor(dio));
 
-    // 10. 错误拦截器
+    // 11. 错误拦截器
     dio.interceptors.add(ErrorInterceptor());
 
-    // 11. CF 验证拦截器 + 终态类型化兜底。
+    // 12. CF 验证拦截器 + 终态类型化兜底。
     // 后者不做重试，只确保验证后仍残留的 challenge 不会以裸 403/429
     // 泄漏给业务层并被误显示成“无权限访问资源”。
     if (enableCfChallenge) {
@@ -146,16 +159,16 @@ class DiscourseDio {
       dio.interceptors.add(CfChallengeTerminalInterceptor());
     }
 
-    // 12. 浏览器式条件重验证缓存。
+    // 13. 浏览器式条件重验证缓存。
     // 仅保存带 ETag/Last-Modified 的小型 GET；不自造 TTL，不让动态 Discourse
     // 数据在客户端长期陈旧。304 在这里展开为缓存 body + 最新响应头。
     dio.interceptors.add(HttpRevalidationInterceptor());
 
-    // 13. 请求合并的最终完成点。必须在恢复/重定向/CF/304 展开之后，
+    // 14. 请求合并的最终完成点。必须在恢复/重定向/CF/304 展开之后，
     // 否则跟随者可能收到中间 429/403/304 而不是业务层最终结果。
     dio.interceptors.add(RequestCoalescingFinalizerInterceptor());
 
-    // 14. 网络日志拦截器（最后一个，记录最终结果）
+    // 15. 网络日志拦截器（最后一个，记录最终结果）
     // 注意：Gateway URL 改写已移至 HttpClientAdapter 层（_GatewayAdapterWrapper），
     // 所有拦截器始终看到原始 URL，无需额外处理。
     if (enableNetworkLog) {

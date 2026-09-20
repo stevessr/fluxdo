@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../config/discourse_instance_runtime.dart';
 import '../../../l10n/s.dart';
 import '../../../pages/webview_page.dart';
 import '../../../utils/dialog_utils.dart';
@@ -13,6 +14,9 @@ class LdcRewardConfigTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!DiscourseInstanceRuntime.isDefaultInstance) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     final credentialsAsync = ref.watch(ldcRewardCredentialsProvider);
 

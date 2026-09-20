@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import 'account_browser_session_policy.dart';
 import 'auth_session.dart';
+import '../config/discourse_instance_runtime.dart';
 import '../constants.dart';
 import 'discourse/discourse_service.dart';
 import 'network/cookie/cookie_full_info.dart';
@@ -73,8 +74,19 @@ class AccountManager {
   static const String guestAccountId = 'guest';
 
   /// LDC/CDK、打赏凭证等账号级 SharedPreferences key 的统一命名规则。
+  ///
+  /// 默认 linux.do 继续沿用历史 key，避免升级后丢失已有偏好；自定义
+  /// Discourse 追加实例 namespace，防止两个论坛里的同名账号撞到同一份
+  /// SharedPreferences 状态。
   static String accountScopedKey(String key, String accountId) {
-    return '$key::${Uri.encodeComponent(accountId)}';
+    final encodedAccount = Uri.encodeComponent(accountId);
+    if (DiscourseInstanceRuntime.isDefaultInstance) {
+      return '$key::$encodedAccount';
+    }
+    final encodedInstance = Uri.encodeComponent(
+      DiscourseInstanceRuntime.instanceId,
+    );
+    return '$key::discourse_instance::$encodedInstance::$encodedAccount';
   }
 
   static const Set<String> _deviceCookieNames = {'cf_clearance', '__cf_bm'};
