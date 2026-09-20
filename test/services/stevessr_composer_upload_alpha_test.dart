@@ -110,9 +110,26 @@ void main() {
     addTearDown(() => tempDir.delete(recursive: true));
     // Upload tests exercise the format/metadata path, not native AVIF encoding.
     final source = Uint8List.fromList([
-      0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70,
-      0x61, 0x76, 0x69, 0x66, 0, 0, 0, 0,
-      0x61, 0x76, 0x69, 0x66,
+      0,
+      0,
+      0,
+      20,
+      0x66,
+      0x74,
+      0x79,
+      0x70,
+      0x61,
+      0x76,
+      0x69,
+      0x66,
+      0,
+      0,
+      0,
+      0,
+      0x61,
+      0x76,
+      0x69,
+      0x66,
     ]);
     var calls = 0;
     await expectLater(
@@ -137,11 +154,13 @@ void main() {
         },
         temporaryDirectory: () async => tempDir,
       ),
-      throwsA(isA<StateError>().having(
-        (error) => error.message,
-        'message',
-        contains('避免透明区域变白'),
-      )),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('避免透明区域变白'),
+        ),
+      ),
     );
     expect(calls, 1);
   });
