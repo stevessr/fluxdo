@@ -129,7 +129,8 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
     // JPEG cannot preserve alpha. Switching to a transparent canvas/background
     // keeps the user's transparent image instead of silently flattening it.
     final normalized = params.normalized();
-    final safe = normalized.format == StevessrFormat.jpeg &&
+    final safe =
+        normalized.format == StevessrFormat.jpeg &&
             (normalized.transparent || normalized.background.a < 1)
         ? normalized.copyWith(format: StevessrFormat.png)
         : normalized;
@@ -553,9 +554,13 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             _buildEnumDropdown<StevessrFormat>(
               label: l10n.format,
               value: _params.format,
-              values: StevessrFormat.values.where((format) =>
-                  format != StevessrFormat.jpeg ||
-                  (!_params.transparent && _params.background.a == 1)).toList(),
+              values: StevessrFormat.values
+                  .where(
+                    (format) =>
+                        format != StevessrFormat.jpeg ||
+                        (!_params.transparent && _params.background.a == 1),
+                  )
+                  .toList(),
               labelBuilder: (value) => switch (value) {
                 StevessrFormat.png => l10n.png,
                 StevessrFormat.webp => l10n.webp,
@@ -576,9 +581,8 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
                 max: 100,
                 divisions: 80,
                 label: '${_params.quality}%',
-                onChanged: (value) => _setParams(
-                  _params.copyWith(quality: value.round()),
-                ),
+                onChanged: (value) =>
+                    _setParams(_params.copyWith(quality: value.round())),
               ),
             ],
             const SizedBox(height: 12),
@@ -741,9 +745,11 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
                   child: FilledButton.icon(
                     onPressed: _isExporting ? null : _save,
                     icon: const Icon(Icons.save_rounded),
-                    label: Text(_params.format == StevessrFormat.avif
-                        ? '${l10n.save} (.avif)'
-                        : l10n.save),
+                    label: Text(
+                      _params.format == StevessrFormat.avif
+                          ? '${l10n.save} (.avif)'
+                          : l10n.save,
+                    ),
                   ),
                 ),
                 if (ShareUtils.canShareFiles) ...[
