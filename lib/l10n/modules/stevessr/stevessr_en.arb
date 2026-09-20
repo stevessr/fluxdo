@@ -14,6 +14,7 @@
   "imageTooLarge": "Image must be 12 MB or smaller",
   "expression": "Expression",
   "bubble": "Bubble",
+  "quality": "Quality",
   "format": "Format",
   "background": "Background",
   "transparent": "Transparent background",
