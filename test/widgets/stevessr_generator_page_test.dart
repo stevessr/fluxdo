@@ -32,6 +32,43 @@ void main() {
     expect(find.byType(TextField), findsWidgets);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('选择非 StevesSR 角色时隐藏表情选择', (tester) async {
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocaleUtils.supportedLocales,
+          home: const StevessrGeneratorPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byType(DropdownButtonFormField<StevessrExpression>),
+      findsOneWidget,
+    );
+    final characterDropdown = find.byType(
+      DropdownButtonFormField<StevessrCharacter>,
+    );
+    await tester.ensureVisible(characterDropdown);
+    await tester.pump();
+    await tester.tap(characterDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('博丽灵梦').last);
+    await tester.pump();
+
+    expect(
+      find.byType(DropdownButtonFormField<StevessrExpression>),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('嵌入编辑器模式显示生成并插入按钮', (tester) async {
     await tester.pumpWidget(

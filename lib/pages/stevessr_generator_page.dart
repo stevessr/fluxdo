@@ -521,7 +521,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               ),
               onChanged: _setText,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildBubbleContentControls(),
             _buildEnumDropdown<StevessrCharacter>(
               label: l10n.character,
@@ -533,16 +533,18 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               onChanged: (value) =>
                   _setParams(_params.copyWith(character: value)),
             ),
-            const SizedBox(height: 12),
-            _buildEnumDropdown<StevessrExpression>(
-              label: l10n.expression,
-              value: _params.expression,
-              values: StevessrExpression.values,
-              labelBuilder: _enumLabel,
-              onChanged: (value) =>
-                  _setParams(_params.copyWith(expression: value)),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            if (_params.character.supportsExpression) ...[
+              _buildEnumDropdown<StevessrExpression>(
+                label: l10n.expression,
+                value: _params.expression,
+                values: StevessrExpression.values,
+                labelBuilder: _enumLabel,
+                onChanged: (value) =>
+                    _setParams(_params.copyWith(expression: value)),
+              ),
+              const SizedBox(height: 8),
+            ],
             _buildEnumDropdown<StevessrBubble>(
               label: l10n.bubble,
               value: _params.bubble,
@@ -550,7 +552,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               labelBuilder: _enumLabel,
               onChanged: (value) => _setParams(_params.copyWith(bubble: value)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildEnumDropdown<StevessrFormat>(
               label: l10n.format,
               value: _params.format,
@@ -573,7 +575,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             if (_params.format == StevessrFormat.webp ||
                 _params.format == StevessrFormat.avif ||
                 _params.format == StevessrFormat.jpeg) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text('${l10n.quality}: ${_params.quality}%'),
               Slider(
                 value: _params.quality.toDouble(),
@@ -585,9 +587,9 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
                     _setParams(_params.copyWith(quality: value.round())),
               ),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildSizePresetSelector(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -660,7 +662,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               },
               onChanged: (value) => _setParams(_params.copyWith(tail: value)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildEnumDropdown<StevessrFont>(
               label: l10n.font,
               value: _params.font,
@@ -673,7 +675,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               },
               onChanged: (value) => _setParams(_params.copyWith(font: value)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildEnumDropdown<StevessrTextAlign>(
               label: l10n.align,
               value: _params.align,
@@ -685,7 +687,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               },
               onChanged: (value) => _setParams(_params.copyWith(align: value)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -707,7 +709,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -793,7 +795,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
           onChanged: _setBubbleContent,
         ),
         if (_params.bubbleContent == StevessrBubbleContent.image) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           if (imageBytes != null && imageBytes.isNotEmpty)
             Container(
               height: 180,
@@ -855,7 +857,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
           heightController: _bubbleHeightController,
           onChanged: _updateBubbleRect,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         _buildRectFields(
           title: l10n.expression,
           xController: _characterXController,
@@ -931,7 +933,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
     required ValueChanged<String> onChanged,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 8),
       child: TextField(
         controller: controller,
         decoration: InputDecoration(

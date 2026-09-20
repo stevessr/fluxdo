@@ -51,7 +51,7 @@ void main() {
 
   testWidgets('SVG 气泡内容可以使用图片并隐藏文字', (tester) async {
     final imageData = await rootBundle.load(
-      'assets/images/stevessr/happy.webp',
+      'assets/images/avater/stevessr/happy.webp',
     );
     final imageBytes = imageData.buffer.asUint8List(
       imageData.offsetInBytes,
@@ -78,7 +78,7 @@ void main() {
 
   testWidgets('PNG 导出会捕获气泡内图片', (tester) async {
     final imageData = await rootBundle.load(
-      'assets/images/stevessr/happy.webp',
+      'assets/images/avater/stevessr/happy.webp',
     );
     final imageBytes = imageData.buffer.asUint8List(
       imageData.offsetInBytes,
@@ -117,7 +117,7 @@ void main() {
 
   testWidgets('画布支持所有气泡使用图片内容', (tester) async {
     final imageData = await rootBundle.load(
-      'assets/images/stevessr/happy.webp',
+      'assets/images/avater/stevessr/happy.webp',
     );
     final imageBytes = imageData.buffer.asUint8List(
       imageData.offsetInBytes,

@@ -33,9 +33,9 @@ enum StevessrBubble { thought, speech, cloud, shout, rounded, caption }
 
 /// 生成器可选的角色立绘。
 ///
-/// [StevessrCharacter.original] 渲染 `assets/images/stevessr/` 下的表情
-/// 素材（此时由 [StevessrExpression] 决定表情）；其余值渲染
-/// `assets/images/touhou/` 下的东方 Project 角色立绘，表情维度不生效。
+/// [StevessrCharacter.original] 渲染 `assets/images/avater/stevessr/` 下的表情
+/// 素材（此时由 [StevessrExpression] 决定）；其余值渲染
+/// `assets/images/avater/` 下对应目录的角色立绘，表情维度不生效。
 enum StevessrCharacter {
   original,
   reimu,
@@ -66,6 +66,21 @@ enum StevessrCharacter {
   maribel,
   keine,
   deepseek,
+  blueArchive01,
+  blueArchive02,
+  blueArchive03,
+  blueArchive04,
+  blueArchive05,
+  witchJudgment01,
+  witchJudgment02,
+  witchJudgment03,
+  witchJudgment04,
+  witchJudgment05,
+  witchJudgment06,
+  witchJudgment07,
+  witchJudgment08,
+  witchJudgment09,
+  witchJudgment10,
 }
 
 extension StevessrCharacterKey on StevessrCharacter {
@@ -73,7 +88,48 @@ extension StevessrCharacterKey on StevessrCharacter {
   String get key => switch (this) {
     StevessrCharacter.original => '',
     StevessrCharacter.okuuRin => 'okuu_rin',
+    StevessrCharacter.blueArchive01 => 'blue_archive_01',
+    StevessrCharacter.blueArchive02 => 'blue_archive_02',
+    StevessrCharacter.blueArchive03 => 'blue_archive_03',
+    StevessrCharacter.blueArchive04 => 'blue_archive_04',
+    StevessrCharacter.blueArchive05 => 'blue_archive_05',
+    StevessrCharacter.witchJudgment01 => 'witch_judgment_01',
+    StevessrCharacter.witchJudgment02 => 'witch_judgment_02',
+    StevessrCharacter.witchJudgment03 => 'witch_judgment_03',
+    StevessrCharacter.witchJudgment04 => 'witch_judgment_04',
+    StevessrCharacter.witchJudgment05 => 'witch_judgment_05',
+    StevessrCharacter.witchJudgment06 => 'witch_judgment_06',
+    StevessrCharacter.witchJudgment07 => 'witch_judgment_07',
+    StevessrCharacter.witchJudgment08 => 'witch_judgment_08',
+    StevessrCharacter.witchJudgment09 => 'witch_judgment_09',
+    StevessrCharacter.witchJudgment10 => 'witch_judgment_10',
     _ => name,
+  };
+
+  /// 是否使用 StevesSR 表情素材。
+  bool get supportsExpression => this == StevessrCharacter.original;
+
+  /// 资源路径（相对于 `assets/images/avater/`）。
+  String assetPath({StevessrExpression? expression}) => switch (this) {
+    StevessrCharacter.original =>
+      'stevessr/${(expression ?? StevessrExpression.neutral).key}.webp',
+    StevessrCharacter.deepseek => 'llm/deepseek.webp',
+    StevessrCharacter.blueArchive01 ||
+    StevessrCharacter.blueArchive02 ||
+    StevessrCharacter.blueArchive03 ||
+    StevessrCharacter.blueArchive04 ||
+    StevessrCharacter.blueArchive05 => 'blue_archive/$key.webp',
+    StevessrCharacter.witchJudgment01 ||
+    StevessrCharacter.witchJudgment02 ||
+    StevessrCharacter.witchJudgment03 ||
+    StevessrCharacter.witchJudgment04 ||
+    StevessrCharacter.witchJudgment05 ||
+    StevessrCharacter.witchJudgment06 ||
+    StevessrCharacter.witchJudgment07 ||
+    StevessrCharacter.witchJudgment08 ||
+    StevessrCharacter.witchJudgment09 ||
+    StevessrCharacter.witchJudgment10 => 'witch_judgment/$key.webp',
+    _ => 'touhou/$key.webp',
   };
 
   /// 下拉列表显示名；东方角色用官方中文译名。
@@ -107,6 +163,21 @@ extension StevessrCharacterKey on StevessrCharacter {
     StevessrCharacter.maribel => '玛艾露贝莉·赫恩',
     StevessrCharacter.keine => '上白泽慧音',
     StevessrCharacter.deepseek => '鲸鲸子',
+    StevessrCharacter.blueArchive01 => '碧蓝档案 01',
+    StevessrCharacter.blueArchive02 => '碧蓝档案 02',
+    StevessrCharacter.blueArchive03 => '碧蓝档案 03',
+    StevessrCharacter.blueArchive04 => '碧蓝档案 04',
+    StevessrCharacter.blueArchive05 => '碧蓝档案 05',
+    StevessrCharacter.witchJudgment01 => '魔法少女的魔女审判 01',
+    StevessrCharacter.witchJudgment02 => '魔法少女的魔女审判 02',
+    StevessrCharacter.witchJudgment03 => '魔法少女的魔女审判 03',
+    StevessrCharacter.witchJudgment04 => '魔法少女的魔女审判 04',
+    StevessrCharacter.witchJudgment05 => '魔法少女的魔女审判 05',
+    StevessrCharacter.witchJudgment06 => '魔法少女的魔女审判 06',
+    StevessrCharacter.witchJudgment07 => '魔法少女的魔女审判 07',
+    StevessrCharacter.witchJudgment08 => '魔法少女的魔女审判 08',
+    StevessrCharacter.witchJudgment09 => '魔法少女的魔女审判 09',
+    StevessrCharacter.witchJudgment10 => '魔法少女的魔女审判 10',
   };
 }
 

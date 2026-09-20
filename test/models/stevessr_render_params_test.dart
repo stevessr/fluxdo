@@ -161,13 +161,45 @@ void main() {
         'maribel',
         'keine',
         'deepseek',
+        'blue_archive_01',
+        'blue_archive_02',
+        'blue_archive_03',
+        'blue_archive_04',
+        'blue_archive_05',
+        'witch_judgment_01',
+        'witch_judgment_02',
+        'witch_judgment_03',
+        'witch_judgment_04',
+        'witch_judgment_05',
+        'witch_judgment_06',
+        'witch_judgment_07',
+        'witch_judgment_08',
+        'witch_judgment_09',
+        'witch_judgment_10',
       ]),
     );
     expect(
       StevessrCharacter.values.map((value) => value.displayName),
-      containsAll(<String>['博丽灵梦', '雾雨魔理沙', '琪露诺', '蕾米莉亚·斯卡蕾特']),
+      containsAll(<String>[
+        '博丽灵梦',
+        '雾雨魔理沙',
+        '琪露诺',
+        '蕾米莉亚·斯卡蕾特',
+        '碧蓝档案 01',
+        '魔法少女的魔女审判 10',
+      ]),
     );
     expect(StevessrCharacter.original.displayName, '');
+    expect(StevessrCharacter.original.supportsExpression, isTrue);
+    expect(StevessrCharacter.blueArchive01.supportsExpression, isFalse);
+    expect(
+      StevessrCharacter.blueArchive01.assetPath(),
+      'blue_archive/blue_archive_01.webp',
+    );
+    expect(
+      StevessrCharacter.witchJudgment10.assetPath(),
+      'witch_judgment/witch_judgment_10.webp',
+    );
     expect(
       StevessrBubble.values.map((value) => value.key),
       containsAll(<String>[

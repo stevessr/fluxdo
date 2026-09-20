@@ -247,9 +247,11 @@ flutter:
     - assets/icons/thinking/
     - assets/polyfill/
     - assets/cook/
-    - assets/images/stevessr/
-    - assets/images/touhou/
-    - assets/images/llm/
+    - assets/images/avater/stevessr/
+    - assets/images/avater/touhou/
+    - assets/images/avater/llm/
+    - assets/images/avater/blue_archive/
+    - assets/images/avater/witch_judgment/
 
   fonts:
     - family: MiSans

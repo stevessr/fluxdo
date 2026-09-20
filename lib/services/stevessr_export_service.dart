@@ -37,8 +37,7 @@ class StevessrExportedImage {
 
 /// 将预览画布导出为 PNG、WebP、AVIF、JPEG 或 SVG。
 abstract final class StevessrExportService {
-  static const _assetPrefix = 'assets/images/stevessr/';
-  static const _touhouAssetPrefix = 'assets/images/touhou/';
+  static const _assetRoot = 'assets/images/avater/';
 
   static Future<StevessrExportedImage> render({
     required StevessrRenderParams params,
@@ -233,9 +232,8 @@ abstract final class StevessrExportService {
   }
 
   static Future<List<int>> _buildSvg(StevessrRenderParams p) async {
-    final characterAsset = p.character == StevessrCharacter.original
-        ? '$_assetPrefix${p.expression.key}.webp'
-        : '$_touhouAssetPrefix${p.character.key}.webp';
+    final characterAsset =
+        '$_assetRoot${p.character.assetPath(expression: p.expression)}';
     final asset = await rootBundle.load(characterAsset);
     final imageBase64 = base64Encode(
       asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes),
