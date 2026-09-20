@@ -565,6 +565,22 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               },
               onChanged: (value) => _setParams(_params.copyWith(format: value)),
             ),
+            if (_params.format == StevessrFormat.webp ||
+                _params.format == StevessrFormat.avif ||
+                _params.format == StevessrFormat.jpeg) ...[
+              const SizedBox(height: 12),
+              Text('${l10n.quality}: ${_params.quality}%'),
+              Slider(
+                value: _params.quality.toDouble(),
+                min: 20,
+                max: 100,
+                divisions: 80,
+                label: '${_params.quality}%',
+                onChanged: (value) => _setParams(
+                  _params.copyWith(quality: value.round()),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             _buildSizePresetSelector(),
             const SizedBox(height: 12),
