@@ -5,10 +5,12 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_avif/flutter_avif.dart' as avif;
-import 'package:image/image.dart' as img;
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import 'package:flutter/widgets.dart';
+import '../l10n/s.dart';
 import '../models/stevessr_render_params.dart';
+import '../services/toast_service.dart';
 import '../utils/image_save_utils.dart';
 import '../utils/screenshot_utils.dart';
 import '../utils/share_utils.dart';
@@ -187,8 +189,20 @@ abstract final class StevessrExportService {
     return bytes;
   }
 
-  /// 保存到相册/文件选择器，沿用 FluxDO 的平台适配和提示。
-  static Future<bool> save(StevessrExportedImage image) {
+  /// Gallery plugins do not consistently recognize AVIF bytes on mobile.
+  /// Use a native Save As document picker instead, preserving the exact
+  /// extension and bytes; other formats keep the existing gallery behavior.
+  static Future<bool> save(StevessrExportedImage image) async {
+    if (image.extension.toLowerCase() == 'avif') {
+      if (image.bytes.isEmpty) throw StateError('AVIF 图片数据为空');
+      final file = await ShareUtils.createOutboxFile('stevessr.avif');
+      await file.writeAsBytes(image.bytes, flush: true);
+      final outcome = await ShareUtils.saveFileAs(
+        XFile(file.path, mimeType: image.mimeType),
+      );
+      if (outcome.shared) ToastService.showSuccess(S.current.share_fileSaved);
+      return outcome.shared;
+    }
     return ImageSaveUtils.saveBytes(
       image.bytes,
       fileName: 'stevessr.${image.extension}',
