@@ -741,7 +741,9 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
                   child: FilledButton.icon(
                     onPressed: _isExporting ? null : _save,
                     icon: const Icon(Icons.save_rounded),
-                    label: Text(l10n.save),
+                    label: Text(_params.format == StevessrFormat.avif
+                        ? '${l10n.save} (.avif)'
+                        : l10n.save),
                   ),
                 ),
                 if (ShareUtils.canShareFiles) ...[
