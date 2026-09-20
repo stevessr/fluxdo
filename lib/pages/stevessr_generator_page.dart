@@ -126,7 +126,14 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
   }
 
   void _setParams(StevessrRenderParams params) {
-    setState(() => _params = params.normalized());
+    // JPEG cannot preserve alpha. Switching to a transparent canvas/background
+    // keeps the user's transparent image instead of silently flattening it.
+    final normalized = params.normalized();
+    final safe = normalized.format == StevessrFormat.jpeg &&
+            (normalized.transparent || normalized.background.a < 1)
+        ? normalized.copyWith(format: StevessrFormat.png)
+        : normalized;
+    setState(() => _params = safe);
   }
 
   void _setText(String value) {
@@ -546,10 +553,14 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             _buildEnumDropdown<StevessrFormat>(
               label: l10n.format,
               value: _params.format,
-              values: StevessrFormat.values,
+              values: StevessrFormat.values.where((format) =>
+                  format != StevessrFormat.jpeg ||
+                  (!_params.transparent && _params.background.a == 1)).toList(),
               labelBuilder: (value) => switch (value) {
                 StevessrFormat.png => l10n.png,
                 StevessrFormat.webp => l10n.webp,
+                StevessrFormat.avif => 'AVIF',
+                StevessrFormat.jpeg => 'JPEG',
                 StevessrFormat.svg => l10n.svg,
               },
               onChanged: (value) => _setParams(_params.copyWith(format: value)),
