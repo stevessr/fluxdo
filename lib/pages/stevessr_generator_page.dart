@@ -126,7 +126,15 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
   }
 
   void _setParams(StevessrRenderParams params) {
-    setState(() => _params = params.normalized());
+    // JPEG cannot preserve alpha. Switching to a transparent canvas/background
+    // keeps the user's transparent image instead of silently flattening it.
+    final normalized = params.normalized();
+    final safe =
+        normalized.format == StevessrFormat.jpeg &&
+            (normalized.transparent || normalized.background.a < 1)
+        ? normalized.copyWith(format: StevessrFormat.png)
+        : normalized;
+    setState(() => _params = safe);
   }
 
   void _setText(String value) {
@@ -546,14 +554,37 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
             _buildEnumDropdown<StevessrFormat>(
               label: l10n.format,
               value: _params.format,
-              values: StevessrFormat.values,
+              values: StevessrFormat.values
+                  .where(
+                    (format) =>
+                        format != StevessrFormat.jpeg ||
+                        (!_params.transparent && _params.background.a == 1),
+                  )
+                  .toList(),
               labelBuilder: (value) => switch (value) {
                 StevessrFormat.png => l10n.png,
                 StevessrFormat.webp => l10n.webp,
+                StevessrFormat.avif => 'AVIF',
+                StevessrFormat.jpeg => 'JPEG',
                 StevessrFormat.svg => l10n.svg,
               },
               onChanged: (value) => _setParams(_params.copyWith(format: value)),
             ),
+            if (_params.format == StevessrFormat.webp ||
+                _params.format == StevessrFormat.avif ||
+                _params.format == StevessrFormat.jpeg) ...[
+              const SizedBox(height: 12),
+              Text('${l10n.quality}: ${_params.quality}%'),
+              Slider(
+                value: _params.quality.toDouble(),
+                min: 20,
+                max: 100,
+                divisions: 80,
+                label: '${_params.quality}%',
+                onChanged: (value) =>
+                    _setParams(_params.copyWith(quality: value.round())),
+              ),
+            ],
             const SizedBox(height: 12),
             _buildSizePresetSelector(),
             const SizedBox(height: 12),
@@ -714,7 +745,11 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
                   child: FilledButton.icon(
                     onPressed: _isExporting ? null : _save,
                     icon: const Icon(Icons.save_rounded),
-                    label: Text(l10n.save),
+                    label: Text(
+                      _params.format == StevessrFormat.avif
+                          ? '${l10n.save} (.avif)'
+                          : l10n.save,
+                    ),
                   ),
                 ),
                 if (ShareUtils.canShareFiles) ...[

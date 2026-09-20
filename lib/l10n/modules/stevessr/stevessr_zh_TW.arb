@@ -14,6 +14,7 @@
   "imageTooLarge": "圖片不能超過 12 MB",
   "expression": "表情",
   "bubble": "泡泡",
+  "quality": "匯出品質",
   "format": "格式",
   "background": "背景",
   "transparent": "透明背景",

@@ -128,7 +128,8 @@ dependencies:
   package_info_plus: ^8.1.2
   pro_image_editor: ^11.18.4
   flutter_image_compress: ^2.4.0
-  image: ^4.7.2
+  # 4.10.1 adds cross-platform lossy/lossless WebP encoding for the sticker generator.
+  image: ^4.10.1
   flutter_math_fork: ^0.7.4
   device_info_plus: 12.3.0
   connectivity_plus: 7.0.0
