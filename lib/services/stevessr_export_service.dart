@@ -234,8 +234,8 @@ abstract final class StevessrExportService {
 
   static Future<List<int>> _buildSvg(StevessrRenderParams p) async {
     final characterAsset = p.character == StevessrCharacter.original
-        ? '$_assetPrefix${p.expression.key}.png'
-        : '$_touhouAssetPrefix${p.character.key}.png';
+        ? '$_assetPrefix${p.expression.key}.webp'
+        : '$_touhouAssetPrefix${p.character.key}.webp';
     final asset = await rootBundle.load(characterAsset);
     final imageBase64 = base64Encode(
       asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes),
@@ -262,7 +262,7 @@ $bubble
 $bubbleImage
 $bubbleStroke
 $text
-<image x="${c.x}" y="${c.y}" width="${c.width}" height="${c.height}" preserveAspectRatio="none" href="data:image/png;base64,$imageBase64"/>
+<image x="${c.x}" y="${c.y}" width="${c.width}" height="${c.height}" preserveAspectRatio="none" href="data:image/webp;base64,$imageBase64"/>
 </svg>''';
     return utf8.encode(svg);
   }

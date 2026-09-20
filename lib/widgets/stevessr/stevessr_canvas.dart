@@ -27,9 +27,9 @@ class StevessrCanvas extends StatelessWidget {
   String get _expressionAsset {
     final character = params.character;
     if (character != StevessrCharacter.original) {
-      return '$_touhouAssetPrefix${character.key}.png';
+      return '$_touhouAssetPrefix${character.key}.webp';
     }
-    return '$_assetPrefix${params.expression.key}.png';
+    return '$_assetPrefix${params.expression.key}.webp';
   }
 
   @override

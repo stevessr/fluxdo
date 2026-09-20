@@ -50,7 +50,9 @@ void main() {
   });
 
   testWidgets('SVG 气泡内容可以使用图片并隐藏文字', (tester) async {
-    final imageData = await rootBundle.load('assets/images/stevessr/happy.png');
+    final imageData = await rootBundle.load(
+      'assets/images/stevessr/happy.webp',
+    );
     final imageBytes = imageData.buffer.asUint8List(
       imageData.offsetInBytes,
       imageData.lengthInBytes,
@@ -59,7 +61,7 @@ void main() {
       format: StevessrFormat.svg,
       bubbleContent: StevessrBubbleContent.image,
       bubbleImageBytes: imageBytes,
-      bubbleImageMimeType: 'image/png',
+      bubbleImageMimeType: 'image/webp',
     );
 
     final exported = await StevessrExportService.render(
@@ -70,12 +72,14 @@ void main() {
 
     expect(svg, contains('stevessr-bubble-image-clip'));
     expect(svg, contains('clip-path="url(#stevessr-bubble-image-clip)"'));
-    expect(svg, contains('data:image/png;base64,'));
+    expect(svg, contains('data:image/webp;base64,'));
     expect(svg, isNot(contains('<text')));
   });
 
   testWidgets('PNG 导出会捕获气泡内图片', (tester) async {
-    final imageData = await rootBundle.load('assets/images/stevessr/happy.png');
+    final imageData = await rootBundle.load(
+      'assets/images/stevessr/happy.webp',
+    );
     final imageBytes = imageData.buffer.asUint8List(
       imageData.offsetInBytes,
       imageData.lengthInBytes,
@@ -83,7 +87,7 @@ void main() {
     final params = StevessrRenderParams.defaults().copyWith(
       bubbleContent: StevessrBubbleContent.image,
       bubbleImageBytes: imageBytes,
-      bubbleImageMimeType: 'image/png',
+      bubbleImageMimeType: 'image/webp',
     );
     final boundaryKey = GlobalKey();
 
@@ -112,7 +116,9 @@ void main() {
   });
 
   testWidgets('画布支持所有气泡使用图片内容', (tester) async {
-    final imageData = await rootBundle.load('assets/images/stevessr/happy.png');
+    final imageData = await rootBundle.load(
+      'assets/images/stevessr/happy.webp',
+    );
     final imageBytes = imageData.buffer.asUint8List(
       imageData.offsetInBytes,
       imageData.lengthInBytes,
@@ -120,7 +126,7 @@ void main() {
     var params = StevessrRenderParams.defaults().copyWith(
       bubbleContent: StevessrBubbleContent.image,
       bubbleImageBytes: imageBytes,
-      bubbleImageMimeType: 'image/png',
+      bubbleImageMimeType: 'image/webp',
     );
     final boundaryKey = GlobalKey();
 
