@@ -3,9 +3,9 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:image/image.dart' as img;
-
 import 'package:flutter/rendering.dart';
+import 'package:flutter_avif/flutter_avif.dart' as avif;
+import 'package:image/image.dart' as img;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../models/stevessr_render_params.dart';
@@ -20,14 +20,19 @@ class StevessrExportedImage {
     required this.bytes,
     required this.extension,
     required this.mimeType,
+    this.containsTransparency,
   });
 
   final Uint8List bytes;
   final String extension;
   final String mimeType;
+
+  /// Useful for AVIF uploads: the pure-Dart image package cannot decode AVIF.
+  /// null means that the upload layer must inspect the encoded image instead.
+  final bool? containsTransparency;
 }
 
-/// 将预览画布导出为 PNG、WebP 或 SVG。
+/// 将预览画布导出为 PNG、WebP、AVIF、JPEG 或 SVG。
 abstract final class StevessrExportService {
   static const _assetPrefix = 'assets/images/stevessr/';
   static const _touhouAssetPrefix = 'assets/images/touhou/';
@@ -51,6 +56,27 @@ abstract final class StevessrExportService {
           bytes: webp,
           extension: 'webp',
           mimeType: 'image/webp',
+        );
+      case StevessrFormat.avif:
+        final png = await _capturePng(p, repaintBoundaryKey);
+        final encoded = await encodeAvifPng(png, quality: p.quality);
+        return StevessrExportedImage(
+          bytes: encoded,
+          extension: 'avif',
+          mimeType: 'image/avif',
+          containsTransparency: p.transparent,
+        );
+      case StevessrFormat.jpeg:
+        if (p.transparent || p.background.a < 1) {
+          throw StateError('JPEG 不支持透明背景，请选择 PNG、WebP 或 AVIF');
+        }
+        final png = await _capturePng(p, repaintBoundaryKey);
+        final encoded = await encodeJpegPng(png, quality: p.quality);
+        return StevessrExportedImage(
+          bytes: encoded,
+          extension: 'jpg',
+          mimeType: 'image/jpeg',
+          containsTransparency: false,
         );
       case StevessrFormat.svg:
         return StevessrExportedImage(
@@ -83,6 +109,65 @@ abstract final class StevessrExportService {
       throw StateError('WebP 编码失败：输出格式无效');
     }
     return webp;
+  }
+
+  /// Use the AVIF encoder already bundled with FluxDO. Quality maps onto
+  /// libavif's 0..63 quantizer scale (smaller is better). Keep the alpha
+  /// quantizer at zero even for lossy images so transparent edges stay intact.
+  @visibleForTesting
+  static Future<Uint8List> encodeAvifPng(
+    Uint8List png, {
+    required int quality,
+  }) async {
+    if (png.isEmpty) throw StateError('待编码 PNG 数据为空');
+    final safeQuality = quality.clamp(20, 100).toInt();
+    final quantizer = ((100 - safeQuality) * 0.55).round().clamp(0, 63);
+    final encoded = await avif.encodeAvif(
+      png,
+      speed: 8,
+      minQuantizer: quantizer,
+      maxQuantizer: quantizer,
+      minQuantizerAlpha: 0,
+      maxQuantizerAlpha: 0,
+    );
+    // ISO BMFF: [box size][ftyp][major/compatible brands].
+    // Reject empty/PNG output rather than handing a mislabeled file to save.
+    if (encoded.length < 20 ||
+        encoded[4] != 0x66 || encoded[5] != 0x74 ||
+        encoded[6] != 0x79 || encoded[7] != 0x70 ||
+        !_hasAvifBrand(encoded)) {
+      throw StateError('AVIF 编码失败：输出格式无效');
+    }
+    return encoded;
+  }
+
+  static bool _hasAvifBrand(Uint8List bytes) {
+    final limit = math.min(bytes.length - 3, 40);
+    for (var i = 8; i < limit; i += 4) {
+      if (bytes[i] == 0x61 && bytes[i + 1] == 0x76 &&
+          bytes[i + 2] == 0x69 && bytes[i + 3] == 0x66) {
+        return true; // avif
+      }
+    }
+    return false;
+  }
+
+  @visibleForTesting
+  static Future<Uint8List> encodeJpegPng(
+    Uint8List png, {
+    required int quality,
+  }) async {
+    if (png.isEmpty) throw StateError('待编码 PNG 数据为空');
+    final jpeg = await compute(
+      _encodeJpegBytes,
+      (png: png, quality: quality.clamp(20, 100).toInt()),
+    );
+    if (jpeg.length < 4 ||
+        jpeg[0] != 0xff || jpeg[1] != 0xd8 ||
+        jpeg[jpeg.length - 2] != 0xff || jpeg.last != 0xd9) {
+      throw StateError('JPEG 编码失败：输出格式无效');
+    }
+    return jpeg;
   }
 
   static Future<Uint8List> _capturePng(
@@ -401,4 +486,15 @@ Uint8List _encodeWebpBytes(({Uint8List png, int quality}) request) {
     alphaQuality: 100,
     exact: true,
   );
+}
+
+/// JPEG has no alpha channel. Guard against accidental transparency in source
+/// PNG as well as the form-level transparency check: never discard user pixels.
+Uint8List _encodeJpegBytes(({Uint8List png, int quality}) request) {
+  final image = img.decodePng(request.png);
+  if (image == null) throw FormatException('无法解码画布 PNG');
+  if (image.hasAlpha && image.any((pixel) => pixel.aNormalized < 1.0)) {
+    throw StateError('JPEG 不支持透明像素，请选择 PNG、WebP 或 AVIF');
+  }
+  return img.encodeJpg(image, quality: request.quality);
 }
