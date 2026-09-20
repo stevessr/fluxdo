@@ -1,14 +1,25 @@
+import 'package:fluxdo/widgets/markdown_editor/composer_submission_snapshot.dart';
+
+import '../markdown_editor/uploads/upload_task_labels.dart';
+
+import 'package:fluxdo/widgets/markdown_editor/composer_draft_status.dart';
+
 import '../../utils/platform_utils.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../providers/draft_store_provider.dart';
 
 import 'pm_recipient_field.dart';
 import '../markdown_editor/composer_shortcuts.dart';
 import '../markdown_editor/composer_switch_fade.dart';
 import '../markdown_editor/composer_workbench.dart';
 import '../markdown_editor/composer_page_chrome.dart';
+import '../markdown_editor/composer_header_actions.dart';
+import '../common/character_counts_overlay.dart';
 import '../markdown_editor/composer_view_mode_switcher.dart';
 import '../markdown_editor/markdown_renderer.dart';
 import '../markdown_editor/markdown_editor.dart';
@@ -19,7 +30,6 @@ import '../../models/draft.dart';
 import '../../plugins/plugins.dart';
 import '../../providers/category_provider.dart';
 import '../../services/composer_min_length_resolver.dart';
-import '../common/character_counts_overlay.dart';
 import '../../models/pending_post.dart';
 import '../../pages/pending_posts_page.dart';
 import '../../pages/create_topic_page.dart';
@@ -31,7 +41,9 @@ import '../../services/emoji_handler.dart';
 import '../../services/draft_controller.dart';
 import '../../services/dynamic_content_suspension_service.dart';
 import '../../services/embedded_browser_controller_pool.dart';
+
 import 'package:dio/dio.dart';
+
 import '../../services/app_error_handler.dart';
 import '../../services/network/exceptions/api_exception.dart';
 import '../../services/toast_service.dart';
@@ -41,6 +53,7 @@ import '../../utils/dialog_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../providers/shortcut_provider.dart';
 import '../ai/ai_post_review_button.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
 
 enum _ComposerAction { replyToTopic, replyToPost, newTopic, newPrivateMessage }
@@ -214,6 +227,31 @@ class ReplySheet extends ConsumerStatefulWidget {
 class _ReplySheetState extends ConsumerState<ReplySheet> {
   /// 富文本导入失败(cook 不可用)时本次会话降级纯文本
   bool _richFallback = false;
+  bool _allowClose = false;
+  bool _richModeEnabled = false;
+
+  void _closeWithCurrentContent(dynamic result) {
+    if (!_submitted && !_discarded && !_flushRichContent()) return;
+    setState(() => _allowClose = true);
+    // 等待 PopScope 更新许可；dispose 随后保存刚刚同步的草稿。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(result);
+    });
+  }
+
+  /// 富文本未就绪或导出失败时，绝不能消费 controller 中的旧镜像。
+  bool _flushRichContent() {
+    final rich = _richKey.currentState;
+    final ready = rich != null
+        ? rich.flushToController()
+        : (_showPreview ||
+              _richFallback ||
+              !ref.read(preferencesProvider).useRichComposer);
+    if (!ready) {
+      ToastService.showError('正文尚未同步，已停止操作；请稍后重试，勿关闭编辑器');
+    }
+    return ready;
+  }
 
   /// 预览渲染。与 MarkdownEditor 内部预览同款（MarkdownBody + 空态文案），
   /// 但对富文本/源码两种模式都生效。
@@ -251,7 +289,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
       return;
     }
     final hadFocus = _contentFocusNode.hasFocus;
-    _richKey.currentState?.flushToController();
+    if (!_flushRichContent()) return;
     _editorKey.currentState?.closeEmojiPanel();
     _richKey.currentState?.closeEmojiPanel();
     _contentFocusNode.unfocus();
@@ -266,17 +304,43 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     }
   }
 
-  Widget _buildReplyContext() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 4),
-    child: Text(
-      _replyToPost == null
-          ? (_isEditMode ? S.current.common_edit : S.current.post_replyToTopic)
-          : '${_replyToPost!.username} · #${_replyToPost!.postNumber}',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.labelMedium,
-    ),
-  );
+  Widget _buildReplyContext() {
+    final theme = Theme.of(context);
+    final target = widget.replyToPost;
+    final title = widget.topicTitle?.trim();
+    final (label, icon) = _isEditMode
+        ? ('#${widget.editPost!.postNumber}', Symbols.edit_rounded)
+        : _isPrivateMessage && _recipients.isNotEmpty
+        ? (_recipients.map((name) => '@$name').join(', '), Symbols.mail_rounded)
+        : target != null
+        ? ('@${target.username} · #${target.postNumber}', Symbols.reply_rounded)
+        : title != null && title.isNotEmpty
+        ? (title, Symbols.reply_rounded)
+        : (_viewMode.label, _viewMode.icon);
+    return Tooltip(
+      message: label,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          children: [
+            AppIcon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   bool _previewHadFocus = false;
 
@@ -284,7 +348,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     final leaving = _showPreview;
     if (!leaving) {
       _previewHadFocus = _contentFocusNode.hasFocus;
-      _richKey.currentState?.flushToController();
+      if (!_flushRichContent()) return;
       _editorKey.currentState?.closeEmojiPanel();
       _richKey.currentState?.closeEmojiPanel();
       FocusScope.of(context).unfocus();
@@ -308,34 +372,157 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     });
   }
 
-  Widget _buildReviewButton() {
-    if (!_canReviewPost ||
-        !ref.watch(preferencesProvider).aiPostReviewEnabled) {
-      return const SizedBox.shrink();
-    }
-    return AiPostReviewButton(
-      titleBuilder: () => widget.topicTitle,
-      contentBuilder: () {
-        _richKey.currentState?.flushToController();
-        return _contentController.text;
-      },
-      target: AiPostReviewTarget.reply,
-      enabled: !_isSubmitting && !_isLoadingRaw,
-      builder: (_, reviewing, trigger) => ComposerActionButton(
-        icon: Symbols.auto_awesome_rounded,
-        label: S.current.aiPostReview_button,
-        busy: reviewing,
-        onPressed: trigger,
-      ),
+  Widget _buildHeaderActions(
+    double availableWidth, {
+    double? minimumTitleWidth,
+  }) => ComposerHeaderActions(
+    availableWidth: availableWidth,
+    minimumTitleWidth: minimumTitleWidth,
+    submitLabel: _isEditMode
+        ? context.l10n.common_save
+        : context.l10n.common_send,
+    submitIcon: _isEditMode ? AppIcons.check : null,
+    onSubmit: (_isSubmitting || _isLoadingRaw) ? null : _submit,
+    submitting: _isSubmitting,
+    previewing: _showPreview,
+    onTogglePreview: !_isSubmitting && !_isLoadingRaw ? _togglePreview : null,
+    draftStatus: _draftController?.statusNotifier,
+    onRetryDraft: _isSubmitting ? null : _retryDraftSave,
+    showDiscard: _draftController != null,
+    onDiscard: _isSubmitting ? null : _discardDraft,
+    reviewBuilder:
+        _canReviewPost && ref.watch(preferencesProvider).aiPostReviewEnabled
+        ? (builder) => AiPostReviewButton(
+            titleBuilder: () => widget.topicTitle,
+            contentBuilder: () {
+              if (!_flushRichContent()) return '';
+              return _contentController.text;
+            },
+            target: AiPostReviewTarget.reply,
+            enabled: !_isSubmitting && !_isLoadingRaw,
+            builder: (_, reviewing, trigger) => builder(reviewing, trigger),
+          )
+        : null,
+  );
+
+  Widget _buildHeaderTitle(
+    ThemeData theme, {
+    TextStyle? style,
+    bool wrapTarget = false,
+  }) {
+    final target = widget.replyToPost;
+    final label = _isEditMode
+        ? context.l10n.post_editPostTitle(widget.editPost!.postNumber)
+        : _isPrivateMessage
+        ? (_recipients.isEmpty
+              ? context.l10n.pm_newTitle
+              : context.l10n.post_sendPmTitle(_recipients.join(', ')))
+        : target != null
+        ? context.l10n.post_replyToUser(target.username)
+        : context.l10n.post_replyToTopic;
+    return Row(
+      children: [
+        if (!_isEditMode && !_isPrivateMessage && target != null) ...[
+          SmartAvatar(
+            imageUrl: target.getAvatarUrl().isNotEmpty
+                ? target.getAvatarUrl()
+                : null,
+            radius: 14,
+            fallbackText: target.username,
+            backgroundColor: theme.colorScheme.primaryContainer,
+          ),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Tooltip(
+            message: label,
+            child: Text(
+              wrapTarget ? '@${target!.username}' : label,
+              key: const ValueKey('reply-composer-title-text'),
+              style: style,
+              maxLines: wrapTarget ? null : 1,
+              overflow: wrapTarget
+                  ? TextOverflow.visible
+                  : TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  final _richKey = GlobalKey<RichComposerEditorState>();
+  Widget _buildResponsiveHeader(ThemeData theme, double width) {
+    final target = widget.replyToPost;
+    final compactTarget =
+        (width < 600 || !PlatformUtils.isDesktop) &&
+        !_isEditMode &&
+        !_isPrivateMessage &&
+        target != null;
+    final style = compactTarget
+        ? theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)
+        : null;
+    double? titleWidth;
+    if (compactTarget) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: context.l10n.post_replyToUser(target.username),
+          style: style,
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      titleWidth = painter.width.ceilToDouble() + 28 + 8;
+      painter.dispose();
+    }
+    // 56 navigation + 32 title margins + 44 more + 8 gap + 48 submit + 16 trailing.
+    // When even the compact action row cannot fit the recipient, give it its
+    // own full-width row instead of truncating the identity or shrinking taps.
+    final separateTarget = compactTarget && titleWidth! > width - 204;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: kToolbarHeight,
+          child: AppBar(
+            key: const ValueKey('reply-composer-header'),
+            primary: false,
+            centerTitle: false,
+            automaticallyImplyLeading: false,
+            leading: CloseButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+            ),
+            title: separateTarget
+                ? Text(context.l10n.common_reply)
+                : _buildHeaderTitle(theme, style: style),
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            actions: [
+              _buildHeaderActions(
+                width,
+                minimumTitleWidth: separateTarget ? width : titleWidth,
+              ),
+            ],
+          ),
+        ),
+        if (separateTarget)
+          Padding(
+            key: const ValueKey('reply-composer-recipient-row'),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _buildHeaderTitle(theme, style: style, wrapTarget: true),
+          ),
+      ],
+    );
+  }
+
+  var _richKey = GlobalKey<RichComposerEditorState>();
 
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   final _contentFocusNode = FocusNode();
-  final _editorKey = GlobalKey<MarkdownEditorState>();
+  var _editorKey = GlobalKey<MarkdownEditorState>();
 
   // 编辑帖子时允许调整“回复至”目标楼层。
   final _editReplyTargetController = TextEditingController();
@@ -350,6 +537,8 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   bool _showEmojiPanel = false;
   bool _isLoadingRaw = false; // 编辑模式：加载原始内容中
   bool _isLoadingDraft = false; // 加载草稿中
+  bool _restoringDraft = false;
+  bool _reloadingDraft = false;
 
   // 表情面板高度
   static const double _emojiPanelHeight = 280.0;
@@ -451,6 +640,11 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     // 但计数器在编辑帖子时同样需要实时更新
     _contentController.addListener(_onContentLengthChanged);
     _loadMinPostLength();
+    _draftLifecycle = AppLifecycleListener(
+      onInactive: _flushDraftForLifecycle,
+      onPause: _flushDraftForLifecycle,
+      onResume: () => _flushDraftForLifecycle(refresh: true),
+    );
 
     // 自动聚焦（非编辑模式时立即聚焦，编辑模式在加载完成后聚焦）
     if (!_isEditMode) {
@@ -717,7 +911,26 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
       return;
     }
 
-    _draftController = DraftController(draftKey: draftKey);
+    _draftController = DraftController(
+      draftKey: draftKey,
+      localStore: ref.read(localDraftStoreProvider),
+      onRemoteDraftChanged: (data) {
+        if (mounted &&
+            !_submitted &&
+            !_discarded &&
+            (!_isLoadingDraft || _reloadingDraft)) {
+          _restoreDraft(
+            Draft(draftKey: draftKey, data: data),
+            appendInitialContent: false,
+          );
+        }
+      },
+      currentEditorData: () {
+        if (!mounted || (_isLoadingDraft && !_reloadingDraft)) return null;
+        if (!_flushRichContent()) return null;
+        return _currentDraftData();
+      },
+    );
     if (shouldLoadDraft) {
       _loadExistingDraft();
     }
@@ -739,6 +952,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     } finally {
       if (mounted) {
         setState(() => _isLoadingDraft = false);
+        if (widget.initialContent?.isNotEmpty == true) _onContentChanged();
         _contentFocusNode.requestFocus();
       }
     }
@@ -772,25 +986,24 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   }
 
   /// 恢复草稿内容
-  void _restoreDraft(Draft draft) {
-    if (draft.data.reply != null) {
-      // 有预填内容时，将草稿追加到引用内容后面
-      if (widget.initialContent != null && widget.initialContent!.isNotEmpty) {
-        _contentController.text = '${widget.initialContent}${draft.data.reply}';
-      } else {
-        _contentController.text = draft.data.reply!;
+  void _restoreDraft(Draft draft, {bool appendInitialContent = true}) {
+    _restoringDraft = true;
+    _richKey.currentState?.prepareForDocumentReplacement();
+    _richKey = GlobalKey<RichComposerEditorState>();
+    _editorKey = GlobalKey<MarkdownEditorState>();
+    try {
+      final prefix = appendInitialContent ? widget.initialContent ?? '' : '';
+      _contentController.text = '$prefix${draft.data.reply ?? ''}';
+      if (_isPrivateMessage) {
+        _titleController.text = draft.data.title ?? '';
+        setState(
+          () => _recipients = List.of(draft.data.recipients ?? const []),
+        );
       }
+    } finally {
+      _restoringDraft = false;
     }
-    if (_isPrivateMessage) {
-      if (draft.data.title != null) {
-        _titleController.text = draft.data.title!;
-      }
-      // 对齐 Discourse loadDraft：收件人以草稿数据为准（支持多收件人）
-      final recipients = draft.data.recipients;
-      if (recipients != null && recipients.isNotEmpty) {
-        setState(() => _recipients = List.of(recipients));
-      }
-    }
+    setState(() {});
   }
 
   /// 内容变化时触发草稿保存
@@ -818,18 +1031,81 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   }
 
   void _onContentChanged() {
-    if (_isEditMode || _draftController == null) return;
+    if (_isEditMode ||
+        _draftController == null ||
+        _isLoadingDraft ||
+        _restoringDraft) {
+      return;
+    }
 
-    final data = DraftData(
-      reply: _contentController.text,
-      title: _isPrivateMessage ? _titleController.text : null,
-      action: _isPrivateMessage ? 'privateMessage' : 'reply',
-      replyToPostNumber: _replyToPost?.postNumber,
-      recipients: _isPrivateMessage ? _recipients : null,
-      archetypeId: _isPrivateMessage ? 'private_message' : 'regular',
-    );
+    _draftController!.scheduleSave(_currentDraftData());
+  }
 
-    _draftController!.scheduleSave(data);
+  DraftData _currentDraftData() => DraftData(
+    reply: _contentController.text,
+    title: _isPrivateMessage ? _titleController.text : null,
+    action: _isPrivateMessage ? 'privateMessage' : 'reply',
+    replyToPostNumber: widget.replyToPost?.postNumber,
+    recipients: _isPrivateMessage ? _recipients : null,
+    archetypeId: _isPrivateMessage ? 'private_message' : 'regular',
+  );
+
+  AppLifecycleListener? _draftLifecycle;
+  void _flushDraftForLifecycle({bool refresh = false}) {
+    if (!mounted ||
+        _isSubmitting ||
+        _isLoadingDraft ||
+        _submitted ||
+        _discarded) {
+      return;
+    }
+    if (!_flushRichContent()) return;
+    if (refresh) {
+      _draftController?.scheduleSave(_currentDraftData());
+      _draftController?.retryPending();
+    } else {
+      _draftController?.saveNow(_currentDraftData());
+    }
+  }
+
+  Future<void> _reloadRemoteDraft() async {
+    setState(() {
+      _reloadingDraft = true;
+      _isLoadingDraft = true;
+    });
+    try {
+      if (await _draftController?.reloadFromRemote() != true && mounted) {
+        ToastService.showError(S.current.composer_draftReloadFailed);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingDraft = false;
+          _reloadingDraft = false;
+        });
+      }
+    }
+  }
+
+  bool _retryingDraft = false;
+  Future<void> _retryDraftSave() async {
+    if (_isSubmitting || _retryingDraft || _draftController == null) return;
+    _retryingDraft = true;
+    try {
+      if (!_flushRichContent()) return;
+      final force = _draftController!.hasConflict;
+      if (force &&
+          !await confirmComposerDraftOverwrite(
+            context,
+            onReload: _reloadRemoteDraft,
+          )) {
+        return;
+      }
+      if (!mounted) return;
+      await _draftController!.saveNow(_currentDraftData(), forceSave: force);
+    } finally {
+      _retryingDraft = false;
+    }
   }
 
   /// 收件人本身也是私信草稿的一部分；只改名单不继续输入也要及时保存。
@@ -1044,13 +1320,22 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
 
   @override
   void dispose() {
+    final rich = _richKey.currentState;
+    final currentContentSafe = rich != null
+        ? rich.flushToController()
+        : (_allowClose || _showPreview || _richFallback || !_richModeEnabled);
+    _draftLifecycle?.dispose();
     // 移除监听器
     _contentController.removeListener(_onContentChanged);
     _titleController.removeListener(_onContentChanged);
     _contentController.removeListener(_onContentLengthChanged);
 
     // 关闭时处理草稿：已提交则跳过，有内容则保存，无内容则删除
-    if (_draftController != null && !_submitted && !_discarded) {
+    if (currentContentSafe &&
+        _draftController != null &&
+        !_submitted &&
+        !_discarded &&
+        !_isLoadingDraft) {
       final hasContent =
           _contentController.text.trim().isNotEmpty ||
           (_isPrivateMessage && _titleController.text.trim().isNotEmpty);
@@ -1120,9 +1405,36 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     throw Exception(S.current.error_updatePostFailed);
   }
 
+  List<Object?> _submissionValues() => [
+    _contentController.text,
+    _titleController.text,
+    ..._recipients,
+  ];
+
+  bool _submissionPending = false;
+
   Future<void> _submit() async {
+    if (_submissionPending || _isSubmitting) return;
+    _submissionPending = true;
+    try {
+      await _submitChecked();
+    } finally {
+      _submissionPending = false;
+    }
+  }
+
+  Future<void> _submitChecked() async {
+    if ((_editorKey.currentState?.hasPendingUploads ?? false) ||
+        (_richKey.currentState?.hasPendingUploads ?? false)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(UploadTaskLabels.of(context).pendingSubmit)),
+      );
+      return;
+    }
+
     // 富文本模式:镜像 debounce 窗口内提交也不丢内容,先强制序列化
-    _richKey.currentState?.flushToController();
+    if (!_flushRichContent()) return;
+    final approved = ComposerSubmissionSnapshot(_submissionValues());
     final content = _contentController.text.trim();
     if (content.isEmpty) {
       _showError(S.current.post_contentRequired);
@@ -1194,6 +1506,21 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     );
     if (!pluginAllowed || !mounted) return;
 
+    if (_draftController?.hasConflict == true &&
+        !await confirmComposerDraftOverwrite(
+          context,
+          onReload: _reloadRemoteDraft,
+        )) {
+      return;
+    }
+    if (!mounted) return;
+    if (!mounted) return;
+    if (!approved.verify(
+      synchronize: _flushRichContent,
+      read: _submissionValues,
+    )) {
+      return;
+    }
     setState(() => _isSubmitting = true);
     // 对齐 Discourse 前端 composer.set("disableDrafts", true):
     // 发送途中关掉自动保存,避免与 PostCreator 推进的 draft_sequence 撞 409
@@ -1284,177 +1611,15 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     }
   }
 
-  /// 构建草稿保存状态指示器
-  /// 字数不足时悬浮在正文区右下角的提示
-  ///
-  /// 对齐网页端：主题组件只吐一个 `.character-counts` div，悬浮定位由
-  /// 主题 CSS 完成。悬浮而非占独立行，既不挤压顶部标题行（那行已有
-  /// 头像/草稿状态/舍弃/AI 审阅/发送），也不受中英文文案长度差异影响。
   Widget _buildCharCountOverlay() => CharacterCountsOverlay(
     length: _contentLength,
     minimumLength: _minPostLength,
   );
 
-  Widget _buildDraftStatusIndicator(DraftSaveStatus status, ThemeData theme) {
-    switch (status) {
-      case DraftSaveStatus.idle:
-        return const SizedBox.shrink();
-      case DraftSaveStatus.pending:
-        return const SizedBox.shrink();
-      case DraftSaveStatus.saving:
-        return SizedBox(
-          width: 12,
-          height: 12,
-          child: CircularProgressIndicator(
-            strokeWidth: 1.5,
-            color: theme.colorScheme.outline,
-          ),
-        );
-      case DraftSaveStatus.saved:
-        return Icon(
-          Symbols.cloud_done_rounded,
-          size: 16,
-          color: theme.colorScheme.outline,
-        );
-      case DraftSaveStatus.error:
-        return Icon(
-          Symbols.cloud_off_rounded,
-          size: 16,
-          color: theme.colorScheme.error,
-        );
-    }
-  }
-
-  String _currentComposerActionLabel(BuildContext context) {
-    if (_isPrivateMessage) {
-      return _recipients.isEmpty
-          ? context.l10n.pm_newTitle
-          : context.l10n.post_sendPmTitle(_recipients.join(', '));
-    }
-    final reply = _replyToPost;
-    if (reply != null) {
-      return context.l10n.post_replyToUser(reply.username);
-    }
-    return context.l10n.post_replyToTopic;
-  }
-
-  List<PopupMenuEntry<_ComposerAction>> _composerActionItems(
-    BuildContext context,
-  ) {
-    final entries = <PopupMenuEntry<_ComposerAction>>[
-      PopupMenuItem(
-        value: _ComposerAction.replyToTopic,
-        child: ListTile(
-          dense: true,
-          leading: const Icon(Icons.reply_all_rounded),
-          title: Text(context.l10n.post_replyToTopic),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-    ];
-
-    final originalTarget = widget.replyToPost;
-    if (originalTarget != null) {
-      entries.add(
-        PopupMenuItem(
-          value: _ComposerAction.replyToPost,
-          child: ListTile(
-            dense: true,
-            leading: const Icon(Icons.reply_rounded),
-            title: Text(context.l10n.post_replyToUser(originalTarget.username)),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      );
-    }
-
-    entries.add(
-      PopupMenuItem(
-        value: widget.isPrivateMessageTopic
-            ? _ComposerAction.newPrivateMessage
-            : _ComposerAction.newTopic,
-        child: ListTile(
-          dense: true,
-          leading: Icon(
-            widget.isPrivateMessageTopic
-                ? Icons.mail_outline_rounded
-                : Icons.add_box_outlined,
-          ),
-          title: Text(
-            widget.isPrivateMessageTopic
-                ? context.l10n.post_replyAsNewPrivateMessage
-                : context.l10n.post_replyAsNewTopic,
-          ),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-    );
-    return entries;
-  }
-
-  Future<void> _handleComposerAction(_ComposerAction action) async {
-    switch (action) {
-      case _ComposerAction.replyToTopic:
-        await _switchToTopicReply();
-        return;
-      case _ComposerAction.replyToPost:
-        await _switchToTopicReply(target: widget.replyToPost);
-        return;
-      case _ComposerAction.newTopic:
-        await _convertToNewTopic();
-        return;
-      case _ComposerAction.newPrivateMessage:
-        await _switchToPrivateMessage();
-        return;
-    }
-  }
-
-  Widget _buildComposerActionSelector(ThemeData theme) {
-    final reply = _replyToPost;
-    final row = Row(
-      children: [
-        if (!_isPrivateMessage && reply != null) ...[
-          SmartAvatar(
-            imageUrl: reply.getAvatarUrl().isNotEmpty
-                ? reply.getAvatarUrl()
-                : null,
-            radius: 14,
-            fallbackText: reply.username,
-            backgroundColor: theme.colorScheme.primaryContainer,
-          ),
-          const SizedBox(width: 8),
-        ],
-        Expanded(
-          child: Text(
-            _currentComposerActionLabel(context),
-            style: theme.textTheme.titleSmall,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        if (_canSwitchComposerAction) ...[
-          const SizedBox(width: 4),
-          Icon(
-            Icons.arrow_drop_down_rounded,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ],
-      ],
-    );
-
-    if (!_canSwitchComposerAction) return row;
-    return PopupMenuButton<_ComposerAction>(
-      tooltip: _currentComposerActionLabel(context),
-      position: PopupMenuPosition.under,
-      onSelected: (action) async {
-        await _handleComposerAction(action);
-      },
-      itemBuilder: _composerActionItems,
-      child: row,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
+    _richModeEnabled = ref.watch(preferencesProvider).useRichComposer;
     final theme = Theme.of(context);
 
     // 使用 FractionallySizedBox 固定 0.95 高度
@@ -1472,9 +1637,13 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
           resizeToAvoidBottomInset: false,
           // PopScope 用于处理表情面板开启时的返回逻辑
           body: PopScope(
-            canPop: !_showEmojiPanel,
+            canPop: _allowClose && !_showEmojiPanel,
             onPopInvokedWithResult: (bool didPop, dynamic result) async {
               if (didPop) return;
+              if (!_showEmojiPanel) {
+                _closeWithCurrentContent(result);
+                return;
+              }
               if (_showEmojiPanel) {
                 _editorKey.currentState?.closeEmojiPanel();
                 _richKey.currentState?.closeEmojiPanel();
@@ -1507,85 +1676,9 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                             ),
                           ),
 
-                          // 标题行
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            child: Row(
-                              children: [
-                                // 标题信息：Discourse 风格动作选择器。
-                                if (_isEditMode) ...[
-                                  Icon(
-                                    Symbols.edit_rounded,
-                                    size: 18,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      context.l10n.post_editPostTitle(
-                                        widget.editPost!.postNumber,
-                                      ),
-                                      style: theme.textTheme.titleSmall,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ] else
-                                  Expanded(
-                                    child: _buildComposerActionSelector(theme),
-                                  ),
-
-                                // 视图模式切换(富文本/源码):与草稿/审核/
-                                // 发送同属文档级操作,从底部工具栏上移
-                                ComposerPreviewButton(
-                                  previewing: _showPreview,
-                                  onPressed: !_isSubmitting && !_isLoadingRaw
-                                      ? _togglePreview
-                                      : null,
-                                ),
-
-                                // 草稿保存状态指示器
-                                if (_draftController != null) ...[
-                                  ValueListenableBuilder<DraftSaveStatus>(
-                                    valueListenable:
-                                        _draftController!.statusNotifier,
-                                    builder: (context, status, _) {
-                                      return _buildDraftStatusIndicator(
-                                        status,
-                                        theme,
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                if (_draftController != null)
-                                  ComposerDiscardButton(
-                                    onPressed: _isSubmitting
-                                        ? null
-                                        : _discardDraft,
-                                  ),
-                                _buildReviewButton(),
-
-                                // 发送/保存按钮
-                                FilledButton(
-                                  onPressed: (_isSubmitting || _isLoadingRaw)
-                                      ? null
-                                      : _submit,
-                                  child: _isSubmitting
-                                      ? const LoadingSpinner(
-                                          size: 20,
-                                          color: Colors.white,
-                                        )
-                                      : Text(
-                                          _isEditMode
-                                              ? context.l10n.common_save
-                                              : context.l10n.common_send,
-                                        ),
-                                ),
-                              ],
-                            ),
+                          LayoutBuilder(
+                            builder: (context, bounds) =>
+                                _buildResponsiveHeader(theme, bounds.maxWidth),
                           ),
 
                           Divider(
@@ -1671,7 +1764,8 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                                 // 真内容(毁帖)。内容源就绪后才挂;占位留空,
                                 // 加载视觉由草稿遮罩/RichComposer 自身统一提供
                                 // (双 spinner 叠影)。
-                                ? ((_isLoadingRaw || _isLoadingDraft)
+                                ? ((_isLoadingRaw ||
+                                          (_isLoadingDraft && !_reloadingDraft))
                                       ? const SizedBox.shrink()
                                       : RichComposerEditor(
                                           key: _richKey,

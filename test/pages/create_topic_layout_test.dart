@@ -1,8 +1,9 @@
+import 'package:fluxdo/providers/draft_store_provider.dart';
+import '../helpers/memory_draft_store.dart';
 import 'dart:convert';
 import 'package:chat_bottom_container/listener_manager.dart';
 
 import 'package:app_icons/app_icons.dart';
-import 'package:common_ui/common_ui.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -20,6 +21,8 @@ import 'package:fluxdo/services/local_notification_service.dart';
 import 'package:fluxdo/services/preloaded_data_service.dart';
 import 'package:fluxdo/utils/platform_utils.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_page_chrome.dart';
+import 'package:fluxdo/widgets/markdown_editor/composer_header_actions.dart';
+import 'package:fluxdo/services/draft_controller.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_chrome.dart';
 import 'package:fluxdo/widgets/common/progressive_top_blur.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_view_mode_switcher.dart';
@@ -94,6 +97,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             sharedPreferencesProvider.overrideWithValue(prefs),
+            localDraftStoreProvider.overrideWithValue(MemoryDraftStore()),
             categoriesProvider.overrideWith((_) async => categories),
             tagsProvider.overrideWith((_) async => ['flutter', '体验']),
             canTagTopicsProvider.overrideWith((_) async => true),
@@ -156,7 +160,11 @@ void main() {
         await tester.pump();
         for (
           var i = 0;
-          i < 40 && find.byType(GlassSurfaceFrame).evaluate().isEmpty;
+          i < 40 &&
+              find
+                  .byKey(const ValueKey('composer-island-surface'))
+                  .evaluate()
+                  .isEmpty;
           i++
         ) {
           await tester.runAsync(
@@ -167,12 +175,10 @@ void main() {
 
         expect(tester.takeException(), isNull);
         final appbar = find.byType(AppBar);
-        final publish = find.widgetWithText(
-          FilledButton,
-          S.current.common_publish,
-        );
+        final publish = find.byKey(const ValueKey('composer-header-submit'));
         expect(width - tester.getRect(publish).right, 16);
-        expect(tester.getSize(publish).height, 44);
+        expect(tester.getSize(publish), const Size(48, 48));
+        expect(find.byTooltip(S.current.common_publish), findsOneWidget);
         final chrome = ComposerChromeScope.maybeOf(tester.element(appbar))!;
         chrome.hide();
         await tester.pump();
@@ -204,7 +210,11 @@ void main() {
           await tester.tap(more);
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 250));
-          for (final action in ['preview', 'review', 'discard']) {
+          for (final action in [
+            if (width < 390) 'preview',
+            'review',
+            'discard',
+          ]) {
             expect(
               find.byKey(ValueKey('composer-header-$action')),
               findsOneWidget,
@@ -214,8 +224,8 @@ void main() {
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 250));
         } else {
-          expect(more, findsNothing);
-          for (final action in ['preview', 'review', 'discard']) {
+          expect(more, findsOneWidget);
+          for (final action in ['preview', 'review']) {
             expect(
               find.byKey(ValueKey('composer-header-$action-inline')),
               findsOneWidget,
@@ -228,7 +238,10 @@ void main() {
           desktop ? findsOneWidget : findsNothing,
         );
         expect(find.byType(ComposerDesktopMetadata), findsNothing);
-        expect(find.byType(GlassSurfaceFrame), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('composer-island-surface')),
+          findsNWidgets(desktop && width >= 1040 ? 2 : 1),
+        );
         final initialScroll = tester
             .widget<CustomScrollView>(
               find
@@ -244,6 +257,35 @@ void main() {
           closeTo(0, .01),
           reason: '空白和短正文不应被最小高度或底部留白撑出滚动',
         );
+        final scrollBeforeStatus = initialScroll.offset;
+        final canvasBeforeStatus = tester.getRect(
+          find.byType(CustomScrollView).first,
+        );
+        final status =
+            tester
+                    .widget<ComposerHeaderActions>(
+                      find.byType(ComposerHeaderActions),
+                    )
+                    .draftStatus!
+                as ValueNotifier<DraftSaveStatus>;
+        for (final value in [
+          DraftSaveStatus.pending,
+          DraftSaveStatus.saving,
+          DraftSaveStatus.saved,
+          DraftSaveStatus.error,
+        ]) {
+          status.value = value;
+          await tester.pump(const Duration(milliseconds: 200));
+          expect(
+            initialScroll.offset,
+            scrollBeforeStatus,
+            reason: '保存状态不能顶起正文',
+          );
+          expect(
+            tester.getRect(find.byType(CustomScrollView).first),
+            canvasBeforeStatus,
+          );
+        }
         final titleEditable = tester
             .state<EditableTextState>(
               find.descendant(
@@ -416,6 +458,60 @@ void main() {
           ChatBottomContainerListenerManager().flutterApi.keyboardHeight(300);
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 200));
+          final bodyController = tester
+              .widget<TextField>(sourceField)
+              .controller!;
+          final longText = List.filled(40, '继续输入，草稿状态不能改变当前阅读位置。').join('\n');
+          bodyController.value = TextEditingValue(
+            text: longText,
+            selection: TextSelection.collapsed(offset: longText.length),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 350));
+          await tester.pump();
+          for (final reading in [false, true]) {
+            if (reading) {
+              sourceScroll.jumpTo(
+                (sourceScroll.offset - 100).clamp(
+                  0,
+                  sourceScroll.position.maxScrollExtent,
+                ),
+              );
+              await tester.pump();
+            }
+            final offsetBefore = sourceScroll.offset;
+            final caretBefore = sourceBody.localToGlobal(
+              sourceBody
+                  .getLocalRectForCaret(bodyController.selection.extent)
+                  .bottomLeft,
+            );
+            for (final value in [
+              DraftSaveStatus.pending,
+              DraftSaveStatus.saved,
+              DraftSaveStatus.error,
+            ]) {
+              status.value = value;
+              await tester.pump(const Duration(milliseconds: 200));
+              expect(
+                sourceScroll.offset,
+                offsetBefore,
+                reason: '输入和滚动过程中保存状态都不能顶起正文',
+              );
+              expect(
+                sourceBody.localToGlobal(
+                  sourceBody
+                      .getLocalRectForCaret(bodyController.selection.extent)
+                      .bottomLeft,
+                ),
+                caretBefore,
+              );
+              expect(find.text(S.current.composer_draftSaved), findsNothing);
+              expect(find.text(S.current.composer_draftError), findsNothing);
+            }
+          }
+          // 后续工具面板用例从光标可见的位置开始，避免离屏选区柄盖住入口。
+          sourceScroll.jumpTo(sourceScroll.position.maxScrollExtent);
+          await tester.pump();
           await tester.tap(find.byTooltip(S.current.composer_expandToolbar));
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 450));

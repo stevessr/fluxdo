@@ -1,4 +1,5 @@
 import '../constants/composer_tool_defaults.dart';
+
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -7,9 +8,11 @@ import 'package:flutter/services.dart';
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/topic_card_style.dart';
 import '../navigation/nav_action_bus.dart';
 import '../services/network/request_scheduler_config.dart';
+import '../services/uploads/upload_settings.dart';
 import '../services/cf_challenge_service.dart';
 import '../services/crash_context_reporter.dart';
 import '../services/render_backend_service.dart';
@@ -106,6 +109,9 @@ class AppPreferences {
 
   /// 自动填充登录凭证
   final bool autoFillLogin;
+
+  /// 在首页创作按钮上方显示独立刷新入口，默认关闭
+  final bool homeRefreshButton;
 
   /// 自动识别剪贴板中的 Linux.do 话题链接
   final bool clipboardTopicLinkDetection;
@@ -238,6 +244,7 @@ class AppPreferences {
   final BookmarksOpenMode bookmarksOpenMode;
 
   /// 最大并发请求数
+  final bool forceDisableMultipartUpload;
   final int maxConcurrent;
 
   /// 滑动窗口内最大请求数
@@ -309,6 +316,7 @@ class AppPreferences {
     required this.contentFontScale,
     required this.shareImageThemeIndex,
     required this.autoFillLogin,
+    this.homeRefreshButton = false,
     required this.clipboardTopicLinkDetection,
     required this.topicFilterKeywords,
     this.topicFilterWholeWord = false,
@@ -343,6 +351,7 @@ class AppPreferences {
     this.defaultNestedView = false,
     this.nestedLineStyle = NestedLineStyle.auto,
     this.bookmarksOpenMode = BookmarksOpenMode.defaultRoute,
+    this.forceDisableMultipartUpload = false,
     required this.maxConcurrent,
     required this.maxPerWindow,
     required this.windowSeconds,
@@ -374,6 +383,7 @@ class AppPreferences {
     double? contentFontScale,
     int? shareImageThemeIndex,
     bool? autoFillLogin,
+    bool? homeRefreshButton,
     bool? clipboardTopicLinkDetection,
     List<String>? topicFilterKeywords,
     bool? topicFilterWholeWord,
@@ -408,6 +418,7 @@ class AppPreferences {
     bool? defaultNestedView,
     NestedLineStyle? nestedLineStyle,
     BookmarksOpenMode? bookmarksOpenMode,
+    bool? forceDisableMultipartUpload,
     int? maxConcurrent,
     int? maxPerWindow,
     int? windowSeconds,
@@ -439,6 +450,7 @@ class AppPreferences {
       contentFontScale: contentFontScale ?? this.contentFontScale,
       shareImageThemeIndex: shareImageThemeIndex ?? this.shareImageThemeIndex,
       autoFillLogin: autoFillLogin ?? this.autoFillLogin,
+      homeRefreshButton: homeRefreshButton ?? this.homeRefreshButton,
       clipboardTopicLinkDetection:
           clipboardTopicLinkDetection ?? this.clipboardTopicLinkDetection,
       topicFilterKeywords: topicFilterKeywords ?? this.topicFilterKeywords,
@@ -487,6 +499,8 @@ class AppPreferences {
       defaultNestedView: defaultNestedView ?? this.defaultNestedView,
       nestedLineStyle: nestedLineStyle ?? this.nestedLineStyle,
       bookmarksOpenMode: bookmarksOpenMode ?? this.bookmarksOpenMode,
+      forceDisableMultipartUpload:
+          forceDisableMultipartUpload ?? this.forceDisableMultipartUpload,
       maxConcurrent: maxConcurrent ?? this.maxConcurrent,
       maxPerWindow: maxPerWindow ?? this.maxPerWindow,
       windowSeconds: windowSeconds ?? this.windowSeconds,
@@ -531,6 +545,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   static const String _contentFontScaleKey = 'pref_content_font_scale';
   static const String _shareImageThemeIndexKey = 'pref_share_image_theme_index';
   static const String _autoFillLoginKey = 'pref_auto_fill_login';
+  static const String _homeRefreshButtonKey = 'pref_home_refresh_button';
   static const String _clipboardTopicLinkDetectionKey =
       'pref_clipboard_topic_link_detection';
   static const String _topicFilterKeywordsKey = 'pref_topic_filter_keywords';
@@ -623,6 +638,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
           contentFontScale: _prefs.getDouble(_contentFontScaleKey) ?? 1.0,
           shareImageThemeIndex: _prefs.getInt(_shareImageThemeIndexKey) ?? 0,
           autoFillLogin: _prefs.getBool(_autoFillLoginKey) ?? true,
+          homeRefreshButton: _prefs.getBool(_homeRefreshButtonKey) ?? false,
           clipboardTopicLinkDetection:
               _prefs.getBool(_clipboardTopicLinkDetectionKey) ?? false,
           topicFilterKeywords:
@@ -672,6 +688,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
           bookmarksOpenMode: BookmarksOpenMode.fromString(
             _prefs.getString(_bookmarksOpenModeKey),
           ),
+          forceDisableMultipartUpload: UploadSettings.forceDisabled(_prefs),
           maxConcurrent: _prefs.getInt(_maxConcurrentKey) ?? 3,
           maxPerWindow: _prefs.getInt(_maxPerWindowKey) ?? 6,
           windowSeconds: _prefs.getInt(_windowSecondsKey) ?? 3,
@@ -777,6 +794,11 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   Future<void> setAutoFillLogin(bool enabled) async {
     state = state.copyWith(autoFillLogin: enabled);
     await _prefs.setBool(_autoFillLoginKey, enabled);
+  }
+
+  Future<void> setHomeRefreshButton(bool enabled) async {
+    state = state.copyWith(homeRefreshButton: enabled);
+    await _prefs.setBool(_homeRefreshButtonKey, enabled);
   }
 
   Future<void> setClipboardTopicLinkDetection(bool enabled) async {
@@ -1019,6 +1041,11 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   Future<void> setBookmarksOpenMode(BookmarksOpenMode mode) async {
     state = state.copyWith(bookmarksOpenMode: mode);
     await _prefs.setString(_bookmarksOpenModeKey, mode.name);
+  }
+
+  Future<void> setForceDisableMultipartUpload(bool value) async {
+    await _prefs.setBool(UploadSettings.forceDisableMultipartKey, value);
+    state = state.copyWith(forceDisableMultipartUpload: value);
   }
 
   Future<void> setMaxConcurrent(int value) async {

@@ -46,34 +46,18 @@ class DraftData {
     this.typingTime,
   });
 
-  /// Discourse 的草稿标签既可能是字符串，也可能是网页端序列化的
-  /// `{id, name}` 对象。Composer 内部统一使用标签名，不能直接对 Map
-  /// 调用 toString()，否则恢复后会显示成 `{id: 1498, name: 转载}`。
-  static List<String>? _parseTags(dynamic rawTags) {
-    if (rawTags is! List) return null;
-
-    final tags = <String>[];
-    for (final tag in rawTags) {
-      String? name;
-      if (tag is Map) {
-        final rawName = tag['name'];
-        if (rawName != null) name = rawName.toString();
-      } else if (tag != null) {
-        name = tag.toString();
-      }
-
-      if (name != null) tags.add(name);
-    }
-    return tags;
-  }
-
   /// 从 JSON 解析
   factory DraftData.fromJson(Map<String, dynamic> json) {
     return DraftData(
       reply: json['reply'] as String?,
       title: json['title'] as String?,
       categoryId: json['categoryId'] as int?,
-      tags: _parseTags(json['tags']),
+      // Discourse 的 serializeTags 将标签保存为 {id?, name}，旧草稿仍可能是字符串。
+      tags: (json['tags'] as List<dynamic>?)
+          ?.map((tag) => tag is Map ? tag['name'] : tag)
+          .whereType<String>()
+          .where((name) => name.isNotEmpty)
+          .toList(),
       replyToPostNumber: json['replyToPostNumber'] as int?,
       action: json['action'] as String?,
       recipients: (json['recipients'] as List<dynamic>?)
@@ -107,6 +91,30 @@ class DraftData {
 
   /// 转换为 JSON 字符串
   String toJsonString() => jsonEncode(toJson());
+
+  /// 比较文档语义：时长、空字段写法和标签顺序不代表内容修改。
+  String get contentFingerprint {
+    final normalizedAction = switch (action) {
+      'create_topic' => 'createTopic',
+      'private_message' => 'privateMessage',
+      null => 'reply',
+      _ => action,
+    };
+    return jsonEncode({
+      'reply': reply ?? '',
+      'title': title ?? '',
+      'categoryId': categoryId == 0 ? null : categoryId,
+      'tags': (tags ?? const <String>[]).toSet().toList()..sort(),
+      'replyToPostNumber': replyToPostNumber == 0 ? null : replyToPostNumber,
+      'action': normalizedAction,
+      'recipients': (recipients ?? const <String>[]).toSet().toList()..sort(),
+      'archetypeId':
+          archetypeId ??
+          (normalizedAction == 'privateMessage'
+              ? 'private_message'
+              : 'regular'),
+    });
+  }
 
   /// 是否有有效内容
   bool get hasContent {

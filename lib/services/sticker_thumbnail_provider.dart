@@ -12,6 +12,7 @@ import 'package:native_animated_image/native_animated_image.dart'
 import 'avif_fast_bridge.dart';
 import 'avif_image_provider.dart';
 import 'blob_image_cache.dart';
+import 'dio_http_client.dart';
 import 'sticker_thumbnail_cache_policy.dart';
 
 // 与 native_animated_image 内部定义的错误码保持一致(Rust 端 ERR_UNSUPPORTED = -2),
@@ -27,7 +28,10 @@ const int _kErrUnsupported = -2;
 bool _bytesLookLikeAvif(Uint8List bytes) {
   if (bytes.length < 12) return false;
   // 'ftyp' at offset 4
-  if (bytes[4] != 0x66 || bytes[5] != 0x74 || bytes[6] != 0x79 || bytes[7] != 0x70) {
+  if (bytes[4] != 0x66 ||
+      bytes[5] != 0x74 ||
+      bytes[6] != 0x79 ||
+      bytes[7] != 0x70) {
     return false;
   }
   // brand at 8..12: avif | avis | mif1 | msf1
@@ -51,7 +55,10 @@ bool _bytesLookLikeAvif(Uint8List bytes) {
 /// 因而不能用“平台 codec 成功”作为颜色正确的判据。
 bool _bytesLookLikeAnimatedAvif(Uint8List bytes) {
   if (bytes.length < 16) return false;
-  if (bytes[4] != 0x66 || bytes[5] != 0x74 || bytes[6] != 0x79 || bytes[7] != 0x70) {
+  if (bytes[4] != 0x66 ||
+      bytes[5] != 0x74 ||
+      bytes[6] != 0x79 ||
+      bytes[7] != 0x70) {
     return false;
   }
 
@@ -109,14 +116,23 @@ bool _bytesLookLikeGif(Uint8List bytes) {
 ///
 /// 完整动画解码(长按预览 / 大图查看)**不**走这个 provider —
 /// 那是另一套路径,见 [AvifImageProvider] 和 `NativeAnimatedImageProvider`。
-class StickerThumbnailProvider
-    extends ImageProvider<StickerThumbnailProvider> {
+class StickerThumbnailProvider extends ImageProvider<StickerThumbnailProvider> {
   const StickerThumbnailProvider(
     this.url, {
     required this.targetSize,
     this.scale = 1.0,
     this.bucket = BlobImageCache.stickerOriginalBucket,
-  });
+    this.priority = DownloadPriority.normal,
+  }) : _keyGeneration = null;
+
+  const StickerThumbnailProvider._key(
+    this.url,
+    this.targetSize,
+    this.scale,
+    this.bucket,
+    this.priority,
+    this._keyGeneration,
+  );
 
   /// 主动 cancel 所有 in-flight thumbnail decode。
   ///
@@ -137,6 +153,12 @@ class StickerThumbnailProvider
 
   /// 原文件所在 blob bucket(贴纸默认 stickerOriginal)。
   final String bucket;
+
+  /// 下载队列优先级(前景市场可越过后台预取)。
+  final DownloadPriority priority;
+
+  /// obtainKey 时捕获的解码代数：cancelInflight 后同参数新 key。
+  final int? _keyGeneration;
 
   /// URL 是否走得通这个 provider(AVIF / GIF / animated WebP / APNG)。
   /// 静态图(PNG/JPEG)和其它格式应该走 `CachedNetworkImageProvider`。
@@ -163,6 +185,7 @@ class StickerThumbnailProvider
     List<String> urls, {
     required int targetSize,
     String bucket = BlobImageCache.stickerOriginalBucket,
+    DownloadPriority priority = DownloadPriority.normal,
     bool Function()? shouldContinue,
   }) async {
     // 全程流水线:每张图「下载 → magic 分流 → 解码 → 写缩略图」独立。
@@ -180,13 +203,22 @@ class StickerThumbnailProvider
         final cachedBytes = await _readCachedThumbnailBytes(thumbKey);
         if (cachedBytes != null) return;
 
-        final bytes = await BlobImageCache.fetch(bucket, url);
+        final bytes = await BlobImageCache.fetch(
+          bucket,
+          url,
+          priority: priority,
+        );
         if (shouldContinue != null && !shouldContinue()) return;
 
         if (_bytesLookLikeAvif(bytes)) {
           // AVIF → precache(_pendingThumbnailTasks 去重,与 grid 现场
           // 解码互不重复;_avifSemaphore(4) 限流)
-          await precache(url, targetSize: targetSize, bucket: bucket);
+          await precache(
+            url,
+            targetSize: targetSize,
+            bucket: bucket,
+            priority: priority,
+          );
         } else if (_bytesLookLikeGif(bytes)) {
           // GIF thumbnail 只需要首帧。Flutter codec 的 getNextFrame 是
           // 惰性的，不会像 Rust FFI decode() 一样先把整段动画解成 RGBA。
@@ -259,8 +291,8 @@ class StickerThumbnailProvider
       }
       final displayImage =
           (srcImage.width > targetSize || srcImage.height > targetSize)
-              ? await _resize(srcImage, targetSize)
-              : srcImage;
+          ? await _resize(srcImage, targetSize)
+          : srcImage;
       final thumbKey = _thumbnailCacheKey(url, targetSize);
       await _cacheThumbnail(
         thumbKey,
@@ -281,6 +313,7 @@ class StickerThumbnailProvider
     String url, {
     required int targetSize,
     String bucket = BlobImageCache.stickerOriginalBucket,
+    DownloadPriority priority = DownloadPriority.normal,
   }) async {
     if (!supports(url)) return;
 
@@ -301,6 +334,7 @@ class StickerThumbnailProvider
       url: url,
       targetSize: targetSize,
       thumbKey: thumbKey,
+      priority: priority,
     );
     _pendingThumbnailTasks[thumbKey] = task;
     try {
@@ -312,7 +346,16 @@ class StickerThumbnailProvider
 
   @override
   Future<StickerThumbnailProvider> obtainKey(ImageConfiguration configuration) {
-    return SynchronousFuture<StickerThumbnailProvider>(this);
+    return SynchronousFuture<StickerThumbnailProvider>(
+      StickerThumbnailProvider._key(
+        url,
+        targetSize,
+        scale,
+        bucket,
+        priority,
+        _thumbnailGeneration,
+      ),
+    );
   }
 
   @override
@@ -348,6 +391,7 @@ class StickerThumbnailProvider
       key.url,
       targetSize: key.targetSize,
       bucket: key.bucket,
+      priority: key.priority,
     );
     final warmedBytes = await _readCachedThumbnailBytes(thumbKey);
     if (warmedBytes != null) {
@@ -359,14 +403,9 @@ class StickerThumbnailProvider
       bucket: key.bucket,
       url: key.url,
       targetSize: key.targetSize,
+      priority: key.priority,
     );
-    unawaited(
-      _cacheThumbnail(
-        thumbKey,
-        decoded.image,
-        format: decoded.format,
-      ),
-    );
+    unawaited(_cacheThumbnail(thumbKey, decoded.image, format: decoded.format));
     return ImageInfo(image: decoded.image, scale: key.scale);
   }
 
@@ -377,11 +416,14 @@ class StickerThumbnailProvider
         other.url == url &&
         other.bucket == bucket &&
         other.targetSize == targetSize &&
-        other.scale == scale;
+        other.scale == scale &&
+        other.priority == priority &&
+        other._keyGeneration == _keyGeneration;
   }
 
   @override
-  int get hashCode => Object.hash(url, bucket, targetSize, scale);
+  int get hashCode =>
+      Object.hash(url, bucket, targetSize, scale, priority, _keyGeneration);
 
   @override
   String toString() =>
@@ -462,10 +504,7 @@ Future<Uint8List?> _readCachedThumbnailBytes(String thumbKey) async {
   return pngBytes;
 }
 
-Future<ImageInfo> _decodeThumbnailBytes(
-  Uint8List bytes,
-  double scale,
-) async {
+Future<ImageInfo> _decodeThumbnailBytes(Uint8List bytes, double scale) async {
   final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
   final codec = await ui.instantiateImageCodecFromBuffer(buffer);
   final frame = await codec.getNextFrame();
@@ -478,6 +517,7 @@ Future<void> _warmThumbnail({
   required String url,
   required int targetSize,
   required String thumbKey,
+  DownloadPriority priority = DownloadPriority.normal,
 }) async {
   _DecodedThumbnail? decoded;
   try {
@@ -485,12 +525,9 @@ Future<void> _warmThumbnail({
       bucket: bucket,
       url: url,
       targetSize: targetSize,
+      priority: priority,
     );
-    await _cacheThumbnail(
-      thumbKey,
-      decoded.image,
-      format: decoded.format,
-    );
+    await _cacheThumbnail(thumbKey, decoded.image, format: decoded.format);
     _knownThumbnailKeys.add(thumbKey);
   } finally {
     decoded?.image.dispose();
@@ -506,6 +543,7 @@ Future<_DecodedThumbnail> _decodeFirstFrameImage({
   required String bucket,
   required String url,
   required int targetSize,
+  DownloadPriority priority = DownloadPriority.normal,
 }) async {
   final startGen = _thumbnailGeneration;
   void checkCancel() {
@@ -515,7 +553,7 @@ Future<_DecodedThumbnail> _decodeFirstFrameImage({
   // 先把 bytes 拉出来,根据 magic 选 semaphore(不能用 URL 后缀 — CDN 可能
   // 给 `.gif/.webp` 后缀但实际是 AVIF)。bytes 读取本身是 IO async,不占
   // semaphore 配额。
-  final bytes = await BlobImageCache.fetch(bucket, url);
+  final bytes = await BlobImageCache.fetch(bucket, url, priority: priority);
   checkCancel();
 
   final format = StickerThumbnailCachePolicy.detectFormat(bytes, url);
@@ -795,19 +833,19 @@ class _Semaphore {
 
 class _DecodeReply {
   const _DecodeReply.ok(this.width, this.height, this.rgba)
-      : error = null,
-        unsupported = false;
+    : error = null,
+      unsupported = false;
   const _DecodeReply.unsupported()
-      : width = 0,
-        height = 0,
-        rgba = null,
-        error = null,
-        unsupported = true;
+    : width = 0,
+      height = 0,
+      rgba = null,
+      error = null,
+      unsupported = true;
   const _DecodeReply.err(this.error)
-      : width = 0,
-        height = 0,
-        rgba = null,
-        unsupported = false;
+    : width = 0,
+      height = 0,
+      rgba = null,
+      unsupported = false;
 
   final int width;
   final int height;
@@ -864,9 +902,11 @@ class _DecoderWorkerPool {
       }
     });
     for (var i = 0; i < _workerCount; i++) {
-      Isolate.spawn<SendPort>(_decoderWorkerEntry, receivePort.sendPort,
-              debugName: 'StickerThumbnailWorker#$i')
-          .then((_) {});
+      Isolate.spawn<SendPort>(
+        _decoderWorkerEntry,
+        receivePort.sendPort,
+        debugName: 'StickerThumbnailWorker#$i',
+      ).then((_) {});
     }
     return completer.future;
   }
@@ -874,10 +914,7 @@ class _DecoderWorkerPool {
   /// 提交一个 decode 任务(round-robin 派给某条 worker,各自串行)。
   /// 如果在解码过程中 [token] 被 cancel,Future 立即 complete `_DecodeReply.err`
   /// (用 sentinel 错误),后续 ui.Image 创建会被跳过。
-  Future<_DecodeReply?> decode(
-    Uint8List bytes, {
-    _CancelToken? token,
-  }) async {
+  Future<_DecodeReply?> decode(Uint8List bytes, {_CancelToken? token}) async {
     await _ensureInit();
     if (token != null && token.isCancelled) return null;
     final taskId = _nextTaskId++;
@@ -923,9 +960,10 @@ void _decoderWorkerEntry(SendPort mainSendPort) {
         return;
       }
       final first = decoded.frames.first;
-      mainSendPort.send(
-        [taskId, _DecodeReply.ok(decoded.width, decoded.height, first.rgba)],
-      );
+      mainSendPort.send([
+        taskId,
+        _DecodeReply.ok(decoded.width, decoded.height, first.rgba),
+      ]);
     } on NativeAnimatedImageException catch (e) {
       if (e.code == _kErrUnsupported) {
         mainSendPort.send([taskId, const _DecodeReply.unsupported()]);
@@ -936,4 +974,85 @@ void _decoderWorkerEntry(SendPort mainSendPort) {
       mainSendPort.send([taskId, _DecodeReply.err(e)]);
     }
   });
+}
+
+/// 首帧共享器：每个消费者独占 clone，任务只在解码或写盘期间保留原图。
+/// 注入解码和缓存操作，测试无需网络、磁盘或原生 AVIF 插件。
+@visibleForTesting
+class StickerThumbnailFirstFrameLoader {
+  final _tasks = <String, _SharedThumbnailFrame>{};
+  int _generation = 0;
+
+  void cancel() {
+    _generation++;
+    // 旧任务自行收敛；新一代绝不加入旧任务。
+    _tasks.clear();
+  }
+
+  Future<ui.Image> load(
+    String key, {
+    required Future<ui.Image> Function() decode,
+    required Future<void> Function(ui.Image) cache,
+    DownloadPriority priority = DownloadPriority.normal,
+    bool visible = true,
+    bool Function()? shouldContinue,
+  }) async {
+    final generation = _generation;
+    final task = _tasks.putIfAbsent(key, _SharedThumbnailFrame.new);
+    if (priority == DownloadPriority.high) task.priority = priority;
+    task.hasVisibleRequest |= visible;
+    task.users++;
+    void release() {
+      if (task.users != 0 || task.writing) return;
+      if (identical(_tasks[key], task)) _tasks.remove(key);
+      task.image?.dispose();
+      task.image = null;
+    }
+
+    task.future ??= (() async {
+      final image = await decode();
+      if (generation != _generation ||
+          (!task.hasVisibleRequest &&
+              shouldContinue != null &&
+              !shouldContinue())) {
+        image.dispose();
+        throw const _ThumbnailCancelled();
+      }
+      task.image = image;
+      // 写盘持有独立句柄，UI dispose 不会影响编码。
+      final cacheImage = image.clone();
+      task.writing = true;
+      unawaited(
+        (() async {
+          try {
+            await cache(cacheImage);
+          } catch (_) {
+            // 缓存失败不重解原文件，也不影响首帧。
+          } finally {
+            cacheImage.dispose();
+            task.writing = false;
+            release();
+          }
+        })(),
+      );
+      return image;
+    })();
+    try {
+      final image = await task.future!;
+      if (generation != _generation) throw const _ThumbnailCancelled();
+      return image.clone();
+    } finally {
+      task.users--;
+      release();
+    }
+  }
+}
+
+class _SharedThumbnailFrame {
+  Future<ui.Image>? future;
+  ui.Image? image;
+  int users = 0;
+  bool writing = false;
+  bool hasVisibleRequest = false;
+  DownloadPriority priority = DownloadPriority.normal;
 }

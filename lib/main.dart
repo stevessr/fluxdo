@@ -749,6 +749,7 @@ class MainApp extends ConsumerWidget {
         return TranslationProvider(
           child: Builder(
             builder: (context) => MaterialApp(
+              scrollBehavior: const DesktopScrollInteractionBehavior(),
               navigatorKey: navigatorKey,
               // JankNavObserver 给 [JANK] 日志加导航归因(debug/profile 观测用)
               navigatorObservers: [appRouteObserver, JankNavObserver()],

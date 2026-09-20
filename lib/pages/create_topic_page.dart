@@ -1,11 +1,21 @@
+import 'package:fluxdo/widgets/markdown_editor/composer_submission_snapshot.dart';
+
+import '../widgets/markdown_editor/uploads/upload_task_labels.dart';
+
+import 'package:fluxdo/widgets/markdown_editor/composer_draft_status.dart';
+
 import '../widgets/markdown_editor/composer_chrome.dart';
+import '../widgets/markdown_editor/composer_header_actions.dart';
 import '../utils/platform_utils.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../providers/draft_store_provider.dart';
+
 import 'package:fluxdo/widgets/common/error_view.dart';
 import 'package:fluxdo/widgets/common/progressive_top_blur.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -37,6 +47,7 @@ import 'package:fluxdo/providers/shortcut_provider.dart';
 import 'package:fluxdo/widgets/topic/topic_editor_helpers.dart';
 import 'package:fluxdo/services/local_notification_service.dart'
     show navigatorKey;
+
 import '../constants.dart';
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
@@ -69,7 +80,33 @@ class CreateTopicPage extends ConsumerStatefulWidget {
 class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   /// 富文本导入失败时本次会话降级纯文本
   bool _richFallback = false;
-  final _richKey = GlobalKey<RichComposerEditorState>();
+  bool _allowClose = false;
+  bool _richModeEnabled = false;
+
+  void _closeWithCurrentContent(dynamic result) {
+    if (!_submitted && !_discarded && !_flushRichContent()) return;
+    setState(() => _allowClose = true);
+    // 等待 PopScope 更新许可；dispose 随后保存刚刚同步的草稿。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(result);
+    });
+  }
+
+  /// 富文本未就绪或导出失败时，绝不能消费 controller 中的旧镜像。
+  bool _flushRichContent() {
+    final rich = _richKey.currentState;
+    final ready = rich != null
+        ? rich.flushToController()
+        : (_showPreview ||
+              _richFallback ||
+              !ref.read(preferencesProvider).useRichComposer);
+    if (!ready) {
+      ToastService.showError('正文尚未同步，已停止操作；请稍后重试，勿关闭编辑器');
+    }
+    return ready;
+  }
+
+  var _richKey = GlobalKey<RichComposerEditorState>();
 
   final _formKey = GlobalKey<FormState>();
   final _chrome = ComposerChromeController();
@@ -82,7 +119,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   final _contentFocusNode = FocusNode();
-  final _editorKey = GlobalKey<MarkdownEditorState>();
+  var _editorKey = GlobalKey<MarkdownEditorState>();
   late final ShortcutSurfaceBinding _shortcutSurfaceBinding =
       ShortcutSurfaceBinding(
         ref: ref,
@@ -117,6 +154,11 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
   // 草稿控制器
   late final DraftController _draftController;
+  bool _restoringDraft = false;
+  bool _reloadingDraft = false;
+  bool _hasRestoredDraft = false;
+  int? _draftCategoryId;
+  ProviderSubscription<AsyncValue<List<Category>>>? _draftCategorySubscription;
 
   @override
   void initState() {
@@ -124,7 +166,23 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     _contentController.addListener(_updateContentLength);
 
     // 初始化草稿控制器
-    _draftController = DraftController(draftKey: widget.draftKey);
+    _draftController = DraftController(
+      draftKey: widget.draftKey,
+      localStore: ref.read(localDraftStoreProvider),
+      onRemoteDraftChanged: (data) {
+        if (mounted &&
+            !_submitted &&
+            !_discarded &&
+            (!_isLoadingDraft || _reloadingDraft)) {
+          _restoreDraft(Draft(draftKey: widget.draftKey, data: data));
+        }
+      },
+      currentEditorData: () {
+        if (!mounted || (_isLoadingDraft && !_reloadingDraft)) return null;
+        if (!_flushRichContent()) return null;
+        return _currentDraftData();
+      },
+    );
 
     // 添加草稿自动保存监听
     // 标题上的三件事（featured link 解析 / 草稿 / 计数器）合并成一个监听，
@@ -153,6 +211,11 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyCurrentFilter());
     // 先按站点默认算一版下限，_applyCurrentFilter 选中分类后会再刷新
     _refreshMinContentLength();
+    _draftLifecycle = AppLifecycleListener(
+      onInactive: _flushDraftForLifecycle,
+      onPause: _flushDraftForLifecycle,
+      onResume: () => _flushDraftForLifecycle(refresh: true),
+    );
   }
 
   @override
@@ -186,7 +249,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
         // 弹出恢复草稿对话框
         final restore = await _showRestoreDraftDialog();
         if (restore == true && mounted) {
-          _restoreDraft(draft);
+          final latest = _draftController.currentDraft;
+          if (latest != null) _restoreDraft(latest);
         } else if (restore == false && mounted) {
           // 用户选择丢弃，删除草稿
           await _draftController.deleteDraft();
@@ -195,6 +259,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     } finally {
       if (mounted) {
         setState(() => _isLoadingDraft = false);
+        _applyCurrentFilter();
       }
     }
   }
@@ -223,30 +288,41 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
   /// 恢复草稿内容
   void _restoreDraft(Draft draft) {
-    if (draft.data.title != null) {
-      _titleController.text = draft.data.title!;
-    }
-    if (draft.data.reply != null) {
-      _contentController.text = draft.data.reply!;
-      _templateContent = null; // 恢复草稿后清除模板标记
-    }
-    if (draft.data.tags != null && draft.data.tags!.isNotEmpty) {
-      setState(() => _selectedTags = List.from(draft.data.tags!));
-    }
-    // 分类需要在 categories 加载后设置，通过 _applyCurrentFilter 中处理
-    if (draft.data.categoryId != null) {
-      // 监听 categories 加载完成后设置分类
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _restoreCategoryFromDraft(draft.data.categoryId!);
+    _restoringDraft = true;
+    _richKey.currentState?.prepareForDocumentReplacement();
+    _richKey = GlobalKey<RichComposerEditorState>();
+    _editorKey = GlobalKey<MarkdownEditorState>();
+    _hasRestoredDraft = true;
+    _featuredLinkDebounce?.cancel();
+    _titleChangeGeneration++;
+    _draftCategorySubscription?.close();
+    try {
+      _titleController.text = draft.data.title ?? '';
+      _contentController.text = draft.data.reply ?? '';
+      setState(() {
+        _templateContent = null;
+        _selectedTags = List.of(draft.data.tags ?? const []);
+        _selectedCategory = null;
+        _draftCategoryId = draft.data.categoryId;
+        _featuredLink = null;
+        _featuredLinkAutoPosted = false;
       });
+      if (_draftCategoryId != null) {
+        _restoreCategoryFromDraft(_draftCategoryId!);
+      }
+    } finally {
+      _restoringDraft = false;
     }
   }
 
   /// 从草稿恢复分类
   void _restoreCategoryFromDraft(int categoryId) {
-    ref.listenManual(categoriesProvider, (previous, next) {
+    _draftCategorySubscription = ref.listenManual(categoriesProvider, (
+      previous,
+      next,
+    ) {
       next.whenData((categories) {
-        if (!mounted) return;
+        if (!mounted || _draftCategoryId != categoryId) return;
         final category = categories
             .where((c) => c.id == categoryId)
             .firstOrNull;
@@ -259,15 +335,75 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
   /// 草稿内容变化时触发保存
   void _onDraftContentChanged() {
-    final data = DraftData(
-      title: _titleController.text,
-      reply: _contentController.text,
-      categoryId: _selectedCategory?.id,
-      tags: _selectedTags.isNotEmpty ? _selectedTags : null,
-      action: 'createTopic',
-      archetypeId: 'regular',
-    );
-    _draftController.scheduleSave(data);
+    if (_isLoadingDraft || _restoringDraft) return;
+    _draftController.scheduleSave(_currentDraftData());
+  }
+
+  DraftData _currentDraftData() => DraftData(
+    title: _titleController.text,
+    reply: _contentController.text,
+    categoryId: _selectedCategory?.id ?? _draftCategoryId,
+    tags: _selectedTags.isNotEmpty ? _selectedTags : null,
+    action: 'createTopic',
+    archetypeId: 'regular',
+  );
+
+  AppLifecycleListener? _draftLifecycle;
+  void _flushDraftForLifecycle({bool refresh = false}) {
+    if (!mounted ||
+        _isSubmitting ||
+        _isLoadingDraft ||
+        _submitted ||
+        _discarded) {
+      return;
+    }
+    if (!_flushRichContent()) return;
+    if (refresh) {
+      _draftController.scheduleSave(_currentDraftData());
+      _draftController.retryPending();
+    } else {
+      _draftController.saveNow(_currentDraftData());
+    }
+  }
+
+  Future<void> _reloadRemoteDraft() async {
+    setState(() {
+      _reloadingDraft = true;
+      _isLoadingDraft = true;
+    });
+    try {
+      if (!await _draftController.reloadFromRemote() && mounted) {
+        ToastService.showError(S.current.composer_draftReloadFailed);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingDraft = false;
+          _reloadingDraft = false;
+        });
+      }
+    }
+  }
+
+  bool _retryingDraft = false;
+  Future<void> _retryDraftSave() async {
+    if (_isSubmitting || _retryingDraft) return;
+    _retryingDraft = true;
+    try {
+      if (!_flushRichContent()) return;
+      final force = _draftController.hasConflict;
+      if (force &&
+          !await confirmComposerDraftOverwrite(
+            context,
+            onReload: _reloadRemoteDraft,
+          )) {
+        return;
+      }
+      if (!mounted) return;
+      await _draftController.saveNow(_currentDraftData(), forceSave: force);
+    } finally {
+      _retryingDraft = false;
+    }
   }
 
   /// 舍弃草稿
@@ -298,10 +434,12 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   }
 
   void _applyCurrentFilter() async {
+    if (_isLoadingDraft || _hasRestoredDraft) return;
     // 优先使用传入的分类，否则使用站点默认分类
     int? targetCategoryId = widget.initialCategoryId;
     targetCategoryId ??= await PreloadedDataService()
         .getDefaultComposerCategoryId();
+    if (!mounted || _isLoadingDraft || _hasRestoredDraft) return;
 
     // 应用传入的标签
     if (widget.initialTags != null &&
@@ -314,7 +452,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       // 监听 categories 加载完成
       ref.listenManual(categoriesProvider, (previous, next) {
         next.whenData((categories) {
-          if (!mounted) return;
+          if (!mounted || _hasRestoredDraft) return;
           final category = categories
               .where((c) => c.id == targetCategoryId)
               .firstOrNull;
@@ -330,6 +468,12 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
   @override
   void dispose() {
+    final rich = _richKey.currentState;
+    final currentContentSafe = rich != null
+        ? rich.flushToController()
+        : (_allowClose || _showPreview || _richFallback || !_richModeEnabled);
+    _draftCategorySubscription?.close();
+    _draftLifecycle?.dispose();
     _chrome.dispose();
     _shortcutSurfaceBinding.disposeDeferred();
     _featuredLinkDebounce?.cancel();
@@ -338,13 +482,13 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     _contentController.removeListener(_onDraftContentChanged);
 
     // 关闭时处理草稿：已提交则跳过，有内容则保存，无内容则删除
-    if (!_submitted && !_discarded) {
+    if (currentContentSafe && !_submitted && !_discarded && !_isLoadingDraft) {
       if (_titleController.text.trim().isNotEmpty ||
           _contentController.text.trim().isNotEmpty) {
         final data = DraftData(
           title: _titleController.text,
           reply: _contentController.text,
-          categoryId: _selectedCategory?.id,
+          categoryId: _selectedCategory?.id ?? _draftCategoryId,
           tags: _selectedTags.isNotEmpty ? _selectedTags : null,
           action: 'createTopic',
           archetypeId: 'regular',
@@ -436,7 +580,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   void _onTitleInputChanged() {
     _onDraftContentChanged();
     _updateTitleLength();
-    _onTitleChanged();
+    if (!_restoringDraft) _onTitleChanged();
   }
 
   /// 对齐 Discourse composer：标题只包含一个 URL 时，异步取 onebox 标题，
@@ -635,6 +779,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   }
 
   void _onCategorySelected(Category category) {
+    _draftCategoryId = null;
     setState(() {
       _selectedCategory = category;
       // 分类联动问答默认值:强制分类锁定开;默认分类预勾选;
@@ -690,7 +835,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       return;
     }
     final hadFocus = _contentFocusNode.hasFocus;
-    _richKey.currentState?.flushToController();
+    if (!_flushRichContent()) return;
     _editorKey.currentState?.closeEmojiPanel();
     _richKey.currentState?.closeEmojiPanel();
     _contentFocusNode.unfocus();
@@ -711,7 +856,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     final leaving = _showPreview;
     if (!leaving) {
       _previewHadFocus = _contentFocusNode.hasFocus;
-      _richKey.currentState?.flushToController();
+      if (!_flushRichContent()) return;
       _editorKey.currentState?.closeEmojiPanel();
       _richKey.currentState?.closeEmojiPanel();
       FocusScope.of(context).unfocus();
@@ -735,11 +880,40 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     });
   }
 
+  List<Object?> _submissionValues() => [
+    _contentController.text,
+    _titleController.text,
+    _selectedCategory?.id,
+    ..._selectedTags,
+    _featuredLink,
+    _createAsPostVoting,
+  ];
+
+  bool _submissionPending = false;
+
   Future<void> _submit() async {
+    if (_submissionPending || _isSubmitting) return;
+    _submissionPending = true;
+    try {
+      await _submitChecked();
+    } finally {
+      _submissionPending = false;
+    }
+  }
+
+  Future<void> _submitChecked() async {
+    if ((_editorKey.currentState?.hasPendingUploads ?? false) ||
+        (_richKey.currentState?.hasPendingUploads ?? false)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(UploadTaskLabels.of(context).pendingSubmit)),
+      );
+      return;
+    }
+
     // 富文本模式:先强制序列化镜像。
     // 必须排在下面两步**之前**：它俩都要读 _contentController 判断正文是否
     // 仍为默认态，而富文本的内容在 flush 前还在 EditorState 里。
-    _richKey.currentState?.flushToController();
+    if (!_flushRichContent()) return;
     // 标题是纯 URL 但 onebox 还在飞（或还在 debounce 窗口内）时，不阻断提交：
     // featured link 本身不依赖 onebox 结果，直接用当前标题里的 URL 定案。
     _settlePendingFeaturedLink();
@@ -749,8 +923,9 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     if (pendingLink != null) {
       await _applyFeaturedLinkToContent(pendingLink);
       // 富文本插入后需要重新序列化，否则 controller 拿不到刚插的链接。
-      _richKey.currentState?.flushToController();
+      if (!_flushRichContent()) return;
     }
+    final approved = ComposerSubmissionSnapshot(_submissionValues());
     if (!_formKey.currentState!.validate()) {
       // 预览模式下验证错误不可见，切回编辑模式并提示
       if (_showPreview) {
@@ -825,7 +1000,24 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       if (confirm != true) return;
     }
 
+    if (!mounted) return;
+    if (_draftController.hasConflict &&
+        !await confirmComposerDraftOverwrite(
+          context,
+          onReload: _reloadRemoteDraft,
+        )) {
+      return;
+    }
+    if (!mounted) return;
+    if (!mounted) return;
+    if (!approved.verify(
+      synchronize: _flushRichContent,
+      read: _submissionValues,
+    )) {
+      return;
+    }
     setState(() => _isSubmitting = true);
+    _draftController.disable();
 
     try {
       final service = ref.read(discourseServiceProvider);
@@ -836,6 +1028,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
         tags: _selectedTags.isNotEmpty ? _selectedTags : null,
         featuredLink: _featuredLink,
         createAsPostVoting: _createAsPostVoting,
+        draftKey: _draftController.draftKey,
+        onDraftSequence: _draftController.syncSequence,
       );
 
       // 发送成功后删除草稿
@@ -862,7 +1056,9 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       Navigator.of(context).pop();
     } on DioException catch (_) {
       // 网络错误已由 ErrorInterceptor 处理
+      _draftController.enable();
     } catch (e, s) {
+      _draftController.enable();
       AppErrorHandler.handleUnexpected(e, s);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -915,13 +1111,12 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                     ? null
                     : PreloadedDataService().maxTopicTitleLengthSync,
                 // 计数改用悬浮层(见下方 Stack),这里不占位
-                buildCounter:
-                    (
-                      context, {
-                      required currentLength,
-                      required isFocused,
-                      maxLength,
-                    }) => null,
+                buildCounter: (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) => null,
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return context.l10n.createTopic_enterTitle;
@@ -970,17 +1165,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                 ),
             ],
           ),
-          SizedBox(
-            height: 16,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: ValueListenableBuilder<DraftSaveStatus>(
-                valueListenable: _draftController.statusNotifier,
-                builder: (context, status, _) =>
-                    _buildDraftStatusIndicator(status, theme),
-              ),
-            ),
-          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -1016,42 +1201,6 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     );
   }
 
-  /// 构建草稿保存状态指示器
-  /// 草稿保存状态指示器(瞬态):保存中转圈、失败红色警示;
-  /// 已保存/空闲不显示 —— 成功无需常驻宣告,失败才需要被看见。
-  Widget _buildDraftStatusIndicator(DraftSaveStatus status, ThemeData theme) {
-    final Widget child;
-    switch (status) {
-      case DraftSaveStatus.idle:
-      case DraftSaveStatus.pending:
-      case DraftSaveStatus.saved:
-        return const SizedBox.shrink();
-      case DraftSaveStatus.saving:
-        child = SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(
-            strokeWidth: 1.5,
-            color: theme.colorScheme.outline,
-          ),
-        );
-      case DraftSaveStatus.error:
-        child = Icon(
-          Symbols.cloud_off_rounded,
-          size: 16,
-          color: theme.colorScheme.error,
-        );
-    }
-    return Center(
-      widthFactor: 1,
-      heightFactor: 1,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 4, right: 4),
-        child: child,
-      ),
-    );
-  }
-
   Widget _buildPageTitle(bool supportsQuestions) {
     if (!supportsQuestions) {
       return Text(
@@ -1074,6 +1223,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
   @override
   Widget build(BuildContext context) {
+    _richModeEnabled = ref.watch(preferencesProvider).useRichComposer;
     final categoriesAsync = ref.watch(categoriesProvider);
     final tagsAsync = ref.watch(tagsProvider);
     final canTagTopics = ref.watch(canTagTopicsProvider).value ?? false;
@@ -1095,9 +1245,13 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     );
 
     final page = PopScope(
-      canPop: !_showEmojiPanel,
+      canPop: _allowClose && !_showEmojiPanel,
       onPopInvokedWithResult: (bool didPop, dynamic result) async {
         if (didPop) return;
+        if (!_showEmojiPanel) {
+          _closeWithCurrentContent(result);
+          return;
+        }
         _editorKey.currentState?.closeEmojiPanel();
         _richKey.currentState?.closeEmojiPanel();
       },
@@ -1146,58 +1300,39 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                 ? SystemUiOverlayStyle.light
                 : SystemUiOverlayStyle.dark,
             actions: [
-              // 预览、舍弃、审核、发布保持直接入口。
-              ComposerPreviewButton(
+              ComposerHeaderActions(
+                availableWidth:
+                    MediaQuery.sizeOf(context).width -
+                    MediaQuery.paddingOf(context).horizontal,
+                submitLabel: context.l10n.common_publish,
+                onSubmit: (_isSubmitting || _isResolvingFeaturedLink)
+                    ? null
+                    : _submit,
+                submitting: _isSubmitting,
                 previewing: _showPreview,
-                onPressed: !_isSubmitting ? _togglePreview : null,
-              ),
-              ComposerDiscardButton(
-                onPressed: _isSubmitting ? null : _discardDraft,
-              ),
-              if (ref.watch(preferencesProvider).aiPostReviewEnabled)
-                AiPostReviewButton(
-                  titleBuilder: () => _titleController.text,
-                  contentBuilder: () {
-                    _richKey.currentState?.flushToController();
-                    return _contentController.text;
-                  },
-                  target: AiPostReviewTarget.topic,
-                  enabled: !_isSubmitting,
-                  categoryNameBuilder: () => _selectedCategory?.name,
-                  categoryDescriptionBuilder: () =>
-                      _selectedCategory?.description,
-                  tagsBuilder: () => _selectedTags,
-                  builder: (anchorContext, isReviewing, trigger) {
-                    return ComposerActionButton(
-                      icon: Symbols.auto_awesome_rounded,
-                      label: context.l10n.aiPostReview_button,
-                      onPressed: trigger,
-                      busy: isReviewing,
-                    );
-                  },
-                ),
-              Padding(
-                padding: EdgeInsets.only(right: desktop ? 16 : 0),
-                child: FilledButton(
-                  onPressed: (_isSubmitting || _isResolvingFeaturedLink)
-                      ? null
-                      : _submit,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(56, 40),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(context.l10n.common_publish),
-                ),
+                onTogglePreview: !_isSubmitting ? _togglePreview : null,
+                draftStatus: _draftController.statusNotifier,
+                onRetryDraft: _isSubmitting ? null : _retryDraftSave,
+                showDiscard: true,
+                onDiscard: _isSubmitting ? null : _discardDraft,
+                reviewBuilder:
+                    ref.watch(preferencesProvider).aiPostReviewEnabled
+                    ? (builder) => AiPostReviewButton(
+                        titleBuilder: () => _titleController.text,
+                        contentBuilder: () {
+                          if (!_flushRichContent()) return '';
+                          return _contentController.text;
+                        },
+                        target: AiPostReviewTarget.topic,
+                        enabled: !_isSubmitting,
+                        categoryNameBuilder: () => _selectedCategory?.name,
+                        categoryDescriptionBuilder: () =>
+                            _selectedCategory?.description,
+                        tagsBuilder: () => _selectedTags,
+                        builder: (_, reviewing, trigger) =>
+                            builder(reviewing, trigger),
+                      )
+                    : null,
               ),
             ],
           ),
@@ -1237,7 +1372,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                     // 一次性,提前挂会以空文档镜像覆盖草稿。
                                     // 占位留空 —— 加载视觉由页面级草稿遮罩
                                     // 统一提供(双 spinner 叠影)
-                                    ? (_isLoadingDraft
+                                    ? (_isLoadingDraft && !_reloadingDraft
                                           ? const SizedBox.shrink()
                                           : RichComposerEditor(
                                               key: _richKey,

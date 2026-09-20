@@ -349,6 +349,8 @@ class BlobImageCache {
     final cached = await read(bucket, key, url: url);
     if (cached != null) return cached;
 
+    // 高优请求复用后台下载时仍需提升队列位置，而不是只复用 Future。
+    if (priority == DownloadPriority.high) bump(bucket, url);
     final future = _inflight.putIfAbsent(
       url,
       () => _downloadObject(bucket, url, priority, onProgress).whenComplete(() {
