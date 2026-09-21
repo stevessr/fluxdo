@@ -252,7 +252,7 @@ jobs:
             echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
           else
             echo "未配置 ANDROID_KEYSTORE_BASE64，复用主构建工作流的统一固定兜底签名证书"
-            fallback_keystore_base64="$(sed -n 's/^[[:space:]]*FALLBACK_KEYSTORE_BASE64: "\\(.*\\)"$/\\1/p' .github/workflows/build.yaml | head -n1)"
+            fallback_keystore_base64="$(awk -F'"' '/^[[:space:]]*FALLBACK_KEYSTORE_BASE64:/ {print $2; exit}' .github/workflows/build.yaml)"
             test -n "$fallback_keystore_base64"
             echo "$fallback_keystore_base64" | base64 -d > android/app/upload-keystore.jks
           fi
