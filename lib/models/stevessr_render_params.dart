@@ -71,6 +71,7 @@ enum StevessrCharacter {
   blueArchive03,
   blueArchive04,
   blueArchive05,
+  blueArchive06,
   witchJudgmentEma,
   witchJudgmentHiro,
   witchJudgmentAnAn,
@@ -96,6 +97,7 @@ extension StevessrCharacterKey on StevessrCharacter {
     StevessrCharacter.blueArchive03 => 'blue_archive_03',
     StevessrCharacter.blueArchive04 => 'blue_archive_04',
     StevessrCharacter.blueArchive05 => 'blue_archive_05',
+    StevessrCharacter.blueArchive06 => 'blue_archive_06',
     StevessrCharacter.witchJudgmentEma => '樱羽艾玛',
     StevessrCharacter.witchJudgmentHiro => '二阶堂希罗',
     StevessrCharacter.witchJudgmentAnAn => '夏目安安',
@@ -124,7 +126,8 @@ extension StevessrCharacterKey on StevessrCharacter {
     StevessrCharacter.blueArchive02 ||
     StevessrCharacter.blueArchive03 ||
     StevessrCharacter.blueArchive04 ||
-    StevessrCharacter.blueArchive05 => 'blue_archive/$key.webp',
+    StevessrCharacter.blueArchive05 ||
+    StevessrCharacter.blueArchive06 => 'blue_archive/$key.webp',
     StevessrCharacter.witchJudgmentEma ||
     StevessrCharacter.witchJudgmentHiro ||
     StevessrCharacter.witchJudgmentAnAn ||
@@ -177,6 +180,7 @@ extension StevessrCharacterKey on StevessrCharacter {
     StevessrCharacter.blueArchive03 => '碧蓝档案 03',
     StevessrCharacter.blueArchive04 => '碧蓝档案 04',
     StevessrCharacter.blueArchive05 => '碧蓝档案 05',
+    StevessrCharacter.blueArchive06 => '碧蓝档案 06',
     StevessrCharacter.witchJudgmentEma => '樱羽艾玛',
     StevessrCharacter.witchJudgmentHiro => '二阶堂希罗',
     StevessrCharacter.witchJudgmentAnAn => '夏目安安',
