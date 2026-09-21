@@ -25,7 +25,7 @@ class StevessrCanvas extends StatelessWidget {
   /// 其余角色渲染对应目录下的固定立绘。
   String get _expressionAsset {
     final character = params.character;
-    return '$_assetRoot${character.assetPath(expression: params.expression)}';
+    return '$_assetRoot${character.assetPath(emotion: params.expression)}';
   }
 
   @override

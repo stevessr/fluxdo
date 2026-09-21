@@ -97,7 +97,7 @@ void main() {
     expect(cleared.usesBubbleImage, isFalse);
   });
 
-  test('所有枚举都提供稳定的资源 key', () {
+  test('枚举与角色资源提供稳定名称', () {
     expect(
       StevessrExpression.values.map((value) => value.key),
       containsAll(<String>[
@@ -131,7 +131,7 @@ void main() {
       isNot(contains('original')),
     );
     expect(
-      StevessrCharacter.values.map((value) => value.key),
+      StevessrCharacter.values.map((value) => value.name),
       containsAll(<String>[
         'reimu',
         'marisa',
@@ -166,6 +166,7 @@ void main() {
         'blue_archive_03',
         'blue_archive_04',
         'blue_archive_05',
+        'blue_archive_06',
         '樱羽艾玛',
         '二阶堂希罗',
         '夏目安安',
@@ -189,6 +190,7 @@ void main() {
         '琪露诺',
         '蕾米莉亚·斯卡蕾特',
         '碧蓝档案 01',
+        '碧蓝档案 06',
         '樱羽艾玛',
         '冰上梅露露',
       ]),
@@ -197,12 +199,21 @@ void main() {
     expect(StevessrCharacter.original.supportsExpression, isTrue);
     expect(StevessrCharacter.blueArchive01.supportsExpression, isFalse);
     expect(
+      StevessrCharacter.witchJudgmentMeruru.type,
+      StevessrCharacterType.witchJudgment,
+    );
+    expect(StevessrCharacter.witchJudgmentMeruru.name, '冰上梅露露');
+    expect(
       StevessrCharacter.blueArchive01.assetPath(),
       'blue_archive/blue_archive_01.webp',
     );
     expect(
       StevessrCharacter.witchJudgmentMeruru.assetPath(),
       'witch_judgment/冰上梅露露.webp',
+    );
+    expect(
+      StevessrCharacter.original.assetPath(emotion: StevessrExpression.happy),
+      'stevessr/happy.webp',
     );
     expect(
       StevessrBubble.values.map((value) => value.key),

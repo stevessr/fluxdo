@@ -31,170 +31,352 @@ enum StevessrExpression {
 /// StevesSR 可用的气泡造型。
 enum StevessrBubble { thought, speech, cloud, shout, rounded, caption }
 
-/// 生成器可选的角色立绘。
-///
-/// [StevessrCharacter.original] 渲染 `assets/images/avater/stevessr/` 下的表情
-/// 素材（此时由 [StevessrExpression] 决定）；其余值渲染
-/// `assets/images/avater/` 下对应目录的角色立绘，表情维度不生效。
-enum StevessrCharacter {
-  original,
-  reimu,
-  marisa,
-  flandre,
-  remilia,
-  sakuya,
-  patchouli,
-  koishi,
-  satori,
-  okuu,
-  okuuRin,
-  yuyuko,
-  youmu,
-  yukari,
-  cirno,
-  sanae,
-  suika,
-  suwako,
-  tenshi,
-  kokoro,
-  kaguya,
-  einin,
-  aya,
-  akyuu,
-  renko,
-  sumireko,
-  maribel,
-  keine,
-  deepseek,
-  blueArchive01,
-  blueArchive02,
-  blueArchive03,
-  blueArchive04,
-  blueArchive05,
-  blueArchive06,
-  witchJudgmentEma,
-  witchJudgmentHiro,
-  witchJudgmentAnAn,
-  witchJudgmentNoah,
-  witchJudgmentLeia,
-  witchJudgmentMiria,
-  witchJudgmentMargo,
-  witchJudgmentNanoka,
-  witchJudgmentAlisa,
-  witchJudgmentSherry,
-  witchJudgmentHanna,
-  witchJudgmentKoko,
-  witchJudgmentMeruru,
+/// 角色资源类型，对应 `assets/images/avater/` 下的目录。
+enum StevessrCharacterType {
+  /// StevesSR 表情素材；角色名为空，由表情维度决定资源。
+  stevessr('stevessr'),
+  touhou('touhou'),
+  llm('llm'),
+  blueArchive('blue_archive'),
+  witchJudgment('witch_judgment');
+
+  const StevessrCharacterType(this.directory);
+
+  /// 资源目录名（相对于 `assets/images/avater/`）。
+  final String directory;
 }
 
-extension StevessrCharacterKey on StevessrCharacter {
-  /// 资源文件名（不含扩展名）。
-  String get key => switch (this) {
-    StevessrCharacter.original => '',
-    StevessrCharacter.okuuRin => 'okuu_rin',
-    StevessrCharacter.blueArchive01 => 'blue_archive_01',
-    StevessrCharacter.blueArchive02 => 'blue_archive_02',
-    StevessrCharacter.blueArchive03 => 'blue_archive_03',
-    StevessrCharacter.blueArchive04 => 'blue_archive_04',
-    StevessrCharacter.blueArchive05 => 'blue_archive_05',
-    StevessrCharacter.blueArchive06 => 'blue_archive_06',
-    StevessrCharacter.witchJudgmentEma => '樱羽艾玛',
-    StevessrCharacter.witchJudgmentHiro => '二阶堂希罗',
-    StevessrCharacter.witchJudgmentAnAn => '夏目安安',
-    StevessrCharacter.witchJudgmentNoah => '城崎诺亚',
-    StevessrCharacter.witchJudgmentLeia => '莲见蕾雅',
-    StevessrCharacter.witchJudgmentMiria => '佐伯米莉亚',
-    StevessrCharacter.witchJudgmentMargo => '宝生玛格',
-    StevessrCharacter.witchJudgmentNanoka => '黑部奈叶香',
-    StevessrCharacter.witchJudgmentAlisa => '紫藤亚里沙',
-    StevessrCharacter.witchJudgmentSherry => '橘雪莉',
-    StevessrCharacter.witchJudgmentHanna => '远野汉娜',
-    StevessrCharacter.witchJudgmentKoko => '泽渡可可',
-    StevessrCharacter.witchJudgmentMeruru => '冰上梅露露',
-    _ => name,
-  };
+/// 生成器可选的角色立绘：`type -> name (-> emotion)`。
+///
+/// 角色通过 [type] 和 [name] 定位到
+/// `assets/images/avater/<type>/<name>.webp`；[StevessrCharacterType.stevessr]
+/// 类型没有固定角色名，改为渲染 `stevessr/<emotion>.webp` 表情素材。
+class StevessrCharacter {
+  const StevessrCharacter._(this.type, this.name, this.displayName);
 
-  /// 是否使用 StevesSR 表情素材。
-  bool get supportsExpression => this == StevessrCharacter.original;
+  /// 角色资源类型。
+  final StevessrCharacterType type;
+
+  /// 类型内的资源文件名（不含扩展名）。stevessr 类型为空字符串。
+  final String name;
+
+  /// 下拉列表显示名；东方角色使用官方中文译名。
+  final String displayName;
+
+  /// StevesSR 表情素材是否生效。
+  bool get supportsExpression => type == StevessrCharacterType.stevessr;
 
   /// 资源路径（相对于 `assets/images/avater/`）。
-  String assetPath({StevessrExpression? expression}) => switch (this) {
-    StevessrCharacter.original =>
-      'stevessr/${(expression ?? StevessrExpression.neutral).key}.webp',
-    StevessrCharacter.deepseek => 'llm/deepseek.webp',
-    StevessrCharacter.blueArchive01 ||
-    StevessrCharacter.blueArchive02 ||
-    StevessrCharacter.blueArchive03 ||
-    StevessrCharacter.blueArchive04 ||
-    StevessrCharacter.blueArchive05 ||
-    StevessrCharacter.blueArchive06 => 'blue_archive/$key.webp',
-    StevessrCharacter.witchJudgmentEma ||
-    StevessrCharacter.witchJudgmentHiro ||
-    StevessrCharacter.witchJudgmentAnAn ||
-    StevessrCharacter.witchJudgmentNoah ||
-    StevessrCharacter.witchJudgmentLeia ||
-    StevessrCharacter.witchJudgmentMiria ||
-    StevessrCharacter.witchJudgmentMargo ||
-    StevessrCharacter.witchJudgmentNanoka ||
-    StevessrCharacter.witchJudgmentAlisa ||
-    StevessrCharacter.witchJudgmentSherry ||
-    StevessrCharacter.witchJudgmentHanna ||
-    StevessrCharacter.witchJudgmentKoko ||
-    StevessrCharacter.witchJudgmentMeruru => 'witch_judgment/$key.webp',
-    _ => 'touhou/$key.webp',
-  };
+  String assetPath({StevessrExpression? emotion}) {
+    final assetName = supportsExpression
+        ? (emotion ?? StevessrExpression.neutral).key
+        : name;
+    return '${type.directory}/$assetName.webp';
+  }
 
-  /// 下拉列表显示名；东方角色用官方中文译名。
-  String get displayName => switch (this) {
-    StevessrCharacter.original => '',
-    StevessrCharacter.reimu => '博丽灵梦',
-    StevessrCharacter.marisa => '雾雨魔理沙',
-    StevessrCharacter.flandre => '芙兰朵露·斯卡蕾特',
-    StevessrCharacter.remilia => '蕾米莉亚·斯卡蕾特',
-    StevessrCharacter.sakuya => '十六夜咲夜',
-    StevessrCharacter.patchouli => '帕秋莉·诺蕾姬',
-    StevessrCharacter.koishi => '古明地恋',
-    StevessrCharacter.satori => '古明地觉',
-    StevessrCharacter.okuu => '灵乌路空',
-    StevessrCharacter.okuuRin => '火焰猫燐',
-    StevessrCharacter.yuyuko => '西行寺幽幽子',
-    StevessrCharacter.youmu => '魂魄妖梦',
-    StevessrCharacter.yukari => '八云紫',
-    StevessrCharacter.cirno => '琪露诺',
-    StevessrCharacter.sanae => '东风谷早苗',
-    StevessrCharacter.suika => '伊吹萃香',
-    StevessrCharacter.suwako => '洩矢诹访子',
-    StevessrCharacter.tenshi => '比那名居天子',
-    StevessrCharacter.kokoro => '秦心',
-    StevessrCharacter.kaguya => '蓬莱山辉夜',
-    StevessrCharacter.einin => '八意永琳',
-    StevessrCharacter.aya => '射命丸文',
-    StevessrCharacter.akyuu => '稗田阿求',
-    StevessrCharacter.renko => '宇佐见莲子',
-    StevessrCharacter.sumireko => '宇佐见堇子',
-    StevessrCharacter.maribel => '玛艾露贝莉·赫恩',
-    StevessrCharacter.keine => '上白泽慧音',
-    StevessrCharacter.deepseek => '鲸鲸子',
-    StevessrCharacter.blueArchive01 => '碧蓝档案 01',
-    StevessrCharacter.blueArchive02 => '碧蓝档案 02',
-    StevessrCharacter.blueArchive03 => '碧蓝档案 03',
-    StevessrCharacter.blueArchive04 => '碧蓝档案 04',
-    StevessrCharacter.blueArchive05 => '碧蓝档案 05',
-    StevessrCharacter.blueArchive06 => '碧蓝档案 06',
-    StevessrCharacter.witchJudgmentEma => '樱羽艾玛',
-    StevessrCharacter.witchJudgmentHiro => '二阶堂希罗',
-    StevessrCharacter.witchJudgmentAnAn => '夏目安安',
-    StevessrCharacter.witchJudgmentNoah => '城崎诺亚',
-    StevessrCharacter.witchJudgmentLeia => '莲见蕾雅',
-    StevessrCharacter.witchJudgmentMiria => '佐伯米莉亚',
-    StevessrCharacter.witchJudgmentMargo => '宝生玛格',
-    StevessrCharacter.witchJudgmentNanoka => '黑部奈叶香',
-    StevessrCharacter.witchJudgmentAlisa => '紫藤亚里沙',
-    StevessrCharacter.witchJudgmentSherry => '橘雪莉',
-    StevessrCharacter.witchJudgmentHanna => '远野汉娜',
-    StevessrCharacter.witchJudgmentKoko => '泽渡可可',
-    StevessrCharacter.witchJudgmentMeruru => '冰上梅露露',
-  };
+  static const original = StevessrCharacter._(
+    StevessrCharacterType.stevessr,
+    '',
+    '',
+  );
+
+  static const reimu = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'reimu',
+    '博丽灵梦',
+  );
+  static const marisa = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'marisa',
+    '雾雨魔理沙',
+  );
+  static const flandre = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'flandre',
+    '芙兰朵露·斯卡蕾特',
+  );
+  static const remilia = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'remilia',
+    '蕾米莉亚·斯卡蕾特',
+  );
+  static const sakuya = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'sakuya',
+    '十六夜咲夜',
+  );
+  static const patchouli = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'patchouli',
+    '帕秋莉·诺蕾姬',
+  );
+  static const koishi = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'koishi',
+    '古明地恋',
+  );
+  static const satori = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'satori',
+    '古明地觉',
+  );
+  static const okuu = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'okuu',
+    '灵乌路空',
+  );
+  static const okuuRin = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'okuu_rin',
+    '火焰猫燐',
+  );
+  static const yuyuko = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'yuyuko',
+    '西行寺幽幽子',
+  );
+  static const youmu = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'youmu',
+    '魂魄妖梦',
+  );
+  static const yukari = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'yukari',
+    '八云紫',
+  );
+  static const cirno = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'cirno',
+    '琪露诺',
+  );
+  static const sanae = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'sanae',
+    '东风谷早苗',
+  );
+  static const suika = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'suika',
+    '伊吹萃香',
+  );
+  static const suwako = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'suwako',
+    '洩矢诹访子',
+  );
+  static const tenshi = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'tenshi',
+    '比那名居天子',
+  );
+  static const kokoro = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'kokoro',
+    '秦心',
+  );
+  static const kaguya = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'kaguya',
+    '蓬莱山辉夜',
+  );
+  static const einin = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'einin',
+    '八意永琳',
+  );
+  static const aya = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'aya',
+    '射命丸文',
+  );
+  static const akyuu = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'akyuu',
+    '稗田阿求',
+  );
+  static const renko = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'renko',
+    '宇佐见莲子',
+  );
+  static const sumireko = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'sumireko',
+    '宇佐见堇子',
+  );
+  static const maribel = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'maribel',
+    '玛艾露贝莉·赫恩',
+  );
+  static const keine = StevessrCharacter._(
+    StevessrCharacterType.touhou,
+    'keine',
+    '上白泽慧音',
+  );
+
+  static const deepseek = StevessrCharacter._(
+    StevessrCharacterType.llm,
+    'deepseek',
+    '鲸鲸子',
+  );
+
+  static const blueArchive01 = StevessrCharacter._(
+    StevessrCharacterType.blueArchive,
+    'blue_archive_01',
+    '碧蓝档案 01',
+  );
+  static const blueArchive02 = StevessrCharacter._(
+    StevessrCharacterType.blueArchive,
+    'blue_archive_02',
+    '碧蓝档案 02',
+  );
+  static const blueArchive03 = StevessrCharacter._(
+    StevessrCharacterType.blueArchive,
+    'blue_archive_03',
+    '碧蓝档案 03',
+  );
+  static const blueArchive04 = StevessrCharacter._(
+    StevessrCharacterType.blueArchive,
+    'blue_archive_04',
+    '碧蓝档案 04',
+  );
+  static const blueArchive05 = StevessrCharacter._(
+    StevessrCharacterType.blueArchive,
+    'blue_archive_05',
+    '碧蓝档案 05',
+  );
+  static const blueArchive06 = StevessrCharacter._(
+    StevessrCharacterType.blueArchive,
+    'blue_archive_06',
+    '碧蓝档案 06',
+  );
+
+  static const witchJudgmentEma = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '樱羽艾玛',
+    '樱羽艾玛',
+  );
+  static const witchJudgmentHiro = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '二阶堂希罗',
+    '二阶堂希罗',
+  );
+  static const witchJudgmentAnAn = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '夏目安安',
+    '夏目安安',
+  );
+  static const witchJudgmentNoah = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '城崎诺亚',
+    '城崎诺亚',
+  );
+  static const witchJudgmentLeia = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '莲见蕾雅',
+    '莲见蕾雅',
+  );
+  static const witchJudgmentMiria = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '佐伯米莉亚',
+    '佐伯米莉亚',
+  );
+  static const witchJudgmentMargo = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '宝生玛格',
+    '宝生玛格',
+  );
+  static const witchJudgmentNanoka = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '黑部奈叶香',
+    '黑部奈叶香',
+  );
+  static const witchJudgmentAlisa = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '紫藤亚里沙',
+    '紫藤亚里沙',
+  );
+  static const witchJudgmentSherry = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '橘雪莉',
+    '橘雪莉',
+  );
+  static const witchJudgmentHanna = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '远野汉娜',
+    '远野汉娜',
+  );
+  static const witchJudgmentKoko = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '泽渡可可',
+    '泽渡可可',
+  );
+  static const witchJudgmentMeruru = StevessrCharacter._(
+    StevessrCharacterType.witchJudgment,
+    '冰上梅露露',
+    '冰上梅露露',
+  );
+
+  /// 生成器下拉框可用的全部角色，保持现有显示顺序。
+  static const List<StevessrCharacter> values = <StevessrCharacter>[
+    original,
+    reimu,
+    marisa,
+    flandre,
+    remilia,
+    sakuya,
+    patchouli,
+    koishi,
+    satori,
+    okuu,
+    okuuRin,
+    yuyuko,
+    youmu,
+    yukari,
+    cirno,
+    sanae,
+    suika,
+    suwako,
+    tenshi,
+    kokoro,
+    kaguya,
+    einin,
+    aya,
+    akyuu,
+    renko,
+    sumireko,
+    maribel,
+    keine,
+    deepseek,
+    blueArchive01,
+    blueArchive02,
+    blueArchive03,
+    blueArchive04,
+    blueArchive05,
+    blueArchive06,
+    witchJudgmentEma,
+    witchJudgmentHiro,
+    witchJudgmentAnAn,
+    witchJudgmentNoah,
+    witchJudgmentLeia,
+    witchJudgmentMiria,
+    witchJudgmentMargo,
+    witchJudgmentNanoka,
+    witchJudgmentAlisa,
+    witchJudgmentSherry,
+    witchJudgmentHanna,
+    witchJudgmentKoko,
+    witchJudgmentMeruru,
+  ];
+
+  @override
+  bool operator ==(Object other) =>
+      other is StevessrCharacter && other.type == type && other.name == name;
+
+  @override
+  int get hashCode => Object.hash(type, name);
 }
 
 enum StevessrFont { sans, serif, mono, rounded }

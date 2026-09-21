@@ -295,7 +295,7 @@ class _StevessrInteractivePreviewState
                         children: [
                           StevessrCanvas(
                             key: ValueKey(
-                              'canvas-${p.character.key}-${p.expression.key}',
+                              'canvas-${p.character.type.directory}-${p.character.name}-${p.expression.key}',
                             ),
                             repaintBoundaryKey: widget.repaintBoundaryKey,
                             params: p,

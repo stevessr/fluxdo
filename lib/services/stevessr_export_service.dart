@@ -9,6 +9,7 @@ import 'package:flutter_avif/flutter_avif.dart' as avif;
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter/widgets.dart';
+
 import '../l10n/s.dart';
 import '../models/stevessr_render_params.dart';
 import '../services/toast_service.dart';
@@ -233,7 +234,7 @@ abstract final class StevessrExportService {
 
   static Future<List<int>> _buildSvg(StevessrRenderParams p) async {
     final characterAsset =
-        '$_assetRoot${p.character.assetPath(expression: p.expression)}';
+        '$_assetRoot${p.character.assetPath(emotion: p.expression)}';
     final asset = await rootBundle.load(characterAsset);
     final imageBase64 = base64Encode(
       asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes),
