@@ -71,20 +71,23 @@ enum StevessrCharacter {
   blueArchive03,
   blueArchive04,
   blueArchive05,
-  witchJudgment01,
-  witchJudgment02,
-  witchJudgment03,
-  witchJudgment04,
-  witchJudgment05,
-  witchJudgment06,
-  witchJudgment07,
-  witchJudgment08,
-  witchJudgment09,
-  witchJudgment10,
+  witchJudgmentEma,
+  witchJudgmentHiro,
+  witchJudgmentAnAn,
+  witchJudgmentNoah,
+  witchJudgmentLeia,
+  witchJudgmentMiria,
+  witchJudgmentMargo,
+  witchJudgmentNanoka,
+  witchJudgmentAlisa,
+  witchJudgmentSherry,
+  witchJudgmentHanna,
+  witchJudgmentKoko,
+  witchJudgmentMeruru,
 }
 
 extension StevessrCharacterKey on StevessrCharacter {
-  /// 资源文件名（ASCII key）。
+  /// 资源文件名（不含扩展名）。
   String get key => switch (this) {
     StevessrCharacter.original => '',
     StevessrCharacter.okuuRin => 'okuu_rin',
@@ -93,16 +96,19 @@ extension StevessrCharacterKey on StevessrCharacter {
     StevessrCharacter.blueArchive03 => 'blue_archive_03',
     StevessrCharacter.blueArchive04 => 'blue_archive_04',
     StevessrCharacter.blueArchive05 => 'blue_archive_05',
-    StevessrCharacter.witchJudgment01 => 'witch_judgment_01',
-    StevessrCharacter.witchJudgment02 => 'witch_judgment_02',
-    StevessrCharacter.witchJudgment03 => 'witch_judgment_03',
-    StevessrCharacter.witchJudgment04 => 'witch_judgment_04',
-    StevessrCharacter.witchJudgment05 => 'witch_judgment_05',
-    StevessrCharacter.witchJudgment06 => 'witch_judgment_06',
-    StevessrCharacter.witchJudgment07 => 'witch_judgment_07',
-    StevessrCharacter.witchJudgment08 => 'witch_judgment_08',
-    StevessrCharacter.witchJudgment09 => 'witch_judgment_09',
-    StevessrCharacter.witchJudgment10 => 'witch_judgment_10',
+    StevessrCharacter.witchJudgmentEma => '樱羽艾玛',
+    StevessrCharacter.witchJudgmentHiro => '二阶堂希罗',
+    StevessrCharacter.witchJudgmentAnAn => '夏目安安',
+    StevessrCharacter.witchJudgmentNoah => '城崎诺亚',
+    StevessrCharacter.witchJudgmentLeia => '莲见蕾雅',
+    StevessrCharacter.witchJudgmentMiria => '佐伯米莉亚',
+    StevessrCharacter.witchJudgmentMargo => '宝生玛格',
+    StevessrCharacter.witchJudgmentNanoka => '黑部奈叶香',
+    StevessrCharacter.witchJudgmentAlisa => '紫藤亚里沙',
+    StevessrCharacter.witchJudgmentSherry => '橘雪莉',
+    StevessrCharacter.witchJudgmentHanna => '远野汉娜',
+    StevessrCharacter.witchJudgmentKoko => '泽渡可可',
+    StevessrCharacter.witchJudgmentMeruru => '冰上梅露露',
     _ => name,
   };
 
@@ -119,16 +125,19 @@ extension StevessrCharacterKey on StevessrCharacter {
     StevessrCharacter.blueArchive03 ||
     StevessrCharacter.blueArchive04 ||
     StevessrCharacter.blueArchive05 => 'blue_archive/$key.webp',
-    StevessrCharacter.witchJudgment01 ||
-    StevessrCharacter.witchJudgment02 ||
-    StevessrCharacter.witchJudgment03 ||
-    StevessrCharacter.witchJudgment04 ||
-    StevessrCharacter.witchJudgment05 ||
-    StevessrCharacter.witchJudgment06 ||
-    StevessrCharacter.witchJudgment07 ||
-    StevessrCharacter.witchJudgment08 ||
-    StevessrCharacter.witchJudgment09 ||
-    StevessrCharacter.witchJudgment10 => 'witch_judgment/$key.webp',
+    StevessrCharacter.witchJudgmentEma ||
+    StevessrCharacter.witchJudgmentHiro ||
+    StevessrCharacter.witchJudgmentAnAn ||
+    StevessrCharacter.witchJudgmentNoah ||
+    StevessrCharacter.witchJudgmentLeia ||
+    StevessrCharacter.witchJudgmentMiria ||
+    StevessrCharacter.witchJudgmentMargo ||
+    StevessrCharacter.witchJudgmentNanoka ||
+    StevessrCharacter.witchJudgmentAlisa ||
+    StevessrCharacter.witchJudgmentSherry ||
+    StevessrCharacter.witchJudgmentHanna ||
+    StevessrCharacter.witchJudgmentKoko ||
+    StevessrCharacter.witchJudgmentMeruru => 'witch_judgment/$key.webp',
     _ => 'touhou/$key.webp',
   };
 
@@ -168,16 +177,19 @@ extension StevessrCharacterKey on StevessrCharacter {
     StevessrCharacter.blueArchive03 => '碧蓝档案 03',
     StevessrCharacter.blueArchive04 => '碧蓝档案 04',
     StevessrCharacter.blueArchive05 => '碧蓝档案 05',
-    StevessrCharacter.witchJudgment01 => '魔法少女的魔女审判 01',
-    StevessrCharacter.witchJudgment02 => '魔法少女的魔女审判 02',
-    StevessrCharacter.witchJudgment03 => '魔法少女的魔女审判 03',
-    StevessrCharacter.witchJudgment04 => '魔法少女的魔女审判 04',
-    StevessrCharacter.witchJudgment05 => '魔法少女的魔女审判 05',
-    StevessrCharacter.witchJudgment06 => '魔法少女的魔女审判 06',
-    StevessrCharacter.witchJudgment07 => '魔法少女的魔女审判 07',
-    StevessrCharacter.witchJudgment08 => '魔法少女的魔女审判 08',
-    StevessrCharacter.witchJudgment09 => '魔法少女的魔女审判 09',
-    StevessrCharacter.witchJudgment10 => '魔法少女的魔女审判 10',
+    StevessrCharacter.witchJudgmentEma => '樱羽艾玛',
+    StevessrCharacter.witchJudgmentHiro => '二阶堂希罗',
+    StevessrCharacter.witchJudgmentAnAn => '夏目安安',
+    StevessrCharacter.witchJudgmentNoah => '城崎诺亚',
+    StevessrCharacter.witchJudgmentLeia => '莲见蕾雅',
+    StevessrCharacter.witchJudgmentMiria => '佐伯米莉亚',
+    StevessrCharacter.witchJudgmentMargo => '宝生玛格',
+    StevessrCharacter.witchJudgmentNanoka => '黑部奈叶香',
+    StevessrCharacter.witchJudgmentAlisa => '紫藤亚里沙',
+    StevessrCharacter.witchJudgmentSherry => '橘雪莉',
+    StevessrCharacter.witchJudgmentHanna => '远野汉娜',
+    StevessrCharacter.witchJudgmentKoko => '泽渡可可',
+    StevessrCharacter.witchJudgmentMeruru => '冰上梅露露',
   };
 }
 

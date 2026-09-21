@@ -166,16 +166,19 @@ void main() {
         'blue_archive_03',
         'blue_archive_04',
         'blue_archive_05',
-        'witch_judgment_01',
-        'witch_judgment_02',
-        'witch_judgment_03',
-        'witch_judgment_04',
-        'witch_judgment_05',
-        'witch_judgment_06',
-        'witch_judgment_07',
-        'witch_judgment_08',
-        'witch_judgment_09',
-        'witch_judgment_10',
+        '樱羽艾玛',
+        '二阶堂希罗',
+        '夏目安安',
+        '城崎诺亚',
+        '莲见蕾雅',
+        '佐伯米莉亚',
+        '宝生玛格',
+        '黑部奈叶香',
+        '紫藤亚里沙',
+        '橘雪莉',
+        '远野汉娜',
+        '泽渡可可',
+        '冰上梅露露',
       ]),
     );
     expect(
@@ -186,7 +189,8 @@ void main() {
         '琪露诺',
         '蕾米莉亚·斯卡蕾特',
         '碧蓝档案 01',
-        '魔法少女的魔女审判 10',
+        '樱羽艾玛',
+        '冰上梅露露',
       ]),
     );
     expect(StevessrCharacter.original.displayName, '');
@@ -197,8 +201,8 @@ void main() {
       'blue_archive/blue_archive_01.webp',
     );
     expect(
-      StevessrCharacter.witchJudgment10.assetPath(),
-      'witch_judgment/witch_judgment_10.webp',
+      StevessrCharacter.witchJudgmentMeruru.assetPath(),
+      'witch_judgment/冰上梅露露.webp',
     );
     expect(
       StevessrBubble.values.map((value) => value.key),
