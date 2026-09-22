@@ -59,11 +59,22 @@ extension _UserActions on _TopicDetailPageState {
       replyToPost: replyToPost,
       initialContent: initialContent,
       topicTitle: detail?.title,
+      // 公开话题的「转为私信」预选被回复楼层作者；私信话题则沿用原
+      // 收件人/群组但排除当前用户，避免把自己加入新私信收件人列表。
       privateMessageRecipients: detail == null
           ? const <String>[]
           : <String>{
-              ...detail.allowedUsers.map((user) => user.username),
-              ...detail.allowedGroups,
+              if (detail.isPrivateMessage) ...[
+                ...detail.allowedUsers
+                    .where((user) =>
+                        user.username !=
+                        ref.read(currentUserProvider).value?.username)
+                    .map((user) => user.username),
+                ...detail.allowedGroups,
+              ] else if (replyToPost != null &&
+                  replyToPost.username !=
+                      ref.read(currentUserProvider).value?.username)
+                replyToPost.username,
             }.toList(growable: false),
       preloadedDraftFuture: preloadedDraftFuture,
       isPrivateMessageTopic: detail?.isPrivateMessage ?? false,
