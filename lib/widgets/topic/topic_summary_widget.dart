@@ -463,7 +463,12 @@ class _CollapsibleTopicSummaryState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        // 个人置顶采用 Discourse 的带文字下拉按钮后，需要在窄屏自然换行，
+        // 避免与摘要、订阅按钮争抢同一行而产生 RenderFlex overflow。
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             // 摘要按钮
             InkWell(
@@ -531,10 +536,7 @@ class _CollapsibleTopicSummaryState
                 ),
               ),
             ),
-            if (widget.headerExtra != null) ...[
-              const SizedBox(width: 12),
-              widget.headerExtra!,
-            ],
+            if (widget.headerExtra != null) widget.headerExtra!,
           ],
         ),
         // 展开的摘要内容，使用 SizeTransition 优化展开动画
