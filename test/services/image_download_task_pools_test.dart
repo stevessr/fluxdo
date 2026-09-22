@@ -10,10 +10,22 @@ void main() {
   test('仅主站及合法子域使用专属任务池，第三方继续按内容分池', () {
     final pools = ImageDownloadTaskPools(mainHost: 'linux.do');
     final main = pools.queueFor(mainImage, DownloadChannel.content);
-    expect(pools.queueFor(mainAvatar, DownloadChannel.small), same(main));
+    expect(pools.queueFor(mainAvatar, DownloadChannel.content), same(main));
+    expect(
+      pools.queueFor(mainImage, DownloadChannel.small),
+      isNot(same(main)),
+    );
     expect(
       pools.queueFor(mainImage, DownloadChannel.sticker),
-      same(main),
+      isNot(same(main)),
+    );
+    expect(
+      pools.queueFor(mainImage, DownloadChannel.small),
+      isNot(same(pools.queueFor(cdnImage, DownloadChannel.small))),
+    );
+    expect(
+      pools.queueFor(mainImage, DownloadChannel.sticker),
+      isNot(same(pools.queueFor(cdnImage, DownloadChannel.sticker))),
     );
     expect(
       pools.isMainDomain(
@@ -90,6 +102,33 @@ void main() {
     expect(mainPendingStarted, isTrue);
     for (var i = 0; i < 8; i++) {
       main.release();
+    }
+  });
+
+  test('主站贴纸正在批量下载时不阻塞主站正文图片', () async {
+    final pools = ImageDownloadTaskPools(mainHost: 'linux.do');
+    final sticker = pools.queueFor(mainImage, DownloadChannel.sticker);
+    final content = pools.queueFor(mainImage, DownloadChannel.content);
+
+    await sticker.acquire('sticker-a', DownloadPriority.normal);
+    await sticker.acquire('sticker-b', DownloadPriority.normal);
+    await sticker.acquire('sticker-c', DownloadPriority.high);
+    var stickerPendingStarted = false;
+    final pending = sticker
+        .acquire('sticker-pending', DownloadPriority.normal)
+        .then((_) => stickerPendingStarted = true);
+
+    await content
+        .acquire('main-content', DownloadPriority.high)
+        .timeout(const Duration(seconds: 1));
+    expect(stickerPendingStarted, isFalse);
+    content.release();
+
+    sticker.release();
+    sticker.release();
+    await pending.timeout(const Duration(seconds: 1));
+    for (var i = 0; i < 2; i++) {
+      sticker.release();
     }
   });
 
