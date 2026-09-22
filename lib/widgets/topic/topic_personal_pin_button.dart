@@ -163,6 +163,100 @@ class _TopicPersonalPinButtonState
     }
   }
 
+  // 与 Discourse pinned-options 一致：选择“置顶 / 取消置顶”，而不是
+  // 用上下箭头暗示阅读位置，或把当前状态误当成下一步操作。
+  String _optionTitle(bool pinned, PersonalTopicPinState state) =>
+      pinned ? state.scopeLabel : '取消置顶';
+
+  String _optionDescription(bool pinned, PersonalTopicPinState state) {
+    if (!pinned) return '仅对你取消置顶，不影响其他用户';
+    return state.pinnedGlobally
+        ? '在你看到的所有话题列表中保持置顶'
+        : '在你看到的所属板块话题列表中保持置顶';
+  }
+
+  Widget _optionContent(
+    BuildContext context,
+    PersonalTopicPinState state, {
+    required bool pinned,
+    required bool selected,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+          color: selected ? colors.primary : colors.onSurfaceVariant,
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_optionTitle(pinned, state)),
+              const SizedBox(height: 2),
+              Text(
+                _optionDescription(pinned, state),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (selected) ...[
+          const SizedBox(width: 12),
+          Icon(Icons.check_rounded, size: 18, color: colors.primary),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _showMobileOptions(
+    PersonalTopicPinState state,
+    bool isPinned,
+  ) async {
+    final requestedTopicId = widget.topicId;
+    final choice = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final pinned in [true, false])
+              ListTile(
+                leading: Icon(
+                  pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                ),
+                title: Text(_optionTitle(pinned, state)),
+                subtitle: Text(_optionDescription(pinned, state)),
+                trailing: pinned == isPinned
+                    ? Icon(
+                        Icons.check_rounded,
+                        color: Theme.of(sheetContext).colorScheme.primary,
+                      )
+                    : null,
+                selected: pinned == isPinned,
+                onTap: () => Navigator.pop(sheetContext, pinned),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    // 用户可能在面板打开时切换右侧详情话题，不要把旧选择写入新话题。
+    if (!mounted ||
+        requestedTopicId != widget.topicId ||
+        choice == null ||
+        choice == isPinned) {
+      return;
+    }
+    await _setPinned(choice);
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = ref.watch(currentUserProvider).value;
@@ -181,51 +275,90 @@ class _TopicPersonalPinButtonState
       return const SizedBox.shrink();
     }
 
-    // Discourse 的 pinned / unpinned 在存在 pinned_at 时互斥。若服务端因兼容
-    // 性问题没有返回 unpinned，则仍以 pinned 为当前显示状态的权威来源。
+    // Discourse 原生操作是带选中态的双选项菜单：管理员设置的
+    // 全局/板块置顶只决定作用范围，用户在这里修改的仅是自己的显示状态。
     final isPinned = state.pinned && !state.unpinned;
-    final tooltip = isPinned
-        ? '${state.scopeLabel} · 当前已置顶，点击取消置顶'
-        : '${state.scopeLabel} · 当前未置顶，点击恢复置顶';
     final theme = Theme.of(context);
-
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _mutating ? null : () => unawaited(_setPinned(!isPinned)),
-          borderRadius: BorderRadius.circular(8),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: isPinned
-                  ? theme.colorScheme.primaryContainer
-                  : theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isPinned ? theme.colorScheme.primary : Colors.transparent,
+    final colors = theme.colorScheme;
+    final trigger = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_mutating)
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: colors.onSurfaceVariant,
               ),
+            )
+          else
+            Icon(
+              isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+              size: 16,
+              color: colors.onSurfaceVariant,
             ),
-            child: _mutating
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(
-                    // 箭头表达“当前状态”而非下一步操作：向上=当前置顶，
-                    // 向下=当前已取消置顶。Tooltip 同时明确点击后的动作。
-                    isPinned
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    size: 18,
-                    color: theme.colorScheme.primary,
-                  ),
+          const SizedBox(width: 6),
+          Text(
+            isPinned ? state.scopeLabel : '已取消置顶',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: colors.onSurface,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.arrow_drop_down_rounded, size: 18, color: colors.onSurfaceVariant),
+        ],
+      ),
+    );
+
+    const tooltip = '选择个人置顶状态（不影响其他用户）';
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _mutating
+                ? null
+                : () => unawaited(_showMobileOptions(state, isPinned)),
+            borderRadius: BorderRadius.circular(8),
+            child: trigger,
           ),
         ),
-      ),
+      );
+    }
+
+    return PopupMenuButton<bool>(
+      tooltip: tooltip,
+      enabled: !_mutating,
+      onSelected: (value) {
+        if (value != isPinned) unawaited(_setPinned(value));
+      },
+      itemBuilder: (menuContext) => [
+        for (final pinned in [true, false])
+          PopupMenuItem<bool>(
+            value: pinned,
+            height: 72,
+            child: SizedBox(
+              width: 300,
+              child: _optionContent(
+                menuContext,
+                state,
+                pinned: pinned,
+                selected: pinned == isPinned,
+              ),
+            ),
+          ),
+      ],
+      child: trigger,
     );
   }
 }
