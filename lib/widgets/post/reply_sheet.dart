@@ -8,6 +8,7 @@ import '../../utils/platform_utils.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -306,7 +307,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
 
   Widget _buildReplyContext() {
     final theme = Theme.of(context);
-    final target = widget.replyToPost;
+    final target = _replyToPost;
     final title = widget.topicTitle?.trim();
     final (label, icon) = _isEditMode
         ? ('#${widget.editPost!.postNumber}', Symbols.edit_rounded)
@@ -405,12 +406,92 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
         : null,
   );
 
+  /// 恢复 Discourse 的 composer 动作菜单；当前回复目标与最初的回链来源独立。
+  Widget _buildComposerActionMenu() {
+    final origin = widget.replyToPost;
+    final actions = <_ComposerAction>[
+      _ComposerAction.replyToTopic,
+      if (origin != null && origin.postNumber > 1) _ComposerAction.replyToPost,
+      if (!widget.isPrivateMessageTopic) _ComposerAction.newTopic,
+      _ComposerAction.newPrivateMessage,
+    ];
+    final selected = _isPrivateMessage
+        ? _ComposerAction.newPrivateMessage
+        : _replyToPost == null
+        ? _ComposerAction.replyToTopic
+        : _ComposerAction.replyToPost;
+
+    String label(_ComposerAction action) => switch (action) {
+      _ComposerAction.replyToTopic => context.l10n.post_replyToTopic,
+      _ComposerAction.replyToPost =>
+        '${context.l10n.post_replyToUser(origin!.username)} · #${origin.postNumber}',
+      _ComposerAction.newTopic => context.l10n.drafts_newTopic,
+      _ComposerAction.newPrivateMessage => context.l10n.pm_newTitle,
+    };
+    IconData actionIcon(_ComposerAction action) => switch (action) {
+      _ComposerAction.replyToTopic => Icons.reply_all_rounded,
+      _ComposerAction.replyToPost => Icons.reply_rounded,
+      _ComposerAction.newTopic => Icons.post_add_rounded,
+      _ComposerAction.newPrivateMessage => Icons.mail_outline_rounded,
+    };
+
+    return PopupMenuButton<_ComposerAction>(
+      key: const ValueKey('reply-composer-action-menu'),
+      tooltip: context.l10n.post_replyTo,
+      enabled: !_isSubmitting &&
+          !_isLoadingDraft &&
+          !_isLoadingRaw &&
+          !_switchingComposerAction,
+      icon: const Icon(Icons.swap_horiz_rounded),
+      onSelected: (action) async {
+        if (_switchingComposerAction || action == selected) return;
+        setState(() => _switchingComposerAction = true);
+        try {
+          switch (action) {
+            case _ComposerAction.replyToTopic:
+              await _switchToTopicReply();
+              break;
+            case _ComposerAction.replyToPost:
+              if (origin != null) await _switchToTopicReply(target: origin);
+              break;
+            case _ComposerAction.newTopic:
+              await _convertToNewTopic();
+              break;
+            case _ComposerAction.newPrivateMessage:
+              await _switchToPrivateMessage();
+              break;
+          }
+        } finally {
+          if (mounted) setState(() => _switchingComposerAction = false);
+        }
+      },
+      itemBuilder: (_) => [
+        for (final action in actions)
+          PopupMenuItem<_ComposerAction>(
+            key: ValueKey('reply-composer-action-${action.name}'),
+            value: action,
+            child: Row(
+              children: [
+                Icon(actionIcon(action), size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: Text(label(action))),
+                if (action == selected) ...[
+                  const SizedBox(width: 8),
+                  const Icon(Icons.check_rounded, size: 18),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildHeaderTitle(
     ThemeData theme, {
     TextStyle? style,
     bool wrapTarget = false,
   }) {
-    final target = widget.replyToPost;
+    final target = _replyToPost;
     final label = _isEditMode
         ? context.l10n.post_editPostTitle(widget.editPost!.postNumber)
         : _isPrivateMessage
@@ -452,7 +533,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   }
 
   Widget _buildResponsiveHeader(ThemeData theme, double width) {
-    final target = widget.replyToPost;
+    final target = _replyToPost;
     final compactTarget =
         (width < 600 || !PlatformUtils.isDesktop) &&
         !_isEditMode &&
@@ -478,7 +559,8 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     // 56 navigation + 32 title margins + 44 more + 8 gap + 48 submit + 16 trailing.
     // When even the compact action row cannot fit the recipient, give it its
     // own full-width row instead of truncating the identity or shrinking taps.
-    final separateTarget = compactTarget && titleWidth! > width - 204;
+    final separateTarget =
+        compactTarget && titleWidth! > width - (_canSwitchComposerAction ? 252 : 204);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -500,8 +582,9 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
             elevation: 0,
             scrolledUnderElevation: 0,
             actions: [
+              if (_canSwitchComposerAction) _buildComposerActionMenu(),
               _buildHeaderActions(
-                width,
+                width - (_canSwitchComposerAction ? 48 : 0),
                 minimumTitleWidth: separateTarget ? width : titleWidth,
               ),
             ],
@@ -559,8 +642,8 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
 
   bool get _isPrivateMessage => _composePrivateMessage;
 
-  bool get _canSwitchComposerAction =>
-      !_isEditMode && widget.topicId != null && !_isLoadingDraft;
+  bool get _canSwitchComposerAction => !_isEditMode && widget.topicId != null;
+  bool _switchingComposerAction = false;
 
   /// 所有新建私信入口都允许继续增删收件人；已有私信话题回复不走这里。
   bool get _canEditRecipients => _isPrivateMessage && !_isEditMode;
@@ -667,6 +750,19 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     if (_editReplyTargetNumber == normalized) return;
     _editReplyTargetController.text = normalized == 0 ? '' : '$normalized';
     _scheduleEditReplyTargetPreview(normalized);
+  }
+
+  void _onEditReplyTargetInputChanged(String text) {
+    final target = text.isEmpty ? 0 : int.tryParse(text);
+    if (target == null || target < 0 || target >= widget.editPost!.postNumber) {
+      ++_editReplyTargetPreviewGeneration;
+      setState(() {
+        _editReplyTargetPreview = null;
+        _isLoadingEditReplyTargetPreview = false;
+      });
+      return;
+    }
+    _scheduleEditReplyTargetPreview(target);
   }
 
   void _scheduleEditReplyTargetPreview(int target, {bool notify = true}) {
@@ -846,41 +942,45 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                 ],
               ),
             ),
-            const SizedBox(height: 4),
-            Slider(
-              min: 0,
-              max: maxTarget.toDouble(),
-              divisions: maxTarget,
-              value: selected
-                  .toDouble()
-                  .clamp(0.0, maxTarget.toDouble())
-                  .toDouble(),
-              label: isTopicReply
-                  ? context.l10n.post_replyToTopic
-                  : '#$selected',
-              onChanged: _isSubmitting
-                  ? null
-                  : (value) => _setEditReplyTargetNumber(value.round()),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Row(
-                children: [
-                  Text(
-                    context.l10n.post_replyToTopic,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '#$maxTarget',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 6),
+            // 大话题直接输入楼层号，避免上千个 slider 分段难以精确操作。
+            if (maxTarget <= 100)
+              Slider(
+                min: 0,
+                max: maxTarget.toDouble(),
+                divisions: maxTarget,
+                value: selected.toDouble().clamp(0.0, maxTarget.toDouble()).toDouble(),
+                label: isTopicReply ? context.l10n.post_replyToTopic : '#$selected',
+                onChanged: _isSubmitting
+                    ? null
+                    : (value) => _setEditReplyTargetNumber(value.round()),
               ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    key: const ValueKey('edit-reply-target-number'),
+                    controller: _editReplyTargetController,
+                    enabled: !_isSubmitting,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      isDense: true,
+                      prefixText: '#',
+                      labelText: context.l10n.post_replyTo,
+                      hintText: '1–$maxTarget',
+                    ),
+                    onChanged: _onEditReplyTargetInputChanged,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: _isSubmitting
+                      ? null
+                      : () => _setEditReplyTargetNumber(0),
+                  child: Text(context.l10n.post_replyToTopic),
+                ),
+              ],
             ),
           ],
         ),
@@ -1045,7 +1145,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     reply: _contentController.text,
     title: _isPrivateMessage ? _titleController.text : null,
     action: _isPrivateMessage ? 'privateMessage' : 'reply',
-    replyToPostNumber: widget.replyToPost?.postNumber,
+    replyToPostNumber: _replyToPost?.postNumber,
     recipients: _isPrivateMessage ? _recipients : null,
     archetypeId: _isPrivateMessage ? 'private_message' : 'regular',
   );
@@ -1238,6 +1338,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
           widget.topicId!,
           replyToPostNumber: target?.postNumber,
         ),
+        localStore: ref.read(localDraftStoreProvider),
       );
       _titleController.clear();
     });
@@ -1259,6 +1360,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
       _recipients = widget.privateMessageRecipients.toSet().toList();
       _draftController = DraftController(
         draftKey: Draft.generateNewPrivateMessageKey(),
+        localStore: ref.read(localDraftStoreProvider),
       );
       if (_titleController.text.trim().isEmpty &&
           (widget.topicTitle?.trim().isNotEmpty ?? false)) {

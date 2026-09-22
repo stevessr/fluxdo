@@ -28,6 +28,7 @@ import 'package:fluxdo/widgets/markdown_editor/composer_desktop_workbench.dart';
 import 'package:fluxdo/widgets/markdown_editor/content_actions_button.dart';
 import 'package:fluxdo/widgets/markdown_editor/markdown_editor.dart';
 import 'package:fluxdo/widgets/post/reply_sheet.dart';
+import 'package:fluxdo/widgets/post/pm_recipient_field.dart';
 import 'package:fluxdo/widgets/markdown_editor/rich_composer/rich_composer_editor.dart';
 import 'package:fluxdo_render/editor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -675,6 +676,148 @@ void main() {
     await tester.tap(find.widgetWithText(ListTile, S.current.toolPanel_bold));
     await tester.pumpAndSettle();
     expect(controller.text, '**hello**');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  Post samplePost(int number, {String username = 'author', int replyTo = 0}) =>
+      Post(
+        id: 1000 + number,
+        username: username,
+        avatarTemplate: '',
+        cooked: '<p>example</p>',
+        postNumber: number,
+        postType: 1,
+        replyToPostNumber: replyTo,
+        updatedAt: DateTime(2026),
+        createdAt: DateTime(2026),
+        likeCount: 0,
+        replyCount: 0,
+      );
+
+  testWidgets('公开楼层回复恢复 Discourse 模式切换并保留原楼层回链', (tester) async {
+    await _pumpReply(
+      tester,
+      width: 420,
+      sheet: ReplySheet(
+        topicId: 1,
+        topicTitle: 'Original discussion',
+        replyToPost: samplePost(2),
+        privateMessageRecipients: const ['author'],
+        preloadedDraftFuture: Future.value(null),
+      ),
+    );
+
+    final menu = find.byKey(const ValueKey('reply-composer-action-menu'));
+    expect(menu, findsOneWidget);
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    for (final action in [
+      'replyToTopic',
+      'replyToPost',
+      'newTopic',
+      'newPrivateMessage',
+    ]) {
+      expect(
+        find.byKey(ValueKey('reply-composer-action-$action')),
+        findsOneWidget,
+      );
+    }
+
+    await tester.tap(
+      find.byKey(const ValueKey('reply-composer-action-replyToTopic')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      tester.widget<Text>(
+        find.byKey(const ValueKey('reply-composer-title-text')),
+      ).data,
+      S.current.post_replyToTopic,
+    );
+
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('reply-composer-action-newPrivateMessage')),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(PmRecipientField), findsOneWidget);
+    final field = find.descendant(
+      of: find.byType(MarkdownEditor),
+      matching: find.byType(TextField),
+    );
+    expect(
+      tester.widget<TextField>(field).controller!.text,
+      contains('/t/-/1/2'),
+      reason: '切为话题回复再转私信时，仍须引用最初的具体楼层',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('私信楼层可回复话题、原楼层或新建私信，不提供公开新话题', (tester) async {
+    await _pumpReply(
+      tester,
+      width: 420,
+      sheet: ReplySheet(
+        topicId: 1,
+        topicTitle: 'Private discussion',
+        isPrivateMessageTopic: true,
+        replyToPost: samplePost(3),
+        privateMessageRecipients: const ['author'],
+        preloadedDraftFuture: Future.value(null),
+      ),
+    );
+    final menu = find.byKey(const ValueKey('reply-composer-action-menu'));
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('reply-composer-action-replyToTopic')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('reply-composer-action-replyToPost')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('reply-composer-action-newPrivateMessage')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('reply-composer-action-newTopic')),
+      findsNothing,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('reply-composer-action-newPrivateMessage')),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(PmRecipientField), findsOneWidget);
+    final field = find.descendant(
+      of: find.byType(MarkdownEditor),
+      matching: find.byType(TextField),
+    );
+    expect(tester.widget<TextField>(field).controller!.text, contains('/t/-/1/3'));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('编辑大话题楼层号可精确输入并一键改为回复话题', (tester) async {
+    await _pumpReply(
+      tester,
+      sheet: ReplySheet(
+        topicId: 1,
+        editPost: samplePost(250, replyTo: 2),
+      ),
+    );
+    final number = find.byKey(const ValueKey('edit-reply-target-number'));
+    expect(number, findsOneWidget);
+    expect(tester.widget<TextField>(number).controller!.text, '2');
+    await tester.enterText(number, '125');
+    await tester.pump();
+    expect(tester.widget<TextField>(number).controller!.text, '125');
+    await tester.tap(find.widgetWithText(TextButton, S.current.post_replyToTopic));
+    await tester.pump();
+    expect(tester.widget<TextField>(number).controller!.text, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
   });
