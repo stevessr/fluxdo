@@ -115,14 +115,16 @@ class _TopicPersonalPinButtonState
     if (_mutating) return;
     final current = _state;
     if (current == null || !current.hasAdminPin) return;
+    final requestedTopicId = widget.topicId;
+    final requestedCategoryId = widget.categoryId;
 
     setState(() => _mutating = true);
     try {
       final path = pinned
-          ? '/t/${widget.topicId}/re-pin'
-          : '/t/${widget.topicId}/clear-pin';
+          ? '/t/$requestedTopicId/re-pin'
+          : '/t/$requestedTopicId/clear-pin';
       await ref.read(discourseServiceProvider).dio.put<void>(path);
-      if (!mounted) return;
+      if (!mounted || requestedTopicId != widget.topicId) return;
 
       setState(() {
         _state = PersonalTopicPinState(
@@ -136,15 +138,17 @@ class _TopicPersonalPinButtonState
       // 个人置顶状态会影响 latest 与分类列表的排序/图标。让两类常用列表
       // 在返回时重新取当前用户视角的数据；认证/session 本身完全不动。
       ref.invalidate(topicListProvider(null));
-      ref.invalidate(topicListProvider(widget.categoryId));
+      ref.invalidate(topicListProvider(requestedCategoryId));
 
       ToastService.showSuccess(pinned ? '已恢复置顶' : '已对你取消置顶');
     } catch (error) {
-      if (mounted) {
+      if (mounted && requestedTopicId == widget.topicId) {
         ToastService.showError(context.l10n.common_operationFailed('$error'));
       }
     } finally {
-      if (mounted) setState(() => _mutating = false);
+      if (mounted && requestedTopicId == widget.topicId) {
+        setState(() => _mutating = false);
+      }
     }
   }
 
