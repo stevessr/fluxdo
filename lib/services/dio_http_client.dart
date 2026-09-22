@@ -1,5 +1,7 @@
 import 'download_request_queue.dart';
+import 'image_download_task_pools.dart';
 export 'download_request_queue.dart' show DownloadPriority;
+export 'image_download_task_pools.dart' show DownloadChannel, ImageDownloadTaskPools;
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -57,7 +59,7 @@ class DioHttpClient extends http.BaseClient {
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
   };
 
-  /// 图片下载并发通道(下载侧按内容域分队,与缓存 bucket 分池同思路)。
+  /// 图片下载并发池：主站与第三方 CDN 独立调度。
   ///
   /// 曾是单一全局 8 槽 FIFO —— cache_manager 时代每个 manager 自带 10
   /// 并发互相稀释,问题不显;全量走 blob 单一入口后,贴纸面板一开
@@ -72,52 +74,30 @@ class DioHttpClient extends http.BaseClient {
   ///   带宽敏感,并发过高互相挤占)。
   /// - **sticker 3 槽**:贴纸原文件(面板预取型、单文件大),独立通道
   ///   防挤占内容；其中1槽仅供high前台请求，后台最多使用2槽。
-  static final DownloadRequestQueue _smallSemaphore = DownloadRequestQueue(12);
-  static final DownloadRequestQueue _contentSemaphore = DownloadRequestQueue(6);
-  static final DownloadRequestQueue _stickerSemaphore = DownloadRequestQueue(
-    3,
-    reservedHighSlots: 1,
+  static final ImageDownloadTaskPools _taskPools = ImageDownloadTaskPools(
+    mainHost: Uri.parse(AppConstants.baseUrl).host,
   );
-
-  /// [send](http.BaseClient 接口,现无常驻调用方)沿用内容通道。
-  static DownloadRequestQueue get _downloadSemaphore => _contentSemaphore;
-
-  static DownloadRequestQueue _semaphoreOf(DownloadChannel channel) =>
-      switch (channel) {
-        DownloadChannel.small => _smallSemaphore,
-        DownloadChannel.content => _contentSemaphore,
-        DownloadChannel.sticker => _stickerSemaphore,
-      };
 
   /// 把仍在 [channel] 等待队列中的 [url] 提到高优先级(滚入视野)。
   /// 在途/未排队/已完成均为无操作 —— 幂等,调用方无需判断状态。
   static void bumpPending(DownloadChannel channel, String url) =>
-      _semaphoreOf(channel).bump(url);
+      _taskPools.bumpPending(channel, url);
 
   /// 把仍在 [channel] 等待队列中的 [url] 沉到低优先级队尾(滚出视野)。
   static void sinkPending(DownloadChannel channel, String url) =>
-      _semaphoreOf(channel).sink(url);
+      _taskPools.sinkPending(channel, url);
 
   /// 提取 [AppConstants.baseUrl] 的 host(例如 `linux.do`),用于判断主域。
   /// 注意是 host 比对而不是 URL prefix 比对 —— 子域(`auth.linux.do` 等)
   /// 也算主域,会走带 cookie 的 dio。
-  static final String _mainHost = Uri.parse(AppConstants.baseUrl).host;
-
-  bool _isMainDomain(Uri url) {
-    final host = url.host;
-    if (host.isEmpty) return false;
-    // 主域精确匹配 或 是主域的子域(*.linux.do)
-    return host == _mainHost || host.endsWith('.$_mainHost');
-  }
+  bool _isMainDomain(Uri url) => _taskPools.isMainDomain(url);
 
   dio.Dio _selectDio(Uri url) => _isMainDomain(url) ? _mainDomainDio : _cdnDio;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    await _downloadSemaphore.acquire(
-      request.url.toString(),
-      DownloadPriority.normal,
-    );
+    final semaphore = _taskPools.queueFor(request.url, DownloadChannel.content);
+    await semaphore.acquire(request.url.toString(), DownloadPriority.normal);
     try {
       // 转换 headers
       final headers = <String, dynamic>{};
@@ -164,7 +144,7 @@ class DioHttpClient extends http.BaseClient {
         responseHeaders[name] = values.join(', ');
       });
 
-      // 在并发槽内读完整个 body(见 _downloadSemaphore 注释)
+      // 在下载槽内读完整个 body，避免尚未收完的图片挤占额外连接。
       final builder = BytesBuilder(copy: false);
       final responseBody = response.data;
       if (responseBody != null) {
@@ -194,7 +174,7 @@ class DioHttpClient extends http.BaseClient {
       }
       throw http.ClientException('Dio error: ${e.message}', request.url);
     } finally {
-      _downloadSemaphore.release();
+      semaphore.release();
     }
   }
 
@@ -214,7 +194,7 @@ class DioHttpClient extends http.BaseClient {
     DownloadPriority priority = DownloadPriority.normal,
     void Function(int received, int? total)? onProgress,
   }) async {
-    final semaphore = _semaphoreOf(channel);
+    final semaphore = _taskPools.queueFor(url, channel);
     await semaphore.acquire(url.toString(), priority);
     try {
       final isMainDomain = _isMainDomain(url);
@@ -260,14 +240,3 @@ class DioHttpClient extends http.BaseClient {
   }
 }
 
-/// 图片下载并发通道(见 [DioHttpClient._smallSemaphore] 注释)。
-enum DownloadChannel {
-  /// KB 级小文件(emoji)—— RTT 主导,高并发纯赚。
-  small,
-
-  /// 正文/头像/原图/外部图 —— 带宽敏感的混合内容。
-  content,
-
-  /// 贴纸原文件 —— 面板预取型、单文件大,独立通道防挤占内容。
-  sticker,
-}
