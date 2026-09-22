@@ -59,21 +59,13 @@ class DioHttpClient extends http.BaseClient {
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
   };
 
-  /// 图片下载并发池：主站与第三方 CDN 独立调度。
+  /// 图片按主站/CDN 和内容类型双维度分流，限制的是完整下载而非仅连接数。
+  /// - 主站（含子域）：small 12 / content 8 / sticker 3 个槽位；
+  /// - 第三方 CDN：沿用 small 12 / content 6 / sticker 3 个槽位。
+  /// 贴纸通道各预留 1 个 high 前台槽位，避免批量预取挤占用户主动操作。
   ///
-  /// 曾是单一全局 8 槽 FIFO —— cache_manager 时代每个 manager 自带 10
-  /// 并发互相稀释,问题不显;全量走 blob 单一入口后,贴纸面板一开
-  /// (30+ 张几百 KB~几 MB 动图 + 批量预取)就把 8 槽全占满,正文图
-  /// 排在几十个大文件后面,表现为"贴纸一多正文图加载不出来"。
-  ///
-  /// 修法 = 按内容域分通道,物理隔离:
-  /// - **small 12 槽**:emoji 等 KB 级小文件。耗时被 RTT 主导而非带宽,
-  ///   高并发是纯赚(连接复用后无 TLS 风暴,浏览器 H2 加载 emoji 同为
-  ///   几十路);6 槽跑 200 张 ≈ 200/6×RTT≈5s,12 槽砍半。
-  /// - **content 6 槽**:正文/头像/原图/外部图(几十 KB~几 MB 混合,
-  ///   带宽敏感,并发过高互相挤占)。
-  /// - **sticker 3 槽**:贴纸原文件(面板预取型、单文件大),独立通道
-  ///   防挤占内容；其中1槽仅供high前台请求，后台最多使用2槽。
+  /// 所有主站图片继续使用带 Cookie 的 Dio，CDN 不带 Cookie。
+  /// 两类任务互不排队，主站的小图/正文/贴纸也不会互相占满下载槽。
   static final ImageDownloadTaskPools _taskPools = ImageDownloadTaskPools(
     mainHost: Uri.parse(AppConstants.baseUrl).host,
   );
