@@ -18,7 +18,6 @@ import 'pm_recipient_field.dart';
 import '../markdown_editor/composer_shortcuts.dart';
 import '../markdown_editor/composer_switch_fade.dart';
 import '../markdown_editor/composer_workbench.dart';
-import '../markdown_editor/composer_page_chrome.dart';
 import '../markdown_editor/composer_header_actions.dart';
 import '../common/character_counts_overlay.dart';
 import '../markdown_editor/composer_view_mode_switcher.dart';
@@ -438,7 +437,8 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     return PopupMenuButton<_ComposerAction>(
       key: const ValueKey('reply-composer-action-menu'),
       tooltip: context.l10n.post_replyTo,
-      enabled: !_isSubmitting &&
+      enabled:
+          !_isSubmitting &&
           !_isLoadingDraft &&
           !_isLoadingRaw &&
           !_switchingComposerAction,
@@ -560,7 +560,8 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     // When even the compact action row cannot fit the recipient, give it its
     // own full-width row instead of truncating the identity or shrinking taps.
     final separateTarget =
-        compactTarget && titleWidth! > width - (_canSwitchComposerAction ? 252 : 204);
+        compactTarget &&
+        titleWidth! > width - (_canSwitchComposerAction ? 252 : 204);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -949,8 +950,13 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                 min: 0,
                 max: maxTarget.toDouble(),
                 divisions: maxTarget,
-                value: selected.toDouble().clamp(0.0, maxTarget.toDouble()).toDouble(),
-                label: isTopicReply ? context.l10n.post_replyToTopic : '#$selected',
+                value: selected
+                    .toDouble()
+                    .clamp(0.0, maxTarget.toDouble())
+                    .toDouble(),
+                label: isTopicReply
+                    ? context.l10n.post_replyToTopic
+                    : '#$selected',
                 onChanged: _isSubmitting
                     ? null
                     : (value) => _setEditReplyTargetNumber(value.round()),
@@ -1717,7 +1723,6 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     length: _contentLength,
     minimumLength: _minPostLength,
   );
-
 
   @override
   Widget build(BuildContext context) {

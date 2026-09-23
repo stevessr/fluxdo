@@ -43,21 +43,6 @@ class ComposerActionButton extends StatelessWidget {
   );
 }
 
-/// Legacy wrapper kept for fork composer surfaces that still expose a direct
-/// discard action while upstream routes the same action through header menus.
-class ComposerDiscardButton extends StatelessWidget {
-  const ComposerDiscardButton({super.key, this.onPressed});
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) => ComposerActionButton(
-    icon: Symbols.delete_rounded,
-    label: S.current.common_discard,
-    onPressed: onPressed,
-  );
-}
-
 /// 可切换的创建页标题，继承 AppBar 的标题样式。
 class ComposerTopicKindPicker extends StatelessWidget {
   const ComposerTopicKindPicker({
