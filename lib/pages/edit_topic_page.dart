@@ -623,29 +623,6 @@ class _EditTopicPageState extends ConsumerState<EditTopicPage> {
                     ? _togglePreview
                     : null,
               ),
-
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: FilledButton(
-                  onPressed: (_isSubmitting || _isLoadingContent)
-                      ? null
-                      : _submit,
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                  ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(context.l10n.common_save),
-                ),
-              ),
             ],
           ),
         ),
