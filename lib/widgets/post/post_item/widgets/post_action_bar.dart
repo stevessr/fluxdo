@@ -416,8 +416,11 @@ class _PostActionBarState extends State<PostActionBar>
   /// 描边沿表情自身轮廓（贴纸效果）：把表情染成底色后向四周偏移绘制在底层，
   /// 再叠原图，避免圆形底盘的生硬感。
   Widget _buildReactionStack(ThemeData theme) {
-    final shown = widget.reactions.take(3).toList();
-    const double size = 16;
+    return AnimatedBuilder(
+      animation: EmojiHandler(),
+      builder: (context, _) {
+        final shown = widget.reactions.take(3).toList();
+        const double size = 16;
     const double step = 11; // 相邻表情的水平偏移
     return SizedBox(
       width: size + (shown.length - 1) * step,
@@ -440,6 +443,8 @@ class _PostActionBarState extends State<PostActionBar>
             ),
         ],
       ),
+    );
+      },
     );
   }
 
@@ -504,12 +509,17 @@ class _PostActionBarState extends State<PostActionBar>
       ),
       alignment: Alignment.center,
       child: widget.currentUserReaction != null
-          ? Image(
-              image:
-                  emojiImageProvider(_getEmojiUrl(widget.currentUserReaction!.id)),
-              width: 20,
-              height: 20,
-              errorBuilder: (_, _, _) => const Icon(Symbols.favorite_rounded, size: 20),
+          ? AnimatedBuilder(
+              animation: EmojiHandler(),
+              builder: (context, _) => Image(
+                image: emojiImageProvider(
+                  _getEmojiUrl(widget.currentUserReaction!.id),
+                ),
+                width: 20,
+                height: 20,
+                errorBuilder: (_, _, _) =>
+                    const Icon(Symbols.favorite_rounded, size: 20),
+              ),
             )
           : Icon(
               Symbols.favorite_rounded,
