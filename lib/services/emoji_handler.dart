@@ -3,19 +3,19 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/emoji.dart';
+import '../utils/emoji_shortcodes.dart';
+import '../utils/url_helper.dart';
 import 'auth_session.dart';
 import 'discourse/discourse_service.dart';
-
 import 'preloaded_data_service.dart';
-import '../utils/url_helper.dart';
-import '../utils/emoji_shortcodes.dart';
 
 /// Emoji URL 解析器
 ///
 /// 与 Discourse 官方逻辑一致：
-/// - 自定义 emoji（如 bili_114）：从预加载数据 `customEmoji` 注册，URL 由服务端提供
-/// - 标准 emoji（如 heart、smile）：URL 确定性拼接 `/images/emoji/twitter/{name}.png`
-/// - 不依赖 `/emojis.json` API（该接口仅供 emoji picker 使用）
+/// - 自定义 emoji：优先使用当前 bootstrap 的 URL，补充从
+///   `/emojis.json` 获取的站点完整目录（reaction 和 picker 共用）。
+/// - 标准 emoji：优先使用服务端目录提供的真实 URL，仅无目录时
+///   临时拼接 Twemoji 路径，等待异步目录就绪后刷新已挂载的图片。
 class EmojiHandler extends ChangeNotifier {
   static final EmojiHandler _instance = EmojiHandler._internal();
   factory EmojiHandler() => _instance;
