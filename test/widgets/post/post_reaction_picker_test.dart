@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/l10n/s.dart';
+import 'package:fluxdo/models/emoji.dart';
 import 'package:fluxdo/models/topic.dart';
 import 'package:fluxdo/services/discourse_cache_manager.dart';
 import 'package:fluxdo/services/emoji_handler.dart';
@@ -353,5 +354,82 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       expect(tester.takeException(), isNull);
     }
+  });
+
+  testWidgets('already-open reaction picker adopts server custom emoji URL', (
+    tester,
+  ) async {
+    const reaction = 'server_reaction_fixture';
+    const actualUrl = 'https://cdn.example.com/reactions/actual.png';
+    final handler = EmojiHandler();
+    final fallbackUrl = handler.getEmojiUrl(reaction);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawCircle(const Offset(14, 14), 12, Paint()..color = Colors.amber);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(28, 28);
+    picture.dispose();
+    for (final url in [fallbackUrl, actualUrl]) {
+      PaintingBinding.instance.imageCache.putIfAbsent(
+        emojiImageProvider(url),
+        () => OneFrameImageStreamCompleter(
+          Future.value(ImageInfo(image: image.clone())),
+        ),
+      );
+    }
+    image.dispose();
+
+    late BuildContext pickerContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            pickerContext = context;
+            return const Scaffold();
+          },
+        ),
+      ),
+    );
+    final controller = ReactionPickerController(
+      vsync: const TestVSync(),
+      onReactionSelected: (_) {},
+    );
+    addTearDown(controller.dispose);
+    controller.open(
+      context: pickerContext,
+      buttonRect: const Rect.fromLTWH(100, 320, 44, 36),
+      reactions: const [reaction],
+      currentUserReaction: null,
+      theme: Theme.of(pickerContext),
+      mode: ReactionPickerMode.touch,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Image &&
+            w.width == 28 &&
+            w.image == emojiImageProvider(fallbackUrl),
+      ),
+      findsOneWidget,
+    );
+
+    handler.registerCatalog({
+      'custom': [
+        Emoji(name: reaction, url: actualUrl, group: 'custom'),
+      ],
+    });
+    await tester.pump();
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Image &&
+            w.width == 28 &&
+            w.image == emojiImageProvider(actualUrl),
+      ),
+      findsOneWidget,
+    );
+    controller.close();
+    await tester.pumpAndSettle();
   });
 }
