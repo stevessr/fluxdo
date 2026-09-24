@@ -620,9 +620,11 @@ class _EmojiCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image(
-      image: ResizeImage(
-        emojiImageProvider(EmojiHandler().getEmojiUrl(name)),
+    return AnimatedBuilder(
+      animation: EmojiHandler(),
+      builder: (context, _) => Image(
+        image: ResizeImage(
+          emojiImageProvider(EmojiHandler().getEmojiUrl(name)),
         width: decodeSize,
         height: decodeSize,
         policy: ResizeImagePolicy.fit,
@@ -643,7 +645,8 @@ class _EmojiCell extends StatelessWidget {
           child: SizedBox(width: width, height: height),
         );
       },
-      errorBuilder: (_, _, _) => SizedBox(width: width, height: height),
+        errorBuilder: (_, _, _) => SizedBox(width: width, height: height),
+      ),
     );
   }
 }
