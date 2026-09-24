@@ -421,29 +421,29 @@ class _PostActionBarState extends State<PostActionBar>
       builder: (context, _) {
         final shown = widget.reactions.take(3).toList();
         const double size = 16;
-    const double step = 11; // 相邻表情的水平偏移
-    return SizedBox(
-      width: size + (shown.length - 1) * step,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // 倒序绘制，让靠前的表情盖在上层
-          for (var i = shown.length - 1; i >= 0; i--)
-            Positioned(
-              left: i * step,
-              child: _OutlinedEmoji(
-                image: emojiImageProvider(_getEmojiUrl(shown[i].id)),
-                // 描边的作用是「咬掉」压在下面的表情一圈，
-                // 最下层没有压着任何表情，无需描边
-                outlineColor:
-                    i == shown.length - 1 ? null : theme.colorScheme.surface,
-                size: size,
-              ),
-            ),
-        ],
-      ),
-    );
+        const double step = 11; // 相邻表情的水平偏移
+        return SizedBox(
+          width: size + (shown.length - 1) * step,
+          height: size,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // 倒序绘制，让靠前的表情盖在上层
+              for (var i = shown.length - 1; i >= 0; i--)
+                Positioned(
+                  left: i * step,
+                  child: _OutlinedEmoji(
+                    image: emojiImageProvider(_getEmojiUrl(shown[i].id)),
+                    // 最下层没有压着任何表情，无需描边
+                    outlineColor: i == shown.length - 1
+                        ? null
+                        : theme.colorScheme.surface,
+                    size: size,
+                  ),
+                ),
+            ],
+          ),
+        );
       },
     );
   }
