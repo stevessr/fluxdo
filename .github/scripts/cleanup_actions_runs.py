@@ -81,8 +81,10 @@ class GitHubAPI:
         return self.branch_cache[key]
 
     def completed_runs(self, cutoff):
-        # GitHub limits filtered run searches to 1,000 results. Resume with an
-        # inclusive timestamp boundary and deduplicate to cover older pages.
+        # GitHub limits filtered run searches to 1,000 results. The Actions
+        # runs endpoint does not support an open-ended "..timestamp" range:
+        # it silently returns zero runs. Use the supported <=timestamp filter
+        # and resume with an inclusive boundary, deduplicating overlapping runs.
         upper = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
         seen = set()
         previous_boundary = None
@@ -90,7 +92,7 @@ class GitHubAPI:
             oldest = None
             for page in range(1, 11):
                 params = urlencode(
-                    {"status": "completed", "created": f"..{upper}",
+                    {"status": "completed", "created": f"<={upper}",
                      "per_page": 100, "page": page}
                 )
                 payload = self.request(f"actions/runs?{params}")
