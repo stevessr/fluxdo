@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageProvider;
+
 import 'avif_image_provider.dart';
 export 'avif_image_provider.dart' show AvifImageProvider;
 import 'blob_image_cache.dart';
