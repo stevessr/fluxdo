@@ -215,7 +215,10 @@ ImageProvider siteAssetImageProvider(
 /// emoji 全集实测 100% 静态 PNG,单一路径即可;64px 目标尺寸走解码
 /// 闸门的小图旁路,由引擎 worker 池并行解码。
 ImageProvider emojiImageProvider(String url, {double scale = 1.0}) {
-  return BlobImageProvider(
+  // Site-defined emoji can be GIF, animated WebP, APNG, or AVIF; unlike the
+  // bundled PNG set they need the same format-aware decoder as other images.
+  // Keep the shared site-wide emoji bucket for all formats.
+  return discourseImageProvider(
     url,
     bucket: BlobImageCache.emojiBucket,
     scale: scale,
