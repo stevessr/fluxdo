@@ -118,12 +118,13 @@ class EmojiHandler extends ChangeNotifier {
   ///
   /// 优先查找自定义 emoji（有服务端提供的真实 URL），
   /// 未找到则使用标准 emoji 的确定性路径。
-  String getEmojiUrl(String name) {
+  String getEmojiUrl(String name, {String? serverUrl}) {
     final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
 
     // 优先查自定义 emoji（如 bili_114、tsai 等）
-    final customUrl = _customEmojiMap[normalized] ?? _catalogEmojiMap[normalized];
-    if (customUrl != null) {
+    final customUrl =
+        _customEmojiMap[normalized] ?? _catalogEmojiMap[normalized] ?? serverUrl;
+    if (customUrl != null && customUrl.isNotEmpty) {
       return UrlHelper.resolveUrlWithCdn(customUrl);
     }
 
