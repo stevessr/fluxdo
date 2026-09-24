@@ -1035,13 +1035,16 @@ class _EmojiImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image(
-      image: emojiImageProvider(_getEmojiUrl(reactionId)),
-      width: size,
-      height: size,
-      gaplessPlayback: true,
-      errorBuilder: (_, _, _) =>
-          Icon(Symbols.emoji_emotions_rounded, size: size * 0.9),
+    return AnimatedBuilder(
+      animation: EmojiHandler(),
+      builder: (context, _) => Image(
+        image: emojiImageProvider(_getEmojiUrl(reactionId)),
+        width: size,
+        height: size,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) =>
+            Icon(Symbols.emoji_emotions_rounded, size: size * 0.9),
+      ),
     );
   }
 }
