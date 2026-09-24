@@ -449,6 +449,7 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
                                 emojiGroups[groupKeys[groupIndex]]!.first;
                             icon = _EmojiCell(
                               name: firstEmoji.name,
+                              serverUrl: firstEmoji.url,
                               width: 24,
                               height: 24,
                               decodeSize: 48,
@@ -568,7 +569,11 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
           message: ':${emoji.name}:',
           child: Padding(
             padding: const EdgeInsets.all(4.0),
-            child: _EmojiCell(name: emoji.name, decodeSize: 64),
+            child: _EmojiCell(
+                            name: emoji.name,
+                            serverUrl: emoji.url,
+                            decodeSize: 64,
+                          ),
           ),
         ),
       ),
@@ -608,12 +613,14 @@ extension StringExtension on String {
 class _EmojiCell extends StatelessWidget {
   const _EmojiCell({
     required this.name,
+    this.serverUrl,
     required this.decodeSize,
     this.width,
     this.height,
   });
 
   final String name;
+  final String? serverUrl;
   final int decodeSize;
   final double? width;
   final double? height;
@@ -624,7 +631,9 @@ class _EmojiCell extends StatelessWidget {
       animation: EmojiHandler(),
       builder: (context, _) => Image(
         image: ResizeImage(
-          emojiImageProvider(EmojiHandler().getEmojiUrl(name)),
+          emojiImageProvider(
+            EmojiHandler().getEmojiUrl(name, serverUrl: serverUrl),
+          ),
           width: decodeSize,
           height: decodeSize,
           policy: ResizeImagePolicy.fit,
@@ -803,7 +812,11 @@ class _EmojiSearchViewState extends State<_EmojiSearchView> {
                         message: ':${emoji.name}:',
                         child: Padding(
                           padding: const EdgeInsets.all(4.0),
-                          child: _EmojiCell(name: emoji.name, decodeSize: 64),
+                          child: _EmojiCell(
+                            name: emoji.name,
+                            serverUrl: emoji.url,
+                            decodeSize: 64,
+                          ),
                         ),
                       ),
                     );
@@ -1008,7 +1021,11 @@ class _EmojiSearchSheetState extends State<_EmojiSearchSheet> {
                           message: ':${emoji.name}:',
                           child: Padding(
                             padding: const EdgeInsets.all(4.0),
-                            child: _EmojiCell(name: emoji.name, decodeSize: 80),
+                            child: _EmojiCell(
+                              name: emoji.name,
+                              serverUrl: emoji.url,
+                              decodeSize: 80,
+                            ),
                           ),
                         ),
                       );
