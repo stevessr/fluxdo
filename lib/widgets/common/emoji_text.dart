@@ -117,27 +117,27 @@ class EmojiText extends StatelessWidget {
         style?.fontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14.0;
     final emojiSize = fontSize * 1.2;
 
-    // 获取 emoji URL
-    final emojiUrl = EmojiHandler().getEmojiUrl(emojiName);
-
     return WidgetSpan(
       alignment: PlaceholderAlignment.middle,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1),
-        child: Image(
-          image: emojiImageProvider(emojiUrl),
-          width: emojiSize,
-          height: emojiSize,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) {
-            // 加载失败时显示原文本
-            return Text(
-              ':$emojiName:',
-              style:
-                  style?.copyWith(fontSize: fontSize) ??
-                  TextStyle(fontSize: fontSize),
-            );
-          },
+        child: AnimatedBuilder(
+          animation: EmojiHandler(),
+          builder: (context, _) => Image(
+            image: emojiImageProvider(EmojiHandler().getEmojiUrl(emojiName)),
+            width: emojiSize,
+            height: emojiSize,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              // 加载失败时显示原文本
+              return Text(
+                ':$emojiName:',
+                style:
+                    style?.copyWith(fontSize: fontSize) ??
+                    TextStyle(fontSize: fontSize),
+              );
+            },
+          ),
         ),
       ),
     );
