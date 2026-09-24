@@ -1,4 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+
+import '../models/emoji.dart';
+import 'auth_session.dart';
+import 'discourse/discourse_service.dart';
 
 import 'preloaded_data_service.dart';
 import '../utils/url_helper.dart';
@@ -16,12 +22,64 @@ class EmojiHandler extends ChangeNotifier {
   EmojiHandler._internal() {
     // preload 可以在首屏放行后才完成；监听真实完成与重置，而不是把
     // 门禁超时时读到的空表情列表当成永久初始化结果。
-    PreloadedDataService().emojiDataRevision.addListener(init);
-    init();
+    PreloadedDataService().emojiDataRevision.addListener(_onPreloadChanged);
+    _onPreloadChanged();
   }
 
   /// 自定义 emoji 名称 -> URL 映射（对应 Discourse 的 extendedEmojiMap）
-  Map<String, String>? _customEmojiMap;
+  Map<String, String> _customEmojiMap = {};
+
+  /// /emojis.json exposes the actual URL of *all* server emoji, including
+  /// custom reactions that may not be present in the home preload payload.
+  Map<String, String> _catalogEmojiMap = {};
+  Future<void>? _catalogInflight;
+  bool _catalogLoaded = false;
+
+  void _onPreloadChanged() {
+    init();
+    // Bootstrap is allowed to finish after the startup gate opens. Populate
+    // reaction URLs independently of whether the user opens the emoji picker.
+    if (PreloadedDataService().isLoaded && !_catalogLoaded) {
+      unawaited(ensureCatalogLoaded().catchError((Object error) {
+        debugPrint('[EmojiHandler] Failed to fetch emoji catalog: $error');
+      }));
+    }
+  }
+
+  /// Share a single background request; a failed attempt can be retried by
+  /// opening the picker or on the next successful bootstrap refresh.
+  Future<void> ensureCatalogLoaded() {
+    if (_catalogLoaded) return Future<void>.value();
+    return _catalogInflight ??= _fetchCatalog().whenComplete(() {
+      _catalogInflight = null;
+    });
+  }
+
+  Future<void> _fetchCatalog() async {
+    final generation = AuthSession().generation;
+    final groups = await DiscourseService().getEmojis();
+    if (!AuthSession().isValid(generation)) return;
+    registerCatalog(groups);
+    if (groups.isNotEmpty) _catalogLoaded = true;
+  }
+
+  /// Also accept cached /emojis.json snapshots and subsequent SWR updates.
+  /// Server URLs take precedence over generated Twemoji paths, while the
+  /// current bootstrap's custom URLs take precedence over an older snapshot.
+  void registerCatalog(Map<String, List<Emoji>> groups) {
+    final updated = <String, String>{};
+    for (final emojis in groups.values) {
+      for (final emoji in emojis) {
+        if (emoji.name.isNotEmpty && emoji.url.isNotEmpty) {
+          updated[normalizeEmojiShortcodeName(emoji.name).toLowerCase()] =
+              emoji.url;
+        }
+      }
+    }
+    if (updated.isEmpty || mapEquals(_catalogEmojiMap, updated)) return;
+    _catalogEmojiMap = updated;
+    notifyListeners();
+  }
 
   /// 每次 preload 完成/失效时重新同步。空数据仅为当前临时状态，
   /// 不会阻止后续加载；切换站点时也不会沿用上一站点的自定义 URL。
@@ -35,7 +93,7 @@ class EmojiHandler extends ChangeNotifier {
         final url = emoji['url'];
         if (name is String && url is String &&
             name.isNotEmpty && url.isNotEmpty) {
-          updated[normalizeEmojiShortcodeName(name)] = url;
+          updated[normalizeEmojiShortcodeName(name).toLowerCase()] = url;
         }
       }
     } catch (e) {
@@ -61,10 +119,10 @@ class EmojiHandler extends ChangeNotifier {
   /// 优先查找自定义 emoji（有服务端提供的真实 URL），
   /// 未找到则使用标准 emoji 的确定性路径。
   String getEmojiUrl(String name) {
-    final normalized = normalizeEmojiShortcodeName(name);
+    final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
 
     // 优先查自定义 emoji（如 bili_114、tsai 等）
-    final customUrl = _customEmojiMap?[normalized];
+    final customUrl = _customEmojiMap[normalized] ?? _catalogEmojiMap[normalized];
     if (customUrl != null) {
       return UrlHelper.resolveUrlWithCdn(customUrl);
     }
