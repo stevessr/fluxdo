@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/emoji.dart';
+import '../services/emoji_handler.dart';
 import '../services/discourse/discourse_service.dart';
 import 'core_providers.dart';
 
@@ -37,14 +38,17 @@ final emojiGroupsProvider =
       debugPrint('[EmojiProvider] 快照解析失败,回退网络: $e');
     }
     if (snapshotGroups != null && snapshotGroups.isNotEmpty) {
+      EmojiHandler().registerCatalog(snapshotGroups);
       yield snapshotGroups;
       // 后台刷新:失败静默(快照已在展示,不打扰)。
       try {
         final fresh = await service.getEmojisRaw();
         final freshJson = jsonEncode(fresh);
         if (freshJson != snapshotJson) {
-          await _EmojiSnapshotStore.save(freshJson);
-          yield parseEmojiGroups(fresh);
+          final groups = parseEmojiGroups(fresh);
+          EmojiHandler().registerCatalog(groups);
+          unawaited(_EmojiSnapshotStore.save(freshJson));
+          yield groups;
         }
       } catch (e) {
         debugPrint('[EmojiProvider] 后台刷新失败(快照兜底): $e');
@@ -55,8 +59,10 @@ final emojiGroupsProvider =
 
   // 无快照:等网络(首装唯一一次),成功即落盘。
   final fresh = await service.getEmojisRaw();
+  final groups = parseEmojiGroups(fresh);
+  EmojiHandler().registerCatalog(groups);
   unawaited(_EmojiSnapshotStore.save(jsonEncode(fresh)));
-  yield parseEmojiGroups(fresh);
+  yield groups;
 });
 
 /// /emojis.json 的磁盘快照(ApplicationSupport 下单文件)。
