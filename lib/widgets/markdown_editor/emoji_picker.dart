@@ -292,8 +292,9 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
   }
 
   Widget _buildContent(Map<String, List<Emoji>> emojiGroups) {
-    if (emojiGroups.isEmpty)
+    if (emojiGroups.isEmpty) {
       return Center(child: Text(S.current.emoji_notFound));
+    }
 
     // 内联搜索态:整个内容区切换为搜索视图(桌面悬浮弹层场景)
     if (_searching) {
