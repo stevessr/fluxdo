@@ -14,8 +14,10 @@ class Emoji {
   factory Emoji.fromJson(Map<String, dynamic> json) {
     return Emoji(
       name: json['name'] as String,
-      url: json['url'] as String,
-      group: json['group'] as String,
+      // A deleted custom upload may have a null URL; keep the rest of the
+      // catalog available instead of breaking every reaction image.
+      url: json['url'] as String? ?? '',
+      group: json['group'] as String? ?? 'default',
       searchAliases: (json['search_aliases'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
