@@ -241,12 +241,15 @@ class _PostReactionUsersSheetState extends State<PostReactionUsersSheet> {
                   ),
                 )
               else if (emojiId != null)
-                Image(
-                  image: emojiImageProvider(_getEmojiUrl(emojiId)),
-                  width: 18,
-                  height: 18,
-                  errorBuilder: (_, _, _) =>
-                      const SizedBox(width: 18, height: 18),
+                AnimatedBuilder(
+                  animation: EmojiHandler(),
+                  builder: (context, _) => Image(
+                    image: emojiImageProvider(_getEmojiUrl(emojiId)),
+                    width: 18,
+                    height: 18,
+                    errorBuilder: (_, _, _) =>
+                        const SizedBox(width: 18, height: 18),
+                  ),
                 ),
               const SizedBox(width: 4),
               Text(
@@ -348,12 +351,15 @@ class _PostReactionUsersSheetState extends State<PostReactionUsersSheet> {
               ),
               // 回应 emoji（仅在"全部"标签下显示）
               if (_selectedReactionId == null)
-                Image(
-                  image: emojiImageProvider(_getEmojiUrl(item.reactionId)),
-                  width: 20,
-                  height: 20,
-                  errorBuilder: (_, _, _) =>
-                      const SizedBox(width: 20, height: 20),
+                AnimatedBuilder(
+                  animation: EmojiHandler(),
+                  builder: (context, _) => Image(
+                    image: emojiImageProvider(_getEmojiUrl(item.reactionId)),
+                    width: 20,
+                    height: 20,
+                    errorBuilder: (_, _, _) =>
+                        const SizedBox(width: 20, height: 20),
+                  ),
                 ),
             ],
           ),
