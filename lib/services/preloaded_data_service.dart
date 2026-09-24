@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show compute, visibleForTesting;
+import 'package:flutter/foundation.dart' show compute, visibleForTesting, ValueNotifier;
 import 'package:flutter/material.dart';
 import '../constants.dart';
 import '../models/topic.dart';
@@ -51,6 +51,10 @@ class PreloadedDataService {
   bool _hasDiscourseSetup = false; // 是否提取到 data-discourse-setup 标签
   bool _loaded = false;
   int _dataRevision = 0;
+
+  /// 表情配置从预加载数据就绪/失效时发布变更。首屏门禁可能超时或被跳过，
+  /// 已挂载的表情和 reaction 选择器仍需在后台 preload 完成后刷新 URL。
+  final ValueNotifier<int> emojiDataRevision = ValueNotifier<int>(0);
   bool _loading = false;
 
   PreloadedDataService._internal()
@@ -534,6 +538,7 @@ class PreloadedDataService {
     }
 
     _loaded = true;
+    emojiDataRevision.value++;
     debugPrint('[PreloadedData] 已从 HTML 快照恢复数据');
     return true;
   }
@@ -547,6 +552,7 @@ class PreloadedDataService {
     _cachedTopicListResponse = null;
     _topicListResponseCompleter = null;
     _customEmoji = null;
+    emojiDataRevision.value++;
     _topicTrackingStates = null;
     _topicTrackingStatesRawJson = null;
     _topicTrackingStatesCompleter = null;
@@ -577,6 +583,13 @@ class PreloadedDataService {
   }) {
     _currentUser = currentUser;
     _siteSettings = siteSettings;
+  }
+
+  /// 测试用：模拟首屏放行后自定义表情才到达，以及站点切换。
+  @visibleForTesting
+  void debugSeedCustomEmoji(List<Map<String, dynamic>>? emojis) {
+    _customEmoji = emojis;
+    emojiDataRevision.value++;
   }
 
   void reset() {
@@ -675,6 +688,7 @@ class PreloadedDataService {
       }
       debugPrint('[PreloadedData] 数据加载成功');
       _loaded = true;
+      emojiDataRevision.value++;
       // 预热完成后仅更新站点基础数据和 sitekey。cf_clearance 自动续期
       // 由 BrowserTrustCoordinator 统一判断启动，避免预加载服务绕过生命周期门禁。
     } catch (e) {

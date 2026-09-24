@@ -620,30 +620,33 @@ class _EmojiCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image(
-      image: ResizeImage(
-        emojiImageProvider(EmojiHandler().getEmojiUrl(name)),
-        width: decodeSize,
-        height: decodeSize,
-        policy: ResizeImagePolicy.fit,
+    return AnimatedBuilder(
+      animation: EmojiHandler(),
+      builder: (context, _) => Image(
+        image: ResizeImage(
+          emojiImageProvider(EmojiHandler().getEmojiUrl(name)),
+          width: decodeSize,
+          height: decodeSize,
+          policy: ResizeImagePolicy.fit,
+        ),
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) return child;
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurfaceVariant.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: SizedBox(width: width, height: height),
+          );
+        },
+        errorBuilder: (_, _, _) => SizedBox(width: width, height: height),
       ),
-      width: width,
-      height: height,
-      fit: BoxFit.contain,
-      gaplessPlayback: true,
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (wasSynchronouslyLoaded || frame != null) return child;
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurfaceVariant.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: SizedBox(width: width, height: height),
-        );
-      },
-      errorBuilder: (_, _, _) => SizedBox(width: width, height: height),
     );
   }
 }

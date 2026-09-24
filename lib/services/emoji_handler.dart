@@ -10,36 +10,41 @@ import '../utils/emoji_shortcodes.dart';
 /// - 自定义 emoji（如 bili_114）：从预加载数据 `customEmoji` 注册，URL 由服务端提供
 /// - 标准 emoji（如 heart、smile）：URL 确定性拼接 `/images/emoji/twitter/{name}.png`
 /// - 不依赖 `/emojis.json` API（该接口仅供 emoji picker 使用）
-class EmojiHandler {
+class EmojiHandler extends ChangeNotifier {
   static final EmojiHandler _instance = EmojiHandler._internal();
   factory EmojiHandler() => _instance;
-  EmojiHandler._internal();
+  EmojiHandler._internal() {
+    // preload 可以在首屏放行后才完成；监听真实完成与重置，而不是把
+    // 门禁超时时读到的空表情列表当成永久初始化结果。
+    PreloadedDataService().emojiDataRevision.addListener(init);
+    init();
+  }
 
   /// 自定义 emoji 名称 -> URL 映射（对应 Discourse 的 extendedEmojiMap）
   Map<String, String>? _customEmojiMap;
 
-  /// 从预加载数据注册自定义 emoji
-  ///
-  /// 必须在 [PreloadedDataService().ensureLoaded()] 之后调用。
+  /// 每次 preload 完成/失效时重新同步。空数据仅为当前临时状态，
+  /// 不会阻止后续加载；切换站点时也不会沿用上一站点的自定义 URL。
   void init() {
-    if (_customEmojiMap != null) return;
-
-    _customEmojiMap = {};
-
+    final updated = <String, String>{};
     try {
-      final customEmojis = PreloadedDataService().customEmoji;
-      if (customEmojis != null) {
-        for (final emoji in customEmojis) {
-          final name = emoji['name'] as String?;
-          final url = emoji['url'] as String?;
-          if (name != null && url != null) {
-            _customEmojiMap![name] = url;
-          }
+      final customEmojis =
+          PreloadedDataService().customEmoji ?? const <Map<String, dynamic>>[];
+      for (final emoji in customEmojis) {
+        final name = emoji['name'];
+        final url = emoji['url'];
+        if (name is String && url is String &&
+            name.isNotEmpty && url.isNotEmpty) {
+          updated[normalizeEmojiShortcodeName(name)] = url;
         }
       }
     } catch (e) {
       debugPrint('Failed to load custom emojis: $e');
+      return;
     }
+    if (mapEquals(_customEmojiMap, updated)) return;
+    _customEmojiMap = updated;
+    notifyListeners();
   }
 
   /// 将文本中的 :emoji: 替换为 HTML img 标签
