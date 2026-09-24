@@ -94,6 +94,22 @@ class APIBehaviorTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "refusing to delete"):
             api.current_workflows()
 
+    def test_completed_runs_uses_supported_created_filter(self):
+        api = cleanup.GitHubAPI(REPO, "example-token")
+        older_run = run(REMOVED, 4)
+
+        def request(path):
+            # GitHub Actions silently returns an empty search for
+            # created=..TIMESTAMP, even when older runs exist.
+            if "created=%3C%3D2026-09-19T00%3A00%3A00Z" in path:
+                return {"workflow_runs": [older_run]}
+            return {"workflow_runs": []}
+
+        api.request = Mock(side_effect=request)
+        self.assertEqual(list(api.completed_runs(NOW)), [older_run])
+        api.request.assert_called_once()
+        self.assertIn("status=completed", api.request.call_args.args[0])
+
     def test_paginated_runs_are_not_limited_to_first_page(self):
         api = cleanup.GitHubAPI(REPO, "example-token")
         first = [{"id": i, "created_at": "2026-09-01T00:00:00Z"}
