@@ -28,7 +28,9 @@ class EmojiHandler extends ChangeNotifier {
   void init() {
     final updated = <String, String>{};
     try {
-      for (final emoji in PreloadedDataService().customEmoji ?? const <Map<String, dynamic>>[]) {
+      final customEmojis =
+          PreloadedDataService().customEmoji ?? const <Map<String, dynamic>>[];
+      for (final emoji in customEmojis) {
         final name = emoji['name'];
         final url = emoji['url'];
         if (name is String && url is String &&
