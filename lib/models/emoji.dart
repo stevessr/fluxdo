@@ -18,7 +18,8 @@ class Emoji {
       // catalog available instead of breaking every reaction image.
       url: json['url'] as String? ?? '',
       group: json['group'] as String? ?? 'default',
-      searchAliases: (json['search_aliases'] as List<dynamic>?)
+      searchAliases:
+          (json['search_aliases'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           [],
