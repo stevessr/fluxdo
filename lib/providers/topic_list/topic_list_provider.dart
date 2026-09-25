@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -34,6 +35,21 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
     ]) {
       if (tag.id != null) _knownTags[tag.id!] = tag;
     }
+  }
+
+  /// 持久化 bootstrap 只负责让 latest 首屏立即可见；其中 topicList 是
+  /// 动态快照，不能像 Discourse 当前页面响应那样视为最终结果。
+  ///
+  /// 返回缓存列表后在事件队列里静默校准，避免重新进入 loading，也避免
+  /// 为实时网络 / WebView bootstrap 再发一遍完全相同的 latest 请求。
+  void _revalidatePersistentPreload(PreloadedDataService preloaded) {
+    if (!preloaded.loadedFromPersistentCache) return;
+    unawaited(
+      Future<void>(() async {
+        if (!ref.mounted) return;
+        await silentRefresh();
+      }),
+    );
   }
 
   TopicListUpdateQuery get updateQuery => TopicListUpdateQuery(
@@ -101,6 +117,7 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
             moreUrl: preloadedData.moreTopicsUrl,
           ),
         );
+        _revalidatePersistentPreload(preloadedService);
         return completePagedRefresh(PagedPage.fromPagination(result));
       }
       if (preloadedService.hasInitialTopicList) {
@@ -113,6 +130,7 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
               moreUrl: asyncPreloaded.moreTopicsUrl,
             ),
           );
+          _revalidatePersistentPreload(preloadedService);
           return completePagedRefresh(PagedPage.fromPagination(result));
         }
       }
