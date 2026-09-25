@@ -138,7 +138,7 @@ void main() {
     );
   });
 
-  test('current preload beats a cached catalog and changes update the UI', () {
+  test('current preload beats catalog and clearing preload drops stale URLs', () {
     const name = 'reaction_catalog_fixture';
     handler.registerCatalog({
       'custom': [
@@ -156,10 +156,13 @@ void main() {
       handler.getEmojiUrl(name),
       'https://cdn.example.com/reactions/current.png',
     );
+    // debugSeedCustomEmoji publishes a preload revision while this test
+    // intentionally keeps preload in the not-loaded state. That models a
+    // session/site boundary, so the old catalog must be discarded as stale.
     preload.debugSeedCustomEmoji(null);
     expect(
       handler.getEmojiUrl(name),
-      'https://cdn.example.com/reactions/cached.png',
+      contains('/images/emoji/twitter/$name.png'),
     );
   });
 }
