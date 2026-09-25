@@ -54,15 +54,11 @@ class EmojiHandler extends ChangeNotifier {
       return;
     }
 
-    // Bootstrap is allowed to finish after the startup gate opens. Populate
-    // reaction URLs independently of whether the user opens the emoji picker.
-    if (!_catalogLoaded) {
-      unawaited(
-        ensureCatalogLoaded().catchError((Object error) {
-          debugPrint('[EmojiHandler] Failed to fetch emoji catalog: $error');
-        }),
-      );
-    }
+    // 对齐 Discourse enable-emoji initializer：启动期只注册
+    // ApplicationLayoutPreloader 下发的 customEmoji，不额外请求 /emojis.json。
+    // 完整 catalog 由 emoji picker 的 SWR provider 按需加载并通过
+    // registerCatalog() 回灌；这样 reaction 首屏 URL 仍然准确，同时不让
+    // 几百 KB 的表情目录与首页/用户请求争抢启动网络槽位。
   }
 
   /// Share a single background request; a failed attempt can be retried by
