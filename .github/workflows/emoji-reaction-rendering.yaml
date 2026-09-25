@@ -1,0 +1,102 @@
+name: Emoji Reaction Rendering
+
+on:
+  pull_request:
+    paths:
+      - 'lib/services/emoji_handler.dart'
+      - 'lib/providers/emoji_provider.dart'
+      - 'lib/services/discourse_cache_manager.dart'
+      - 'lib/models/emoji.dart'
+      - 'lib/widgets/markdown_editor/emoji_picker.dart'
+      - 'lib/widgets/post/post_item/widgets/post_action_bar.dart'
+      - 'lib/widgets/post/post_item/widgets/post_reaction_picker.dart'
+      - 'lib/widgets/post/post_item/widgets/post_reaction_users_sheet.dart'
+      - 'test/services/emoji_handler_late_preload_test.dart'
+      - 'test/widgets/post/post_reaction_picker_test.dart'
+      - '.github/workflows/emoji-reaction-rendering.yaml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/services/emoji_handler.dart'
+      - 'lib/providers/emoji_provider.dart'
+      - 'lib/services/discourse_cache_manager.dart'
+      - 'lib/models/emoji.dart'
+      - 'lib/widgets/markdown_editor/emoji_picker.dart'
+      - 'lib/widgets/post/post_item/widgets/post_action_bar.dart'
+      - 'lib/widgets/post/post_item/widgets/post_reaction_picker.dart'
+      - 'lib/widgets/post/post_item/widgets/post_reaction_users_sheet.dart'
+      - 'test/services/emoji_handler_late_preload_test.dart'
+      - 'test/widgets/post/post_reaction_picker_test.dart'
+      - '.github/workflows/emoji-reaction-rendering.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emoji-reaction-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+
+      - name: Check custom emoji formatting
+        run: |
+          dart format \
+            lib/models/emoji.dart \
+            lib/providers/emoji_provider.dart \
+            lib/services/discourse_cache_manager.dart \
+            lib/services/emoji_handler.dart \
+            test/services/emoji_handler_late_preload_test.dart \
+            test/widgets/post/post_reaction_picker_test.dart
+          git diff --exit-code -- \
+            lib/models/emoji.dart \
+            lib/providers/emoji_provider.dart \
+            lib/services/discourse_cache_manager.dart \
+            lib/services/emoji_handler.dart \
+            test/services/emoji_handler_late_preload_test.dart \
+            test/widgets/post/post_reaction_picker_test.dart
+
+      - name: Analyze custom emoji and reaction UI
+        run: >-
+          flutter analyze
+          lib/services/emoji_handler.dart
+          lib/providers/emoji_provider.dart
+          lib/services/discourse_cache_manager.dart
+          lib/models/emoji.dart
+          lib/widgets/markdown_editor/emoji_picker.dart
+          lib/widgets/post/post_item/widgets/post_action_bar.dart
+          lib/widgets/post/post_item/widgets/post_reaction_picker.dart
+          lib/widgets/post/post_item/widgets/post_reaction_users_sheet.dart
+          test/services/emoji_handler_late_preload_test.dart
+          test/widgets/post/post_reaction_picker_test.dart
+
+      - name: Test late custom emoji hydration and reaction rendering
+        run: >-
+          dart tool/flutterw.dart test
+          test/services/emoji_handler_late_preload_test.dart
+          test/widgets/post/post_reaction_picker_test.dart

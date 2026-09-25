@@ -160,6 +160,10 @@ class _PostActionBarState extends State<PostActionBar>
     if (box == null || !box.hasSize) return false;
     final reactions = DiscourseService().enabledReactionsSync;
     if (reactions.isEmpty) return false;
+    // An earlier catalog fetch may have failed (offline/CF). Opening the
+    // picker retries in the background and refreshes its already-visible
+    // emoji cells as soon as the server URLs are available.
+    EmojiHandler().ensureCatalogLoaded().ignore();
     _pickerController.open(
       context: context,
       buttonRect: box.localToGlobal(Offset.zero) & box.size,

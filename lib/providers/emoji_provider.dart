@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/emoji.dart';
+import '../services/auth_session.dart';
+import '../services/emoji_handler.dart';
 import '../services/discourse/discourse_service.dart';
 import 'core_providers.dart';
 
@@ -22,11 +24,19 @@ import 'core_providers.dart';
 ///    刷新,当场生效;无变化零重建);
 /// 3. 无快照(首装)→ 行为同旧:等网络,单次 emit;网络失败且无
 ///    快照才进 error 态。
-final emojiGroupsProvider =
-    StreamProvider<Map<String, List<Emoji>>>((ref) async* {
+final emojiGroupsProvider = StreamProvider<Map<String, List<Emoji>>>((
+  ref,
+) async* {
   final service = ref.watch(discourseServiceProvider);
+  // Restart the SWR stream whenever login/logout/account-switch publishes a
+  // new auth state. The generation guard below also prevents an older stream
+  // from registering results after the session boundary has moved.
+  ref.watch(authStateProvider);
+  final generation = AuthSession().generation;
+  bool isCurrent() => AuthSession().isValid(generation);
 
   final snapshotJson = await _EmojiSnapshotStore.load();
+  if (!isCurrent()) return;
   if (snapshotJson != null) {
     Map<String, List<Emoji>>? snapshotGroups;
     try {
@@ -37,14 +47,19 @@ final emojiGroupsProvider =
       debugPrint('[EmojiProvider] 快照解析失败,回退网络: $e');
     }
     if (snapshotGroups != null && snapshotGroups.isNotEmpty) {
+      if (!isCurrent()) return;
+      EmojiHandler().registerCatalog(snapshotGroups);
       yield snapshotGroups;
       // 后台刷新:失败静默(快照已在展示,不打扰)。
       try {
         final fresh = await service.getEmojisRaw();
+        if (!isCurrent()) return;
         final freshJson = jsonEncode(fresh);
         if (freshJson != snapshotJson) {
-          await _EmojiSnapshotStore.save(freshJson);
-          yield parseEmojiGroups(fresh);
+          final groups = parseEmojiGroups(fresh);
+          EmojiHandler().registerCatalog(groups);
+          unawaited(_EmojiSnapshotStore.save(freshJson));
+          yield groups;
         }
       } catch (e) {
         debugPrint('[EmojiProvider] 后台刷新失败(快照兜底): $e');
@@ -55,8 +70,12 @@ final emojiGroupsProvider =
 
   // 无快照:等网络(首装唯一一次),成功即落盘。
   final fresh = await service.getEmojisRaw();
+  if (!isCurrent()) return;
+  final groups = parseEmojiGroups(fresh);
+  EmojiHandler().registerCatalog(groups);
+  if (!isCurrent()) return;
   unawaited(_EmojiSnapshotStore.save(jsonEncode(fresh)));
-  yield parseEmojiGroups(fresh);
+  yield groups;
 });
 
 /// /emojis.json 的磁盘快照(ApplicationSupport 下单文件)。
