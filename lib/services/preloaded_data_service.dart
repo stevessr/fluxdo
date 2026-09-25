@@ -50,6 +50,7 @@ class PreloadedDataService {
   List<String>? _pluginCandidates; // 首页 HTML 中扫到的 plugin js url 列表
   bool _hasDiscourseSetup = false; // 是否提取到 data-discourse-setup 标签
   bool _loaded = false;
+  bool _loadedFromPersistentCache = false;
   int _dataRevision = 0;
 
   /// 表情配置从预加载数据就绪/失效时发布变更。首屏门禁可能超时或被跳过，
@@ -68,6 +69,13 @@ class PreloadedDataService {
 
   /// 是否已加载数据
   bool get isLoaded => _loaded;
+
+  /// 当前已发布的 bootstrap 是否来自持久化快照。
+  ///
+  /// 仅用于让动态数据消费方采用 stale-while-revalidate：缓存先负责首屏，
+  /// 随后由对应 API 静默校准。实时网络 / WebView hydrate 均为 false。
+  bool get loadedFromPersistentCache => _loadedFromPersistentCache;
+
   Map<String, dynamic>? get currentUserSync => _currentUser;
   Map<String, dynamic>? get siteSettingsSync => _siteSettings;
   Map<String, dynamic>? get siteSync => _site;
@@ -537,6 +545,7 @@ class PreloadedDataService {
       return false;
     }
 
+    _loadedFromPersistentCache = false;
     _loaded = true;
     emojiDataRevision.value++;
     debugPrint('[PreloadedData] 已从 HTML 快照恢复数据');
@@ -545,6 +554,7 @@ class PreloadedDataService {
 
   void _clearCachedData() {
     _loaded = false;
+    _loadedFromPersistentCache = false;
     _currentUser = null;
     _siteSettings = null;
     _site = null;
@@ -673,6 +683,8 @@ class PreloadedDataService {
       );
 
       final html = response.data as String;
+      final loadedFromPersistentCache =
+          response.extra['preloadCacheHit'] == true;
       if (!_isCurrent(revision, generation)) return;
       final parsed = await _parsePreloadedDataFromHtml(
         html,
@@ -686,7 +698,11 @@ class PreloadedDataService {
         // BrowserTrustCoordinator 的降级链(启动 WebView 补水/重试)。
         throw const FormatException('首页 HTML 未解析出 data-preloaded 数据');
       }
-      debugPrint('[PreloadedData] 数据加载成功');
+      debugPrint(
+        '[PreloadedData] 数据加载成功'
+        '${loadedFromPersistentCache ? ' (persistent cache)' : ''}',
+      );
+      _loadedFromPersistentCache = loadedFromPersistentCache;
       _loaded = true;
       emojiDataRevision.value++;
       // 预热完成后仅更新站点基础数据和 sitekey。cf_clearance 自动续期
@@ -898,10 +914,11 @@ class PreloadedDataService {
   }
 
   bool _hasReusableBootstrapData() {
-    return _hasDiscourseSetup &&
-        _currentUser != null &&
-        _siteSettings != null &&
-        _site != null;
+    // Discourse ApplicationLayoutPreloader always emits site/siteSettings for
+    // anonymous bootstrap, while currentUser only exists for authenticated
+    // sessions. Requiring currentUser here incorrectly rejects a perfectly
+    // valid guest/login-transition snapshot and forces another homepage load.
+    return _hasDiscourseSetup && _siteSettings != null && _site != null;
   }
 
   /// 从 HTML 中提取 discourse-base-uri（子路径部署前缀）
