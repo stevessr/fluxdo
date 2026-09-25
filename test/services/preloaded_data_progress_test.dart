@@ -64,8 +64,10 @@ void main() {
     expect(body, contains("FluxRequestKeys.requestTag: 'preload-home'"));
   });
 
-  test('bootstrap validity matches Discourse anonymous preload contract', () {
-    final start = preloadSource.indexOf('bool _hasReusableBootstrapData()');
+  test('bootstrap validity follows Discourse auth-aware preload contract', () {
+    final start = preloadSource.indexOf(
+      'Future<bool> _hasReusableBootstrapData()',
+    );
     final end = preloadSource.indexOf(
       '/// 从 HTML 中提取 discourse-base-uri',
       start,
@@ -75,9 +77,13 @@ void main() {
 
     final body = preloadSource.substring(start, end);
     expect(body, contains('_hasDiscourseSetup'));
-    expect(body, contains('_siteSettings != null'));
-    expect(body, contains('_site != null'));
-    expect(body, isNot(contains('_currentUser != null')));
+    expect(body, contains('_siteSettings == null'));
+    expect(body, contains('_site == null'));
+    expect(body, contains('CookieJarService().getTToken()'));
+    expect(
+      body,
+      contains('return !expectsAuthenticated || _currentUser != null;'),
+    );
   });
 
   test('persistent preload source is exposed for dynamic SWR', () {
