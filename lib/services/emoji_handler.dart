@@ -36,10 +36,25 @@ class EmojiHandler extends ChangeNotifier {
   bool _catalogLoaded = false;
 
   void _onPreloadChanged() {
+    final preload = PreloadedDataService();
     init();
+
+    // reset()/account switch publishes an emoji revision while preload is not
+    // loaded. Drop every server URL from the previous session immediately so
+    // the UI can never render a stale custom reaction while the new bootstrap
+    // is still in flight.
+    if (!preload.isLoaded) {
+      final hadCatalog = _catalogEmojiMap.isNotEmpty || _catalogLoaded;
+      _catalogEmojiMap = {};
+      _catalogLoaded = false;
+      _catalogInflight = null;
+      if (hadCatalog) notifyListeners();
+      return;
+    }
+
     // Bootstrap is allowed to finish after the startup gate opens. Populate
     // reaction URLs independently of whether the user opens the emoji picker.
-    if (PreloadedDataService().isLoaded && !_catalogLoaded) {
+    if (!_catalogLoaded) {
       unawaited(ensureCatalogLoaded().catchError((Object error) {
         debugPrint('[EmojiHandler] Failed to fetch emoji catalog: $error');
       }));
