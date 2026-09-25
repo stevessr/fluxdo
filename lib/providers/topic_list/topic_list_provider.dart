@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../models/topic.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/discourse/discourse_service.dart';
