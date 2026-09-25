@@ -129,7 +129,10 @@ void main() {
     final start = providerSource.indexOf(
       'void _revalidatePersistentPreload',
     );
-    final end = providerSource.indexOf('TopicListUpdateQuery get updateQuery', start);
+    final end = providerSource.indexOf(
+      'TopicListUpdateQuery get updateQuery',
+      start,
+    );
     expect(start, greaterThanOrEqualTo(0));
     expect(end, greaterThan(start));
 
