@@ -415,9 +415,7 @@ void main() {
     );
 
     handler.registerCatalog({
-      'custom': [
-        Emoji(name: reaction, url: actualUrl, group: 'custom'),
-      ],
+      'custom': [Emoji(name: reaction, url: actualUrl, group: 'custom')],
     });
     await tester.pump();
     expect(
