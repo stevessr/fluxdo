@@ -138,31 +138,34 @@ void main() {
     );
   });
 
-  test('current preload beats catalog and clearing preload drops stale URLs', () {
-    const name = 'reaction_catalog_fixture';
-    handler.registerCatalog({
-      'custom': [
-        Emoji(
-          name: name,
-          url: 'https://cdn.example.com/reactions/cached.png',
-          group: 'custom',
-        ),
-      ],
-    });
-    preload.debugSeedCustomEmoji([
-      {'name': name, 'url': 'https://cdn.example.com/reactions/current.png'},
-    ]);
-    expect(
-      handler.getEmojiUrl(name),
-      'https://cdn.example.com/reactions/current.png',
-    );
-    // debugSeedCustomEmoji publishes a preload revision while this test
-    // intentionally keeps preload in the not-loaded state. That models a
-    // session/site boundary, so the old catalog must be discarded as stale.
-    preload.debugSeedCustomEmoji(null);
-    expect(
-      handler.getEmojiUrl(name),
-      contains('/images/emoji/twitter/$name.png'),
-    );
-  });
+  test(
+    'current preload beats catalog and clearing preload drops stale URLs',
+    () {
+      const name = 'reaction_catalog_fixture';
+      handler.registerCatalog({
+        'custom': [
+          Emoji(
+            name: name,
+            url: 'https://cdn.example.com/reactions/cached.png',
+            group: 'custom',
+          ),
+        ],
+      });
+      preload.debugSeedCustomEmoji([
+        {'name': name, 'url': 'https://cdn.example.com/reactions/current.png'},
+      ]);
+      expect(
+        handler.getEmojiUrl(name),
+        'https://cdn.example.com/reactions/current.png',
+      );
+      // debugSeedCustomEmoji publishes a preload revision while this test
+      // intentionally keeps preload in the not-loaded state. That models a
+      // session/site boundary, so the old catalog must be discarded as stale.
+      preload.debugSeedCustomEmoji(null);
+      expect(
+        handler.getEmojiUrl(name),
+        contains('/images/emoji/twitter/$name.png'),
+      );
+    },
+  );
 }
