@@ -571,10 +571,10 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
           child: Padding(
             padding: const EdgeInsets.all(4.0),
             child: _EmojiCell(
-                            name: emoji.name,
-                            serverUrl: emoji.url,
-                            decodeSize: 64,
-                          ),
+              name: emoji.name,
+              serverUrl: emoji.url,
+              decodeSize: 64,
+            ),
           ),
         ),
       ),
