@@ -57,42 +57,45 @@ void main() {
     );
   });
 
-  test('server catalog resolves custom reactions missing from home preload', () {
-    const name = 'reaction_catalog_fixture';
-    expect(
-      handler.getEmojiUrl(name),
-      contains('/images/emoji/twitter/$name.png'),
-    );
+  test(
+    'server catalog resolves custom reactions missing from home preload',
+    () {
+      const name = 'reaction_catalog_fixture';
+      expect(
+        handler.getEmojiUrl(name),
+        contains('/images/emoji/twitter/$name.png'),
+      );
 
-    handler.registerCatalog({
-      'custom': [
-        Emoji(
-          name: name,
-          url: 'https://cdn.example.com/reactions/real.png',
-          group: 'custom',
+      handler.registerCatalog({
+        'custom': [
+          Emoji(
+            name: name,
+            url: 'https://cdn.example.com/reactions/real.png',
+            group: 'custom',
+          ),
+          Emoji(name: 'deleted_fixture', url: '', group: 'custom'),
+        ],
+      });
+      expect(
+        handler.getEmojiUrl(name),
+        'https://cdn.example.com/reactions/real.png',
+      );
+      expect(
+        handler.getEmojiUrl('deleted_fixture'),
+        contains('/images/emoji/twitter/deleted_fixture.png'),
+      );
+
+      // The exact URL in /emojis.json is also available to the picker when
+      // the server catalog has not yet populated a separate image widget.
+      expect(
+        handler.getEmojiUrl(
+          'uncached_picker_fixture',
+          serverUrl: 'https://cdn.example.com/emoji/picker.png',
         ),
-        Emoji(name: 'deleted_fixture', url: '', group: 'custom'),
-      ],
-    });
-    expect(
-      handler.getEmojiUrl(name),
-      'https://cdn.example.com/reactions/real.png',
-    );
-    expect(
-      handler.getEmojiUrl('deleted_fixture'),
-      contains('/images/emoji/twitter/deleted_fixture.png'),
-    );
-
-    // The exact URL in /emojis.json is also available to the picker when
-    // the server catalog has not yet populated a separate image widget.
-    expect(
-      handler.getEmojiUrl(
-        'uncached_picker_fixture',
-        serverUrl: 'https://cdn.example.com/emoji/picker.png',
-      ),
-      'https://cdn.example.com/emoji/picker.png',
-    );
-  });
+        'https://cdn.example.com/emoji/picker.png',
+      );
+    },
+  );
 
   test('session reset drops server catalog URLs from the previous session', () {
     const name = 'stale_reaction_fixture';
