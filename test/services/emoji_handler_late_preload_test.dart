@@ -9,8 +9,8 @@ void main() {
   final preload = PreloadedDataService();
   final handler = EmojiHandler();
 
-  setUp(() => preload.debugSeedCustomEmoji(null));
-  tearDown(() => preload.debugSeedCustomEmoji(null));
+  setUp(() => preload.reset());
+  tearDown(() => preload.reset());
 
   test('late preload replaces fallback emoji URLs and updates listeners', () {
     final updates = <String>[];
@@ -37,6 +37,24 @@ void main() {
       {'name': 'forum_test', 'url': 'https://example.com/forum-test.png'},
     ]);
     expect(updates, hasLength(1));
+  });
+
+  test('fallback respects the server emoji set and external emoji URL', () {
+    preload.debugSeed(
+      siteSettings: {
+        'emoji_set': 'apple',
+        'external_emoji_url': 'https://emoji.example.com/assets/',
+      },
+    );
+
+    expect(
+      handler.getEmojiUrl('smile'),
+      'https://emoji.example.com/assets/apple/smile.png',
+    );
+    expect(
+      handler.getEmojiUrl('wave:t2'),
+      'https://emoji.example.com/assets/apple/wave/t2.png',
+    );
   });
 
   test('refresh updates URL and session reset removes stale custom emoji', () {
