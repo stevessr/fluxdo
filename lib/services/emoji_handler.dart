@@ -162,18 +162,28 @@ class EmojiHandler extends ChangeNotifier {
       return UrlHelper.resolveUrlWithCdn(customUrl);
     }
 
-    final toneMatch = RegExp(r'^([^\s:]+):t([1-6])$').firstMatch(normalized);
-    if (toneMatch != null) {
-      final base = toneMatch.group(1)!;
-      final tone = toneMatch.group(2)!;
-      return UrlHelper.resolveUrlWithCdn(
-        '/images/emoji/twitter/$base/t$tone.png?v=12',
-      );
-    }
+    return _buildStandardEmojiUrl(normalized);
 
-    // 标准 emoji，URL 确定性拼接（与 Discourse buildEmojiUrl 一致）
-    return UrlHelper.resolveUrlWithCdn(
-      '/images/emoji/twitter/$normalized.png?v=12',
-    );
+  String _buildStandardEmojiUrl(String normalized) {
+    final settings = PreloadedDataService().siteSettingsSync;
+    final configuredSet = settings?['emoji_set']?.toString().trim();
+    final emojiSet = configuredSet == null || configuredSet.isEmpty
+        ? 'twitter'
+        : configuredSet;
+
+    final external = settings?['external_emoji_url']?.toString().trim();
+    final basePath = external == null || external.isEmpty
+        ? '/images/emoji'
+        : external.replaceFirst(RegExp(r'/+$'), '');
+
+    final toneMatch = RegExp(r'^([^\s:]+):t([1-6])$').firstMatch(normalized);
+    final path = toneMatch == null
+        ? normalized
+        : '${toneMatch.group(1)!}/t${toneMatch.group(2)!}';
+
+    // Mirror Discourse buildEmojiUrl: respect the site's emoji_set and
+    // external_emoji_url while the authoritative /emojis.json catalog is
+    // still loading. The catalog URL replaces this fallback once available.
+    return UrlHelper.resolveUrlWithCdn('$basePath/$emojiSet/$path.png');
   }
 }
