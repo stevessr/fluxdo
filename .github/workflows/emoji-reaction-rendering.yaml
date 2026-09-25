@@ -64,6 +64,31 @@ jobs:
       - name: Generate localization
         run: dart run tool/gen_l10n.dart
 
+      - name: Check custom emoji formatting
+        run: |
+          dart format \
+            lib/models/emoji.dart \
+            lib/providers/emoji_provider.dart \
+            lib/services/discourse_cache_manager.dart \
+            lib/services/emoji_handler.dart \
+            lib/widgets/markdown_editor/emoji_picker.dart \
+            lib/widgets/post/post_item/widgets/post_action_bar.dart \
+            lib/widgets/post/post_item/widgets/post_reaction_picker.dart \
+            lib/widgets/post/post_item/widgets/post_reaction_users_sheet.dart \
+            test/services/emoji_handler_late_preload_test.dart \
+            test/widgets/post/post_reaction_picker_test.dart
+          git diff --exit-code -- \
+            lib/models/emoji.dart \
+            lib/providers/emoji_provider.dart \
+            lib/services/discourse_cache_manager.dart \
+            lib/services/emoji_handler.dart \
+            lib/widgets/markdown_editor/emoji_picker.dart \
+            lib/widgets/post/post_item/widgets/post_action_bar.dart \
+            lib/widgets/post/post_item/widgets/post_reaction_picker.dart \
+            lib/widgets/post/post_item/widgets/post_reaction_users_sheet.dart \
+            test/services/emoji_handler_late_preload_test.dart \
+            test/widgets/post/post_reaction_picker_test.dart
+
       - name: Analyze custom emoji and reaction UI
         run: >-
           flutter analyze
