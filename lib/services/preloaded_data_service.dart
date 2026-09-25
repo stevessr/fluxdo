@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:async';
+
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show compute, visibleForTesting, ValueNotifier;
+import 'package:flutter/foundation.dart'
+    show compute, visibleForTesting, ValueNotifier;
 import 'package:flutter/material.dart';
+
 import '../constants.dart';
 import '../models/topic.dart';
 import '../models/category.dart';
