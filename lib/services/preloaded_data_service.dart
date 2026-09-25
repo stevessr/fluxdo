@@ -11,6 +11,7 @@ import 'preloaded_data_decoder.dart';
 import 'network/discourse_dio.dart';
 import 'network/flux_request_spec.dart';
 import 'network/cookie/csrf_token_service.dart';
+import 'network/cookie/cookie_jar_service.dart';
 import 'cf_challenge_service.dart';
 import 'cf_clearance_refresh_service.dart';
 
@@ -533,7 +534,8 @@ class PreloadedDataService {
       return false;
     }
 
-    if (!_hasReusableBootstrapData()) {
+    if (!await _hasReusableBootstrapData()) {
+      if (!_isCurrent(revision, generation)) return false;
       debugPrint(
         '[PreloadedData] HTML 快照缺少完整引导数据: '
         'hasSetup=$_hasDiscourseSetup, '
@@ -698,6 +700,11 @@ class PreloadedDataService {
         // BrowserTrustCoordinator 的降级链(启动 WebView 补水/重试)。
         throw const FormatException('首页 HTML 未解析出 data-preloaded 数据');
       }
+      if (!await _hasReusableBootstrapData()) {
+        if (!_isCurrent(revision, generation)) return;
+        throw const FormatException('首页 bootstrap 与当前认证会话不匹配');
+      }
+      if (!_isCurrent(revision, generation)) return;
       debugPrint(
         '[PreloadedData] 数据加载成功'
         '${loadedFromPersistentCache ? ' (persistent cache)' : ''}',
@@ -913,12 +920,19 @@ class PreloadedDataService {
     }());
   }
 
-  bool _hasReusableBootstrapData() {
-    // Discourse ApplicationLayoutPreloader always emits site/siteSettings for
-    // anonymous bootstrap, while currentUser only exists for authenticated
-    // sessions. Requiring currentUser here incorrectly rejects a perfectly
-    // valid guest/login-transition snapshot and forces another homepage load.
-    return _hasDiscourseSetup && _siteSettings != null && _site != null;
+  Future<bool> _hasReusableBootstrapData() async {
+    // Discourse ApplicationLayoutPreloader always emits site/siteSettings, but
+    // currentUser is authenticated-only. A real guest snapshot is therefore
+    // valid without currentUser. If our native cookie jar already has a _t
+    // session, however, an anonymous bootstrap means WebView/native cookies
+    // have not converged yet and must not be published as the logged-in state.
+    if (!_hasDiscourseSetup || _siteSettings == null || _site == null) {
+      return false;
+    }
+    final token = (await CookieJarService().getTToken())?.trim();
+    final expectsAuthenticated =
+        token != null && token.isNotEmpty && token != 'del';
+    return !expectsAuthenticated || _currentUser != null;
   }
 
   /// 从 HTML 中提取 discourse-base-uri（子路径部署前缀）
