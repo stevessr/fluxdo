@@ -57,9 +57,11 @@ class EmojiHandler extends ChangeNotifier {
     // Bootstrap is allowed to finish after the startup gate opens. Populate
     // reaction URLs independently of whether the user opens the emoji picker.
     if (!_catalogLoaded) {
-      unawaited(ensureCatalogLoaded().catchError((Object error) {
-        debugPrint('[EmojiHandler] Failed to fetch emoji catalog: $error');
-      }));
+      unawaited(
+        ensureCatalogLoaded().catchError((Object error) {
+          debugPrint('[EmojiHandler] Failed to fetch emoji catalog: $error');
+        }),
+      );
     }
   }
 
@@ -119,8 +121,10 @@ class EmojiHandler extends ChangeNotifier {
       for (final emoji in customEmojis) {
         final name = emoji['name'];
         final url = emoji['url'];
-        if (name is String && url is String &&
-            name.isNotEmpty && url.isNotEmpty) {
+        if (name is String &&
+            url is String &&
+            name.isNotEmpty &&
+            url.isNotEmpty) {
           updated[normalizeEmojiShortcodeName(name).toLowerCase()] = url;
         }
       }
@@ -151,7 +155,9 @@ class EmojiHandler extends ChangeNotifier {
 
     // 优先查自定义 emoji（如 bili_114、tsai 等）
     final customUrl =
-        _customEmojiMap[normalized] ?? _catalogEmojiMap[normalized] ?? serverUrl;
+        _customEmojiMap[normalized] ??
+        _catalogEmojiMap[normalized] ??
+        serverUrl;
     if (customUrl != null && customUrl.isNotEmpty) {
       return UrlHelper.resolveUrlWithCdn(customUrl);
     }
