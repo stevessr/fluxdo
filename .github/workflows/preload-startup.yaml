@@ -61,22 +61,43 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          dart format \
-            lib/services/browser_trust_coordinator.dart \
-            lib/services/preloaded_data_service.dart \
-            lib/providers/topic_list/topic_list_provider.dart \
-            lib/pages/topics_screen.dart \
-            lib/widgets/preheat_gate.dart \
-            test/services/browser_trust_preload_latency_contract_test.dart \
+          targets=(
+            lib/services/browser_trust_coordinator.dart
+            lib/services/preloaded_data_service.dart
+            lib/providers/topic_list/topic_list_provider.dart
+            lib/pages/topics_screen.dart
+            lib/widgets/preheat_gate.dart
+            test/services/browser_trust_preload_latency_contract_test.dart
             test/services/preloaded_data_progress_test.dart
-          git diff --exit-code -- \
-            lib/services/browser_trust_coordinator.dart \
-            lib/services/preloaded_data_service.dart \
-            lib/providers/topic_list/topic_list_provider.dart \
-            lib/pages/topics_screen.dart \
-            lib/widgets/preheat_gate.dart \
-            test/services/browser_trust_preload_latency_contract_test.dart \
-            test/services/preloaded_data_progress_test.dart
+          )
+
+          base=""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            base="${{ github.event.before }}"
+          fi
+
+          if [[ -n "$base" && ! "$base" =~ ^0+$ ]]; then
+            git fetch --no-tags --depth=1 origin "$base"
+            mapfile -t changed < <(
+              git diff --name-only "$base" HEAD -- "${targets[@]}"
+            )
+          else
+            mapfile -t changed < <(
+              git show --pretty='' --name-only HEAD -- "${targets[@]}"
+            )
+          fi
+
+          if (( ${#changed[@]} == 0 )); then
+            echo "No preload-path Dart files changed; skipping format gate."
+            exit 0
+          fi
+
+          printf 'Formatting changed preload files:\n'
+          printf '  %s\n' "${changed[@]}"
+          dart format "${changed[@]}"
+          git diff --exit-code -- "${changed[@]}"
 
       - name: Analyze preload startup path
         id: analyze
