@@ -85,6 +85,8 @@ import '../../common/smart_avatar.dart';
 import '../../content/discourse_html_content/image_utils.dart';
 import '../../mention/mention_autocomplete.dart';
 import '../composer_workbench.dart';
+import '../composer_table_panel.dart';
+import '../composer_anchored_panel.dart';
 import '../composer_object_toolbar.dart';
 import '../composer_object_surface.dart';
 import '../composer_block_picker.dart';
@@ -382,8 +384,9 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         if (widget.controller.text != raw || !_rawMirror.isCurrent) return;
       }
       await _recoveryStore.remove(record.scope, record.id);
-      if (mounted)
+      if (mounted) {
         setState(() => _recoveries.removeWhere((r) => r.id == record.id));
+      }
     } catch (error) {
       pending?.dispose();
       if (mounted) setState(() => _recoveryFailed = true);
@@ -755,6 +758,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   @override
   void initState() {
     super.initState();
+    _toolsAnchor.contextExtent.addListener(_tableExtentChanged);
     _rawMirror = ComposerRawMirror(
       widget.controller,
       onExternalChange: _fallbackPreservingRaw,
@@ -856,6 +860,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     // 保存读到旧文本(丢最后一句话)。
     flushToController();
     _rawMirror.dispose();
+    _toolsAnchor.contextExtent.removeListener(_tableExtentChanged);
     _toolsAnchor.dispose();
     _emojiPopover?.dispose();
     _serializeDebounce?.cancel();
@@ -866,6 +871,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     _linkToolbarOverlay?.remove();
     _removeBlockPicker();
     _objectSelection.dispose();
+    _tableContext.dispose();
     if (_ownsFocus) _editorFocus.dispose();
     _editorAreaFocus.removeListener(_onEditorAreaFocusChanged);
     _editorAreaFocus.dispose();
@@ -2877,10 +2883,55 @@ class RichComposerEditorState extends State<RichComposerEditor> {
 
   /// 表格 cell 原位编辑确认:新表格 markdown → cook → 替换岛。
   final Map<String, int> _tableEditVersions = {};
+  final _tableContext = ValueNotifier<EditorTableContext?>(null);
 
-  Future<void> _onTableEdited(IslandBlock island, String markdown) async {
+  void _updateTableContext(EditorTableContext? value) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final previous = _tableContext.value;
+      if (previous?.tableId == value?.tableId &&
+          previous?.cell == value?.cell &&
+          previous?.revision == value?.revision &&
+          previous?.busy == value?.busy) {
+        return;
+      }
+      _tableContext.value = value;
+      if (value == null && _toolsAnchor.preservesKeyboard) {
+        _toolsAnchor.collapse();
+      }
+    });
+  }
+
+  Future<void> _showTableStructureMenu(String tableId, bool row, Rect anchor) async {
+    final target = _tableContext.value;
+    if (target == null || target.tableId != tableId) return;
+    final releaseChrome = ComposerChromeScope.maybeOf(context)?.hold();
+    try {
+      await showComposerAnchoredPanel<void>(
+        context: context,
+        globalAnchor: anchor,
+        requestFocus: false,
+        width: 300,
+        maxHeight: 360,
+        builder: (menuContext) => ComposerTablePanel(
+          contextListenable: _tableContext,
+          row: row,
+          target: target,
+          onClose: () => Navigator.of(menuContext).pop(),
+        ),
+      );
+    } finally {
+      releaseChrome?.call();
+    }
+  }
+
+  void _tableExtentChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<bool> _onTableEdited(IslandBlock island, String markdown) async {
     final editor = _editor;
-    if (editor == null) return;
+    if (editor == null) return false;
     final version = (_tableEditVersions[island.id] ?? 0) + 1;
     _tableEditVersions[island.id] = version;
     final fragment = (await _semanticCodec.import(markdown)).document;
@@ -2889,18 +2940,18 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         _documentReplaced ||
         _tableEditVersions[island.id] != version ||
         fragment == null) {
-      return;
+      return false;
     }
     final current = editor.blockById(island.id);
     // 撤销/删除/外部替换已改变表格时，迟到的转换结果不得复活旧内容。
     if (current is! IslandBlock || !identical(current.node, island.node)) {
-      return;
+      return false;
     }
     // 仅提取新单元格字段，原表 attrs 由会话绑定局部合并，不替换来源。
     final tables = SemanticEditorProjection.project(fragment).blocks
         .whereType<IslandBlock>()
         .where((block) => block.node is TableNode);
-    if (tables.length != 1) return;
+    if (tables.length != 1) return false;
     final table = tables.single.node as TableNode;
     editor.updateIslandNode(
       island.id,
@@ -2912,6 +2963,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         textAlign: (island.node as TableNode).textAlign,
       ),
     );
+    return true;
   }
 
   /// 代码块岛内编辑提交:结构化节点原位形变,不经 cook(fence 冲突由
@@ -3029,8 +3081,9 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       );
       if (confirmed == null) return;
       if (!mounted) return;
-      if (_documentReplaced || !identical(editor, _editor) || !bookmark.valid)
+      if (_documentReplaced || !identical(editor, _editor) || !bookmark.valid) {
         return;
+      }
       _queueUpload(
         confirmed.path,
         confirmed.originalName,
@@ -3960,7 +4013,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                                                     ),
                                             caretViewportInsets:
                                                 EdgeInsets.only(
-                                                  bottom: bottomInset,
+                                                  bottom:
+                                                      bottomInset +
+                                                      _toolsAnchor
+                                                          .contextExtent
+                                                          .value,
                                                 ),
                                             showTrailingParagraph: true,
                                             emptyParagraphHint:
@@ -4005,6 +4062,12 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                                             // 表格 cell 原位编辑 → 重建 markdown 经
                                             // cook 替换
                                             onTableEdited: _onTableEdited,
+                                            onTableCommit: _onTableEdited,
+                                            tableStructureControlsBuilder: _isDesktop ? null : (context, cell, open) => ComposerTableControls(cell: cell, onOpen: open),
+                                            onTableStructureMenuRequested: _isDesktop ? null : _showTableStructureMenu,
+                                            onTableContextChanged: _isDesktop
+                                                ? null
+                                                : _updateTableContext,
                                             // 代码块岛内原位编辑 → 结构化节点直换
                                             // (不经 cook)
                                             onCodeBlockEdited:
@@ -4089,6 +4152,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       toolbar: _RichToolbar(
         state: editor,
         objectSelection: _objectSelection,
+        tableContext: _tableContext,
         objectToolbarKey: _objectToolbarKey,
         onResumeEditing: resumeEditing,
         metaBar: _isDesktop ? null : widget.metaBar,
@@ -4297,6 +4361,7 @@ class _RichToolbar extends StatefulWidget {
   const _RichToolbar({
     required this.state,
     required this.objectSelection,
+    required this.tableContext,
     required this.objectToolbarKey,
     required this.isEmojiPanelVisible,
     required this.onToggleEmoji,
@@ -4322,6 +4387,7 @@ class _RichToolbar extends StatefulWidget {
   final Widget? metaBar;
   final EditorState state;
   final ValueListenable<ComposerObjectSelection?> objectSelection;
+  final ValueListenable<EditorTableContext?> tableContext;
   final GlobalKey objectToolbarKey;
   final bool isEmojiPanelVisible;
   final VoidCallback onToggleEmoji;
@@ -4535,33 +4601,54 @@ class _RichToolbarState extends State<_RichToolbar> {
         if (widget.onSwitchToSource != null)
           ComposerModeButton(rich: true, onPressed: widget.onSwitchToSource),
       ],
-      tools: ValueListenableBuilder<ComposerObjectSelection?>(
-        valueListenable: widget.objectSelection,
-        builder: (context, selection, child) => selection == null
+      tools: ValueListenableBuilder<EditorTableContext?>(
+        valueListenable: widget.tableContext,
+        builder: (context, table, child) => table == null
             ? child!
-            : ComposerObjectToolbar(
-                menuAnchorKey: widget.objectToolbarKey,
-                selection: selection,
+            : Tooltip(
+                message: context.l10n.editor.table_format_unavailable,
+                child: ExcludeFocus(child: AbsorbPointer(
+                  child: Opacity(opacity: .45, child: Row(
+                    key: const ValueKey('table-format-tools'),
+                    children: [
+                      _buildEmojiButton(theme),
+                      Expanded(child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: _buildMiddleTools(theme)),
+                      )),
+                      if (widget.onToggleTools != null) _buildToolsButton(theme),
+                    ],
+                  )),
+                )),
               ),
-        child: Row(
-          children: [
-            _buildEmojiButton(theme),
-            const SizedBox(width: 3),
-            Expanded(
-              child: ComposerCompactTools(
-                anchor: widget.toolsAnchor,
-                child: FadingEdgeScrollView(
-                  fadeLeft: true,
-                  fadeRight: true,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(children: _buildMiddleTools(theme)),
+        child: ValueListenableBuilder<ComposerObjectSelection?>(
+          valueListenable: widget.objectSelection,
+          builder: (context, selection, child) => selection == null
+              ? child!
+              : ComposerObjectToolbar(
+                  menuAnchorKey: widget.objectToolbarKey,
+                  selection: selection,
+                ),
+          child: Row(
+            children: [
+              _buildEmojiButton(theme),
+              const SizedBox(width: 3),
+              Expanded(
+                child: ComposerCompactTools(
+                  anchor: widget.toolsAnchor,
+                  child: FadingEdgeScrollView(
+                    fadeLeft: true,
+                    fadeRight: true,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: _buildMiddleTools(theme)),
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (widget.onToggleTools != null) _buildToolsButton(theme),
-          ],
+              if (widget.onToggleTools != null) _buildToolsButton(theme),
+            ],
+          ),
         ),
       ),
     );
