@@ -163,6 +163,7 @@ class EmojiHandler extends ChangeNotifier {
     }
 
     return _buildStandardEmojiUrl(normalized);
+  }
 
   String _buildStandardEmojiUrl(String normalized) {
     final settings = PreloadedDataService().siteSettingsSync;
