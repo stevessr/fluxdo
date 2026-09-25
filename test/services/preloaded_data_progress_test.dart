@@ -8,13 +8,11 @@ void main() {
   late String providerSource;
 
   setUpAll(() {
-    preloadSource = File(
-      'lib/services/preloaded_data_service.dart',
-    ).readAsStringSync();
+    preloadSource = File('lib/services/preloaded_data_service.dart')
+        .readAsStringSync();
     topicsSource = File('lib/pages/topics_screen.dart').readAsStringSync();
-    providerSource = File(
-      'lib/providers/topic_list/topic_list_provider.dart',
-    ).readAsStringSync();
+    providerSource = File('lib/providers/topic_list/topic_list_provider.dart')
+        .readAsStringSync();
   });
 
   test('preload uses upstream loading wait semantics', () {
@@ -87,10 +85,7 @@ void main() {
   });
 
   test('persistent preload source is exposed for dynamic SWR', () {
-    expect(
-      preloadSource,
-      contains('bool get loadedFromPersistentCache =>'),
-    );
+    expect(preloadSource, contains('bool get loadedFromPersistentCache =>'));
     expect(
       preloadSource,
       contains("response.extra['preloadCacheHit'] == true"),
@@ -132,9 +127,7 @@ void main() {
   test('cached bootstrap topic list is revalidated without loading state', () {
     expect(providerSource, contains('loadedFromPersistentCache'));
 
-    final start = providerSource.indexOf(
-      'void _revalidatePersistentPreload',
-    );
+    final start = providerSource.indexOf('void _revalidatePersistentPreload');
     final end = providerSource.indexOf(
       'TopicListUpdateQuery get updateQuery',
       start,
@@ -147,9 +140,8 @@ void main() {
     expect(body, contains('await silentRefresh();'));
 
     expect(
-      RegExp(
-        r'_revalidatePersistentPreload\(preloadedService\);',
-      ).allMatches(providerSource),
+      RegExp(r'_revalidatePersistentPreload\(preloadedService\);')
+          .allMatches(providerSource),
       hasLength(2),
     );
   });
