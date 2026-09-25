@@ -12,10 +12,10 @@ import 'preloaded_data_service.dart';
 /// Emoji URL 解析器
 ///
 /// 与 Discourse 官方逻辑一致：
-/// - 自定义 emoji：优先使用当前 bootstrap 的 URL，补充从
-///   `/emojis.json` 获取的站点完整目录（reaction 和 picker 共用）。
-/// - 标准 emoji：优先使用服务端目录提供的真实 URL，仅无目录时
-///   临时拼接 Twemoji 路径，等待异步目录就绪后刷新已挂载的图片。
+/// - 自定义 emoji：与官方 enable-emoji initializer 一样，启动时直接使用
+///   bootstrap 的 customEmoji；picker 按需加载 /emojis.json 后可补充目录。
+/// - 标准 emoji：优先使用已加载目录里的真实 URL；目录尚未加载时按
+///   siteSettings 的 emoji_set / external_emoji_url 构造官方兼容路径。
 class EmojiHandler extends ChangeNotifier {
   static final EmojiHandler _instance = EmojiHandler._internal();
   factory EmojiHandler() => _instance;
@@ -29,8 +29,8 @@ class EmojiHandler extends ChangeNotifier {
   /// 自定义 emoji 名称 -> URL 映射（对应 Discourse 的 extendedEmojiMap）
   Map<String, String> _customEmojiMap = {};
 
-  /// /emojis.json exposes the actual URL of *all* server emoji, including
-  /// custom reactions that may not be present in the home preload payload.
+  /// /emojis.json 的按需完整目录。bootstrap customEmoji 是启动期权威来源；
+  /// picker/SWR catalog 到达后用于补充标准表情与异常站点的兼容数据。
   Map<String, String> _catalogEmojiMap = {};
   Future<void>? _catalogInflight;
   bool _catalogLoaded = false;
@@ -61,8 +61,7 @@ class EmojiHandler extends ChangeNotifier {
     // 几百 KB 的表情目录与首页/用户请求争抢启动网络槽位。
   }
 
-  /// Share a single background request; a failed attempt can be retried by
-  /// opening the picker or on the next successful bootstrap refresh.
+  /// 显式需要完整目录的调用方可复用同一个请求；启动初始化不会调用这里。
   Future<void> ensureCatalogLoaded() {
     if (_catalogLoaded) return Future<void>.value();
     final inflight = _catalogInflight;
