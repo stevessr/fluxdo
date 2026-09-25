@@ -64,6 +64,37 @@ void main() {
     expect(body, contains("FluxRequestKeys.requestTag: 'preload-home'"));
   });
 
+  test('bootstrap validity matches Discourse anonymous preload contract', () {
+    final start = preloadSource.indexOf('bool _hasReusableBootstrapData()');
+    final end = preloadSource.indexOf(
+      '/// 从 HTML 中提取 discourse-base-uri',
+      start,
+    );
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+
+    final body = preloadSource.substring(start, end);
+    expect(body, contains('_hasDiscourseSetup'));
+    expect(body, contains('_siteSettings != null'));
+    expect(body, contains('_site != null'));
+    expect(body, isNot(contains('_currentUser != null')));
+  });
+
+  test('persistent preload source is exposed for dynamic SWR', () {
+    expect(
+      preloadSource,
+      contains('bool get loadedFromPersistentCache =>'),
+    );
+    expect(
+      preloadSource,
+      contains("response.extra['preloadCacheHit'] == true"),
+    );
+    expect(
+      preloadSource,
+      contains('_loadedFromPersistentCache = loadedFromPersistentCache;'),
+    );
+  });
+
   test('top preload progress and progressive feed plumbing stay removed', () {
     expect(preloadSource, isNot(contains('PreloadProgress')));
     expect(preloadSource, isNot(contains('preloadProgressListenable')));
@@ -90,6 +121,28 @@ void main() {
     expect(body, contains("parsed && metadataHtml.contains('/plugins/')"));
     expect(body, contains('_extractPluginCandidatesInBackground('));
     expect(body, contains('metadataHtml,'));
+  });
+
+  test('cached bootstrap topic list is revalidated without loading state', () {
+    expect(providerSource, contains('loadedFromPersistentCache'));
+
+    final start = providerSource.indexOf(
+      'void _revalidatePersistentPreload',
+    );
+    final end = providerSource.indexOf('TopicListUpdateQuery get updateQuery', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+
+    final body = providerSource.substring(start, end);
+    expect(body, contains('if (!preloaded.loadedFromPersistentCache) return;'));
+    expect(body, contains('await silentRefresh();'));
+
+    expect(
+      RegExp(
+        r'_revalidatePersistentPreload\(preloadedService\);',
+      ).allMatches(providerSource),
+      hasLength(2),
+    );
   });
 
   test('topic list decode starts before core hydration wait', () {
