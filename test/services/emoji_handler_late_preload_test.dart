@@ -14,18 +14,21 @@ void main() {
   setUp(() => preload.reset());
   tearDown(() => preload.reset());
 
-  test('preload registration stays network-free like Discourse initializer', () {
-    final source = File('lib/services/emoji_handler.dart').readAsStringSync();
-    final start = source.indexOf('void _onPreloadChanged()');
-    final end = source.indexOf('Future<void> ensureCatalogLoaded()', start);
-    expect(start, greaterThanOrEqualTo(0));
-    expect(end, greaterThan(start));
+  test(
+    'preload registration stays network-free like Discourse initializer',
+    () {
+      final source = File('lib/services/emoji_handler.dart').readAsStringSync();
+      final start = source.indexOf('void _onPreloadChanged()');
+      final end = source.indexOf('Future<void> ensureCatalogLoaded()', start);
+      expect(start, greaterThanOrEqualTo(0));
+      expect(end, greaterThan(start));
 
-    final body = source.substring(start, end);
-    expect(body, contains('init();'));
-    expect(body, isNot(contains('ensureCatalogLoaded()')));
-    expect(body, isNot(contains('getEmojis()')));
-  });
+      final body = source.substring(start, end);
+      expect(body, contains('init();'));
+      expect(body, isNot(contains('ensureCatalogLoaded()')));
+      expect(body, isNot(contains('getEmojis()')));
+    },
+  );
 
   test('late preload replaces fallback emoji URLs and updates listeners', () {
     final updates = <String>[];
