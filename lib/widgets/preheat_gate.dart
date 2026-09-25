@@ -88,7 +88,8 @@ class _PreheatGateState extends State<PreheatGate> {
         );
       }
 
-      DiscourseService().getEnabledReactions();
+      // enabled reactions 与 customEmoji 已由同一份 Discourse bootstrap
+      // 下发；这里不再额外触发一个无副作用的 Future。
       EmojiHandler().init();
 
       _error = null;
