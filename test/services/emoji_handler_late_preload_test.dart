@@ -94,6 +94,29 @@ void main() {
     );
   });
 
+  test('session reset drops server catalog URLs from the previous session', () {
+    const name = 'stale_reaction_fixture';
+    handler.registerCatalog({
+      'custom': [
+        Emoji(
+          name: name,
+          url: 'https://cdn.example.com/reactions/stale.png',
+          group: 'custom',
+        ),
+      ],
+    });
+    expect(
+      handler.getEmojiUrl(name),
+      'https://cdn.example.com/reactions/stale.png',
+    );
+
+    preload.reset();
+    expect(
+      handler.getEmojiUrl(name),
+      contains('/images/emoji/twitter/$name.png'),
+    );
+  });
+
   test('current preload beats a cached catalog and changes update the UI', () {
     const name = 'reaction_catalog_fixture';
     handler.registerCatalog({
