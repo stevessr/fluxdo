@@ -34,6 +34,7 @@ class EmojiHandler extends ChangeNotifier {
   Map<String, String> _catalogEmojiMap = {};
   Future<void>? _catalogInflight;
   bool _catalogLoaded = false;
+  int _catalogRevision = 0;
 
   void _onPreloadChanged() {
     final preload = PreloadedDataService();
@@ -47,6 +48,7 @@ class EmojiHandler extends ChangeNotifier {
       final hadCatalog = _catalogEmojiMap.isNotEmpty || _catalogLoaded;
       _catalogEmojiMap = {};
       _catalogLoaded = false;
+      _catalogRevision++;
       _catalogInflight = null;
       if (hadCatalog) notifyListeners();
       return;
@@ -65,15 +67,26 @@ class EmojiHandler extends ChangeNotifier {
   /// opening the picker or on the next successful bootstrap refresh.
   Future<void> ensureCatalogLoaded() {
     if (_catalogLoaded) return Future<void>.value();
-    return _catalogInflight ??= _fetchCatalog().whenComplete(() {
-      _catalogInflight = null;
+    final inflight = _catalogInflight;
+    if (inflight != null) return inflight;
+
+    final revision = _catalogRevision;
+    late final Future<void> request;
+    request = _fetchCatalog(revision).whenComplete(() {
+      if (identical(_catalogInflight, request)) {
+        _catalogInflight = null;
+      }
     });
+    _catalogInflight = request;
+    return request;
   }
 
-  Future<void> _fetchCatalog() async {
+  Future<void> _fetchCatalog(int revision) async {
     final generation = AuthSession().generation;
     final groups = await DiscourseService().getEmojis();
-    if (!AuthSession().isValid(generation)) return;
+    if (!AuthSession().isValid(generation) || revision != _catalogRevision) {
+      return;
+    }
     registerCatalog(groups);
     if (groups.isNotEmpty) _catalogLoaded = true;
   }
