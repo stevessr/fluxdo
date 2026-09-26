@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../l10n/s.dart';
 import '../pages/about_page.dart';
 import '../pages/network_settings_page/network_settings_page.dart';
@@ -18,7 +19,9 @@ import '../services/power_saving_mode_service.dart';
 import '../utils/dialog_utils.dart';
 import '../widgets/common/ambient_background.dart';
 import '../widgets/common/error_view.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import 'preheat_logo.dart';
 
 class PreheatGate extends StatefulWidget {
@@ -88,7 +91,8 @@ class _PreheatGateState extends State<PreheatGate> {
         );
       }
 
-      DiscourseService().getEnabledReactions();
+      // enabled reactions 与 customEmoji 已由同一份 Discourse bootstrap
+      // 下发；这里不再额外触发一个无副作用的 Future。
       EmojiHandler().init();
 
       _error = null;
@@ -352,15 +356,13 @@ class _PreheatFailed extends StatelessWidget {
   const _PreheatFailed({super.key, required this.onRetry, this.error});
 
   void _openAbout(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const AboutPage()));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const AboutPage()));
   }
 
   void _openNetworkSettings(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const NetworkSettingsPage()));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const NetworkSettingsPage()));
   }
 
   Future<void> _confirmLogout(BuildContext context) async {

@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:async';
+
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show compute, visibleForTesting, ValueNotifier;
+import 'package:flutter/foundation.dart'
+    show compute, visibleForTesting, ValueNotifier;
 import 'package:flutter/material.dart';
+
 import '../constants.dart';
 import '../models/topic.dart';
 import '../models/category.dart';
@@ -11,6 +14,7 @@ import 'preloaded_data_decoder.dart';
 import 'network/discourse_dio.dart';
 import 'network/flux_request_spec.dart';
 import 'network/cookie/csrf_token_service.dart';
+import 'network/cookie/cookie_jar_service.dart';
 import 'cf_challenge_service.dart';
 import 'cf_clearance_refresh_service.dart';
 
@@ -50,6 +54,7 @@ class PreloadedDataService {
   List<String>? _pluginCandidates; // 首页 HTML 中扫到的 plugin js url 列表
   bool _hasDiscourseSetup = false; // 是否提取到 data-discourse-setup 标签
   bool _loaded = false;
+  bool _loadedFromPersistentCache = false;
   int _dataRevision = 0;
 
   /// 表情配置从预加载数据就绪/失效时发布变更。首屏门禁可能超时或被跳过，
@@ -68,6 +73,13 @@ class PreloadedDataService {
 
   /// 是否已加载数据
   bool get isLoaded => _loaded;
+
+  /// 当前已发布的 bootstrap 是否来自持久化快照。
+  ///
+  /// 仅用于让动态数据消费方采用 stale-while-revalidate：缓存先负责首屏，
+  /// 随后由对应 API 静默校准。实时网络 / WebView hydrate 均为 false。
+  bool get loadedFromPersistentCache => _loadedFromPersistentCache;
+
   Map<String, dynamic>? get currentUserSync => _currentUser;
   Map<String, dynamic>? get siteSettingsSync => _siteSettings;
   Map<String, dynamic>? get siteSync => _site;
@@ -525,7 +537,8 @@ class PreloadedDataService {
       return false;
     }
 
-    if (!_hasReusableBootstrapData()) {
+    if (!await _hasReusableBootstrapData()) {
+      if (!_isCurrent(revision, generation)) return false;
       debugPrint(
         '[PreloadedData] HTML 快照缺少完整引导数据: '
         'hasSetup=$_hasDiscourseSetup, '
@@ -537,6 +550,7 @@ class PreloadedDataService {
       return false;
     }
 
+    _loadedFromPersistentCache = false;
     _loaded = true;
     emojiDataRevision.value++;
     debugPrint('[PreloadedData] 已从 HTML 快照恢复数据');
@@ -545,6 +559,7 @@ class PreloadedDataService {
 
   void _clearCachedData() {
     _loaded = false;
+    _loadedFromPersistentCache = false;
     _currentUser = null;
     _siteSettings = null;
     _site = null;
@@ -673,6 +688,8 @@ class PreloadedDataService {
       );
 
       final html = response.data as String;
+      final loadedFromPersistentCache =
+          response.extra['preloadCacheHit'] == true;
       if (!_isCurrent(revision, generation)) return;
       final parsed = await _parsePreloadedDataFromHtml(
         html,
@@ -686,7 +703,16 @@ class PreloadedDataService {
         // BrowserTrustCoordinator 的降级链(启动 WebView 补水/重试)。
         throw const FormatException('首页 HTML 未解析出 data-preloaded 数据');
       }
-      debugPrint('[PreloadedData] 数据加载成功');
+      if (!await _hasReusableBootstrapData()) {
+        if (!_isCurrent(revision, generation)) return;
+        throw const FormatException('首页 bootstrap 与当前认证会话不匹配');
+      }
+      if (!_isCurrent(revision, generation)) return;
+      debugPrint(
+        '[PreloadedData] 数据加载成功'
+        '${loadedFromPersistentCache ? ' (persistent cache)' : ''}',
+      );
+      _loadedFromPersistentCache = loadedFromPersistentCache;
       _loaded = true;
       emojiDataRevision.value++;
       // 预热完成后仅更新站点基础数据和 sitekey。cf_clearance 自动续期
@@ -897,11 +923,19 @@ class PreloadedDataService {
     }());
   }
 
-  bool _hasReusableBootstrapData() {
-    return _hasDiscourseSetup &&
-        _currentUser != null &&
-        _siteSettings != null &&
-        _site != null;
+  Future<bool> _hasReusableBootstrapData() async {
+    // Discourse ApplicationLayoutPreloader always emits site/siteSettings, but
+    // currentUser is authenticated-only. A real guest snapshot is therefore
+    // valid without currentUser. If our native cookie jar already has a _t
+    // session, however, an anonymous bootstrap means WebView/native cookies
+    // have not converged yet and must not be published as the logged-in state.
+    if (!_hasDiscourseSetup || _siteSettings == null || _site == null) {
+      return false;
+    }
+    final token = (await CookieJarService().getTToken())?.trim();
+    final expectsAuthenticated =
+        token != null && token.isNotEmpty && token != 'del';
+    return !expectsAuthenticated || _currentUser != null;
   }
 
   /// 从 HTML 中提取 discourse-base-uri（子路径部署前缀）
