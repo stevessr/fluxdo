@@ -207,7 +207,7 @@ class RawCookieWriter {
         '[RawCookieWriter] setRawCookiesBatch incomplete '
         '$written/${items.length}, fallback serial',
       );
-      return _setRawCookiesSerial(items);
+      return await _setRawCookiesSerial(items);
     } on PlatformException catch (e) {
       debugPrint('[RawCookieWriter] setRawCookiesBatch failed, fallback: $e');
       return _setRawCookiesSerial(items);
@@ -349,7 +349,7 @@ class RawCookieWriter {
         '[RawCookieWriter] deleteExactCookiesBatch incomplete '
         '$deleted/${items.length}, fallback individual deletes',
       );
-      return _deleteExactCookiesFallback(items);
+      return await _deleteExactCookiesFallback(items);
     } on PlatformException catch (e) {
       debugPrint(
         '[RawCookieWriter] deleteExactCookiesBatch failed, fallback: $e',

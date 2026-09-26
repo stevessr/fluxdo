@@ -60,15 +60,21 @@ void main() {
     }
   });
 
-  test('resolveVisibleRichTools 保留用户固定顺序', () {
-    // 故意乱序传入，结果应按注册表顺序
+  test('resolveVisibleRichTools 保留用户固定顺序并补上 StevesSR 快捷入口', () {
+    // 故意乱序传入，结果应按注册表顺序；Stevessr 作为一等快捷入口
+    // 自动补位（见 2dd5e4cd 回归覆盖），不要求用户清偏好。
     final got = resolveVisibleRichTools(['link', 'bold', 'italic']);
-    expect(got.map((t) => t.id).toList(), ['link', 'bold', 'italic']);
+    expect(got.map((t) => t.id).toList(), [
+      'link',
+      'bold',
+      'italic',
+      'stevessr',
+    ]);
   });
 
   test('resolveVisibleRichTools 忽略未知 id', () {
     final got = resolveVisibleRichTools(['bold', 'nope']);
-    expect(got.map((t) => t.id).toList(), ['bold']);
+    expect(got.map((t) => t.id).toList(), ['bold', 'stevessr']);
   });
 
   group('工具动作真的改文档', () {

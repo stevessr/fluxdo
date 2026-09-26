@@ -155,7 +155,7 @@ class AppStateRefresher {
       final notifier = container.read(currentUserProvider.notifier);
       // AsyncNotifier.state 是 protected API；这里是账户切换事务的原子提交点，
       // 必须在其它 provider 刷新前同步替换旧身份，避免出现一帧串号。
-      // ignore: invalid_use_of_protected_member
+      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
       notifier.state = AsyncValue.data(validatedUser);
       unawaited(notifier.refreshSilently(force: true));
       return;

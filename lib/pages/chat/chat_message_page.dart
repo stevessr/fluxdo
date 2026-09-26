@@ -31,7 +31,6 @@ import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/chat/chat_keyboard_viewport.dart';
-import '../../widgets/user/user_card.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../image_viewer_page.dart';
 import '../user_profile_page.dart';
@@ -2375,24 +2374,8 @@ class _ChatMessageBubble extends StatefulWidget {
 }
 
 class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
-  final LayerLink _link = LayerLink();
-
   /// 桌面鼠标悬停时显示异侧 react 按钮；触控设备始终保留轻量入口。
   bool _hovered = false;
-
-  void _openUserCard() {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final anchorRect = box.localToGlobal(Offset.zero) & box.size;
-    showUserCard(
-      context: context,
-      anchorRect: anchorRect,
-      layerLink: _link,
-      username: message.user!.username,
-      avatarFallbackUrl: avatarUrl,
-      nameFallback: message.user!.name ?? message.user!.username,
-    );
-  }
 
   ChatMessage get message => widget.message;
   ChatMessage? get replyToMessage => widget.replyToMessage;

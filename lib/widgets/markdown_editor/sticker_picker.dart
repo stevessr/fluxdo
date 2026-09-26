@@ -129,7 +129,8 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
           ),
         ),
       ],
-      bodyBuilder: (context, scrollController) => const StickerMarketSheet(),
+      bodyBuilder: (context, scrollController) =>
+          StickerMarketSheet(scrollController: scrollController),
     );
     dismissPicker?.call();
     try {
@@ -262,6 +263,8 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    // 市场位于前景时卸载下层图片监听，禁止继续构建/加载订阅网格。
+    if (_marketOpen) return const SizedBox.expand();
     final subscribedIds = ref.watch(subscribedStickerIdsProvider);
     _recentSnapshot ??= ref.read(recentStickersProvider);
     final recentStickers = _recentSnapshot!;

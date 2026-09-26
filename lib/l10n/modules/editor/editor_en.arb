@@ -4,7 +4,21 @@
   "codeBlock_chartLoadFailed": "Chart load failed",
   "codeBlock_code": "Code",
   "codeBlock_renderFailed": "Code block render failed: {error}",
+  "@codeBlock_renderFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "draft_topicTitle": "Topic #{id}",
+  "@draft_topicTitle": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "composer_draftLocal": "Draft saved on this device; sync pending",
   "composer_draftConflict": "Draft version conflict",
   "composer_draftConflictTitle": "Draft version conflict",
@@ -19,6 +33,13 @@
   "drafts_deleteContent": "Delete this draft?",
   "drafts_deleteDraft": "Delete draft",
   "drafts_deleteFailed": "Delete failed: {error}",
+  "@drafts_deleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "drafts_deleteTitle": "Delete draft",
   "drafts_deleted": "Draft deleted",
   "drafts_draft": "Draft",
@@ -28,6 +49,13 @@
   "drafts_privateMessage": "Private message",
   "drafts_selectHint": "Select a draft to continue editing",
   "drafts_replyToPost": "Reply to #{number}",
+  "@drafts_replyToPost": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
   "drafts_title": "My Drafts",
   "editor_hintText": "Say something... (Markdown supported)",
   "editor_noContent": "(No content)",

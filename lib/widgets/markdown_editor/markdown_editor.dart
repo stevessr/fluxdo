@@ -20,7 +20,6 @@ import 'composer_tools_panel.dart';
 import 'composer_quick_panel.dart';
 import 'composer_tools_anchor.dart';
 import 'composer_workbench.dart';
-import 'composer_panel_scope.dart';
 import 'editor_tools.dart';
 import 'emoji_popover.dart';
 import 'emoji_sticker_panel.dart';
@@ -32,7 +31,7 @@ import 'package:pangutext/pangutext.dart';
 import '../../../../../l10n/s.dart';
 
 /// 编辑器面板类型
-enum EditorPanelType { none, keyboard, emoji, metadata }
+enum EditorPanelType { none, keyboard, emoji }
 
 /// 通用 Markdown 编辑器组件
 /// 包含编辑/预览模式切换、工具栏和表情面板
@@ -158,6 +157,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   // 面板意图状态：用户希望打开的自定义面板（表情/工具），
   // 用于防止焦点变化导致的面板状态竞争
   EditorPanelType _intendedPanel = EditorPanelType.none;
+  bool _returningToKeyboard = false;
 
   /// EmojiStickerPanel 实例缓存。
   ///
@@ -196,6 +196,21 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     widget.controller.addListener(_handleTextChange);
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_returningToKeyboard &&
+        MediaQuery.viewInsetsOf(context).bottom >= _panelHeight - 1) {
+      _returningToKeyboard = false;
+    }
+  }
+
+  void _finishKeyboardHandoff() {
+    if (mounted && _returningToKeyboard) {
+      setState(() => _returningToKeyboard = false);
+    }
+  }
+
   void _onEditorFocusChanged() {
     if (mounted) setState(() {});
   }
@@ -210,32 +225,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     }
   }
 
-  Widget? _metadataPanel;
-  Completer<Object?>? _metadataResult;
-
-  Future<Object?> _openMetadataPanel(ComposerPanelBuilder builder) {
-    _metadataResult?.complete(null);
-    final result = Completer<Object?>();
-    _metadataResult = result;
-    _metadataPanel = builder((value) {
-      if (!mounted || _metadataResult != result) return;
-      _metadataResult = null;
-      result.complete(value);
-      closeEmojiPanel();
-      setState(() => _metadataPanel = null);
-      if (value != null) resumeEditing();
-    });
-    _togglePanel(EditorPanelType.metadata);
-    return result.future;
-  }
-
-  Widget _buildMetadataPanel() => SizedBox(
-    height: _panelHeight,
-    child: _metadataPanel ?? const SizedBox.shrink(),
-  );
-
   bool _toolsOpen = false;
-  bool _toolsWasEditing = false;
 
   Future<void>? _toolsTask;
 
@@ -274,8 +264,6 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   Future<void> _presentTools({required bool quick}) async {
     final toolbar = _toolbarKey.currentState;
     if (toolbar == null || _toolsOpen) return;
-    _toolsWasEditing =
-        _focusNode.hasFocus || MediaQuery.viewInsetsOf(context).bottom > 0;
     setState(() => _toolsOpen = true);
     final selection = widget.controller.selection;
     final keyboardWasVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -425,8 +413,6 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   @override
   void dispose() {
     _focusNode.removeListener(_onEditorFocusChanged);
-    _metadataResult?.complete(null);
-    _metadataResult = null;
     _toolsAnchor.dispose();
     _emojiPopover?.dispose();
     _undoController.dispose();
@@ -609,15 +595,13 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
   /// 关闭表情/工具面板（供外部调用，如返回键拦截）
   void closeEmojiPanel() {
-    _metadataResult?.complete(null);
-    _metadataResult = null;
+    _toolsAnchor.dismiss();
     if (_isDesktop) {
       _emojiPopover?.hide();
       return;
     }
     if (_intendedPanel != EditorPanelType.none ||
-        _currentPanelType == EditorPanelType.emoji ||
-        _currentPanelType == EditorPanelType.metadata) {
+        _currentPanelType == EditorPanelType.emoji) {
       _intendedPanel = EditorPanelType.none;
       // 不解除 readOnly、不摘焦点:关闭面板 = 输入框停在"光标闪烁、
       // 键盘不弹"的待命态(同聊天输入条,TG 口径,用户点名)。要用键盘,
@@ -634,6 +618,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
   /// 切换自定义面板（表情/工具）
   void _togglePanel(EditorPanelType type) {
+    _toolsAnchor.dismiss();
     // 桌面端表情走悬浮弹层,不进 docked 容器
     if (_isDesktop && type == EditorPanelType.emoji) {
       _emojiPopover!.toggle(context, panel: _ensureEmojiPanelChild());
@@ -1017,7 +1002,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     return wrappedField;
   }
 
-  /// 自定义面板高度：键盘高度已知时直接使用（与 _KeyboardPlaceholder 等高），
+  /// 自定义面板高度：键盘高度已知时直接使用（与表情面板等高），
   /// 否则用 emojiPanelHeight 兜底
   double get _panelHeight {
     final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
@@ -1072,12 +1057,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   }
 
   /// 构建当前意图面板对应的组件（用于焦点竞争时维持面板显示）
-  Widget _buildIntendedPanel() {
-    return switch (_intendedPanel) {
-      EditorPanelType.metadata => _buildMetadataPanel(),
-      _ => _buildEmojiPanel(),
-    };
-  }
+  Widget _buildIntendedPanel() => _buildEmojiPanel();
 
   @override
   Widget build(BuildContext context) {
@@ -1220,8 +1200,6 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
           switch (type) {
             case EditorPanelType.emoji:
               return _buildEmojiPanel();
-            case EditorPanelType.metadata:
-              return _buildMetadataPanel();
             default:
               return const SizedBox.shrink();
           }
@@ -1245,13 +1223,20 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
           }
 
           bool isCustomPanel(EditorPanelType type) =>
-              type == EditorPanelType.emoji || type == EditorPanelType.metadata;
+              type == EditorPanelType.emoji;
 
           final wasCustom = isCustomPanel(_currentPanelType);
           final wasNone = _currentPanelType == EditorPanelType.none;
           final isCustom = isCustomPanel(newType);
 
           setState(() {
+            // 仅承接表情 → 键盘的过渡，不把焦点触发的 keyboard 态当作键盘可见。
+            if (newType != EditorPanelType.keyboard) {
+              _returningToKeyboard = false;
+            } else if (wasCustom) {
+              _returningToKeyboard =
+                  MediaQuery.viewInsetsOf(context).bottom == 0;
+            }
             _currentPanelType = newType;
           });
 
@@ -1277,17 +1262,11 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
           }
           switch (panelType) {
             case ChatBottomPanelType.keyboard:
-              return _KeyboardPlaceholder(
-                color: theme.colorScheme.surface,
-                nativeKeyboardHeight: _panelController.keyboardHeight,
+              return ComposerKeyboardSpace(
+                heldHeight: _returningToKeyboard ? _panelHeight : null,
+                onHandoffComplete: _finishKeyboardHandoff,
               );
             case ChatBottomPanelType.other:
-              if (data == EditorPanelType.metadata) {
-                return ColoredBox(
-                  color: theme.colorScheme.surface,
-                  child: _buildMetadataPanel(),
-                );
-              }
               if (data == EditorPanelType.emoji) {
                 return ColoredBox(
                   color: theme.colorScheme.surface,
@@ -1296,7 +1275,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
               }
               return const SizedBox.shrink();
             case ChatBottomPanelType.none:
-              return _SafeAreaPlaceholder(color: theme.colorScheme.surface);
+              return const ComposerKeyboardSpace();
           }
         },
       ),
@@ -1304,40 +1283,3 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   }
 }
 
-/// 键盘占位组件：使用原生键盘高度，不使用 AnimatedSize，
-/// 与表情面板共用同一高度源（nativeKeyboardHeight），确保切换时等高
-class _KeyboardPlaceholder extends StatelessWidget {
-  final Color color;
-  final double nativeKeyboardHeight;
-
-  const _KeyboardPlaceholder({
-    required this.color,
-    required this.nativeKeyboardHeight,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
-    final height = max(nativeKeyboardHeight, safeBottom);
-    return ColoredBox(
-      color: color,
-      child: SizedBox(width: double.infinity, height: height),
-    );
-  }
-}
-
-/// 安全区域占位组件：无键盘时显示底部安全区域高度
-class _SafeAreaPlaceholder extends StatelessWidget {
-  final Color color;
-
-  const _SafeAreaPlaceholder({required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
-    return ColoredBox(
-      color: color,
-      child: SizedBox(width: double.infinity, height: safeBottom),
-    );
-  }
-}

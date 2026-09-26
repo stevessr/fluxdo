@@ -46,7 +46,10 @@ class _MarketService extends StickerMarketService {
   );
 
   @override
-  List<StickerGroup> getSubscribedGroups() => const [
+  List<String> getSubscribedGroupIds() => const ['local'];
+
+  @override
+  Future<List<StickerGroup>> getAllGroups() async => const [
     StickerGroup(
       id: 'local',
       name: '本地分组',

@@ -36,8 +36,7 @@ class UserProfilePage extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider).value;
     final isOwnProfile =
         currentUser != null && currentUser.username == username;
-    final canAccessInvites =
-        isOwnProfile && (currentUser?.trustLevel ?? 0) >= 3;
+    final canAccessInvites = isOwnProfile && currentUser.trustLevel >= 3;
 
     final destinations = <NavigationDestination>[
       NavigationDestination(
