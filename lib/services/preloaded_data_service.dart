@@ -703,7 +703,9 @@ class PreloadedDataService {
         // BrowserTrustCoordinator 的降级链(启动 WebView 补水/重试)。
         throw const FormatException('首页 HTML 未解析出 data-preloaded 数据');
       }
-      if (!await _hasReusableBootstrapData()) {
+      if (!await _hasReusableBootstrapData(
+        expectsAuthenticated: loadedFromPersistentCache ? true : null,
+      )) {
         if (!_isCurrent(revision, generation)) return;
         throw const FormatException('首页 bootstrap 与当前认证会话不匹配');
       }
@@ -923,7 +925,9 @@ class PreloadedDataService {
     }());
   }
 
-  Future<bool> _hasReusableBootstrapData() async {
+  Future<bool> _hasReusableBootstrapData({
+    bool? expectsAuthenticated,
+  }) async {
     // Discourse ApplicationLayoutPreloader always emits site/siteSettings, but
     // currentUser is authenticated-only. A real guest snapshot is therefore
     // valid without currentUser. If our native cookie jar already has a _t
@@ -932,10 +936,13 @@ class PreloadedDataService {
     if (!_hasDiscourseSetup || _siteSettings == null || _site == null) {
       return false;
     }
-    final token = (await CookieJarService().getTToken())?.trim();
-    final expectsAuthenticated =
-        token != null && token.isNotEmpty && token != 'del';
-    return !expectsAuthenticated || _currentUser != null;
+
+    var authenticated = expectsAuthenticated;
+    if (authenticated == null) {
+      final token = (await CookieJarService().getTToken())?.trim();
+      authenticated = token != null && token.isNotEmpty && token != 'del';
+    }
+    return !authenticated || _currentUser != null;
   }
 
   /// 从 HTML 中提取 discourse-base-uri（子路径部署前缀）
