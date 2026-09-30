@@ -64,7 +64,7 @@ void main() {
 
   test('bootstrap validity follows Discourse auth-aware preload contract', () {
     final start = preloadSource.indexOf(
-      'Future<bool> _hasReusableBootstrapData()',
+      'Future<bool> _hasReusableBootstrapData({',
     );
     final end = preloadSource.indexOf(
       '/// 从 HTML 中提取 discourse-base-uri',
@@ -77,11 +77,10 @@ void main() {
     expect(body, contains('_hasDiscourseSetup'));
     expect(body, contains('_siteSettings == null'));
     expect(body, contains('_site == null'));
+    expect(body, contains('bool? expectsAuthenticated'));
+    expect(body, contains('if (authenticated == null)'));
     expect(body, contains('CookieJarService().getTToken()'));
-    expect(
-      body,
-      contains('return !expectsAuthenticated || _currentUser != null;'),
-    );
+    expect(body, contains('return !authenticated || _currentUser != null;'));
   });
 
   test('persistent preload source is exposed for dynamic SWR', () {
@@ -93,6 +92,12 @@ void main() {
     expect(
       preloadSource,
       contains('_loadedFromPersistentCache = loadedFromPersistentCache;'),
+    );
+    expect(
+      preloadSource,
+      contains(
+        'expectsAuthenticated: loadedFromPersistentCache ? true : null,',
+      ),
     );
   });
 
