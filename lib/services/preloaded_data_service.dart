@@ -925,9 +925,7 @@ class PreloadedDataService {
     }());
   }
 
-  Future<bool> _hasReusableBootstrapData({
-    bool? expectsAuthenticated,
-  }) async {
+  Future<bool> _hasReusableBootstrapData({bool? expectsAuthenticated}) async {
     // Discourse ApplicationLayoutPreloader always emits site/siteSettings, but
     // currentUser is authenticated-only. A real guest snapshot is therefore
     // valid without currentUser. If our native cookie jar already has a _t
