@@ -263,8 +263,9 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
               });
               hcaptchaLast = { endpoint: ep, status: h.status, body: await h.text() };
               if (h.status === 200) { hcaptchaOk = true; break; }
-              // 404 视为路径不对, 继续 fallback
-              if (h.status !== 404) break;
+              // endpoint 可能被关闭、改挂载点或当前路径不接受该请求；
+              // 对常见不可用状态继续尝试下一个候选。
+              if (![403, 404, 405, 410].includes(h.status)) break;
             } catch (e) {
               hcaptchaLast = { endpoint: ep, status: 0, body: String(e) };
             }
