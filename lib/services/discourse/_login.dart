@@ -1,15 +1,9 @@
 part of 'discourse_service.dart';
 
-/// 原生用户名/密码登录 — linux.do 流程对齐网页:
-/// 1. (UI 层) 弹 hcaptcha mini webview, 让用户人机验证拿 hcaptcha token
-/// 2. GET /session/csrf (由 RequestHeaderInterceptor 在 POST 前自动触发)
-/// 3. POST /hcaptcha/create.json {token: hcaptchaToken}
-///    → server 写一个 2 分钟 TTL 的 encrypted cookie `h_captcha_temp_id`
-/// 4. POST /session.json {login, password, second_factor_token?}
-///    → server 见 h_captcha_temp_id cookie + verify hcaptcha → 真正登录
+/// 原生用户名/密码登录相关能力。
 ///
-/// 主要解决 iOS 15.7 用户卡 splash 的 Discourse `static {}` (ES2022) 兼容问题:
-/// 不再加载 Discourse Ember bundle, 直接走 native JSON API。
+/// 当前主路径由轻量 WebView 直接访问 Discourse JSON API，并根据服务端响应按需
+/// 处理 Cloudflare、hCaptcha 与二步验证；这里的 dio 方法仅作为兼容兜底。
 mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   /// 用 hcaptcha token 换 h_captcha_temp_id cookie。
   /// caller 必须先通过 hcaptcha mini webview 让用户人机交互拿到 token。
@@ -92,6 +86,9 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     final reason = body['reason']?.toString();
     if (reason != null) return _parseLoginError(reason, body);
     if (body['error'] != null && body['user'] == null) {
+      if (_hasSecondFactorOptions(body)) {
+        return _secondFactorFailure(body);
+      }
       return LoginResult.error(
         LoginErrorKind.unknown,
         message: body['error']?.toString(),
