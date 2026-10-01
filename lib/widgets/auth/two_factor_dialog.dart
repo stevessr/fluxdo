@@ -13,10 +13,7 @@ enum DirectTwoFactorMethod {
 
 /// 直接登录使用的二步验证提交值。
 class TwoFactorSubmission {
-  const TwoFactorSubmission({
-    required this.token,
-    required this.method,
-  });
+  const TwoFactorSubmission({required this.token, required this.method});
 
   final String token;
   final DirectTwoFactorMethod method;
@@ -115,9 +112,8 @@ class _TwoFactorDialogState extends State<_TwoFactorDialog> {
   void _submit() {
     final token = _controller.text.trim();
     if (!_isValid(token)) return;
-    Navigator.of(context).pop(
-      TwoFactorSubmission(token: token, method: _method),
-    );
+    Navigator.of(context)
+        .pop(TwoFactorSubmission(token: token, method: _method));
   }
 
   void _useWebLogin() {
@@ -175,13 +171,9 @@ class _TwoFactorDialogState extends State<_TwoFactorDialog> {
               key: ValueKey(_method),
               controller: _controller,
               focusNode: _focusNode,
-              keyboardType: _isTotp
-                  ? TextInputType.number
-                  : TextInputType.text,
+              keyboardType: _isTotp ? TextInputType.number : TextInputType.text,
               textAlign: TextAlign.center,
-              autofillHints: _isTotp
-                  ? const [AutofillHints.oneTimeCode]
-                  : null,
+              autofillHints: _isTotp ? const [AutofillHints.oneTimeCode] : null,
               autocorrect: false,
               enableSuggestions: false,
               style: TextStyle(
@@ -237,10 +229,7 @@ class _TwoFactorDialogState extends State<_TwoFactorDialog> {
             },
           )
         else if (widget.onUseWebLogin != null)
-          FilledButton(
-            onPressed: _useWebLogin,
-            child: const Text('使用 Web 登录'),
-          ),
+          FilledButton(onPressed: _useWebLogin, child: const Text('使用 Web 登录')),
       ],
     );
   }
