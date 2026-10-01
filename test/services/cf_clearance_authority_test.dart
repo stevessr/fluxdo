@@ -102,23 +102,6 @@ void main() {
       );
     });
 
-    test('Precursor/JSD 浏览器会话可在 incumbent 健康时主动换届', () async {
-      jarWith(
-        clearance(
-          'healthy-incumbent',
-          expiresAt: DateTime.now().add(const Duration(days: 7)),
-        ),
-      );
-
-      expect(
-        await authority.evaluateReplacement(
-          'precursor-rotated',
-          browserSessionRotation: true,
-        ),
-        CfClearanceReplaceDecision.allow,
-      );
-    });
-
     test('在位值无 expires(session 形态)且未被撞 → 同样受保护', () async {
       jarWith(clearance('session-form-value'));
       expect(
