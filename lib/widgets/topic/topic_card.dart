@@ -17,6 +17,7 @@ import '../common/smart_avatar.dart';
 import '../common/animated_avatar_overlay.dart';
 import '../common/perf_span_box.dart';
 import '../../services/discourse_cache_manager.dart';
+import '../../services/toast_service.dart';
 import '../common/category_tags_line.dart';
 import '../common/icon_glyph_span.dart';
 import '../common/relative_time_text.dart';
@@ -967,6 +968,32 @@ class TopicCard extends ConsumerWidget {
   }
 }
 
+Future<void> _clearPinFromFeed(
+  BuildContext context,
+  WidgetRef ref,
+  Topic topic,
+) async {
+  try {
+    await ref.read(discourseServiceProvider).clearTopicPin(topic.id);
+
+    // clear-pin 只影响当前用户的列表排序/置顶呈现。刷新已挂载的全局
+    // latest 与该话题分类列表，让 CompactTopicCard 立即回归普通卡片。
+    ref.invalidate(topicListProvider(null));
+    final categoryId = int.tryParse(topic.categoryId);
+    if (categoryId != null) {
+      ref.invalidate(topicListProvider(categoryId));
+    }
+
+    if (context.mounted) {
+      ToastService.showSuccess('已取消置顶');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ToastService.showError('取消置顶失败: $e');
+    }
+  }
+}
+
 /// 紧凑型话题卡片 - 用于置顶话题
 class CompactTopicCard extends ConsumerWidget {
   final Topic topic;
@@ -1058,13 +1085,28 @@ class CompactTopicCard extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
-                  // 1. 置顶图标
-                  Icon(
-                    Symbols.push_pin_rounded,
-                    size: 14,
-                    color: theme.colorScheme.primary,
+                  // 1. 置顶图标：直接在信息流取消“对我置顶”。
+                  // Discourse clear-pin 是用户级隐藏，不会修改全站置顶状态。
+                  Tooltip(
+                    message: '取消置顶',
+                    child: InkResponse(
+                      radius: 18,
+                      onTap: () {
+                        unawaited(
+                          _clearPinFromFeed(context, ref, topic),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: Icon(
+                          Symbols.push_pin_rounded,
+                          size: 14,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 5),
 
                   // 2. 分类图标/Dot
                   if (category != null) ...[

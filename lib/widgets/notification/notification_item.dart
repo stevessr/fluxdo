@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 import '../../models/notification.dart';
+import '../../providers/discourse_providers.dart';
+import '../../services/toast_service.dart';
 import '../../utils/url_helper.dart';
 import '../common/emoji_text.dart';
 import '../common/smart_avatar.dart';
@@ -22,7 +25,7 @@ const _followNewReplySvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
     '</svg>';
 
 /// 通知列表项 widget，快捷面板和历史列表页面共用
-class NotificationItem extends StatelessWidget {
+class NotificationItem extends ConsumerStatefulWidget {
   final DiscourseNotification notification;
   final String? systemAvatarTemplate;
   final VoidCallback onTap;
@@ -33,6 +36,67 @@ class NotificationItem extends StatelessWidget {
     this.systemAvatarTemplate,
     required this.onTap,
   });
+
+  @override
+  ConsumerState<NotificationItem> createState() => _NotificationItemState();
+}
+
+class _NotificationItemState extends ConsumerState<NotificationItem> {
+  DiscourseNotification get notification => widget.notification;
+  String? get systemAvatarTemplate => widget.systemAvatarTemplate;
+  VoidCallback get onTap => widget.onTap;
+
+  bool _isUnassigning = false;
+  bool _unassigned = false;
+
+  @override
+  void didUpdateWidget(covariant NotificationItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.notification.id != widget.notification.id) {
+      // ListView 默认按位置复用 State。筛选/插入通知后同一个 State 可能承载
+      // 另一条通知，必须清掉上一条的瞬时操作状态，避免“已取消”串到别的条目。
+      _isUnassigning = false;
+      _unassigned = false;
+    }
+  }
+
+  Future<void> _unassignTopic() async {
+    final topicId = notification.topicId;
+    final notificationId = notification.id;
+    if (topicId == null || _isUnassigning || _unassigned) return;
+
+    setState(() => _isUnassigning = true);
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.unassignTarget(targetId: topicId);
+
+      // 直接在通知流完成操作也要让已打开的话题详情失效，避免返回详情页
+      // 仍短暂显示旧的指定状态。
+      final params = TopicDetailNotifier.activeParamsFor(topicId);
+      if (params != null) {
+        ref.invalidate(topicDetailProvider(params));
+      }
+
+      // 异步请求期间列表可能重排并复用这个 State；只允许原通知更新 UI。
+      if (!mounted || notification.id != notificationId) return;
+      setState(() => _unassigned = true);
+      ToastService.showSuccess('已取消指定');
+
+      // 这条通知已经被用户处理，服务端已读态做 best-effort 同步。
+      // 即使已读上报失败，也不能把已经成功的取消指定误报成失败。
+      try {
+        await service.markNotificationRead(notificationId);
+      } catch (_) {}
+    } catch (e) {
+      if (mounted && notification.id == notificationId) {
+        ToastService.showError('取消指定失败: $e');
+      }
+    } finally {
+      if (mounted && notification.id == notificationId) {
+        setState(() => _isUnassigning = false);
+      }
+    }
+  }
 
   IconData _getNotificationIcon() {
     if (notification.isAcceptedSolutionNotification) {
@@ -186,8 +250,9 @@ class NotificationItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final iconColor = _getNotificationColor(context);
+    final handled = notification.read || _unassigned;
     final titleStyle = TextStyle(
-      fontWeight: notification.read ? FontWeight.normal : FontWeight.w500,
+      fontWeight: handled ? FontWeight.normal : FontWeight.w500,
     );
 
     return ListTile(
@@ -211,7 +276,7 @@ class NotificationItem extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: notification.read
+                  color: handled
                       ? colorScheme.surfaceContainerHighest
                       : colorScheme.surface,
                   shape: BoxShape.circle,
@@ -228,7 +293,7 @@ class NotificationItem extends StatelessWidget {
                   ],
                 ),
                 child: _buildBadgeIcon(
-                  notification.read ? colorScheme.onSurfaceVariant : iconColor,
+                  handled ? colorScheme.onSurfaceVariant : iconColor,
                 ),
               ),
             ),
@@ -276,16 +341,46 @@ class NotificationItem extends StatelessWidget {
         ],
       ),
       onTap: onTap,
-      trailing: !notification.read
-          ? Container(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (notification.notificationType == NotificationType.assignedTopic &&
+              notification.topicId != null &&
+              !_unassigned &&
+              (ref.watch(currentUserProvider).value?.canAssign ?? false))
+            TextButton(
+              onPressed: _isUnassigning ? null : _unassignTopic,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+              ),
+              child: _isUnassigning
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('取消指定'),
+            ),
+          if (!notification.read && !_unassigned) ...[
+            const SizedBox(width: 6),
+            Container(
               width: 8,
               height: 8,
               decoration: BoxDecoration(
                 color: colorScheme.primary,
                 shape: BoxShape.circle,
               ),
-            )
-          : null,
+            ),
+          ],
+          if (_unassigned)
+            Icon(
+              Symbols.check_circle_rounded,
+              size: 18,
+              color: colorScheme.primary,
+            ),
+        ],
+      ),
     );
   }
 }
