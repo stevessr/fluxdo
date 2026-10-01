@@ -836,7 +836,11 @@ document.close();
                         borderRadius: BorderRadius.circular(20),
                         child: Column(
                           children: [
-                            _Header(onClose: _finishCanceled, scheme: scheme),
+                            _Header(
+                              onClose: _finishCanceled,
+                              scheme: scheme,
+                              title: _captchaPrompted ? '完成人机验证' : '安全登录',
+                            ),
                             Expanded(
                               child: Stack(
                                 children: [
@@ -967,10 +971,15 @@ document.close();
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onClose, required this.scheme});
+  const _Header({
+    required this.onClose,
+    required this.scheme,
+    required this.title,
+  });
 
   final VoidCallback onClose;
   final ColorScheme scheme;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -989,7 +998,7 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '完成人机验证',
+              title,
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
