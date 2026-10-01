@@ -84,6 +84,12 @@ class BrowserTrustCoordinator {
   static const Duration _diagnosticBackgroundPauseDelay = Duration(seconds: 60);
   static const Duration _webViewTeardownCooldown = Duration(milliseconds: 1200);
 
+  // Precursor keeper 会创建常驻真实同源 WebView。它不属于首屏/预加载依赖，
+  // 如果在 preload/browser bootstrap 刚结束时立刻启动，会和首批 topic/feed
+  // 请求争抢网络、CPU 与平台 WebView 线程。留出一个短暂的启动后空窗；期间
+  // 真遇到 CF 拒绝仍由现有 challenge interceptor 立即恢复，不牺牲正确性。
+  static const Duration _clearanceRefreshStartupDelay = Duration(seconds: 5);
+
   final CookieJarService _jar = CookieJarService();
   final PreloadedDataService _preload = PreloadedDataService();
 
@@ -91,7 +97,9 @@ class BrowserTrustCoordinator {
   Future<bool>? _activeBrowserTrust;
   Future<bool>? _activeBrowserTrustGate;
   Timer? _backgroundPauseTimer;
+  Timer? _clearanceRefreshStartTimer;
   String? _pendingClearanceRefreshReason;
+  String? _scheduledClearanceRefreshReason;
 
   /// 导航 context,供 bootstrap 被 CF 挡下时主动发起 CF 验证(showManualVerify)。
   BuildContext? _navigatorContext;
@@ -264,8 +272,40 @@ class BrowserTrustCoordinator {
   }
 
   void _startClearanceRefreshNow({required String reason}) {
-    _log('start cf_clearance refresh: reason=$reason');
-    CfClearanceRefreshService().start();
+    _scheduledClearanceRefreshReason = reason;
+    if (_clearanceRefreshStartTimer != null) {
+      _log('reuse scheduled cf_clearance refresh: reason=$reason');
+      return;
+    }
+
+    _log(
+      'schedule cf_clearance refresh after startup quiet window: '
+      'reason=$reason delay=${_clearanceRefreshStartupDelay.inSeconds}s',
+    );
+    _clearanceRefreshStartTimer = Timer(_clearanceRefreshStartupDelay, () {
+      _clearanceRefreshStartTimer = null;
+      final scheduledReason = _scheduledClearanceRefreshReason ?? reason;
+      _scheduledClearanceRefreshReason = null;
+
+      // preload / session bootstrap 仍在跑时绝不创建第二个真实页面 WebView。
+      // 让当前任务结束后的既有 pending 路径重新调度，避免平台线程与首批
+      // feed 请求发生资源竞争。
+      if (_activePreload != null || _activeBrowserTrust != null) {
+        _pendingClearanceRefreshReason = scheduledReason;
+        _log(
+          'defer scheduled cf_clearance refresh until startup work settles: '
+          'reason=$scheduledReason',
+        );
+        return;
+      }
+      if (_preload.currentUserSync == null) {
+        _log('skip scheduled cf_clearance refresh: not logged in');
+        return;
+      }
+
+      _log('start cf_clearance refresh: reason=$scheduledReason');
+      CfClearanceRefreshService().start();
+    });
   }
 
   Future<void> _ensurePreloadedInternal({required String reason}) async {
