@@ -6,9 +6,8 @@ void main() {
   late String source;
 
   setUpAll(() {
-    source = File(
-      'lib/services/browser_trust_coordinator.dart',
-    ).readAsStringSync();
+    source = File('lib/services/browser_trust_coordinator.dart')
+        .readAsStringSync();
   });
 
   test('native preload probe runs before startup WebView fallback', () {
@@ -90,5 +89,33 @@ void main() {
     );
     expect(source, contains("reason: '\$reason:\${path}_preload_settle'"));
     expect(source, contains('final synced = await ensureBrowserTrust('));
+  });
+
+  test('persistent CF keeper stays off preload critical path', () {
+    final start = source.indexOf('void _startClearanceRefreshNow');
+    final end = source.indexOf('Future<void> _ensurePreloadedInternal', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+
+    final body = source.substring(start, end);
+    expect(source, contains('_clearanceRefreshStartupDelay'));
+    expect(
+      source,
+      contains(
+        'static const Duration _clearanceRefreshStartupDelay = '
+        'Duration(seconds: 5);',
+      ),
+    );
+    expect(body, contains('Timer(_clearanceRefreshStartupDelay'));
+    expect(
+      body,
+      contains('_activePreload != null || _activeBrowserTrust != null'),
+    );
+    expect(body, contains('_preload.currentUserSync == null'));
+
+    final scheduled = body.indexOf('Timer(_clearanceRefreshStartupDelay');
+    final keeperStart = body.indexOf('CfClearanceRefreshService().start()');
+    expect(scheduled, greaterThanOrEqualTo(0));
+    expect(keeperStart, greaterThan(scheduled));
   });
 }
