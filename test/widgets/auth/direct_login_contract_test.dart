@@ -34,8 +34,7 @@ void main() {
         expect(source, contains('status == $status'));
       }
       expect(
-        source,
-        contains(
+        source.contains(
           '_captchaPrompted &&\n'
           '        !_captchaEndpointFallbackUsed',
         ),
