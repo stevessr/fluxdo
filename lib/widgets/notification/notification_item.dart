@@ -65,14 +65,15 @@ class _NotificationItemState extends ConsumerState<NotificationItem> {
         ref.invalidate(topicDetailProvider(params));
       }
 
-      // 用户已经处理了这条指定通知：同步快捷面板、历史通知页和服务端已读态。
-      ref.read(recentNotificationsProvider.notifier).markAsRead(notification.id);
-      ref.read(notificationListProvider.notifier).markAsRead(notification.id);
-      await service.markNotificationRead(notification.id);
-
       if (!mounted) return;
       setState(() => _unassigned = true);
       ToastService.showSuccess('已取消指定');
+
+      // 这条通知已经被用户处理，服务端已读态做 best-effort 同步。
+      // 即使已读上报失败，也不能把已经成功的取消指定误报成失败。
+      try {
+        await service.markNotificationRead(notification.id);
+      } catch (_) {}
     } catch (e) {
       if (mounted) {
         ToastService.showError('取消指定失败: $e');
