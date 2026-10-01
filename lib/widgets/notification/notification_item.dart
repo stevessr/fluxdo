@@ -49,8 +49,20 @@ class _NotificationItemState extends ConsumerState<NotificationItem> {
   bool _isUnassigning = false;
   bool _unassigned = false;
 
+  @override
+  void didUpdateWidget(covariant NotificationItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.notification.id != widget.notification.id) {
+      // ListView 默认按位置复用 State。筛选/插入通知后同一个 State 可能承载
+      // 另一条通知，必须清掉上一条的瞬时操作状态，避免“已取消”串到别的条目。
+      _isUnassigning = false;
+      _unassigned = false;
+    }
+  }
+
   Future<void> _unassignTopic() async {
     final topicId = notification.topicId;
+    final notificationId = notification.id;
     if (topicId == null || _isUnassigning || _unassigned) return;
 
     setState(() => _isUnassigning = true);
@@ -65,21 +77,22 @@ class _NotificationItemState extends ConsumerState<NotificationItem> {
         ref.invalidate(topicDetailProvider(params));
       }
 
-      if (!mounted) return;
+      // 异步请求期间列表可能重排并复用这个 State；只允许原通知更新 UI。
+      if (!mounted || notification.id != notificationId) return;
       setState(() => _unassigned = true);
       ToastService.showSuccess('已取消指定');
 
       // 这条通知已经被用户处理，服务端已读态做 best-effort 同步。
       // 即使已读上报失败，也不能把已经成功的取消指定误报成失败。
       try {
-        await service.markNotificationRead(notification.id);
+        await service.markNotificationRead(notificationId);
       } catch (_) {}
     } catch (e) {
-      if (mounted) {
+      if (mounted && notification.id == notificationId) {
         ToastService.showError('取消指定失败: $e');
       }
     } finally {
-      if (mounted) {
+      if (mounted && notification.id == notificationId) {
         setState(() => _isUnassigning = false);
       }
     }
