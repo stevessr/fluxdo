@@ -237,8 +237,9 @@ class _NotificationItemState extends ConsumerState<NotificationItem> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final iconColor = _getNotificationColor(context);
+    final handled = notification.read || _unassigned;
     final titleStyle = TextStyle(
-      fontWeight: notification.read ? FontWeight.normal : FontWeight.w500,
+      fontWeight: handled ? FontWeight.normal : FontWeight.w500,
     );
 
     return ListTile(
@@ -262,7 +263,7 @@ class _NotificationItemState extends ConsumerState<NotificationItem> {
               child: Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: notification.read
+                  color: handled
                       ? colorScheme.surfaceContainerHighest
                       : colorScheme.surface,
                   shape: BoxShape.circle,
@@ -279,7 +280,7 @@ class _NotificationItemState extends ConsumerState<NotificationItem> {
                   ],
                 ),
                 child: _buildBadgeIcon(
-                  notification.read ? colorScheme.onSurfaceVariant : iconColor,
+                  handled ? colorScheme.onSurfaceVariant : iconColor,
                 ),
               ),
             ),
