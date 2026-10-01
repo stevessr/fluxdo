@@ -152,6 +152,7 @@ class _LoginPageState extends State<LoginPage>
     // 先 csrf → session；只有服务端确实要求 captcha 才调用 hcaptcha/create。
     // 这样站点关闭验证码后不会继续请求已禁用 endpoint 并收到 403。
     // 2FA 通过 onNeedSecondFactor 原生处理 TOTP / 备用码。
+    var fallbackToWebLogin = false;
     final result = await showWebViewLoginDialog(
       context,
       siteKey: _kLinuxDoHcaptchaSiteKey,
@@ -166,11 +167,14 @@ class _LoginPageState extends State<LoginPage>
         totpEnabled: need.totpEnabled,
         backupEnabled: need.backupEnabled,
         securityKeyEnabled: need.securityKeyEnabled,
-        onUseWebLogin: () => _loginWithWebView(),
+        onUseWebLogin: () => fallbackToWebLogin = true,
       ),
     );
     if (!mounted) return false;
     if (result == null || result.status == WebViewLoginStatus.canceled) {
+      if (fallbackToWebLogin && mounted) {
+        await _loginWithWebView();
+      }
       return false;
     }
 
