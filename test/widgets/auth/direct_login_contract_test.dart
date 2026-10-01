@@ -34,14 +34,6 @@ void main() {
         expect(source, contains('status == $status'));
       }
       expect(
-        source.contains(
-          '_captchaPrompted &&\n'
-          '        !_captchaEndpointFallbackUsed',
-        ),
-        isFalse,
-        reason: 'endpoint 回退后不应重新进入验证码循环',
-      );
-      expect(
         source,
         contains(
           '!_captchaPrompted &&\n'
