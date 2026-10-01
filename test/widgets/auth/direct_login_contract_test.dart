@@ -30,12 +30,9 @@ void main() {
           .readAsStringSync();
 
       expect(source, contains('bool _captchaEndpointFallbackUsed = false;'));
-      expect(
-        source,
-        contains(
-          'status == 403 || status == 404 || status == 405 || status == 410',
-        ),
-      );
+      for (final status in const [403, 404, 405, 410]) {
+        expect(source, contains('status == $status'));
+      }
       expect(
         source,
         contains(
