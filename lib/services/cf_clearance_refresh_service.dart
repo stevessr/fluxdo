@@ -58,6 +58,7 @@ class CfClearanceRefreshService {
   /// Precursor 只有“新出现”的精确值才会被 acceptValues 放行；历史 CHIPS /
   /// Turnstile 副本即使再次被枚举出来，也不会被当作本轮新铸值。
   Set<String> _knownBrowserClearanceValues = <String>{};
+  bool _browserClearanceBaselineReady = false;
 
   /// 当前 HeadlessWebView 对应的 controller。
   InAppWebViewController? _webViewController;
@@ -343,11 +344,25 @@ class CfClearanceRefreshService {
 
       // 先记录导航前浏览器存储中所有已有 clearance，后续只把新出现的
       // 精确值视为本轮浏览器会话新铸值，避免历史 CHIPS 副本冒充 rotation。
-      _knownBrowserClearanceValues =
-          await BoundarySyncService.instance.readCookieValuesFromWebView(
-        name: _cookieName,
-        currentUrl: AppConstants.baseUrl,
-      );
+      try {
+        _knownBrowserClearanceValues =
+            await BoundarySyncService.instance.readCookieValuesFromWebView(
+          name: _cookieName,
+          currentUrl: AppConstants.baseUrl,
+        );
+        // 本服务只在 jar 已有 clearance 时启动。priming 后仍读不到任何
+        // browser 值，说明这个平台无法建立可靠的“导航前”基线；此时关闭
+        // 主动 rotation，宁可交给既有 403/429 challenge 自愈。
+        _browserClearanceBaselineReady =
+            _knownBrowserClearanceValues.isNotEmpty;
+      } catch (e) {
+        _knownBrowserClearanceValues = <String>{};
+        _browserClearanceBaselineReady = false;
+        CfChallengeLogger.log(
+          '[CfRefresh] 无法建立浏览器 clearance 基线，'
+          '保持 incumbent 粘性: $e',
+        );
+      }
 
       // Precursor 只会出现在真实 HTML 响应里。先加载同源页面，让
       // Cloudflare 有机会注入 challenge-platform 客户端验证；只有确认没有
@@ -616,6 +631,7 @@ document.close();
     _webViewController = null;
     _browserSessionVerificationActive = false;
     _knownBrowserClearanceValues = <String>{};
+    _browserClearanceBaselineReady = false;
 
     CfChallengeLogger.log(
       '[CfRefresh] disposing begin: reason=$reason, gen=$_generation',
@@ -765,7 +781,8 @@ document.close();
     _isSyncingCookies = true;
     try {
       String? freshBrowserClearance;
-      if (_browserSessionVerificationActive) {
+      if (_browserSessionVerificationActive &&
+          _browserClearanceBaselineReady) {
         final observed =
             await BoundarySyncService.instance.readCookieValuesFromWebView(
           name: _cookieName,
