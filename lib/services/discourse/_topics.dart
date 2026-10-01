@@ -400,6 +400,21 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     );
   }
 
+  /// 取消当前用户看到的置顶状态。
+  ///
+  /// 对齐 Discourse core 的 PUT /t/:id/clear-pin.json：只写当前用户的
+  /// TopicUser.cleared_pinned_at，不会替管理员把全站/分类置顶一起撤掉。
+  Future<void> clearTopicPin(int topicId) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/clear-pin.json',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
   /// 设置话题订阅级别
   Future<void> setTopicNotificationLevel(int topicId, TopicNotificationLevel level) async {
     await _dio.post(
