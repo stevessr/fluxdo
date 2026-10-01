@@ -106,6 +106,10 @@ class BoundarySyncService {
   /// [acceptValues] cookie 名 → 只接受的值；用于 challenge 场景按确认的 fresh 值
   ///   过滤，排除 WebView 中可能残留的旧变体。与 trusted 同用时，确认的
   ///   cf_clearance 可替换验证期间被普通同步抢先写回的副本。
+  /// [allowCfClearanceRotation] 仅供真实同源浏览器中已确认运行 Cloudflare
+  ///   client verification（Precursor/JSD）的会话使用。它允许 Cloudflare
+  ///   在 incumbent 尚健康时主动旋转 cf_clearance；普通 WebView/Turnstile
+  ///   同步必须保持 false，避免旧 CHIPS 副本重新覆盖新值。
   Future<void> syncFromWebView({
     String? currentUrl,
     InAppWebViewController? controller,
@@ -115,6 +119,7 @@ class BoundarySyncService {
     int? requestGeneration,
     bool trusted = false,
     Map<String, String>? acceptValues,
+    bool allowCfClearanceRotation = false,
   }) => _syncLock.synchronized(
     () => _syncFromWebView(
       currentUrl: currentUrl,
@@ -125,6 +130,7 @@ class BoundarySyncService {
       requestGeneration: requestGeneration,
       trusted: trusted,
       acceptValues: acceptValues,
+      allowCfClearanceRotation: allowCfClearanceRotation,
     ),
   );
 
@@ -137,6 +143,7 @@ class BoundarySyncService {
     int? requestGeneration,
     bool trusted = false,
     Map<String, String>? acceptValues,
+    bool allowCfClearanceRotation = false,
   }) async {
     final url = currentUrl ?? AppConstants.baseUrl;
     final uri = Uri.parse(url);
@@ -166,6 +173,7 @@ class BoundarySyncService {
             url: url,
             trusted: trusted,
             acceptValues: acceptValues,
+            allowCfClearanceRotation: allowCfClearanceRotation,
           ),
         );
         if (synced > 0) {
@@ -258,6 +266,7 @@ class BoundarySyncService {
           url: url,
           trusted: trusted,
           acceptValues: acceptValues,
+          allowCfClearanceRotation: allowCfClearanceRotation,
         )) {
           continue;
         }
@@ -415,6 +424,7 @@ class BoundarySyncService {
     required String url,
     required bool trusted,
     Map<String, String>? acceptValues,
+    bool allowCfClearanceRotation = false,
   }) async {
     if (name != CfClearanceAuthority.cookieName) return true;
 
@@ -426,6 +436,7 @@ class BoundarySyncService {
           confirmedValue != null &&
           CookieValueCodec.decode(confirmedValue) ==
               CookieValueCodec.decode(value),
+      browserSessionRotation: trusted && allowCfClearanceRotation,
     );
     if (decision == CfClearanceReplaceDecision.skipHealthyIncumbent) {
       LogWriter.instance.write({
