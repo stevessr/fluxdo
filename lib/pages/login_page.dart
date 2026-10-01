@@ -30,6 +30,7 @@ import 'webview_login_page.dart';
 ///
 /// linux.do 的 hcaptcha sitekey 写死, 后续可从 PreloadedDataService 动态拿。
 const String _kLinuxDoHcaptchaSiteKey = 'a776b4ac-8c4c-441e-986a-c6ee9ed8cf08';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
