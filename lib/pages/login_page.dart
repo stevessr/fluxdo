@@ -3,12 +3,8 @@ import 'package:app_icons/app_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/s.dart';
-import '../services/auth_session.dart';
-import '../services/cf_challenge_service.dart';
 import '../services/credential_store_service.dart';
 import '../services/discourse/discourse_service.dart';
-import '../services/network/cookie/boundary_sync_service.dart';
-import '../services/network/cookie/cookie_jar_service.dart';
 import '../services/toast_service.dart';
 import '../services/user_api_key_login_flow.dart';
 import '../utils/blur_config.dart';
@@ -17,26 +13,24 @@ import '../widgets/auth/login_form.dart';
 import '../widgets/auth/two_factor_dialog.dart';
 import '../widgets/common/ambient_background.dart';
 import '../widgets/common/floating_logo.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import 'qr_login_scan_page.dart';
 import 'webview_login_page.dart';
 
 /// linux.do 原生登录页。
 ///
-/// 主路径走 [DiscourseService.loginWithPassword] (在 `_LoginMixin` 里),
-/// 不加载 Discourse Ember bundle, 绕开 iOS 15 的 ES2022 `static{}` 兼容问题。
+/// 主路径在轻量 WebView 内直接调用 Discourse JSON 登录接口，不加载完整 Ember
+/// bundle，绕开低版本 WebView 对现代前端语法的兼容问题。
 ///
-/// 流程对齐 linux.do 网页:
-/// 1. 弹 hcaptcha 人机验证 (mini WebView, 只加载几 KB hcaptcha widget)
-/// 2. POST /hcaptcha/create.json 用 token 换 h_captcha_temp_id cookie
-/// 3. POST /session.json 真正登录
-/// 4. 2FA 用户弹 TOTP dialog 再次提交
-///
-/// 失败 / 高级场景 (OAuth / 注册 / 找回密码 / 2FA 走 backup code 等) 兜底跳
-/// [WebViewLoginPage]。
+/// 登录能力按服务端响应自适应：默认先尝试无验证码登录；只有站点实际要求时
+/// 才展示 hCaptcha。二步验证直接支持 TOTP 与备用码，安全密钥 / Passkey 等
+/// WebAuthn 场景继续交给 [WebViewLoginPage]。
 ///
 /// linux.do 的 hcaptcha sitekey 写死, 后续可从 PreloadedDataService 动态拿。
 const String _kLinuxDoHcaptchaSiteKey = 'a776b4ac-8c4c-441e-986a-c6ee9ed8cf08';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -44,8 +38,7 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage>
-    with TickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   String? _savedUsername;
   String? _savedPassword;
   bool _credentialsLoaded = false;
@@ -93,7 +86,10 @@ class _LoginPageState extends State<LoginPage>
 
   @override
   void dispose() {
-    if (identical(UserApiKeyLoginFlow.instance.onFlowFinished, _onBrowserAuthFinished)) {
+    if (identical(
+      UserApiKeyLoginFlow.instance.onFlowFinished,
+      _onBrowserAuthFinished,
+    )) {
       UserApiKeyLoginFlow.instance.onFlowFinished = null;
     }
     _entryController.dispose();
@@ -138,37 +134,6 @@ class _LoginPageState extends State<LoginPage>
     }
   }
 
-  /// 确保 jar 里有 cf_clearance。没有 → 弹 fluxdo 现有的 CF 手动验证页让用户
-  /// 人机交互拿 cookie, 然后**显式 sync** 从 WebView cookie store 到 dart jar
-  /// (这步 [CfChallengeService.showManualVerify] 本身不做, sync 一般是
-  /// [CfChallengeInterceptor._syncCookiesOnce] 触发, 我们直接调 showManualVerify
-  /// 不经过 interceptor, 所以要手动 sync, 不然 jar 还是空)。
-  Future<bool> _ensureCfClearance() async {
-    final jar = CookieJarService();
-    var clearance = await jar.getCfClearance();
-    if (clearance != null && clearance.isNotEmpty) return true;
-    if (!mounted) return false;
-
-    final requestGeneration = AuthSession().generation;
-    final ok = await CfChallengeService().showManualVerify(context, true);
-    if (ok != true) return false;
-
-    // 等 1.5s 让 WV 网络栈把 Set-Cookie 写完, 然后同步 CF/验证码相关 cookie。
-    // 这里明确排除 Discourse session cookie，登录成功收口流程会单独同步它们。
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    for (var i = 0; i < 3; i++) {
-      await BoundarySyncService.instance.syncFromWebView(
-        cookieNames: null,
-        excludeCookieNames: CookieJarService.authCookieNames,
-        requestGeneration: requestGeneration,
-      );
-      clearance = await jar.getCfClearance();
-      if (clearance != null && clearance.isNotEmpty) return true;
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-    }
-    return false;
-  }
-
   /// 表单提交回调。返 true 表示走完成功路径并已 pop, false 留在表单。
   Future<bool> _handleSubmit({
     required String identifier,
@@ -177,16 +142,9 @@ class _LoginPageState extends State<LoginPage>
   }) async {
     final service = DiscourseService();
 
-    // Step 0: jar 必须有 cf_clearance, 否则 native dio 任何请求都被 CF 当 bot
-    // 直接 403 (TLS 指纹不对). 没有就弹 CF 手动验证页让用户人机过一次。
-    if (!await _ensureCfClearance()) {
-      if (mounted) {
-        ToastService.showError('Cloudflare 验证未完成,请重试');
-      }
-      return false;
-    }
-    if (!mounted) return false;
-
+    // 不再预先强制要求 cf_clearance。直接登录请求本身由 WebView 内核发出；
+    // 只有 /session/csrf 真正命中 Cloudflare challenge 时，dialog 才按需拉起验证。
+    // 这样未启用 Cloudflare 的 Discourse 实例也能直接登录。
     // hcaptcha endpoint: 从 SharedPreferences 拿 (站长改 mount 时填到设置里);
     // 没配就让 dialog 用内置 fallback 列表 (/captcha/hcaptcha/create.json →
     // /hcaptcha/create.json)。读 prefs 直接走 SharedPreferences (不依赖
@@ -195,10 +153,11 @@ class _LoginPageState extends State<LoginPage>
     final hcaptchaEndpoint = prefs.getString('pref_hcaptcha_create_endpoint');
     if (!mounted) return false;
 
-    // Step 1-3: WebView 内 JS 全流程登录 (csrf → hcaptcha/create → session)。
-    // 三个请求都由 WebView 内核发出, TLS/JA3 指纹与 CF 签发 cf_clearance 时一致,
-    // 避开 dio (IO/rhttp 适配器) 指纹不匹配导致的 403 (BAD CSRF)。
-    // 2FA 通过 onNeedSecondFactor 回调弹 TOTP, 由 dialog 内同一 WebView 重试。
+    // Step 1-3: WebView 内 JS 自适应登录。
+    // 先 csrf → session；只有服务端确实要求 captcha 才调用 hcaptcha/create。
+    // 这样站点关闭验证码后不会继续请求已禁用 endpoint 并收到 403。
+    // 2FA 通过 onNeedSecondFactor 原生处理 TOTP / 备用码。
+    var fallbackToWebLogin = false;
     final result = await showWebViewLoginDialog(
       context,
       siteKey: _kLinuxDoHcaptchaSiteKey,
@@ -207,14 +166,18 @@ class _LoginPageState extends State<LoginPage>
       hcaptchaCreateEndpoint: hcaptchaEndpoint,
       onNeedSecondFactor: (need) => showTwoFactorDialog(
         context,
-        hint: need.totpEnabled
-            ? '请输入身份验证器 App 显示的 6 位验证码'
-            : '此账号需要二步验证',
-        onUseBackupCode: () => _loginWithWebView(),
+        hint: need.totpEnabled ? '请选择可用的二步验证方式完成登录' : '此账号需要二步验证',
+        totpEnabled: need.totpEnabled,
+        backupEnabled: need.backupEnabled,
+        securityKeyEnabled: need.securityKeyEnabled,
+        onUseWebLogin: () => fallbackToWebLogin = true,
       ),
     );
     if (!mounted) return false;
     if (result == null || result.status == WebViewLoginStatus.canceled) {
+      if (fallbackToWebLogin && mounted) {
+        await _loginWithWebView();
+      }
       return false;
     }
 
@@ -250,8 +213,7 @@ class _LoginPageState extends State<LoginPage>
     final msg = switch (f.kind) {
       LoginErrorKind.invalidCredentials => '用户名或密码错误',
       LoginErrorKind.secondFactorRequired => f.message ?? '二步验证失败',
-      LoginErrorKind.notActivated =>
-        '账号未激活,请到邮箱 ${f.sentToEmail ?? ''} 完成激活',
+      LoginErrorKind.notActivated => '账号未激活,请到邮箱 ${f.sentToEmail ?? ''} 完成激活',
       LoginErrorKind.notApproved => '账号尚未通过审核',
       LoginErrorKind.passwordExpired => '密码已过期,请用浏览器登录重设密码',
       LoginErrorKind.network => f.message ?? '网络异常',
@@ -510,9 +472,8 @@ class _LoginPageState extends State<LoginPage>
 
   /// 扫码登录:跳转扫码页,成功后 pop 登录页
   Future<void> _loginWithQrScan() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const QrLoginScanPage()),
-    );
+    final result = await Navigator.of(context)
+        .push<bool>(MaterialPageRoute(builder: (_) => const QrLoginScanPage()));
     if (result == true && mounted) {
       Navigator.of(context).pop(true);
     }
