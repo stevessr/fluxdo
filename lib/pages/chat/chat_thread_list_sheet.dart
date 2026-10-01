@@ -76,12 +76,31 @@ class ChatThreadListSheet extends ConsumerWidget {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Text(
-                '还没有消息串\n回复消息即可开启讨论',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.forum_outlined,
+                    size: 52,
+                    color: theme.colorScheme.onSurfaceVariant
+                        .withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '还没有消息串',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '回复一条消息即可开启独立讨论',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -93,9 +112,9 @@ class ChatThreadListSheet extends ConsumerWidget {
             await ref.read(chatChannelThreadsProvider(channelId).future);
           },
           child: ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
             itemCount: threads.length,
-            separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
+            separatorBuilder: (_, _) => const SizedBox(height: 4),
             itemBuilder: (context, index) {
               final thread = threads[index];
               final om = thread.originalMessage;
@@ -110,6 +129,12 @@ class ChatThreadListSheet extends ConsumerWidget {
                       : null);
 
               return ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                tileColor: theme.colorScheme.surfaceContainerLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 leading: SmartAvatar(
                   imageUrl: avatar,
                   radius: 20,
