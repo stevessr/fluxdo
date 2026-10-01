@@ -25,6 +25,7 @@ void main() {
 
   test('Precursor rotation only accepts a newly observed exact clearance', () {
     expect(source, contains('_knownBrowserClearanceValues'));
+    expect(source, contains('_browserClearanceBaselineReady'));
     expect(
       source,
       contains(
@@ -36,6 +37,11 @@ void main() {
       source,
       contains('acceptValues: freshBrowserClearance == null'),
     );
+    expect(
+      source,
+      contains("await _syncAndCheckCookies('browser_session_ready', gen);"),
+    );
+    expect(source, contains('if (!isInitialOriginLoad)'));
 
     // Do not add a broad authority bypass: historical CHIPS/Turnstile
     // variants must still be rejected by the existing sticky-incumbent rule.
