@@ -317,7 +317,7 @@ class CfClearanceRefreshService {
     _isRunning = true;
 
     try {
-      CfChallengeLogger.log('[CfRefresh] 启动 Turnstile WebView');
+      CfChallengeLogger.log('[CfRefresh] 启动 Cloudflare 浏览器验证会话');
       // WebView 创建/加载在平台主线程执行重活,与掉帧时间轴对齐归因
       FrameJankMonitor.logEvent('WEBVIEW', 'CfRefresh run() 开始');
 
@@ -496,7 +496,7 @@ document.close();
     );
   }
 
-  /// stale_refresh 的轻量恢复:**原地重载** Turnstile 页面,不销毁重建
+  /// stale_refresh 的轻量恢复：**原地重载** 当前 CF 会话页面，不销毁重建
   /// WebView 实例。
   ///
   /// 旧路径(dispose → priming 逐 cookie 三段式 → HeadlessInAppWebView.run
@@ -664,7 +664,7 @@ document.close();
             ? 'never'
             : '${DateTime.now().difference(_lastSignalAt!).inSeconds}s';
         CfChallengeLogger.log(
-          '[CfRefresh] 长时间未观察到 cf_clearance 更新，原地重载 Turnstile '
+          '[CfRefresh] 长时间未观察到 cf_clearance 更新，原地刷新 CF 会话 '
           '(idle=${idle.inSeconds}s, lastSignalAgo=$lastSignalAgo)',
         );
         unawaited(_reloadTurnstile('stale_refresh', gen: gen));
@@ -672,7 +672,7 @@ document.close();
     });
 
     // 滚动窗口内把 headless WebView 挂起(Android onPause:暂停 JS 定时
-    // 器与渲染,不销毁实例):Turnstile 是活网页,常驻 JS 把平台主线程
+    // 器与渲染,不销毁实例):CF 会话页面是活网页,常驻 JS 把平台主线程
     // 烧到 60%+ 单核(生产 CPU 采样),而 vsync 分发/触摸事件与其同
     // 线程。滚动繁忙即挂起、静默 ~1s 后恢复,JS 信号与刷新逻辑 resume
     // 后自然补上。初始 Turnstile 运行期(_initialTimer 未清)只恢复不
