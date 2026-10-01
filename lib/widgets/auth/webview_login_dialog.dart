@@ -510,7 +510,10 @@ document.close();
         // 当成登录失败；现在把常见“endpoint 不可用”状态视为能力变化，
         // 无验证码回退一次，并禁止再次弹验证码以避免循环。
         if (!_captchaEndpointFallbackUsed &&
-            (status == 403 || status == 404 || status == 405 || status == 410)) {
+            (status == 403 ||
+                status == 404 ||
+                status == 405 ||
+                status == 410)) {
           _captchaEndpointFallbackUsed = true;
           await _runLogin(
             hcaptchaToken: null,
@@ -708,9 +711,8 @@ document.close();
             );
         if (!AuthSession().isValid(_flowGeneration)) {
           if (mounted) {
-            Navigator.of(
-              context,
-            ).pop(const WebViewLoginDialogResult.canceled());
+            Navigator.of(context)
+                .pop(const WebViewLoginDialogResult.canceled());
           }
           return;
         }
@@ -774,9 +776,8 @@ document.close();
     if (_finished) return;
     _finished = true;
     if (mounted) {
-      Navigator.of(
-        context,
-      ).pop(WebViewLoginDialogResult.failure(kind, message));
+      Navigator.of(context)
+          .pop(WebViewLoginDialogResult.failure(kind, message));
     }
   }
 
@@ -1000,9 +1001,8 @@ class _Header extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
           IconButton(
