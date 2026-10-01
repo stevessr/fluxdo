@@ -57,6 +57,7 @@ class CfClearanceAuthority {
   Future<CfClearanceReplaceDecision> evaluateReplacement(
     String candidateValue, {
     bool verified = false,
+    bool browserSessionRotation = false,
   }) async {
     final candidate = _normalize(candidateValue);
     if (candidate.isEmpty) return CfClearanceReplaceDecision.allow;
@@ -76,6 +77,14 @@ class CfClearanceAuthority {
     // trusted 本身不代表已过盾（Turnstile/会话 bootstrap 也会使用它）；
     // 调用方必须同时用 acceptValues 限定本轮验证观察到的新值。
     if (verified) return CfClearanceReplaceDecision.allow;
+
+    // Precursor / JSD 在真实同源浏览器页面中会持续重评会话，并可能在
+    // incumbent 仍未过期时主动旋转 cf_clearance。这个来源与普通 cookie
+    // 同步不同：调用方必须先确认当前 WebView 正在运行 Cloudflare 注入的
+    // challenge-platform 客户端验证脚本，才可打开本通道。
+    if (browserSessionRotation) {
+      return CfClearanceReplaceDecision.allow;
+    }
 
     // 3. 在位值过期/临期：自然换届窗口，放行（新铸值无缝继位）。
     final expires = current?.expiresAt?.toLocal();
@@ -136,7 +145,8 @@ class CfClearanceAuthority {
 
 /// sync 闸门判定结果（见 [CfClearanceAuthority.evaluateReplacement]）。
 enum CfClearanceReplaceDecision {
-  /// 放行：jar 空 / 在位值过期 / 临期 / 在位值刚被撞（换届窗口）。
+  /// 放行：jar 空 / 已确认验证值 / 浏览器会话动态换届 /
+  /// 在位值过期 / 临期 / 在位值刚被撞（换届窗口）。
   allow,
 
   /// 候选值与在位值相同：幂等，无需写入。
