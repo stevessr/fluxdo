@@ -758,6 +758,9 @@ class ChatChannelTile extends ConsumerWidget {
     final isFavorite = favorites.contains(channel.id);
 
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      horizontalTitleGap: 12,
+      minVerticalPadding: 6,
       leading: _buildLeading(context, currentUser?.id),
       title: Text(
         _resolveTitle(context, currentUser?.id),
@@ -773,7 +776,10 @@ class ChatChannelTile extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+                color: hasUnread
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.onSurfaceVariant,
+                fontWeight: hasUnread ? FontWeight.w500 : FontWeight.w400,
               ),
             )
           : null,
@@ -789,8 +795,11 @@ class ChatChannelTile extends ConsumerWidget {
                 Text(
                   TimeUtils.formatRelativeTime(channel.lastMessageSentAt),
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                    color: hasUnread
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
                     fontSize: 11,
+                    fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
                   ),
                 ),
               if (hasUnread) ...[
@@ -824,7 +833,7 @@ class ChatChannelTile extends ConsumerWidget {
           IconButton(
             icon: Icon(
               isFavorite ? Symbols.star_rounded : Symbols.star_outline_rounded,
-              size: 20,
+              size: 19,
               color: isFavorite
                   ? Colors.amber.shade700
                   : theme.colorScheme.onSurfaceVariant,
@@ -832,6 +841,9 @@ class ChatChannelTile extends ConsumerWidget {
             tooltip: isFavorite
                 ? context.l10n.chat_remove_favorite
                 : context.l10n.chat_add_favorite,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+            visualDensity: VisualDensity.compact,
             onPressed: () {
               ref
                   .read(chatFavoritesProvider.notifier)
