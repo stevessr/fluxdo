@@ -482,6 +482,21 @@ class _ChatChannelSettingsSheetState
       if (mounted) setState(() => _isSaving = false);
     }
   }
+
+  Widget _sectionLabel(BuildContext context, String label) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+      child: Text(
+        label,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -558,22 +573,22 @@ class _ChatChannelSettingsSheetState
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                subtitle: Text(
-                  [
-                    if (channel?.description != null &&
-                        channel!.description!.isNotEmpty)
-                      channel.description!
-                    else
-                      null,
-                    '类型: ${_channelTypeLabel(channel)}',
-                    if (_statusLabel(channel).isNotEmpty)
-                      '状态: ${_statusLabel(channel)}',
-                    'ID: ${widget.channelId}',
-                  ].whereType<String>().join(' · '),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    [
+                      if (channel?.description != null &&
+                          channel!.description!.isNotEmpty)
+                        channel.description!,
+                      _channelTypeLabel(channel),
+                      if (_statusLabel(channel).isNotEmpty)
+                        _statusLabel(channel),
+                    ].join(' · '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 trailing: canEdit
@@ -588,6 +603,8 @@ class _ChatChannelSettingsSheetState
               ),
 
               const Divider(height: 1),
+
+              _sectionLabel(context, '通知'),
 
               SwitchListTile(
                 secondary: Icon(
@@ -619,6 +636,8 @@ class _ChatChannelSettingsSheetState
                     : () => _showNotificationLevelPicker(channel!),
               ),
 
+              _sectionLabel(context, '频道'),
+
               // 消息串仅对有编辑权限的用户可改；无权限只展示状态
               if (canEdit)
                 SwitchListTile(
@@ -648,6 +667,8 @@ class _ChatChannelSettingsSheetState
                 ),
 
               const Divider(height: 1),
+
+              _sectionLabel(context, '频道信息'),
 
               Builder(
                 builder: (context) {
@@ -706,6 +727,8 @@ class _ChatChannelSettingsSheetState
                   ),
                 ),
 
+              _sectionLabel(context, '成员'),
+
               ListTile(
                 leading: const Icon(Icons.group_outlined),
                 title: Text(context.l10n.chat_channel_members),
@@ -727,31 +750,10 @@ class _ChatChannelSettingsSheetState
                 },
               ),
 
-              if (canAddMembers)
-                ListTile(
-                  leading: Icon(
-                    Icons.person_add_outlined,
-                    color: theme.colorScheme.primary,
-                  ),
-                  title: Text(
-                    context.l10n.chat_add_member,
-                    style: TextStyle(color: theme.colorScheme.primary),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    ChatChannelMembersSheet.show(
-                      context,
-                      widget.channelId,
-                      widget.channelTitle,
-                      canAddMembers: true,
-                      membersCountHint: channel?.membersCount,
-                    );
-                  },
-                ),
-
               // 离开：私聊/群聊/公开频道均可；语义对齐 Discourse toggle-channel-membership
               if (channel != null && channel.isJoined) ...[
                 const Divider(height: 1),
+                _sectionLabel(context, '危险操作'),
                 ListTile(
                   leading: Icon(
                     Icons.logout_rounded,
