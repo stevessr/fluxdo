@@ -18,6 +18,7 @@ import '../../services/toast_service.dart';
 import '../../services/webview_session_cookie_refresh_service.dart';
 import '../../services/webview_settings.dart';
 import '../../services/windows_webview_environment_service.dart';
+import 'two_factor_dialog.dart';
 
 /// 登录对话框结果状态。
 enum WebViewLoginStatus { success, failure, canceled }
@@ -60,22 +61,22 @@ class WebViewLoginNeed2FA {
 /// 显示 WebView 内 JS 全流程登录对话框。
 ///
 /// 在一个**与 CF 验证共享 WebView 环境**的 mini WebView 里, 用 data:url
-/// (baseUrl=linux.do, **不加载 Discourse Ember bundle**) 渲染 hcaptcha, 并在
-/// 同一个 WebView 内核里用 JS 同源 `fetch` 跑完整个登录:
-/// `GET /session/csrf` → `POST /hcaptcha/create.json` → `POST /session.json`。
+/// (baseUrl=linux.do, **不加载 Discourse Ember bundle**) 运行同源登录请求。
 ///
-/// 这样三个请求都由 WebView 内核发出, TLS/JA3 指纹与 CF 签发 `cf_clearance`
-/// 时一致, 避开 dio (IO / rhttp 适配器) 指纹不匹配导致的 403 (BAD CSRF)。
+/// 自适应顺序:
+/// 1. 先直接 `GET /session/csrf` → `POST /session.json`，不碰 hCaptcha endpoint；
+/// 2. 只有服务端返回 403 / captcha 语义时才让用户完成 hCaptcha；
+/// 3. hCaptcha endpoint 被站点关闭并返回 403/404/405/410 时，再无验证码重试一次；
+/// 4. 需要二步验证时支持 TOTP 与备用码，WebAuthn 方式交给完整 Web 登录。
 ///
-/// 返回结构化结果; 取消返回 [WebViewLoginStatus.canceled]。
-/// [onNeedSecondFactor] 在检测到 2FA 时回调出去 (由 caller 弹 TOTP 对话框),
-/// 返回 6 位 code (null=取消)。
+/// 请求都由 WebView 内核发出, TLS/JA3 指纹与 CF 签发 `cf_clearance` 时一致，
+/// 避开 dio (IO / rhttp 适配器) 指纹不匹配导致的 403 (BAD CSRF)。
 Future<WebViewLoginDialogResult?> showWebViewLoginDialog(
   BuildContext context, {
   required String siteKey,
   required String identifier,
   required String password,
-  required Future<String?> Function(WebViewLoginNeed2FA need)
+  required Future<TwoFactorSubmission?> Function(WebViewLoginNeed2FA need)
   onNeedSecondFactor,
   String? hcaptchaCreateEndpoint,
 }) {
@@ -105,7 +106,8 @@ class _WebViewLoginDialog extends StatefulWidget {
   final String siteKey;
   final String identifier;
   final String password;
-  final Future<String?> Function(WebViewLoginNeed2FA need) onNeedSecondFactor;
+  final Future<TwoFactorSubmission?> Function(WebViewLoginNeed2FA need)
+  onNeedSecondFactor;
   final String? hcaptchaCreateEndpoint;
 
   @override
@@ -115,11 +117,14 @@ class _WebViewLoginDialog extends StatefulWidget {
 class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   InAppWebViewController? _controller;
   bool _loading = true;
-  bool _processing = false; // hcaptcha 通过后登录请求进行中
+  bool _processing = false;
   bool _finished = false; // 防止重复 pop / 回调重入
   bool _cookiesPrimed = false; // 方案 A: 是否已从 jar 预灌 cookie
   bool _windowsInlineHtmlInjected = false;
-  bool _cfRetryUsed = false; // CSRF 403 自动重验证只做一次, 避免死循环
+  bool _cfRetryUsed = false; // CF 403 自动重验证只做一次, 避免死循环
+  bool _initialLoginStarted = false;
+  bool _captchaPrompted = false;
+  bool _captchaEndpointFallbackUsed = false;
   final int _flowGeneration = AuthSession().generation;
   // 最近一次 _runLogin 的参数, CSRF 403 重新过 CF 后用同样参数重跑。
   // CSRF 失败发生在 JS __fluxdoLogin 第一步 (fetch /session/csrf), 此时
@@ -127,6 +132,7 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   // 也未用过。
   String? _lastHcaptchaToken;
   String? _lastSecondFactorToken;
+  int _lastSecondFactorMethod = 1;
 
   @override
   void dispose() {
@@ -220,7 +226,7 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
     // WebView 内核同源全流程登录。所有请求 credentials:'include' 带 store cookie。
     // 只设 X-CSRF-Token / X-Requested-With / Content-Type / Accept;
     // Cookie / User-Agent / Origin / Referer / sec-* 由内核自管, 不手设。
-    window.__fluxdoLogin = async function(identifier, password, hcaptchaToken, secondFactorToken) {
+    window.__fluxdoLogin = async function(identifier, password, hcaptchaToken, secondFactorToken, secondFactorMethod) {
       function done(p) {
         try { window.flutter_inappwebview.callHandler('login_result', JSON.stringify(p)); } catch (e) {}
       }
@@ -268,10 +274,14 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
           }
         }
 
-        // 3. session.json — 真正登录
-        var form = 'login=' + encodeURIComponent(identifier) + '&password=' + encodeURIComponent(password);
+        // 3. session.json — 真正登录。method 始终带上，与 Discourse 官方前端一致，
+        //    这样首次遇到 2FA 时服务端会返回完整的能力标志。
+        var method = secondFactorMethod || 1;
+        var form = 'login=' + encodeURIComponent(identifier) +
+          '&password=' + encodeURIComponent(password) +
+          '&second_factor_method=' + encodeURIComponent(method);
         if (secondFactorToken) {
-          form += '&second_factor_token=' + encodeURIComponent(secondFactorToken) + '&second_factor_method=1';
+          form += '&second_factor_token=' + encodeURIComponent(secondFactorToken);
         }
         var s = await fetch('/session.json', {
           method: 'POST',
@@ -284,7 +294,12 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
           },
           body: form
         });
-        return done({ phase: 'session', status: s.status, body: await s.text() });
+        return done({
+          phase: 'session',
+          status: s.status,
+          body: await s.text(),
+          cfMitigated: s.headers.get('cf-mitigated')
+        });
       } catch (e) {
         return done({ phase: 'exception', status: 0, body: String(e) });
       }
@@ -300,9 +315,18 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
     controller.addJavaScriptHandler(
       handlerName: 'hcaptcha_page_ready',
       callback: (args) {
+        if (_initialLoginStarted || _finished) return null;
+        _initialLoginStarted = true;
         if (mounted && _loading) {
           setState(() => _loading = false);
         }
+        // 先不提交 hCaptcha，直接尝试标准 Discourse 密码登录。
+        // 站点已关闭验证码时这条路径直接成功，不会再请求已禁用的 endpoint。
+        _runLogin(
+          hcaptchaToken: null,
+          secondFactorToken: null,
+          secondFactorMethod: 1,
+        );
         return null;
       },
     );
@@ -312,7 +336,11 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
       callback: (args) {
         final token = args.isNotEmpty ? args.first?.toString() : null;
         if (token != null && token.isNotEmpty) {
-          _runLogin(hcaptchaToken: token, secondFactorToken: null);
+          _runLogin(
+            hcaptchaToken: token,
+            secondFactorToken: null,
+            secondFactorMethod: 1,
+          );
         }
         return null;
       },
@@ -411,6 +439,7 @@ document.close();
   Future<void> _runLogin({
     required String? hcaptchaToken,
     required String? secondFactorToken,
+    required int secondFactorMethod,
   }) async {
     final controller = _controller;
     if (controller == null ||
@@ -426,6 +455,7 @@ document.close();
     // 记录参数, CSRF 403 自动重验证后用同样参数重跑
     _lastHcaptchaToken = hcaptchaToken;
     _lastSecondFactorToken = secondFactorToken;
+    _lastSecondFactorMethod = secondFactorMethod;
 
     // 方案 A: fetch 发出前确保登录 WebView store 有 cf_clearance (只灌一次)
     await _primeCookiesFromJar();
@@ -443,7 +473,8 @@ document.close();
         : jsonEncode(secondFactorToken);
     try {
       await controller.evaluateJavascript(
-        source: 'window.__fluxdoLogin($id, $pwd, $tok, $sf);',
+        source:
+            'window.__fluxdoLogin($id, $pwd, $tok, $sf, $secondFactorMethod);',
       );
     } catch (e) {
       debugPrint('[WebViewLogin] evaluate __fluxdoLogin 失败: $e');
@@ -465,6 +496,7 @@ document.close();
     final phase = payload['phase']?.toString();
     final status = (payload['status'] as num?)?.toInt() ?? 0;
     final body = payload['body']?.toString() ?? '';
+    final cfMitigated = payload['cfMitigated']?.toString();
 
     switch (phase) {
       case 'csrf':
@@ -473,6 +505,19 @@ document.close();
         await _handleCsrfFailure(status);
         return;
       case 'hcaptcha':
+        // 站点可能刚刚关闭了验证码插件/要求。旧实现会把 endpoint 的 403
+        // 当成登录失败；现在把常见“endpoint 不可用”状态视为能力变化，
+        // 无验证码回退一次，并禁止再次弹验证码以避免循环。
+        if (!_captchaEndpointFallbackUsed &&
+            (status == 403 || status == 404 || status == 405 || status == 410)) {
+          _captchaEndpointFallbackUsed = true;
+          await _runLogin(
+            hcaptchaToken: null,
+            secondFactorToken: _lastSecondFactorToken,
+            secondFactorMethod: _lastSecondFactorMethod,
+          );
+          return;
+        }
         _finishFailure(
           LoginErrorKind.unknown,
           '人机验证失败, 请重试 (hcaptcha $status)',
@@ -482,10 +527,26 @@ document.close();
         _finishFailure(LoginErrorKind.network, '登录请求异常: $body');
         return;
       case 'session':
+        if (cfMitigated == 'challenge') {
+          await _handleCsrfFailure(status);
+          return;
+        }
         break;
       default:
         _finishFailure(LoginErrorKind.unknown, '未知登录阶段: $phase');
         return;
+    }
+
+    // 首次无验证码尝试若被服务端以 captcha 语义拒绝，才开放 hCaptcha UI。
+    // endpoint 已判定不可用并回退过时不再重复提示，避免 403 循环。
+    if (!_captchaPrompted &&
+        !_captchaEndpointFallbackUsed &&
+        _sessionNeedsCaptcha(status, body)) {
+      _captchaPrompted = true;
+      if (mounted) {
+        setState(() => _processing = false);
+      }
+      return;
     }
 
     // 复用 _LoginMixin 的响应解析 (错误 reason 映射)
@@ -502,7 +563,17 @@ document.close();
     _finishFailure(failure.kind, failure.message);
   }
 
-  /// CSRF 阶段 403 处理: 自动重过一次 CF 验证, 再用同样参数重跑登录。
+  bool _sessionNeedsCaptcha(int status, String body) {
+    if (status == 403) return true;
+
+    final normalized = body.toLowerCase();
+    return normalized.contains('hcaptcha') ||
+        normalized.contains('captcha') ||
+        normalized.contains('human verification') ||
+        normalized.contains('人机验证');
+  }
+
+  /// CF / CSRF 阶段 403 处理: 自动重过一次 CF 验证, 再用同样参数重跑登录。
   ///
   /// 触发场景:
   /// - jar 里的 cf_clearance 已被 CF 拒 (IP 漂移 / TLS 指纹不一致 / 自然过期)
@@ -576,12 +647,16 @@ document.close();
     await _runLogin(
       hcaptchaToken: _lastHcaptchaToken,
       secondFactorToken: _lastSecondFactorToken,
+      secondFactorMethod: _lastSecondFactorMethod,
     );
   }
 
   Future<void> _handleSecondFactor(LoginFailure failure) async {
     if (_finished || !mounted) return;
-    final code = await widget.onNeedSecondFactor(
+    if (mounted) {
+      setState(() => _processing = false);
+    }
+    final submission = await widget.onNeedSecondFactor(
       WebViewLoginNeed2FA(
         totpEnabled: failure.totpEnabled,
         backupEnabled: failure.backupEnabled,
@@ -590,15 +665,17 @@ document.close();
       ),
     );
     if (_finished || !mounted) return;
-    if (code == null || code.isEmpty) {
-      // 用户取消 2FA (或选了备用码/安全密钥, 已由 caller 跳 WebViewLoginPage 兜底)
+    if (submission == null || submission.token.isEmpty) {
+      // 用户取消 2FA；WebAuthn 方式由 caller 切到完整 Web 登录流程。
       _finishCanceled();
       return;
     }
-    // 同一存活 controller 重试, 第二次 hcaptchaToken=null (h_captcha_temp_id 已写)。
-    // 注意: h_captcha_temp_id 仅 2 分钟 TTL, 若 2FA 输入超时, 第二次 session 会
-    // 因 hcaptcha 过期失败 → 走 _finishFailure, caller 提示重新登录。
-    await _runLogin(hcaptchaToken: null, secondFactorToken: code);
+    // 同一存活 controller 重试。TOTP=1，备用码=2；不在这里处理 WebAuthn。
+    await _runLogin(
+      hcaptchaToken: null,
+      secondFactorToken: submission.token,
+      secondFactorMethod: submission.method.discourseValue,
+    );
   }
 
   Future<void> _finishSuccess() async {
