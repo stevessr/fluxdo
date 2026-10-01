@@ -15,12 +15,12 @@ import 'network/cookie/webview_cookie_priming.dart';
 import 'webview_settings.dart';
 import 'windows_webview_environment_service.dart';
 
-/// cf_clearance 自动续期服务。
+/// cf_clearance / Cloudflare 浏览器会话维护服务。
 ///
-/// 只维护一个轻量 Headless WebView，加载同源 Turnstile widget，让
-/// Cloudflare 的 challenge-platform / rc 请求继续由 WebView 浏览器栈自己发送。
-/// Dart 侧不代理、不重放 CF 请求，只在边界时机把 WebView 中新的
-/// `.linux.do` cf_clearance 同步回 CookieJar。
+/// Precursor 会在真实 HTML 页面中注入 client verification，并在同一会话里
+/// 持续重评、旋转 cf_clearance。这里优先维持一个真实同源页面，让这些信号
+/// 留在浏览器栈中；若页面没有 Cloudflare 注入脚本，则回退到旧 Turnstile
+/// keeper。Dart 侧不代理、不重放 CF 请求，只在边界时机同步浏览器产生的新值。
 class CfClearanceRefreshService {
   static final CfClearanceRefreshService _instance =
       CfClearanceRefreshService._internal();
@@ -46,8 +46,13 @@ class CfClearanceRefreshService {
   /// 缓存的 sitekey（来自预热 HTML、登录 HTML 或 CF 403 响应体）。
   String? _sitekey;
 
-  /// 持久 HeadlessWebView（保持 Turnstile widget 存活）。
+  /// 持久 HeadlessWebView（优先保持 Precursor/JSD 浏览器会话，
+  /// 未检测到注入脚本时才承载 Turnstile fallback）。
   HeadlessInAppWebView? _headlessWebView;
+
+  /// 当前 WebView 是否已确认运行 Cloudflare 注入的 challenge-platform
+  /// client verification。只有此状态下，健康 incumbent 才允许被动态旋转。
+  bool _browserSessionVerificationActive = false;
 
   /// 当前 HeadlessWebView 对应的 controller。
   InAppWebViewController? _webViewController;
@@ -119,10 +124,11 @@ class CfClearanceRefreshService {
   // 生命周期
   // ---------------------------------------------------------------------------
 
-  /// 启动服务：创建持久轻量 WebView，加载 Turnstile。
+  /// 启动服务：创建持久轻量 WebView，优先维持真实同源 Cloudflare 会话。
   ///
-  /// 这个方法不阻塞启动链路；没有 sitekey 或没有现存 cf_clearance 时不会
-  /// 主动拉起验证页，交给正常请求的 CF challenge 流程处理。
+  /// 这个方法不阻塞启动链路；没有现存 cf_clearance 时不会主动拉起浏览器，
+  /// 交给正常请求的 CF challenge 流程处理。sitekey 仅用于无 Precursor/JSD
+  /// 注入时的 Turnstile fallback，不再是启动前提。
   void start() {
     // Windows 的常驻 Turnstile WebView 会让 Flutter 合成线程持续退化，
     // 最终卡死；按需 CF 验证仍由 CfChallengeService 负责。
@@ -234,11 +240,6 @@ class CfClearanceRefreshService {
     }
 
     final sitekey = _sitekey;
-    if (sitekey == null || sitekey.isEmpty) {
-      CfChallengeLogger.log('[CfRefresh] 无 sitekey，跳过启动');
-      return;
-    }
-
     final gen = _generation;
     unawaited(() async {
       final baseline = await _readClearanceSnapshot();
@@ -261,7 +262,7 @@ class CfClearanceRefreshService {
     }());
   }
 
-  Future<void> _createAndRunWebView(String sitekey, int gen) async {
+  Future<void> _createAndRunWebView(String? sitekey, int gen) async {
     if (!_canStartGeneration(gen)) return;
 
     try {
@@ -274,7 +275,6 @@ class CfClearanceRefreshService {
     if (!_canStartGeneration(gen)) return;
 
     final originLoadCompleter = Completer<void>();
-    final html = _buildTurnstileHtml(sitekey);
     final webView = HeadlessInAppWebView(
       webViewEnvironment: io.Platform.isWindows
           ? WindowsWebViewEnvironmentService.instance.environment
@@ -296,7 +296,8 @@ class CfClearanceRefreshService {
         _registerJavaScriptHandlers(controller, gen);
       },
       onLoadStop: (_, url) {
-        if (!originLoadCompleter.isCompleted) {
+        if (!originLoadCompleter.isCompleted &&
+            _isAppOriginUrl(url?.toString())) {
           originLoadCompleter.complete();
         }
         if (_canHandleGeneration(gen)) {
@@ -329,28 +330,48 @@ class CfClearanceRefreshService {
         throw StateError('Headless WebView controller is null');
       }
 
-      if (io.Platform.isWindows) {
-        await controller.loadUrl(
-          urlRequest: URLRequest(url: WebUri(_windowsBootstrapUrl)),
+      // Precursor 只会出现在真实 HTML 响应里。先加载同源页面，让
+      // Cloudflare 有机会注入 challenge-platform 客户端验证；只有确认没有
+      // 注入脚本时，才退回旧的 synthetic Turnstile keeper。
+      await controller.loadUrl(
+        urlRequest: URLRequest(url: WebUri(_browserSessionUrl)),
+      );
+      try {
+        await originLoadCompleter.future.timeout(const Duration(seconds: 12));
+      } on TimeoutException {
+        debugPrint('[CfRefresh] origin browser session load timeout');
+      }
+      if (!_canHandleGeneration(gen)) return;
+
+      _browserSessionVerificationActive =
+          await _detectClientSideVerification(controller);
+      if (_browserSessionVerificationActive) {
+        CfChallengeLogger.log(
+          '[CfRefresh] 检测到 Cloudflare client verification，'
+          '启用 Precursor/JSD 会话换届',
         );
-        try {
-          await originLoadCompleter.future.timeout(const Duration(seconds: 8));
-        } on TimeoutException {
-          debugPrint('[CfRefresh] Windows origin bootstrap load timeout');
-        }
-        if (!_canHandleGeneration(gen)) return;
-        await _writeTurnstileHtml(controller, html);
+        // load_stop 可能早于检测完成，补一次带“浏览器会话动态换届”权限的同步。
+        unawaited(_syncAndCheckCookies('browser_session_ready', gen));
+      } else if (sitekey != null && sitekey.isNotEmpty) {
+        CfChallengeLogger.log(
+          '[CfRefresh] 未检测到 Cloudflare 注入脚本，回退 Turnstile keeper',
+        );
+        await _writeTurnstileHtml(controller, _buildTurnstileHtml(sitekey));
       } else {
-        await controller.loadData(
-          data: html,
-          baseUrl: WebUri(AppConstants.baseUrl),
-          mimeType: 'text/html',
-          encoding: 'utf-8',
+        CfChallengeLogger.log(
+          '[CfRefresh] 未检测到 Cloudflare 注入脚本且无 sitekey，'
+          '保留同源页面作为轻量会话锚点',
         );
       }
 
       if (!_canHandleGeneration(gen)) return;
-      _startTimers(gen);
+      _startTimers(
+        gen,
+        includeInitialTimeout:
+            !_browserSessionVerificationActive &&
+            sitekey != null &&
+            sitekey.isNotEmpty,
+      );
     } catch (e, stackTrace) {
       debugPrint('[CfRefresh] WebView 启动失败: $e');
       debugPrintStack(label: '[CfRefresh] start stack', stackTrace: stackTrace);
@@ -433,6 +454,33 @@ class CfClearanceRefreshService {
     }
   }
 
+  Future<bool> _detectClientSideVerification(
+    InAppWebViewController controller,
+  ) async {
+    try {
+      final result = await controller.evaluateJavascript(
+        source: r'''
+(function() {
+  var scripts = document.scripts || [];
+  for (var i = 0; i < scripts.length; i++) {
+    var src = String(scripts[i].src || '');
+    if (src.indexOf('/cdn-cgi/challenge-platform/') !== -1) {
+      return true;
+    }
+  }
+  return false;
+})()
+''',
+      );
+      return result == true || result?.toString() == 'true';
+    } catch (e) {
+      CfChallengeLogger.log(
+        '[CfRefresh] 检测 Cloudflare client verification 失败: $e',
+      );
+      return false;
+    }
+  }
+
   Future<void> _writeTurnstileHtml(
     InAppWebViewController controller,
     String html,
@@ -465,7 +513,7 @@ document.close();
     if (!_canHandleGeneration(gen)) return;
     final controller = _webViewController;
     final sitekey = _sitekey;
-    if (controller == null || sitekey == null || sitekey.isEmpty) {
+    if (controller == null) {
       _scheduleRestart(reason, gen: gen);
       return;
     }
@@ -479,16 +527,16 @@ document.close();
     FrameJankMonitor.logEvent('WEBVIEW', 'CfRefresh reload($reason)');
 
     try {
-      final html = _buildTurnstileHtml(sitekey);
-      if (io.Platform.isWindows) {
-        await _writeTurnstileHtml(controller, html);
-      } else {
-        await controller.loadData(
-          data: html,
-          baseUrl: WebUri(AppConstants.baseUrl),
-          mimeType: 'text/html',
-          encoding: 'utf-8',
+      if (_browserSessionVerificationActive ||
+          sitekey == null ||
+          sitekey.isEmpty) {
+        // Precursor/JSD 必须重新请求真实 HTML，不能 document.write synthetic
+        // 页面，否则会把 Cloudflare 注入的会话脚本一起销毁。
+        await controller.loadUrl(
+          urlRequest: URLRequest(url: WebUri(_browserSessionUrl)),
         );
+      } else {
+        await _writeTurnstileHtml(controller, _buildTurnstileHtml(sitekey));
       }
       // 重载视为一次活动,把 stale 窗口锚点前移,避免下个 health tick
       // 立即再次触发
@@ -523,6 +571,7 @@ document.close();
     final controller = _webViewController;
     _headlessWebView = null;
     _webViewController = null;
+    _browserSessionVerificationActive = false;
 
     CfChallengeLogger.log(
       '[CfRefresh] disposing begin: reason=$reason, gen=$_generation',
@@ -676,6 +725,7 @@ document.close();
         controller: controller,
         cookieNames: const {_cookieName},
         trusted: true,
+        allowCfClearanceRotation: _browserSessionVerificationActive,
       );
 
       if (!_canHandleGeneration(gen)) return false;
@@ -872,10 +922,21 @@ document.close();
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-  String get _windowsBootstrapUrl => '${AppConstants.baseUrl}/robots.txt';
+  String get _browserSessionUrl =>
+      Uri.parse(AppConstants.baseUrl).resolve('/').toString();
+
+  bool _isAppOriginUrl(String? rawUrl) {
+    if (rawUrl == null || rawUrl.isEmpty) return false;
+    final current = Uri.tryParse(rawUrl);
+    if (current == null) return false;
+    final base = Uri.parse(AppConstants.baseUrl);
+    return current.scheme == base.scheme &&
+        current.host == base.host &&
+        current.port == base.port;
+  }
 
   // ---------------------------------------------------------------------------
-  // HTML 模板
+  // HTML 模板（仅无 Precursor/JSD 时的 Turnstile fallback）
   // ---------------------------------------------------------------------------
 
   String _buildTurnstileHtml(String sitekey) {
