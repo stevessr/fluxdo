@@ -23,17 +23,12 @@ import 'webview_login_page.dart';
 
 /// linux.do 原生登录页。
 ///
-/// 主路径走 [DiscourseService.loginWithPassword] (在 `_LoginMixin` 里),
-/// 不加载 Discourse Ember bundle, 绕开 iOS 15 的 ES2022 `static{}` 兼容问题。
+/// 主路径在轻量 WebView 内直接调用 Discourse JSON 登录接口，不加载完整 Ember
+/// bundle，绕开低版本 WebView 对现代前端语法的兼容问题。
 ///
-/// 流程对齐 linux.do 网页:
-/// 1. 弹 hcaptcha 人机验证 (mini WebView, 只加载几 KB hcaptcha widget)
-/// 2. POST /hcaptcha/create.json 用 token 换 h_captcha_temp_id cookie
-/// 3. POST /session.json 真正登录
-/// 4. 2FA 用户弹 TOTP dialog 再次提交
-///
-/// 失败 / 高级场景 (OAuth / 注册 / 找回密码 / 2FA 走 backup code 等) 兜底跳
-/// [WebViewLoginPage]。
+/// 登录能力按服务端响应自适应：默认先尝试无验证码登录；只有站点实际要求时
+/// 才展示 hCaptcha。二步验证直接支持 TOTP 与备用码，安全密钥 / Passkey 等
+/// WebAuthn 场景继续交给 [WebViewLoginPage]。
 ///
 /// linux.do 的 hcaptcha sitekey 写死, 后续可从 PreloadedDataService 动态拿。
 const String _kLinuxDoHcaptchaSiteKey = 'a776b4ac-8c4c-441e-986a-c6ee9ed8cf08';
@@ -195,10 +190,10 @@ class _LoginPageState extends State<LoginPage>
     final hcaptchaEndpoint = prefs.getString('pref_hcaptcha_create_endpoint');
     if (!mounted) return false;
 
-    // Step 1-3: WebView 内 JS 全流程登录 (csrf → hcaptcha/create → session)。
-    // 三个请求都由 WebView 内核发出, TLS/JA3 指纹与 CF 签发 cf_clearance 时一致,
-    // 避开 dio (IO/rhttp 适配器) 指纹不匹配导致的 403 (BAD CSRF)。
-    // 2FA 通过 onNeedSecondFactor 回调弹 TOTP, 由 dialog 内同一 WebView 重试。
+    // Step 1-3: WebView 内 JS 自适应登录。
+    // 先 csrf → session；只有服务端确实要求 captcha 才调用 hcaptcha/create。
+    // 这样站点关闭验证码后不会继续请求已禁用 endpoint 并收到 403。
+    // 2FA 通过 onNeedSecondFactor 原生处理 TOTP / 备用码。
     final result = await showWebViewLoginDialog(
       context,
       siteKey: _kLinuxDoHcaptchaSiteKey,
@@ -208,9 +203,12 @@ class _LoginPageState extends State<LoginPage>
       onNeedSecondFactor: (need) => showTwoFactorDialog(
         context,
         hint: need.totpEnabled
-            ? '请输入身份验证器 App 显示的 6 位验证码'
+            ? '请选择可用的二步验证方式完成登录'
             : '此账号需要二步验证',
-        onUseBackupCode: () => _loginWithWebView(),
+        totpEnabled: need.totpEnabled,
+        backupEnabled: need.backupEnabled,
+        securityKeyEnabled: need.securityKeyEnabled,
+        onUseWebLogin: () => _loginWithWebView(),
       ),
     );
     if (!mounted) return false;
