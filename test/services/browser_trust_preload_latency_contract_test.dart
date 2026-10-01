@@ -6,9 +6,8 @@ void main() {
   late String source;
 
   setUpAll(() {
-    source = File(
-      'lib/services/browser_trust_coordinator.dart',
-    ).readAsStringSync();
+    source = File('lib/services/browser_trust_coordinator.dart')
+        .readAsStringSync();
   });
 
   test('native preload probe runs before startup WebView fallback', () {
