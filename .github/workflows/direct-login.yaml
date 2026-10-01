@@ -59,7 +59,7 @@ jobs:
         run: >-
           flutter analyze
           lib/pages/login_page.dart
-          lib/services/discourse/_login.dart
+          lib/services/discourse/discourse_service.dart
           lib/widgets/auth/two_factor_dialog.dart
           lib/widgets/auth/webview_login_dialog.dart
           test/widgets/auth/direct_login_contract_test.dart
