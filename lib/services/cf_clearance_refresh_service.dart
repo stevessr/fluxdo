@@ -51,8 +51,13 @@ class CfClearanceRefreshService {
   HeadlessInAppWebView? _headlessWebView;
 
   /// 当前 WebView 是否已确认运行 Cloudflare 注入的 challenge-platform
-  /// client verification。只有此状态下，健康 incumbent 才允许被动态旋转。
+  /// client verification。
   bool _browserSessionVerificationActive = false;
+
+  /// 进入真实同源页面前，以及之后每次同步已经见过的 cf_clearance 值。
+  /// Precursor 只有“新出现”的精确值才会被 acceptValues 放行；历史 CHIPS /
+  /// Turnstile 副本即使再次被枚举出来，也不会被当作本轮新铸值。
+  Set<String> _knownBrowserClearanceValues = <String>{};
 
   /// 当前 HeadlessWebView 对应的 controller。
   InAppWebViewController? _webViewController;
@@ -330,6 +335,14 @@ class CfClearanceRefreshService {
         throw StateError('Headless WebView controller is null');
       }
 
+      // 先记录导航前浏览器存储中所有已有 clearance，后续只把新出现的
+      // 精确值视为本轮浏览器会话新铸值，避免历史 CHIPS 副本冒充 rotation。
+      _knownBrowserClearanceValues =
+          await BoundarySyncService.instance.readCookieValuesFromWebView(
+        name: _cookieName,
+        currentUrl: AppConstants.baseUrl,
+      );
+
       // Precursor 只会出现在真实 HTML 响应里。先加载同源页面，让
       // Cloudflare 有机会注入 challenge-platform 客户端验证；只有确认没有
       // 注入脚本时，才退回旧的 synthetic Turnstile keeper。
@@ -350,7 +363,8 @@ class CfClearanceRefreshService {
           '[CfRefresh] 检测到 Cloudflare client verification，'
           '启用 Precursor/JSD 会话换届',
         );
-        // load_stop 可能早于检测完成，补一次带“浏览器会话动态换届”权限的同步。
+        // load_stop 可能早于检测完成，补一次同步；同步层只会精确接受
+        // 相对导航前快照新出现的 clearance，而不是放宽所有异值。
         unawaited(_syncAndCheckCookies('browser_session_ready', gen));
       } else if (sitekey != null && sitekey.isNotEmpty) {
         CfChallengeLogger.log(
@@ -461,13 +475,22 @@ class CfClearanceRefreshService {
       final result = await controller.evaluateJavascript(
         source: r'''
 (function() {
+  function isChallengePlatform(url) {
+    return String(url || '').indexOf('/cdn-cgi/challenge-platform/') !== -1;
+  }
+
   var scripts = document.scripts || [];
   for (var i = 0; i < scripts.length; i++) {
-    var src = String(scripts[i].src || '');
-    if (src.indexOf('/cdn-cgi/challenge-platform/') !== -1) {
-      return true;
-    }
+    if (isChallengePlatform(scripts[i].src)) return true;
   }
+
+  try {
+    var resources = performance.getEntriesByType('resource') || [];
+    for (var j = 0; j < resources.length; j++) {
+      if (isChallengePlatform(resources[j].name)) return true;
+    }
+  } catch (_) {}
+
   return false;
 })()
 ''',
@@ -572,6 +595,7 @@ document.close();
     _headlessWebView = null;
     _webViewController = null;
     _browserSessionVerificationActive = false;
+    _knownBrowserClearanceValues = <String>{};
 
     CfChallengeLogger.log(
       '[CfRefresh] disposing begin: reason=$reason, gen=$_generation',
@@ -720,12 +744,40 @@ document.close();
 
     _isSyncingCookies = true;
     try {
+      String? freshBrowserClearance;
+      if (_browserSessionVerificationActive) {
+        final observed =
+            await BoundarySyncService.instance.readCookieValuesFromWebView(
+          name: _cookieName,
+          currentUrl: AppConstants.baseUrl,
+        );
+        final freshValues = observed.difference(_knownBrowserClearanceValues);
+        _knownBrowserClearanceValues.addAll(observed);
+
+        if (freshValues.length == 1) {
+          freshBrowserClearance = freshValues.single;
+          CfChallengeLogger.log(
+            '[CfRefresh] 观察到浏览器会话新 cf_clearance，'
+            '按精确值接受 rotation: reason=$reason',
+          );
+        } else if (freshValues.length > 1) {
+          // 无法证明哪一枚是本轮新值时宁可保持 incumbent 粘性，等待下一次
+          // challenge / session sync 自愈，也不让历史双变体误覆盖。
+          CfChallengeLogger.log(
+            '[CfRefresh] 同时观察到 ${freshValues.length} 个未知 clearance，'
+            '拒绝模糊 rotation: reason=$reason',
+          );
+        }
+      }
+
       await BoundarySyncService.instance.syncFromWebView(
         currentUrl: AppConstants.baseUrl,
         controller: controller,
         cookieNames: const {_cookieName},
         trusted: true,
-        allowCfClearanceRotation: _browserSessionVerificationActive,
+        acceptValues: freshBrowserClearance == null
+            ? null
+            : {_cookieName: freshBrowserClearance},
       );
 
       if (!_canHandleGeneration(gen)) return false;
