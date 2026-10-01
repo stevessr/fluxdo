@@ -91,6 +91,7 @@ void main() {
     expect(source, contains("reason: '\$reason:\${path}_preload_settle'"));
     expect(source, contains('final synced = await ensureBrowserTrust('));
   });
+
   test('persistent CF keeper stays off preload critical path', () {
     final start = source.indexOf('void _startClearanceRefreshNow');
     final end = source.indexOf('Future<void> _ensurePreloadedInternal', start);
@@ -118,5 +119,4 @@ void main() {
     expect(scheduled, greaterThanOrEqualTo(0));
     expect(keeperStart, greaterThan(scheduled));
   });
-
 }
