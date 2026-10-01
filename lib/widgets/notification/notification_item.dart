@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 import '../../models/notification.dart';
+import '../../providers/discourse_providers.dart';
+import '../../services/toast_service.dart';
 import '../../utils/url_helper.dart';
 import '../common/emoji_text.dart';
 import '../common/smart_avatar.dart';
@@ -22,7 +25,7 @@ const _followNewReplySvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
     '</svg>';
 
 /// 通知列表项 widget，快捷面板和历史列表页面共用
-class NotificationItem extends StatelessWidget {
+class NotificationItem extends ConsumerStatefulWidget {
   final DiscourseNotification notification;
   final String? systemAvatarTemplate;
   final VoidCallback onTap;
@@ -33,6 +36,53 @@ class NotificationItem extends StatelessWidget {
     this.systemAvatarTemplate,
     required this.onTap,
   });
+
+  @override
+  ConsumerState<NotificationItem> createState() => _NotificationItemState();
+}
+
+class _NotificationItemState extends ConsumerState<NotificationItem> {
+  DiscourseNotification get notification => widget.notification;
+  String? get systemAvatarTemplate => widget.systemAvatarTemplate;
+  VoidCallback get onTap => widget.onTap;
+
+  bool _isUnassigning = false;
+  bool _unassigned = false;
+
+  Future<void> _unassignTopic() async {
+    final topicId = notification.topicId;
+    if (topicId == null || _isUnassigning || _unassigned) return;
+
+    setState(() => _isUnassigning = true);
+    try {
+      final service = ref.read(discourseServiceProvider);
+      await service.unassignTarget(targetId: topicId);
+
+      // 直接在通知流完成操作也要让已打开的话题详情失效，避免返回详情页
+      // 仍短暂显示旧的指定状态。
+      final params = TopicDetailNotifier.activeParamsFor(topicId);
+      if (params != null) {
+        ref.invalidate(topicDetailProvider(params));
+      }
+
+      // 用户已经处理了这条指定通知：同步快捷面板、历史通知页和服务端已读态。
+      ref.read(recentNotificationsProvider.notifier).markAsRead(notification.id);
+      ref.read(notificationListProvider.notifier).markAsRead(notification.id);
+      await service.markNotificationRead(notification.id);
+
+      if (!mounted) return;
+      setState(() => _unassigned = true);
+      ToastService.showSuccess('已取消指定');
+    } catch (e) {
+      if (mounted) {
+        ToastService.showError('取消指定失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUnassigning = false);
+      }
+    }
+  }
 
   IconData _getNotificationIcon() {
     if (notification.isAcceptedSolutionNotification) {
@@ -276,16 +326,46 @@ class NotificationItem extends StatelessWidget {
         ],
       ),
       onTap: onTap,
-      trailing: !notification.read
-          ? Container(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (notification.notificationType == NotificationType.assignedTopic &&
+              notification.topicId != null &&
+              !_unassigned &&
+              (ref.watch(currentUserProvider).value?.canAssign ?? false))
+            TextButton(
+              onPressed: _isUnassigning ? null : _unassignTopic,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+              ),
+              child: _isUnassigning
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('取消指定'),
+            ),
+          if (!notification.read && !_unassigned) ...[
+            const SizedBox(width: 6),
+            Container(
               width: 8,
               height: 8,
               decoration: BoxDecoration(
                 color: colorScheme.primary,
                 shape: BoxShape.circle,
               ),
-            )
-          : null,
+            ),
+          ],
+          if (_unassigned)
+            Icon(
+              Symbols.check_circle_rounded,
+              size: 18,
+              color: colorScheme.primary,
+            ),
+        ],
+      ),
     );
   }
 }
