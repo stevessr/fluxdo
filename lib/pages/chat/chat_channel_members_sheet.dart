@@ -75,10 +75,6 @@ class _ChatChannelMembersSheetState
     );
   }
 
-  void _executeFilter() {
-    setState(() => _filterQuery = _searchController.text.trim().toLowerCase());
-  }
-
   void _showAddMemberDialog() {
     showDialog(
       context: context,
