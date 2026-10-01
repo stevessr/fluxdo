@@ -75,10 +75,6 @@ class _ChatChannelMembersSheetState
     );
   }
 
-  void _executeFilter() {
-    setState(() => _filterQuery = _searchController.text.trim().toLowerCase());
-  }
-
   void _showAddMemberDialog() {
     showDialog(
       context: context,
@@ -172,13 +168,15 @@ class _ChatChannelMembersSheetState
                         ),
                       ),
                       if (widget.canAddMembers)
-                        FilledButton.icon(
+                        IconButton(
                           onPressed: _showAddMemberDialog,
-                          icon:
-                              const Icon(Icons.person_add_rounded, size: 18),
-                          label: Text(context.l10n.chat_add_member),
-                          style: FilledButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.person_add_rounded),
+                          tooltip: context.l10n.chat_add_member,
+                          style: IconButton.styleFrom(
+                            backgroundColor:
+                                theme.colorScheme.secondaryContainer,
+                            foregroundColor:
+                                theme.colorScheme.onSecondaryContainer,
                           ),
                         ),
                     ],
@@ -190,15 +188,23 @@ class _ChatChannelMembersSheetState
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: TextField(
                 controller: _searchController,
-                onSubmitted: (_) => _executeFilter(),
+                textInputAction: TextInputAction.search,
+                onChanged: (value) {
+                  setState(() => _filterQuery = value.trim().toLowerCase());
+                },
                 decoration: InputDecoration(
                   hintText: context.l10n.chat_search_members,
                   prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                    onPressed: _executeFilter,
-                    tooltip: '搜索',
-                  ),
+                  suffixIcon: _filterQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _filterQuery = '');
+                          },
+                          tooltip: '清除',
+                        )
+                      : null,
                   isDense: true,
                   filled: true,
                   fillColor: theme.colorScheme.surfaceContainerHighest,
@@ -233,10 +239,29 @@ class _ChatChannelMembersSheetState
 
                   if (filteredMembers.isEmpty && !state.isLoadingMore) {
                     return Center(
-                      child: Text(
-                        context.l10n.chat_no_members,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _filterQuery.isEmpty
+                                  ? Icons.group_outlined
+                                  : Icons.person_search_rounded,
+                              size: 48,
+                              color: theme.colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.45),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _filterQuery.isEmpty
+                                  ? context.l10n.chat_no_members
+                                  : '没有匹配的成员',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -345,6 +370,8 @@ class _ChatChannelMembersSheetState
                         final user = filteredMembers[index];
                         final avatarUrl = _resolveAvatarUrl(user);
                         return ListTile(
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 16),
                           leading: OnlineStatusAvatar(
                             userId: user.id,
                             imageUrl: avatarUrl,

@@ -1481,21 +1481,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           : AppBar(
               title: Text(widget.channelTitle),
               actions: [
-                // 公开频道有编辑权限时，编辑入口放在顶部（对齐需求）
-                if (canEditChannel &&
-                    (currentChannel?.isCategoryChannel ?? false))
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined),
-                    tooltip: '编辑频道',
-                    onPressed: () {
-                      ChatChannelSettingsSheet.show(
-                        context,
-                        widget.channelId,
-                        widget.channelTitle,
-                      );
-                    },
-                  ),
-                // 收藏（与频道列表/设置页共用 chatFavoritesProvider）
+                // 收藏与搜索属于高频动作，保持一级可达；其余频道动作收进
+                // overflow，避免窄屏标题被 6~8 个图标挤没。
                 Builder(
                   builder: (context) {
                     final isFavorite = ref
@@ -1522,62 +1509,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                   tooltip: '搜索对话',
                   onPressed: _enterSearchMode,
                 ),
-                // 置顶消息查看入口
-                if (_pinEnabled)
-                  IconButton(
-                    icon: Icon(
-                      Icons.push_pin_rounded,
-                      color: theme.colorScheme.primary,
-                    ),
-                    tooltip: context.l10n.chat_view_pinned_messages,
-                    onPressed: _showPinnedMessages,
-                  ),
-                // 消息串开启时显示入口：进入频道消息串列表
-                // （对齐 Discourse threads-list-button → chat.channel.threads）
-                if (currentChannel?.threadingEnabled == true)
-                  IconButton(
-                    icon: Icon(
-                      Icons.forum_outlined,
-                      color: theme.colorScheme.primary,
-                    ),
-                    tooltip: '消息串列表',
-                    onPressed: () {
-                      ChatThreadListSheet.show(
-                        context,
-                        channelId: widget.channelId,
-                        channelTitle: widget.channelTitle,
-                      );
-                    },
-                  ),
-                if (!_isAtBottom && messagesAsync.value != null)
-                  IconButton(
-                    icon: const Icon(Icons.arrow_downward_rounded),
-                    tooltip: context.l10n.chat_scroll_to_bottom,
-                    onPressed: _scrollToLatest,
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.people_outline_rounded),
-                  tooltip: context.l10n.chat_channel_members,
-                  onPressed: () {
-                    ChatChannelMembersSheet.show(
-                      context,
-                      widget.channelId,
-                      widget.channelTitle,
-                      canAddMembers: currentChannel?.canAddMembers ?? false,
-                      membersCountHint: currentChannel?.membersCount,
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.tune_rounded),
-                  tooltip: '频道设置',
-                  onPressed: () {
-                    ChatChannelSettingsSheet.show(
-                      context,
-                      widget.channelId,
-                      widget.channelTitle,
-                    );
-                  },
+                _buildChannelMoreMenu(
+                  theme: theme,
+                  channel: currentChannel,
+                  canEditChannel: canEditChannel,
                 ),
               ],
             ),
@@ -1765,6 +1700,122 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildChannelMoreMenu({
+    required ThemeData theme,
+    required ChatChannel? channel,
+    required bool canEditChannel,
+  }) {
+    return PopupMenuButton<String>(
+      tooltip: '更多',
+      icon: const Icon(Icons.more_vert_rounded),
+      onSelected: (value) {
+        switch (value) {
+          case 'latest':
+            _scrollToLatest();
+          case 'edit':
+            ChatChannelSettingsSheet.show(
+              context,
+              widget.channelId,
+              widget.channelTitle,
+            );
+          case 'pinned':
+            _showPinnedMessages();
+          case 'threads':
+            ChatThreadListSheet.show(
+              context,
+              channelId: widget.channelId,
+              channelTitle: widget.channelTitle,
+            );
+          case 'members':
+            ChatChannelMembersSheet.show(
+              context,
+              widget.channelId,
+              widget.channelTitle,
+              canAddMembers: channel?.canAddMembers ?? false,
+              membersCountHint: channel?.membersCount,
+            );
+          case 'settings':
+            ChatChannelSettingsSheet.show(
+              context,
+              widget.channelId,
+              widget.channelTitle,
+            );
+        }
+      },
+      itemBuilder: (context) => <PopupMenuEntry<String>>[
+        if (!_isAtBottom)
+          PopupMenuItem<String>(
+            value: 'latest',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.arrow_downward_rounded),
+              title: Text(context.l10n.chat_scroll_to_bottom),
+            ),
+          ),
+        if (canEditChannel && (channel?.isCategoryChannel ?? false))
+          const PopupMenuItem<String>(
+            value: 'edit',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.edit_outlined),
+              title: Text('编辑频道'),
+            ),
+          ),
+        if (_pinEnabled)
+          PopupMenuItem<String>(
+            value: 'pinned',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.push_pin_rounded,
+                color: theme.colorScheme.primary,
+              ),
+              title: Text(context.l10n.chat_view_pinned_messages),
+            ),
+          ),
+        if (channel?.threadingEnabled == true)
+          PopupMenuItem<String>(
+            value: 'threads',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.forum_outlined,
+                color: theme.colorScheme.primary,
+              ),
+              title: const Text('消息串列表'),
+            ),
+          ),
+        if (!_isAtBottom ||
+            (canEditChannel && (channel?.isCategoryChannel ?? false)) ||
+            _pinEnabled ||
+            channel?.threadingEnabled == true)
+          const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'members',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.people_outline_rounded),
+            title: Text(context.l10n.chat_channel_members),
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'settings',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.tune_rounded),
+            title: Text('频道设置'),
+          ),
+        ),
+      ],
     );
   }
 
@@ -2023,22 +2074,49 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // 图片附件上传按钮
-                        IconButton(
-                          onPressed: _isUploadingImage
-                              ? null
-                              : _pickAndUploadImage,
-                          icon: const Icon(Icons.add_photo_alternate_rounded),
-                          color: theme.colorScheme.onSurfaceVariant,
-                          tooltip: context.l10n.chat_upload_image,
-                        ),
-                        IconButton(
-                          onPressed: _isUploadingImage
-                              ? null
-                              : _createStevessrImage,
-                          icon: const Icon(Icons.auto_awesome_rounded),
-                          color: theme.colorScheme.primary,
-                          tooltip: '生成表情包图片',
+                        // 图片上传与表情包生成合并到一个「添加」菜单，给小屏
+                        // 输入框让出横向空间；两项能力仍保持一层菜单可达。
+                        SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: PopupMenuButton<String>(
+                            tooltip: '添加内容',
+                            padding: EdgeInsets.zero,
+                            enabled: !_isUploadingImage,
+                            icon: const Icon(Icons.add_rounded),
+                            onSelected: (value) {
+                              switch (value) {
+                                case 'image':
+                                  _pickAndUploadImage();
+                                case 'stevessr':
+                                  _createStevessrImage();
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              PopupMenuItem<String>(
+                                value: 'image',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(
+                                    Icons.add_photo_alternate_rounded,
+                                  ),
+                                  title: Text(
+                                    context.l10n.chat_upload_image,
+                                  ),
+                                ),
+                              ),
+                              const PopupMenuItem<String>(
+                                value: 'stevessr',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.auto_awesome_rounded),
+                                  title: Text('生成表情包图片'),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         // 表情与贴纸切换按钮
                         IconButton(
@@ -2059,6 +2137,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               ? theme.colorScheme.primary
                               : theme.colorScheme.onSurfaceVariant,
                           tooltip: '表情与贴纸',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 40,
+                            height: 40,
+                          ),
+                          visualDensity: VisualDensity.compact,
                         ),
                         Expanded(
                           child: TextField(
@@ -2112,11 +2196,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               : _sendMessageOrUpdate,
                           icon: _isSending
                               ? SizedBox(
-                                  width: 20,
-                                  height: 20,
+                                  width: 18,
+                                  height: 18,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: theme.colorScheme.primary,
+                                    color:
+                                        theme.colorScheme.onPrimaryContainer,
                                   ),
                                 )
                               : Icon(
@@ -2124,8 +2209,21 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                       ? Icons.check_rounded
                                       : Icons.send_rounded,
                                 ),
-                          color: theme.colorScheme.primary,
                           tooltip: context.l10n.chat_send,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 40,
+                            height: 40,
+                          ),
+                          style: IconButton.styleFrom(
+                            backgroundColor:
+                                theme.colorScheme.primaryContainer,
+                            foregroundColor:
+                                theme.colorScheme.onPrimaryContainer,
+                            disabledBackgroundColor: theme
+                                .colorScheme
+                                .surfaceContainerHighest,
+                          ),
                         ),
                       ],
                     ),
@@ -2609,51 +2707,56 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
         .replaceAll(RegExp(r'!\[.*?\]\(upload://[^\)]+\)'), '')
         .trim();
 
-    // 触控设备无 hover，保留轻量可见入口；桌面仅在悬停时显示
-    final platform = Theme.of(context).platform;
-    final isTouch =
-        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+    // reaction 快捷键只在可悬停设备上出现。触屏已有长按操作面板，
+    // 不再为每条消息永久预留 28px，避免气泡被无意义压窄。
     final showReactButton =
-        !isMultiSelectMode && onReactButtonTap != null && (_hovered || isTouch);
+        !isMultiSelectMode && onReactButtonTap != null && _hovered;
 
     Widget buildReactButton() {
-      return AnimatedOpacity(
-        opacity: showReactButton ? 1 : 0,
+      return AnimatedSize(
         duration: const Duration(milliseconds: 120),
-        child: IgnorePointer(
-          ignoring: !showReactButton,
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: isOwnMessage ? 0 : 4,
-              right: isOwnMessage ? 4 : 0,
-              bottom: 2,
-            ),
-            child: Material(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.85,
-              ),
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onReactButtonTap,
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: Icon(
-                    Icons.add_reaction_outlined,
-                    size: 16,
-                    color: theme.colorScheme.onSurfaceVariant,
+        curve: Curves.easeOutCubic,
+        child: !showReactButton
+            ? const SizedBox.shrink()
+            : Padding(
+                padding: EdgeInsets.only(
+                  left: isOwnMessage ? 0 : 4,
+                  right: isOwnMessage ? 4 : 0,
+                  bottom: 2,
+                ),
+                child: Material(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.92,
+                  ),
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onReactButtonTap,
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: Icon(
+                        Icons.add_reaction_outlined,
+                        size: 16,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ),
       );
     }
 
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final bubbleMaxWidth = viewportWidth >= 840
+        ? 620.0
+        : viewportWidth * 0.75;
+
     final bubbleWidget = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: EdgeInsets.only(
+        top: showSender ? 6 : 1,
+        bottom: showAvatar ? 3 : 1,
+      ),
       child: Column(
         crossAxisAlignment: alignment,
         children: [
@@ -2685,9 +2788,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
               // 视频等 builder 内部有 LayoutBuilder，不支持 dry layout 与内在
               // 尺寸，被问到就抛异常，整条消息布局失败 → 消息肉眼不可见。
               Container(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.75,
-                ),
+                constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: alignment,

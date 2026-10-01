@@ -57,20 +57,39 @@ class _ChatBrowseChannelsPageState
       appBar: AppBar(
         title: const Text('浏览频道'),
         centerTitle: true,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: '全部'),
-            Tab(text: '开放'),
-            Tab(text: '已关闭'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Material(
+              color: theme.colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              clipBehavior: Clip.antiAlias,
+              child: TabBar(
+                controller: _tabController,
+                dividerHeight: 0,
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicator: BoxDecoration(
+                  color: theme.colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                labelColor: theme.colorScheme.onSecondaryContainer,
+                unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+                tabs: const [
+                  Tab(text: '全部'),
+                  Tab(text: '开放'),
+                  Tab(text: '已关闭'),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
       body: Column(
         children: [
           // 搜索栏
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -180,7 +199,7 @@ class _BrowseChannelListView extends ConsumerWidget {
             ref.invalidate(chatChannelsProvider);
           },
           child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
             itemCount: channels.length,
             itemBuilder: (context, index) {
               final channel = channels[index];
@@ -357,20 +376,62 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
       );
     }
 
-    // 对齐 Discourse chat-channel-card：已加入只显示「退出」，点整行进入频道。
-    // 切勿同时显示「进入」+「退出」。
+    // 已加入频道的主动作是「进入」，整行点击即可。退出属于低频破坏性操作，
+    // 收进状态菜单，避免浏览页出现一列醒目的红色「退出」按钮。
     if (_isJoined) {
-      return OutlinedButton(
-        onPressed: _leaveChannel,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: theme.colorScheme.error,
-          side: BorderSide(
-            color: theme.colorScheme.error.withValues(alpha: 0.5),
+      return PopupMenuButton<String>(
+        tooltip: '已加入 · 频道操作',
+        onSelected: (value) {
+          if (value == 'leave') _leaveChannel();
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem<String>(
+            value: 'leave',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.logout_rounded,
+                color: theme.colorScheme.error,
+              ),
+              title: Text(
+                '退出频道',
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          visualDensity: VisualDensity.compact,
+        ],
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.check_rounded,
+                size: 16,
+                color: theme.colorScheme.onSecondaryContainer,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '已加入',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSecondaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 16,
+                color: theme.colorScheme.onSecondaryContainer,
+              ),
+            ],
+          ),
         ),
-        child: const Text('退出'),
       );
     }
 
@@ -412,6 +473,12 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
     return Opacity(
       opacity: dimmed ? 0.72 : 1,
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        horizontalTitleGap: 12,
+        tileColor: _isJoined
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.08)
+            : null,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         leading: _buildLeading(context, dimmed: dimmed),
         title: Row(
           children: [
@@ -480,25 +547,6 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
                       '消息串',
                       style:
                           theme.textTheme.labelSmall?.copyWith(color: subColor),
-                    ),
-                  ],
-                  if (_isJoined) ...[
-                    const SizedBox(width: 12),
-                    Icon(
-                      Icons.check_circle_outline_rounded,
-                      size: 14,
-                      color: theme.colorScheme.primary.withValues(
-                        alpha: dimmed ? 0.55 : 1,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '已加入',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.primary.withValues(
-                          alpha: dimmed ? 0.55 : 1,
-                        ),
-                      ),
                     ),
                   ],
                 ],
