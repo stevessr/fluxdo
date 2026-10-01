@@ -1792,7 +1792,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               title: const Text('消息串列表'),
             ),
           ),
-        const PopupMenuDivider(),
+        if (!_isAtBottom ||
+            (canEditChannel && (channel?.isCategoryChannel ?? false)) ||
+            _pinEnabled ||
+            channel?.threadingEnabled == true)
+          const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'members',
           child: ListTile(
