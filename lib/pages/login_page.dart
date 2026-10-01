@@ -3,12 +3,8 @@ import 'package:app_icons/app_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/s.dart';
-import '../services/auth_session.dart';
-import '../services/cf_challenge_service.dart';
 import '../services/credential_store_service.dart';
 import '../services/discourse/discourse_service.dart';
-import '../services/network/cookie/boundary_sync_service.dart';
-import '../services/network/cookie/cookie_jar_service.dart';
 import '../services/toast_service.dart';
 import '../services/user_api_key_login_flow.dart';
 import '../utils/blur_config.dart';
@@ -133,37 +129,6 @@ class _LoginPageState extends State<LoginPage>
     }
   }
 
-  /// 确保 jar 里有 cf_clearance。没有 → 弹 fluxdo 现有的 CF 手动验证页让用户
-  /// 人机交互拿 cookie, 然后**显式 sync** 从 WebView cookie store 到 dart jar
-  /// (这步 [CfChallengeService.showManualVerify] 本身不做, sync 一般是
-  /// [CfChallengeInterceptor._syncCookiesOnce] 触发, 我们直接调 showManualVerify
-  /// 不经过 interceptor, 所以要手动 sync, 不然 jar 还是空)。
-  Future<bool> _ensureCfClearance() async {
-    final jar = CookieJarService();
-    var clearance = await jar.getCfClearance();
-    if (clearance != null && clearance.isNotEmpty) return true;
-    if (!mounted) return false;
-
-    final requestGeneration = AuthSession().generation;
-    final ok = await CfChallengeService().showManualVerify(context, true);
-    if (ok != true) return false;
-
-    // 等 1.5s 让 WV 网络栈把 Set-Cookie 写完, 然后同步 CF/验证码相关 cookie。
-    // 这里明确排除 Discourse session cookie，登录成功收口流程会单独同步它们。
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    for (var i = 0; i < 3; i++) {
-      await BoundarySyncService.instance.syncFromWebView(
-        cookieNames: null,
-        excludeCookieNames: CookieJarService.authCookieNames,
-        requestGeneration: requestGeneration,
-      );
-      clearance = await jar.getCfClearance();
-      if (clearance != null && clearance.isNotEmpty) return true;
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-    }
-    return false;
-  }
-
   /// 表单提交回调。返 true 表示走完成功路径并已 pop, false 留在表单。
   Future<bool> _handleSubmit({
     required String identifier,
@@ -172,16 +137,9 @@ class _LoginPageState extends State<LoginPage>
   }) async {
     final service = DiscourseService();
 
-    // Step 0: jar 必须有 cf_clearance, 否则 native dio 任何请求都被 CF 当 bot
-    // 直接 403 (TLS 指纹不对). 没有就弹 CF 手动验证页让用户人机过一次。
-    if (!await _ensureCfClearance()) {
-      if (mounted) {
-        ToastService.showError('Cloudflare 验证未完成,请重试');
-      }
-      return false;
-    }
-    if (!mounted) return false;
-
+    // 不再预先强制要求 cf_clearance。直接登录请求本身由 WebView 内核发出；
+    // 只有 /session/csrf 真正命中 Cloudflare challenge 时，dialog 才按需拉起验证。
+    // 这样未启用 Cloudflare 的 Discourse 实例也能直接登录。
     // hcaptcha endpoint: 从 SharedPreferences 拿 (站长改 mount 时填到设置里);
     // 没配就让 dialog 用内置 fallback 列表 (/captcha/hcaptcha/create.json →
     // /hcaptcha/create.json)。读 prefs 直接走 SharedPreferences (不依赖
