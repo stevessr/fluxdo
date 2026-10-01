@@ -114,6 +114,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
+  Future<void> _markAllChannelsRead() async {
+    try {
+      await ref.read(markAllChatChannelsReadProvider.future);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已将所有聊天频道标为已读')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final channelsAsync = ref.watch(chatChannelsProvider);
@@ -136,45 +151,56 @@ class _ChatPageState extends ConsumerState<ChatPage>
         title: Text(context.l10n.chat_title),
         centerTitle: true,
         actions: [
-          // 全局搜索：独立入口，对齐 Discourse chat search（相关性/最新）
+          // 全局消息搜索保留一级入口；管理型操作统一收进 overflow。
           IconButton(
             icon: const Icon(Icons.search_rounded),
-            tooltip: '搜索聊天',
+            tooltip: '搜索聊天消息',
             onPressed: _openGlobalSearch,
           ),
-          // 有建频道权限（staff）时显示创建按钮
-          if (canCreateChannel)
-            IconButton(
-              icon: const Icon(Icons.add_box_outlined),
-              tooltip: '创建频道',
-              onPressed: _openCreateChannel,
-            ),
-          IconButton(
-            icon: const Icon(Icons.done_all_rounded),
-            tooltip: '全部标为已读',
-            onPressed: () async {
-              try {
-                await ref.read(markAllChatChannelsReadProvider.future);
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('已将所有聊天频道标为已读')));
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+          PopupMenuButton<String>(
+            tooltip: '更多',
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (value) {
+              switch (value) {
+                case 'create_channel':
+                  _openCreateChannel();
+                case 'mark_read':
+                  _markAllChannelsRead();
               }
             },
+            itemBuilder: (context) => [
+              if (canCreateChannel)
+                const PopupMenuItem<String>(
+                  value: 'create_channel',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.add_box_outlined),
+                    title: Text('创建公开频道'),
+                  ),
+                ),
+              const PopupMenuItem<String>(
+                value: 'mark_read',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.done_all_rounded),
+                  title: Text('全部标为已读'),
+                ),
+              ),
+            ],
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
+          dividerHeight: 0,
+          indicatorSize: TabBarIndicatorSize.tab,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 8),
           tabs: [
             Tab(text: context.l10n.chat_favorites),
             Tab(text: context.l10n.chat_public_channels),
             Tab(text: context.l10n.chat_direct_messages),
-            Tab(text: '消息串'),
+            const Tab(text: '消息串'),
           ],
         ),
       ),
@@ -182,7 +208,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         children: [
           // 搜索栏 + 创建聊天（论坛开启 chat 时显示在搜索框右侧）
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
             child: Row(
               children: [
                 Expanded(
@@ -217,13 +243,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     },
                   ),
                 ),
-                if (forumChatEnabled && (currentUser?.canDirectMessage ?? true))
+                if (forumChatEnabled && (currentUser?.canDirectMessage ?? true)) ...[
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Symbols.add_comment_rounded),
                     // 上限>1 时可多选建群；文案仍用「新建聊天」兼容单人 DM
                     tooltip: context.l10n.chat_new_dm,
                     onPressed: _openNewDmDialog,
+                    style: IconButton.styleFrom(
+                      backgroundColor: theme.colorScheme.secondaryContainer,
+                      foregroundColor:
+                          theme.colorScheme.onSecondaryContainer,
+                    ),
                   ),
+                ],
               ],
             ),
           ),
@@ -454,7 +487,7 @@ class _ChatChannelListView extends ConsumerWidget {
     return DesktopRefreshIndicator(
       onRefresh: onRefresh,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
         itemCount: channels.length,
         itemBuilder: (context, index) {
           final channel = channels[index];
@@ -762,13 +795,27 @@ class ChatChannelTile extends ConsumerWidget {
       horizontalTitleGap: 12,
       minVerticalPadding: 6,
       leading: _buildLeading(context, currentUser?.id),
-      title: Text(
-        _resolveTitle(context, currentUser?.id),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
-        ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _resolveTitle(context, currentUser?.id),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+          if (isFavorite) ...[
+            const SizedBox(width: 6),
+            Icon(
+              Symbols.star_rounded,
+              size: 16,
+              color: Colors.amber.shade700,
+            ),
+          ],
+        ],
       ),
       subtitle: lastMessage != null
           ? EmojiText(
@@ -783,75 +830,50 @@ class ChatChannelTile extends ConsumerWidget {
               ),
             )
           : null,
-      trailing: Row(
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (channel.lastMessageSentAt != null)
-                Text(
-                  TimeUtils.formatRelativeTime(channel.lastMessageSentAt),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: hasUnread
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                    fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
-                  ),
-                ),
-              if (hasUnread) ...[
-                const SizedBox(height: 4),
-                Container(
-                  constraints: const BoxConstraints(minWidth: 20),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    channel.unreadCount > 99
-                        ? '99+'
-                        : channel.unreadCount.toString(),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onPrimary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: Icon(
-              isFavorite ? Symbols.star_rounded : Symbols.star_outline_rounded,
-              size: 19,
-              color: isFavorite
-                  ? Colors.amber.shade700
-                  : theme.colorScheme.onSurfaceVariant,
+          if (channel.lastMessageSentAt != null)
+            Text(
+              TimeUtils.formatRelativeTime(channel.lastMessageSentAt),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: hasUnread
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
+                fontSize: 11,
+                fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
+              ),
             ),
-            tooltip: isFavorite
-                ? context.l10n.chat_remove_favorite
-                : context.l10n.chat_add_favorite,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              ref
-                  .read(chatFavoritesProvider.notifier)
-                  .toggleFavorite(channel.id);
-            },
-          ),
+          if (hasUnread) ...[
+            const SizedBox(height: 4),
+            Container(
+              constraints: const BoxConstraints(minWidth: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                channel.unreadCount > 99
+                    ? '99+'
+                    : channel.unreadCount.toString(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onPrimary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
         ],
       ),
+      tileColor: hasUnread
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.12)
+          : null,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onTap: onTap,
       onLongPress: () => _showChannelMenu(context, ref),
     );
