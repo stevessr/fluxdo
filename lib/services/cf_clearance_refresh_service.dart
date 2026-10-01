@@ -301,13 +301,19 @@ class CfClearanceRefreshService {
         _registerJavaScriptHandlers(controller, gen);
       },
       onLoadStop: (_, url) {
-        if (!originLoadCompleter.isCompleted &&
-            _isAppOriginUrl(url?.toString())) {
+        final isInitialOriginLoad =
+            !originLoadCompleter.isCompleted &&
+            _isAppOriginUrl(url?.toString());
+        if (isInitialOriginLoad) {
+          // 首次真实 HTML load_stop 只负责解除等待。此时尚未判断页面是否
+          // 承载 Precursor/JSD，不能抢先用普通同步把新值判成“健康异值”。
           originLoadCompleter.complete();
         }
         if (_canHandleGeneration(gen)) {
           _lastSignalAt = DateTime.now();
-          unawaited(_syncAndCheckCookies('load_stop', gen));
+          if (!isInitialOriginLoad) {
+            unawaited(_syncAndCheckCookies('load_stop', gen));
+          }
           debugPrint('[CfRefresh] WebView load stop: $url');
         }
       },
@@ -357,15 +363,15 @@ class CfClearanceRefreshService {
       if (!_canHandleGeneration(gen)) return;
 
       _browserSessionVerificationActive =
-          await _detectClientSideVerification(controller);
+          await _waitForClientSideVerification(controller);
       if (_browserSessionVerificationActive) {
         CfChallengeLogger.log(
           '[CfRefresh] 检测到 Cloudflare client verification，'
           '启用 Precursor/JSD 会话换届',
         );
-        // load_stop 可能早于检测完成，补一次同步；同步层只会精确接受
-        // 相对导航前快照新出现的 clearance，而不是放宽所有异值。
-        unawaited(_syncAndCheckCookies('browser_session_ready', gen));
+        // 首次 origin load_stop 被刻意抑制同步，因此这里可以无竞态地立即
+        // 接受相对导航前快照新出现的精确 clearance。
+        await _syncAndCheckCookies('browser_session_ready', gen);
       } else if (sitekey != null && sitekey.isNotEmpty) {
         CfChallengeLogger.log(
           '[CfRefresh] 未检测到 Cloudflare 注入脚本，回退 Turnstile keeper',
@@ -466,6 +472,20 @@ class CfClearanceRefreshService {
     if (type == 'api_ready' || type.endsWith(':start')) {
       _cancelInitialTimer();
     }
+  }
+
+  Future<bool> _waitForClientSideVerification(
+    InAppWebViewController controller,
+  ) async {
+    // 注入脚本通常已经在 HTML 中，但动态/延迟插入时 load_stop 与资源登记
+    // 仍可能有很小竞态。短暂重试只发生在后台 keeper 初始化，不阻塞 UI。
+    for (var attempt = 0; attempt < 4; attempt++) {
+      if (await _detectClientSideVerification(controller)) return true;
+      if (attempt < 3) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    }
+    return false;
   }
 
   Future<bool> _detectClientSideVerification(
