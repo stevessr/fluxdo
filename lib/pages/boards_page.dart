@@ -380,8 +380,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
             title: Text(_isZh(context) ? '删除卡片' : 'Delete card'),
             content: Text(
               _isZh(context)
-                  ? '确定删除“\${card.displayTitle}”吗？'
-                  : 'Delete “\${card.displayTitle}”?',
+                  ? '确定删除“${card.displayTitle}”吗？'
+                  : 'Delete “${card.displayTitle}”?',
             ),
             actions: [
               TextButton(
@@ -418,8 +418,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
             title: Text(_isZh(context) ? '清空分栏' : 'Clear column'),
             content: Text(
               _isZh(context)
-                  ? '确定删除“\${column.displayTitle}”中的全部卡片吗？'
-                  : 'Delete all cards in “\${column.displayTitle}”?',
+                  ? '确定删除“${column.displayTitle}”中的全部卡片吗？'
+                  : 'Delete all cards in “${column.displayTitle}”?',
             ),
             actions: [
               TextButton(
@@ -456,8 +456,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
             title: Text(_isZh(context) ? '删除分栏' : 'Delete column'),
             content: Text(
               _isZh(context)
-                  ? '确定删除分栏“\${column.displayTitle}”吗？'
-                  : 'Delete column “\${column.displayTitle}”?',
+                  ? '确定删除分栏“${column.displayTitle}”吗？'
+                  : 'Delete column “${column.displayTitle}”?',
             ),
             actions: [
               TextButton(
@@ -506,8 +506,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
             title: Text(_isZh(context) ? '删除看板' : 'Delete board'),
             content: Text(
               _isZh(context)
-                  ? '确定永久删除“\${board.displayName}”吗？'
-                  : 'Permanently delete “\${board.displayName}”?',
+                  ? '确定永久删除“${board.displayName}”吗？'
+                  : 'Permanently delete “${board.displayName}”?',
             ),
             actions: [
               TextButton(
