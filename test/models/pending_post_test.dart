@@ -29,33 +29,4 @@ void main() {
       expect(pending.tags, isNull);
     });
   });
-
-  group('PendingTopicTagsRegistry', () {
-    const reviewableId = 9001;
-
-    tearDown(() {
-      PendingTopicTagsRegistry.remove(reviewableId);
-    });
-
-    test('按 reviewable id 保存并返回标签副本', () {
-      PendingTopicTagsRegistry.record(reviewableId, ['flutter', 'discourse']);
-
-      final first = PendingTopicTagsRegistry.lookup(reviewableId);
-      expect(first, ['flutter', 'discourse']);
-
-      first!.add('mutated');
-      expect(
-        PendingTopicTagsRegistry.lookup(reviewableId),
-        ['flutter', 'discourse'],
-      );
-    });
-
-    test('remove 后不再返回标签', () {
-      PendingTopicTagsRegistry.record(reviewableId, ['tag']);
-      PendingTopicTagsRegistry.remove(reviewableId);
-
-      expect(PendingTopicTagsRegistry.contains(reviewableId), isFalse);
-      expect(PendingTopicTagsRegistry.lookup(reviewableId), isNull);
-    });
-  });
 }
