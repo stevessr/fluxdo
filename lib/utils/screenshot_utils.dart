@@ -105,7 +105,7 @@ class ScreenshotUtils {
       '[ScreenshotUtils] 分块截图：$chunkCount 块，每块逻辑高度 $chunkLogicalHeight',
     );
 
-    // 在 CPU 端创建最终图像
+    // 在 CPU 端创建最终图像；显式使用 RGBA，避免 PNG 编码器在透明图上退化为 RGB。
     final fullImage = img.Image(
       width: totalPixelWidth,
       height: totalPixelHeight,
