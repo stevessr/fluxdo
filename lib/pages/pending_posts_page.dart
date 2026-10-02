@@ -204,7 +204,6 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
     );
     if (withdrawn && mounted) {
       PendingReplyTargetRegistry.remove(pending.id);
-      PendingTopicTagsRegistry.remove(pending.id);
       ToastService.showSuccess(S.current.review_withdrawn);
     }
   }
@@ -218,10 +217,13 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
     final replyToPostNumber = PendingReplyTargetRegistry.lookup(pending.id);
 
     // 官方 PendingPostSerializer 不返回新主题 payload.tags。
-    // 优先接受服务器/自定义实例直接返回的 tags，否则回退到送审时会话补记。
-    final initialTags =
-        pending.tags ?? PendingTopicTagsRegistry.lookup(pending.id);
+    // 优先接受服务器/自定义实例直接返回的 tags，否则读取送审时持久化补记。
+    final initialTags = pending.isNewTopic
+        ? pending.tags ??
+              await DiscourseService().getPendingTopicTags(pending.id)
+        : null;
 
+    if (!mounted) return;
     final confirmContent = targetKnown
         ? S.current.review_withdrawAndEditConfirmContent
         : '${S.current.review_withdrawAndEditConfirmContent}\n\n'
@@ -235,7 +237,6 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
     );
     if (!withdrawn || !mounted) return;
     PendingReplyTargetRegistry.remove(pending.id);
-    PendingTopicTagsRegistry.remove(pending.id);
 
     if (pending.isNewTopic) {
       // 待审的新主题:原文带回创建话题页
