@@ -13,6 +13,9 @@
     <!-- 前台服务权限（后台通知保活） -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- VPN 旁路：枚举物理网络并将进程绑定到指定网络 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
     <!--
         WebAuthn/PassKey: WebView FOR_BROWSER 模式下 Chromium 会把 origin 传给
         Credential Manager，需要此权限才能通过 setOrigin 检查。
