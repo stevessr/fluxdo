@@ -1,0 +1,347 @@
+import '../utils/time_utils.dart';
+import '../utils/url_helper.dart';
+import 'topic.dart';
+
+/// discourse-boards 看板。
+class DiscourseBoard {
+  const DiscourseBoard({
+    required this.id,
+    required this.name,
+    required this.unicodeName,
+    required this.slug,
+    required this.categoryIds,
+    required this.tagIds,
+    required this.tagNames,
+    required this.anonymousCanRead,
+    required this.requireConfirmation,
+    required this.showTags,
+    required this.cardStyle,
+    required this.showTopicThumbnail,
+    required this.archived,
+    required this.canWrite,
+    required this.canManage,
+    required this.columns,
+  });
+
+  final int id;
+  final String name;
+  final String unicodeName;
+  final String slug;
+  final List<int> categoryIds;
+  final List<int> tagIds;
+  final List<String> tagNames;
+  final bool anonymousCanRead;
+  final bool requireConfirmation;
+  final bool showTags;
+  final String cardStyle;
+  final bool showTopicThumbnail;
+  final bool archived;
+  final bool canWrite;
+  final bool canManage;
+  final List<BoardColumn> columns;
+
+  factory DiscourseBoard.fromJson(Map<String, dynamic> json) {
+    final columns = (json['columns'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(BoardColumn.fromJson)
+        .toList()
+      ..sort((a, b) => a.position.compareTo(b.position));
+    return DiscourseBoard(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String? ?? '',
+      unicodeName: json['unicode_name'] as String? ?? json['name'] as String? ?? '',
+      slug: json['slug'] as String? ?? '',
+      categoryIds: _intList(json['category_ids']),
+      tagIds: _intList(json['tag_ids']),
+      tagNames: _stringList(json['tag_names']),
+      anonymousCanRead: json['anonymous_can_read'] as bool? ?? false,
+      requireConfirmation: json['require_confirmation'] as bool? ?? false,
+      showTags: json['show_tags'] as bool? ?? true,
+      cardStyle: json['card_style'] as String? ?? 'detailed',
+      showTopicThumbnail: json['show_topic_thumbnail'] as bool? ?? false,
+      archived: json['archived'] as bool? ?? false,
+      canWrite: json['can_write'] as bool? ?? false,
+      canManage: json['can_manage'] as bool? ?? false,
+      columns: columns,
+    );
+  }
+
+  /// show 接口把完整 columns 放在顶层，board.columns 只适合作元信息。
+  factory DiscourseBoard.fromDetailResponse(Map<String, dynamic> json) {
+    final raw = json['board'];
+    if (raw is! Map<String, dynamic>) {
+      throw const FormatException('Boards 响应缺少 board');
+    }
+    final merged = Map<String, dynamic>.from(raw);
+    if (json['columns'] is List<dynamic>) merged['columns'] = json['columns'];
+    return DiscourseBoard.fromJson(merged);
+  }
+
+  String get displayName => unicodeName.trim().isNotEmpty ? unicodeName : name;
+}
+
+class BoardColumn {
+  const BoardColumn({
+    required this.id,
+    required this.title,
+    required this.unicodeTitle,
+    required this.position,
+    required this.defaultSort,
+    required this.moveToStatus,
+    required this.color,
+    required this.cards,
+  });
+
+  final int id;
+  final String title;
+  final String unicodeTitle;
+  final int position;
+  final String defaultSort;
+  final String moveToStatus;
+  final String color;
+  final List<BoardCard> cards;
+
+  factory BoardColumn.fromJson(Map<String, dynamic> json) {
+    final cards = (json['cards'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(BoardCard.fromJson)
+        .toList()
+      ..sort((a, b) => a.position.compareTo(b.position));
+    return BoardColumn(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      title: json['title'] as String? ?? '',
+      unicodeTitle:
+          json['unicode_title'] as String? ?? json['title'] as String? ?? '',
+      position: (json['position'] as num?)?.toInt() ?? 0,
+      defaultSort: json['default_sort'] as String? ?? 'priority',
+      moveToStatus: json['move_to_status'] as String? ?? '',
+      color: json['color'] as String? ?? '',
+      cards: cards,
+    );
+  }
+
+  String get displayTitle =>
+      unicodeTitle.trim().isNotEmpty ? unicodeTitle : title;
+
+  /// Boards 没有独立 solved 布尔值。优先看动作状态，再兼容常见完成列标题。
+  /// 这里只用于隐藏“指定用户”入口，不改变任何服务端状态。
+  bool get isResolvedLike {
+    final status = moveToStatus.trim().toLowerCase();
+    if (const {'closed', 'solved', 'resolved', 'done', 'completed'}
+        .contains(status)) {
+      return true;
+    }
+    final normalized = displayTitle.trim().toLowerCase().replaceAll(' ', '');
+    return normalized.contains('已解决') ||
+        normalized.contains('已完成') ||
+        normalized == '完成' ||
+        normalized == 'done' ||
+        normalized.contains('resolved') ||
+        normalized.contains('completed');
+  }
+}
+
+class BoardCard {
+  const BoardCard({
+    required this.id,
+    required this.boardId,
+    required this.columnId,
+    required this.cardType,
+    required this.position,
+    this.title,
+    this.unicodeTitle,
+    this.notes,
+    required this.tags,
+    this.topicId,
+    this.createdAt,
+    this.updatedAt,
+    this.recencyAt,
+    this.createdBy,
+    this.assignedTo,
+    this.topic,
+  });
+
+  final int id;
+  final int boardId;
+  final int columnId;
+  final String cardType;
+  final double position;
+  final String? title;
+  final String? unicodeTitle;
+  final String? notes;
+  final List<Tag> tags;
+  final int? topicId;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final DateTime? recencyAt;
+  final BoardCreator? createdBy;
+  final BoardAssignee? assignedTo;
+  final BoardTopic? topic;
+
+  factory BoardCard.fromJson(Map<String, dynamic> json) {
+    return BoardCard(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      boardId: (json['board_id'] as num?)?.toInt() ?? 0,
+      columnId: (json['column_id'] as num?)?.toInt() ?? 0,
+      cardType: json['card_type'] as String? ?? 'floater',
+      position: (json['position'] as num?)?.toDouble() ?? 0,
+      title: json['title'] as String?,
+      unicodeTitle: json['unicode_title'] as String?,
+      notes: json['notes'] as String?,
+      tags: (json['tags'] as List<dynamic>? ?? const [])
+          .map(Tag.fromJson)
+          .toList(),
+      topicId: (json['topic_id'] as num?)?.toInt(),
+      createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
+      updatedAt: TimeUtils.parseUtcTime(json['updated_at'] as String?),
+      recencyAt: TimeUtils.parseUtcTime(json['recency_at'] as String?),
+      createdBy: json['created_by'] is Map<String, dynamic>
+          ? BoardCreator.fromJson(json['created_by'] as Map<String, dynamic>)
+          : null,
+      assignedTo: json['assigned_to'] is Map<String, dynamic>
+          ? BoardAssignee.fromJson(json['assigned_to'] as Map<String, dynamic>)
+          : null,
+      topic: json['topic'] is Map<String, dynamic>
+          ? BoardTopic.fromJson(json['topic'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+
+  bool get isTopic => cardType == 'topic' && topic != null && topicId != null;
+
+  String get displayTitle {
+    final topicTitle = topic?.topic.title.trim();
+    if (topicTitle != null && topicTitle.isNotEmpty) return topicTitle;
+    final unicode = unicodeTitle?.trim();
+    if (unicode != null && unicode.isNotEmpty) return unicode;
+    return title?.trim() ?? '';
+  }
+
+  DateTime? get activityAt =>
+      recencyAt ?? topic?.topic.lastPostedAt ?? updatedAt ?? createdAt;
+
+  List<BoardAssignee> get assignedUsers {
+    final topicUsers = topic?.assignedUsers ?? const <BoardAssignee>[];
+    if (topicUsers.isNotEmpty) return topicUsers;
+    final direct = assignedTo;
+    return direct != null && direct.isUser ? [direct] : const [];
+  }
+
+  String? get assignedGroupName {
+    final topicGroup = topic?.assignedGroupName;
+    if (topicGroup != null && topicGroup.isNotEmpty) return topicGroup;
+    final direct = assignedTo;
+    return direct != null && direct.isGroup ? direct.name : null;
+  }
+}
+
+class BoardTopic {
+  const BoardTopic({
+    required this.topic,
+    this.imageUrl,
+    required this.assignedUsers,
+    this.assignedGroupName,
+  });
+
+  final Topic topic;
+  final String? imageUrl;
+  final List<BoardAssignee> assignedUsers;
+  final String? assignedGroupName;
+
+  factory BoardTopic.fromJson(Map<String, dynamic> json) {
+    final normalized = Map<String, dynamic>.from(json);
+    normalized['last_posted_at'] ??= json['bumped_at'];
+    final lastPoster = json['last_poster'];
+    if (normalized['last_poster_username'] == null &&
+        lastPoster is Map<String, dynamic>) {
+      normalized['last_poster_username'] = lastPoster['username'];
+    }
+    final postsCount = (json['posts_count'] as num?)?.toInt() ?? 0;
+    normalized['reply_count'] ??= postsCount > 0 ? postsCount - 1 : 0;
+    normalized['views'] ??= 0;
+    normalized['like_count'] ??= 0;
+    normalized['highest_post_number'] ??= json['highest_post_number'] ?? 0;
+
+    final users = (json['all_assigned_users'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(BoardAssignee.userFromJson)
+        .toList();
+    if (users.isEmpty && json['assigned_to_user'] is Map<String, dynamic>) {
+      users.add(BoardAssignee.userFromJson(
+        json['assigned_to_user'] as Map<String, dynamic>,
+      ));
+    }
+    final group = json['assigned_to_group'];
+    return BoardTopic(
+      topic: Topic.fromJson(normalized),
+      imageUrl: json['image_url'] as String?,
+      assignedUsers: users,
+      assignedGroupName:
+          group is Map<String, dynamic> ? group['name'] as String? : null,
+    );
+  }
+}
+
+class BoardCreator {
+  const BoardCreator({required this.username, this.avatarTemplate});
+
+  final String username;
+  final String? avatarTemplate;
+
+  factory BoardCreator.fromJson(Map<String, dynamic> json) => BoardCreator(
+        username: json['username'] as String? ?? '',
+        avatarTemplate: json['avatar_template'] as String?,
+      );
+}
+
+class BoardAssignee {
+  const BoardAssignee({
+    required this.type,
+    this.username,
+    this.name,
+    this.avatarTemplate,
+  });
+
+  final String type;
+  final String? username;
+  final String? name;
+  final String? avatarTemplate;
+
+  bool get isUser => type.toLowerCase() == 'user' || username != null;
+  bool get isGroup => !isUser;
+  String get displayName => username ?? name ?? '';
+
+  factory BoardAssignee.fromJson(Map<String, dynamic> json) => BoardAssignee(
+        type: json['type'] as String? ??
+            (json['username'] != null ? 'User' : 'Group'),
+        username: json['username'] as String?,
+        name: json['name'] as String?,
+        avatarTemplate: json['avatar_template'] as String?,
+      );
+
+  factory BoardAssignee.userFromJson(Map<String, dynamic> json) =>
+      BoardAssignee(
+        type: 'User',
+        username: json['username'] as String?,
+        name: json['name'] as String?,
+        avatarTemplate: json['avatar_template'] as String?,
+      );
+
+  String? getAvatarUrl({int size = 40}) {
+    final template = avatarTemplate;
+    if (template == null || template.isEmpty) return null;
+    return UrlHelper.resolveUrlWithCdn(
+      template.replaceAll('{size}', size.toString()),
+    );
+  }
+}
+
+List<int> _intList(dynamic value) {
+  if (value is! List) return const [];
+  return value.map((e) => (e as num?)?.toInt()).whereType<int>().toList();
+}
+
+List<String> _stringList(dynamic value) {
+  if (value is! List) return const [];
+  return value.map((e) => e.toString()).toList();
+}
