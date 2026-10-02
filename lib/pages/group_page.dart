@@ -31,6 +31,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   bool _loadingMore = false;
   bool _adding = false;
   bool _membershipChanging = false;
+  bool _requestingMembership = false;
+  final Set<int> _removingMemberIds = <int>{};
   Object? _error;
 
   @override
@@ -248,6 +250,125 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
   }
 
+  Future<void> _requestMembership() async {
+    final group = _group;
+    if (group == null ||
+        group.isGroupUser ||
+        !group.allowMembershipRequests ||
+        _requestingMembership) {
+      return;
+    }
+
+    final copy = _copy(context);
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: Text(copy.requestMembership),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 2,
+            maxLines: 5,
+            decoration: InputDecoration(
+              hintText: copy.requestMembershipReasonHint,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(copy.cancel),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controller.text.trim()),
+              child: Text(copy.submit),
+            ),
+          ],
+        );
+      },
+    );
+    if (reason == null || !mounted) return;
+
+    setState(() => _requestingMembership = true);
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .requestGroupMembership(group.name, reason: reason);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(copy.membershipRequested)),
+      );
+      await _reload();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _requestingMembership = false);
+    }
+  }
+
+  Future<void> _removeMember(GroupMember member) async {
+    final group = _group;
+    if (group == null ||
+        !group.canManageMembers ||
+        member.owner ||
+        _removingMemberIds.contains(member.id)) {
+      return;
+    }
+    final copy = _copy(context);
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(copy.removeMember),
+            content: Text(copy.confirmRemoveMember(member.username)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(copy.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(copy.remove),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    setState(() => _removingMemberIds.add(member.id));
+    try {
+      await ref.read(discourseServiceProvider).removeGroupMember(
+            groupId: group.id,
+            username: member.username,
+          );
+      if (!mounted) return;
+      setState(() {
+        _members = _members.where((item) => item.id != member.id).toList();
+        _group = group.copyWith(
+          userCount: group.userCount == null
+              ? null
+              : (group.userCount! > 0 ? group.userCount! - 1 : 0),
+        );
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(copy.memberRemoved(member.username))),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _removingMemberIds.remove(member.id));
+    }
+  }
+
   void _openUser(GroupMember member) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -329,6 +450,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
               membershipChanging: _membershipChanging,
               onJoin: () => _changeMembership(join: true),
               onLeave: () => _changeMembership(join: false),
+              onRequestMembership: _requestMembership,
+              requestingMembership: _requestingMembership,
             ),
           ),
           if (group.canSeeMembers) ...[
@@ -464,7 +587,22 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                 ],
               ),
               subtitle: Text('@${member.username}'),
-              trailing: const Icon(Symbols.chevron_right_rounded),
+              trailing: _group?.canManageMembers == true && !member.owner
+                  ? IconButton(
+                      tooltip: copy.removeMember,
+                      onPressed: _removingMemberIds.contains(member.id)
+                          ? null
+                          : () => _removeMember(member),
+                      icon: _removingMemberIds.contains(member.id)
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator.adaptive(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Symbols.person_remove_rounded),
+                    )
+                  : const Icon(Symbols.chevron_right_rounded),
               onTap: () => _openUser(member),
             );
           }, childCount: memberContentCount + 1),
@@ -480,12 +618,16 @@ class _GroupHeader extends StatelessWidget {
     required this.membershipChanging,
     required this.onJoin,
     required this.onLeave,
+    required this.onRequestMembership,
+    required this.requestingMembership,
   });
 
   final DiscourseGroup group;
   final bool membershipChanging;
   final VoidCallback onJoin;
   final VoidCallback onLeave;
+  final VoidCallback onRequestMembership;
+  final bool requestingMembership;
 
   @override
   Widget build(BuildContext context) {
@@ -541,7 +683,10 @@ class _GroupHeader extends StatelessWidget {
                           _SmallBadge(label: copy.youAreOwner),
                       ],
                     ),
-                    if (group.canJoin || group.canLeave) ...[
+                    if (group.canJoin ||
+                        group.canLeave ||
+                        (group.allowMembershipRequests &&
+                            !group.isGroupUser)) ...[
                       const SizedBox(height: 12),
                       if (group.canJoin)
                         FilledButton.tonal(
@@ -555,7 +700,7 @@ class _GroupHeader extends StatelessWidget {
                                 )
                               : Text(copy.join),
                         )
-                      else
+                      else if (group.canLeave)
                         OutlinedButton(
                           onPressed: membershipChanging ? null : onLeave,
                           child: membershipChanging
@@ -566,6 +711,20 @@ class _GroupHeader extends StatelessWidget {
                                   ),
                                 )
                               : Text(copy.leave),
+                        )
+                      else
+                        FilledButton.tonalIcon(
+                          onPressed:
+                              requestingMembership ? null : onRequestMembership,
+                          icon: requestingMembership
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator.adaptive(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Symbols.person_add_rounded),
+                          label: Text(copy.requestMembership),
                         ),
                     ],
                   ],
@@ -700,6 +859,19 @@ class _GroupCopy {
   String get clear => zh ? '清除' : 'Clear';
   String get loadFailed => zh ? '群组加载失败' : 'Failed to load group';
   String get addMembers => zh ? '添加成员' : 'Add members';
+  String get removeMember => zh ? '移除成员' : 'Remove member';
+  String get remove => zh ? '移除' : 'Remove';
+  String confirmRemoveMember(String username) => zh
+      ? '确定要将 @$username 从该群组移除吗？'
+      : 'Remove @$username from this group?';
+  String memberRemoved(String username) =>
+      zh ? '已移除 @$username' : 'Removed @$username';
+  String get requestMembership => zh ? '申请加入' : 'Request membership';
+  String get requestMembershipReasonHint =>
+      zh ? '可选：说明加入该群组的原因' : 'Optional reason for joining';
+  String get membershipRequested =>
+      zh ? '加入申请已提交' : 'Membership request submitted';
+  String get submit => zh ? '提交' : 'Submit';
   String get searchMembers => zh ? '搜索成员' : 'Search members';
   String get membersHidden => zh ? '该群组的成员列表不可见' : 'Members are hidden';
   String get noMembers => zh ? '没有成员' : 'No members';
