@@ -509,7 +509,8 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     if (id == null || details?.canDeleteInvite == false || _isManagingInvite) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('删除邀请'),
@@ -561,7 +562,8 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
 
   Future<void> _resendAllInvites() async {
     if (_isManagingInvite) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('重新发送全部邀请'),
@@ -624,14 +626,8 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
               if (value == 'clear_expired') _destroyExpiredInvites();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: 'resend_all',
-                child: Text('重新发送全部待处理邀请'),
-              ),
-              PopupMenuItem(
-                value: 'clear_expired',
-                child: Text('清理过期邀请'),
-              ),
+              PopupMenuItem(value: 'resend_all', child: Text('重新发送全部待处理邀请')),
+              PopupMenuItem(value: 'clear_expired', child: Text('清理过期邀请')),
             ],
           ),
         ],
@@ -905,16 +901,14 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                 children: [
                   if (invite.invite?.email?.trim().isNotEmpty ?? false)
                     OutlinedButton.icon(
-                      onPressed:
-                          _isManagingInvite ? null : _resendLatestInvite,
+                      onPressed: _isManagingInvite ? null : _resendLatestInvite,
                       icon: const Icon(Icons.forward_to_inbox_outlined),
                       label: const Text('重新发送邮件'),
                     ),
                   if (invite.invite?.id != null &&
                       invite.invite?.canDeleteInvite != false)
                     OutlinedButton.icon(
-                      onPressed:
-                          _isManagingInvite ? null : _deleteLatestInvite,
+                      onPressed: _isManagingInvite ? null : _deleteLatestInvite,
                       icon: const Icon(Icons.delete_outline),
                       label: const Text('删除邀请'),
                     ),
