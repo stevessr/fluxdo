@@ -109,6 +109,7 @@ class ScreenshotUtils {
     final fullImage = img.Image(
       width: totalPixelWidth,
       height: totalPixelHeight,
+      numChannels: 4,
     );
 
     for (int i = 0; i < chunkCount; i++) {
