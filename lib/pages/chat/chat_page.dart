@@ -222,17 +222,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return (channel.slug ?? '').toLowerCase();
   }
 
-  String get _currentFilterLabel => switch (_channelFilter) {
-    _ChatChannelFilter.all => '所有频道',
-    _ChatChannelFilter.active => '仅活跃',
-    _ChatChannelFilter.unread => '未读',
-    _ChatChannelFilter.mentions => '提及',
+  String _currentFilterLabel(BuildContext context) => switch (_channelFilter) {
+    _ChatChannelFilter.all => context.l10n.chat_filter_all,
+    _ChatChannelFilter.active => context.l10n.chat_filter_active,
+    _ChatChannelFilter.unread => context.l10n.chat_filter_unread,
+    _ChatChannelFilter.mentions => context.l10n.chat_filter_mentions,
   };
 
-  String get _currentSortLabel => switch (_channelSort) {
-    _ChatChannelSort.alphabetical => '按字母顺序',
-    _ChatChannelSort.recentActivity => '近期活动',
-    _ChatChannelSort.priority => '优先级',
+  String _currentSortLabel(BuildContext context) => switch (_channelSort) {
+    _ChatChannelSort.alphabetical => context.l10n.chat_sort_alphabetical,
+    _ChatChannelSort.recentActivity => context.l10n.chat_sort_recent_activity,
+    _ChatChannelSort.priority => context.l10n.chat_sort_priority,
   };
 
   void _openBrowseChannels() {
@@ -275,20 +275,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
                 child: Text(
-                  '按以下方式筛选频道：',
+                  context.l10n.chat_filter_title,
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
-              option(_ChatChannelFilter.all, '所有频道'),
+              option(_ChatChannelFilter.all, context.l10n.chat_filter_all),
               option(
                 _ChatChannelFilter.active,
-                '仅活跃',
-                subtitle: '最近 30 天的新活动',
+                context.l10n.chat_filter_active,
+                subtitle: context.l10n.chat_filter_active_description,
               ),
-              option(_ChatChannelFilter.unread, '未读'),
-              option(_ChatChannelFilter.mentions, '提及'),
+              option(
+                _ChatChannelFilter.unread,
+                context.l10n.chat_filter_unread,
+              ),
+              option(
+                _ChatChannelFilter.mentions,
+                context.l10n.chat_filter_mentions,
+              ),
             ],
           ),
         );
@@ -334,18 +340,24 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
                 child: Text(
-                  '频道排序方式：',
+                  context.l10n.chat_sort_title,
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
-              option(_ChatChannelSort.alphabetical, '按字母顺序'),
-              option(_ChatChannelSort.recentActivity, '近期活动'),
+              option(
+                _ChatChannelSort.alphabetical,
+                context.l10n.chat_sort_alphabetical,
+              ),
+              option(
+                _ChatChannelSort.recentActivity,
+                context.l10n.chat_sort_recent_activity,
+              ),
               option(
                 _ChatChannelSort.priority,
-                '优先级',
-                subtitle: '提及，然后是未读消息，然后是最近活动',
+                context.l10n.chat_sort_priority,
+                subtitle: context.l10n.chat_sort_priority_description,
               ),
             ],
           ),
@@ -364,7 +376,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       await ref.read(markAllChatChannelsReadProvider.future);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('已将所有聊天频道标为已读')));
+          .showSnackBar(SnackBar(content: Text(context.l10n.chat_mark_all_read_success)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -396,11 +408,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
         actions: [
           IconButton(
             icon: const Icon(Icons.search_rounded),
-            tooltip: '搜索聊天消息',
+            tooltip: context.l10n.chat_search_messages,
             onPressed: _openGlobalSearch,
           ),
           PopupMenuButton<String>(
-            tooltip: '频道列表选项',
+            tooltip: context.l10n.chat_channel_options,
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (value) {
               switch (value) {
@@ -448,19 +460,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.add_box_outlined),
-                    title: Text('创建公开频道'),
+                    title: Text(context.l10n.chat_create_public_channel),
                   ),
                 ),
               const PopupMenuItem<String>(
                 enabled: false,
                 height: 32,
-                child: Text('筛选'),
+                child: Text(context.l10n.chat_channel_filter),
               ),
               PopupMenuItem<String>(
                 value: 'filter',
                 child: Row(
                   children: [
-                    Expanded(child: Text(_currentFilterLabel)),
+                    Expanded(child: Text(_currentFilterLabel(context))),
                     const Icon(Icons.chevron_right_rounded),
                   ],
                 ),
@@ -468,13 +480,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
               const PopupMenuItem<String>(
                 enabled: false,
                 height: 32,
-                child: Text('排序'),
+                child: Text(context.l10n.chat_channel_sort),
               ),
               PopupMenuItem<String>(
                 value: 'sort',
                 child: Row(
                   children: [
-                    Expanded(child: Text(_currentSortLabel)),
+                    Expanded(child: Text(_currentSortLabel(context))),
                     const Icon(Icons.chevron_right_rounded),
                   ],
                 ),
@@ -486,7 +498,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.done_all_rounded),
-                  title: Text('全部标为已读'),
+                  title: Text(context.l10n.chat_mark_all_read),
                 ),
               ),
             ],
@@ -1518,7 +1530,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = context.l10n;
-    final title = _isGroup ? l10n.chat_new_group : '发送消息';
+    final title = _isGroup ? l10n.chat_new_group : l10n.chat_send_message_title;
     final createLabel = l10n.chat_create_group;
 
     return Dialog(
@@ -1609,7 +1621,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                 autofocus: true,
                 enabled: !_isCreating,
                 decoration: InputDecoration(
-                  hintText: _isGroup ? l10n.chat_search_users : '@ 某人',
+                  hintText: l10n.chat_search_users,
                   prefixIcon: const Icon(AppIcons.search, size: 20),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(
