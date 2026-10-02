@@ -219,7 +219,8 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
 
     // 官方 PendingPostSerializer 不返回新主题 payload.tags。
     // 优先接受服务器/自定义实例直接返回的 tags，否则回退到送审时会话补记。
-    final initialTags = pending.tags ?? PendingTopicTagsRegistry.lookup(pending.id);
+    final initialTags =
+        pending.tags ?? PendingTopicTagsRegistry.lookup(pending.id);
 
     final confirmContent = targetKnown
         ? S.current.review_withdrawAndEditConfirmContent
