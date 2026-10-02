@@ -1240,7 +1240,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   }
 
   bool get _canCreateDm {
-    final user = ref.watch(currentUserProvider).value;
+    final user = ref.read(currentUserProvider).value;
     // canDirectMessage 来自 currentUser JSON；缺失时不阻断（站点若禁 DM，
     // 创建接口会返回错误，由 SnackBar 展示）。
     if (user?.canDirectMessage == false) return false;
@@ -1325,10 +1325,10 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   }
 
   List<Chatable> _recentDirectMessageUsers() {
-    final state = ref.watch(chatChannelsProvider).value;
+    final state = ref.read(chatChannelsProvider).value;
     if (state == null) return const [];
 
-    final currentUserId = ref.watch(currentUserProvider).value?.id;
+    final currentUserId = ref.read(currentUserProvider).value?.id;
     final seen = <int>{};
     final users = <Chatable>[];
 
@@ -1539,7 +1539,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                       ),
                     ),
                   ),
-                  if (_selected.isNotEmpty)
+                  if (_isGroup && _selected.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(right: 4),
                       child: Text(
