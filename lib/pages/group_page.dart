@@ -304,9 +304,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
           .read(discourseServiceProvider)
           .requestGroupMembership(group.name, reason: reason);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(copy.membershipRequested)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(copy.membershipRequested)));
       await _reload();
     } catch (error) {
       if (mounted) {
@@ -327,7 +326,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       return;
     }
     final copy = _copy(context);
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(copy.removeMember),
@@ -349,10 +349,9 @@ class _GroupPageState extends ConsumerState<GroupPage> {
 
     setState(() => _removingMemberIds.add(member.id));
     try {
-      await ref.read(discourseServiceProvider).removeGroupMember(
-            groupId: group.id,
-            username: member.username,
-          );
+      await ref
+          .read(discourseServiceProvider)
+          .removeGroupMember(groupId: group.id, username: member.username);
       if (!mounted) return;
       setState(() {
         _members = _members.where((item) => item.id != member.id).toList();
@@ -720,8 +719,9 @@ class _GroupHeader extends StatelessWidget {
                         )
                       else
                         FilledButton.tonalIcon(
-                          onPressed:
-                              requestingMembership ? null : onRequestMembership,
+                          onPressed: requestingMembership
+                              ? null
+                              : onRequestMembership,
                           icon: requestingMembership
                               ? const SizedBox.square(
                                   dimension: 18,
@@ -867,9 +867,8 @@ class _GroupCopy {
   String get addMembers => zh ? '添加成员' : 'Add members';
   String get removeMember => zh ? '移除成员' : 'Remove member';
   String get remove => zh ? '移除' : 'Remove';
-  String confirmRemoveMember(String username) => zh
-      ? '确定要将 @$username 从该群组移除吗？'
-      : 'Remove @$username from this group?';
+  String confirmRemoveMember(String username) =>
+      zh ? '确定要将 @$username 从该群组移除吗？' : 'Remove @$username from this group?';
   String memberRemoved(String username) =>
       zh ? '已移除 @$username' : 'Removed @$username';
   String get requestMembership => zh ? '申请加入' : 'Request membership';
