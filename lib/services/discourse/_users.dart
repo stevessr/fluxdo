@@ -561,4 +561,131 @@ mixin _UsersMixin on _DiscourseServiceBase {
     );
     return InviteLinkResponse.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// 更新当前用户创建的邀请。
+  Future<InviteLinkResponse> updateInvite(
+    int inviteId, {
+    String? email,
+    int? topicId,
+    List<int>? groupIds,
+    List<String>? groupNames,
+    bool? skipEmail,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/invites/$inviteId.json',
+        data: {
+          if (email != null) 'email': email,
+          if (topicId != null) 'topic_id': topicId,
+          if (groupIds != null) 'group_ids': groupIds,
+          if (groupNames != null) 'group_names': groupNames,
+          if (skipEmail != null) 'skip_email': skipEmail,
+        },
+      );
+      return InviteLinkResponse.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> deleteInvite(int inviteId) async {
+    try {
+      await _dio.delete('/invites/$inviteId.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> resendInvite(String email) async {
+    try {
+      await _dio.post(
+        '/invites/reinvite.json',
+        data: {'email': email.trim()},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> resendAllInvites() async {
+    try {
+      await _dio.post('/invites/reinvite-all.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> destroyAllExpiredInvites({String? username}) async {
+    final target = username ?? await getUsername();
+    if (target == null || target.isEmpty) {
+      throw Exception(S.current.error_notLoggedInNoUsername);
+    }
+    try {
+      await _dio.post(
+        '/invites/destroy-all-expired.json',
+        data: {'username': target},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 批量创建邮件邀请；返回成功/失败明细，由 UI 决定如何展示部分成功。
+  Future<Map<String, dynamic>> createMultipleInvites({
+    required List<String> emails,
+    String? description,
+    String? domain,
+    String? customMessage,
+    int? maxRedemptionsAllowed,
+    int? topicId,
+    List<int>? groupIds,
+    List<String>? groupNames,
+    DateTime? expiresAt,
+    bool? inviteToTopic,
+    bool? skipEmail,
+  }) async {
+    final normalized = emails
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalized.isEmpty) {
+      return const <String, dynamic>{
+        'num_successfully_created_invitations': 0,
+        'num_failed_invitations': 0,
+      };
+    }
+
+    try {
+      final response = await _dio.post(
+        '/invites/create-multiple.json',
+        data: {
+          'email': normalized,
+          if (description != null && description.trim().isNotEmpty)
+            'description': description.trim(),
+          if (domain != null && domain.trim().isNotEmpty)
+            'domain': domain.trim(),
+          if (customMessage != null && customMessage.trim().isNotEmpty)
+            'custom_message': customMessage.trim(),
+          if (maxRedemptionsAllowed != null)
+            'max_redemptions_allowed': maxRedemptionsAllowed,
+          if (topicId != null) 'topic_id': topicId,
+          if (groupIds != null) 'group_ids': groupIds,
+          if (groupNames != null) 'group_names': groupNames,
+          if (expiresAt != null)
+            'expires_at': expiresAt.toUtc().toIso8601String(),
+          if (inviteToTopic != null) 'invite_to_topic': inviteToTopic,
+          if (skipEmail != null) 'skip_email': skipEmail,
+        },
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
 }
