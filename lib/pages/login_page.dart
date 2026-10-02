@@ -6,6 +6,7 @@ import '../l10n/s.dart';
 import '../services/account_manager.dart';
 import '../services/credential_store_service.dart';
 import '../services/discourse/discourse_service.dart';
+import '../services/preloaded_data_service.dart';
 import '../services/toast_service.dart';
 import '../services/user_api_key_login_flow.dart';
 import '../utils/blur_config.dart';
@@ -192,7 +193,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       // 密码按实际 Discourse username 隔离。使用邮箱登录时也不会另开一个
       // 凭证槽；取消“记住密码”则显式删除该账号此前保存的密码。
       try {
-        final accountId = await AccountManager().getCurrentUsername();
+        final preloadedUsername =
+            PreloadedDataService().currentUserSync?['username']
+                ?.toString()
+                .trim();
+        final storedUsername = await AccountManager().getCurrentUsername();
+        final accountId =
+            preloadedUsername != null && preloadedUsername.isNotEmpty
+            ? preloadedUsername
+            : storedUsername;
+
         if (rememberCredentials) {
           await CredentialStoreService().save(
             identifier,
@@ -200,9 +210,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             accountId: accountId,
           );
         } else {
-          await CredentialStoreService().clear(
-            accountId: accountId ?? identifier,
-          );
+          final credentialStore = CredentialStoreService();
+          await credentialStore.clear(accountId: accountId ?? identifier);
+          // 兼容旧版本可能以登录邮箱作为槽 ID 的凭证。
+          if (accountId != null &&
+              accountId.trim().toLowerCase() !=
+                  identifier.trim().toLowerCase()) {
+            await credentialStore.clear(accountId: identifier);
+          }
         }
       } catch (e) {
         debugPrint('[LoginPage] 更新账号密码存储失败,不影响登录: $e');
