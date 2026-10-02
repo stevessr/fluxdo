@@ -193,10 +193,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       // 密码按实际 Discourse username 隔离。使用邮箱登录时也不会另开一个
       // 凭证槽；取消“记住密码”则显式删除该账号此前保存的密码。
       try {
-        final preloadedUsername =
-            PreloadedDataService().currentUserSync?['username']
-                ?.toString()
-                .trim();
+        final preloadedUsername = PreloadedDataService()
+            .currentUserSync?['username']
+            ?.toString()
+            .trim();
         final storedUsername = await AccountManager().getCurrentUsername();
         final accountId =
             preloadedUsername != null && preloadedUsername.isNotEmpty
