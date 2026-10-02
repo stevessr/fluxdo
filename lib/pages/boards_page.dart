@@ -228,8 +228,9 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   ) {
     if (board.archived || column.isResolvedLike) return false;
     if (!PreloadedDataService().assignEnabled) return false;
-    final user = ref.watch(currentUserProvider).value;
+    final user = ref.read(currentUserProvider).value;
     if (user?.canAssign != true) return false;
+    if (card.isTopic && card.topic!.topic.closed) return false;
 
     // 官方 Boards：topic 走 discourse-assign，不要求 board.can_write；
     // floater 的负责人保存在卡片本身，因此必须有 Board 写权限。
