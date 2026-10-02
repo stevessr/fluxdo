@@ -60,14 +60,20 @@
   "customHosts_loaded": "Loaded {hosts} hosts and {addresses} addresses",
   "@customHosts_loaded": {
     "placeholders": {
-      "hosts": { "type": "int" },
-      "addresses": { "type": "int" }
+      "hosts": {
+        "type": "int"
+      },
+      "addresses": {
+        "type": "int"
+      }
     }
   },
   "customHosts_source": "Source: {source}",
   "@customHosts_source": {
     "placeholders": {
-      "source": { "type": "String" }
+      "source": {
+        "type": "String"
+      }
     }
   },
   "customHosts_importUrl": "Import from URL",
@@ -79,14 +85,20 @@
   "customHosts_imported": "Imported {hosts} hosts and {addresses} addresses",
   "@customHosts_imported": {
     "placeholders": {
-      "hosts": { "type": "int" },
-      "addresses": { "type": "int" }
+      "hosts": {
+        "type": "int"
+      },
+      "addresses": {
+        "type": "int"
+      }
     }
   },
   "customHosts_importFailed": "Import failed: {error}",
   "@customHosts_importFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "customHosts_clearTitle": "Clear custom hosts",
@@ -112,9 +124,15 @@
   "networkSettings_rateLimitSummary": "Up to {maxPerWindow} requests every {windowSeconds}s, {maxConcurrent} in parallel",
   "@networkSettings_rateLimitSummary": {
     "placeholders": {
-      "windowSeconds": { "type": "int" },
-      "maxPerWindow": { "type": "int" },
-      "maxConcurrent": { "type": "int" }
+      "windowSeconds": {
+        "type": "int"
+      },
+      "maxPerWindow": {
+        "type": "int"
+      },
+      "maxConcurrent": {
+        "type": "int"
+      }
     }
   },
   "network_adapterNativeAndroid": "Cronet adapter",
@@ -156,5 +174,18 @@
   "webviewAdapter_title": "WebView Network Engine",
   "networkSettings_upload": "File uploads",
   "networkSettings_forceDisableMultipart": "Force disable multipart uploads",
-  "networkSettings_forceDisableMultipartDescription": "Use standard uploads for all files regardless of site settings. Enable if multipart uploads are failing. Applies to the next upload."
+  "networkSettings_forceDisableMultipartDescription": "Use standard uploads for all files regardless of site settings. Enable if multipart uploads are failing. Applies to the next upload.",
+  "vpnBypass_title": "Bypass VPN",
+  "vpnBypass_subtitle": "When a VPN is connected, try to route FluxDO directly over Wi‑Fi, Ethernet, or cellular",
+  "vpnBypass_bound": "Direct network bound",
+  "vpnBypass_waitingForVpn": "Enabled, waiting for a VPN connection",
+  "vpnBypass_noNetwork": "No usable non-VPN network found",
+  "vpnBypass_bindFailed": "Direct routing was rejected; the VPN may disallow bypass or use lockdown mode",
+  "vpnBypass_unsupported": "This system does not support this feature",
+  "vpnBypass_error": "Unable to update VPN bypass status",
+  "vpnBypass_disclaimer": "Whether bypass actually works is controlled by the VPN. If bypass is blocked, networking may temporarily become unavailable.",
+  "vpnBypass_transportWifi": "Wi‑Fi",
+  "vpnBypass_transportEthernet": "Ethernet",
+  "vpnBypass_transportCellular": "Cellular",
+  "vpnBypass_transportOther": "Physical network"
 }

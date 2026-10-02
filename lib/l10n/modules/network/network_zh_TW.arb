@@ -60,14 +60,20 @@
   "customHosts_loaded": "已載入 {hosts} 個網域、{addresses} 個位址",
   "@customHosts_loaded": {
     "placeholders": {
-      "hosts": { "type": "int" },
-      "addresses": { "type": "int" }
+      "hosts": {
+        "type": "int"
+      },
+      "addresses": {
+        "type": "int"
+      }
     }
   },
   "customHosts_source": "來源：{source}",
   "@customHosts_source": {
     "placeholders": {
-      "source": { "type": "String" }
+      "source": {
+        "type": "String"
+      }
     }
   },
   "customHosts_importUrl": "從網址匯入",
@@ -79,14 +85,20 @@
   "customHosts_imported": "已匯入 {hosts} 個網域、{addresses} 個位址",
   "@customHosts_imported": {
     "placeholders": {
-      "hosts": { "type": "int" },
-      "addresses": { "type": "int" }
+      "hosts": {
+        "type": "int"
+      },
+      "addresses": {
+        "type": "int"
+      }
     }
   },
   "customHosts_importFailed": "匯入失敗：{error}",
   "@customHosts_importFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "customHosts_clearTitle": "清除自訂 hosts",
@@ -112,9 +124,15 @@
   "networkSettings_rateLimitSummary": "每 {windowSeconds} 秒內最多 {maxPerWindow} 個請求，同時進行 {maxConcurrent} 個",
   "@networkSettings_rateLimitSummary": {
     "placeholders": {
-      "windowSeconds": { "type": "int" },
-      "maxPerWindow": { "type": "int" },
-      "maxConcurrent": { "type": "int" }
+      "windowSeconds": {
+        "type": "int"
+      },
+      "maxPerWindow": {
+        "type": "int"
+      },
+      "maxConcurrent": {
+        "type": "int"
+      }
     }
   },
   "network_adapterNativeAndroid": "Cronet 介面卡",
@@ -173,5 +191,18 @@
   "rhttpEngine_initFailedHint": "rhttp 引擎初始化失敗，已退回至備用網路介面卡，下次啟動將自動重試",
   "networkSettings_upload": "檔案上傳",
   "networkSettings_forceDisableMultipart": "強制關閉分片上傳",
-  "networkSettings_forceDisableMultipartDescription": "開啟後，所有檔案均使用一般上傳，忽略站點分片設定。伺服器分片異常時可開啟，對下一次上傳生效。"
+  "networkSettings_forceDisableMultipartDescription": "開啟後，所有檔案均使用一般上傳，忽略站點分片設定。伺服器分片異常時可開啟，對下一次上傳生效。",
+  "vpnBypass_title": "繞過 VPN",
+  "vpnBypass_subtitle": "VPN 連線時嘗試讓 FluxDO 直接使用 Wi‑Fi、乙太網路或行動網路",
+  "vpnBypass_bound": "已綁定直連網路",
+  "vpnBypass_waitingForVpn": "已啟用，等待 VPN 連線",
+  "vpnBypass_noNetwork": "找不到可用的非 VPN 網路",
+  "vpnBypass_bindFailed": "系統拒絕直連；VPN 可能未允許應用程式旁路或已啟用鎖定模式",
+  "vpnBypass_unsupported": "目前系統不支援此功能",
+  "vpnBypass_error": "無法更新 VPN 旁路狀態",
+  "vpnBypass_disclaimer": "是否能真正繞過由 VPN 設定決定；若 VPN 禁止旁路，啟用後網路可能暫時無法使用",
+  "vpnBypass_transportWifi": "Wi‑Fi",
+  "vpnBypass_transportEthernet": "乙太網路",
+  "vpnBypass_transportCellular": "行動網路",
+  "vpnBypass_transportOther": "實體網路"
 }
