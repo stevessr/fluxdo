@@ -112,6 +112,22 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
                     widget.onEdit!();
                   },
                 ),
+              if (!isGuest && widget.post.canWiki)
+                ListTile(
+                  leading: Icon(
+                    widget.post.wiki
+                        ? Symbols.edit_note_rounded
+                        : Symbols.description_rounded,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  title: Text(
+                    widget.post.wiki ? '取消 Wiki' : '设为 Wiki',
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _toggleWiki();
+                  },
+                ),
               // 菜单点击后才构建，用 read 避免给楼层常驻树增加监听。
               if (ref.read(preferencesProvider).aiTranslationEnabled &&
                   ref.read(aiTranslationSelectedModelProvider) != null)
