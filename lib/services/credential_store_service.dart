@@ -64,10 +64,7 @@ class CredentialStoreService {
   final ResilientSecureStorage? _legacyStorage;
   bool _legacyMigrationChecked = false;
 
-  static const _indexKey = SecretKey(
-    namespace: _namespace,
-    name: 'accounts',
-  );
+  static const _indexKey = SecretKey(namespace: _namespace, name: 'accounts');
 
   SecretKey _credentialKey(String accountId) => SecretKey(
     namespace: _namespace,
@@ -75,8 +72,7 @@ class CredentialStoreService {
     accountId: _canonicalAccountId(accountId),
   );
 
-  static String _canonicalAccountId(String value) =>
-      value.trim().toLowerCase();
+  static String _canonicalAccountId(String value) => value.trim().toLowerCase();
 
   Future<List<String>> _readIndex() async {
     final raw = await _store.read(_indexKey);
@@ -229,9 +225,7 @@ class CredentialStoreService {
     final index = await _readIndex();
     if (index.isEmpty) return const <SavedLoginCredential>[];
 
-    final credentials = await Future.wait(
-      index.map(_readCredential),
-    );
+    final credentials = await Future.wait(index.map(_readCredential));
     final result = <SavedLoginCredential>[];
     final validIds = <String>[];
     for (var i = 0; i < index.length; i++) {
@@ -265,10 +259,7 @@ class CredentialStoreService {
         }
       }
     }
-    return (
-      username: selected?.identifier,
-      password: selected?.password,
-    );
+    return (username: selected?.identifier, password: selected?.password);
   }
 
   /// 清除指定账号的凭证；不传 [accountId] 时清除所有已保存凭证。
