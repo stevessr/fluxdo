@@ -1133,53 +1133,88 @@ final chatAllThreadsProvider =
       final channelsState = ref.watch(chatChannelsProvider).value;
       if (channelsState == null) return const [];
 
-      final all = [
+      final allChannels = [
         ...channelsState.publicChannels,
         ...channelsState.directMessageChannels,
       ];
+      final channelsById = <int, ChatChannel>{
+        for (final channel in allChannels) channel.id: channel,
+      };
+      final service = ref.read(discourseServiceProvider);
 
-      // 优先取启用了消息串的频道；若没有则取前 15 个活跃频道
-      final candidates = all.where((c) => c.threadingEnabled).toList();
-      if (candidates.isEmpty) {
-        candidates.addAll(all.take(15));
+      List<(ChatThread, ChatChannel)> sortThreads(
+        List<(ChatThread, ChatChannel)> items,
+      ) {
+        items.sort((a, b) {
+          final aTime =
+              a.$1.preview?.lastReplyCreatedAt ??
+              a.$1.originalMessage?.createdAt ??
+              DateTime(2000);
+          final bTime =
+              b.$1.preview?.lastReplyCreatedAt ??
+              b.$1.originalMessage?.createdAt ??
+              DateTime(2000);
+          return bTime.compareTo(aTime);
+        });
+        return items;
       }
 
-      final service = ref.read(discourseServiceProvider);
-      final result = <(ChatThread, ChatChannel)>[];
+      // Discourse 当前提供专用 /chat/api/me/threads，一次请求即可返回当前
+      // 用户参与的跨频道消息串。优先使用它，避免旧实现逐频道请求造成 N+1。
+      try {
+        final raw = await service.getCurrentUserChatThreads();
+        final list = raw['threads'];
+        if (list is List) {
+          final result = <(ChatThread, ChatChannel)>[];
+          for (final item in list) {
+            if (item is! Map) continue;
+            try {
+              final json = Map<String, dynamic>.from(item);
+              final thread = ChatThread.fromJson(json);
+              if (thread.id <= 0) continue;
 
+              ChatChannel? channel = channelsById[thread.channelId];
+              final embedded = json['channel'];
+              if (channel == null && embedded is Map) {
+                try {
+                  channel = ChatChannel.fromJson(
+                    Map<String, dynamic>.from(embedded),
+                  );
+                } catch (_) {}
+              }
+              if (channel != null) result.add((thread, channel));
+            } catch (_) {
+              // 单个 thread payload 兼容失败不应拖垮整个列表。
+            }
+          }
+          return sortThreads(result);
+        }
+      } catch (_) {
+        // 较旧的 Discourse Chat 可能尚无 /me/threads，下面保留逐频道兼容回退。
+      }
+
+      final candidates = allChannels.where((c) => c.threadingEnabled).toList();
+      if (candidates.isEmpty) candidates.addAll(allChannels.take(15));
+      final fallback = <(ChatThread, ChatChannel)>[];
       for (final channel in candidates) {
         try {
           final raw = await service.getChatChannelThreads(channel.id);
           final list = raw['threads'];
           if (list is! List) continue;
-          for (final e in list) {
-            if (e is! Map) continue;
+          for (final item in list) {
+            if (item is! Map) continue;
             try {
-              final thread = ChatThread.fromJson(Map<String, dynamic>.from(e));
-              if (thread.id > 0) {
-                result.add((thread, channel));
-              }
+              final thread = ChatThread.fromJson(
+                Map<String, dynamic>.from(item),
+              );
+              if (thread.id > 0) fallback.add((thread, channel));
             } catch (_) {}
           }
         } catch (_) {
-          // 单个频道加载失败不影响其他频道
+          // 单个频道不可用时继续其它频道。
         }
       }
-
-      // 按最后回复时间排序（最新的在前）
-      result.sort((a, b) {
-        final aTime =
-            a.$1.preview?.lastReplyCreatedAt ??
-            a.$1.originalMessage?.createdAt ??
-            DateTime(2000);
-        final bTime =
-            b.$1.preview?.lastReplyCreatedAt ??
-            b.$1.originalMessage?.createdAt ??
-            DateTime(2000);
-        return bTime.compareTo(aTime);
-      });
-
-      return result;
+      return sortThreads(fallback);
     });
 
 /// ============================================================================
