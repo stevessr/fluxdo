@@ -92,7 +92,8 @@ class _ChatChannelMembersSheetState
 
   Future<void> _removeMember(ChatUser user) async {
     if (!widget.canAddMembers) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('移除成员'),
@@ -121,9 +122,8 @@ class _ChatChannelMembersSheetState
           .read(chatChannelMembersProvider(widget.channelId).notifier)
           .refresh();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已移除 @${user.username}')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('已移除 @${user.username}')));
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -426,8 +426,10 @@ class _ChatChannelMembersSheetState
 
                         final user = filteredMembers[index];
                         final avatarUrl = _resolveAvatarUrl(user);
-                        final currentUserId =
-                            ref.watch(currentUserProvider).value?.id;
+                        final currentUserId = ref
+                            .watch(currentUserProvider)
+                            .value
+                            ?.id;
                         final canRemove =
                             widget.canAddMembers && currentUserId != user.id;
                         return ListTile(
