@@ -281,49 +281,64 @@ class CfClearanceRefreshService {
     if (!_canStartGeneration(gen)) return;
 
     final originLoadCompleter = Completer<void>();
-    final webView = HeadlessInAppWebView(
-      webViewEnvironment: io.Platform.isWindows
-          ? WindowsWebViewEnvironmentService.instance.environment
-          : null,
-      initialSettings: WebViewSettings.headlessCf,
-      initialUserScripts: WebViewSettings.compatPolyfillScripts,
-      onReceivedServerTrustAuthRequest: (_, challenge) =>
-          WebViewSettings.handleServerTrustAuthRequest(challenge),
-      onWebViewCreated: (controller) {
-        if (!_canHandleGeneration(gen)) {
-          CfChallengeLogger.log(
-            '[CfRefresh] 忽略过期 WebView 创建回调: gen=$gen current=$_generation',
-          );
-          return;
-        }
-        _webViewController = controller;
-        WebViewSettings.applyWindowsHeadlessMemoryTarget(controller);
-        WebViewSettings.registerJsErrorReporter(controller);
-        _registerJavaScriptHandlers(controller, gen);
-      },
-      onLoadStop: (_, url) {
-        final isInitialOriginLoad =
-            !originLoadCompleter.isCompleted &&
-            _isAppOriginUrl(url?.toString());
-        if (isInitialOriginLoad) {
-          // 首次真实 HTML load_stop 只负责解除等待。此时尚未判断页面是否
-          // 承载 Precursor/JSD，不能抢先用普通同步把新值判成“健康异值”。
-          originLoadCompleter.complete();
-        }
-        if (_canHandleGeneration(gen)) {
-          _lastSignalAt = DateTime.now();
-          if (!isInitialOriginLoad) {
-            unawaited(_syncAndCheckCookies('load_stop', gen));
+    late final HeadlessInAppWebView webView;
+    try {
+      webView = HeadlessInAppWebView(
+        webViewEnvironment: io.Platform.isWindows
+            ? WindowsWebViewEnvironmentService.instance.environment
+            : null,
+        initialSettings: WebViewSettings.headlessCf,
+        initialUserScripts: WebViewSettings.compatPolyfillScripts,
+        onReceivedServerTrustAuthRequest: (_, challenge) =>
+            WebViewSettings.handleServerTrustAuthRequest(challenge),
+        onWebViewCreated: (controller) {
+          if (!_canHandleGeneration(gen)) {
+            CfChallengeLogger.log(
+              '[CfRefresh] 忽略过期 WebView 创建回调: gen=$gen current=$_generation',
+            );
+            return;
           }
-          debugPrint('[CfRefresh] WebView load stop: $url');
-        }
-      },
-      onReceivedError: (_, request, error) {
-        debugPrint(
-          '[CfRefresh] WebView 错误: url=${request.url}, ${error.description}',
-        );
-      },
-    );
+          _webViewController = controller;
+          WebViewSettings.applyWindowsHeadlessMemoryTarget(controller);
+          WebViewSettings.registerJsErrorReporter(controller);
+          _registerJavaScriptHandlers(controller, gen);
+        },
+        onLoadStop: (_, url) {
+          final isInitialOriginLoad =
+              !originLoadCompleter.isCompleted &&
+              _isAppOriginUrl(url?.toString());
+          if (isInitialOriginLoad) {
+            // 首次真实 HTML load_stop 只负责解除等待。此时尚未判断页面是否
+            // 承载 Precursor/JSD，不能抢先用普通同步把新值判成“健康异值”。
+            originLoadCompleter.complete();
+          }
+          if (_canHandleGeneration(gen)) {
+            _lastSignalAt = DateTime.now();
+            if (!isInitialOriginLoad) {
+              unawaited(_syncAndCheckCookies('load_stop', gen));
+            }
+            debugPrint('[CfRefresh] WebView load stop: $url');
+          }
+        },
+        onReceivedError: (_, request, error) {
+          debugPrint(
+            '[CfRefresh] WebView 错误: url=${request.url}, ${error.description}',
+          );
+        },
+      );
+    } on UnimplementedError catch (e) {
+      _shouldBeRunning = false;
+      debugPrint('[CfRefresh] 当前平台不支持 Headless WebView，停止自动续期: $e');
+      CfChallengeLogger.log(
+        '[CfRefresh] 当前平台不支持 Headless WebView，停止自动续期: $e',
+      );
+      return;
+    } catch (e) {
+      debugPrint('[CfRefresh] 创建 Headless WebView 失败: $e');
+      CfChallengeLogger.log('[CfRefresh] 创建 Headless WebView 失败: $e');
+      _recordFailure('create_failed', gen: gen, restart: true);
+      return;
+    }
 
     _headlessWebView = webView;
     _isRunning = true;
