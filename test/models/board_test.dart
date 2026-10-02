@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/models/board.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('解析 Boards 详情中的 topic、floater 和负责人', () {
@@ -32,8 +32,10 @@ void main() {
               'topic': {
                 'id': 2974921,
                 'title': '测试话题',
+                'unicode_title': '测试话题',
                 'slug': 'topic',
                 'category_id': 126,
+                'tags': ['ios', 'bug'],
                 'posts_count': 2,
                 'highest_post_number': 2,
                 'bumped_at': '2026-10-01T10:48:33.958Z',
@@ -57,8 +59,12 @@ void main() {
               'assigned_to': {
                 'type': 'User',
                 'username': 'bob',
-                'avatar_template': '/user_avatar/linux.do/bob/{size}/3.png',
+                'avatar_template':
+                    '/user_avatar/linux.do/bob/{size}/3.png',
               },
+              'tags': [
+                {'id': 3, 'name': 'crash', 'slug': 'crash'},
+              ],
             },
           ],
         },
@@ -79,12 +85,14 @@ void main() {
     final topicCard = board.columns.first.cards.first;
     expect(topicCard.isTopic, isTrue);
     expect(topicCard.displayTitle, '测试话题');
-    expect(topicCard.topic?.topic.lastPosterUsername, 'neo');
+    expect(topicCard.topic?.lastPosterUsername, 'neo');
+    expect(topicCard.topic?.tags.map((tag) => tag.name), ['ios', 'bug']);
     expect(topicCard.assignedUsers.single.username, 'alice');
 
     final floater = board.columns.first.cards[1];
     expect(floater.isTopic, isFalse);
     expect(floater.displayTitle, 'App 闪退');
+    expect(floater.displayTags.single.name, 'crash');
     expect(floater.assignedUsers.single.username, 'bob');
   });
 }
