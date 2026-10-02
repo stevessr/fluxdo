@@ -72,6 +72,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   bool _showAdvancedOptions = false;
   bool _isSubmitting = false;
   bool _isLoadingPending = false;
+  bool _isManagingInvite = false;
   InviteLinkResponse? _latestInvite;
   ProviderSubscription<AsyncValue<User?>>? _userSub;
   bool _hasRequestedInitialRefresh = false;
@@ -502,12 +503,139 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     return S.current.time_seconds(seconds);
   }
 
+  Future<void> _deleteLatestInvite() async {
+    final details = _latestInvite?.invite;
+    final id = details?.id;
+    if (id == null || details?.canDeleteInvite == false || _isManagingInvite) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('删除邀请'),
+            content: const Text('确定删除这个待使用邀请吗？邀请链接将立即失效。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('删除'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    setState(() => _isManagingInvite = true);
+    try {
+      await ref.read(discourseServiceProvider).deleteInvite(id);
+      final user = ref.read(currentUserProvider).value;
+      if (user != null) await _clearInviteCache(user.username);
+      if (!mounted) return;
+      setState(() => _latestInvite = null);
+      await _loadPendingInvites(force: true);
+      ToastService.showSuccess('邀请已删除');
+    } catch (e) {
+      ToastService.showError('删除失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
+  Future<void> _resendLatestInvite() async {
+    final email = _latestInvite?.invite?.email?.trim();
+    if (email == null || email.isEmpty || _isManagingInvite) return;
+    setState(() => _isManagingInvite = true);
+    try {
+      await ref.read(discourseServiceProvider).resendInvite(email);
+      ToastService.showSuccess('邀请邮件已重新发送');
+    } catch (e) {
+      ToastService.showError('重新发送失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
+  Future<void> _resendAllInvites() async {
+    if (_isManagingInvite) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('重新发送全部邀请'),
+            content: const Text('将重新发送所有仍处于待处理状态的邮件邀请。继续吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('重新发送'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    setState(() => _isManagingInvite = true);
+    try {
+      await ref.read(discourseServiceProvider).resendAllInvites();
+      ToastService.showSuccess('待处理邀请已重新发送');
+    } catch (e) {
+      ToastService.showError('重新发送失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
+  Future<void> _destroyExpiredInvites() async {
+    if (_isManagingInvite) return;
+    setState(() => _isManagingInvite = true);
+    try {
+      final user = ref.read(currentUserProvider).value;
+      await ref
+          .read(discourseServiceProvider)
+          .destroyAllExpiredInvites(username: user?.username);
+      if (!mounted) return;
+      await _loadPendingInvites(force: true);
+      ToastService.showSuccess('已清理过期邀请');
+    } catch (e) {
+      ToastService.showError('清理失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.invite_title)),
+      appBar: AppBar(
+        title: Text(context.l10n.invite_title),
+        actions: [
+          PopupMenuButton<String>(
+            enabled: !_isManagingInvite,
+            onSelected: (value) {
+              if (value == 'resend_all') _resendAllInvites();
+              if (value == 'clear_expired') _destroyExpiredInvites();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'resend_all',
+                child: Text('重新发送全部待处理邀请'),
+              ),
+              PopupMenuItem(
+                value: 'clear_expired',
+                child: Text('清理过期邀请'),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -767,6 +895,32 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                 ),
               ],
             ),
+            if ((invite.invite?.email?.trim().isNotEmpty ?? false) ||
+                (invite.invite?.id != null &&
+                    invite.invite?.canDeleteInvite != false)) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (invite.invite?.email?.trim().isNotEmpty ?? false)
+                    OutlinedButton.icon(
+                      onPressed:
+                          _isManagingInvite ? null : _resendLatestInvite,
+                      icon: const Icon(Icons.forward_to_inbox_outlined),
+                      label: const Text('重新发送邮件'),
+                    ),
+                  if (invite.invite?.id != null &&
+                      invite.invite?.canDeleteInvite != false)
+                    OutlinedButton.icon(
+                      onPressed:
+                          _isManagingInvite ? null : _deleteLatestInvite,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('删除邀请'),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
