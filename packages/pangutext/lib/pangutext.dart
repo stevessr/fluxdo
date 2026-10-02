@@ -88,6 +88,10 @@ class Pangu {
   );
 
   static final RegExp _anyCjk = RegExp('[$_cjk]');
+  static final RegExp _bareHttpUrl = RegExp(
+    r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+",
+    caseSensitive: false,
+  );
 
   static final RegExp _cjkPunctuation = RegExp(
     '([$_cjk])([!;,\\?:]+)(?=[$_cjk$_an])',
@@ -283,6 +287,24 @@ class Pangu {
     );
     newText = newText.replaceAllMapped(RegExp('<https?://[^>]+>'), (match) {
       return autoLinkManager.store(match.group(0) ?? '');
+    });
+
+    // 保护裸写 HTTP(S) URL，避免后续的斜杠、连字符、运算符等规则改写 URL。
+    // URL 两侧若直接紧贴 CJK，仅在 URL 外侧补空格，URL 本体保持逐字不变。
+    final bareUrlManager =
+        _PlaceholderReplacer('BARE_HTTP_URL_', '\uE018', '\uE019');
+    final bareUrlSource = newText;
+    newText = newText.replaceAllMapped(_bareHttpUrl, (match) {
+      var replacement = bareUrlManager.store(match.group(0) ?? '');
+      if (match.start > 0 &&
+          _anyCjk.hasMatch(bareUrlSource.substring(match.start - 1, match.start))) {
+        replacement = ' $replacement';
+      }
+      if (match.end < bareUrlSource.length &&
+          _anyCjk.hasMatch(bareUrlSource.substring(match.end, match.end + 1))) {
+        replacement = '$replacement ';
+      }
+      return replacement;
     });
 
     // 保护 Emoji（:smile:）
@@ -539,6 +561,7 @@ class Pangu {
     newText = mdFormattingManager.restore(newText);
     newText = entityManager.restore(newText);
     newText = emojiManager.restore(newText);
+    newText = bareUrlManager.restore(newText);
     newText = autoLinkManager.restore(newText);
     newText = markdownLinkManager.restore(newText);
     newText = backtickManager.restore(newText);
