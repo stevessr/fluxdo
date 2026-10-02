@@ -331,14 +331,20 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     }
 
     // 帖子进入审核队列。Discourse 官方 pending serializer 不返回 payload.tags，
-    // 因此趁这里仍持有提交参数，用 reviewable id 补记标签，供撤回重编辑恢复。
+    // 因此趁这里仍持有提交参数，用 reviewable id 持久化标签，供撤回重编辑恢复。
     if (respData is Map && respData['action'] == 'enqueued') {
       final pendingPost = _parsePendingPost(respData['pending_post']);
       if (pendingPost != null) {
-        PendingTopicTagsRegistry.record(
-          pendingPost.id,
-          tags ?? const <String>[],
-        );
+        final username =
+            _username ?? await AccountManager().getCurrentUsername();
+        if (username != null && username.isNotEmpty) {
+          await PendingReviewContextStore.recordTopicTags(
+            site: AppConstants.baseUrl,
+            username: username,
+            reviewableId: pendingPost.id,
+            tags: tags ?? const <String>[],
+          );
+        }
       }
       throw PostEnqueuedException(
         pendingCount: respData['pending_count'] as int? ?? 0,
