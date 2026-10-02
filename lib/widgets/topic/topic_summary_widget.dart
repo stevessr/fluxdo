@@ -507,7 +507,9 @@ class _CollapsibleTopicSummaryState
         summaryAsync?.isLoading == true ||
         summaryAsync?.value?.isStreaming == true;
     final isOutdated = summaryAsync?.value?.outdated == true;
-    final hasCachedSummary = topicDetail?.hasCachedSummary ?? false;
+    final hasCachedSummary =
+        (topicDetail?.hasCachedSummary ?? false) ||
+        (summaryAsync?.value?.summarizedText.isNotEmpty ?? false);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
