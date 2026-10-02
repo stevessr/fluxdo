@@ -6,6 +6,7 @@ import '../l10n/s.dart';
 import '../models/user.dart';
 import '../pages/ai_bot_conversations_page.dart';
 import '../pages/bookmarks_page.dart';
+import '../pages/boards_page.dart';
 import '../pages/browsing_history_page.dart';
 import '../pages/community_events_page.dart';
 import '../pages/drafts_page.dart';
@@ -41,6 +42,15 @@ class NavEntryRegistry {
         pageBuilder: (ctx, isActive) => TopicsScreen(isActive: isActive),
         locked: true,
         defaultInBottomNav: true,
+      ),
+      NavEntry(
+        id: NavEntryIds.boards,
+        kind: NavEntryKind.page,
+        iconData: Icons.view_kanban_outlined,
+        selectedIconData: Icons.view_kanban,
+        label: _boardsLabel,
+        pageBuilder: (ctx, isActive) => BoardsPage(isActive: isActive),
+        defaultInBottomNav: false,
       ),
       NavEntry(
         id: NavEntryIds.chat,
@@ -214,6 +224,11 @@ class NavEntryRegistry {
   static List<String> lockedIds() {
     return buildAll().where((e) => e.locked).map((e) => e.id).toList();
   }
+}
+
+String _boardsLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '看板' : 'Boards';
 }
 
 String _leaderboardLabel(BuildContext context) {
