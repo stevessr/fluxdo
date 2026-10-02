@@ -299,9 +299,9 @@ class TopicSummaryWidget extends ConsumerWidget {
     // 独立使用时也必须真正触发 Discourse 的 regenerate 语义，而不是只
     // invalidate 普通 Provider 后再次拿到旧缓存。折叠组件会传入
     // onRegenerate，以便同时展示 MessageBus 流式结果。
-    await ref.read(
-      topicSummaryRegenerationProvider(topicId).future,
-    );
+    await ref
+        .read(discourseServiceProvider)
+        .getTopicSummary(topicId, skipAgeCheck: true);
     ref.invalidate(topicSummaryProvider(topicId));
   }
 }
