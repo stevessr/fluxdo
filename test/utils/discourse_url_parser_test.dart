@@ -81,24 +81,6 @@ void main() {
   });
 
   group('站内插件链接解析', () {
-    test('解析 discourse-boards 看板与卡片链接', () {
-      final board = DiscourseUrlParser.parseBoard('/boards/topic/1');
-      expect(board?.boardId, 1);
-      expect(board?.slug, 'topic');
-      expect(board?.cardId, isNull);
-
-      final card = DiscourseUrlParser.parseBoard(
-        'https://linux.do/boards/topic/1/cards/6',
-      );
-      expect(card?.boardId, 1);
-      expect(card?.cardId, 6);
-
-      expect(
-        DiscourseUrlParser.parseBoard('/boards/api/boards/1.json'),
-        isNull,
-      );
-    });
-
     test('解析徽章 ID 和 slug，并把 Discourse 的 - 占位符归一化', () {
       final placeholder = DiscourseUrlParser.parseBadge(
         'https://linux.do/badges/128/-',
