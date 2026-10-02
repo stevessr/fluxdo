@@ -1554,11 +1554,13 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
 
     final currentUserId = ref.read(currentUserProvider).value?.id;
     final channels = _messageChannels(query);
-    final channelUsernames = <String>{
-      for (final channel in channels)
-        if (channel.getDmTargetUser(currentUserId) case final user?)
-          user.username.toLowerCase(),
-    };
+    final channelUsernames = <String>{};
+    for (final channel in channels) {
+      final user = channel.getDmTargetUser(currentUserId);
+      if (user != null) {
+        channelUsernames.add(user.username.toLowerCase());
+      }
+    }
     final remoteUsers = _results
         .where(
           (user) => !channelUsernames.contains(user.username.toLowerCase()),
@@ -1578,6 +1580,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
             selectedTileColor: theme.colorScheme.primaryContainer.withValues(
               alpha: 0.55,
             ),
+            selectedColor: theme.colorScheme.onPrimaryContainer,
             leading: CircleAvatar(
               radius: 20,
               backgroundColor: theme.colorScheme.surfaceContainerHighest,
@@ -1602,15 +1605,17 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
 
           Widget leading;
           String? username;
-          if (channel.isDirectMessage && !channel.isGroupDm && targetUser != null) {
+          final emoji = channel.emojiShortcode;
+          if (channel.isDirectMessage &&
+              !channel.isGroupDm &&
+              targetUser != null) {
             leading = SmartAvatar(
               imageUrl: _resolveChatUserAvatarUrl(targetUser),
               radius: 20,
               fallbackText: targetUser.username,
             );
             username = targetUser.username;
-          } else if (channel.emojiShortcode case final emoji?
-              when emoji.isNotEmpty) {
+          } else if (emoji != null && emoji.isNotEmpty) {
             leading = CircleAvatar(
               radius: 20,
               backgroundColor: theme.colorScheme.primaryContainer,
