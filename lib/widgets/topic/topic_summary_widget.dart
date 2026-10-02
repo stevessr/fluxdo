@@ -42,8 +42,12 @@ class TopicSummaryWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summaryAsync =
-        summaryAsyncOverride ?? ref.watch(topicSummaryProvider(topicId));
+    final AsyncValue<TopicSummary?> summaryAsync;
+    if (summaryAsyncOverride != null) {
+      summaryAsync = summaryAsyncOverride!;
+    } else {
+      summaryAsync = ref.watch(topicSummaryProvider(topicId));
+    }
     final theme = Theme.of(context);
 
     // 使用 AnimatedSize 和 AnimatedSwitcher 优化状态切换动画

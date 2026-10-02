@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../l10n/s.dart';
 import '../../../services/network/vpn_bypass_service.dart';
 
-import 'package:common_ui/common_ui.dart';
+import 'package:m3e_ui/m3e_ui.dart';
 
 class VpnBypassCard extends StatelessWidget {
   const VpnBypassCard({super.key});
