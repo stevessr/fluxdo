@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 待审核内容中服务端作者接口不会回传的编辑上下文。
@@ -13,6 +14,9 @@ class PendingReviewContextStore {
 
   static const _topicTagsPrefix = 'pending_review_topic_tags_v1';
   static final Map<String, List<String>> _memory = {};
+
+  @visibleForTesting
+  static void resetMemoryCacheForTest() => _memory.clear();
 
   static String _scopePrefix({
     required String site,
