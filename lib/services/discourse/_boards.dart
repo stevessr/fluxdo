@@ -72,9 +72,9 @@ mixin _BoardsMixin on _DiscourseServiceBase {
       final data = Map<String, dynamic>.from(response.data as Map);
       return (data['boards'] as List<dynamic>? ?? const [])
           .whereType<Map>()
-          .map((item) => DiscourseBoard.fromJson(
-                Map<String, dynamic>.from(item),
-              ))
+          .map(
+            (item) => DiscourseBoard.fromJson(Map<String, dynamic>.from(item)),
+          )
           .toList(growable: false);
     } on DioException catch (e) {
       _throwApiError(e);
@@ -173,9 +173,7 @@ mixin _BoardsMixin on _DiscourseServiceBase {
 
   Future<void> deleteBoardColumn(int boardId, int columnId) async {
     try {
-      await _dio.delete(
-        '/boards/api/boards/$boardId/columns/$columnId.json',
-      );
+      await _dio.delete('/boards/api/boards/$boardId/columns/$columnId.json');
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -190,10 +188,7 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     try {
       await _dio.post(
         '/boards/api/boards/$boardId/move-column.json',
-        data: {
-          'column_id': columnId,
-          'after_column_id': afterColumnId,
-        },
+        data: {'column_id': columnId, 'after_column_id': afterColumnId},
       );
     } on DioException catch (e) {
       _throwApiError(e);
@@ -226,9 +221,7 @@ mixin _BoardsMixin on _DiscourseServiceBase {
         },
       );
       final root = Map<String, dynamic>.from(response.data as Map);
-      return BoardCard.fromJson(
-        Map<String, dynamic>.from(root['card'] as Map),
-      );
+      return BoardCard.fromJson(Map<String, dynamic>.from(root['card'] as Map));
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -243,15 +236,10 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     try {
       final response = await _dio.put(
         '/boards/api/boards/$boardId/cards/$cardId.json',
-        data: {
-          if (clientId != null) 'client_id': clientId,
-          'card': updates,
-        },
+        data: {if (clientId != null) 'client_id': clientId, 'card': updates},
       );
       final root = Map<String, dynamic>.from(response.data as Map);
-      return BoardCard.fromJson(
-        Map<String, dynamic>.from(root['card'] as Map),
-      );
+      return BoardCard.fromJson(Map<String, dynamic>.from(root['card'] as Map));
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -265,9 +253,7 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     try {
       await _dio.delete(
         '/boards/api/boards/$boardId/cards/$cardId.json',
-        data: {
-          if (clientId != null) 'client_id': clientId,
-        },
+        data: {if (clientId != null) 'client_id': clientId},
       );
     } on DioException catch (e) {
       _throwApiError(e);
@@ -283,15 +269,10 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     try {
       final response = await _dio.post(
         '/boards/api/boards/$boardId/topic-moves.json',
-        data: {
-          'topic_id': topicId,
-          'to_column_id': toColumnId,
-        },
+        data: {'topic_id': topicId, 'to_column_id': toColumnId},
       );
       final root = Map<String, dynamic>.from(response.data as Map);
-      return BoardCard.fromJson(
-        Map<String, dynamic>.from(root['card'] as Map),
-      );
+      return BoardCard.fromJson(Map<String, dynamic>.from(root['card'] as Map));
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -319,14 +300,11 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     try {
       final response = await _dio.put(
         '/boards/api/boards/$boardId/check-constraint-mismatches.json',
-        data: {
-          if (board != null) 'board': board,
-        },
+        data: {if (board != null) 'board': board},
       );
       return Map<String, dynamic>.from(response.data as Map);
     } on DioException catch (e) {
       _throwApiError(e);
     }
   }
-
 }
