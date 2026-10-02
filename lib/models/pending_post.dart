@@ -106,32 +106,3 @@ class PendingReplyTargetRegistry {
   /// 撤回成功后清理(重新提交送审会以新 reviewable id 重新记录)
   static void remove(int reviewableId) => _targets.remove(reviewableId);
 }
-
-/// 待审新主题标签的会话级补记(reviewableId → tag names)。
-///
-/// Discourse 当前的 PendingPostSerializer / TopicPendingPostSerializer 都不会
-/// 把 ReviewableQueuedPost.payload["tags"] 返回给待审内容作者；但服务端审核
-/// 模型会把 payload.tags 作为新主题可编辑字段，并在审核通过时继续使用它。
-///
-/// 因此客户端在 createTopic 收到 action=enqueued 且拿到 reviewable id 时，
-/// 需要把提交时的标签保存下来，供「撤回并重新编辑」恢复。与回复目标注册表
-/// 一样，这里只覆盖当前进程会话；若服务器未来直接返回 tags，则优先使用
-/// [PendingPost.tags]，此注册表作为兼容兜底。
-class PendingTopicTagsRegistry {
-  PendingTopicTagsRegistry._();
-
-  static final Map<int, List<String>> _tags = {};
-
-  static void record(int reviewableId, Iterable<String> tags) {
-    _tags[reviewableId] = List<String>.unmodifiable(tags);
-  }
-
-  static bool contains(int reviewableId) => _tags.containsKey(reviewableId);
-
-  static List<String>? lookup(int reviewableId) {
-    final tags = _tags[reviewableId];
-    return tags == null ? null : List<String>.of(tags);
-  }
-
-  static void remove(int reviewableId) => _tags.remove(reviewableId);
-}
