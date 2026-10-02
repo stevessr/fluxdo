@@ -1,5 +1,5 @@
 import 'package:fluxdo/models/board.dart';
-import 'package:test/test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('解析 Boards 详情中的 topic、floater 和负责人', () {
