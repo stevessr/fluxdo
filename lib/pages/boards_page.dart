@@ -90,8 +90,8 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
                           : '${board.columns.length} columns',
                     ),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.of(context).push(
+                    onTap: () async {
+                      final changed = await Navigator.of(context).push<bool>(
                         MaterialPageRoute(
                           builder: (_) => BoardDetailPage(
                             boardId: board.id,
@@ -99,6 +99,7 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
                           ),
                         ),
                       );
+                      if (changed == true && mounted) _reload();
                     },
                   ),
                 );
@@ -539,6 +540,39 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       appBar: AppBar(
         title: Text(title),
         actions: [
+          if (board != null && board.canManage)
+            PopupMenuButton<String>(
+              tooltip: _isZh(context) ? '看板管理' : 'Board management',
+              onSelected: (value) {
+                switch (value) {
+                  case 'add_column':
+                    _addColumn(board);
+                  case 'archive':
+                    _toggleBoardArchived(board);
+                  case 'delete':
+                    _deleteBoard(board);
+                }
+              },
+              itemBuilder: (_) => [
+                if (!board.archived)
+                  PopupMenuItem(
+                    value: 'add_column',
+                    child: Text(_isZh(context) ? '添加分栏' : 'Add column'),
+                  ),
+                PopupMenuItem(
+                  value: 'archive',
+                  child: Text(
+                    board.archived
+                        ? (_isZh(context) ? '取消归档' : 'Unarchive')
+                        : (_isZh(context) ? '归档看板' : 'Archive board'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text(_isZh(context) ? '删除看板' : 'Delete board'),
+                ),
+              ],
+            ),
           IconButton(
             onPressed: () => _loadBoard(showLoading: false),
             icon: const Icon(Icons.refresh),
@@ -584,6 +618,11 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                   canAssign: (card) => _canAssign(board, column, card),
                   onCardTap: _openCard,
                   onAssign: (card) => _assign(board, column, card),
+                  onAddCard: () => _addCard(board, column),
+                  onMoveCard: (card) => _moveCard(board, card),
+                  onDeleteCard: (card) => _deleteCard(board, card),
+                  onClearColumn: () => _clearColumn(board, column),
+                  onDeleteColumn: () => _deleteColumn(board, column),
                 ),
               );
             },
@@ -601,6 +640,11 @@ class _BoardColumnView extends StatelessWidget {
     required this.canAssign,
     required this.onCardTap,
     required this.onAssign,
+    required this.onAddCard,
+    required this.onMoveCard,
+    required this.onDeleteCard,
+    required this.onClearColumn,
+    required this.onDeleteColumn,
   });
 
   final DiscourseBoard board;
@@ -608,6 +652,11 @@ class _BoardColumnView extends StatelessWidget {
   final bool Function(BoardCard card) canAssign;
   final ValueChanged<BoardCard> onCardTap;
   final ValueChanged<BoardCard> onAssign;
+  final VoidCallback onAddCard;
+  final ValueChanged<BoardCard> onMoveCard;
+  final ValueChanged<BoardCard> onDeleteCard;
+  final VoidCallback onClearColumn;
+  final VoidCallback onDeleteColumn;
 
   @override
   Widget build(BuildContext context) {
@@ -651,6 +700,36 @@ class _BoardColumnView extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (board.canWrite && !board.archived)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: _isZh(context) ? '添加卡片' : 'Add card',
+                    onPressed: onAddCard,
+                    icon: const Icon(Icons.add_rounded, size: 20),
+                  ),
+                if (board.canManage && !board.archived)
+                  PopupMenuButton<String>(
+                    tooltip: _isZh(context) ? '分栏管理' : 'Column management',
+                    onSelected: (value) {
+                      if (value == 'clear') onClearColumn();
+                      if (value == 'delete') onDeleteColumn();
+                    },
+                    itemBuilder: (_) => [
+                      if (column.cards.isNotEmpty)
+                        PopupMenuItem(
+                          value: 'clear',
+                          child: Text(
+                            _isZh(context) ? '清空分栏' : 'Clear column',
+                          ),
+                        ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text(
+                          _isZh(context) ? '删除分栏' : 'Delete column',
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -674,8 +753,11 @@ class _BoardColumnView extends StatelessWidget {
                         board: board,
                         card: card,
                         canAssign: canAssign(card),
+                        canManageCard: board.canWrite && !board.archived,
                         onTap: () => onCardTap(card),
                         onAssign: () => onAssign(card),
+                        onMove: () => onMoveCard(card),
+                        onDelete: () => onDeleteCard(card),
                       );
                     },
                   ),
@@ -691,15 +773,21 @@ class _BoardCardTile extends StatelessWidget {
     required this.board,
     required this.card,
     required this.canAssign,
+    required this.canManageCard,
     required this.onTap,
     required this.onAssign,
+    required this.onMove,
+    required this.onDelete,
   });
 
   final DiscourseBoard board;
   final BoardCard card;
   final bool canAssign;
+  final bool canManageCard;
   final VoidCallback onTap;
   final VoidCallback onAssign;
+  final VoidCallback onMove;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -749,6 +837,28 @@ class _BoardCardTile extends StatelessWidget {
                       ),
                       visualDensity: VisualDensity.compact,
                       tooltip: _isZh(context) ? '指定负责人' : 'Assign',
+                    ),
+                  if (canManageCard)
+                    PopupMenuButton<String>(
+                      tooltip: _isZh(context) ? '卡片管理' : 'Card management',
+                      onSelected: (value) {
+                        if (value == 'move') onMove();
+                        if (value == 'delete') onDelete();
+                      },
+                      itemBuilder: (_) => [
+                        PopupMenuItem(
+                          value: 'move',
+                          child: Text(
+                            _isZh(context) ? '移动卡片' : 'Move card',
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            _isZh(context) ? '删除卡片' : 'Delete card',
+                          ),
+                        ),
+                      ],
                     ),
                 ],
               ),
@@ -905,6 +1015,78 @@ class _FloaterDetailSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _BoardCardEditorDialog extends StatefulWidget {
+  const _BoardCardEditorDialog();
+
+  @override
+  State<_BoardCardEditorDialog> createState() => _BoardCardEditorDialogState();
+}
+
+class _BoardCardEditorDialogState extends State<_BoardCardEditorDialog> {
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final zh = _isZh(context);
+    return AlertDialog(
+      title: Text(zh ? '添加卡片' : 'Add card'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: zh ? '标题' : 'Title',
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              minLines: 2,
+              maxLines: 5,
+              decoration: InputDecoration(
+                labelText: zh ? '备注（可选）' : 'Notes (optional)',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(zh ? '取消' : 'Cancel'),
+        ),
+        FilledButton(
+          onPressed: _titleController.text.trim().isEmpty
+              ? null
+              : () => Navigator.pop(
+                    context,
+                    (
+                      title: _titleController.text.trim(),
+                      notes: _notesController.text.trim(),
+                    ),
+                  ),
+          child: Text(zh ? '添加' : 'Add'),
+        ),
+      ],
     );
   }
 }
