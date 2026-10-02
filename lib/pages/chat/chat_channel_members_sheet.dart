@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
 import '../../providers/chat_providers.dart';
+import '../../providers/core_providers.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/chat/online_status_avatar.dart';
@@ -87,6 +88,48 @@ class _ChatChannelMembersSheetState
         },
       ),
     );
+  }
+
+  Future<void> _removeMember(ChatUser user) async {
+    if (!widget.canAddMembers) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('移除成员'),
+            content: Text('确定要将 @${user.username} 从此频道移除吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('移除'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .removeChannelMember(widget.channelId, user.id);
+      if (!mounted) return;
+      await ref
+          .read(chatChannelMembersProvider(widget.channelId).notifier)
+          .refresh();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已移除 @${user.username}')),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('移除失败: $error')));
+      }
+    }
   }
 
   void _navigateToUserProfile(String username) {
@@ -383,6 +426,10 @@ class _ChatChannelMembersSheetState
 
                         final user = filteredMembers[index];
                         final avatarUrl = _resolveAvatarUrl(user);
+                        final currentUserId =
+                            ref.watch(currentUserProvider).value?.id;
+                        final canRemove =
+                            widget.canAddMembers && currentUserId != user.id;
                         return ListTile(
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -397,6 +444,13 @@ class _ChatChannelMembersSheetState
                           subtitle: user.name != null
                               ? Text('@${user.username}')
                               : null,
+                          trailing: canRemove
+                              ? IconButton(
+                                  tooltip: '移除成员',
+                                  icon: const Icon(Icons.person_remove_rounded),
+                                  onPressed: () => _removeMember(user),
+                                )
+                              : const Icon(Icons.chevron_right_rounded),
                           onTap: () => _navigateToUserProfile(user.username),
                         );
                       },
