@@ -1,7 +1,3 @@
-import '../utils/time_utils.dart';
-import '../utils/url_helper.dart';
-import 'topic.dart';
-
 /// discourse-boards 看板。
 class DiscourseBoard {
   const DiscourseBoard({
@@ -177,7 +173,7 @@ class BoardCard {
   final String? title;
   final String? unicodeTitle;
   final String? notes;
-  final List<Tag> tags;
+  final List<BoardTag> tags;
   final int? topicId;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -197,12 +193,12 @@ class BoardCard {
       unicodeTitle: json['unicode_title'] as String?,
       notes: json['notes'] as String?,
       tags: (json['tags'] as List<dynamic>? ?? const [])
-          .map(Tag.fromJson)
+          .map(BoardTag.fromJson)
           .toList(),
       topicId: (json['topic_id'] as num?)?.toInt(),
-      createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
-      updatedAt: TimeUtils.parseUtcTime(json['updated_at'] as String?),
-      recencyAt: TimeUtils.parseUtcTime(json['recency_at'] as String?),
+      createdAt: _parseDateTime(json['created_at']),
+      updatedAt: _parseDateTime(json['updated_at']),
+      recencyAt: _parseDateTime(json['recency_at']),
       createdBy: json['created_by'] is Map<String, dynamic>
           ? BoardCreator.fromJson(json['created_by'] as Map<String, dynamic>)
           : null,
@@ -218,15 +214,17 @@ class BoardCard {
   bool get isTopic => cardType == 'topic' && topic != null && topicId != null;
 
   String get displayTitle {
-    final topicTitle = topic?.topic.title.trim();
+    final topicTitle = topic?.displayTitle.trim();
     if (topicTitle != null && topicTitle.isNotEmpty) return topicTitle;
     final unicode = unicodeTitle?.trim();
     if (unicode != null && unicode.isNotEmpty) return unicode;
     return title?.trim() ?? '';
   }
 
+  List<BoardTag> get displayTags => isTopic ? topic!.tags : tags;
+
   DateTime? get activityAt =>
-      recencyAt ?? topic?.topic.lastPostedAt ?? updatedAt ?? createdAt;
+      recencyAt ?? topic?.bumpedAt ?? updatedAt ?? createdAt;
 
   List<BoardAssignee> get assignedUsers {
     final topicUsers = topic?.assignedUsers ?? const <BoardAssignee>[];
@@ -245,31 +243,43 @@ class BoardCard {
 
 class BoardTopic {
   const BoardTopic({
-    required this.topic,
+    required this.id,
+    required this.title,
+    required this.unicodeTitle,
+    required this.slug,
+    required this.categoryId,
+    required this.tags,
+    this.bumpedAt,
+    required this.closed,
     this.imageUrl,
+    required this.postsCount,
+    required this.highestPostNumber,
+    this.lastReadPostNumber,
+    this.lastPosterUsername,
     required this.assignedUsers,
     this.assignedGroupName,
   });
 
-  final Topic topic;
+  final int id;
+  final String title;
+  final String unicodeTitle;
+  final String slug;
+  final int categoryId;
+  final List<BoardTag> tags;
+  final DateTime? bumpedAt;
+  final bool closed;
   final String? imageUrl;
+  final int postsCount;
+  final int highestPostNumber;
+  final int? lastReadPostNumber;
+  final String? lastPosterUsername;
   final List<BoardAssignee> assignedUsers;
   final String? assignedGroupName;
 
-  factory BoardTopic.fromJson(Map<String, dynamic> json) {
-    final normalized = Map<String, dynamic>.from(json);
-    normalized['last_posted_at'] ??= json['bumped_at'];
-    final lastPoster = json['last_poster'];
-    if (normalized['last_poster_username'] == null &&
-        lastPoster is Map<String, dynamic>) {
-      normalized['last_poster_username'] = lastPoster['username'];
-    }
-    final postsCount = (json['posts_count'] as num?)?.toInt() ?? 0;
-    normalized['reply_count'] ??= postsCount > 0 ? postsCount - 1 : 0;
-    normalized['views'] ??= 0;
-    normalized['like_count'] ??= 0;
-    normalized['highest_post_number'] ??= json['highest_post_number'] ?? 0;
+  String get displayTitle =>
+      unicodeTitle.trim().isNotEmpty ? unicodeTitle : title;
 
+  factory BoardTopic.fromJson(Map<String, dynamic> json) {
     final users = (json['all_assigned_users'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(BoardAssignee.userFromJson)
@@ -282,14 +292,54 @@ class BoardTopic {
       );
     }
     final group = json['assigned_to_group'];
+    final lastPoster = json['last_poster'];
+
     return BoardTopic(
-      topic: Topic.fromJson(normalized),
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      title: json['title'] as String? ?? '',
+      unicodeTitle:
+          json['unicode_title'] as String? ?? json['title'] as String? ?? '',
+      slug: json['slug'] as String? ?? '',
+      categoryId: (json['category_id'] as num?)?.toInt() ?? 0,
+      tags: (json['tags'] as List<dynamic>? ?? const [])
+          .map(BoardTag.fromJson)
+          .toList(),
+      bumpedAt: _parseDateTime(json['bumped_at']),
+      closed: json['closed'] as bool? ?? false,
       imageUrl: json['image_url'] as String?,
+      postsCount: (json['posts_count'] as num?)?.toInt() ?? 0,
+      highestPostNumber:
+          (json['highest_post_number'] as num?)?.toInt() ?? 0,
+      lastReadPostNumber:
+          (json['last_read_post_number'] as num?)?.toInt(),
+      lastPosterUsername: lastPoster is Map<String, dynamic>
+          ? lastPoster['username'] as String?
+          : null,
       assignedUsers: users,
       assignedGroupName: group is Map<String, dynamic>
           ? group['name'] as String?
           : null,
     );
+  }
+}
+
+class BoardTag {
+  const BoardTag({this.id, required this.name, this.slug});
+
+  final int? id;
+  final String name;
+  final String? slug;
+
+  factory BoardTag.fromJson(dynamic json) {
+    if (json is String) return BoardTag(name: json);
+    if (json is Map<String, dynamic>) {
+      return BoardTag(
+        id: (json['id'] as num?)?.toInt(),
+        name: json['name'] as String? ?? '',
+        slug: json['slug'] as String?,
+      );
+    }
+    return BoardTag(name: json.toString());
   }
 }
 
@@ -338,14 +388,11 @@ class BoardAssignee {
         name: json['name'] as String?,
         avatarTemplate: json['avatar_template'] as String?,
       );
+}
 
-  String? getAvatarUrl({int size = 40}) {
-    final template = avatarTemplate;
-    if (template == null || template.isEmpty) return null;
-    return UrlHelper.resolveUrlWithCdn(
-      template.replaceAll('{size}', size.toString()),
-    );
-  }
+DateTime? _parseDateTime(dynamic value) {
+  if (value is! String || value.isEmpty) return null;
+  return DateTime.tryParse(value)?.toLocal();
 }
 
 List<int> _intList(dynamic value) {
