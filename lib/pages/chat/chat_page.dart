@@ -1338,6 +1338,22 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     });
   }
 
+  void _cancelGroupMode() {
+    if (_isCreating) return;
+    if (widget.initialMode == _NewChatCreatorMode.group) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    setState(() {
+      _mode = _NewChatCreatorMode.message;
+      _selected.clear();
+      _results.clear();
+      _groupNameController.clear();
+      _searchController.clear();
+    });
+  }
+
   List<Chatable> _recentDirectMessageUsers() {
     final state = ref.read(chatChannelsProvider).value;
     if (state == null) return const [];
@@ -1532,7 +1548,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     final theme = Theme.of(context);
     final l10n = context.l10n;
     final title = _isGroup ? l10n.chat_new_group : l10n.chat_send_message_title;
-    final createLabel = l10n.chat_create_group;
+    final createLabel = l10n.chat_create_group_chat;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1570,48 +1586,47 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                 ],
               ),
             ),
-            if (_isGroup && _selected.isNotEmpty) ...[
-              SizedBox(
-                height: 48,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  itemCount: _selected.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final user = _selected[index];
-                    final label = user.name?.trim().isNotEmpty == true
-                        ? user.name!
-                        : user.username;
-                    return InputChip(
-                      avatar: SmartAvatar(
-                        imageUrl: _resolveUserAvatarUrl(user),
-                        radius: 12,
-                        fallbackText: user.username,
-                      ),
-                      label: Text(label),
-                      onDeleted: _isCreating
-                          ? null
-                          : () => _removeSelected(user),
-                      deleteIconColor: theme.colorScheme.onSurfaceVariant,
-                    );
-                  },
+            if (_isGroup) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: TextField(
+                  controller: _groupNameController,
+                  enabled: !_isCreating,
+                  decoration: InputDecoration(
+                    hintText: l10n.chat_group_name_hint,
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
                 ),
               ),
-              if (_isGroup)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: TextField(
-                    controller: _groupNameController,
-                    enabled: !_isCreating,
-                    decoration: InputDecoration(
-                      labelText: l10n.chat_group_name_label,
-                      hintText: l10n.chat_group_name_hint,
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+              if (_selected.isNotEmpty)
+                SizedBox(
+                  height: 48,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    itemCount: _selected.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final user = _selected[index];
+                      final label = user.name?.trim().isNotEmpty == true
+                          ? user.name!
+                          : user.username;
+                      return InputChip(
+                        avatar: SmartAvatar(
+                          imageUrl: _resolveUserAvatarUrl(user),
+                          radius: 12,
+                          fallbackText: user.username,
+                        ),
+                        label: Text(label),
+                        onDeleted: _isCreating
+                            ? null
+                            : () => _removeSelected(user),
+                        deleteIconColor: theme.colorScheme.onSurfaceVariant,
+                      );
+                    },
                   ),
                 ),
             ],
@@ -1622,7 +1637,9 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                 autofocus: true,
                 enabled: !_isCreating,
                 decoration: InputDecoration(
-                  hintText: l10n.chat_search_users,
+                  hintText: _isGroup
+                      ? l10n.chat_add_more_members_hint
+                      : l10n.chat_new_message_user_search_hint,
                   prefixIcon: const Icon(AppIcons.search, size: 20),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(
@@ -1644,9 +1661,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                 child: Row(
                   children: [
                     TextButton(
-                      onPressed: _isCreating
-                          ? null
-                          : () => Navigator.of(context).pop(),
+                      onPressed: _isCreating ? null : _cancelGroupMode,
                       child: Text(l10n.chat_cancel),
                     ),
                     const Spacer(),
