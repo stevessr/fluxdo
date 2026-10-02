@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/board.dart';
 import '../models/mention_user.dart';
+import '../models/topic.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../providers/core_providers.dart';
 import '../services/preloaded_data_service.dart';
 import '../services/toast_service.dart';
+import '../utils/url_helper.dart';
 import '../widgets/common/relative_time_text.dart';
 import '../widgets/common/smart_avatar.dart';
 import '../widgets/topic/assign_sheet.dart';
@@ -195,7 +197,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     );
 
     if (card.isTopic) {
-      final topic = card.topic!.topic;
+      final topic = _topicFromBoardTopic(card.topic!);
       await TopicPreviewDialog.show(
         context,
         topic: topic,
@@ -224,7 +226,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     if (!PreloadedDataService().assignEnabled) return false;
     final user = ref.read(currentUserProvider).value;
     if (user?.canAssign != true) return false;
-    if (card.isTopic && card.topic!.topic.closed) return false;
+    if (card.isTopic && card.topic!.closed) return false;
 
     // 官方 Boards：topic 走 discourse-assign，不要求 board.can_write；
     // floater 的负责人保存在卡片本身，因此必须有 Board 写权限。
@@ -239,7 +241,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     if (!_canAssign(board, column, card)) return;
 
     if (card.isTopic) {
-      await showAssignSheet(context, ref, topicId: card.topic!.topic.id);
+      await showAssignSheet(context, ref, topicId: card.topic!.id);
       if (mounted) await _loadBoard(showLoading: false);
       return;
     }
@@ -441,7 +443,7 @@ class _BoardCardTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final topic = card.topic?.topic;
+    final topic = card.topic;
     final users = card.assignedUsers;
     final group = card.assignedGroupName;
 
@@ -489,12 +491,12 @@ class _BoardCardTile extends StatelessWidget {
                     ),
                 ],
               ),
-              if (card.tags.isNotEmpty && board.showTags) ...[
+              if (card.displayTags.isNotEmpty && board.showTags) ...[
                 const SizedBox(height: 7),
                 Wrap(
                   spacing: 5,
                   runSpacing: 4,
-                  children: card.tags
+                  children: card.displayTags
                       .take(4)
                       .map(
                         (tag) => Chip(
@@ -513,7 +515,7 @@ class _BoardCardTile extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Image.network(
-                    card.topic!.imageUrl!,
+                    UrlHelper.resolveUrlWithCdn(card.topic!.imageUrl!),
                     height: 132,
                     width: double.infinity,
                     fit: BoxFit.cover,
@@ -583,7 +585,7 @@ class _AssigneeAvatars extends StatelessWidget {
             Positioned(
               left: i * 14.0,
               child: SmartAvatar(
-                imageUrl: shown[i].getAvatarUrl(size: 48),
+                imageUrl: _boardAssigneeAvatarUrl(shown[i], size: 48),
                 fallbackText: shown[i].displayName,
                 radius: 11,
               ),
@@ -849,3 +851,32 @@ Color? _parseHexColor(String value) {
 
 bool _isZh(BuildContext context) =>
     Localizations.localeOf(context).languageCode == 'zh';
+
+
+Topic _topicFromBoardTopic(BoardTopic source) {
+  final replyCount = source.postsCount > 0 ? source.postsCount - 1 : 0;
+  return Topic.fromJson({
+    'id': source.id,
+    'title': source.displayTitle,
+    'slug': source.slug,
+    'category_id': source.categoryId,
+    'posts_count': source.postsCount,
+    'reply_count': replyCount,
+    'views': 0,
+    'like_count': 0,
+    'tags': source.tags.map((tag) => tag.name).toList(),
+    'last_posted_at': source.bumpedAt?.toUtc().toIso8601String(),
+    'last_poster_username': source.lastPosterUsername,
+    'closed': source.closed,
+    'highest_post_number': source.highestPostNumber,
+    'last_read_post_number': source.lastReadPostNumber,
+  });
+}
+
+String? _boardAssigneeAvatarUrl(BoardAssignee assignee, {int size = 40}) {
+  final template = assignee.avatarTemplate;
+  if (template == null || template.isEmpty) return null;
+  return UrlHelper.resolveUrlWithCdn(
+    template.replaceAll('{size}', size.toString()),
+  );
+}
