@@ -3,6 +3,7 @@ import 'package:app_icons/app_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/s.dart';
+import '../services/account_manager.dart';
 import '../services/credential_store_service.dart';
 import '../services/discourse/discourse_service.dart';
 import '../services/toast_service.dart';
@@ -41,6 +42,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   String? _savedUsername;
   String? _savedPassword;
+  List<SavedLoginCredential> _savedCredentials = const [];
   bool _credentialsLoaded = false;
   bool _browserAuthLaunching = false;
 
@@ -122,11 +124,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   Future<void> _loadSavedCredentials() async {
     try {
-      final saved = await CredentialStoreService().load();
+      final credentials = await CredentialStoreService().list();
+      final recent = credentials.isEmpty ? null : credentials.first;
       if (!mounted) return;
       setState(() {
-        _savedUsername = saved.username;
-        _savedPassword = saved.password;
+        _savedCredentials = credentials;
+        _savedUsername = recent?.identifier;
+        _savedPassword = recent?.password;
         _credentialsLoaded = true;
       });
     } catch (_) {
@@ -185,13 +189,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       // dialog 已把会话 cookie (_t/_forum_session) 同步落 jar,
       // 这里复用收尾: AuthSession.advance → setToken → 预加载数据 → 登录广播。
       await service.finalizeNativeLoginSuccess(identifier);
-      // 保存账号密码 (可选)
-      if (rememberCredentials) {
-        try {
-          await CredentialStoreService().save(identifier, password);
-        } catch (e) {
-          debugPrint('[LoginPage] 保存账号失败,不影响登录: $e');
+      // 密码按实际 Discourse username 隔离。使用邮箱登录时也不会另开一个
+      // 凭证槽；取消“记住密码”则显式删除该账号此前保存的密码。
+      try {
+        final accountId = await AccountManager().getCurrentUsername();
+        if (rememberCredentials) {
+          await CredentialStoreService().save(
+            identifier,
+            password,
+            accountId: accountId,
+          );
+        } else {
+          await CredentialStoreService().clear(
+            accountId: accountId ?? identifier,
+          );
         }
+      } catch (e) {
+        debugPrint('[LoginPage] 更新账号密码存储失败,不影响登录: $e');
       }
       if (!mounted) return true;
       ToastService.showSuccess(S.current.webviewLogin_loginSuccess);
@@ -237,10 +251,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     await CredentialStoreService().clear();
     if (!mounted) return;
     setState(() {
+      _savedCredentials = const [];
       _savedUsername = null;
       _savedPassword = null;
     });
-    ToastService.showSuccess('已清除保存的账号密码');
+    ToastService.showSuccess('已清除所有保存的账号密码');
   }
 
   @override
@@ -277,7 +292,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       0,
                       AmbientIconButton(
                         icon: Symbols.delete_rounded,
-                        tooltip: '清除保存的账号',
+                        tooltip: '清除所有保存的账号密码',
                         onPressed: _clearSavedCredentials,
                       ),
                     ),
@@ -393,6 +408,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         _loginWithWebView('https://linux.do/password-reset'),
                     savedUsername: _savedUsername,
                     savedPassword: _savedPassword,
+                    savedCredentials: {
+                      for (final credential in _savedCredentials)
+                        credential.identifier: credential.password,
+                    },
                   ),
           ),
         ),
