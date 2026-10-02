@@ -291,6 +291,12 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       },
     );
     if (reason == null || !mounted) return;
+    if (reason.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(copy.requestMembershipReasonRequired)),
+      );
+      return;
+    }
 
     setState(() => _requestingMembership = true);
     try {
@@ -868,7 +874,9 @@ class _GroupCopy {
       zh ? '已移除 @$username' : 'Removed @$username';
   String get requestMembership => zh ? '申请加入' : 'Request membership';
   String get requestMembershipReasonHint =>
-      zh ? '可选：说明加入该群组的原因' : 'Optional reason for joining';
+      zh ? '说明加入该群组的原因' : 'Reason for joining';
+  String get requestMembershipReasonRequired =>
+      zh ? '加入申请需要填写原因' : 'A membership request reason is required';
   String get membershipRequested =>
       zh ? '加入申请已提交' : 'Membership request submitted';
   String get submit => zh ? '提交' : 'Submit';
