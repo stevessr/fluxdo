@@ -25,7 +25,13 @@ class BoardsPage extends ConsumerStatefulWidget {
 }
 
 class _BoardsPageState extends ConsumerState<BoardsPage> {
-  late Future<List<DiscourseBoard>> _future = _load();
+  late Future<List<DiscourseBoard>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
 
   Future<List<DiscourseBoard>> _load() =>
       ref.read(discourseServiceProvider).getBoards();
@@ -78,8 +84,8 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
                     title: Text(board.displayName),
                     subtitle: Text(
                       zh
-                          ? '\${board.columns.length} 个分栏'
-                          : '\${board.columns.length} columns',
+                          ? '${board.columns.length} 个分栏'
+                          : '${board.columns.length} columns',
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
@@ -87,7 +93,7 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
                         MaterialPageRoute(
                           builder: (_) => BoardDetailPage(
                             boardId: board.id,
-                            initialName: board.unicodeName,
+                            initialName: board.displayName,
                           ),
                         ),
                       );
@@ -388,7 +394,7 @@ class _BoardColumnView extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '\${column.cards.length}',
+                  '${column.cards.length}',
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -549,7 +555,7 @@ class _BoardCardTile extends StatelessWidget {
                     const Icon(Icons.chat_bubble_outline, size: 14),
                     const SizedBox(width: 3),
                     Text(
-                      '\${(topic.postsCount - 1).clamp(0, 999999)}',
+                      '${(topic.postsCount - 1).clamp(0, 999999)}',
                       style: theme.textTheme.labelSmall,
                     ),
                     const SizedBox(width: 8),
@@ -754,7 +760,7 @@ class _BoardAssigneeDialogState
                         radius: 18,
                       ),
                       title: Text(hasName ? user.name! : user.username),
-                      subtitle: hasName ? Text('@\${user.username}') : null,
+                      subtitle: hasName ? Text('@${user.username}') : null,
                       onTap: () {
                         _controller.text = user.username;
                         setState(() => _results = const []);
