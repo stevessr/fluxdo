@@ -85,7 +85,7 @@ class Pangu {
 
   static final RegExp _anyCjk = RegExp('[$_cjk]');
   static final RegExp _bareHttpUrl = RegExp(
-    r"https?://[A-Za-z0-9._~:/?#\\[\\]@!\  static final RegExp _anyCjk = RegExp('[$_cjk]');'()*+,;=%-]+",
+    r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+",
     caseSensitive: false,
   );
 
@@ -257,17 +257,17 @@ class Pangu {
     // 保护裸写 HTTP(S) URL，避免后续的斜杠、连字符、运算符等规则改写 URL。
     // URL 两侧若直接紧贴 CJK，仅在 URL 外侧补空格，URL 本体保持逐字不变。
     final bareUrlManager =
-        _PlaceholderReplacer('BARE_HTTP_URL_', '\\uE018', '\\uE019');
+        _PlaceholderReplacer('BARE_HTTP_URL_', '\uE018', '\uE019');
     final bareUrlSource = newText;
     newText = newText.replaceAllMapped(_bareHttpUrl, (match) {
       var replacement = bareUrlManager.store(match.group(0) ?? '');
       if (match.start > 0 &&
           _anyCjk.hasMatch(bareUrlSource.substring(match.start - 1, match.start))) {
-        replacement = ' \$replacement';
+        replacement = ' $replacement';
       }
       if (match.end < bareUrlSource.length &&
           _anyCjk.hasMatch(bareUrlSource.substring(match.end, match.end + 1))) {
-        replacement = '\$replacement ';
+        replacement = '$replacement ';
       }
       return replacement;
     });
