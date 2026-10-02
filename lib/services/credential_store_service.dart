@@ -264,22 +264,26 @@ class CredentialStoreService {
 
   /// 清除指定账号的凭证；不传 [accountId] 时清除所有已保存凭证。
   Future<void> clear({String? accountId}) async {
-    await _ensureLegacyMigrated();
-    final index = await _readIndex();
-
     if (accountId == null || accountId.trim().isEmpty) {
-      for (final id in index) {
-        await _store.delete(_credentialKey(id));
-      }
-      await _store.delete(_indexKey);
+      // “清除全部”不应为了删除旧凭证先把它迁移到新结构。先清历史 key，
+      // 再清新索引；即使严格系统安全存储暂时不可用，也不会重新制造旧副本。
       final legacyStorage = _legacyStorage;
       if (legacyStorage != null) {
         await legacyStorage.delete(key: _legacyKeyUsername);
         await legacyStorage.delete(key: _legacyKeyPassword);
       }
+      _legacyMigrationChecked = true;
+
+      final index = await _readIndex();
+      for (final id in index) {
+        await _store.delete(_credentialKey(id));
+      }
+      await _store.delete(_indexKey);
       return;
     }
 
+    await _ensureLegacyMigrated();
+    final index = await _readIndex();
     final canonical = _canonicalAccountId(accountId);
     final retained = <String>[];
     for (final id in index) {
