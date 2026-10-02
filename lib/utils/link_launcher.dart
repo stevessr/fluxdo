@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/site_customization.dart';
 import '../constants.dart';
 import '../pages/badge_page.dart';
+import '../pages/boards_page.dart';
 import '../pages/community_events_page.dart';
 import '../pages/group_page.dart';
 import '../pages/image_viewer_page.dart';
@@ -152,6 +153,20 @@ Future<void> launchContentLink(
   }
 
   final internal = isInternalUrlString(url);
+
+  // discourse-boards 看板页面优先原生打开，避免落回 WebView。
+  final boardInfo = DiscourseUrlParser.parseBoard(url);
+  if (boardInfo != null && internal) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BoardDetailPage(
+          boardId: boardInfo.boardId,
+          initialCardId: boardInfo.cardId,
+        ),
+      ),
+    );
+    return;
+  }
 
   // 1. 识别用户链接 /u/username
   final userInfo = DiscourseUrlParser.parseUser(url);
