@@ -1159,19 +1159,27 @@ final chatAllThreadsProvider =
         return items;
       }
 
-      // Discourse 当前提供专用 /chat/api/me/threads，一次请求即可返回当前
-      // 用户参与的跨频道消息串。优先使用它，避免旧实现逐频道请求造成 N+1。
+      // Discourse 当前提供专用 /chat/api/me/threads，单页最多 10 条。
+      // 按 offset 分页聚合，避免旧实现逐频道请求造成 N+1，同时不会截断活跃线程。
       try {
-        final raw = await service.getCurrentUserChatThreads();
-        final list = raw['threads'];
-        if (list is List) {
-          final result = <(ChatThread, ChatChannel)>[];
+        final result = <(ChatThread, ChatChannel)>[];
+        final seenThreadIds = <int>{};
+        const pageSize = 10;
+        var offset = 0;
+        for (var page = 0; page < 20; page++) {
+          final raw = await service.getCurrentUserChatThreads(
+            offset: offset,
+            limit: pageSize,
+          );
+          final list = raw['threads'];
+          if (list is! List) break;
+
           for (final item in list) {
             if (item is! Map) continue;
             try {
               final json = Map<String, dynamic>.from(item);
               final thread = ChatThread.fromJson(json);
-              if (thread.id <= 0) continue;
+              if (thread.id <= 0 || !seenThreadIds.add(thread.id)) continue;
 
               ChatChannel? channel = channelsById[thread.channelId];
               final embedded = json['channel'];
@@ -1187,8 +1195,11 @@ final chatAllThreadsProvider =
               // 单个 thread payload 兼容失败不应拖垮整个列表。
             }
           }
-          return sortThreads(result);
+
+          if (list.length < pageSize) break;
+          offset += list.length;
         }
+        return sortThreads(result);
       } catch (_) {
         // 较旧的 Discourse Chat 可能尚无 /me/threads，下面保留逐频道兼容回退。
       }
