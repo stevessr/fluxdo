@@ -192,9 +192,11 @@ mixin _GroupsMixin on _DiscourseServiceBase {
     final normalized = username.trim();
     if (normalized.isEmpty) return;
     try {
+      // remove_owner 属于 Admin::GroupsController；普通 group owner 可添加
+      // owner，但移除 owner 仍由上游 admin 路由与 Guardian 决定。
       await _dio.delete(
-        '/groups/$groupId/owners.json',
-        data: {'username': normalized},
+        '/admin/groups/$groupId/owners.json',
+        data: {'usernames': normalized},
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
     } on DioException catch (e) {
@@ -202,10 +204,27 @@ mixin _GroupsMixin on _DiscourseServiceBase {
     }
   }
 
-  /// 将群组设为当前用户的主要群组。
-  Future<void> setPrimaryGroup(int groupId) async {
+  /// 为一批用户设置/取消该主要群组（Discourse admin API）。
+  Future<void> setPrimaryGroupForUsers({
+    required int groupId,
+    required List<String> usernames,
+    required bool primary,
+  }) async {
+    final normalized = usernames
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalized.isEmpty) return;
     try {
-      await _dio.put('/groups/$groupId/primary.json');
+      await _dio.put(
+        '/admin/groups/$groupId/primary.json',
+        data: {
+          'usernames': normalized.join(','),
+          'primary': primary.toString(),
+        },
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -214,16 +233,17 @@ mixin _GroupsMixin on _DiscourseServiceBase {
   /// 申请加入需要审核的群组。
   Future<void> requestGroupMembership(
     String groupName, {
-    String? reason,
+    required String reason,
   }) async {
+    final normalizedReason = reason.trim();
+    if (normalizedReason.isEmpty) {
+      throw ArgumentError.value(reason, 'reason', 'must not be empty');
+    }
     final encoded = Uri.encodeComponent(groupName);
     try {
       await _dio.post(
         '/groups/$encoded/request_membership.json',
-        data: {
-          if (reason != null && reason.trim().isNotEmpty)
-            'reason': reason.trim(),
-        },
+        data: {'reason': normalizedReason},
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
     } on DioException catch (e) {
@@ -253,13 +273,18 @@ mixin _GroupsMixin on _DiscourseServiceBase {
 
   /// 设置当前用户对群组的通知级别。
   Future<void> setGroupNotificationLevel(
-    int groupId, {
+    String groupName, {
     required int notificationLevel,
+    int? userId,
   }) async {
+    final encoded = Uri.encodeComponent(groupName);
     try {
       await _dio.post(
-        '/groups/$groupId/notifications.json',
-        data: {'notification_level': notificationLevel},
+        '/groups/$encoded/notifications.json',
+        data: {
+          'notification_level': notificationLevel,
+          if (userId != null) 'user_id': userId,
+        },
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
     } on DioException catch (e) {
