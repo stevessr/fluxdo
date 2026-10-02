@@ -62,11 +62,13 @@ List<String>? _parsePendingTagNames(dynamic value) {
 
   final result = <String>[];
   for (final item in value) {
-    final name = switch (item) {
-      String() => item,
-      Map() => item['name']?.toString(),
-      _ => null,
-    };
+    String? name;
+    if (item is String) {
+      name = item;
+    } else if (item is Map) {
+      name = item['name']?.toString();
+    }
+
     if (name != null && name.isNotEmpty) {
       result.add(name);
     }
@@ -104,7 +106,6 @@ class PendingReplyTargetRegistry {
   /// 撤回成功后清理(重新提交送审会以新 reviewable id 重新记录)
   static void remove(int reviewableId) => _targets.remove(reviewableId);
 }
-
 
 /// 待审新主题标签的会话级补记(reviewableId → tag names)。
 ///
