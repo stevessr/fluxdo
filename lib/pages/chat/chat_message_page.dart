@@ -1590,24 +1590,21 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             );
                           }
 
-                          // 连续相同发送者的消息分组：不重复显示昵称和头像
-                          // 昵称只显示在第一条（最上面），头像只显示在最后一条
-                          // 自己的消息始终显示头像以保持对齐
-                          final bool isFirstInGroup;
-                          final bool isLastInGroup;
-                          if (message.user != null) {
-                            final userId = message.user!.id;
-                            isFirstInGroup =
-                                messageIndex == 0 ||
-                                messages[messageIndex - 1].user?.id != userId;
-                            isLastInGroup =
-                                isOwnMessage ||
-                                messageIndex == messages.length - 1 ||
-                                messages[messageIndex + 1].user?.id != userId;
-                          } else {
-                            isFirstInGroup = false;
-                            isLastInGroup = false;
-                          }
+                          // 连续相同发送者的消息分组：不重复显示昵称和头像。
+                          // 昵称只显示在第一条（最上面），头像只显示在最后一条。
+                          // 日期分隔和已删除消息会终止分组，避免跨分隔线隐藏头像。
+                          final isFirstInGroup =
+                              messageIndex == 0 ||
+                              !_canGroupChatMessages(
+                                messages[messageIndex - 1],
+                                message,
+                              );
+                          final isLastInGroup =
+                              messageIndex == messages.length - 1 ||
+                              !_canGroupChatMessages(
+                                message,
+                                messages[messageIndex + 1],
+                              );
 
                           // 查找关联回复消息：优先用当前窗口内完整消息，
                           // 找不到则回退到服务端嵌套的 in_reply_to 摘要。
@@ -1896,6 +1893,16 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  bool _canGroupChatMessages(ChatMessage earlier, ChatMessage later) {
+    final earlierUserId = earlier.user?.id;
+    final laterUserId = later.user?.id;
+    return !earlier.deleted &&
+        !later.deleted &&
+        earlierUserId != null &&
+        earlierUserId == laterUserId &&
+        _isSameDay(earlier.createdAt, later.createdAt);
   }
 
   Widget _buildDateHeader(ThemeData theme, DateTime date) {
