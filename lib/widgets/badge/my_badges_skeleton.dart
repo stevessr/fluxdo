@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../common/skeleton.dart';
 import '../../../../../l10n/s.dart';
 
@@ -27,7 +28,9 @@ class MyBadgesSkeleton extends StatelessWidget {
                     end: Alignment.bottomRight,
                     colors: [
                       colorScheme.surface,
-                      colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.5,
+                      ),
                     ],
                   ),
                 ),

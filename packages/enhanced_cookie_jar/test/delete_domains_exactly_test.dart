@@ -11,9 +11,7 @@ void main() {
     tempDir = await Directory.systemTemp.createTemp(
       'enhanced_cookie_exact_delete_test_',
     );
-    jar = EnhancedPersistCookieJar(
-      store: FileCookieStore(tempDir.path),
-    );
+    jar = EnhancedPersistCookieJar(store: FileCookieStore(tempDir.path));
   });
 
   tearDown(() async {
@@ -23,14 +21,12 @@ void main() {
   });
 
   test('删除子域不会删除父域 Cookie', () async {
-    await jar.saveFromSetCookieHeaders(
-      Uri.parse('https://linux.do'),
-      ['parent=1; Domain=.linux.do; Path=/'],
-    );
-    await jar.saveFromSetCookieHeaders(
-      Uri.parse('https://credit.linux.do'),
-      ['child=1; Path=/'],
-    );
+    await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+      'parent=1; Domain=.linux.do; Path=/',
+    ]);
+    await jar.saveFromSetCookieHeaders(Uri.parse('https://credit.linux.do'), [
+      'child=1; Path=/',
+    ]);
 
     final removed = await jar.deleteDomainsExactly({'credit.linux.do'});
 
@@ -47,18 +43,15 @@ void main() {
   });
 
   test('批量删除只影响被选中的域名', () async {
-    await jar.saveFromSetCookieHeaders(
-      Uri.parse('https://linux.do'),
-      ['root=1; Path=/'],
-    );
-    await jar.saveFromSetCookieHeaders(
-      Uri.parse('https://credit.linux.do'),
-      ['credit=1; Path=/'],
-    );
-    await jar.saveFromSetCookieHeaders(
-      Uri.parse('https://cdk.linux.do'),
-      ['cdk=1; Path=/'],
-    );
+    await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+      'root=1; Path=/',
+    ]);
+    await jar.saveFromSetCookieHeaders(Uri.parse('https://credit.linux.do'), [
+      'credit=1; Path=/',
+    ]);
+    await jar.saveFromSetCookieHeaders(Uri.parse('https://cdk.linux.do'), [
+      'cdk=1; Path=/',
+    ]);
 
     final removed = await jar.deleteDomainsExactly({
       '.linux.do',

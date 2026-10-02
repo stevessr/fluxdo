@@ -19,9 +19,9 @@ void main() {
         },
       ]);
 
-      final normalized =
-          jsonDecode(MultiAccountRegistryNormalizer.normalize(raw))
-              as List<dynamic>;
+      final normalized = jsonDecode(
+        MultiAccountRegistryNormalizer.normalize(raw),
+      ) as List<dynamic>;
 
       expect(normalized, hasLength(1));
       expect(normalized.single['username'], 'stevessr');
@@ -34,9 +34,9 @@ void main() {
         {'username': '  stevessr  ', 'saved_at': '2026-09-11T10:00:00.000Z'},
       ]);
 
-      final normalized =
-          jsonDecode(MultiAccountRegistryNormalizer.normalize(raw))
-              as List<dynamic>;
+      final normalized = jsonDecode(
+        MultiAccountRegistryNormalizer.normalize(raw),
+      ) as List<dynamic>;
 
       expect(normalized, hasLength(1));
       expect(normalized.single['username'], 'stevessr');

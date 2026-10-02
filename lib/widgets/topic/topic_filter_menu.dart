@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:common_ui/common_ui.dart';
+
 import '../../pages/bookmarks_page.dart';
 import '../../providers/topic_list/filter_provider.dart';
 import '../../providers/topic_list/sort_provider.dart';
@@ -142,9 +143,8 @@ class _TopicFilterMenuButtonState extends ConsumerState<TopicFilterMenuButton> {
         } else if (value == _selectTagsValue) {
           widget.onSelectTags?.call();
         } else if (value == _bookmarksValue) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const BookmarksPage()),
-          );
+          Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const BookmarksPage()));
         }
       },
       offset: const Offset(0, 36),

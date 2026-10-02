@@ -75,22 +75,17 @@ void main() {
     await tester.pump();
   }
 
-  Rect heroRect(WidgetTester tester) =>
-      tester.getRect(find.byType(Hero).first);
+  Rect heroRect(WidgetTester tester) => tester.getRect(find.byType(Hero).first);
 
-  testWidgets('正方形图:Hero 盒子 = 画面(300x300 居中),而非整条槽位', (
-    tester,
-  ) async {
+  testWidgets('正方形图:Hero 盒子 = 画面(300x300 居中),而非整条槽位', (tester) async {
     // 与真机同参:500x500 的图 / 768 宽槽位 / 300 高
     await pumpCarousel(tester, imgW: 500, imgH: 500);
 
     final r = heroRect(tester);
-    expect(r.width, closeTo(300, 0.5),
-        reason: 'Hero 盒子宽仍是槽位宽 ⇒ 尾帧会铺满槽位');
+    expect(r.width, closeTo(300, 0.5), reason: 'Hero 盒子宽仍是槽位宽 ⇒ 尾帧会铺满槽位');
     expect(r.height, closeTo(300, 0.5));
     // 居中于 768 宽的槽位:左右各留 (768-300)/2 = 234
-    expect(r.width, lessThan(768 - 400),
-        reason: '与槽位几乎同宽 = 结构没生效');
+    expect(r.width, lessThan(768 - 400), reason: '与槽位几乎同宽 = 结构没生效');
   });
 
   testWidgets('宽图:Hero 盒子按比例收拢(高度撑满槽位)', (tester) async {
@@ -113,8 +108,7 @@ void main() {
     // 无宽高则无从得知比例,只能保持旧行为 —— 但不该崩
     await pumpCarousel(tester, imgW: null, imgH: null);
     final r = heroRect(tester);
-    expect(r.width, closeTo(768, 1.0),
-        reason: '退化分支应铺满槽位(旧结构),而不是收成 0 或异常尺寸');
+    expect(r.width, closeTo(768, 1.0), reason: '退化分支应铺满槽位(旧结构),而不是收成 0 或异常尺寸');
     expect(r.height, closeTo(300, 0.5));
   });
 
@@ -127,8 +121,9 @@ void main() {
 
     testWidgets('未放大:走框架默认几何(结构已保证两端对齐)', (tester) async {
       await pumpCarousel(tester, imgW: 500, imgH: 500);
-      final make =
-          tester.widget<Hero>(find.byType(Hero).first).createRectTween!;
+      final make = tester
+          .widget<Hero>(find.byType(Hero).first)
+          .createRectTween!;
       const viewerBox = Rect.fromLTWH(0, 0, 1212, 758);
       const heroBox = Rect.fromLTWH(675, 357, 225, 300);
       final tween = make(viewerBox, heroBox);
@@ -138,8 +133,9 @@ void main() {
 
     testWidgets('放大态:起点换成查看器发布的实际可见矩形', (tester) async {
       await pumpCarousel(tester, imgW: 500, imgH: 500);
-      final make =
-          tester.widget<Hero>(find.byType(Hero).first).createRectTween!;
+      final make = tester
+          .widget<Hero>(find.byType(Hero).first)
+          .createRectTween!;
 
       // 3x 放大且平移过:矩形远大于屏幕、原点为负
       const zoomed = Rect.fromLTRB(-400, -600, 1600, 2000);
@@ -148,18 +144,15 @@ void main() {
       const viewerBox = Rect.fromLTWH(0, 0, 1212, 758);
       const heroBox = Rect.fromLTWH(675, 357, 225, 300);
       final tween = make(viewerBox, heroBox);
-      expect(
-        tween.begin,
-        zoomed,
-        reason: '放大态起点仍是布局盒子 ⇒ 大图瞬间变小再播动画(真机报的症状)',
-      );
+      expect(tween.begin, zoomed, reason: '放大态起点仍是布局盒子 ⇒ 大图瞬间变小再播动画(真机报的症状)');
       expect(tween.end, heroBox);
     });
 
     testWidgets('放大态飞行全程:尺寸从放大矩形单调收到画面', (tester) async {
       await pumpCarousel(tester, imgW: 500, imgH: 500);
-      final make =
-          tester.widget<Hero>(find.byType(Hero).first).createRectTween!;
+      final make = tester
+          .widget<Hero>(find.byType(Hero).first)
+          .createRectTween!;
       const zoomed = Rect.fromLTRB(-400, -600, 1600, 2000);
       HeroVisibilityController.instance.setExitFlightRect(zoomed);
 
@@ -171,12 +164,18 @@ void main() {
       expect(prev, closeTo(2000, 1), reason: '起点应是放大后的宽度');
       for (var i = 1; i <= 10; i++) {
         final w = tween.transform(i / 10)!.width;
-        expect(w, lessThanOrEqualTo(prev + 0.01),
-            reason: 't=${i / 10} 处宽度回升,飞行不单调');
+        expect(
+          w,
+          lessThanOrEqualTo(prev + 0.01),
+          reason: 't=${i / 10} 处宽度回升,飞行不单调',
+        );
         prev = w;
       }
-      expect(tween.transform(1.0)!.width, closeTo(225, 1),
-          reason: '终点必须落到画面宽度');
+      expect(
+        tween.transform(1.0)!.width,
+        closeTo(225, 1),
+        reason: '终点必须落到画面宽度',
+      );
     });
   });
 

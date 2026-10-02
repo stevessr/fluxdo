@@ -31,8 +31,7 @@ class PromptPresetEditPage extends ConsumerStatefulWidget {
       _PromptPresetEditPageState();
 }
 
-class _PromptPresetEditPageState
-    extends ConsumerState<PromptPresetEditPage> {
+class _PromptPresetEditPageState extends ConsumerState<PromptPresetEditPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _templateController;
@@ -71,14 +70,13 @@ class _PromptPresetEditPageState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing
-            ? AiL10n.current.quickPromptsEditTitle
-            : AiL10n.current.quickPromptsCreateTitle),
+        title: Text(
+          _isEditing
+              ? AiL10n.current.quickPromptsEditTitle
+              : AiL10n.current.quickPromptsCreateTitle,
+        ),
         actions: [
-          TextButton(
-            onPressed: _save,
-            child: Text(AiL10n.current.save),
-          ),
+          TextButton(onPressed: _save, child: Text(AiL10n.current.save)),
         ],
       ),
       body: Form(
@@ -172,8 +170,7 @@ class _PromptPresetEditPageState
               ),
               validator: (v) {
                 if ((v ?? '').trim().isEmpty) {
-                  return AiL10n
-                      .current.quickPromptsValidateTemplateRequired;
+                  return AiL10n.current.quickPromptsValidateTemplateRequired;
                 }
                 return null;
               },

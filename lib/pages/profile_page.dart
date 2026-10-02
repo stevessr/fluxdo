@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/user.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/selected_topic_provider.dart';
@@ -21,14 +23,18 @@ import 'my_topics_page.dart';
 import 'my_badges_page.dart';
 import 'user_profile_page.dart';
 import 'trust_level_requirements_page.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../widgets/common/loading_dialog.dart';
 import '../widgets/common/notification_icon_button.dart';
 import '../widgets/common/flair_badge.dart';
 import '../widgets/common/smart_avatar.dart';
 import '../providers/app_state_refresher.dart';
 import 'metaverse_page.dart';
+
 import 'package:ai_model_manager/ai_model_manager.dart';
+
 import 'topic_detail_page/topic_detail_page.dart';
 import 'drafts_page.dart';
 import 'pending_posts_page.dart';
@@ -222,9 +228,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     // Navigator.of、containerOf)都会抛错;曾因此把 refreshAll 整段掐死,
     // 表现为扫码登录成功后 UI 无登录态、要重启才恢复。
     final container = ProviderScope.containerOf(context, listen: false);
-    final result = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const LoginPage()));
+    final result = await Navigator.of(context)
+        .push<bool>(MaterialPageRoute(builder: (_) => const LoginPage()));
     if (result != true) return;
 
     // 等一帧让路由弹出与重挂载稳定;deactivate 未复活的元素此刻已 unmount,
@@ -1183,9 +1188,9 @@ class _ProfileHeader extends ConsumerWidget {
                   ),
                   child: CircleAvatar(
                     radius: 16,
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     child: Icon(
                       Symbols.qr_code_rounded,
                       size: 16,
@@ -1197,9 +1202,9 @@ class _ProfileHeader extends ConsumerWidget {
               const SizedBox(width: 8),
               CircleAvatar(
                 radius: 16,
-                backgroundColor: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest,
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest,
                 child: Icon(
                   Symbols.arrow_forward_ios_rounded,
                   size: 14,

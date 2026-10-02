@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:jovial_svg/jovial_svg.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
@@ -22,7 +23,9 @@ import '../../../services/toast_service.dart';
 import '../../../widgets/ai/ai_model_select_sheet.dart';
 import '../../../widgets/ai/ai_quick_prompts_bar.dart';
 import '../../../widgets/share/ai_share_image_preview.dart';
+
 import 'package:common_ui/common_ui.dart';
+
 import 'ai_chat_input.dart';
 import 'ai_chat_message_item.dart';
 import 'ai_context_selector.dart';
@@ -374,9 +377,8 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
       ),
     );
     if (result == true && mounted) {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const AiProvidersPage()));
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const AiProvidersPage()));
     }
   }
 
@@ -792,9 +794,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
       children: [
         // 上下文加载提示
         if (_isLoadingContext)
-          M3eLinearProgress(
-            color: theme.colorScheme.primary,
-          ),
+          M3eLinearProgress(color: theme.colorScheme.primary),
 
         // 聊天主要内容区
         Expanded(
@@ -1239,7 +1239,9 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
           final isCurrent = session.id == widget.currentSessionId;
 
           return ListTile(
-            leading: Icon(Symbols.chat_bubble_rounded, fill: isCurrent ? 1 : 0,
+            leading: Icon(
+              Symbols.chat_bubble_rounded,
+              fill: isCurrent ? 1 : 0,
               size: 20,
               color: isCurrent
                   ? theme.colorScheme.primary

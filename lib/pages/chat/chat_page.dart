@@ -118,14 +118,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
     try {
       await ref.read(markAllChatChannelsReadProvider.future);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已将所有聊天频道标为已读')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已将所有聊天频道标为已读')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('操作失败: $e')));
     }
   }
 
@@ -243,7 +241,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     },
                   ),
                 ),
-                if (forumChatEnabled && (currentUser?.canDirectMessage ?? true)) ...[
+                if (forumChatEnabled &&
+                    (currentUser?.canDirectMessage ?? true)) ...[
                   const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Symbols.add_comment_rounded),
@@ -252,8 +251,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     onPressed: _openNewDmDialog,
                     style: IconButton.styleFrom(
                       backgroundColor: theme.colorScheme.secondaryContainer,
-                      foregroundColor:
-                          theme.colorScheme.onSecondaryContainer,
+                      foregroundColor: theme.colorScheme.onSecondaryContainer,
                     ),
                   ),
                 ],
@@ -711,9 +709,8 @@ class ChatChannelTile extends ConsumerWidget {
       ).showSnackBar(SnackBar(content: Text(l10n.chat_leave_success(title))));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.chat_leave_failed('$e'))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.chat_leave_failed('$e'))));
     }
   }
 
@@ -809,11 +806,7 @@ class ChatChannelTile extends ConsumerWidget {
           ),
           if (isFavorite) ...[
             const SizedBox(width: 6),
-            Icon(
-              Symbols.star_rounded,
-              size: 16,
-              color: Colors.amber.shade700,
-            ),
+            Icon(Symbols.star_rounded, size: 16, color: Colors.amber.shade700),
           ],
         ],
       ),
@@ -1023,9 +1016,8 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   Future<void> _create() async {
     if (_isCreating || _selected.isEmpty) return;
     if (!_canCreateDm) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.l10n.chat_dm_disabled)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(context.l10n.chat_dm_disabled)));
       return;
     }
     setState(() => _isCreating = true);
@@ -1363,8 +1355,8 @@ class _ChatThreadTabView extends ConsumerWidget {
               final time = lastAt != null
                   ? TimeUtils.formatRelativeTime(lastAt)
                   : (om?.createdAt != null
-                      ? TimeUtils.formatRelativeTime(om!.createdAt!)
-                      : null);
+                        ? TimeUtils.formatRelativeTime(om!.createdAt!)
+                        : null);
 
               return ListTile(
                 leading: SmartAvatar(

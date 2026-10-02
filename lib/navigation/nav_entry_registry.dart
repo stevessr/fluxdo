@@ -111,9 +111,8 @@ class NavEntryRegistry {
         iconData: Symbols.calendar_today_rounded,
         selectedIconData: Symbols.calendar_today_rounded,
         label: (ctx) => _communityEventLabel(ctx, CommunityEventsView.upcoming),
-        pageBuilder: (ctx, isActive) => const CommunityEventsPage(
-          view: CommunityEventsView.upcoming,
-        ),
+        pageBuilder: (ctx, isActive) =>
+            const CommunityEventsPage(view: CommunityEventsView.upcoming),
         defaultInBottomNav: false,
         requiresLogin: true,
       ),
@@ -124,9 +123,8 @@ class NavEntryRegistry {
         selectedIconData: Symbols.celebration_rounded,
         label: (ctx) =>
             _communityEventLabel(ctx, CommunityEventsView.anniversaries),
-        pageBuilder: (ctx, isActive) => const CommunityEventsPage(
-          view: CommunityEventsView.anniversaries,
-        ),
+        pageBuilder: (ctx, isActive) =>
+            const CommunityEventsPage(view: CommunityEventsView.anniversaries),
         defaultInBottomNav: false,
         requiresLogin: true,
       ),
@@ -135,10 +133,10 @@ class NavEntryRegistry {
         kind: NavEntryKind.page,
         iconData: Symbols.cake_rounded,
         selectedIconData: Symbols.cake_rounded,
-        label: (ctx) => _communityEventLabel(ctx, CommunityEventsView.birthdays),
-        pageBuilder: (ctx, isActive) => const CommunityEventsPage(
-          view: CommunityEventsView.birthdays,
-        ),
+        label: (ctx) =>
+            _communityEventLabel(ctx, CommunityEventsView.birthdays),
+        pageBuilder: (ctx, isActive) =>
+            const CommunityEventsPage(view: CommunityEventsView.birthdays),
         defaultInBottomNav: false,
         requiresLogin: true,
       ),

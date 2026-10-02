@@ -9,7 +9,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/l10n/s.dart';
-import 'package:fluxdo/providers/theme_provider.dart' show sharedPreferencesProvider;
+import 'package:fluxdo/providers/theme_provider.dart'
+    show sharedPreferencesProvider;
 import 'package:fluxdo/widgets/crypto/crypto_algorithm_field.dart';
 import 'package:fluxdo/providers/secret_store_provider.dart';
 import 'package:fluxdo/services/crypto/crypto_toolbox.dart';
@@ -19,8 +20,7 @@ import 'package:fluxdo/widgets/crypto/crypto_decrypt_sheet.dart';
 import 'package:fluxdo/widgets/crypto/crypto_encrypt_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Widget _wrap(Widget child,
-    {Size size = const Size(390, 844), String? title}) {
+Widget _wrap(Widget child, {Size size = const Size(390, 844), String? title}) {
   return TranslationProvider(
     child: MaterialApp(
       locale: const Locale('zh'),
@@ -72,11 +72,15 @@ void main() {
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
 
-        await tester.pumpWidget(await _withProviders(_wrap(
-          const CryptoDecryptSheet(initialCiphertext: _longCipher),
-          size: size,
-          title: '解密内容',
-        )));
+        await tester.pumpWidget(
+          await _withProviders(
+            _wrap(
+              const CryptoDecryptSheet(initialCiphertext: _longCipher),
+              size: size,
+              title: '解密内容',
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
@@ -91,24 +95,36 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(await _withProviders(_wrap(
-          const CryptoDecryptSheet(initialCiphertext: _longCipher))));
+      await tester.pumpWidget(
+        await _withProviders(
+          _wrap(const CryptoDecryptSheet(initialCiphertext: _longCipher)),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.byKey(const ValueKey('crypto-decrypt-password-input')),
-          findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('crypto-decrypt-password-input')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('编码算法（无密钥区）', (tester) async {
-      await tester.pumpWidget(await _withProviders(_wrap(
-          const CryptoDecryptSheet(initialCiphertext: 'SGVsbG8gRmx1eGRvIQ=='))));
+      await tester.pumpWidget(
+        await _withProviders(
+          _wrap(
+            const CryptoDecryptSheet(initialCiphertext: 'SGVsbG8gRmx1eGRvIQ=='),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
       // base64 无需密码 → 密码框不出现
-      expect(find.byKey(const ValueKey('crypto-decrypt-password-input')),
-          findsNothing);
+      expect(
+        find.byKey(const ValueKey('crypto-decrypt-password-input')),
+        findsNothing,
+      );
     });
   });
 
@@ -118,22 +134,32 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(await _withProviders(_wrap(
-        const CryptoEncryptSheet(initialPlaintext: '测试明文'),
-        size: const Size(1100, 800),
-        title: '加密内容',
-      )));
+      await tester.pumpWidget(
+        await _withProviders(
+          _wrap(
+            const CryptoEncryptSheet(initialPlaintext: '测试明文'),
+            size: const Size(1100, 800),
+            title: '加密内容',
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
       expect(find.text('加密内容'), findsOneWidget);
       // 按钮存在
-      expect(find.byKey(const ValueKey('crypto-encrypt-action')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('crypto-encrypt-action')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('手机端全宽布局正常', (tester) async {
-      await tester.pumpWidget(await _withProviders(_wrap(
-          const CryptoEncryptSheet(initialPlaintext: '测试明文'))));
+      await tester.pumpWidget(
+        await _withProviders(
+          _wrap(const CryptoEncryptSheet(initialPlaintext: '测试明文')),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -146,25 +172,40 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(await _withProviders(_wrap(
-        const CryptoAlgorithmPickerSheet(
-            currentAlgorithmId: CryptoToolbox.defaultAlgorithmId),
-      )));
+      await tester.pumpWidget(
+        await _withProviders(
+          _wrap(
+            const CryptoAlgorithmPickerSheet(
+              currentAlgorithmId: CryptoToolbox.defaultAlgorithmId,
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.byKey(const ValueKey('crypto-picker-search')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('crypto-picker-search')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('搜索过滤出目标算法', (tester) async {
-      await tester.pumpWidget(await _withProviders(_wrap(
-        const CryptoAlgorithmPickerSheet(
-            currentAlgorithmId: CryptoToolbox.defaultAlgorithmId),
-      )));
+      await tester.pumpWidget(
+        await _withProviders(
+          _wrap(
+            const CryptoAlgorithmPickerSheet(
+              currentAlgorithmId: CryptoToolbox.defaultAlgorithmId,
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.enterText(
-          find.byKey(const ValueKey('crypto-picker-search')), 'gcm');
+        find.byKey(const ValueKey('crypto-picker-search')),
+        'gcm',
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('AES-256-GCM'), findsOneWidget);
@@ -177,18 +218,27 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(await _withProviders(_wrap(
-        const CryptoAlgorithmPickerSheet(
-            currentAlgorithmId: CryptoToolbox.defaultAlgorithmId),
-      )));
+      await tester.pumpWidget(
+        await _withProviders(
+          _wrap(
+            const CryptoAlgorithmPickerSheet(
+              currentAlgorithmId: CryptoToolbox.defaultAlgorithmId,
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('crypto-picker-toggle-layout')));
+      await tester.tap(
+        find.byKey(const ValueKey('crypto-picker-toggle-layout')),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.byKey(const ValueKey('crypto-grid-aes-256-cbc')),
-          findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('crypto-grid-aes-256-cbc')),
+        findsOneWidget,
+      );
     });
   });
 }

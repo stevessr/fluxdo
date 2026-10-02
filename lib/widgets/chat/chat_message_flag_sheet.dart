@@ -47,17 +47,19 @@ class _ChatMessageFlagSheetState extends State<ChatMessageFlagSheet> {
     final types = await preloaded.getPostActionTypes();
     if (!mounted) return;
     setState(() {
-      final parsed = (types ?? const [])
-          .map((t) => FlagType.fromJson(Map<String, dynamic>.from(t as Map)))
-          .where((f) => f.isFlag && f.enabled && f.appliesToChatMessage)
-          .toList()
-        ..sort((a, b) => a.position.compareTo(b.position));
+      final parsed =
+          (types ?? const [])
+              .map(
+                (t) => FlagType.fromJson(Map<String, dynamic>.from(t as Map)),
+              )
+              .where((f) => f.isFlag && f.enabled && f.appliesToChatMessage)
+              .toList()
+            ..sort((a, b) => a.position.compareTo(b.position));
       // 若消息自带 available_flags，再按 nameKey 过滤
       if (widget.availableFlagKeys != null &&
           widget.availableFlagKeys!.isNotEmpty) {
         final keys = widget.availableFlagKeys!.toSet();
-        _flagTypes =
-            parsed.where((f) => keys.contains(f.nameKey)).toList();
+        _flagTypes = parsed.where((f) => keys.contains(f.nameKey)).toList();
         if (_flagTypes.isEmpty) {
           // 服务端给了符号但预加载类型匹配不上时，回退全部 chat 适用类型
           _flagTypes = parsed;
@@ -72,9 +74,8 @@ class _ChatMessageFlagSheetState extends State<ChatMessageFlagSheet> {
   Future<void> _submit() async {
     if (_selected == null || _submitting) return;
     if (_selected!.requireMessage && _messageController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请填写举报说明')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请填写举报说明')));
       return;
     }
     setState(() => _submitting = true);
@@ -89,15 +90,13 @@ class _ChatMessageFlagSheetState extends State<ChatMessageFlagSheet> {
       );
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已提交举报')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已提交举报')));
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('举报失败: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('举报失败: $e')));
     }
   }
 
@@ -150,7 +149,8 @@ class _ChatMessageFlagSheetState extends State<ChatMessageFlagSheet> {
                           ? null
                           : (v) => setState(() => _selected = v),
                       title: Text(type.name),
-                      subtitle: type.shortDescription != null ||
+                      subtitle:
+                          type.shortDescription != null ||
                               type.description.isNotEmpty
                           ? Text(
                               (type.shortDescription ?? type.description)
@@ -184,7 +184,9 @@ class _ChatMessageFlagSheetState extends State<ChatMessageFlagSheet> {
                 child: SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: _selected == null || _submitting ? null : _submit,
+                    onPressed: _selected == null || _submitting
+                        ? null
+                        : _submit,
                     child: const Text('提交'),
                   ),
                 ),

@@ -48,10 +48,7 @@ class PluginRegistry {
 
   /// 依次让插件改写最小正文字数（后一个插件看到前一个的结果，
   /// 对齐 Discourse value transformer 的链式语义）
-  static int resolveMinPostLength(
-    int value,
-    ComposerMinLengthContext context,
-  ) {
+  static int resolveMinPostLength(int value, ComposerMinLengthContext context) {
     var result = value;
     for (final plugin in plugins) {
       result = plugin.composerMinPostLength(result, context);

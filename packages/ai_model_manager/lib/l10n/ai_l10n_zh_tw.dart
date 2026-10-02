@@ -80,8 +80,7 @@ class AiL10nZhTW extends AiL10n {
   @override
   String get quickPromptsResetBuiltIns => '恢復內建預設';
   @override
-  String get quickPromptsResetBuiltInsConfirm =>
-      '確定要恢復所有內建快捷詞的預設配置嗎？（不影響自訂）';
+  String get quickPromptsResetBuiltInsConfirm => '確定要恢復所有內建快捷詞的預設配置嗎？（不影響自訂）';
   @override
   String get quickPromptsHide => '隱藏';
   @override
@@ -139,8 +138,7 @@ class AiL10nZhTW extends AiL10n {
   @override
   String get deleteSelectedProviders => '刪除選取';
   @override
-  String confirmDeleteSelectedProviders(int count) =>
-      '確定要刪除選取的 $count 個供應商嗎？';
+  String confirmDeleteSelectedProviders(int count) => '確定要刪除選取的 $count 個供應商嗎？';
   @override
   String modelCount(int enabled, int total) => '$enabled/$total 個模型';
   @override
@@ -302,8 +300,7 @@ class AiL10nZhTW extends AiL10n {
   @override
   String get deleteTopicSessions => '刪除話題會話';
   @override
-  String confirmDeleteTopicSessions(String title) =>
-      '確定要刪除「$title」的所有會話紀錄嗎？';
+  String confirmDeleteTopicSessions(String title) => '確定要刪除「$title」的所有會話紀錄嗎？';
   @override
   String get justNow => '剛剛';
   @override
@@ -453,13 +450,11 @@ class AiL10nZhTW extends AiL10n {
 
   // ---- System Prompts ----
   @override
-  String get systemPromptIntro =>
-      '你是一個有幫助的 AI 助手，正在幫助使用者理解和討論一個論壇話題。';
+  String get systemPromptIntro => '你是一個有幫助的 AI 助手，正在幫助使用者理解和討論一個論壇話題。';
   @override
   String systemPromptTopicTitle(String title) => '話題標題：$title';
   @override
-  String get systemPromptContextHint =>
-      '使用者可能會就話題內容向你提問，請基於提供的上下文回答。';
+  String get systemPromptContextHint => '使用者可能會就話題內容向你提問，請基於提供的上下文回答。';
   @override
   String get systemPromptMarkdown => '請用 Markdown 格式回覆。';
   @override

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../models/topic.dart';
 import '../../l10n/s.dart';
 import '../../pages/notion_settings_page.dart';
@@ -383,7 +384,8 @@ class _ExportSheetState extends ConsumerState<ExportSheet> {
               // iOS 没有「公共目录」这一说:沙盒外无处可写,Documents 里躺着
               // 数据库/cookie/日志(不能靠 UIFileSharingEnabled 整目录暴露),
               // 所以那边只给「另存为」,由用户导出到「文件」App。
-              if (PlatformUtils.isDesktop || PublicFileChannel.hasPublicDownloads)
+              if (PlatformUtils.isDesktop ||
+                  PublicFileChannel.hasPublicDownloads)
                 _deliveryTile(
                   theme,
                   action: _ExportAction.save,

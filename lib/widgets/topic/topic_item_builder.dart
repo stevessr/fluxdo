@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../../models/category.dart';
 import '../../models/topic.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../providers/discourse_providers.dart';
 import '../../services/topic_preview_preloader.dart';
 import '../../utils/responsive.dart';

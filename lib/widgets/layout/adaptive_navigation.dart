@@ -35,7 +35,10 @@ class AdaptiveDestination {
   final VoidCallback? onLongPress;
 }
 
-void _recordAccountQuickSwitcherAnchor(BuildContext context, [Offset? fallback]) {
+void _recordAccountQuickSwitcherAnchor(
+  BuildContext context, [
+  Offset? fallback,
+]) {
   AccountQuickSwitcherTriggerState.clear();
   final renderObject = context.findRenderObject();
   if (renderObject is RenderBox && renderObject.hasSize) {
@@ -443,6 +446,7 @@ class _AdaptiveBottomNavigationState
             ),
           );
         }
+
         return NavigationDestination(
           icon: maybeLongPress(d.icon),
           selectedIcon: maybeLongPress(
@@ -555,9 +559,8 @@ abstract final class _CapsuleMetrics {
   /// 行高补偿。缩放 ≤1 时恒为基准值，不影响默认观感。
   static double itemHeight(BuildContext context, {required bool labelless}) {
     if (labelless) return itemHeightLabelless;
-    final scaled = MediaQuery.textScalerOf(
-      context,
-    ).scale(labelSize * labelHeight);
+    final scaled = MediaQuery.textScalerOf(context)
+        .scale(labelSize * labelHeight);
     final natural = iconTop + iconSize + iconGap + scaled + labelBottom;
     return math.max(itemHeightLabeled, natural);
   }

@@ -60,10 +60,13 @@ class VigenereAlgorithm extends CryptoAlgorithm {
   String decrypt(String ciphertext, CryptoParams params) =>
       _process(ciphertext, params, decrypt: true);
 
-  static String _process(String input, CryptoParams params,
-      {required bool decrypt}) {
-    final keyRaw = params.vigenereKey?.replaceAll(RegExp(r'[^A-Za-z]'), '') ??
-        '';
+  static String _process(
+    String input,
+    CryptoParams params, {
+    required bool decrypt,
+  }) {
+    final keyRaw =
+        params.vigenereKey?.replaceAll(RegExp(r'[^A-Za-z]'), '') ?? '';
     if (keyRaw.isEmpty) {
       throw const CryptoException('维吉尼亚密码需要字母密钥');
     }
@@ -74,12 +77,14 @@ class VigenereAlgorithm extends CryptoAlgorithm {
       if (code >= 65 && code <= 90) {
         final shift = key[keyIndex % key.length] - 65;
         sb.writeCharCode(
-            65 + (code - 65 + (decrypt ? 26 - shift : shift)) % 26);
+          65 + (code - 65 + (decrypt ? 26 - shift : shift)) % 26,
+        );
         keyIndex++;
       } else if (code >= 97 && code <= 122) {
         final shift = key[keyIndex % key.length] - 65;
         sb.writeCharCode(
-            97 + (code - 97 + (decrypt ? 26 - shift : shift)) % 26);
+          97 + (code - 97 + (decrypt ? 26 - shift : shift)) % 26,
+        );
         keyIndex++;
       } else {
         sb.writeCharCode(code);
@@ -185,16 +190,57 @@ class MorseAlgorithm extends CryptoAlgorithm {
   CryptoAlgorithmCategory get category => CryptoAlgorithmCategory.classic;
 
   static const Map<String, String> _toMorse = {
-    'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.',
-    'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..',
-    'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.',
-    'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-',
-    'Y': '-.--', 'Z': '--..',
-    '0': '-----', '1': '.----', '2': '..---', '3': '...--', '4': '....-',
-    '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.',
-    '.': '.-.-.-', ',': '--..--', '?': '..--..', '!': '-.-.--', "'": '.----.',
-    '"': '.-..-.', '/': '-..-.', '(': '-.--.', ')': '-.--.-', '&': '.-...',
-    ':': '---...', ';': '-.-.-.', '=': '-...-', '+': '.-.-.', '-': '-....-',
+    'A': '.-',
+    'B': '-...',
+    'C': '-.-.',
+    'D': '-..',
+    'E': '.',
+    'F': '..-.',
+    'G': '--.',
+    'H': '....',
+    'I': '..',
+    'J': '.---',
+    'K': '-.-',
+    'L': '.-..',
+    'M': '--',
+    'N': '-.',
+    'O': '---',
+    'P': '.--.',
+    'Q': '--.-',
+    'R': '.-.',
+    'S': '...',
+    'T': '-',
+    'U': '..-',
+    'V': '...-',
+    'W': '.--',
+    'X': '-..-',
+    'Y': '-.--',
+    'Z': '--..',
+    '0': '-----',
+    '1': '.----',
+    '2': '..---',
+    '3': '...--',
+    '4': '....-',
+    '5': '.....',
+    '6': '-....',
+    '7': '--...',
+    '8': '---..',
+    '9': '----.',
+    '.': '.-.-.-',
+    ',': '--..--',
+    '?': '..--..',
+    '!': '-.-.--',
+    "'": '.----.',
+    '"': '.-..-.',
+    '/': '-..-.',
+    '(': '-.--.',
+    ')': '-.--.-',
+    '&': '.-...',
+    ':': '---...',
+    ';': '-.-.-.',
+    '=': '-...-',
+    '+': '.-.-.',
+    '-': '-....-',
     '@': '.--.-.',
   };
 

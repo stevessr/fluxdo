@@ -3,10 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/network/adapters/rhttp_adapter.dart';
 
 void main() {
-  RequestOptions options(
-    String scheme, {
-    String method = 'GET',
-  }) {
+  RequestOptions options(String scheme, {String method = 'GET'}) {
     return RequestOptions(
       path: '/latest.json',
       baseUrl: '$scheme://linux.do',
@@ -34,10 +31,7 @@ void main() {
         isFalse,
       );
       expect(
-        requestCanProbeRhttpHttp3(
-          options('https'),
-          hasRequestStream: true,
-        ),
+        requestCanProbeRhttpHttp3(options('https'), hasRequestStream: true),
         isFalse,
       );
     });

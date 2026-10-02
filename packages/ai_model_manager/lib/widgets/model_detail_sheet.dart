@@ -166,8 +166,11 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
     if (!_userEdited) setState(() => _userEdited = true);
   }
 
-  InputDecoration _inputDeco(BuildContext context, String? hint,
-      {Widget? suffix}) {
+  InputDecoration _inputDeco(
+    BuildContext context,
+    String? hint, {
+    Widget? suffix,
+  }) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return InputDecoration(
@@ -217,7 +220,11 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: Icon(Symbols.close_rounded, color: cs.onSurface, size: 22),
+                    icon: Icon(
+                      Symbols.close_rounded,
+                      color: cs.onSurface,
+                      size: 22,
+                    ),
                     onPressed: () => Navigator.of(context).pop(),
                     tooltip: AiL10n.current.cancel,
                   ),
@@ -251,9 +258,7 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                     readOnly: !isNew,
                     autofocus: isNew,
                     style: TextStyle(
-                      color: isNew
-                          ? null
-                          : cs.onSurface.withValues(alpha: 0.6),
+                      color: isNew ? null : cs.onSurface.withValues(alpha: 0.6),
                     ),
                     onChanged: isNew
                         ? (v) {
@@ -272,7 +277,8 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                                 if (text.isEmpty) return;
                                 Clipboard.setData(ClipboardData(text: text));
                                 AiToastDelegate.showSuccess(
-                                    AiL10n.current.modelDetailIdCopied);
+                                  AiL10n.current.modelDetailIdCopied,
+                                );
                               },
                             ),
                     ),
@@ -295,8 +301,7 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                       input: _input,
                       output: _output,
                       abilities: _abilities,
-                      onExpand: () =>
-                          setState(() => _showAdvanced = true),
+                      onExpand: () => setState(() => _showAdvanced = true),
                     ),
                   ],
                   // 能力编辑区
@@ -315,8 +320,7 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                       ],
                       onChanged: (idx) {
                         setState(() {
-                          final mod =
-                              idx == 0 ? Modality.text : Modality.image;
+                          final mod = idx == 0 ? Modality.text : Modality.image;
                           if (_input.contains(mod)) {
                             _input.remove(mod);
                             if (_input.isEmpty) _input.add(Modality.text);
@@ -341,8 +345,7 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                       ],
                       onChanged: (idx) {
                         setState(() {
-                          final mod =
-                              idx == 0 ? Modality.text : Modality.image;
+                          final mod = idx == 0 ? Modality.text : Modality.image;
                           if (_output.contains(mod)) {
                             _output.remove(mod);
                             if (_output.isEmpty) _output.add(Modality.text);
@@ -354,8 +357,7 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                       },
                     ),
                     const SizedBox(height: 12),
-                    _label(
-                        context, AiL10n.current.modelDetailAbilitiesLabel),
+                    _label(context, AiL10n.current.modelDetailAbilitiesLabel),
                     const SizedBox(height: 6),
                     _SegmentedMulti(
                       options: [
@@ -386,9 +388,11 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                       Center(
                         child: TextButton.icon(
                           onPressed: _resetToAuto,
-                          icon: const Icon(Symbols.restart_alt_rounded, size: 18),
-                          label:
-                              Text(AiL10n.current.modelDetailResetAuto),
+                          icon: const Icon(
+                            Symbols.restart_alt_rounded,
+                            size: 18,
+                          ),
+                          label: Text(AiL10n.current.modelDetailResetAuto),
                         ),
                       ),
                     ],
@@ -400,12 +404,19 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
             // 底部确认按钮
             Padding(
               padding: EdgeInsets.fromLTRB(
-                  16, 8, 16, 10 + MediaQuery.of(context).padding.bottom),
+                16,
+                8,
+                16,
+                10 + MediaQuery.of(context).padding.bottom,
+              ),
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: _save,
-                  icon: Icon(isNew ? Symbols.add_rounded : Symbols.check_rounded, size: 20),
+                  icon: Icon(
+                    isNew ? Symbols.add_rounded : Symbols.check_rounded,
+                    size: 20,
+                  ),
                   label: Text(
                     isNew
                         ? AiL10n.current.modelDetailAddTitle
@@ -427,13 +438,12 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
   }
 
   Widget _label(BuildContext context, String text) => Text(
-        text,
-        style: TextStyle(
-          fontSize: 13,
-          color:
-              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
-        ),
-      );
+    text,
+    style: TextStyle(
+      fontSize: 13,
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+    ),
+  );
 }
 
 /// 新建模式的能力预览条：展示自动推断结果 + 展开按钮
@@ -462,18 +472,24 @@ class _CapabilityPreview extends StatelessWidget {
 
     for (final m in input) {
       if (m == Modality.image) {
-        chips.add(_miniChip(
+        chips.add(
+          _miniChip(
             '${AiL10n.current.modelDetailInputLabel}: ${modName(m)}',
             cs.tertiary,
-            isDark));
+            isDark,
+          ),
+        );
       }
     }
     for (final m in output) {
       if (m == Modality.image) {
-        chips.add(_miniChip(
+        chips.add(
+          _miniChip(
             '${AiL10n.current.modelDetailOutputLabel}: ${modName(m)}',
             cs.secondary,
-            isDark));
+            isDark,
+          ),
+        );
       }
     }
     for (final a in abilities) {
@@ -565,9 +581,7 @@ class _SegmentedMulti extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: r,
         color: base,
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.35),
-        ),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
       ),
       child: ClipRRect(
         borderRadius: r,

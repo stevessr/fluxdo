@@ -30,8 +30,9 @@ class PmIncomingState {
   bool get hasIncoming => incomingTopicIds.isNotEmpty;
   int get incomingCount => incomingTopicIds.length;
 
-  PmIncomingState copyWith({Set<int>? incomingTopicIds}) =>
-      PmIncomingState(incomingTopicIds: incomingTopicIds ?? this.incomingTopicIds);
+  PmIncomingState copyWith({Set<int>? incomingTopicIds}) => PmIncomingState(
+    incomingTopicIds: incomingTopicIds ?? this.incomingTopicIds,
+  );
 }
 
 /// 私信追踪 Notifier
@@ -73,10 +74,8 @@ class PmTrackingNotifier extends Notifier<PmIncomingState> {
     debugPrint('[PmTracking] 订阅 ${channels.length} 个私信频道: $channels');
 
     for (final channel in channels) {
-      void onMessage(MessageBusMessage message) => _processMessage(
-            message,
-            currentUserId: currentUser.id,
-          );
+      void onMessage(MessageBusMessage message) =>
+          _processMessage(message, currentUserId: currentUser.id);
       _callbacks[channel] = onMessage;
       messageBus.subscribe(channel, onMessage);
     }
@@ -116,8 +115,7 @@ class PmTrackingNotifier extends Notifier<PmIncomingState> {
   void processMessageForTest(
     MessageBusMessage message, {
     required int currentUserId,
-  }) =>
-      _processMessage(message, currentUserId: currentUserId);
+  }) => _processMessage(message, currentUserId: currentUserId);
 
   void _processMessage(
     MessageBusMessage message, {
@@ -181,5 +179,5 @@ class PmTrackingNotifier extends Notifier<PmIncomingState> {
 
 final pmTrackingProvider =
     NotifierProvider<PmTrackingNotifier, PmIncomingState>(
-  PmTrackingNotifier.new,
-);
+      PmTrackingNotifier.new,
+    );

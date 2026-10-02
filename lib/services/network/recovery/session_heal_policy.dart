@@ -82,8 +82,8 @@ class SessionSelfHealPolicy implements RecoveryPolicy {
 
   @override
   bool canHandle(AttemptOutcome outcome) {
-    final options = outcome.error?.requestOptions ??
-        outcome.response!.requestOptions;
+    final options =
+        outcome.error?.requestOptions ?? outcome.response!.requestOptions;
 
     // 只修主站会话
     if (options.uri.host.toLowerCase() != CookieJarService.appBaseHost) {
@@ -119,13 +119,14 @@ class SessionSelfHealPolicy implements RecoveryPolicy {
 
   @override
   Future<RecoveryDecision> decide(AttemptOutcome outcome) async {
-    final options = outcome.error?.requestOptions ??
-        outcome.response!.requestOptions;
+    final options =
+        outcome.error?.requestOptions ?? outcome.response!.requestOptions;
     final origin = '${options.uri.scheme}://${options.uri.host}';
 
     // jar 中 _t 已失效 → 真登出,自愈没有意义
     final jarToken = await _readSessionToken();
-    final jarValid = jarToken != null &&
+    final jarValid =
+        jarToken != null &&
         jarToken.value.isNotEmpty &&
         (jarToken.expiresAt == null ||
             jarToken.expiresAt!.isAfter(DateTime.now()));

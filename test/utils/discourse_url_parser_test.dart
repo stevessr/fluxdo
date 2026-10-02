@@ -46,10 +46,7 @@ void main() {
       // 相对路径没有 host，不能当精选链接
       expect(DiscourseUrlParser.parseTitleUrl('/t/topic/123'), isNull);
       // javascript: 等危险协议必须拦下
-      expect(
-        DiscourseUrlParser.parseTitleUrl('javascript:alert(1)'),
-        isNull,
-      );
+      expect(DiscourseUrlParser.parseTitleUrl('javascript:alert(1)'), isNull);
     });
 
     test('协议大小写不敏感，且保留原始 URL 形态', () {

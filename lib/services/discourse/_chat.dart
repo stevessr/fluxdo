@@ -63,10 +63,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
       // 对齐 Discourse 官方前端 chat-api: POST /chat/:channelId
       // (plugins/chat/config/routes.rb: post "/:chat_channel_id" => "api/channel_messages#create")
       try {
-        response = await _dio.post(
-          '/chat/$channelId',
-          data: data,
-        );
+        response = await _dio.post('/chat/$channelId', data: data);
       } catch (_) {
         try {
           response = await _dio.post(
@@ -113,9 +110,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
   /// 删除 Chat 消息
   Future<void> deleteChatMessage(int channelId, int messageId) async {
     try {
-      await _dio.delete(
-        '/chat/api/channels/$channelId/messages/$messageId',
-      );
+      await _dio.delete('/chat/api/channels/$channelId/messages/$messageId');
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -154,9 +149,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     String? name,
     List<String>? targetGroups,
   }) async {
-    final data = <String, dynamic>{
-      'target_usernames': targetUsernames,
-    };
+    final data = <String, dynamic>{'target_usernames': targetUsernames};
     final trimmedName = name?.trim();
     if (trimmedName != null && trimmedName.isNotEmpty) {
       data['name'] = trimmedName;
@@ -284,7 +277,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
   ///
   /// 返回 members + totalRows（meta.total_rows，大频道用此显示真实人数）。
   Future<({List<Map<String, dynamic>> members, int? totalRows, bool hasMore})>
-      getChannelMembersPage(
+  getChannelMembersPage(
     int channelId, {
     String? filter,
     String? username,
@@ -361,10 +354,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
         },
         options: Options(
           contentType: Headers.formUrlEncodedContentType,
-          headers: {
-            'X-SILENCE-LOGGER': 'true',
-            'Discourse-Background': 'true',
-          },
+          headers: {'X-SILENCE-LOGGER': 'true', 'Discourse-Background': 'true'},
           extra: {'isSilent': true},
         ),
       );
@@ -382,9 +372,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     try {
       final response = await _dio.get(
         '/presence/get',
-        queryParameters: {
-          'channels[]': chatOnlinePresenceChannel,
-        },
+        queryParameters: {'channels[]': chatOnlinePresenceChannel},
       );
       return Map<String, dynamic>.from(response.data as Map);
     } on DioException catch (e) {
@@ -398,8 +386,11 @@ mixin _ChatMixin on _DiscourseServiceBase {
       final usersMap = <int, Map<String, dynamic>>{};
 
       // 1. 提取顶层 users 数组 (Discourse 标准 API 中包含完整的 user 对象)
-      final rawUsers = mapData['users'] ??
-          (mapData['chat_channel'] is Map ? mapData['chat_channel']['users'] : null) ??
+      final rawUsers =
+          mapData['users'] ??
+          (mapData['chat_channel'] is Map
+              ? mapData['chat_channel']['users']
+              : null) ??
           mapData['target_users'];
       if (rawUsers is List) {
         for (final u in rawUsers) {
@@ -412,12 +403,14 @@ mixin _ChatMixin on _DiscourseServiceBase {
       }
 
       // 2. 提取成员或 membership 列表
-      final rawMembers = mapData['members'] ??
+      final rawMembers =
+          mapData['members'] ??
           mapData['memberships'] ??
           mapData['channel_members'] ??
           mapData['user_chat_channel_memberships'] ??
           (mapData['chat_channel'] is Map
-              ? (mapData['chat_channel']['memberships'] ?? mapData['chat_channel']['members'])
+              ? (mapData['chat_channel']['memberships'] ??
+                    mapData['chat_channel']['members'])
               : null);
 
       final result = <Map<String, dynamic>>[];
@@ -434,9 +427,11 @@ mixin _ChatMixin on _DiscourseServiceBase {
           } else if (item['user_chat_channel_membership'] is Map &&
               item['user_chat_channel_membership']['user'] is Map) {
             userObj = Map<String, dynamic>.from(
-                item['user_chat_channel_membership']['user'] as Map);
+              item['user_chat_channel_membership']['user'] as Map,
+            );
           } else {
-            final userId = (item['user_id'] as num?)?.toInt() ??
+            final userId =
+                (item['user_id'] as num?)?.toInt() ??
                 (item['id'] as num?)?.toInt();
             if (userId != null && usersMap.containsKey(userId)) {
               userObj = usersMap[userId];
@@ -541,10 +536,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     try {
       // 对齐 Discourse 路由: PUT /chat/:chat_channel_id/react/:message_id
       // (plugins/chat/config/routes.rb)。旧路径 /chat/api/channels/.../reactions 不存在。
-      await _dio.put(
-        '/chat/$channelId/react/$messageId',
-        data: data,
-      );
+      await _dio.put('/chat/$channelId/react/$messageId', data: data);
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -608,9 +600,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     int originalMessageId, {
     String? title,
   }) async {
-    final data = <String, dynamic>{
-      'original_message_id': originalMessageId,
-    };
+    final data = <String, dynamic>{'original_message_id': originalMessageId};
     if (title != null && title.isNotEmpty) data['title'] = title;
     try {
       final response = await _dio.post(
@@ -672,9 +662,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
   /// GET /chat/api/channels/:channelId/threads
   Future<Map<String, dynamic>> getChatChannelThreads(int channelId) async {
     try {
-      final response = await _dio.get(
-        '/chat/api/channels/$channelId/threads',
-      );
+      final response = await _dio.get('/chat/api/channels/$channelId/threads');
       return Map<String, dynamic>.from(response.data as Map);
     } on DioException catch (e) {
       _throwApiError(e);
@@ -762,7 +750,8 @@ mixin _ChatMixin on _DiscourseServiceBase {
     bool? muted,
     String? notificationLevel,
   }) async {
-    final hasChannelFields = name != null ||
+    final hasChannelFields =
+        name != null ||
         slug != null ||
         emoji != null ||
         description != null ||
@@ -803,10 +792,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     int offset = 0,
     int limit = 25,
   }) async {
-    final queryParameters = <String, dynamic>{
-      'limit': limit,
-      'offset': offset,
-    };
+    final queryParameters = <String, dynamic>{'limit': limit, 'offset': offset};
     if (status != null && status.isNotEmpty) {
       queryParameters['status'] = status;
     }
@@ -892,10 +878,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
   ///
   /// 对齐 Discourse: POST /chat/:channelId/quote  body: { message_ids: [...] }
   /// 返回 markdown 字符串，可粘贴到话题/私信。
-  Future<String> quoteChatMessages(
-    int channelId,
-    List<int> messageIds,
-  ) async {
+  Future<String> quoteChatMessages(int channelId, List<int> messageIds) async {
     try {
       final response = await _dio.post(
         '/chat/$channelId/quote',
@@ -922,9 +905,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
   /// 置顶 Chat 消息（需站点开启 chat_pinned_messages）
   Future<void> pinChatMessage(int channelId, int messageId) async {
     try {
-      await _dio.post(
-        '/chat/api/channels/$channelId/messages/$messageId/pin',
-      );
+      await _dio.post('/chat/api/channels/$channelId/messages/$messageId/pin');
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -974,10 +955,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     try {
       final data = <String, dynamic>{'user_ids': userIds};
       if (messageId != null) data['message_id'] = messageId;
-      await _dio.post(
-        '/chat/api/channels/$channelId/invites',
-        data: data,
-      );
+      await _dio.post('/chat/api/channels/$channelId/invites', data: data);
     } on DioException catch (e) {
       _throwApiError(e);
     }

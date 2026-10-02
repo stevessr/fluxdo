@@ -13,6 +13,7 @@ import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageProvider;
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart' as acrylic;
+
 import 'pages/topics_page.dart';
 import 'pages/data_management_page.dart';
 import 'providers/discourse_providers.dart';
@@ -27,9 +28,11 @@ import 'services/highlighter_service.dart';
 import 'widgets/common/notification_icon_button.dart';
 import 'widgets/user/account_switcher_sheet.dart';
 import 'widgets/common/fullscreen_swipe_back.dart';
+
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+
 import 'services/network/cookie/csrf_token_service.dart';
 import 'services/network/system_proxy_service.dart';
 import 'services/network/cookie/cookie_devtools_extension.dart';
@@ -42,7 +45,9 @@ import 'services/data_management/cache_size_service.dart';
 import 'services/discourse_cache_manager.dart';
 import 'services/render_backend_service.dart';
 import 'services/toast_service.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import 'l10n/s.dart';
 
 import 'services/network/doh/network_settings_service.dart';
@@ -50,13 +55,16 @@ import 'services/network/proxy/proxy_settings_service.dart';
 import 'services/network/rhttp/rhttp_settings_service.dart';
 import 'services/network/webview/webview_adapter_settings_service.dart';
 import 'services/eruda_settings_service.dart';
+
 import 'package:rhttp/rhttp.dart' as rhttp;
+
 import 'services/network/vpn_auto_toggle_service.dart';
 import 'services/network/doh_proxy/proxy_certificate.dart';
 import 'services/cf_challenge_logger.dart';
 import 'services/browser_trust_coordinator.dart';
 import 'services/update_service.dart';
 import 'services/update_checker_helper.dart';
+
 import 'package:fluxdo_render/fluxdo_render.dart'
     show FlattenCache, ParagraphLayoutCache;
 
@@ -91,13 +99,16 @@ import 'utils/time_utils.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_model_manager/ai_model_manager.dart';
+
 import 'services/app_logger.dart';
 import 'services/network/adapters/platform_adapter.dart';
 import 'providers/preferences_provider.dart';
 import 'providers/theme_provider.dart';
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:video_player_media_kit/video_player_media_kit.dart';
+
 import 'services/audio/just_audio_gst.dart';
 import 'widgets/preheat_gate.dart';
 import 'widgets/onboarding_gate.dart';
@@ -1553,9 +1564,8 @@ class _MainPageState extends ConsumerState<MainPage>
       navigatorKey.currentState?.popUntil((route) => route.isFirst);
     }
     if (mounted && action == _AuthErrorDialogAction.clearData) {
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const DataManagementPage()));
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const DataManagementPage()));
     }
   }
 

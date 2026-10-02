@@ -61,8 +61,7 @@ class DiscourseGroup {
 
   /// 与 Discourse 原版群组成员页一致：自动群组不可手工加人；普通群组只有
   /// group owner 或服务端明确下发 can_admin_group 的当前用户能管理。
-  bool get canManageMembers =>
-      !automatic && (canAdminGroup || isGroupOwner);
+  bool get canManageMembers => !automatic && (canAdminGroup || isGroupOwner);
 
   /// 对齐 Discourse `group-membership-button`：公开准入且当前不是成员时可加入。
   bool get canJoin => publicAdmission && !isGroupUser;
@@ -192,8 +191,9 @@ class GroupMember {
       id: (json['id'] as num?)?.toInt() ?? 0,
       username: json['username']?.toString() ?? '',
       name: json['name']?.toString(),
-      avatarTemplate:
-          rawAvatar == null ? null : UrlHelper.resolveUrlWithCdn(rawAvatar),
+      avatarTemplate: rawAvatar == null
+          ? null
+          : UrlHelper.resolveUrlWithCdn(rawAvatar),
       lastSeenAt: TimeUtils.parseUtcTime(json['last_seen_at']?.toString()),
       primaryGroupName: json['primary_group_name']?.toString(),
     );

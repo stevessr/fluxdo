@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
+
 import '../models/draft.dart';
 import 'connectivity_service.dart';
 import 'discourse/discourse_service.dart';

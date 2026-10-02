@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../constants.dart';
 import 'network/cookie/boundary_sync_service.dart';
 import 'network/cookie/cookie_jar_service.dart';
@@ -326,9 +327,9 @@ class CfChallengeService {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
                   ),
-                  onPressed: () => Navigator.of(
-                    dialogContext,
-                  ).pop(_CompatPromptChoice.disableAutoVerify),
+                  onPressed: () =>
+                      Navigator.of(dialogContext)
+                          .pop(_CompatPromptChoice.disableAutoVerify),
                   child: Text(
                     S.current.cf_sessionCompatDisableAuto,
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -350,9 +351,9 @@ class CfChallengeService {
               ),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(
-                dialogContext,
-              ).pop(_CompatPromptChoice.enableCompat),
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(_CompatPromptChoice.enableCompat),
               child: Text(S.current.cf_sessionCompatEnable),
             ),
           ],
@@ -1792,8 +1793,7 @@ document.readyState === 'complete' && document.body && document.body.innerHTML.t
 
         try {
           final html = await controller.evaluateJavascript(
-            source:
-                'document.documentElement ? document.documentElement.innerHTML : ""',
+            source: 'document.documentElement ? document.documentElement.innerHTML : ""',
           );
           if (_hasPopped || !mounted || _finishingFromVerifyResponse) return;
           if (watcherGeneration != _revealStateWatchGeneration) return;
@@ -2003,8 +2003,7 @@ document.readyState === 'complete' && document.body && document.body.innerHTML.t
     if (generation != _loadGeneration) return;
     try {
       final html = await controller.evaluateJavascript(
-        source:
-            'document.documentElement ? document.documentElement.innerHTML : ""',
+        source: 'document.documentElement ? document.documentElement.innerHTML : ""',
       );
       if (_hasPopped ||
           !mounted ||

@@ -5,6 +5,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+
 import '../../../../../l10n/s.dart';
 
 /// Windows/Linux 不支持 flutter_image_compress，回退到 image 包
@@ -121,10 +122,7 @@ class StaticImageCompressionStrategy extends ImageCompressionStrategy {
     // 路径把 alpha 扁平化。PNG 扩展名同时保证上传 MIME 与实际内容一致。
     final transparentPng = await _compressTransparentToPng(sourcePath);
     if (transparentPng != null) {
-      final targetPath = p.join(
-        tempDir.path,
-        'compressed_$timestamp.png',
-      );
+      final targetPath = p.join(tempDir.path, 'compressed_$timestamp.png');
       await File(targetPath).writeAsBytes(transparentPng);
       return targetPath;
     }
@@ -133,8 +131,8 @@ class StaticImageCompressionStrategy extends ImageCompressionStrategy {
     // 使用 .webp 文件名，否则上传层会得到与文件内容不匹配的 MIME/扩展名。
     final outputExtension =
         !_useNativeCompress && format == ImageOutputFormat.webp
-            ? 'png'
-            : extension;
+        ? 'png'
+        : extension;
     final targetPath = p.join(
       tempDir.path,
       'compressed_$timestamp.$outputExtension',
@@ -239,7 +237,8 @@ class ImageCompressionStrategyFactory {
         );
       default:
         return PassthroughImageCompressionStrategy(
-            displayName: S.current.imageFormat_generic);
+          displayName: S.current.imageFormat_generic,
+        );
     }
   }
 }

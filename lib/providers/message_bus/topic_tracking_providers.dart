@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../services/message_bus_service.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/background/ios_background_fetch.dart';
@@ -10,7 +11,9 @@ import 'message_bus_service_provider.dart';
 import 'topic_list_events.dart';
 
 /// 话题追踪状态元数据 Provider（MessageBus 频道初始 message ID）
-final topicTrackingStateMetaProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+final topicTrackingStateMetaProvider = FutureProvider<Map<String, dynamic>?>((
+  ref,
+) async {
   final service = ref.watch(discourseServiceProvider);
   return service.getPreloadedTopicTrackingMeta();
 });
@@ -20,10 +23,10 @@ final topicTrackingStateMetaProvider = FutureProvider<Map<String, dynamic>?>((re
 /// 单个话题的追踪状态
 class TrackedTopicState {
   final int topicId;
-  final int? lastReadPostNumber;  // null = 未读过（NEW）
+  final int? lastReadPostNumber; // null = 未读过（NEW）
   final int highestPostNumber;
   final int? categoryId;
-  final int notificationLevel;  // 0=MUTED, 1=REGULAR, 2=TRACKING, 3=WATCHING
+  final int notificationLevel; // 0=MUTED, 1=REGULAR, 2=TRACKING, 3=WATCHING
   final bool createdInNewPeriod;
   final bool isSeen;
 
@@ -56,7 +59,9 @@ class TrackedTopicState {
   }) {
     return TrackedTopicState(
       topicId: topicId,
-      lastReadPostNumber: clearLastRead ? null : (lastReadPostNumber ?? this.lastReadPostNumber),
+      lastReadPostNumber: clearLastRead
+          ? null
+          : (lastReadPostNumber ?? this.lastReadPostNumber),
       highestPostNumber: highestPostNumber ?? this.highestPostNumber,
       categoryId: categoryId ?? this.categoryId,
       notificationLevel: notificationLevel ?? this.notificationLevel,
@@ -82,7 +87,8 @@ class TrackedTopicState {
       categoryId: json['category_id'] as int?,
       notificationLevel: (json['notification_level'] as int?) ?? 1,
       // 服务端已按 new_since 过滤，未读过的话题一定在新话题期限内
-      createdInNewPeriod: json['created_in_new_period'] as bool? ?? (lastRead == null),
+      createdInNewPeriod:
+          json['created_in_new_period'] as bool? ?? (lastRead == null),
       isSeen: json['is_seen'] as bool? ?? false,
     );
   }
@@ -126,12 +132,16 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     }
     // 调试：打印首条数据的字段和计数
     if (states.isNotEmpty) {
-      debugPrint('[TopicTrackingState] 首条原始数据 keys: ${states.first.keys.toList()}');
+      debugPrint(
+        '[TopicTrackingState] 首条原始数据 keys: ${states.first.keys.toList()}',
+      );
       debugPrint('[TopicTrackingState] 首条原始数据: ${states.first}');
     }
     final newCount = map.values.where((s) => _isNew(s)).length;
     final unreadCount = map.values.where((s) => _isUnread(s)).length;
-    debugPrint('[TopicTrackingState] 从预加载数据初始化 ${map.length} 条追踪状态, new=$newCount, unread=$unreadCount');
+    debugPrint(
+      '[TopicTrackingState] 从预加载数据初始化 ${map.length} 条追踪状态, new=$newCount, unread=$unreadCount',
+    );
     return map;
   }
 
@@ -139,15 +149,18 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     if (_loadingPreloadedStates) return;
     _loadingPreloadedStates = true;
     unawaited(
-      preloaded.getTopicTrackingStates().then((states) {
-        _loadingPreloadedStates = false;
-        if (!ref.mounted || states == null) return;
-        final loaded = _buildPreloadedStateMap(states);
-        state = state.isEmpty ? loaded : {...loaded, ...state};
-      }).catchError((Object e, StackTrace st) {
-        _loadingPreloadedStates = false;
-        debugPrint('[TopicTrackingState] 异步加载预加载追踪状态失败: $e');
-      }),
+      preloaded
+          .getTopicTrackingStates()
+          .then((states) {
+            _loadingPreloadedStates = false;
+            if (!ref.mounted || states == null) return;
+            final loaded = _buildPreloadedStateMap(states);
+            state = state.isEmpty ? loaded : {...loaded, ...state};
+          })
+          .catchError((Object e, StackTrace st) {
+            _loadingPreloadedStates = false;
+            debugPrint('[TopicTrackingState] 异步加载预加载追踪状态失败: $e');
+          }),
     );
   }
 
@@ -174,8 +187,7 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     return s.lastReadPostNumber == null &&
         s.createdInNewPeriod &&
         !s.deleted &&
-        ((s.notificationLevel != 0 && !s.isSeen) ||
-            s.notificationLevel >= 2);
+        ((s.notificationLevel != 0 && !s.isSeen) || s.notificationLevel >= 2);
   }
 
   /// 判断是否为 UNREAD 话题（对齐网页版 isUnread）
@@ -194,7 +206,9 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     if (data is! Map<String, dynamic>) return;
 
     final messageType = data['message_type'] as String?;
-    debugPrint('[TopicTrackingState] 处理消息: type=$messageType, channel=${message.channel}, data=$data');
+    debugPrint(
+      '[TopicTrackingState] 处理消息: type=$messageType, channel=${message.channel}, data=$data',
+    );
 
     // muted / unmuted：只登记不改计数，直接返回
     // （对齐网页版 _processChannelPayload 的第一个分支）
@@ -225,16 +239,22 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     final topicId = data['topic_id'] as int?;
     final old = topicId == null ? null : state[topicId];
     if (topicId != null &&
-        (messageType == 'latest' || messageType == 'new_topic' ||
+        (messageType == 'latest' ||
+            messageType == 'new_topic' ||
             (messageType == 'unread' &&
-                (old == null || old.highestPostNumber == old.lastReadPostNumber)))) {
+                (old == null ||
+                    old.highestPostNumber == old.lastReadPostNumber)))) {
       final payload = data['payload'] as Map<String, dynamic>? ?? {};
-      ref.read(topicListEventsProvider.notifier).publish(TopicListEvent(
-        topicId: topicId,
-        type: messageType!,
-        categoryId: payload['category_id'] as int? ?? old?.categoryId,
-        tags: payload['tags'] as List? ?? const [],
-      ));
+      ref
+          .read(topicListEventsProvider.notifier)
+          .publish(
+            TopicListEvent(
+              topicId: topicId,
+              type: messageType!,
+              categoryId: payload['category_id'] as int? ?? old?.categoryId,
+              tags: payload['tags'] as List? ?? const [],
+            ),
+          );
     }
 
     // dismiss_new / dismiss_new_posts 单独处理
@@ -259,7 +279,9 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     }
 
     // new_topic / unread / read 统一处理（对齐网页版）
-    if (messageType == 'new_topic' || messageType == 'unread' || messageType == 'read') {
+    if (messageType == 'new_topic' ||
+        messageType == 'unread' ||
+        messageType == 'read') {
       final topicId = data['topic_id'] as int?;
       if (topicId == null) return;
 
@@ -269,7 +291,10 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
       final payload = data['payload'] as Map<String, dynamic>? ?? {};
 
       // 对于 unread 消息，补全缺失字段（对齐网页版推断逻辑）
-      final highest = (payload['highest_post_number'] as int?) ?? existing?.highestPostNumber ?? 1;
+      final highest =
+          (payload['highest_post_number'] as int?) ??
+          existing?.highestPostNumber ??
+          1;
       int? lastRead = payload['last_read_post_number'] as int?;
       int? notifLevel = payload['notification_level'] as int?;
 
@@ -283,10 +308,12 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
         notifLevel ??= existing?.notificationLevel ?? 1;
       }
 
-      final categoryId = (payload['category_id'] as int?) ?? existing?.categoryId;
-      final createdInNewPeriod = payload['created_in_new_period'] as bool?
-          ?? existing?.createdInNewPeriod
-          ?? (lastRead == null); // 未读过则视为新话题
+      final categoryId =
+          (payload['category_id'] as int?) ?? existing?.categoryId;
+      final createdInNewPeriod =
+          payload['created_in_new_period'] as bool? ??
+          existing?.createdInNewPeriod ??
+          (lastRead == null); // 未读过则视为新话题
       final isSeen = existing?.isSeen ?? false;
 
       state = {
@@ -335,8 +362,8 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
 
   /// 站点设置：默认静音所有分类
   bool get _muteAllCategoriesByDefault {
-    final value =
-        PreloadedDataService().siteSettingsSync?['mute_all_categories_by_default'];
+    final value = PreloadedDataService()
+        .siteSettingsSync?['mute_all_categories_by_default'];
     if (value is bool) return value;
     if (value is String) return value.toLowerCase() == 'true';
     return false;
@@ -354,7 +381,9 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
       ..._intList(user?['indirectly_muted_category_ids']),
     };
     final category = ref.read(categoryMapProvider).value?[categoryId];
-    final override = ref.read(categoryNotificationOverridesProvider)[categoryId];
+    final override = ref.read(
+      categoryNotificationOverridesProvider,
+    )[categoryId];
     final isMuted = override != null
         ? override == 0
         : muted.contains(categoryId) || category?.notificationLevel == 0;
@@ -384,7 +413,8 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     final mutedTagIds = _tagIds(user?['muted_tags']);
     if (mutedTagIds.isEmpty) return false;
 
-    final mode = PreloadedDataService()
+    final mode =
+        PreloadedDataService()
             .siteSettingsSync?['remove_muted_tags_from_latest']
             ?.toString() ??
         'always';
@@ -500,7 +530,11 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
   }
 
   /// 本地阅读话题后更新追踪状态（减少 new/unread 计数）
-  void updateTopicRead(int topicId, int lastReadPostNumber, int highestPostNumber) {
+  void updateTopicRead(
+    int topicId,
+    int lastReadPostNumber,
+    int highestPostNumber,
+  ) {
     final existing = state[topicId];
     if (existing != null) {
       final updated = existing.copyWith(
@@ -527,7 +561,8 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     bool all = false,
   }) {
     final existing = state[topicId];
-    final highest = existing != null && existing.highestPostNumber > highestPostNumber
+    final highest =
+        existing != null && existing.highestPostNumber > highestPostNumber
         ? existing.highestPostNumber
         : highestPostNumber;
     final lastRead = all ? null : (highest > 1 ? highest - 1 : null);
@@ -538,7 +573,8 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
         lastReadPostNumber: lastRead,
         highestPostNumber: highest,
         categoryId: categoryId ?? existing?.categoryId,
-        notificationLevel: notificationLevel ?? existing?.notificationLevel ?? 1,
+        notificationLevel:
+            notificationLevel ?? existing?.notificationLevel ?? 1,
         createdInNewPeriod: existing?.createdInNewPeriod ?? all,
         isSeen: all ? false : (existing?.isSeen ?? true),
       ),
@@ -576,20 +612,20 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
 
 final topicTrackingStateProvider =
     NotifierProvider<TopicTrackingStateNotifier, Map<int, TrackedTopicState>>(
-  TopicTrackingStateNotifier.new,
-);
+      TopicTrackingStateNotifier.new,
+    );
 
 /// MessageBus 初始化 Notifier
 /// 统一管理所有频道的批量订阅，避免串行等待
 class MessageBusInitNotifier extends Notifier<void> {
   final Map<String, MessageBusCallback> _allCallbacks = {};
-  
+
   @override
   void build() {
     final messageBus = ref.watch(messageBusServiceProvider);
     final currentUser = ref.watch(currentUserProvider).value;
     final metaAsync = ref.watch(topicTrackingStateMetaProvider);
-    
+
     // 清理之前的订阅
     if (_allCallbacks.isNotEmpty) {
       debugPrint('[MessageBusInit] 清理旧订阅: ${_allCallbacks.keys}');
@@ -598,7 +634,7 @@ class MessageBusInitNotifier extends Notifier<void> {
       }
       _allCallbacks.clear();
     }
-    
+
     // 对齐 Discourse：long_polling_base_url 对匿名和登录用户都生效，
     // sharedSessionKey 仅在登录且跨域长轮询时存在。
     final preloaded = PreloadedDataService();
@@ -626,7 +662,7 @@ class MessageBusInitNotifier extends Notifier<void> {
       },
       ...?metaAsync.value,
     };
-    
+
     // 逐个订阅话题追踪频道
     // 注意: /notification/ 和 /notification-alert/ 频道由专门的
     // NotificationChannelNotifier 和 NotificationAlertChannelNotifier 管理，
@@ -644,26 +680,31 @@ class MessageBusInitNotifier extends Notifier<void> {
       };
 
       void onTopicTracking(MessageBusMessage message) {
-        debugPrint('[TopicTracking] 收到消息: ${message.channel} #${message.messageId}');
+        debugPrint(
+          '[TopicTracking] 收到消息: ${message.channel} #${message.messageId}',
+        );
 
         // /destroy：话题已不可逆销毁，登记后由详情页自行退出
         if (message.channel == '/destroy') {
           final data = message.data;
-          final topicId =
-              data is Map<String, dynamic> ? data['topic_id'] as int? : null;
+          final topicId = data is Map<String, dynamic>
+              ? data['topic_id'] as int?
+              : null;
           if (topicId != null) {
             ref.read(destroyedTopicsProvider.notifier).markDestroyed(topicId);
           }
         }
 
         // 转发给 TopicTrackingStateNotifier 更新追踪计数
-        ref.read(topicTrackingStateProvider.notifier).processChannelPayload(message);
+        ref
+            .read(topicTrackingStateProvider.notifier)
+            .processChannelPayload(message);
       }
 
       _allCallbacks[channel] = onTopicTracking;
       messageBus.subscribeWithMessageId(channel, onTopicTracking, messageId);
     }
-    
+
     ref.onDispose(() {
       debugPrint('[MessageBusInit] 取消所有订阅: ${_allCallbacks.keys}');
       for (final entry in _allCallbacks.entries) {
@@ -711,5 +752,5 @@ class DestroyedTopicsNotifier extends Notifier<Set<int>> {
 
 final destroyedTopicsProvider =
     NotifierProvider<DestroyedTopicsNotifier, Set<int>>(
-  DestroyedTopicsNotifier.new,
-);
+      DestroyedTopicsNotifier.new,
+    );

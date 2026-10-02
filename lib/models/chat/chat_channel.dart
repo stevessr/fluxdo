@@ -99,7 +99,10 @@ class ChatChannel {
   }
 
   /// 不可发言时的提示文案
-  String sendDisabledReason({required bool isStaff, bool userSilenced = false}) {
+  String sendDisabledReason({
+    required bool isStaff,
+    bool userSilenced = false,
+  }) {
     if (userSilenced) return '你当前被禁言，无法发送消息';
     if (isArchived) return '频道已归档，无法发送消息';
     if (isReadOnly) return '频道为只读，无法发送消息';
@@ -121,7 +124,8 @@ class ChatChannel {
   /// - 公开频道：仅 staff
   /// - 直接消息：成员（或 staff）可编辑
   bool canEditChannel({required bool isStaff}) {
-    final metaCanEdit = meta?['can_edit'] as bool? ??
+    final metaCanEdit =
+        meta?['can_edit'] as bool? ??
         meta?['can_edit_channel'] as bool? ??
         userChatChannelMembership?['can_edit'] as bool?;
     if (metaCanEdit != null) return metaCanEdit;
@@ -178,7 +182,8 @@ class ChatChannel {
   /// 对齐 Discourse AddUsersToChannel / channel-info-members：
   /// 仅 DirectMessage，且为群组 DM，或尚无消息（可扩展为群聊）的 1:1 DM。
   bool get canAddMembers {
-    final isDm = chatableType == 'DirectMessage' ||
+    final isDm =
+        chatableType == 'DirectMessage' ||
         chatableType == 'DirectMessageChannel';
     if (!isDm) return false;
     if (userCanAddMembers == true) return true;
@@ -193,7 +198,8 @@ class ChatChannel {
   /// 过滤掉当前用户和系统用户（system）。系统用户在群聊中会被 Discourse
   /// 塞进 members，但官方渲染标题时明确排除它，避免把群聊显示成 "system"。
   ChatUser? getDmTargetUser(int? currentUserId) {
-    if (chatableType != 'DirectMessage' && chatableType != 'DirectMessageChannel') {
+    if (chatableType != 'DirectMessage' &&
+        chatableType != 'DirectMessageChannel') {
       return null;
     }
     // 1. 从 dmUsers 中寻找非当前用户且非系统用户
@@ -224,17 +230,15 @@ class ChatChannel {
   /// - 公开频道: chat_channel_retention_days
   /// - 直接消息: chat_dm_retention_days
   /// 0 / null 表示永久保留。
-  String retentionDisplay({
-    int? channelRetentionDays,
-    int? dmRetentionDays,
-  }) {
+  String retentionDisplay({int? channelRetentionDays, int? dmRetentionDays}) {
     // 若模型上已有解析值（兼容旧数据），优先使用
     final existingDays = retentionDays;
     if (existingDays != null && existingDays > 0) return '$existingDays 天';
     final existingHours = retentionHours;
     if (existingHours != null && existingHours > 0) return '$existingHours 小时';
 
-    final isDm = chatableType == 'DirectMessage' ||
+    final isDm =
+        chatableType == 'DirectMessage' ||
         chatableType == 'DirectMessageChannel';
     final days = isDm ? dmRetentionDays : channelRetentionDays;
     if (days != null && days > 0) return '$days 天';
@@ -242,7 +246,9 @@ class ChatChannel {
   }
 
   /// 内部工具：解析保留时长
-  static (int? days, int? hours) _parseRetentionValues(Map<String, dynamic> json) {
+  static (int? days, int? hours) _parseRetentionValues(
+    Map<String, dynamic> json,
+  ) {
     int? parsedDays;
     int? parsedHours;
 
@@ -259,8 +265,10 @@ class ChatChannel {
         }
       } else if (val is String) {
         final str = val.trim().toLowerCase();
-        if (str == 'never' || str == 'none' || str == '0' || str.isEmpty) return;
-        final match = RegExp(r'^(\d+)_?(day|days|hour|hours|year|years)?$').firstMatch(str);
+        if (str == 'never' || str == 'none' || str == '0' || str.isEmpty)
+          return;
+        final match = RegExp(r'^(\d+)_?(day|days|hour|hours|year|years)?$')
+            .firstMatch(str);
         if (match != null) {
           final numVal = int.tryParse(match.group(1) ?? '');
           final unit = match.group(2);
@@ -286,8 +294,12 @@ class ChatChannel {
       }
     }
 
-    final metaObj = json['meta'] is Map ? Map<String, dynamic>.from(json['meta'] as Map) : null;
-    final chatableObj = json['chatable'] is Map ? Map<String, dynamic>.from(json['chatable'] as Map) : null;
+    final metaObj = json['meta'] is Map
+        ? Map<String, dynamic>.from(json['meta'] as Map)
+        : null;
+    final chatableObj = json['chatable'] is Map
+        ? Map<String, dynamic>.from(json['chatable'] as Map)
+        : null;
 
     // 天数解析
     parseValue(json['retention_days']);
@@ -317,19 +329,24 @@ class ChatChannel {
     final membership = json['user_chat_channel_membership'] is Map
         ? Map<String, dynamic>.from(json['user_chat_channel_membership'] as Map)
         : (json['current_user_membership'] is Map
-            ? Map<String, dynamic>.from(json['current_user_membership'] as Map)
-            : null);
+              ? Map<String, dynamic>.from(
+                  json['current_user_membership'] as Map,
+                )
+              : null);
 
-    final isStarred = (json['starred'] as bool?) ??
+    final isStarred =
+        (json['starred'] as bool?) ??
         (membership?['starred'] as bool?) ??
         false;
     // 仅当 membership.following == true 才算已加入；有 membership 但 following=false 表示曾加入后取消关注
-    final isFollowing = (json['following'] as bool?) ??
+    final isFollowing =
+        (json['following'] as bool?) ??
         (membership?['following'] as bool?) ??
         false;
     final statusVal = json['status']?.toString();
 
-    final canAdd = (json['allow_user_add'] as bool?) ??
+    final canAdd =
+        (json['allow_user_add'] as bool?) ??
         (json['user_can_add_members'] as bool?) ??
         (json['can_modify_members'] as bool?);
 
@@ -339,9 +356,12 @@ class ChatChannel {
           (json['meta'] is Map ? (json['meta']['emoji']?.toString()) : null),
     );
 
-    final threading = (json['threading_enabled'] as bool?) ??
+    final threading =
+        (json['threading_enabled'] as bool?) ??
         (json['allow_threading'] as bool?) ??
-        (json['meta'] is Map ? (json['meta']['threading_enabled'] as bool?) : null) ??
+        (json['meta'] is Map
+            ? (json['meta']['threading_enabled'] as bool?)
+            : null) ??
         false;
 
     // 通知级别可能是字符串 never/mention/always，或枚举整数 0/1/2
@@ -362,21 +382,28 @@ class ChatChannel {
     final (rDays, rHours) = _parseRetentionValues(json);
 
     List<ChatUser>? parsedDmUsers;
-    final chatableObj = json['chatable'] is Map ? json['chatable'] as Map : null;
-    final usersList = json['users'] ??
+    final chatableObj = json['chatable'] is Map
+        ? json['chatable'] as Map
+        : null;
+    final usersList =
+        json['users'] ??
         json['target_users'] ??
         json['members'] ??
-        (chatableObj?['users'] ?? chatableObj?['members'] ?? chatableObj?['target_users']);
+        (chatableObj?['users'] ??
+            chatableObj?['members'] ??
+            chatableObj?['target_users']);
     // 群聊 DM 标记：Discourse DirectMessageSerializer 输出 group 字段
     // (direct_message_serializer.rb: attributes :group, :users)，并在
     // users.count > 1 时从 users 中移除当前用户（即返回的是"其他成员"）。
     // 因此 3 人直接消息的 dmUsers 长度为 2（两位其他用户），2 人直接消息长度为 1。
     // 用 > 1 判定群聊（≥2 位其他成员 = 3 人及以上直接消息）。
-    final groupDmFlag = (chatableObj?['group'] as bool?) ??
+    final groupDmFlag =
+        (chatableObj?['group'] as bool?) ??
         (json['group'] as bool?) ??
         (json['is_group'] as bool?) ??
         false;
-    final isDmType = json['chatable_type']?.toString() == 'DirectMessage' ||
+    final isDmType =
+        json['chatable_type']?.toString() == 'DirectMessage' ||
         json['chatable_type']?.toString() == 'DirectMessageChannel';
     if (usersList is List) {
       parsedDmUsers = usersList
@@ -389,8 +416,8 @@ class ChatChannel {
     // - 2 人直接消息：dmUsers 长度 1（仅对方）
     // - 3 人及以上直接消息：dmUsers 长度 ≥ 2（其他成员，已不含当前用户）
     // 群聊判据 = group 标记为 true，或 dmUsers 长度 > 1（即 ≥2 位其他成员）。
-    final resolvedGroupDm = groupDmFlag ||
-        (isDmType && (parsedDmUsers?.length ?? 0) > 1);
+    final resolvedGroupDm =
+        groupDmFlag || (isDmType && (parsedDmUsers?.length ?? 0) > 1);
 
     final parsedLastMessage = json['last_message'] is Map
         ? ChatMessage.fromJson(
@@ -400,7 +427,7 @@ class ChatChannel {
     // Discourse 已删除 last_message_sent_at 列，时间来自 last_message.created_at
     final parsedLastMessageSentAt =
         TimeUtils.parseUtcTime(json['last_message_sent_at']?.toString()) ??
-            parsedLastMessage?.createdAt;
+        parsedLastMessage?.createdAt;
 
     return ChatChannel(
       id: (json['id'] as num?)?.toInt() ?? 0,
@@ -412,19 +439,23 @@ class ChatChannel {
       description: json['description']?.toString(),
       lastMessage: parsedLastMessage,
       lastMessageSentAt: parsedLastMessageSentAt,
-      lastReadMessageId: (json['last_read_message_id'] as num?)?.toInt() ??
+      lastReadMessageId:
+          (json['last_read_message_id'] as num?)?.toInt() ??
           (membership?['last_read_message_id'] as num?)?.toInt(),
       // 官方字段 memberships_count
-      membersCount: (json['memberships_count'] as num?)?.toInt() ??
+      membersCount:
+          (json['memberships_count'] as num?)?.toInt() ??
           (json['members_count'] as num?)?.toInt() ??
           (json['user_count'] as num?)?.toInt(),
-      muted: (json['muted'] as bool?) ?? (membership?['muted'] as bool?) ?? false,
+      muted:
+          (json['muted'] as bool?) ?? (membership?['muted'] as bool?) ?? false,
       mutedUntil: json['muted_until'] != null
           ? TimeUtils.parseUtcTime(json['muted_until']?.toString())
           : null,
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
       // 官方 tracking 字段是 mention_count
-      unreadMentions: (json['unread_mentions'] as num?)?.toInt() ??
+      unreadMentions:
+          (json['unread_mentions'] as num?)?.toInt() ??
           (json['mention_count'] as num?)?.toInt() ??
           0,
       meta: json['meta'] is Map

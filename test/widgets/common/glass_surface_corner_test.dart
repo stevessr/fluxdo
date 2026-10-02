@@ -62,9 +62,9 @@ void main() {
           boundaryKey.currentContext!.findRenderObject()!
               as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: 2);
-      final data = (await image.toByteData(
-        format: ui.ImageByteFormat.rawRgba,
-      ))!.buffer.asUint8List();
+      final data = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!
+          .buffer
+          .asUint8List();
       final rect = tester.getRect(find.byType(GlassSurfaceFrame));
       final x = (rect.left * 2).round();
       final y = (rect.top * 2).round();

@@ -12,7 +12,8 @@ final codec = SemanticComposerCodec(
   tokenize: parseWithNode,
 );
 
-const fullMockRaw = '模拟正文首行  \n'
+const fullMockRaw =
+    '模拟正文首行  \n'
     '''[https://github.com](https://github.com)
 
 [grid]

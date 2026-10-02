@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -131,9 +132,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     final shareUrl =
         '$baseUrl/chat/channel/${widget.channelId}?message_id=${message.id}';
     Clipboard.setData(ClipboardData(text: shareUrl));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('已复制分享链接到剪贴板')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('已复制分享链接到剪贴板')));
   }
 
   void _copySelectedMessages(List<ChatMessage> allMessages) {
@@ -166,9 +166,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           .quoteMessages(ids);
       if (!mounted) return;
       if (markdown.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('生成引用失败：返回为空')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('生成引用失败：返回为空')));
         return;
       }
       await Clipboard.setData(ClipboardData(text: markdown));
@@ -179,9 +178,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('生成引用失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('生成引用失败: $e')));
     }
   }
 
@@ -219,9 +217,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('置顶操作失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('置顶操作失败: $e')));
     }
   }
 
@@ -231,14 +228,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           .read(chatMessagesProvider(widget.channelId).notifier)
           .restoreMessage(message.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已恢复消息')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已恢复消息')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('恢复失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('恢复失败: $e')));
     }
   }
 
@@ -375,10 +370,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     });
     try {
       final result = await ref.read(
-        chatChannelSearchProvider((
-          channelId: widget.channelId,
-          query: q,
-        )).future,
+        chatChannelSearchProvider((channelId: widget.channelId, query: q))
+            .future,
       );
       if (!mounted) return;
       setState(() {
@@ -427,9 +420,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             ref.read(chatMessagesProvider(widget.channelId)).value ?? [];
         final idx = loaded.indexWhere((m) => m.id == messageId);
         if (idx < 0) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('未找到被回复的消息')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('未找到被回复的消息')));
           return;
         }
         final max = _scrollController.position.maxScrollExtent;
@@ -445,9 +437,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('定位消息失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('定位消息失败: $e')));
     }
   }
 
@@ -620,9 +611,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       });
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('表情包图片上传失败: $error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('表情包图片上传失败: $error')));
       }
     } finally {
       if (mounted) setState(() => _isUploadingImage = false);
@@ -817,9 +807,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('打开消息串失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('打开消息串失败: $e')));
     }
   }
 
@@ -989,9 +978,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               _saveRecentReactionEmoji(emoji);
                               ref
                                   .read(
-                                    chatMessagesProvider(
-                                      widget.channelId,
-                                    ).notifier,
+                                    chatMessagesProvider(widget.channelId)
+                                        .notifier,
                                   )
                                   .toggleReaction(message.id, emoji);
                             },
@@ -1169,9 +1157,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               child: Icon(
                                 Icons.add_rounded,
                                 size: 22,
-                                color: Theme.of(
-                                  ctx,
-                                ).colorScheme.onPrimaryContainer,
+                                color: Theme.of(ctx)
+                                    .colorScheme
+                                    .onPrimaryContainer,
                               ),
                             ),
                           ),
@@ -1657,9 +1645,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                 onToggleReaction: (emoji) {
                                   ref
                                       .read(
-                                        chatMessagesProvider(
-                                          widget.channelId,
-                                        ).notifier,
+                                        chatMessagesProvider(widget.channelId)
+                                            .notifier,
                                       )
                                       .toggleReaction(message.id, emoji);
                                 },
@@ -2101,9 +2088,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   leading: const Icon(
                                     Icons.add_photo_alternate_rounded,
                                   ),
-                                  title: Text(
-                                    context.l10n.chat_upload_image,
-                                  ),
+                                  title: Text(context.l10n.chat_upload_image),
                                 ),
                               ),
                               const PopupMenuItem<String>(
@@ -2200,8 +2185,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   height: 18,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color:
-                                        theme.colorScheme.onPrimaryContainer,
+                                    color: theme.colorScheme.onPrimaryContainer,
                                   ),
                                 )
                               : Icon(
@@ -2216,13 +2200,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             height: 40,
                           ),
                           style: IconButton.styleFrom(
-                            backgroundColor:
-                                theme.colorScheme.primaryContainer,
+                            backgroundColor: theme.colorScheme.primaryContainer,
                             foregroundColor:
                                 theme.colorScheme.onPrimaryContainer,
-                            disabledBackgroundColor: theme
-                                .colorScheme
-                                .surfaceContainerHighest,
+                            disabledBackgroundColor:
+                                theme.colorScheme.surfaceContainerHighest,
                           ),
                         ),
                       ],
@@ -2748,9 +2730,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
     }
 
     final viewportWidth = MediaQuery.sizeOf(context).width;
-    final bubbleMaxWidth = viewportWidth >= 840
-        ? 620.0
-        : viewportWidth * 0.75;
+    final bubbleMaxWidth = viewportWidth >= 840 ? 620.0 : viewportWidth * 0.75;
 
     final bubbleWidget = Padding(
       padding: EdgeInsets.only(
@@ -3502,9 +3482,8 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
   Future<void> _submit() async {
     if (_selected == null || _submitting) return;
     if (_selected!.requireMessage && _messageController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请填写举报说明')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请填写举报说明')));
       return;
     }
     setState(() => _submitting = true);
@@ -3519,15 +3498,13 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
       );
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已提交举报')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已提交举报')));
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('举报失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('举报失败: $e')));
     }
   }
 

@@ -20,7 +20,8 @@ class FileCookieStore {
   /// 临时文件带实例唯一后缀：同进程多个 isolate（如 iOS 后台轮询任务）
   /// 各自持有 store 实例并发写盘时，不会交错写坏同一个临时文件；
   /// rename 的原子性保证正式文件始终是完整 JSON。
-  late final String _tmpPath = '$_filePath.'
+  late final String _tmpPath =
+      '$_filePath.'
       '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
       '${identityHashCode(this).toRadixString(36)}.tmp';
 
@@ -35,7 +36,9 @@ class FileCookieStore {
       final cookies = <CanonicalCookie>[];
       for (final entry in jsonValue.whereType<Map>()) {
         try {
-          cookies.add(CanonicalCookie.fromJson(Map<String, dynamic>.from(entry)));
+          cookies.add(
+            CanonicalCookie.fromJson(Map<String, dynamic>.from(entry)),
+          );
         } catch (_) {
           // 跳过单个解析失败的 cookie，不影响其余
         }

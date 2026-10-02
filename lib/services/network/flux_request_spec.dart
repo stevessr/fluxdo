@@ -137,8 +137,7 @@ extension type const FluxRequestSpec(Map<String, dynamic> _extra) {
   bool get skipWebViewAdapter =>
       _extra[FluxRequestKeys.skipWebViewAdapter] == true;
 
-  bool get skipRhttpAdapter =>
-      _extra[FluxRequestKeys.skipRhttpAdapter] == true;
+  bool get skipRhttpAdapter => _extra[FluxRequestKeys.skipRhttpAdapter] == true;
 
   bool get skipScheduler => _extra[FluxRequestKeys.skipScheduler] == true;
 

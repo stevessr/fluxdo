@@ -14,8 +14,7 @@ class AiBotConversationsPage extends StatefulWidget {
   const AiBotConversationsPage({super.key});
 
   @override
-  State<AiBotConversationsPage> createState() =>
-      _AiBotConversationsPageState();
+  State<AiBotConversationsPage> createState() => _AiBotConversationsPageState();
 }
 
 class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
@@ -43,7 +42,9 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
   final Set<int> _starringTopicIds = {};
 
   bool get _isZh =>
-      Localizations.localeOf(context).languageCode.toLowerCase().startsWith('zh');
+      Localizations.localeOf(context).languageCode
+          .toLowerCase()
+          .startsWith('zh');
 
   String _text(String zh, String en) => _isZh ? zh : en;
 
@@ -122,7 +123,8 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
     final currentUser = _preloaded.currentUserSync;
     if (currentUser == null) return;
 
-    final rawAgents = currentUser['ai_enabled_agents'] as List<dynamic>? ?? const [];
+    final rawAgents =
+        currentUser['ai_enabled_agents'] as List<dynamic>? ?? const [];
     final rawBots =
         currentUser['ai_enabled_chat_bots'] as List<dynamic>? ?? const [];
 
@@ -131,12 +133,15 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
         .map(AiBotAgent.fromJson)
         .where((agent) => agent.id > 0 && agent.allowPersonalMessages)
         .toList();
-    final llms = rawBots
-        .whereType<Map<String, dynamic>>()
-        .map(AiBotLlm.fromJson)
-        .where((bot) => !bot.isAgent && bot.id > 0 && bot.username.isNotEmpty)
-        .toList()
-      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    final llms =
+        rawBots
+            .whereType<Map<String, dynamic>>()
+            .map(AiBotLlm.fromJson)
+            .where(
+              (bot) => !bot.isAgent && bot.id > 0 && bot.username.isNotEmpty,
+            )
+            .toList()
+          ..sort((a, b) => a.displayName.compareTo(b.displayName));
 
     if (!mounted) return;
     setState(() {
@@ -306,10 +311,8 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
   Future<void> _openConversation(AiBotConversation item) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => TopicDetailPage(
-          topicId: item.id,
-          initialTitle: item.title,
-        ),
+        builder: (_) =>
+            TopicDetailPage(topicId: item.id, initialTitle: item.title),
       ),
     );
     if (mounted) _refreshInBackground();
@@ -375,14 +378,16 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
             children: [
               Text(
                 _text('历史会话', 'Conversations'),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
               ),
               const Spacer(),
               if (_conversations.isNotEmpty)
                 Text(
-                  _text('${_conversations.length} 个', '${_conversations.length}'),
+                  _text(
+                    '${_conversations.length} 个',
+                    '${_conversations.length}',
+                  ),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
             ],
@@ -420,10 +425,7 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.smart_toy_rounded,
-                  color: theme.colorScheme.primary,
-                ),
+                Icon(Icons.smart_toy_rounded, color: theme.colorScheme.primary),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -592,9 +594,7 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
         ),
         trailing: IconButton(
           onPressed: starring ? null : () => _toggleStar(item),
-          tooltip: item.starred
-              ? _text('取消收藏', 'Unstar')
-              : _text('收藏', 'Star'),
+          tooltip: item.starred ? _text('取消收藏', 'Unstar') : _text('收藏', 'Star'),
           icon: starring
               ? const SizedBox.square(
                   dimension: 20,
@@ -619,10 +619,7 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
           Text(_text('还没有 AI 对话', 'No AI conversations yet')),
           const SizedBox(height: 4),
           Text(
-            _text(
-              '在上方输入问题即可开始。',
-              'Ask a question above to get started.',
-            ),
+            _text('在上方输入问题即可开始。', 'Ask a question above to get started.'),
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -672,10 +669,7 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
           children: [
             const Icon(Icons.error_outline_rounded, size: 48),
             const SizedBox(height: 12),
-            Text(
-              _friendlyError(_error!),
-              textAlign: TextAlign.center,
-            ),
+            Text(_friendlyError(_error!), textAlign: TextAlign.center),
             const SizedBox(height: 16),
             FilledButton.tonal(
               onPressed: _loadInitial,

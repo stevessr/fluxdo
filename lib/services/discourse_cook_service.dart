@@ -125,7 +125,11 @@ class DiscourseCookService {
     final topTags = site['top_tags'] as List?;
     if (topTags == null) return const [];
     return topTags
-        .map((t) => t is Map<String, dynamic> ? (t['name'] as String? ?? '') : t.toString())
+        .map(
+          (t) => t is Map<String, dynamic>
+              ? (t['name'] as String? ?? '')
+              : t.toString(),
+        )
         .where((name) => name.isNotEmpty)
         .toList();
   }
@@ -178,8 +182,18 @@ class DiscourseCookService {
   static bool _isEditorToken(dynamic value, [int depth = 0]) {
     if (depth >= 256 || value is! Map<String, dynamic>) return false;
     const fields = [
-      'type', 'tag', 'nesting', 'attrs', 'content', 'markup', 'info',
-      'children', 'meta', 'map', 'block', 'hidden',
+      'type',
+      'tag',
+      'nesting',
+      'attrs',
+      'content',
+      'markup',
+      'info',
+      'children',
+      'meta',
+      'map',
+      'block',
+      'hidden',
     ];
     if (!fields.every(value.containsKey)) return false;
     for (final key in ['type', 'tag', 'content', 'markup', 'info']) {
@@ -187,24 +201,36 @@ class DiscourseCookService {
     }
     if (value['nesting'] is! int ||
         !const [-1, 0, 1].contains(value['nesting']) ||
-        value['block'] is! bool || value['hidden'] is! bool) {
+        value['block'] is! bool ||
+        value['hidden'] is! bool) {
       return false;
     }
     final attrs = value['attrs'];
-    if (attrs != null && (attrs is! List || !attrs.every((pair) =>
-        pair is List && pair.length == 2 && pair[0] is String &&
-        (pair[1] is String || pair[1] is num || pair[1] is bool)))) {
+    if (attrs != null &&
+        (attrs is! List ||
+            !attrs.every(
+              (pair) =>
+                  pair is List &&
+                  pair.length == 2 &&
+                  pair[0] is String &&
+                  (pair[1] is String || pair[1] is num || pair[1] is bool),
+            ))) {
       return false;
     }
     final map = value['map'];
-    if (map != null && (map is! List || map.length != 2 ||
-        map[0] is! int || map[1] is! int ||
-        map[0] < 0 || map[1] < map[0])) {
+    if (map != null &&
+        (map is! List ||
+            map.length != 2 ||
+            map[0] is! int ||
+            map[1] is! int ||
+            map[0] < 0 ||
+            map[1] < map[0])) {
       return false;
     }
     final children = value['children'];
-    return children == null || (children is List &&
-        children.every((child) => _isEditorToken(child, depth + 1)));
+    return children == null ||
+        (children is List &&
+            children.every((child) => _isEditorToken(child, depth + 1)));
   }
 
   /// 客户端 cook 输出的 Dart 后处理（纯函数，可单测）。

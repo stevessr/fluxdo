@@ -6,22 +6,24 @@ void main() {
   late String source;
 
   setUpAll(() {
-    source = File(
-      'lib/services/cf_clearance_refresh_service.dart',
-    ).readAsStringSync();
+    source = File('lib/services/cf_clearance_refresh_service.dart')
+        .readAsStringSync();
   });
 
-  test('Precursor keeps a real same-origin browser session before fallback', () {
-    final originLoad = source.indexOf('WebUri(_browserSessionUrl)');
-    final fallback = source.indexOf(
-      '_writeTurnstileHtml(controller, _buildTurnstileHtml(sitekey))',
-    );
+  test(
+    'Precursor keeps a real same-origin browser session before fallback',
+    () {
+      final originLoad = source.indexOf('WebUri(_browserSessionUrl)');
+      final fallback = source.indexOf(
+        '_writeTurnstileHtml(controller, _buildTurnstileHtml(sitekey))',
+      );
 
-    expect(originLoad, greaterThanOrEqualTo(0));
-    expect(fallback, greaterThan(originLoad));
-    expect(source, contains('/cdn-cgi/challenge-platform/'));
-    expect(source, contains("performance.getEntriesByType('resource')"));
-  });
+      expect(originLoad, greaterThanOrEqualTo(0));
+      expect(fallback, greaterThan(originLoad));
+      expect(source, contains('/cdn-cgi/challenge-platform/'));
+      expect(source, contains("performance.getEntriesByType('resource')"));
+    },
+  );
 
   test('Precursor rotation only accepts a newly observed exact clearance', () {
     expect(source, contains('_knownBrowserClearanceValues'));
@@ -33,10 +35,7 @@ void main() {
       ),
     );
     expect(source, contains('if (freshValues.length == 1)'));
-    expect(
-      source,
-      contains('acceptValues: freshBrowserClearance == null'),
-    );
+    expect(source, contains('acceptValues: freshBrowserClearance == null'));
     expect(
       source,
       contains("await _syncAndCheckCookies('browser_session_ready', gen);"),

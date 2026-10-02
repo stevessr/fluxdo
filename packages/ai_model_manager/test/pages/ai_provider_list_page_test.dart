@@ -19,31 +19,21 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          aiSharedPreferencesProvider.overrideWithValue(prefs),
-        ],
-        child: const MaterialApp(
-          home: AiProviderListPage(),
-        ),
+        overrides: [aiSharedPreferencesProvider.overrideWithValue(prefs)],
+        child: const MaterialApp(home: AiProviderListPage()),
       ),
     );
     await tester.pumpAndSettle();
   }
 
-  AiProvider provider(
-    String id,
-    String name, {
-    bool pinned = false,
-  }) {
+  AiProvider provider(String id, String name, {bool pinned = false}) {
     return AiProvider(
       id: id,
       name: name,
       type: AiProviderType.openai,
       baseUrl: 'https://example.com/$id',
       pinned: pinned,
-      models: const [
-        AiModel(id: 'model-a'),
-      ],
+      models: const [AiModel(id: 'model-a')],
     );
   }
 
@@ -91,7 +81,9 @@ void main() {
       ],
     );
 
-    final cell = tester.widget<SwipeActionCell>(find.byType(SwipeActionCell).first);
+    final cell = tester.widget<SwipeActionCell>(
+      find.byType(SwipeActionCell).first,
+    );
 
     expect(cell.enableLongPressMenu, isFalse);
   });

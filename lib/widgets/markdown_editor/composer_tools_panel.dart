@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import 'composer_chrome.dart';
 import 'composer_tool_action.dart';
 import 'composer_tool_cell.dart';
@@ -289,9 +291,9 @@ class _ComposerExpandedToolsState extends State<ComposerExpandedTools> {
                                           .textTheme
                                           .labelMedium
                                           ?.copyWith(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.onSurfaceVariant,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
                                           ),
                                     ),
                                   ),

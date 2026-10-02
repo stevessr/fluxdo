@@ -12,7 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// notifier and decide which expensive visual work can be skipped. On Android
 /// it also caps the preferred display mode around 60 Hz while power saving is
 /// active, then restores the user's refresh-rate preference when it is disabled.
-class PowerSavingModeService extends ChangeNotifier with WidgetsBindingObserver {
+class PowerSavingModeService extends ChangeNotifier
+    with WidgetsBindingObserver {
   PowerSavingModeService._();
 
   static final PowerSavingModeService instance = PowerSavingModeService._();
@@ -96,8 +97,10 @@ class PowerSavingModeService extends ChangeNotifier with WidgetsBindingObserver 
 
         final active = await FlutterDisplayMode.active;
         final sameResolution = modes
-            .where((mode) =>
-                mode.width == active.width && mode.height == active.height)
+            .where(
+              (mode) =>
+                  mode.width == active.width && mode.height == active.height,
+            )
             .toList();
         final candidates = sameResolution.isEmpty ? modes : sameResolution;
 

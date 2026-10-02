@@ -339,8 +339,10 @@ class _TocTreeState extends State<_TocTree> {
     final viewBottom = viewTop + pos.viewportDimension;
     if (itemTop >= viewTop && itemBottom <= viewBottom) return; // 已完整可见
 
-    final target = (itemTop - pos.viewportDimension / 2 + extent / 2)
-        .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+    final target = (itemTop - pos.viewportDimension / 2 + extent / 2).clamp(
+      pos.minScrollExtent,
+      pos.maxScrollExtent,
+    );
     if (animate) {
       _scrollController.animateTo(
         target,

@@ -49,12 +49,11 @@ class AppCustomIcon extends AppIconSpec {
 }
 
 /// painter 构造函数签名。color/fill 由 [AppIcon] 渲染时注入。
-typedef IconPainterBuilder =
-    CustomPainter Function({
-      required Color color,
-      required double fill,
-      required double strokeWidth,
-    });
+typedef IconPainterBuilder = CustomPainter Function({
+  required Color color,
+  required double fill,
+  required double strokeWidth,
+});
 
 /// 内部隐式转换：直接把 [IconData] 当 [AppIconSpec] 用。
 extension IconDataToSpec on IconData {

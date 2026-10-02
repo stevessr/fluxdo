@@ -1,7 +1,9 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/profile_stats_config.dart';
 import '../models/user.dart';
 import '../models/connect_stats.dart';
@@ -10,6 +12,7 @@ import '../providers/directory_providers.dart';
 import '../providers/profile_stats_provider.dart';
 import '../utils/number_utils.dart';
 import '../l10n/s.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
 
 /// 统计卡片渲染组件（个人页使用）
@@ -60,10 +63,7 @@ class ProfileStatsCard extends ConsumerWidget {
 
     return KeyedSubtree(
       key: statsCardKey,
-      child: _StatsCardContent(
-        config: config,
-        onEdit: onEdit,
-      ),
+      child: _StatsCardContent(config: config, onEdit: onEdit),
     );
   }
 }
@@ -93,7 +93,9 @@ class ProfileStatsCardPreview extends StatelessWidget {
       return SizedBox(
         width: double.infinity,
         child: Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: InkWell(
             onTap: onTap,
             borderRadius: BorderRadius.circular(16),
@@ -140,7 +142,8 @@ class ProfileStatsCardPreview extends StatelessWidget {
         value: _formatValue(stat, value),
         label: getStatLabel(stat),
         rawValue: value,
-        isTimeValue: stat == ProfileStatType.timeRead ||
+        isTimeValue:
+            stat == ProfileStatType.timeRead ||
             stat == ProfileStatType.recentTimeRead,
       );
     }).toList();
@@ -166,11 +169,13 @@ class ProfileStatsCardPreview extends StatelessWidget {
           Row(
             children: [
               for (int c = 0; c < rows[r].length; c++)
-                Expanded(child: _wrapDraggable(
-                  context,
-                  rows[r][c],
-                  _buildStatItem(Theme.of(context), rows[r][c]),
-                )),
+                Expanded(
+                  child: _wrapDraggable(
+                    context,
+                    rows[r][c],
+                    _buildStatItem(Theme.of(context), rows[r][c]),
+                  ),
+                ),
               for (int c = rows[r].length; c < columns; c++)
                 const Expanded(child: SizedBox()),
             ],
@@ -261,10 +266,7 @@ class _StatsCardContent extends ConsumerWidget {
   final ProfileStatsConfig config;
   final VoidCallback? onEdit;
 
-  const _StatsCardContent({
-    required this.config,
-    this.onEdit,
-  });
+  const _StatsCardContent({required this.config, this.onEdit});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -292,7 +294,8 @@ class _StatsCardContent extends ConsumerWidget {
               child: Icon(
                 Symbols.error_rounded,
                 size: 16,
-                color: Theme.of(context).colorScheme.error.withValues(alpha: 0.6),
+                color: Theme.of(context).colorScheme.error
+                    .withValues(alpha: 0.6),
               ),
             ),
           ),
@@ -323,7 +326,9 @@ class _StatsCardContent extends ConsumerWidget {
             hasError: true,
           );
         }
-        return _ResolvedData(values: _fromSummary(ref.watch(userSummaryProvider).value));
+        return _ResolvedData(
+          values: _fromSummary(ref.watch(userSummaryProvider).value),
+        );
     }
   }
 
@@ -470,7 +475,8 @@ class _DraggableStatItemState extends State<_DraggableStatItem> {
     final renderObj = scrollable.context.findRenderObject() as RenderBox?;
     if (renderObj == null || !renderObj.hasSize) return;
 
-    final isHorizontal = scrollable.axisDirection == AxisDirection.left ||
+    final isHorizontal =
+        scrollable.axisDirection == AxisDirection.left ||
         scrollable.axisDirection == AxisDirection.right;
 
     final viewportOrigin = renderObj.localToGlobal(Offset.zero);
@@ -478,7 +484,9 @@ class _DraggableStatItemState extends State<_DraggableStatItem> {
         ? details.globalPosition.dx
         : details.globalPosition.dy;
     final viewportStart = isHorizontal ? viewportOrigin.dx : viewportOrigin.dy;
-    final viewportSize = isHorizontal ? renderObj.size.width : renderObj.size.height;
+    final viewportSize = isHorizontal
+        ? renderObj.size.width
+        : renderObj.size.height;
     final viewportEnd = viewportStart + viewportSize;
 
     const edgeZone = 60.0;
@@ -498,8 +506,10 @@ class _DraggableStatItemState extends State<_DraggableStatItem> {
 
     _autoScrollTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (_scrollSpeed == 0) return;
-      final newOffset = (position.pixels + _scrollSpeed)
-          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      final newOffset = (position.pixels + _scrollSpeed).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
       position.jumpTo(newOffset);
     });
   }

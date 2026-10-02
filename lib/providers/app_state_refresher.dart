@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../services/auth_session.dart';
 import '../services/preloaded_data_service.dart';
 import 'core_providers.dart';
@@ -151,7 +152,8 @@ class AppStateRefresher {
     // 不再为了结束切换遮罩等待首页 HTML 或 /u/...。完整资料仍在后台补齐。
     final validatedUser = service.currentUserNotifier.value;
     if (validatedUser != null &&
-        validatedUser.username.toLowerCase() == expectedUsername.toLowerCase()) {
+        validatedUser.username.toLowerCase() ==
+            expectedUsername.toLowerCase()) {
       final notifier = container.read(currentUserProvider.notifier);
       // AsyncNotifier.state 是 protected API；这里是账户切换事务的原子提交点，
       // 必须在其它 provider 刷新前同步替换旧身份，避免出现一帧串号。
@@ -171,7 +173,8 @@ class AppStateRefresher {
       container.invalidate(currentUserProvider);
       final currentUser = await container.read(currentUserProvider.future);
       if (!AuthSession().isValid(generation)) return;
-      if (currentUser?.username.toLowerCase() == expectedUsername.toLowerCase()) {
+      if (currentUser?.username.toLowerCase() ==
+          expectedUsername.toLowerCase()) {
         return;
       }
     }

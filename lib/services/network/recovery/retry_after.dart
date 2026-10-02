@@ -88,9 +88,8 @@ int? _extractRetryAfterFromData(dynamic data) {
 }
 
 int? _parseWaitSecondsFromText(String message) {
-  final chineseMatch = RegExp(
-    r'请等待\s*([0-9]+)\s*(天|小时|分钟|秒)',
-  ).firstMatch(message);
+  final chineseMatch = RegExp(r'请等待\s*([0-9]+)\s*(天|小时|分钟|秒)')
+      .firstMatch(message);
   if (chineseMatch != null) {
     final value = int.tryParse(chineseMatch.group(1) ?? '');
     final unit = chineseMatch.group(2);

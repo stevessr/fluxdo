@@ -68,10 +68,7 @@ class RecoveryCoordinator extends Interceptor {
       return;
     }
 
-    final outcome = AttemptOutcome.success(
-      response: response,
-      attemptIndex: 0,
-    );
+    final outcome = AttemptOutcome.success(response: response, attemptIndex: 0);
     if (_firstMatch(outcome) == null) {
       handler.next(response);
       return;

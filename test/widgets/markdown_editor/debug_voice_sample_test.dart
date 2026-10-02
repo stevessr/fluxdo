@@ -48,11 +48,11 @@ void main() {
     expect(maxAbs, greaterThan(8000), reason: '非静音波形');
   });
 
-  testWidgets('debug 按钮:合成 → recorded 态 → 发送返回文件路径',
-      (tester) async {
+  testWidgets('debug 按钮:合成 → recorded 态 → 发送返回文件路径', (tester) async {
     expect(kDebugMode, isTrue, reason: '测试环境即 debug');
-    PathProviderPlatform.instance =
-        _FakePathProvider(Directory.systemTemp.path);
+    PathProviderPlatform.instance = _FakePathProvider(
+      Directory.systemTemp.path,
+    );
 
     String? sent;
     // 录音面板走统一入口 showAppBottomSheet(为拿到预测返回手势),该入口
@@ -61,22 +61,25 @@ void main() {
     // UnimplementedError),与 test/providers/preferences_provider_test 同法
     SharedPreferences.setMockInitialValues(const {});
     final prefs = await SharedPreferences.getInstance();
-    await tester.pumpWidget(ProviderScope(
+    await tester.pumpWidget(
+      ProviderScope(
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
         child: MaterialApp(
-      home: Scaffold(
-        body: Builder(
-          builder: (ctx) => Center(
-            child: ElevatedButton(
-              onPressed: () async {
-                sent = await showVoiceRecorderSheet(ctx);
-              },
-              child: const Text('open'),
+          home: Scaffold(
+            body: Builder(
+              builder: (ctx) => Center(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    sent = await showVoiceRecorderSheet(ctx);
+                  },
+                  child: const Text('open'),
+                ),
+              ),
             ),
           ),
         ),
       ),
-    )));
+    );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 

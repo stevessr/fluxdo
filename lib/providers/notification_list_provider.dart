@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/notification.dart';
 import '../models/notification_category.dart';
 import '../utils/paged_async_notifier.dart';
@@ -125,8 +126,7 @@ class NotificationListNotifier
 
       return PagedPage(
         items: paginationResult.items,
-        hasMore:
-            response.notifications.isNotEmpty && paginationResult.hasMore,
+        hasMore: response.notifications.isNotEmpty && paginationResult.hasMore,
       );
     });
   }
@@ -154,9 +154,7 @@ class NotificationListNotifier
 
     // 其他筛选只需更新本地已加载项目。
     state.whenData((list) {
-      state = AsyncValue.data(
-        list.map((n) => n.copyWith(read: true)).toList(),
-      );
+      state = AsyncValue.data(list.map((n) => n.copyWith(read: true)).toList());
     });
   }
 
@@ -184,9 +182,10 @@ class NotificationListNotifier
   }
 }
 
-final notificationListProvider = AsyncNotifierProvider.autoDispose<
-  NotificationListNotifier,
-  List<DiscourseNotification>
->(() {
-  return NotificationListNotifier();
-});
+final notificationListProvider =
+    AsyncNotifierProvider.autoDispose<
+      NotificationListNotifier,
+      List<DiscourseNotification>
+    >(() {
+      return NotificationListNotifier();
+    });

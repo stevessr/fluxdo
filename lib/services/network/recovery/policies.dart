@@ -66,10 +66,7 @@ class RhttpInformationalFallbackPolicy implements RecoveryPolicy {
 /// - 等待过长(超过 [maxWaitSeconds])或没给时长 → 不重放,包装成
 ///   [RateLimitException] 让业务层决定(它可能想提示用户而不是干等)。
 class RateLimitPolicy implements RecoveryPolicy {
-  const RateLimitPolicy({
-    this.maxWaitSeconds = 30,
-    this.isChallengeResponse,
-  });
+  const RateLimitPolicy({this.maxWaitSeconds = 30, this.isChallengeResponse});
 
   /// 愿意自动等待的上限。超过则交回业务层。
   final int maxWaitSeconds;

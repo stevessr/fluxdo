@@ -93,81 +93,77 @@ void main() {
     );
   }
 
-  testWidgets(
-    'predictive back gesture drives the paired hero flight',
-    (tester) async {
-      final navigatorKey = GlobalKey<NavigatorState>();
-      var heroFlights = 0;
+  testWidgets('predictive back gesture drives the paired hero flight', (
+    tester,
+  ) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    var heroFlights = 0;
 
-      await tester.pumpWidget(
-        buildApp(navigatorKey: navigatorKey, onFlight: () => heroFlights++),
-      );
+    await tester.pumpWidget(
+      buildApp(navigatorKey: navigatorKey, onFlight: () => heroFlights++),
+    );
 
-      await tester.tap(find.text('open'));
-      await tester.pumpAndSettle();
-      heroFlights = 0;
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    heroFlights = 0;
 
-      await sendGesture('startBackGesture', {
-        'touchOffset': <double>[5, 300],
-        'progress': 0.0,
-        'swipeEdge': 0,
-      });
-      await tester.pump();
+    await sendGesture('startBackGesture', {
+      'touchOffset': <double>[5, 300],
+      'progress': 0.0,
+      'swipeEdge': 0,
+    });
+    await tester.pump();
 
-      // 路由已认领手势(认领是 Hero 跟手飞行的前提)
-      expect(navigatorKey.currentState!.userGestureInProgress, isTrue);
+    // 路由已认领手势(认领是 Hero 跟手飞行的前提)
+    expect(navigatorKey.currentState!.userGestureInProgress, isTrue);
 
-      await sendGesture('updateBackGestureProgress', {
-        'touchOffset': <double>[80, 300],
-        'progress': 0.3,
-        'swipeEdge': 0,
-      });
-      await tester.pump();
+    await sendGesture('updateBackGestureProgress', {
+      'touchOffset': <double>[80, 300],
+      'progress': 0.3,
+      'swipeEdge': 0,
+    });
+    await tester.pump();
 
-      // 手势期间 Hero 已跟手起飞;视觉走 fallback,不套缩放预览
-      expect(heroFlights, greaterThan(0));
+    // 手势期间 Hero 已跟手起飞;视觉走 fallback,不套缩放预览
+    expect(heroFlights, greaterThan(0));
 
-      await sendGesture('commitBackGesture');
-      await tester.pumpAndSettle();
-      expect(find.text('open'), findsOneWidget);
-      expect(navigatorKey.currentState!.userGestureInProgress, isFalse);
-    },
-    variant: const TargetPlatformVariant({TargetPlatform.android}),
-  );
+    await sendGesture('commitBackGesture');
+    await tester.pumpAndSettle();
+    expect(find.text('open'), findsOneWidget);
+    expect(navigatorKey.currentState!.userGestureInProgress, isFalse);
+  }, variant: const TargetPlatformVariant({TargetPlatform.android}));
 
-  testWidgets(
-    'cancelled predictive back restores the pushed route',
-    (tester) async {
-      final navigatorKey = GlobalKey<NavigatorState>();
+  testWidgets('cancelled predictive back restores the pushed route', (
+    tester,
+  ) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
 
-      await tester.pumpWidget(
-        buildApp(navigatorKey: navigatorKey, onFlight: () {}),
-      );
+    await tester.pumpWidget(
+      buildApp(navigatorKey: navigatorKey, onFlight: () {}),
+    );
 
-      await tester.tap(find.text('open'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
 
-      await sendGesture('startBackGesture', {
-        'touchOffset': <double>[5, 300],
-        'progress': 0.0,
-        'swipeEdge': 0,
-      });
-      await tester.pump();
-      await sendGesture('updateBackGestureProgress', {
-        'touchOffset': <double>[80, 300],
-        'progress': 0.4,
-        'swipeEdge': 0,
-      });
-      await tester.pump();
+    await sendGesture('startBackGesture', {
+      'touchOffset': <double>[5, 300],
+      'progress': 0.0,
+      'swipeEdge': 0,
+    });
+    await tester.pump();
+    await sendGesture('updateBackGestureProgress', {
+      'touchOffset': <double>[80, 300],
+      'progress': 0.4,
+      'swipeEdge': 0,
+    });
+    await tester.pump();
 
-      await sendGesture('cancelBackGesture');
-      await tester.pumpAndSettle();
+    await sendGesture('cancelBackGesture');
+    await tester.pumpAndSettle();
 
-      // 取消后查看器仍在,Hero 归位不残留
-      expect(find.byType(Scaffold), findsWidgets);
-      expect(navigatorKey.currentState!.userGestureInProgress, isFalse);
-      expect(navigatorKey.currentState!.canPop(), isTrue);
-    },
-    variant: const TargetPlatformVariant({TargetPlatform.android}),
-  );
+    // 取消后查看器仍在,Hero 归位不残留
+    expect(find.byType(Scaffold), findsWidgets);
+    expect(navigatorKey.currentState!.userGestureInProgress, isFalse);
+    expect(navigatorKey.currentState!.canPop(), isTrue);
+  }, variant: const TargetPlatformVariant({TargetPlatform.android}));
 }

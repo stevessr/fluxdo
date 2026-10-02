@@ -12,7 +12,6 @@ class _NoMessageBusInit extends MessageBusInitNotifier {
   void build() {}
 }
 
-
 /// 私信追踪消息分派（对齐 Discourse 网页版 pm-topic-tracking-state.js
 /// 的 _processMessage）。
 ///
@@ -31,16 +30,11 @@ MessageBusMessage _msg(
   String messageType, {
   required int topicId,
   Map<String, dynamic> payload = const {},
-}) =>
-    MessageBusMessage(
-      channel: '/private-message-topic-tracking-state/user/$_currentUserId',
-      messageId: 1,
-      data: {
-        'message_type': messageType,
-        'topic_id': topicId,
-        'payload': payload,
-      },
-    );
+}) => MessageBusMessage(
+  channel: '/private-message-topic-tracking-state/user/$_currentUserId',
+  messageId: 1,
+  data: {'message_type': messageType, 'topic_id': topicId, 'payload': payload},
+);
 
 void main() {
   late ProviderContainer container;

@@ -7,7 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 // layouts through a local equivalent instead of widening the runtime API.
 bool looksAnimatedAvif(Uint8List bytes) {
   if (bytes.length < 16) return false;
-  if (bytes[4] != 0x66 || bytes[5] != 0x74 || bytes[6] != 0x79 || bytes[7] != 0x70) {
+  if (bytes[4] != 0x66 ||
+      bytes[5] != 0x74 ||
+      bytes[6] != 0x79 ||
+      bytes[7] != 0x70) {
     return false;
   }
 

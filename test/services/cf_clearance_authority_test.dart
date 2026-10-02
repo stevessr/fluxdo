@@ -18,15 +18,12 @@ void main() {
   late CfClearanceAuthority authority;
 
   CanonicalCookie clearance(String value, {DateTime? expiresAt}) =>
-      CanonicalCookie(
-        name: 'cf_clearance',
-        value: value,
-        expiresAt: expiresAt,
-      );
+      CanonicalCookie(name: 'cf_clearance', value: value, expiresAt: expiresAt);
 
   void jarWith(CanonicalCookie? cookie) {
-    authority.debugCookieReader =
-        cookie == null ? () async => null : () async => cookie;
+    authority.debugCookieReader = cookie == null
+        ? () async => null
+        : () async => cookie;
   }
 
   setUp(() {
@@ -49,7 +46,9 @@ void main() {
     });
 
     test('候选值与在位值相同 → 幂等跳过', () async {
-      jarWith(clearance('v1', expiresAt: DateTime.now().add(const Duration(days: 7))));
+      jarWith(
+        clearance('v1', expiresAt: DateTime.now().add(const Duration(days: 7))),
+      );
       expect(
         await authority.evaluateReplacement('v1'),
         CfClearanceReplaceDecision.skipSameValue,
@@ -57,7 +56,12 @@ void main() {
     });
 
     test('在位值已过期 → 放行(自然换届)', () async {
-      jarWith(clearance('old', expiresAt: DateTime.now().subtract(const Duration(minutes: 1))));
+      jarWith(
+        clearance(
+          'old',
+          expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
+        ),
+      );
       expect(
         await authority.evaluateReplacement('new-mint'),
         CfClearanceReplaceDecision.allow,
@@ -65,7 +69,12 @@ void main() {
     });
 
     test('在位值临期(<30 分钟) → 放行(新铸值无缝继位,零弹盾)', () async {
-      jarWith(clearance('old', expiresAt: DateTime.now().add(const Duration(minutes: 10))));
+      jarWith(
+        clearance(
+          'old',
+          expiresAt: DateTime.now().add(const Duration(minutes: 10)),
+        ),
+      );
       expect(
         await authority.evaluateReplacement('new-mint'),
         CfClearanceReplaceDecision.allow,
@@ -87,7 +96,12 @@ void main() {
   group('evaluateReplacement 保护条件(核心)', () {
     test('在位值健康 + 异值候选 → 拒绝顶替(2026-08-19 残留旧值场景)', () async {
       // jar 里是刚过盾的新值(597 字符形态,有效期 7 天)
-      jarWith(clearance('fresh-597', expiresAt: DateTime.now().add(const Duration(days: 7))));
+      jarWith(
+        clearance(
+          'fresh-597',
+          expiresAt: DateTime.now().add(const Duration(days: 7)),
+        ),
+      );
 
       // Turnstile WebView load_stop 带回 14:21 签发的残留旧值(533 字符形态):
       // 即便它的 expires 更晚也不许顶替——判定不看候选值,只看在位值活着。
@@ -114,14 +128,26 @@ void main() {
   group('2026-08-19 事故时间线重放', () {
     test('过盾 → 残留值多次试图顶替 → 全部被挡 → 不再二次撞盾', () async {
       // 16:04:54 旧值被撞
-      jarWith(clearance('old-533-15_55', expiresAt: DateTime.now().add(const Duration(days: 7))));
+      jarWith(
+        clearance(
+          'old-533-15_55',
+          expiresAt: DateTime.now().add(const Duration(days: 7)),
+        ),
+      );
       authority.noteIncumbentChallenged('old-533-15_55');
 
       // 过盾:验证流程删空 jar → 新值(597)经 acceptValues 写入(jar 空,放行)
       jarWith(null);
-      expect(await authority.evaluateReplacement('fresh-597'),
-          CfClearanceReplaceDecision.allow);
-      jarWith(clearance('fresh-597', expiresAt: DateTime.now().add(const Duration(days: 7))));
+      expect(
+        await authority.evaluateReplacement('fresh-597'),
+        CfClearanceReplaceDecision.allow,
+      );
+      jarWith(
+        clearance(
+          'fresh-597',
+          expiresAt: DateTime.now().add(const Duration(days: 7)),
+        ),
+      );
 
       // 16:05:00 / 16:05:09 / 16:05:16 三次 load_stop 带回同一枚残留 533:
       // 原日志里每次都盖掉新值、1 秒后再 403;现在全部跳过
@@ -140,7 +166,12 @@ void main() {
     test('编码形态与解码形态互相命中(在位比较/被撞标记)', () async {
       const raw = 'clear{"ace}';
       final encoded = CookieValueCodec.encode(raw);
-      jarWith(clearance(encoded, expiresAt: DateTime.now().add(const Duration(days: 7))));
+      jarWith(
+        clearance(
+          encoded,
+          expiresAt: DateTime.now().add(const Duration(days: 7)),
+        ),
+      );
 
       // 候选为解码形态 → 命中同值幂等
       expect(
@@ -157,7 +188,9 @@ void main() {
     });
 
     test('reset 清空被撞标记(登出换账号)', () async {
-      jarWith(clearance('v1', expiresAt: DateTime.now().add(const Duration(days: 7))));
+      jarWith(
+        clearance('v1', expiresAt: DateTime.now().add(const Duration(days: 7))),
+      );
       authority.noteIncumbentChallenged('v1');
       authority.reset();
 
@@ -184,7 +217,9 @@ void main() {
         'abc.def-_123',
       );
       expect(
-        CfClearanceAuthority.extractFromCookieHeader('my_cf_clearance=bad; _t=x'),
+        CfClearanceAuthority.extractFromCookieHeader(
+          'my_cf_clearance=bad; _t=x',
+        ),
         isNull,
       );
       expect(CfClearanceAuthority.extractFromCookieHeader(''), isNull);

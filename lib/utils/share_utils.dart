@@ -57,17 +57,17 @@ class ShareUtils {
   /// 图片扩展名 → 标准 MIME 类型(jpg 的正确 MIME 是 image/jpeg;
   /// 直接拼 'image/$ext' 会得到非法类型,部分接收方不认)。
   static String imageMimeType(String ext) => switch (ext.toLowerCase()) {
-        'jpg' || 'jpeg' => 'image/jpeg',
-        'png' => 'image/png',
-        'gif' => 'image/gif',
-        'webp' => 'image/webp',
-        'avif' => 'image/avif',
-        'heic' || 'heif' => 'image/heic',
-        'bmp' => 'image/bmp',
-        'svg' => 'image/svg+xml',
-        'tif' || 'tiff' => 'image/tiff',
-        _ => 'image/$ext',
-      };
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'png' => 'image/png',
+    'gif' => 'image/gif',
+    'webp' => 'image/webp',
+    'avif' => 'image/avif',
+    'heic' || 'heif' => 'image/heic',
+    'bmp' => 'image/bmp',
+    'svg' => 'image/svg+xml',
+    'tif' || 'tiff' => 'image/tiff',
+    _ => 'image/$ext',
+  };
 
   /// 分享/导出用的中转文件目录名（在 `getTemporaryDirectory()` 下）。
   static const String _kOutboxDir = 'outbox';
@@ -115,7 +115,8 @@ class ShareUtils {
     String? urlHint,
     String? subject,
   }) async {
-    final base = safeFileBaseName(fileName) ??
+    final base =
+        safeFileBaseName(fileName) ??
         safeFileBaseName(_urlLastSegment(urlHint)) ??
         'fluxdo_${DateTime.now().millisecondsSinceEpoch}';
     final shareFile = await createOutboxFile('$base.$ext');

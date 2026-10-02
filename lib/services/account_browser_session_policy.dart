@@ -18,9 +18,7 @@ class AccountBrowserSessionPolicy {
 
   /// External sites whose WebView login is intentionally tied to the active
   /// linux.do account/profile.
-  static const List<String> externalAccountOrigins = [
-    'https://anyrouter.top/',
-  ];
+  static const List<String> externalAccountOrigins = ['https://anyrouter.top/'];
 
   static const List<String> snapshotOrigins = [
     ...appOrigins,

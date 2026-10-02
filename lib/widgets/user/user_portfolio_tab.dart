@@ -126,7 +126,8 @@ class _UserPortfolioTabState extends ConsumerState<UserPortfolioTab> {
       onNotification: (notification) {
         if (notification.metrics.axis == Axis.vertical) {
           final distance =
-              notification.metrics.maxScrollExtent - notification.metrics.pixels;
+              notification.metrics.maxScrollExtent -
+              notification.metrics.pixels;
           if (_loadMoreCoordinator.shouldTriggerForDistance(distance)) {
             _loadMore();
           }
@@ -148,18 +149,18 @@ class _UserPortfolioTabState extends ConsumerState<UserPortfolioTab> {
                           Icon(
                             Icons.collections_outlined,
                             size: 64,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                           const SizedBox(height: 16),
                           Text(
                             context.l10n.userProfile_noPortfolio,
                             style: Theme.of(context).textTheme.bodyLarge
                                 ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                           ),
                         ],
@@ -175,8 +176,7 @@ class _UserPortfolioTabState extends ConsumerState<UserPortfolioTab> {
                   if (index == topics.length) {
                     return PagedListFooter(
                       hasMore: _hasMore,
-                      isLoadingMore:
-                          _loadMoreCoordinator.isRunning && _loading,
+                      isLoadingMore: _loadMoreCoordinator.isRunning && _loading,
                       isLoadMoreFailed: _loadMoreFailed,
                       onRetry: _loadMore,
                     );

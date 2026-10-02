@@ -58,11 +58,13 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
   late final TextEditingController _cipherController;
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _pemController = TextEditingController();
-  final TextEditingController _caesarController =
-      TextEditingController(text: '3');
+  final TextEditingController _caesarController = TextEditingController(
+    text: '3',
+  );
   final TextEditingController _vigenereController = TextEditingController();
-  final TextEditingController _railCountController =
-      TextEditingController(text: '2');
+  final TextEditingController _railCountController = TextEditingController(
+    text: '2',
+  );
 
   late String _algorithmId;
   bool _autoDetected = false;
@@ -78,8 +80,7 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
     super.initState();
     _cipherController = TextEditingController(text: widget.initialCiphertext);
     final suggestion = CryptoToolbox.suggestDecrypt(widget.initialCiphertext);
-    _algorithmId =
-        suggestion.algorithmId ?? CryptoToolbox.defaultAlgorithmId;
+    _algorithmId = suggestion.algorithmId ?? CryptoToolbox.defaultAlgorithmId;
     _autoDetected = suggestion.algorithmId != null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -114,12 +115,12 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
   CryptoAlgorithm? get _algorithm => CryptoToolbox.byId(_algorithmId);
 
   CryptoParams _buildParams() => CryptoParams(
-        password: _passwordController.text,
-        rsaPem: _pemController.text,
-        caesarShift: int.tryParse(_caesarController.text) ?? 3,
-        vigenereKey: _vigenereController.text,
-        railCount: int.tryParse(_railCountController.text) ?? 2,
-      );
+    password: _passwordController.text,
+    rsaPem: _pemController.text,
+    caesarShift: int.tryParse(_caesarController.text) ?? 3,
+    vigenereKey: _vigenereController.text,
+    railCount: int.tryParse(_railCountController.text) ?? 2,
+  );
 
   Future<void> _decrypt() async {
     final cipherText = _cipherController.text.trim();
@@ -143,8 +144,7 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
       if (_rememberPassword &&
           algo.category == CryptoAlgorithmCategory.symmetric) {
         final store = ref.read(secretStoreProvider);
-        await CryptoKeyStore.rememberPassword(
-            store, _passwordController.text);
+        await CryptoKeyStore.rememberPassword(store, _passwordController.text);
         await _loadRememberedPasswords();
       }
     } on CryptoException catch (e) {
@@ -165,10 +165,10 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
     return SingleChildScrollView(
       key: const ValueKey('crypto-decrypt-sheet'),
       child: Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _buildCipherField(theme, s),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCipherField(theme, s),
           const SizedBox(height: 12),
           CryptoAlgorithmTile(
             algorithmId: _algorithmId,
@@ -192,7 +192,9 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
               label: Text(s.crypto_decrypt),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 28, vertical: 12),
+                  horizontal: 28,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -221,16 +223,14 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
       controller: _cipherController,
       minLines: 2,
       maxLines: 4,
-      style: theme.textTheme.bodySmall
-          ?.copyWith(fontFamily: 'monospace'),
+      style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
       decoration: cryptoSheetInputDecoration(
         theme,
         labelText: s.crypto_ciphertext,
       ),
       onChanged: (_) {
         // 输入变化后重新嗅探算法
-        final suggestion = CryptoToolbox.suggestDecrypt(
-            _cipherController.text);
+        final suggestion = CryptoToolbox.suggestDecrypt(_cipherController.text);
         if (suggestion.algorithmId != null &&
             suggestion.algorithmId != _algorithmId) {
           setState(() {
@@ -245,7 +245,11 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
   }
 
   /// 按算法类型渲染密钥/参数输入区
-  Widget _buildKeyFields(ThemeData theme, AppLocalizations s, CryptoAlgorithm algo) {
+  Widget _buildKeyFields(
+    ThemeData theme,
+    AppLocalizations s,
+    CryptoAlgorithm algo,
+  ) {
     switch (algo.category) {
       case CryptoAlgorithmCategory.symmetric:
         return Column(
@@ -286,8 +290,8 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
                         ? Icons.visibility_outlined
                         : Icons.visibility_off_outlined,
                   ),
-                  onPressed: () => setState(
-                      () => _obscurePassword = !_obscurePassword),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
                 ),
               ),
               onSubmitted: (_) => _decrypt(),
@@ -303,8 +307,9 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
               controller: _pemController,
               minLines: 3,
               maxLines: 5,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(fontFamily: 'monospace'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFamily: 'monospace',
+              ),
               decoration: cryptoSheetInputDecoration(
                 theme,
                 labelText: s.crypto_rsaPrivateKeyHint,
@@ -366,7 +371,10 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
   }
 
   Widget _buildRememberRow(
-      ThemeData theme, AppLocalizations s, CryptoAlgorithm? algo) {
+    ThemeData theme,
+    AppLocalizations s,
+    CryptoAlgorithm? algo,
+  ) {
     if (algo?.category != CryptoAlgorithmCategory.symmetric ||
         !_rememberEnabled) {
       return const SizedBox.shrink();
@@ -380,8 +388,9 @@ class _CryptoDecryptSheetState extends ConsumerState<CryptoDecryptSheet> {
         Expanded(
           child: Text(
             '${s.crypto_rememberPassword}（${s.crypto_secureStorageNote}）',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
           ),
         ),
       ],

@@ -62,10 +62,12 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     });
 
     try {
-      final result = await ref.read(discourseServiceProvider).fetchGroups(
-        page: page,
-        filter: requestedFilter.isEmpty ? null : requestedFilter,
-      );
+      final result = await ref
+          .read(discourseServiceProvider)
+          .fetchGroups(
+            page: page,
+            filter: requestedFilter.isEmpty ? null : requestedFilter,
+          );
       if (!mounted || requestedFilter != _filter) return;
 
       final merged = reset
@@ -112,9 +114,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   }
 
   Future<void> _openGroup(DiscourseGroup group) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => GroupPage(groupName: group.name)),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => GroupPage(groupName: group.name)));
     if (mounted) _load(reset: true);
   }
 
@@ -139,8 +141,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       final nextCount = currentCount == null
           ? null
           : join
-              ? currentCount + 1
-              : (currentCount > 0 ? currentCount - 1 : 0);
+          ? currentCount + 1
+          : (currentCount > 0 ? currentCount - 1 : 0);
       final updated = group.copyWith(
         userCount: nextCount,
         isGroupUser: join,
@@ -154,14 +156,13 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       });
 
       final copy = _copy(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(join ? copy.joined : copy.left)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(join ? copy.joined : copy.left)));
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) {
@@ -296,7 +297,11 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                 color: Theme.of(context).colorScheme.onSecondaryContainer,
               ),
             ),
-            title: Text(group.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            title: Text(
+              group.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             subtitle: Text(
               group.fullName != null && group.fullName!.trim().isNotEmpty
                   ? '@${group.name}'

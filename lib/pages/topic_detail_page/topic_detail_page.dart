@@ -1,16 +1,21 @@
 import 'package:ai_model_manager/ai_model_manager.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+
 import '../../services/app_error_handler.dart';
 import '../../services/notion/notion_bookmark_auto_sync.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderSliver, RenderViewport;
 import 'package:flutter/services.dart';
+
 import '../../utils/idle_task.dart';
+
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scroll_to_index/scroll_to_index.dart';
 import 'package:share_plus/share_plus.dart';
+
 import '../../l10n/s.dart';
 import '../../utils/frame_jank_monitor.dart';
 import '../../utils/html_text_mapper.dart';
@@ -19,11 +24,14 @@ import '../../utils/code_selection_context.dart';
 import '../../utils/link_launcher.dart';
 import '../../utils/quote_builder.dart';
 import '../../utils/scroll_jump.dart';
+
 import 'package:fluxdo_render/fluxdo_render.dart'
     show SelectionCoordinator, TocEntry;
 import 'package:uuid/uuid.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
+
 import '../../models/draft.dart';
 import '../../models/nested_topic.dart';
 import '../../models/topic.dart';
@@ -55,8 +63,10 @@ import '../../widgets/post/post_revision/revision_modal.dart';
 import '../../widgets/post/reply_sheet.dart';
 import '../../widgets/topic/topic_progress.dart';
 import '../../widgets/topic/topic_notification_button.dart';
+
 import 'package:common_ui/common_ui.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../providers/nested_topic_provider.dart';
@@ -1519,9 +1529,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     final hasAiModel = ref.watch(hasAvailableAiModelProvider);
     final isAiGenerating = hasAiModel
         ? ref.watch(
-            topicAiChatProvider(
-              widget.topicId,
-            ).select((state) => state.isGenerating),
+            topicAiChatProvider(widget.topicId)
+                .select((state) => state.isGenerating),
           )
         : false;
 
@@ -2032,9 +2041,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   }
 
   /// 在更多菜单中切换当前私信的个人归档状态。
-  Future<void> _handleToggleArchiveMessage(
-    TopicDetailNotifier notifier,
-  ) async {
+  Future<void> _handleToggleArchiveMessage(TopicDetailNotifier notifier) async {
     final detail = ref.read(topicDetailProvider(_params)).value;
     if (detail == null || !detail.isPrivateMessage) return;
 
@@ -3271,9 +3278,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               highlightBoostUsername: widget.highlightBoostUsername,
               isLoggedIn: isLoggedIn,
               isActivitySort: notifier.isActivityMode,
-              onAnswerSortChanged: (byActivity) => byActivity
-                  ? _handleShowByActivity()
-                  : _handleCancelFilter(),
+              onAnswerSortChanged: (byActivity) =>
+                  byActivity ? _handleShowByActivity() : _handleCancelFilter(),
               headingAnchorRegistry: _tocController.registry,
               currentUserId: currentUser?.id,
               currentUserIsAdmin: currentUser?.admin ?? false,

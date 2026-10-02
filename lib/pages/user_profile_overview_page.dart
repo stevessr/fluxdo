@@ -6,6 +6,7 @@ import 'package:extended_nested_scroll_view/extended_nested_scroll_view.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
+
 import '../models/user.dart';
 import '../models/user_action.dart';
 import '../models/topic.dart';
@@ -17,7 +18,9 @@ import '../utils/number_utils.dart';
 import '../utils/load_more_coordinator.dart';
 import '../utils/pagination_helper.dart';
 import '../services/emoji_handler.dart';
+
 import 'package:dio/dio.dart';
+
 import '../utils/url_helper.dart';
 import '../services/app_error_handler.dart';
 import '../utils/share_utils.dart';
@@ -49,7 +52,9 @@ import 'search_page.dart';
 import 'follow_list_page.dart';
 import 'image_viewer_page.dart';
 import 'badge_page.dart';
+
 import 'package:common_ui/common_ui.dart';
+
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
 import '../providers/chat_providers.dart';
@@ -414,10 +419,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
     setState(() => _isOpeningChat = true);
     try {
       final channelId = await ref.read(
-        createDirectMessageProvider((
-          usernames: [_user!.username],
-          name: null,
-        )).future,
+        createDirectMessageProvider((usernames: [_user!.username], name: null))
+            .future,
       );
       if (!mounted) return;
       final title = _user!.name?.isNotEmpty == true
@@ -1251,9 +1254,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
         // StretchingOverscrollIndicator，与 NestedScrollView/SliverAppBar
         // 组合存在 framework bug（flutter/flutter #100967、#116522、#100538），
         // 表现为上滑松手时 tab 区域回弹抖动（与 topics_page 同因同修）。
-        behavior: ScrollConfiguration.of(
-          context,
-        ).copyWith(scrollbars: false, overscroll: false),
+        behavior: ScrollConfiguration.of(context)
+            .copyWith(scrollbars: false, overscroll: false),
         child: ExtendedNestedScrollView(
           controller: _scrollController,
           pinnedHeaderSliverHeightBuilder: () => pinnedHeaderHeight,

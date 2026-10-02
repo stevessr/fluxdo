@@ -108,13 +108,13 @@ class GestureSurfaceState extends State<GestureSurface>
     super.didChangeDependencies();
     _slidePageState = null;
     if (widget.enableSlideOutPage) {
-      _slidePageState =
-          context.findAncestorStateOfType<ExtendedImageSlidePageState>();
+      _slidePageState = context
+          .findAncestorStateOfType<ExtendedImageSlidePageState>();
     }
     _pageViewState = null;
     if (widget.inPageView) {
-      _pageViewState =
-          context.findAncestorStateOfType<ExtendedImageGesturePageViewState>();
+      _pageViewState = context
+          .findAncestorStateOfType<ExtendedImageGesturePageViewState>();
       _pageViewState?.registerArbiter(this);
     }
   }
@@ -419,8 +419,9 @@ class GestureSurfaceState extends State<GestureSurface>
           );
         }
         Offset delta = details.focalPointDelta;
-        delta =
-            axis == Axis.horizontal ? Offset(delta.dx, 0) : Offset(0, delta.dy);
+        delta = axis == Axis.horizontal
+            ? Offset(delta.dx, 0)
+            : Offset(0, delta.dy);
 
         pageViewState.onDragUpdate(
           DragUpdateDetails(
@@ -433,12 +434,11 @@ class GestureSurfaceState extends State<GestureSurface>
         return;
       }
     }
-    final double? scale =
-        widget.canScaleImage(gestureDetails)
-            ? _clampScaleWithConfig(
-              _startingScale! * details.scale * _gestureConfig.speed,
-            )
-            : gestureDetails!.totalScale;
+    final double? scale = widget.canScaleImage(gestureDetails)
+        ? _clampScaleWithConfig(
+            _startingScale! * details.scale * _gestureConfig.speed,
+          )
+        : gestureDetails!.totalScale;
 
     //no more zoom
     if (details.scale != 1.0 &&
@@ -498,24 +498,23 @@ class GestureSurfaceState extends State<GestureSurface>
     if (_pageViewState != null && _pageViewState!.isDraging) {
       _pageViewState!.onDragEnd(
         DragEndDetails(
-          velocity:
-              _pageViewState!.widget.scrollDirection == Axis.horizontal
-                  ? Velocity(
-                    pixelsPerSecond: Offset(
-                      details.velocity.pixelsPerSecond.dx,
-                      0,
-                    ),
-                  )
-                  : Velocity(
-                    pixelsPerSecond: Offset(
-                      0,
-                      details.velocity.pixelsPerSecond.dy,
-                    ),
+          velocity: _pageViewState!.widget.scrollDirection == Axis.horizontal
+              ? Velocity(
+                  pixelsPerSecond: Offset(
+                    details.velocity.pixelsPerSecond.dx,
+                    0,
                   ),
+                )
+              : Velocity(
+                  pixelsPerSecond: Offset(
+                    0,
+                    details.velocity.pixelsPerSecond.dy,
+                  ),
+                ),
           primaryVelocity:
               _pageViewState!.widget.scrollDirection == Axis.horizontal
-                  ? details.velocity.pixelsPerSecond.dx
-                  : details.velocity.pixelsPerSecond.dy,
+              ? details.velocity.pixelsPerSecond.dx
+              : details.velocity.pixelsPerSecond.dy,
         ),
       );
       return;
@@ -544,7 +543,9 @@ class GestureSurfaceState extends State<GestureSurface>
       final layoutRect = gestureDetails!.layoutRect;
       final destinationRect = gestureDetails!.destinationRect;
       final currentOffset = gestureDetails!.offset;
-      if (layoutRect == null || destinationRect == null || currentOffset == null) {
+      if (layoutRect == null ||
+          destinationRect == null ||
+          currentOffset == null) {
         return;
       }
 

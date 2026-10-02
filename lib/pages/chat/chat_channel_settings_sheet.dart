@@ -73,9 +73,8 @@ class _ChatChannelSettingsSheetState
     } catch (e) {
       if (mounted) {
         setState(() => _localMuted = channel.muted);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('设置失败: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('设置失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -118,16 +117,14 @@ class _ChatChannelSettingsSheetState
           'always' => '全部消息',
           _ => '仅提及',
         };
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('通知级别已设为「$label」')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('通知级别已设为「$label」')));
       }
     } catch (e) {
       if (mounted) {
         setState(() => _localNotificationLevel = channel.notificationLevel);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('设置失败: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('设置失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -215,9 +212,8 @@ class _ChatChannelSettingsSheetState
             channel.threadingEnabled,
           );
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('设置失败: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('设置失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -312,9 +308,9 @@ class _ChatChannelSettingsSheetState
                                       )
                                     : Icon(
                                         Icons.add_reaction_outlined,
-                                        color: Theme.of(
-                                          ctx,
-                                        ).colorScheme.onPrimaryContainer,
+                                        color: Theme.of(ctx)
+                                            .colorScheme
+                                            .onPrimaryContainer,
                                       ),
                               ),
                             ),
@@ -363,9 +359,8 @@ class _ChatChannelSettingsSheetState
                       }
                     } catch (e) {
                       if (mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('更新失败: $e')));
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text('更新失败: $e')));
                       }
                     } finally {
                       if (mounted) setState(() => _isSaving = false);
@@ -475,9 +470,8 @@ class _ChatChannelSettingsSheetState
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.chat_leave_failed('$e'))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.chat_leave_failed('$e'))));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

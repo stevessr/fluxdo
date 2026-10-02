@@ -1,5 +1,6 @@
 // 帖子数据模型
 import 'package:flutter/foundation.dart' show listEquals;
+
 import '../l10n/s.dart';
 import '../utils/time_utils.dart';
 import '../utils/url_helper.dart';
@@ -2537,7 +2538,11 @@ class TopicListResponse {
 
   final List<Tag> tags;
 
-  TopicListResponse({required this.topics, this.moreTopicsUrl, this.tags = const []});
+  TopicListResponse({
+    required this.topics,
+    this.moreTopicsUrl,
+    this.tags = const [],
+  });
 
   factory TopicListResponse.fromJson(Map<String, dynamic> json) {
     // Parse users map
@@ -2591,7 +2596,9 @@ class TopicListResponse {
           )
           .toList(),
       moreTopicsUrl: moreTopicsUrl,
-      tags: (topicList?['tags'] as List? ?? const []).map(Tag.fromJson).toList(),
+      tags: (topicList?['tags'] as List? ?? const [])
+          .map(Tag.fromJson)
+          .toList(),
     );
   }
 }

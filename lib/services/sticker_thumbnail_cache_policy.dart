@@ -5,13 +5,7 @@ import 'dart:typed_data';
 /// Cache schema versions are intentionally attached to the decoded source
 /// format instead of the resource key. A decoder/cache fix for one format can
 /// therefore invalidate only that format without flushing every sticker.
-enum StickerThumbnailFormat {
-  avif,
-  gif,
-  webp,
-  apng,
-  unknown,
-}
+enum StickerThumbnailFormat { avif, gif, webp, apng, unknown }
 
 /// Versionless sticker-thumbnail key + format-scoped cache envelope.
 ///
@@ -49,10 +43,7 @@ class StickerThumbnailCachePolicy {
   }
 
   /// Wrap a PNG payload with source-format + schema-version metadata.
-  static Uint8List wrap(
-    StickerThumbnailFormat format,
-    Uint8List pngBytes,
-  ) {
+  static Uint8List wrap(StickerThumbnailFormat format, Uint8List pngBytes) {
     final version = schemaVersion(format);
     if (version < 0 || version > 0xffff) {
       throw RangeError.range(version, 0, 0xffff, 'schemaVersion');
@@ -163,7 +154,8 @@ class StickerThumbnailCachePolicy {
     if (!_looksLikePng(bytes)) return false;
     var offset = 8;
     while (offset + 12 <= bytes.length) {
-      final length = (bytes[offset] << 24) |
+      final length =
+          (bytes[offset] << 24) |
           (bytes[offset + 1] << 16) |
           (bytes[offset + 2] << 8) |
           bytes[offset + 3];

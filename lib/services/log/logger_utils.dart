@@ -52,7 +52,9 @@ class LoggerUtils {
       final deviceInfo = DeviceInfoPlugin();
       if (Platform.isAndroid) {
         final info = await deviceInfo.androidInfo;
-        buf.writeln('平台: Android ${info.version.release} (SDK ${info.version.sdkInt})');
+        buf.writeln(
+          '平台: Android ${info.version.release} (SDK ${info.version.sdkInt})',
+        );
         buf.writeln('设备: ${info.brand} ${info.model}');
       } else if (Platform.isIOS) {
         final info = await deviceInfo.iosInfo;
@@ -60,7 +62,9 @@ class LoggerUtils {
         buf.writeln('设备: ${info.utsname.machine}');
       } else if (Platform.isMacOS) {
         final info = await deviceInfo.macOsInfo;
-        buf.writeln('平台: macOS ${info.majorVersion}.${info.minorVersion}.${info.patchVersion}');
+        buf.writeln(
+          '平台: macOS ${info.majorVersion}.${info.minorVersion}.${info.patchVersion}',
+        );
         buf.writeln('设备: ${info.model} (${info.arch})');
       } else if (Platform.isLinux) {
         final info = await deviceInfo.linuxInfo;
@@ -93,13 +97,15 @@ class LoggerUtils {
 
     try {
       final pkg = await PackageInfo.fromPlatform();
-      buf.writeln(jsonEncode({
-        '_header': 'app_info',
-        'appName': pkg.appName,
-        'version': pkg.version,
-        'buildNumber': pkg.buildNumber,
-        'packageName': pkg.packageName,
-      }));
+      buf.writeln(
+        jsonEncode({
+          '_header': 'app_info',
+          'appName': pkg.appName,
+          'version': pkg.version,
+          'buildNumber': pkg.buildNumber,
+          'packageName': pkg.packageName,
+        }),
+      );
     } catch (_) {}
 
     try {
@@ -149,7 +155,10 @@ class LoggerUtils {
           'buildNumber': info.buildNumber,
         };
       } else {
-        device = {'_header': 'device_info', 'platform': Platform.operatingSystem};
+        device = {
+          '_header': 'device_info',
+          'platform': Platform.operatingSystem,
+        };
       }
 
       // User-Agent
@@ -269,8 +278,8 @@ class LoggerUtils {
         if (json['message'] == null) {
           final customParams =
               json['customParameters'] as Map<String, dynamic>?;
-          json['message'] = customParams?['message']?.toString() ??
-              json['error']?.toString();
+          json['message'] =
+              customParams?['message']?.toString() ?? json['error']?.toString();
           // 同时提升 tag
           json['tag'] ??= customParams?['tag']?.toString();
         }

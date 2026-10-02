@@ -84,11 +84,10 @@ class CsrfTokenService {
     // 持久化是尽力而为:内存里的 token 已经可用,落盘只为跨进程复用。
     // 所有写删经 _storageTail 保序，因此可安全留在后台，不阻塞业务请求。
     unawaited(
-      _enqueueStorage(
-        () => _storage.write(key: _csrfTokenKey, value: token),
-      ).catchError((Object e) {
-        debugPrint('[CsrfTokenService] CSRF token 持久化失败(忽略): $e');
-      }),
+      _enqueueStorage(() => _storage.write(key: _csrfTokenKey, value: token))
+          .catchError((Object e) {
+            debugPrint('[CsrfTokenService] CSRF token 持久化失败(忽略): $e');
+          }),
     );
   }
 
@@ -98,11 +97,10 @@ class CsrfTokenService {
     // BAD CSRF 说明业务请求已到达服务端(非 CF 拦截),放行下一次刷新
     _lastFailureAt = null;
     unawaited(
-      _enqueueStorage(() => _storage.delete(key: _csrfTokenKey)).catchError((
-        Object e,
-      ) {
-        debugPrint('[CsrfTokenService] CSRF token 清除失败(忽略): $e');
-      }),
+      _enqueueStorage(() => _storage.delete(key: _csrfTokenKey))
+          .catchError((Object e) {
+            debugPrint('[CsrfTokenService] CSRF token 清除失败(忽略): $e');
+          }),
     );
   }
 
@@ -228,11 +226,10 @@ class CsrfTokenService {
     // 正确性依赖的是同步清掉内存 token；持久化删除已经由队列保证一定排在
     // 后续新账号 token 写入之前，因此无需让登录/切换 UI 等 SecureStorage RTT。
     unawaited(
-      _enqueueStorage(() => _storage.delete(key: _csrfTokenKey)).catchError((
-        Object e,
-      ) {
-        debugPrint('[CsrfTokenService] CSRF token 清除失败(忽略): $e');
-      }),
+      _enqueueStorage(() => _storage.delete(key: _csrfTokenKey))
+          .catchError((Object e) {
+            debugPrint('[CsrfTokenService] CSRF token 清除失败(忽略): $e');
+          }),
     );
   }
 }

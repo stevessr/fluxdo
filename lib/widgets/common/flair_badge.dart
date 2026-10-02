@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import '../../services/discourse_cache_manager.dart';
 import '../../services/emoji_handler.dart';
 import '../../utils/svg_utils.dart';
@@ -107,7 +108,8 @@ class FlairBadge extends StatelessWidget {
       // 有背景时图标缩小一点，留出内边距
       final iconSize = hasBgColor ? size * 0.6 : size * 0.8;
       // 图标颜色：优先使用 flairColor，否则有背景用白色，无背景用主题色
-      final iconColor = fgColor ??
+      final iconColor =
+          fgColor ??
           (hasBgColor ? Colors.white : Theme.of(context).colorScheme.onSurface);
 
       return Tooltip(
@@ -116,17 +118,10 @@ class FlairBadge extends StatelessWidget {
           width: size,
           height: size,
           decoration: hasBgColor
-              ? BoxDecoration(
-                  color: bgColor,
-                  shape: BoxShape.circle,
-                )
+              ? BoxDecoration(color: bgColor, shape: BoxShape.circle)
               : null,
           child: Center(
-            child: FaIcon(
-              iconData,
-              size: iconSize,
-              color: iconColor,
-            ),
+            child: FaIcon(iconData, size: iconSize, color: iconColor),
           ),
         ),
       );
@@ -155,10 +150,7 @@ class FlairBadge extends StatelessWidget {
         width: size,
         height: size,
         decoration: hasBgColor
-            ? BoxDecoration(
-                color: bgColor,
-                shape: BoxShape.circle,
-              )
+            ? BoxDecoration(color: bgColor, shape: BoxShape.circle)
             : null,
         child: Center(
           child: Image(
@@ -342,10 +334,7 @@ class _SvgFlairBadgeState extends State<_SvgFlairBadge> {
         width: widget.size,
         height: widget.size,
         decoration: widget.hasBgColor
-            ? BoxDecoration(
-                color: widget.bgColor,
-                shape: BoxShape.circle,
-              )
+            ? BoxDecoration(color: widget.bgColor, shape: BoxShape.circle)
             : null,
         child: Center(child: content),
       ),

@@ -30,8 +30,7 @@ void main() {
       final boosts = [
         Boost(
           id: 1,
-          cooked:
-              '<p><img class="emoji" title="smile" src="/images/emoji/twitter/smile.png?v=12"></p>',
+          cooked: '<p><img class="emoji" title="smile" src="/images/emoji/twitter/smile.png?v=12"></p>',
           user: const BoostUser(
             id: 10,
             username: 'alice',
@@ -40,8 +39,7 @@ void main() {
         ),
         Boost(
           id: 2,
-          cooked:
-              '<p><img class="emoji" title="smile" src="/images/emoji/twitter/smile.png?v=12"></p>',
+          cooked: '<p><img class="emoji" title="smile" src="/images/emoji/twitter/smile.png?v=12"></p>',
           user: const BoostUser(
             id: 11,
             username: 'bob',
@@ -50,8 +48,7 @@ void main() {
         ),
         Boost(
           id: 3,
-          cooked:
-              '<p><img class="emoji" title="heart" src="/images/emoji/twitter/heart.png?v=12"></p>',
+          cooked: '<p><img class="emoji" title="heart" src="/images/emoji/twitter/heart.png?v=12"></p>',
           user: const BoostUser(
             id: 12,
             username: 'carol',

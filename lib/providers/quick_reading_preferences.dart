@@ -24,9 +24,7 @@ class QuickReadingPreferencesNotifier
 
   QuickReadingPreferencesNotifier(this._prefs)
     : super(
-        QuickReadingPreferences(
-          enabled: _prefs.getBool(enabledKey) ?? false,
-        ),
+        QuickReadingPreferences(enabled: _prefs.getBool(enabledKey) ?? false),
       );
 
   final SharedPreferences _prefs;
@@ -38,10 +36,11 @@ class QuickReadingPreferencesNotifier
   }
 }
 
-final quickReadingPreferencesProvider = StateNotifierProvider<
-  QuickReadingPreferencesNotifier,
-  QuickReadingPreferences
->((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return QuickReadingPreferencesNotifier(prefs);
-});
+final quickReadingPreferencesProvider =
+    StateNotifierProvider<
+      QuickReadingPreferencesNotifier,
+      QuickReadingPreferences
+    >((ref) {
+      final prefs = ref.watch(sharedPreferencesProvider);
+      return QuickReadingPreferencesNotifier(prefs);
+    });

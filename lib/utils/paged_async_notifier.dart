@@ -31,8 +31,10 @@ class PagedPage<T> {
 }
 
 typedef PagedRefreshLoader<T> = Future<PagedPage<T>> Function();
-typedef PagedLoadMoreLoader<T> =
-    Future<PagedPage<T>> Function(List<T> currentItems, int nextPage);
+typedef PagedLoadMoreLoader<T> = Future<PagedPage<T>> Function(
+  List<T> currentItems,
+  int nextPage,
+);
 
 /// Shared paging state for `AsyncNotifier<List<T>>` providers.
 ///

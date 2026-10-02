@@ -16,7 +16,9 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
         id: 'radialAccountSwitcher',
         title: copy.radialTitle,
         builder: (context, ref) {
-          final preferences = ref.watch(accountQuickSwitcherPreferencesProvider);
+          final preferences = ref.watch(
+            accountQuickSwitcherPreferencesProvider,
+          );
           final scheme = Theme.of(context).colorScheme;
           return Material(
             color: scheme.surfaceContainerLow,
@@ -51,7 +53,10 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
                     color: scheme.outlineVariant.withValues(alpha: 0.55),
                   ),
                   ListTile(
-                    leading: Icon(Icons.touch_app_outlined, color: scheme.primary),
+                    leading: Icon(
+                      Icons.touch_app_outlined,
+                      color: scheme.primary,
+                    ),
                     title: Text(copy.holdDurationTitle),
                     subtitle: Text(
                       copy.holdDurationValue(preferences.holdDurationMs),
@@ -62,7 +67,9 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
                       current: preferences.holdDurationMs,
                       copy: copy,
                       onChanged: (milliseconds) => ref
-                          .read(accountQuickSwitcherPreferencesProvider.notifier)
+                          .read(
+                            accountQuickSwitcherPreferencesProvider.notifier,
+                          )
                           .setHoldDurationMs(milliseconds),
                     ),
                   ),
@@ -90,7 +97,9 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
                       current: preferences.trigger,
                       copy: copy,
                       onChanged: (trigger) => ref
-                          .read(accountQuickSwitcherPreferencesProvider.notifier)
+                          .read(
+                            accountQuickSwitcherPreferencesProvider.notifier,
+                          )
                           .setTrigger(trigger),
                     ),
                   ),
@@ -140,9 +149,8 @@ void _showHoldDurationPicker(
                 Text(
                   copy.holdDurationValue(milliseconds),
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 Slider(
                   min: AccountQuickSwitcherPreferences.minHoldDurationMs
@@ -270,7 +278,8 @@ class _AccountQuickSwitcherCopy {
   static _AccountQuickSwitcherCopy of(BuildContext context) {
     final locale = Localizations.localeOf(context);
     if (locale.languageCode != 'zh') return _en;
-    if (locale.countryCode == 'TW' || locale.countryCode == 'HK') return _zhHant;
+    if (locale.countryCode == 'TW' || locale.countryCode == 'HK')
+      return _zhHant;
     return _zhHans;
   }
 
@@ -314,7 +323,8 @@ class _AccountQuickSwitcherCopy {
     secondsUnit: 's',
     triggerTitle: 'Account selection trigger',
     releaseTitle: 'Switch on release',
-    releaseDescription: 'Slide to an account and release to switch immediately.',
+    releaseDescription:
+        'Slide to an account and release to switch immediately.',
     dwellTitle: 'Switch after dwelling',
     dwellDescription: 'A progress ring appears around the hovered avatar until the dwell trigger completes. Moving away or releasing early cancels the switch. The long-press entry duration is configured separately above.',
   );

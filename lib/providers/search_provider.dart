@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/search_result.dart';
 import 'core_providers.dart';
 
@@ -7,7 +8,7 @@ import 'core_providers.dart';
 /// family 参数为搜索关键词
 final searchResultProvider = FutureProvider.autoDispose
     .family<SearchResult?, String>((ref, query) async {
-  if (query.trim().isEmpty) return null;
-  final service = ref.read(discourseServiceProvider);
-  return service.search(query: query);
-});
+      if (query.trim().isEmpty) return null;
+      final service = ref.read(discourseServiceProvider);
+      return service.search(query: query);
+    });

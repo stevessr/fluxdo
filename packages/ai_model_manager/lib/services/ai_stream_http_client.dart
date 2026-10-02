@@ -18,16 +18,16 @@ import 'package:http/http.dart' as http;
 /// 在自然消费完之前被截断，导致 `await for` 拿不到末尾事件）。
 class AiStreamHttpClient extends http.BaseClient {
   AiStreamHttpClient({HttpClientAdapter? adapter})
-      : _ownsAdapter = adapter == null,
-        _dio = Dio(
-          BaseOptions(
-            // 全部超时设 null：SSE 长流期间允许任意时长的空闲（thinking）
-            connectTimeout: null,
-            sendTimeout: null,
-            receiveTimeout: null,
-            validateStatus: (_) => true,
-          ),
-        ) {
+    : _ownsAdapter = adapter == null,
+      _dio = Dio(
+        BaseOptions(
+          // 全部超时设 null：SSE 长流期间允许任意时长的空闲（thinking）
+          connectTimeout: null,
+          sendTimeout: null,
+          receiveTimeout: null,
+          validateStatus: (_) => true,
+        ),
+      ) {
     _dio.httpClientAdapter = adapter ?? _buildLongLivedIoAdapter();
   }
 
@@ -52,7 +52,10 @@ class AiStreamHttpClient extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     if (_closed) {
-      throw http.ClientException('AiStreamHttpClient has been closed.', request.url);
+      throw http.ClientException(
+        'AiStreamHttpClient has been closed.',
+        request.url,
+      );
     }
 
     final body = await request.finalize().toBytes();
@@ -81,8 +84,9 @@ class AiStreamHttpClient extends http.BaseClient {
       });
 
       final responseBody = response.data!;
-      final contentLength =
-          responseBody.contentLength >= 0 ? responseBody.contentLength : null;
+      final contentLength = responseBody.contentLength >= 0
+          ? responseBody.contentLength
+          : null;
 
       return http.StreamedResponse(
         responseBody.stream.cast<List<int>>(),

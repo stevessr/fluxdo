@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../models/topic.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/message_bus/topic_list_events.dart';

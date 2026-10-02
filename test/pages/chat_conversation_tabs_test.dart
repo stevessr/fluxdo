@@ -42,7 +42,10 @@ Widget _nestedHost() {
       child: Scaffold(
         appBar: AppBar(
           bottom: const TabBar(
-            tabs: [Tab(text: '直接消息外层'), Tab(text: '频道外层')],
+            tabs: [
+              Tab(text: '直接消息外层'),
+              Tab(text: '频道外层'),
+            ],
           ),
         ),
         body: TabBarView(
@@ -113,9 +116,7 @@ void main() {
     await tester.pumpWidget(_nestedHost());
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.byKey(const ValueKey('chat-nested-test-group-tab')),
-    );
+    await tester.tap(find.byKey(const ValueKey('chat-nested-test-group-tab')));
     // 模拟用户在内层切换动画尚未完全结束时立刻切到外层「频道」。
     await tester.pump(const Duration(milliseconds: 40));
 

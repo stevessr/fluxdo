@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import '../../models/topic.dart';
 import '../../models/category.dart';
 import '../../models/topic_card_style.dart';
@@ -165,9 +166,8 @@ class _MobileTopicTapSurfaceState extends State<_MobileTopicTapSurface> {
 
   @override
   Widget build(BuildContext context) {
-    final overlayColor = Theme.of(
-      context,
-    ).colorScheme.onSurface.withValues(alpha: 0.06);
+    final overlayColor = Theme.of(context).colorScheme.onSurface
+        .withValues(alpha: 0.06);
     return Semantics(
       onTap: widget.onTap == null ? null : _handleTap,
       onLongPress: widget.onLongPress == null ? null : _handleLongPress,
@@ -1092,9 +1092,7 @@ class CompactTopicCard extends ConsumerWidget {
                     child: InkResponse(
                       radius: 18,
                       onTap: () {
-                        unawaited(
-                          _clearPinFromFeed(context, ref, topic),
-                        );
+                        unawaited(_clearPinFromFeed(context, ref, topic));
                       },
                       child: Padding(
                         padding: const EdgeInsets.all(3),

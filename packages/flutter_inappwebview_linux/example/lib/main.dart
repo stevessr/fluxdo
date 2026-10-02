@@ -260,13 +260,12 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     findInteractionController = LinuxFindInteractionController(
       LinuxFindInteractionControllerCreationParams(
-        onFindResultReceived:
-            (
-              controller,
-              activeMatchOrdinal,
-              numberOfMatches,
-              isDoneCounting,
-            ) {},
+        onFindResultReceived: (
+          controller,
+          activeMatchOrdinal,
+          numberOfMatches,
+          isDoneCounting,
+        ) {},
       ),
     );
   }

@@ -10,7 +10,10 @@ import '../utils/dialog_utils.dart';
 
 /// 打开会话回调类型
 typedef OpenSessionCallback = void Function(
-    BuildContext context, int topicId, String sessionId);
+  BuildContext context,
+  int topicId,
+  String sessionId,
+);
 
 /// AI 会话历史管理页面
 /// 两级结构：第一级话题，第二级会话
@@ -118,7 +121,9 @@ class _AiChatHistoryPageState extends ConsumerState<AiChatHistoryPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(AiL10n.current.clearAllConversations),
-        content: Text(AiL10n.current.confirmDeleteAllSessions(_totalSessionCount)),
+        content: Text(
+          AiL10n.current.confirmDeleteAllSessions(_totalSessionCount),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -163,7 +168,8 @@ class _TopicGroupTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final topicTitle = group.topicTitle ?? AiL10n.current.topicWithId(group.topicId);
+    final topicTitle =
+        group.topicTitle ?? AiL10n.current.topicWithId(group.topicId);
 
     return ExpansionTile(
       leading: Icon(
@@ -296,15 +302,20 @@ class _MaxSessionsRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(Symbols.storage_rounded,
-                  size: 20, color: theme.colorScheme.onSurfaceVariant),
+              Icon(
+                Symbols.storage_rounded,
+                size: 20,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(AiL10n.current.maxSessionCount,
-                        style: theme.textTheme.bodyMedium),
+                    Text(
+                      AiL10n.current.maxSessionCount,
+                      style: theme.textTheme.bodyMedium,
+                    ),
                     Text(
                       AiL10n.current.autoDeleteOldestSession,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -316,16 +327,19 @@ class _MaxSessionsRow extends StatelessWidget {
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '$maxSessions',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w500),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
@@ -348,16 +362,19 @@ class _MaxSessionsRow extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: options
-              .map((v) => ListTile(
-                    title: Text('$v'),
-                    trailing:
-                        v == currentValue ? const Icon(Symbols.check_rounded) : null,
-                    onTap: () {
-                      storageService.setMaxSessions(v);
-                      Navigator.pop(ctx);
-                      (context as Element).markNeedsBuild();
-                    },
-                  ))
+              .map(
+                (v) => ListTile(
+                  title: Text('$v'),
+                  trailing: v == currentValue
+                      ? const Icon(Symbols.check_rounded)
+                      : null,
+                  onTap: () {
+                    storageService.setMaxSessions(v);
+                    Navigator.pop(ctx);
+                    (context as Element).markNeedsBuild();
+                  },
+                ),
+              )
               .toList(),
         ),
       ),

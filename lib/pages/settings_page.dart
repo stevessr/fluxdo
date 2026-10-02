@@ -10,7 +10,9 @@ import '../settings/search/settings_search_index.dart';
 import '../utils/appearance_warmup.dart';
 import '../utils/platform_utils.dart';
 import '../utils/responsive.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../widgets/esc_fallback_observer.dart';
 import '../widgets/layout/master_detail_layout.dart';
 import 'about_page.dart';

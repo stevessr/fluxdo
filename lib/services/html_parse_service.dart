@@ -5,6 +5,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:fluxdo_render/fluxdo_render.dart' show HtmlChunk, HtmlChunker;
+
 import '../utils/url_helper.dart';
 import '../widgets/content/discourse_html_content/image_utils.dart';
 
@@ -232,12 +233,14 @@ _GalleryRaw _extractGalleryRaw(dom.DocumentFragment document) {
     final img = anchor.querySelector('img');
     final imgSrc = img?.attributes['src'];
 
-    entries.add(_GalleryEntry(
-      href: href,
-      title: title,
-      imgSrc: imgSrc,
-      inSpoiler: inSpoiler,
-    ));
+    entries.add(
+      _GalleryEntry(
+        href: href,
+        title: title,
+        imgSrc: imgSrc,
+        inSpoiler: inSpoiler,
+      ),
+    );
   }
 
   return _GalleryRaw(entries: entries);

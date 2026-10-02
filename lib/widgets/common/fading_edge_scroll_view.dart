@@ -61,9 +61,8 @@ class _FadingEdgeScrollViewState extends State<FadingEdgeScrollView> {
         child: ShaderMask(
           shaderCallback: (Rect bounds) {
             if (!showLeft && !showRight) {
-              return const LinearGradient(
-                colors: [Colors.white, Colors.white],
-              ).createShader(bounds);
+              return const LinearGradient(colors: [Colors.white, Colors.white])
+                  .createShader(bounds);
             }
             return LinearGradient(
               begin: Alignment.centerLeft,

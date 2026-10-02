@@ -34,7 +34,10 @@ class _UserInvitesPageState extends State<UserInvitesPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _InviteFilter.values.length, vsync: this);
+    _tabController = TabController(
+      length: _InviteFilter.values.length,
+      vsync: this,
+    );
     for (final filter in _InviteFilter.values) {
       _load(filter, refresh: true);
     }
@@ -74,7 +77,9 @@ class _UserInvitesPageState extends State<UserInvitesPage>
       final nextItems = rawInvites is List
           ? rawInvites
                 .whereType<Map>()
-                .map((e) => _InviteRecord.fromJson(Map<String, dynamic>.from(e)))
+                .map(
+                  (e) => _InviteRecord.fromJson(Map<String, dynamic>.from(e)),
+                )
                 .toList()
           : <_InviteRecord>[];
 
@@ -128,9 +133,9 @@ class _UserInvitesPageState extends State<UserInvitesPage>
           IconButton(
             tooltip: _strings(context).create,
             icon: const Icon(Symbols.person_add_rounded),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const InviteLinksPage()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const InviteLinksPage())),
           ),
         ],
         bottom: TabBar(
@@ -577,84 +582,84 @@ class _InviteStrings {
   });
 
   const _InviteStrings.zh()
-      : this(
-          title: '邀请',
-          create: '创建邀请',
-          pending: '待处理',
-          redeemed: '已兑换',
-          expired: '已过期',
-          pendingEmpty: '暂无待处理邀请',
-          redeemedEmpty: '暂无已兑换邀请',
-          expiredEmpty: '暂无已过期邀请',
-          loadFailed: '加载邀请记录失败',
-          retry: '重试',
-          permissionDenied: '当前账号无权查看邀请详情',
-          inviteLabel: '邀请',
-          redemptionsTemplate: '已使用 {used}/{max}',
-          expiresTemplate: '到期 {time}',
-          createdTemplate: '创建 {time}',
-          redeemedAtTemplate: '兑换 {time}',
-        );
+    : this(
+        title: '邀请',
+        create: '创建邀请',
+        pending: '待处理',
+        redeemed: '已兑换',
+        expired: '已过期',
+        pendingEmpty: '暂无待处理邀请',
+        redeemedEmpty: '暂无已兑换邀请',
+        expiredEmpty: '暂无已过期邀请',
+        loadFailed: '加载邀请记录失败',
+        retry: '重试',
+        permissionDenied: '当前账号无权查看邀请详情',
+        inviteLabel: '邀请',
+        redemptionsTemplate: '已使用 {used}/{max}',
+        expiresTemplate: '到期 {time}',
+        createdTemplate: '创建 {time}',
+        redeemedAtTemplate: '兑换 {time}',
+      );
 
   const _InviteStrings.zhHk()
-      : this(
-          title: '邀請',
-          create: '建立邀請',
-          pending: '待處理',
-          redeemed: '已兌換',
-          expired: '已過期',
-          pendingEmpty: '暫無待處理邀請',
-          redeemedEmpty: '暫無已兌換邀請',
-          expiredEmpty: '暫無已過期邀請',
-          loadFailed: '載入邀請記錄失敗',
-          retry: '重試',
-          permissionDenied: '目前帳號無權查看邀請詳情',
-          inviteLabel: '邀請',
-          redemptionsTemplate: '已使用 {used}/{max}',
-          expiresTemplate: '到期 {time}',
-          createdTemplate: '建立 {time}',
-          redeemedAtTemplate: '兌換 {time}',
-        );
+    : this(
+        title: '邀請',
+        create: '建立邀請',
+        pending: '待處理',
+        redeemed: '已兌換',
+        expired: '已過期',
+        pendingEmpty: '暫無待處理邀請',
+        redeemedEmpty: '暫無已兌換邀請',
+        expiredEmpty: '暫無已過期邀請',
+        loadFailed: '載入邀請記錄失敗',
+        retry: '重試',
+        permissionDenied: '目前帳號無權查看邀請詳情',
+        inviteLabel: '邀請',
+        redemptionsTemplate: '已使用 {used}/{max}',
+        expiresTemplate: '到期 {time}',
+        createdTemplate: '建立 {time}',
+        redeemedAtTemplate: '兌換 {time}',
+      );
 
   const _InviteStrings.zhTw()
-      : this(
-          title: '邀請',
-          create: '建立邀請',
-          pending: '待處理',
-          redeemed: '已兌換',
-          expired: '已過期',
-          pendingEmpty: '暫無待處理邀請',
-          redeemedEmpty: '暫無已兌換邀請',
-          expiredEmpty: '暫無已過期邀請',
-          loadFailed: '載入邀請紀錄失敗',
-          retry: '重試',
-          permissionDenied: '目前帳號無權查看邀請詳情',
-          inviteLabel: '邀請',
-          redemptionsTemplate: '已使用 {used}/{max}',
-          expiresTemplate: '到期 {time}',
-          createdTemplate: '建立 {time}',
-          redeemedAtTemplate: '兌換 {time}',
-        );
+    : this(
+        title: '邀請',
+        create: '建立邀請',
+        pending: '待處理',
+        redeemed: '已兌換',
+        expired: '已過期',
+        pendingEmpty: '暫無待處理邀請',
+        redeemedEmpty: '暫無已兌換邀請',
+        expiredEmpty: '暫無已過期邀請',
+        loadFailed: '載入邀請紀錄失敗',
+        retry: '重試',
+        permissionDenied: '目前帳號無權查看邀請詳情',
+        inviteLabel: '邀請',
+        redemptionsTemplate: '已使用 {used}/{max}',
+        expiresTemplate: '到期 {time}',
+        createdTemplate: '建立 {time}',
+        redeemedAtTemplate: '兌換 {time}',
+      );
 
   const _InviteStrings.en()
-      : this(
-          title: 'Invites',
-          create: 'Create invite',
-          pending: 'Pending',
-          redeemed: 'Redeemed',
-          expired: 'Expired',
-          pendingEmpty: 'No pending invites',
-          redeemedEmpty: 'No redeemed invites',
-          expiredEmpty: 'No expired invites',
-          loadFailed: 'Failed to load invite history',
-          retry: 'Retry',
-          permissionDenied: 'This account cannot view invite details',
-          inviteLabel: 'Invite',
-          redemptionsTemplate: 'Used {used}/{max}',
-          expiresTemplate: 'Expires {time}',
-          createdTemplate: 'Created {time}',
-          redeemedAtTemplate: 'Redeemed {time}',
-        );
+    : this(
+        title: 'Invites',
+        create: 'Create invite',
+        pending: 'Pending',
+        redeemed: 'Redeemed',
+        expired: 'Expired',
+        pendingEmpty: 'No pending invites',
+        redeemedEmpty: 'No redeemed invites',
+        expiredEmpty: 'No expired invites',
+        loadFailed: 'Failed to load invite history',
+        retry: 'Retry',
+        permissionDenied: 'This account cannot view invite details',
+        inviteLabel: 'Invite',
+        redemptionsTemplate: 'Used {used}/{max}',
+        expiresTemplate: 'Expires {time}',
+        createdTemplate: 'Created {time}',
+        redeemedAtTemplate: 'Redeemed {time}',
+      );
 
   final String title;
   final String create;
@@ -685,7 +690,8 @@ class _InviteStrings {
     _InviteFilter.expired => expiredEmpty,
   };
 
-  String inviteFallback(int? id) => id == null ? inviteLabel : '$inviteLabel #$id';
+  String inviteFallback(int? id) =>
+      id == null ? inviteLabel : '$inviteLabel #$id';
 
   String redemptions(int used, int? max) => redemptionsTemplate
       .replaceAll('{used}', '$used')

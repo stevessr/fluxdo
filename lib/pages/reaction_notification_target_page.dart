@@ -13,10 +13,7 @@ import 'topic_detail_page/topic_detail_page.dart';
 /// 同一用户对多条帖子的 reaction 合并，此时两个顶层字段都可能为空，
 /// 只能借 data.original_post_id 回查 PostSerializer 中的真实位置。
 class ReactionNotificationTargetPage extends ConsumerStatefulWidget {
-  const ReactionNotificationTargetPage({
-    super.key,
-    required this.notification,
-  });
+  const ReactionNotificationTargetPage({super.key, required this.notification});
 
   final DiscourseNotification notification;
 
@@ -112,7 +109,8 @@ class _ReactionNotificationTargetPageState
           return Scaffold(
             appBar: AppBar(),
             body: ErrorView(
-              error: snapshot.error ??
+              error:
+                  snapshot.error ??
                   const FormatException('Reaction post target is unavailable.'),
               onRetry: _retry,
             ),

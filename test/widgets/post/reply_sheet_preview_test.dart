@@ -729,9 +729,9 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     expect(
-      tester.widget<Text>(
-        find.byKey(const ValueKey('reply-composer-title-text')),
-      ).data,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('reply-composer-title-text')))
+          .data,
       S.current.post_replyToTopic,
     );
 
@@ -796,7 +796,10 @@ void main() {
       of: find.byType(MarkdownEditor),
       matching: find.byType(TextField),
     );
-    expect(tester.widget<TextField>(field).controller!.text, contains('/t/-/1/3'));
+    expect(
+      tester.widget<TextField>(field).controller!.text,
+      contains('/t/-/1/3'),
+    );
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
   });
@@ -804,10 +807,7 @@ void main() {
   testWidgets('编辑大话题楼层号可精确输入并一键改为回复话题', (tester) async {
     await _pumpReply(
       tester,
-      sheet: ReplySheet(
-        topicId: 1,
-        editPost: samplePost(250, replyTo: 2),
-      ),
+      sheet: ReplySheet(topicId: 1, editPost: samplePost(250, replyTo: 2)),
     );
     final number = find.byKey(const ValueKey('edit-reply-target-number'));
     expect(number, findsOneWidget);
@@ -815,7 +815,9 @@ void main() {
     await tester.enterText(number, '125');
     await tester.pump();
     expect(tester.widget<TextField>(number).controller!.text, '125');
-    await tester.tap(find.widgetWithText(TextButton, S.current.post_replyToTopic));
+    await tester.tap(
+      find.widgetWithText(TextButton, S.current.post_replyToTopic),
+    );
     await tester.pump();
     expect(tester.widget<TextField>(number).controller!.text, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());

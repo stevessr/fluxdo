@@ -1228,9 +1228,8 @@ class NetworkSettingsService {
       if (hostOrder != 0) {
         return hostOrder;
       }
-      return _dnsCacheRecordKindOrder(
-        a.kind,
-      ).compareTo(_dnsCacheRecordKindOrder(b.kind));
+      return _dnsCacheRecordKindOrder(a.kind)
+          .compareTo(_dnsCacheRecordKindOrder(b.kind));
     });
     return records;
   }

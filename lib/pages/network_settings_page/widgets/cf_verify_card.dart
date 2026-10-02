@@ -6,6 +6,7 @@ import '../../../l10n/s.dart';
 import '../../../providers/preferences_provider.dart';
 import '../../../services/cf_challenge_service.dart';
 import '../../../services/toast_service.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
 
 /// Cloudflare 验证独立卡片：自动验证开关 + 立即验证入口
@@ -25,9 +26,8 @@ class CfVerifyCard extends ConsumerWidget {
           title: Text(context.l10n.cfVerify_autoTitle),
           subtitle: Text(context.l10n.cfVerify_autoDesc),
           value: autoEnabled,
-          onChanged: (value) => ref
-              .read(preferencesProvider.notifier)
-              .setAutoCfChallenge(value),
+          onChanged: (value) =>
+              ref.read(preferencesProvider.notifier).setAutoCfChallenge(value),
         ),
         ListTile(
           leading: const Icon(Symbols.security_rounded),

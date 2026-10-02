@@ -87,11 +87,13 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     final requestedFilter = _memberFilter;
     setState(() => _loadingMore = true);
     try {
-      final result = await ref.read(discourseServiceProvider).fetchGroupMembers(
-        group.name,
-        offset: _nextOffset,
-        filter: requestedFilter.isEmpty ? null : requestedFilter,
-      );
+      final result = await ref
+          .read(discourseServiceProvider)
+          .fetchGroupMembers(
+            group.name,
+            offset: _nextOffset,
+            filter: requestedFilter.isEmpty ? null : requestedFilter,
+          );
       if (!mounted || requestedFilter != _memberFilter) return;
       final byId = LinkedHashMap<int, GroupMember>();
       for (final member in [..._members, ...result.members]) {
@@ -104,9 +106,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       });
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _loadingMore = false);
@@ -184,8 +185,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       final nextCount = currentCount == null
           ? null
           : join
-              ? currentCount + 1
-              : (currentCount > 0 ? currentCount - 1 : 0);
+          ? currentCount + 1
+          : (currentCount > 0 ? currentCount - 1 : 0);
       setState(() {
         _group = latest.copyWith(
           userCount: nextCount,
@@ -195,15 +196,14 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       });
 
       final copy = _copy(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(join ? copy.joined : copy.left)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(join ? copy.joined : copy.left)));
       await _reload();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _membershipChanging = false);
@@ -226,22 +226,22 @@ class _GroupPageState extends ConsumerState<GroupPage> {
 
     setState(() => _adding = true);
     try {
-      final added = await ref.read(discourseServiceProvider).addGroupMembers(
-        groupId: latest.id,
-        usernames: request.usernames,
-        notifyUsers: request.notifyUsers,
-      );
+      final added = await ref
+          .read(discourseServiceProvider)
+          .addGroupMembers(
+            groupId: latest.id,
+            usernames: request.usernames,
+            notifyUsers: request.notifyUsers,
+          );
       if (!mounted) return;
       final copy = _copy(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(copy.added(added.length))),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(copy.added(added.length))));
       await _reload();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _adding = false);
@@ -413,66 +413,61 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
         sliver: SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              if (index == memberContentCount) {
-                if (_loadingMore) {
-                  return const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Center(
-                      child: CircularProgressIndicator.adaptive(),
-                    ),
-                  );
-                }
-                if (_hasMore) {
-                  return Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Center(
-                      child: FilledButton.tonal(
-                        onPressed: _loadMore,
-                        child: Text(copy.loadMore),
-                      ),
-                    ),
-                  );
-                }
-                return const SizedBox(height: 12);
+          delegate: SliverChildBuilderDelegate((context, index) {
+            if (index == memberContentCount) {
+              if (_loadingMore) {
+                return const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(child: CircularProgressIndicator.adaptive()),
+                );
               }
-
-              if (index.isOdd) {
-                return const Divider(height: 1, indent: 64);
-              }
-
-              final member = _members[index ~/ 2];
-              return ListTile(
-                leading: SmartAvatar(
-                  imageUrl: member.avatarUrl,
-                  radius: 20,
-                  fallbackText: member.username,
-                ),
-                title: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        member.name?.trim().isNotEmpty == true
-                            ? member.name!.trim()
-                            : member.username,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+              if (_hasMore) {
+                return Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Center(
+                    child: FilledButton.tonal(
+                      onPressed: _loadMore,
+                      child: Text(copy.loadMore),
                     ),
-                    if (member.owner) ...[
-                      const SizedBox(width: 8),
-                      _SmallBadge(label: copy.owner),
-                    ],
+                  ),
+                );
+              }
+              return const SizedBox(height: 12);
+            }
+
+            if (index.isOdd) {
+              return const Divider(height: 1, indent: 64);
+            }
+
+            final member = _members[index ~/ 2];
+            return ListTile(
+              leading: SmartAvatar(
+                imageUrl: member.avatarUrl,
+                radius: 20,
+                fallbackText: member.username,
+              ),
+              title: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      member.name?.trim().isNotEmpty == true
+                          ? member.name!.trim()
+                          : member.username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (member.owner) ...[
+                    const SizedBox(width: 8),
+                    _SmallBadge(label: copy.owner),
                   ],
-                ),
-                subtitle: Text('@${member.username}'),
-                trailing: const Icon(Symbols.chevron_right_rounded),
-                onTap: () => _openUser(member),
-              );
-            },
-            childCount: memberContentCount + 1,
-          ),
+                ],
+              ),
+              subtitle: Text('@${member.username}'),
+              trailing: const Icon(Symbols.chevron_right_rounded),
+              onTap: () => _openUser(member),
+            );
+          }, childCount: memberContentCount + 1),
         ),
       ),
     ];
@@ -525,9 +520,8 @@ class _GroupHeader extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '@${group.name}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: scheme.onSurfaceVariant),
                     ),
                     if (group.bioRaw?.trim().isNotEmpty == true) ...[
                       const SizedBox(height: 10),
@@ -542,8 +536,7 @@ class _GroupHeader extends StatelessWidget {
                           _SmallBadge(
                             label: copy.memberCount(group.userCount!),
                           ),
-                        if (group.automatic)
-                          _SmallBadge(label: copy.automatic),
+                        if (group.automatic) _SmallBadge(label: copy.automatic),
                         if (group.isGroupOwner)
                           _SmallBadge(label: copy.youAreOwner),
                       ],
@@ -601,16 +594,18 @@ class _SmallBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: scheme.onSecondaryContainer,
-        ),
+        style: Theme.of(context).textTheme.labelSmall
+            ?.copyWith(color: scheme.onSecondaryContainer),
       ),
     );
   }
 }
 
 class _AddMembersRequest {
-  const _AddMembersRequest({required this.usernames, required this.notifyUsers});
+  const _AddMembersRequest({
+    required this.usernames,
+    required this.notifyUsers,
+  });
   final List<String> usernames;
   final bool notifyUsers;
 }
@@ -634,11 +629,11 @@ class _AddMembersDialogState extends State<_AddMembersDialog> {
   }
 
   List<String> get _usernames => LinkedHashSet<String>.from(
-        _controller.text
-            .split(RegExp(r'[\s,;，；]+'))
-            .map((value) => value.trim())
-            .where((value) => value.isNotEmpty),
-      ).toList(growable: false);
+    _controller.text
+        .split(RegExp(r'[\s,;，；]+'))
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty),
+  ).toList(growable: false);
 
   @override
   Widget build(BuildContext context) {
@@ -668,7 +663,8 @@ class _AddMembersDialogState extends State<_AddMembersDialog> {
               contentPadding: EdgeInsets.zero,
               title: Text(copy.notifyUsers),
               controlAffinity: ListTileControlAffinity.leading,
-              onChanged: (value) => setState(() => _notifyUsers = value ?? true),
+              onChanged: (value) =>
+                  setState(() => _notifyUsers = value ?? true),
             ),
           ],
         ),
@@ -682,11 +678,11 @@ class _AddMembersDialogState extends State<_AddMembersDialog> {
           onPressed: _usernames.isEmpty
               ? null
               : () => Navigator.of(context).pop(
-                    _AddMembersRequest(
-                      usernames: _usernames,
-                      notifyUsers: _notifyUsers,
-                    ),
+                  _AddMembersRequest(
+                    usernames: _usernames,
+                    notifyUsers: _notifyUsers,
                   ),
+                ),
           icon: const Icon(Symbols.person_add_rounded),
           label: Text(copy.add),
         ),
@@ -735,5 +731,5 @@ class _GroupCopy {
 }
 
 _GroupCopy _copy(BuildContext context) => _GroupCopy(
-      zh: Localizations.localeOf(context).languageCode.toLowerCase() == 'zh',
-    );
+  zh: Localizations.localeOf(context).languageCode.toLowerCase() == 'zh',
+);

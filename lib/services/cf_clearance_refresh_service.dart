@@ -345,11 +345,11 @@ class CfClearanceRefreshService {
       // 先记录导航前浏览器存储中所有已有 clearance，后续只把新出现的
       // 精确值视为本轮浏览器会话新铸值，避免历史 CHIPS 副本冒充 rotation。
       try {
-        _knownBrowserClearanceValues =
-            await BoundarySyncService.instance.readCookieValuesFromWebView(
-          name: _cookieName,
-          currentUrl: AppConstants.baseUrl,
-        );
+        _knownBrowserClearanceValues = await BoundarySyncService.instance
+            .readCookieValuesFromWebView(
+              name: _cookieName,
+              currentUrl: AppConstants.baseUrl,
+            );
         // 本服务只在 jar 已有 clearance 时启动。priming 后仍读不到任何
         // browser 值，说明这个平台无法建立可靠的“导航前”基线；此时关闭
         // 主动 rotation，宁可交给既有 403/429 challenge 自愈。
@@ -377,8 +377,9 @@ class CfClearanceRefreshService {
       }
       if (!_canHandleGeneration(gen)) return;
 
-      _browserSessionVerificationActive =
-          await _waitForClientSideVerification(controller);
+      _browserSessionVerificationActive = await _waitForClientSideVerification(
+        controller,
+      );
       if (_browserSessionVerificationActive) {
         CfChallengeLogger.log(
           '[CfRefresh] 检测到 Cloudflare client verification，'
@@ -738,16 +739,15 @@ document.close();
     // 后自然补上。初始 Turnstile 运行期(_initialTimer 未清)只恢复不
     // 挂起,避免把首次验证拖到超时误判重建。
     if (io.Platform.isAndroid) {
-      _scrollPauseTicker = Timer.periodic(
-        const Duration(milliseconds: 500),
-        (_) {
-          if (!_canHandleGeneration(gen)) {
-            _scrollPauseTicker?.cancel();
-            return;
-          }
-          unawaited(_updateScrollPause());
-        },
-      );
+      _scrollPauseTicker = Timer.periodic(const Duration(milliseconds: 500), (
+        _,
+      ) {
+        if (!_canHandleGeneration(gen)) {
+          _scrollPauseTicker?.cancel();
+          return;
+        }
+        unawaited(_updateScrollPause());
+      });
     }
   }
 
@@ -781,13 +781,12 @@ document.close();
     _isSyncingCookies = true;
     try {
       String? freshBrowserClearance;
-      if (_browserSessionVerificationActive &&
-          _browserClearanceBaselineReady) {
-        final observed =
-            await BoundarySyncService.instance.readCookieValuesFromWebView(
-          name: _cookieName,
-          currentUrl: AppConstants.baseUrl,
-        );
+      if (_browserSessionVerificationActive && _browserClearanceBaselineReady) {
+        final observed = await BoundarySyncService.instance
+            .readCookieValuesFromWebView(
+              name: _cookieName,
+              currentUrl: AppConstants.baseUrl,
+            );
         final freshValues = observed.difference(_knownBrowserClearanceValues);
         _knownBrowserClearanceValues.addAll(observed);
 

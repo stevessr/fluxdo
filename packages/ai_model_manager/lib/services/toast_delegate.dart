@@ -11,7 +11,8 @@ class AiToastDelegate {
 
   /// 注入消息提示实现
   static void configure(
-      void Function(String message, {AiToastType type}) showToast) {
+    void Function(String message, {AiToastType type}) showToast,
+  ) {
     _showToast = showToast;
   }
 
@@ -32,7 +33,8 @@ class AiToastDelegate {
   static Widget Function({Color? color, double size})? _loadingBuilder;
 
   static void configureLoading(
-      Widget Function({Color? color, double size}) builder) {
+    Widget Function({Color? color, double size}) builder,
+  ) {
     _loadingBuilder = builder;
   }
 
@@ -43,10 +45,7 @@ class AiToastDelegate {
     return SizedBox(
       width: size,
       height: size,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        color: color,
-      ),
+      child: CircularProgressIndicator(strokeWidth: 2, color: color),
     );
   }
 }

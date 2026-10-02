@@ -1,6 +1,7 @@
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'theme_provider.dart';
 
 /// 已固定的分类 ID 列表（用于首页分类 Tab）
@@ -42,6 +43,6 @@ class PinnedCategoriesNotifier extends StateNotifier<List<int>> {
 
 final pinnedCategoriesProvider =
     StateNotifierProvider<PinnedCategoriesNotifier, List<int>>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return PinnedCategoriesNotifier(prefs);
-});
+      final prefs = ref.watch(sharedPreferencesProvider);
+      return PinnedCategoriesNotifier(prefs);
+    });

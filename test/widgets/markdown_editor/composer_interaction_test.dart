@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -93,13 +94,12 @@ void main() {
           addTearDown(tester.view.resetDevicePixelRatio);
           await tester.runAsync(() async {
             final loader =
-                FontLoader(
-                  'packages/font_awesome_flutter/FontAwesomeSolid',
-                )..addFont(
-                  rootBundle.load(
-                    'packages/font_awesome_flutter/lib/fonts/Font-Awesome-7-Free-Solid-900.otf',
-                  ),
-                );
+                FontLoader('packages/font_awesome_flutter/FontAwesomeSolid')
+                  ..addFont(
+                    rootBundle.load(
+                      'packages/font_awesome_flutter/lib/fonts/Font-Awesome-7-Free-Solid-900.otf',
+                    ),
+                  );
             await loader.load();
           });
           final anchor = ComposerToolsAnchor();

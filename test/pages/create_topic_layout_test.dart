@@ -1,6 +1,9 @@
 import 'package:fluxdo/providers/draft_store_provider.dart';
+
 import '../helpers/memory_draft_store.dart';
+
 import 'dart:convert';
+
 import 'package:chat_bottom_container/listener_manager.dart';
 
 import 'package:app_icons/app_icons.dart';
@@ -145,9 +148,7 @@ void main() {
                       initialCategoryId: 1,
                       initialTags: ['flutter', '体验'],
                       initialTitle: empty ? '123123' : '分享最近的开发体验',
-                      initialContent: empty
-                          ? ''
-                          : '最近重新整理了写作环境。\n\n常用工具应该留在手边，需要的时候能直接找到。\n\n大家平时更习惯怎样的编辑器？',
+                      initialContent: empty ? '' : '最近重新整理了写作环境。\n\n常用工具应该留在手边，需要的时候能直接找到。\n\n大家平时更习惯怎样的编辑器？',
                     ),
                   ),
                 },

@@ -35,9 +35,8 @@ class ComposerEditingControls extends StatelessWidget {
     padding: const EdgeInsets.only(right: 4),
     child: DecoratedBox(
       decoration: BoxDecoration(
-        color: Theme.of(
-          context,
-        ).colorScheme.surfaceContainerHighest.withValues(alpha: .42),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest
+            .withValues(alpha: .42),
         borderRadius: BorderRadius.circular(22),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: children),

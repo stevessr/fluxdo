@@ -21,7 +21,9 @@ import '../../utils/number_utils.dart';
 import '../../utils/platform_utils.dart';
 import '../../utils/time_utils.dart';
 import '../common/flair_badge.dart';
+
 import 'package:common_ui/common_ui.dart';
+
 import '../common/skeleton.dart';
 import '../common/smart_avatar.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
@@ -551,10 +553,8 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
     setState(() => _isOpeningChat = true);
     try {
       final channelId = await ref.read(
-        createDirectMessageProvider((
-          usernames: [user.username],
-          name: null,
-        )).future,
+        createDirectMessageProvider((usernames: [user.username], name: null))
+            .future,
       );
       if (!mounted) return;
 
@@ -618,7 +618,9 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
       listen: false,
     );
     if (!container.exists(topicDetailProvider(params))) return false;
-    return container.read(topicDetailProvider(params).notifier).usernameFilter ==
+    return container
+            .read(topicDetailProvider(params).notifier)
+            .usernameFilter ==
         widget.username;
   }
 

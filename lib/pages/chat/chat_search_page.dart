@@ -143,14 +143,8 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
             initialValue: _sort,
             onSelected: _setSort,
             itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'relevance',
-                child: Text('相关性'),
-              ),
-              PopupMenuItem(
-                value: 'latest',
-                child: Text('最新'),
-              ),
+              PopupMenuItem(value: 'relevance', child: Text('相关性')),
+              PopupMenuItem(value: 'latest', child: Text('最新')),
             ],
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -283,10 +277,7 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
             );
           }
           final hit = _hits[index];
-          return _SearchHitTile(
-            hit: hit,
-            onTap: () => _openHit(hit),
-          );
+          return _SearchHitTile(hit: hit, onTap: () => _openHit(hit));
         },
       ),
     );
@@ -297,10 +288,7 @@ class _SearchHitTile extends StatelessWidget {
   final ChatGlobalSearchHit hit;
   final VoidCallback onTap;
 
-  const _SearchHitTile({
-    required this.hit,
-    required this.onTap,
-  });
+  const _SearchHitTile({required this.hit, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -309,8 +297,7 @@ class _SearchHitTile extends StatelessWidget {
     final preview = message.message.length > 120
         ? '${message.message.substring(0, 120)}…'
         : message.message;
-    final userLabel =
-        message.user?.name ?? message.user?.username ?? '未知用户';
+    final userLabel = message.user?.name ?? message.user?.username ?? '未知用户';
     final timeLabel = TimeUtils.formatRelativeTime(message.createdAt);
     final emojiCode = ChatChannelEmoji.shortcode(hit.channelEmoji);
 

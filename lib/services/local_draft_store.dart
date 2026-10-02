@@ -144,9 +144,8 @@ class LocalDraftStore {
   String? _normalizeFingerprint(String? fingerprint) {
     if (fingerprint == null) return null;
     try {
-      return DraftData.fromJson(
-        jsonDecode(fingerprint) as Map<String, dynamic>,
-      ).contentFingerprint;
+      return DraftData.fromJson(jsonDecode(fingerprint) as Map<String, dynamic>)
+          .contentFingerprint;
     } catch (_) {
       return fingerprint;
     }

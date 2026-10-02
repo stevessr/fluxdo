@@ -392,9 +392,8 @@ class FluxdoRenderCallbacks {
               node.latex,
               style: TextStyle(
                 fontFamily: 'monospace',
-                color: Theme.of(
-                  ctx,
-                ).colorScheme.onSurface.withValues(alpha: 0.7),
+                color: Theme.of(ctx).colorScheme.onSurface
+                    .withValues(alpha: 0.7),
               ),
             ),
           ),
@@ -1327,7 +1326,9 @@ class FluxdoRenderCallbacks {
                     galleryImages: hasGallery ? gallery.urls : null,
                     thumbnailUrls: hasGallery ? gallery.thumbs : null,
                     heroTags: hasGallery ? gallery.heroTags : null,
-                    filenames: hasGallery ? gallery.filenames : [image.filename],
+                    filenames: hasGallery
+                        ? gallery.filenames
+                        : [image.filename],
                     initialIndex: hasGallery ? galleryIndex : 0,
                     heroSourceFit: inGridTile ? BoxFit.cover : null,
                     heroSourceRadius: inGridTile ? 4 : 0,

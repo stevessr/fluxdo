@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
+
 import '../../l10n/s.dart';
 
 /// 可搜索的 AppBar

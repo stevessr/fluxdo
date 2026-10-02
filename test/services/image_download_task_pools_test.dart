@@ -11,10 +11,7 @@ void main() {
     final pools = ImageDownloadTaskPools(mainHost: 'linux.do');
     final main = pools.queueFor(mainImage, DownloadChannel.content);
     expect(pools.queueFor(mainAvatar, DownloadChannel.content), same(main));
-    expect(
-      pools.queueFor(mainImage, DownloadChannel.small),
-      isNot(same(main)),
-    );
+    expect(pools.queueFor(mainImage, DownloadChannel.small), isNot(same(main)));
     expect(
       pools.queueFor(mainImage, DownloadChannel.sticker),
       isNot(same(main)),

@@ -139,8 +139,9 @@ class SiteReadOnlyNotifier extends Notifier<bool> {
   }
 }
 
-final siteReadOnlyProvider =
-    NotifierProvider<SiteReadOnlyNotifier, bool>(SiteReadOnlyNotifier.new);
+final siteReadOnlyProvider = NotifierProvider<SiteReadOnlyNotifier, bool>(
+  SiteReadOnlyNotifier.new,
+);
 
 /// 当前用户的草稿数量（`/user-drafts/:user_id`）
 ///
@@ -190,8 +191,9 @@ class UserDraftCountNotifier extends Notifier<int?> {
   }
 }
 
-final userDraftCountProvider =
-    NotifierProvider<UserDraftCountNotifier, int?>(UserDraftCountNotifier.new);
+final userDraftCountProvider = NotifierProvider<UserDraftCountNotifier, int?>(
+  UserDraftCountNotifier.new,
+);
 
 /// 勿扰模式结束时间（`/do-not-disturb/:user_id`）
 ///
@@ -246,8 +248,9 @@ class DoNotDisturbNotifier extends Notifier<DateTime?> {
   }
 }
 
-final doNotDisturbProvider =
-    NotifierProvider<DoNotDisturbNotifier, DateTime?>(DoNotDisturbNotifier.new);
+final doNotDisturbProvider = NotifierProvider<DoNotDisturbNotifier, DateTime?>(
+  DoNotDisturbNotifier.new,
+);
 
 /// 待审队列计数（`/reviewable_counts/:user_id`）
 class ReviewableCountsState {
@@ -289,8 +292,9 @@ class ReviewableCountsNotifier extends Notifier<ReviewableCountsState> {
       final unseen = data['unseen_reviewable_count'];
       state = ReviewableCountsState(
         reviewableCount: total is int ? total : state.reviewableCount,
-        unseenReviewableCount:
-            unseen is int ? unseen : state.unseenReviewableCount,
+        unseenReviewableCount: unseen is int
+            ? unseen
+            : state.unseenReviewableCount,
       );
       debugPrint(
         '[ReviewableCounts] 待审: ${state.reviewableCount}, '
@@ -314,8 +318,8 @@ class ReviewableCountsNotifier extends Notifier<ReviewableCountsState> {
 
 final reviewableCountsProvider =
     NotifierProvider<ReviewableCountsNotifier, ReviewableCountsState>(
-  ReviewableCountsNotifier.new,
-);
+      ReviewableCountsNotifier.new,
+    );
 
 /// 其他用户的自定义状态（`/user-status`）
 ///
@@ -380,8 +384,8 @@ class UserStatusNotifier extends Notifier<Map<int, UserStatus?>> {
 
 final userStatusProvider =
     NotifierProvider<UserStatusNotifier, Map<int, UserStatus?>>(
-  UserStatusNotifier.new,
-);
+      UserStatusNotifier.new,
+    );
 
 /// 站点级变更频道：`/categories`、`/client_settings`、`/refresh_client`
 ///
@@ -458,5 +462,6 @@ class SiteChangesNotifier extends Notifier<void> {
   }
 }
 
-final siteChangesProvider =
-    NotifierProvider<SiteChangesNotifier, void>(SiteChangesNotifier.new);
+final siteChangesProvider = NotifierProvider<SiteChangesNotifier, void>(
+  SiteChangesNotifier.new,
+);

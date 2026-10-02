@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../utils/frame_jank_monitor.dart';
 import '../utils/link_launcher.dart';
 import '../services/deep_link_service.dart';
@@ -24,7 +25,9 @@ import '../providers/discourse_providers.dart';
 import '../providers/web_bookmark_provider.dart';
 import '../providers/web_history_provider.dart';
 import '../providers/download_provider.dart';
+
 import 'package:common_ui/common_ui.dart';
+
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
 
@@ -195,10 +198,7 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                   value: 'toggle_bookmark',
                   child: Row(
                     children: [
-                      Icon(
-                        Symbols.star_rounded,
-                        fill: isBookmarked ? 1 : 0,
-                      ),
+                      Icon(Symbols.star_rounded, fill: isBookmarked ? 1 : 0),
                       const SizedBox(width: 8),
                       Text(
                         isBookmarked
@@ -250,9 +250,8 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                     shape: const CircleBorder(),
                     child: InkWell(
                       customBorder: const CircleBorder(),
-                      onTap: () => unawaited(
-                        AccountSwitcherSheet.showClassic(context),
-                      ),
+                      onTap: () =>
+                          unawaited(AccountSwitcherSheet.showClassic(context)),
                       onLongPress: () => unawaited(
                         AccountSwitcherSheet.show(
                           context,
@@ -291,7 +290,8 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                         webViewEnvironment: windowsWebViewEnvironment,
                         initialSettings: WebViewSettings.visible
                           ..useShouldOverrideUrlLoading = true,
-                        initialUserScripts: WebViewSettings.compatPolyfillScripts,
+                        initialUserScripts:
+                            WebViewSettings.compatPolyfillScripts,
                         shouldOverrideUrlLoading: _shouldOverrideUrlLoading,
                         onReceivedServerTrustAuthRequest: (_, challenge) =>
                             WebViewSettings.handleServerTrustAuthRequest(
@@ -301,7 +301,9 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                           _controller = controller;
                           WebViewSettings.registerJsErrorReporter(controller);
                           if (widget.url.isNotEmpty) {
-                            await WebViewCookiePriming.instance.prime(widget.url);
+                            await WebViewCookiePriming.instance.prime(
+                              widget.url,
+                            );
                             await controller.loadUrl(
                               urlRequest: URLRequest(url: WebUri(widget.url)),
                             );
@@ -360,7 +362,8 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                             (controller, url, isReload) async {
                               final revision = _navigationRevision;
                               final canGoBack = await controller.canGoBack();
-                              final canGoForward = await controller.canGoForward();
+                              final canGoForward = await controller
+                                  .canGoForward();
                               if (!mounted || revision != _navigationRevision) {
                                 return;
                               }

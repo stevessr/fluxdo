@@ -23,10 +23,7 @@ void main() {
     });
 
     test('单策略上限独立生效', () {
-      final budget = AttemptBudget(
-        maxAttempts: 10,
-        perPolicyCap: {'cf': 1},
-      );
+      final budget = AttemptBudget(maxAttempts: 10, perPolicyCap: {'cf': 1});
       expect(budget.tryConsume('cf'), isTrue);
       expect(budget.tryConsume('cf'), isFalse, reason: 'cf 已达单策略上限');
       expect(budget.tryConsume('other'), isTrue, reason: '其他策略不受影响');
@@ -36,7 +33,12 @@ void main() {
   group('RateLimitPolicy', () {
     test('Retry-After 在可接受范围内 → 延迟重放', () async {
       const policy = RateLimitPolicy(maxWaitSeconds: 30);
-      final outcome = _failure(429, headers: {'retry-after': ['5']});
+      final outcome = _failure(
+        429,
+        headers: {
+          'retry-after': ['5'],
+        },
+      );
 
       expect(policy.canHandle(outcome), isTrue);
       final decision = await policy.decide(outcome);
@@ -48,8 +50,12 @@ void main() {
       const policy = RateLimitPolicy(maxWaitSeconds: 30);
       final outcome = _failure(
         429,
-        headers: {'retry-after': ['600']},
-        body: {'errors': ['太快了']},
+        headers: {
+          'retry-after': ['600'],
+        },
+        body: {
+          'errors': ['太快了'],
+        },
       );
 
       final decision = await policy.decide(outcome);
@@ -65,7 +71,12 @@ void main() {
 
     test('中文限流文案里的秒数同样被识别', () async {
       const policy = RateLimitPolicy(maxWaitSeconds: 30);
-      final outcome = _failure(429, body: {'errors': ['请等待 8 秒后再试']});
+      final outcome = _failure(
+        429,
+        body: {
+          'errors': ['请等待 8 秒后再试'],
+        },
+      );
 
       final decision = await policy.decide(outcome);
       expect((decision as RecoveryRetry).delay, const Duration(seconds: 8));
@@ -136,7 +147,10 @@ void main() {
           reason: '$type 应视为瞬态',
         );
       }
-      expect(policy.canHandle(_networkFailure(DioExceptionType.cancel)), isFalse);
+      expect(
+        policy.canHandle(_networkFailure(DioExceptionType.cancel)),
+        isFalse,
+      );
       expect(
         policy.canHandle(_networkFailure(DioExceptionType.badCertificate)),
         isFalse,
@@ -167,12 +181,12 @@ void main() {
     });
 
     test('持续失败:预算耗尽后抛出原始错误', () async {
-      final adapter = _ScriptedAdapter([_Reply(503, '{"error":"unavailable"}')]);
-      final dio = _buildDio(
-        adapter,
-        [const TransientRetryPolicy(delays: [Duration.zero])],
-        budget: () => AttemptBudget(maxAttempts: 3),
-      );
+      final adapter = _ScriptedAdapter([
+        _Reply(503, '{"error":"unavailable"}'),
+      ]);
+      final dio = _buildDio(adapter, [
+        const TransientRetryPolicy(delays: [Duration.zero]),
+      ], budget: () => AttemptBudget(maxAttempts: 3));
 
       DioException? caught;
       try {
@@ -202,7 +216,9 @@ void main() {
     });
 
     test('noRecovery 的请求完全不进恢复流程', () async {
-      final adapter = _ScriptedAdapter([_Reply(503, '{"error":"unavailable"}')]);
+      final adapter = _ScriptedAdapter([
+        _Reply(503, '{"error":"unavailable"}'),
+      ]);
       final dio = _buildDio(adapter, [
         const TransientRetryPolicy(delays: [Duration.zero]),
       ]);
@@ -218,7 +234,9 @@ void main() {
     });
 
     test('静默请求默认不进恢复流程(长轮询要拿原始错误自行退避)', () async {
-      final adapter = _ScriptedAdapter([_Reply(429, '{"errors":["rate limited"]}')]);
+      final adapter = _ScriptedAdapter([
+        _Reply(429, '{"errors":["rate limited"]}'),
+      ]);
       final dio = _buildDio(adapter, [const RateLimitPolicy()]);
 
       try {
@@ -233,7 +251,9 @@ void main() {
 
     test('策略顺序即归属:前面的策略放行后才轮到后面的', () async {
       final adapter = _ScriptedAdapter([
-        _Reply(429, '{}', {'retry-after': ['0']}),
+        _Reply(429, '{}', {
+          'retry-after': ['0'],
+        }),
         _Reply(200, '{"ok":true}'),
       ]);
       // 挑战判定恒真 → RateLimitPolicy 放行;TransientRetry 不管 429

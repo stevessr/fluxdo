@@ -20,7 +20,7 @@ enum DownloadChannel {
 /// 这里限制的是完整响应体的下载数，而不只是建立连接的数量。
 class ImageDownloadTaskPools {
   ImageDownloadTaskPools({required String mainHost})
-      : _mainHost = mainHost.toLowerCase();
+    : _mainHost = mainHost.toLowerCase();
 
   final String _mainHost;
 

@@ -122,10 +122,7 @@ mixin _GroupsMixin on _DiscourseServiceBase {
     try {
       final response = await _dio.put(
         '/groups/$groupId/members.json',
-        data: {
-          'usernames': normalized.join(','),
-          'notify_users': notifyUsers,
-        },
+        data: {'usernames': normalized.join(','), 'notify_users': notifyUsers},
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
       if (response.data is Map) {

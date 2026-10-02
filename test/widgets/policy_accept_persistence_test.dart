@@ -55,44 +55,42 @@ void main() {
     final el = doc.querySelector('div.policy')!;
     return ProviderScope(
       child: TranslationProvider(
-      child: MaterialApp(
-        locale: const Locale('zh'),
-        navigatorKey: navigatorKey,
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [Locale('zh'), Locale('en')],
-        home: Scaffold(
-          body: Builder(
-            builder: (context) {
-              final policy = buildPolicy(
-                context: context,
-                theme: ThemeData(),
-                element: el,
-                post: post,
-                // 纯 UI 验证:无话题上下文,_syncToProvider 判空静默
-                topicId: null,
-                htmlBuilder: (html, _) => Text(
-                  html.replaceAll(RegExp(r'<[^>]*>'), ''),
-                ),
-              );
-              return SingleChildScrollView(
-                child: wrapScope
-                    ? CurrentPostScope(post: post, child: policy)
-                    : policy,
-              );
-            },
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          navigatorKey: navigatorKey,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('zh'), Locale('en')],
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                final policy = buildPolicy(
+                  context: context,
+                  theme: ThemeData(),
+                  element: el,
+                  post: post,
+                  // 纯 UI 验证:无话题上下文,_syncToProvider 判空静默
+                  topicId: null,
+                  htmlBuilder: (html, _) =>
+                      Text(html.replaceAll(RegExp(r'<[^>]*>'), '')),
+                );
+                return SingleChildScrollView(
+                  child: wrapScope
+                      ? CurrentPostScope(post: post, child: policy)
+                      : policy,
+                );
+              },
+            ),
           ),
         ),
-      ),
       ),
     );
   }
 
-  testWidgets('落地后重建(模拟滚出滚回)→ 已接受态:撤销按钮 + 计数',
-      (tester) async {
+  testWidgets('落地后重建(模拟滚出滚回)→ 已接受态:撤销按钮 + 计数', (tester) async {
     // provider 落地后的 post(updatePostPolicy copyWith 产物等价形态)
     final post = makePost(
       accepted: true,
@@ -117,8 +115,9 @@ void main() {
     expect(find.text('撤销'), findsNothing);
   });
 
-  testWidgets('CurrentPostScope 替换 post(provider 落地广播)→ widget 跟随',
-      (tester) async {
+  testWidgets('CurrentPostScope 替换 post(provider 落地广播)→ widget 跟随', (
+    tester,
+  ) async {
     // 初始:未接受
     await tester.pumpWidget(host(makePost(), wrapScope: true));
     await tester.pump();

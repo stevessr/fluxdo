@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/core_providers.dart';
 import '../providers/ldc_providers.dart';
 import '../pages/webview_page.dart';
 import '../services/network/exceptions/oauth_exception.dart';
 import '../utils/number_utils.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../../../l10n/s.dart';
 
 class LdcBalanceCard extends ConsumerWidget {
@@ -565,9 +568,7 @@ class LdcBalanceCard extends ConsumerWidget {
               right: -20,
               top: -20,
               child: Icon(
-                isExpired
-                    ? Symbols.lock_clock_rounded
-                    : Symbols.error_rounded,
+                isExpired ? Symbols.lock_clock_rounded : Symbols.error_rounded,
                 size: 150,
                 color: Colors.white.withValues(alpha: 0.1),
               ),

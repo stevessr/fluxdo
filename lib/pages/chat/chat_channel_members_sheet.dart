@@ -92,16 +92,16 @@ class _ChatChannelMembersSheetState
   void _navigateToUserProfile(String username) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => UserProfilePage(username: username),
-      ),
+      MaterialPageRoute(builder: (_) => UserProfilePage(username: username)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final membersAsync = ref.watch(chatChannelMembersProvider(widget.channelId));
+    final membersAsync = ref.watch(
+      chatChannelMembersProvider(widget.channelId),
+    );
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -119,8 +119,9 @@ class _ChatChannelMembersSheetState
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.onSurfaceVariant
-                          .withValues(alpha: 0.4),
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.4,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -141,9 +142,9 @@ class _ChatChannelMembersSheetState
                               () {
                                 final total =
                                     membersAsync.asData?.value.displayCount ??
-                                        widget.membersCountHint;
-                                final loaded = membersAsync
-                                    .asData?.value.members.length;
+                                    widget.membersCountHint;
+                                final loaded =
+                                    membersAsync.asData?.value.members.length;
                                 final base = () {
                                   if (total != null) {
                                     if (loaded != null &&
@@ -184,7 +185,7 @@ class _ChatChannelMembersSheetState
                 ],
               ),
             ),
-              Padding(
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: TextField(
                 controller: _searchController,
@@ -225,13 +226,14 @@ class _ChatChannelMembersSheetState
                 data: (state) {
                   final members = state.members;
                   // 过滤掉已删除用户与系统用户
-                  final validMembers = members.where((m) =>
-                    !m.isDeleted && !m.isSystemUser
-                  ).toList();
+                  final validMembers = members
+                      .where((m) => !m.isDeleted && !m.isSystemUser)
+                      .toList();
                   final filteredMembers = validMembers.where((m) {
                     if (_filterQuery.isEmpty) return true;
-                    final usernameMatch =
-                        m.username.toLowerCase().contains(_filterQuery);
+                    final usernameMatch = m.username.toLowerCase().contains(
+                      _filterQuery,
+                    );
                     final nameMatch =
                         m.name?.toLowerCase().contains(_filterQuery) ?? false;
                     return usernameMatch || nameMatch;
@@ -267,7 +269,8 @@ class _ChatChannelMembersSheetState
                     );
                   }
 
-                  final showFooter = _filterQuery.isEmpty &&
+                  final showFooter =
+                      _filterQuery.isEmpty &&
                       (state.hasMore ||
                           state.isLoadingMore ||
                           state.loadMoreError != null);
@@ -281,15 +284,18 @@ class _ChatChannelMembersSheetState
                       }
                       final metrics = notification.metrics;
                       // 内容不足以滚动时也尝试加载更多
-                      final nearBottom = metrics.maxScrollExtent <= 0 ||
+                      final nearBottom =
+                          metrics.maxScrollExtent <= 0 ||
                           metrics.pixels >= metrics.maxScrollExtent - 240;
                       if (nearBottom &&
                           state.hasMore &&
                           !state.isLoadingMore &&
                           _filterQuery.isEmpty) {
                         ref
-                            .read(chatChannelMembersProvider(widget.channelId)
-                                .notifier)
+                            .read(
+                              chatChannelMembersProvider(widget.channelId)
+                                  .notifier,
+                            )
                             .loadMore();
                       }
                       return false;
@@ -297,8 +303,7 @@ class _ChatChannelMembersSheetState
                     child: ListView.builder(
                       // 不使用 sheetScrollController，让列表自己滚动
                       physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount:
-                          filteredMembers.length + (showFooter ? 1 : 0),
+                      itemCount: filteredMembers.length + (showFooter ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (index >= filteredMembers.length) {
                           if (state.loadMoreError != null) {
@@ -307,9 +312,11 @@ class _ChatChannelMembersSheetState
                               child: Center(
                                 child: TextButton.icon(
                                   onPressed: () => ref
-                                      .read(chatChannelMembersProvider(
-                                              widget.channelId)
-                                          .notifier)
+                                      .read(
+                                        chatChannelMembersProvider(
+                                          widget.channelId,
+                                        ).notifier,
+                                      )
                                       .loadMore(),
                                   icon: const Icon(Icons.refresh_rounded),
                                   label: const Text('加载更多失败，点击重试'),
@@ -335,8 +342,11 @@ class _ChatChannelMembersSheetState
                             // 内容不足一屏时提供显式加载入口，并在首帧尝试自动续拉
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               final s = ref
-                                  .read(chatChannelMembersProvider(
-                                          widget.channelId))
+                                  .read(
+                                    chatChannelMembersProvider(
+                                      widget.channelId,
+                                    ),
+                                  )
                                   .asData
                                   ?.value;
                               if (s != null &&
@@ -344,9 +354,11 @@ class _ChatChannelMembersSheetState
                                   !s.isLoadingMore &&
                                   _filterQuery.isEmpty) {
                                 ref
-                                    .read(chatChannelMembersProvider(
-                                            widget.channelId)
-                                        .notifier)
+                                    .read(
+                                      chatChannelMembersProvider(
+                                        widget.channelId,
+                                      ).notifier,
+                                    )
                                     .loadMore();
                               }
                             });
@@ -355,9 +367,11 @@ class _ChatChannelMembersSheetState
                               child: Center(
                                 child: TextButton(
                                   onPressed: () => ref
-                                      .read(chatChannelMembersProvider(
-                                              widget.channelId)
-                                          .notifier)
+                                      .read(
+                                        chatChannelMembersProvider(
+                                          widget.channelId,
+                                        ).notifier,
+                                      )
                                       .loadMore(),
                                   child: const Text('加载更多成员'),
                                 ),
@@ -370,8 +384,9 @@ class _ChatChannelMembersSheetState
                         final user = filteredMembers[index];
                         final avatarUrl = _resolveAvatarUrl(user);
                         return ListTile(
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 16),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                          ),
                           leading: OnlineStatusAvatar(
                             userId: user.id,
                             imageUrl: avatarUrl,
@@ -382,22 +397,21 @@ class _ChatChannelMembersSheetState
                           subtitle: user.name != null
                               ? Text('@${user.username}')
                               : null,
-                          onTap: () =>
-                              _navigateToUserProfile(user.username),
+                          onTap: () => _navigateToUserProfile(user.username),
                         );
                       },
                     ),
                   );
                 },
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, stack) => ErrorView(
                   error: error,
                   stackTrace: stack,
                   onRetry: () {
                     ref
-                        .read(chatChannelMembersProvider(widget.channelId)
-                            .notifier)
+                        .read(
+                          chatChannelMembersProvider(widget.channelId).notifier,
+                        )
                         .refresh();
                   },
                 ),
@@ -538,8 +552,10 @@ class _AddChannelMemberDialogState
                       autofocus: true,
                       decoration: InputDecoration(
                         hintText: context.l10n.chat_search_users,
-                        prefixIcon:
-                            const Icon(Icons.person_search_rounded, size: 20),
+                        prefixIcon: const Icon(
+                          Icons.person_search_rounded,
+                          size: 20,
+                        ),
                         isDense: true,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -564,49 +580,48 @@ class _AddChannelMemberDialogState
               child: _isSearching
                   ? const Center(child: CircularProgressIndicator())
                   : _searchResults.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            _controller.text.isEmpty
-                                ? context.l10n.chat_search_hint
-                                : context.l10n.chat_no_results,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: _searchResults.length,
-                          itemBuilder: (context, index) {
-                            final user = _searchResults[index];
-                            final avatarUrl = _resolveUserAvatarUrl(user);
-
-                            return ListTile(
-                              leading: OnlineStatusAvatar(
-                                userId: user.id,
-                                imageUrl: avatarUrl,
-                                radius: 18,
-                                fallbackText: user.username,
-                              ),
-                              title: Text(user.name ?? user.username),
-                              subtitle: user.name != null
-                                  ? Text('@${user.username}')
-                                  : null,
-                              trailing: IconButton(
-                                icon: const Icon(
-                                    Icons.add_circle_outline_rounded),
-                                color: theme.colorScheme.primary,
-                                onPressed: _isAdding
-                                    ? null
-                                    : () => _addMember(user.username),
-                              ),
-                              onTap: _isAdding
-                                  ? null
-                                  : () => _addMember(user.username),
-                            );
-                          },
+                  ? Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        _controller.text.isEmpty
+                            ? context.l10n.chat_search_hint
+                            : context.l10n.chat_no_results,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _searchResults.length,
+                      itemBuilder: (context, index) {
+                        final user = _searchResults[index];
+                        final avatarUrl = _resolveUserAvatarUrl(user);
+
+                        return ListTile(
+                          leading: OnlineStatusAvatar(
+                            userId: user.id,
+                            imageUrl: avatarUrl,
+                            radius: 18,
+                            fallbackText: user.username,
+                          ),
+                          title: Text(user.name ?? user.username),
+                          subtitle: user.name != null
+                              ? Text('@${user.username}')
+                              : null,
+                          trailing: IconButton(
+                            icon: const Icon(Icons.add_circle_outline_rounded),
+                            color: theme.colorScheme.primary,
+                            onPressed: _isAdding
+                                ? null
+                                : () => _addMember(user.username),
+                          ),
+                          onTap: _isAdding
+                              ? null
+                              : () => _addMember(user.username),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

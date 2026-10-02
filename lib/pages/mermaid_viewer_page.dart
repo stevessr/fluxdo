@@ -4,7 +4,9 @@ import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
 import '../l10n/s.dart';
+
 import 'package:common_ui/common_ui.dart';
+
 import 'image_viewer_page.dart';
 
 /// Mermaid 矢量查看页 —— WebView 顶级文档加载 kroki SVG。
@@ -89,8 +91,9 @@ class _MermaidViewerPageState extends State<MermaidViewerPage> {
     final isDark = theme.brightness == Brightness.dark;
     // 内容底色对齐 mermaid 块容器灰底(282a36/f6f8fa):kroki SVG 背景
     // 透明,dark 主题图形浅色线条,必须深底才可读。
-    final canvasColor =
-        isDark ? const Color(0xff282a36) : const Color(0xfff6f8fa);
+    final canvasColor = isDark
+        ? const Color(0xff282a36)
+        : const Color(0xfff6f8fa);
 
     return Scaffold(
       appBar: AppBar(
@@ -139,15 +142,13 @@ class _MermaidViewerPageState extends State<MermaidViewerPage> {
                   },
                 ),
               ),
-            if (!_loaded && !_error)
-              const Center(child: LoadingSpinner()),
+            if (!_loaded && !_error) const Center(child: LoadingSpinner()),
             if (_error)
               Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Symbols.error_rounded,
-                        color: theme.colorScheme.error),
+                    Icon(Symbols.error_rounded, color: theme.colorScheme.error),
                     const SizedBox(height: 12),
                     Text(
                       S.current.codeBlock_chartLoadFailed,

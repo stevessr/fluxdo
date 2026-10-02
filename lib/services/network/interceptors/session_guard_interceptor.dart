@@ -71,6 +71,7 @@ class _MergedCancelToken extends CancelToken {
         cancel(source.cancelError?.error?.toString());
       }
     }
+
     a.whenCancel.then((_) => onCancel(a));
     b.whenCancel.then((_) => onCancel(b));
   }

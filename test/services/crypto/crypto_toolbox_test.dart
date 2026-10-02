@@ -24,29 +24,20 @@ const String _plainText =
 
 /// `openssl enc -<cipher> -salt -pass pass:...` 生成（OpenSSL 3.6.3）
 const Map<String, String> _openSslVectors = {
-  'aes-128-cbc':
-      'U2FsdGVkX18tREhnE5mtSerQ1kWcPcBJ/7K+2y2IxV5oFhDjOLxdTO2Ah6vsBYCGGm0PZmNHh7VDkUQso2idqj8Kpe7XVk8x6S+awWb33hc=',
-  'aes-192-cbc':
-      'U2FsdGVkX18ncuZ/pjWCnEsz2/ARnXJ2aEP4RRy/XHvIgJfrmGL1N38EWXzTrUmLwE6dAHcWsJlHepoaLgtC76KCZYTtnD8zb2YtiWZMcYc=',
-  'aes-256-cbc':
-      'U2FsdGVkX18sm48IX40hWrvIY5sgvpWSqLbey9fLkF2vsgNyucZFoNlUrgFa5hZc8D2a1ntiZh65rvUa9hhyXofRi+Hm+WMon5VCv9AyHv0=',
-  '3des-cbc':
-      'U2FsdGVkX1+0MTSJWDggRsAze4r3TCCH3DcRr5EdxcE6rw/f3ELtCXW0ox99J/+P5tAdiRQg1dyedK6zBE1Z95ob7Qoi4V/i',
-  'blowfish-cbc':
-      'U2FsdGVkX19OiNhio4gHI61ZHoRKHjkODnV9TOf/tNVbts1Su/8I8Kl1p5s8U7vAkRnxtj6YfoORTB6Oi2s7BrLnKN2LLYOr',
-  'rc4':
-      'U2FsdGVkX18y1WaE5lVLHwX+oD4+wrt4wN5/eMR+3OpEcaLLs4C69KhuT/YHtkGz+k3yzMYCs8Vh/RNC88WHyUccCA==',
+  'aes-128-cbc': 'U2FsdGVkX18tREhnE5mtSerQ1kWcPcBJ/7K+2y2IxV5oFhDjOLxdTO2Ah6vsBYCGGm0PZmNHh7VDkUQso2idqj8Kpe7XVk8x6S+awWb33hc=',
+  'aes-192-cbc': 'U2FsdGVkX18ncuZ/pjWCnEsz2/ARnXJ2aEP4RRy/XHvIgJfrmGL1N38EWXzTrUmLwE6dAHcWsJlHepoaLgtC76KCZYTtnD8zb2YtiWZMcYc=',
+  'aes-256-cbc': 'U2FsdGVkX18sm48IX40hWrvIY5sgvpWSqLbey9fLkF2vsgNyucZFoNlUrgFa5hZc8D2a1ntiZh65rvUa9hhyXofRi+Hm+WMon5VCv9AyHv0=',
+  '3des-cbc': 'U2FsdGVkX1+0MTSJWDggRsAze4r3TCCH3DcRr5EdxcE6rw/f3ELtCXW0ox99J/+P5tAdiRQg1dyedK6zBE1Z95ob7Qoi4V/i',
+  'blowfish-cbc': 'U2FsdGVkX19OiNhio4gHI61ZHoRKHjkODnV9TOf/tNVbts1Su/8I8Kl1p5s8U7vAkRnxtj6YfoORTB6Oi2s7BrLnKN2LLYOr',
+  'rc4': 'U2FsdGVkX18y1WaE5lVLHwX+oD4+wrt4wN5/eMR+3OpEcaLLs4C69KhuT/YHtkGz+k3yzMYCs8Vh/RNC88WHyUccCA==',
 };
 
 /// `openssl enc -<cipher> -salt -md md5` 生成（OpenSSL 1.x 经典 KDF 真值，
 /// 也是 CyberChef 「OpenSSL EVP_BytesToKey」选项的行为）
 const Map<String, String> _openSslMd5Vectors = {
-  'aes-128-cbc':
-      'U2FsdGVkX19L/n6A+JktMgLX3Jhwqh4Ojjax09uVU2/C1ZPnmguPo9QrGIvnA0E85/5QPe9m5YA0LRciUac/ZXeSZE7Qp7Uv58NrtG6dyQ0=',
-  'aes-256-cbc':
-      'U2FsdGVkX19WATWv3OBpXyLMUdfkLcuLXQ9fhOvv72Sq7g06ozgDcSeRTltE436jRXkXP2/qruDgPjXuD1VdQ4BxfkugghHRRyeq2n/taw8=',
-  '3des-cbc':
-      'U2FsdGVkX19j5Q0B6hXNi7ela7x2CP/u0JF/KoCCK58c7OcJYtjdMNKW+d/SBpdU8EnyffY0VS3Ew30oXuRA+W92vvji+Qw+',
+  'aes-128-cbc': 'U2FsdGVkX19L/n6A+JktMgLX3Jhwqh4Ojjax09uVU2/C1ZPnmguPo9QrGIvnA0E85/5QPe9m5YA0LRciUac/ZXeSZE7Qp7Uv58NrtG6dyQ0=',
+  'aes-256-cbc': 'U2FsdGVkX19WATWv3OBpXyLMUdfkLcuLXQ9fhOvv72Sq7g06ozgDcSeRTltE436jRXkXP2/qruDgPjXuD1VdQ4BxfkugghHRRyeq2n/taw8=',
+  '3des-cbc': 'U2FsdGVkX19j5Q0B6hXNi7ela7x2CP/u0JF/KoCCK58c7OcJYtjdMNKW+d/SBpdU8EnyffY0VS3Ew30oXuRA+W92vvji+Qw+',
 };
 
 /// openssl pkeyutl -encrypt -pubin -pkeyopt rsa_padding_mode:oaep
@@ -56,76 +47,76 @@ const String _rsaOaepVector =
 const String rsaInteropPlainText = 'RSA OAEP SHA256 interop test 123';
 
 const List<String> _rsaPublicKeyPem = [
-    '-----BEGIN PUBLIC KEY-----'
-    'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyBDlRpDFrQXY79ze3UqI'
-    'FFOzY2E30IQDSiDXsTDHJR3pcvycLjhJV5w7SqVHYv9RCX2QkH2j9IEvo47sxykT'
-    'gKjqE95I52hzXj+J6iIEiI+gUlU9LblZWv0J/WzvqVSXlpraAlkus0otU/gJeZ76'
-    '2MDZw9KatgF9DiC6WHlNjzLgi79Z3zsZcjJVf4T+Hk7fIcyaWSZIbBClvavHETYW'
-    'VMsAhFIDds1cOGI4JyX2PL7Nrq+RrRJrOm4SZzCH0mY5lA2OSiTt311VAc4t24tU'
-    'fNDEff9jK+h5aQU/i0oOlKF9xNpqs0WT9YBVKtJSn9gbVPqeNdmY7yTCiwOpLU2G'
-    'GQIDAQAB'
-    '-----END PUBLIC KEY-----',
+  '-----BEGIN PUBLIC KEY-----'
+      'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyBDlRpDFrQXY79ze3UqI'
+      'FFOzY2E30IQDSiDXsTDHJR3pcvycLjhJV5w7SqVHYv9RCX2QkH2j9IEvo47sxykT'
+      'gKjqE95I52hzXj+J6iIEiI+gUlU9LblZWv0J/WzvqVSXlpraAlkus0otU/gJeZ76'
+      '2MDZw9KatgF9DiC6WHlNjzLgi79Z3zsZcjJVf4T+Hk7fIcyaWSZIbBClvavHETYW'
+      'VMsAhFIDds1cOGI4JyX2PL7Nrq+RrRJrOm4SZzCH0mY5lA2OSiTt311VAc4t24tU'
+      'fNDEff9jK+h5aQU/i0oOlKF9xNpqs0WT9YBVKtJSn9gbVPqeNdmY7yTCiwOpLU2G'
+      'GQIDAQAB'
+      '-----END PUBLIC KEY-----',
 ];
 
 const List<String> _rsaPrivateKeyPkcs1Pem = [
-    '-----BEGIN RSA PRIVATE KEY-----'
-    'MIIEowIBAAKCAQEAyBDlRpDFrQXY79ze3UqIFFOzY2E30IQDSiDXsTDHJR3pcvyc'
-    'LjhJV5w7SqVHYv9RCX2QkH2j9IEvo47sxykTgKjqE95I52hzXj+J6iIEiI+gUlU9'
-    'LblZWv0J/WzvqVSXlpraAlkus0otU/gJeZ762MDZw9KatgF9DiC6WHlNjzLgi79Z'
-    '3zsZcjJVf4T+Hk7fIcyaWSZIbBClvavHETYWVMsAhFIDds1cOGI4JyX2PL7Nrq+R'
-    'rRJrOm4SZzCH0mY5lA2OSiTt311VAc4t24tUfNDEff9jK+h5aQU/i0oOlKF9xNpq'
-    's0WT9YBVKtJSn9gbVPqeNdmY7yTCiwOpLU2GGQIDAQABAoIBACt7oJlptc0ZTEE1'
-    '3Cp0nIbuejrLUno7dwuRf8+/Lkle6vJW/Qr+qNIl3q0mpxFZNJ+/bsA4zn3B5jzC'
-    'P6w5vUdlbxrKYUYKaai+XpdItXuI2+uJIzbg5g7kmFtAZgaDoD7XgTKpd4D4SknJ'
-    'yyVn7FVX9PyetYmBYVDExDuegcDxh31ltfALoLylpCtTMdZzXfWdbLOSuG4i1Wpy'
-    'MFPBOuuFvkNddb6wSoN2NMVvrxa9bCTqaHEVYoIwBytEYtgxRBdPmEXgcmccRpI6'
-    'Xrz7RENl/B0fwsntpqEpx90skDJ1g7NMWVN3xtIlQGsAyOmMvdKWdgneo4vh5K2a'
-    'z4zxpUECgYEA55m1E2nhZiUqfF43qpVTvKisr2q224lQ6IPRsEnuPi9XL+TCKz/o'
-    'EOsw5FkhCb0ca3aAL8ice82PPMkXeIILvHINKsZMGalPNa8hKOYyQ+TriJJae4Rf'
-    'pz2SC8h5rU9xpp1M9vP5rLDuSbi6Oy8S37TWlU47KMcYjzRYJof/7G0CgYEA3SSz'
-    'cbRepZCi5mmQF1VqDa3nJ6kSZlQPi4bszWpxWT8/vAr4bKoZP7tQqsxJI06YoG8i'
-    'j8Rv1Po7eeYRVGPDAvtCLOyT4ambI+EAQCKspoIAITGF/mnF6tlqjpOlgkkJxZlI'
-    'ETCA2Foi21jEacjOTWT4YuetuaeN86cyI678nN0CgYAfSuZrfBfnbEgkS7qrwsdw'
-    'qz3B6eJRIWmcMQtpDWQyZMUcBIWzwEvD1XNityQ+o52ua3GAg1OZarna1bTlJHUf'
-    'fi2HRQnNQdIhB8usMgZCpDCq4FN3cvhVqX0NOIYwQ5awk3ptt6NZkQJxVZNcIc0k'
-    'CtQfklVt+hC4cLMkaaXLtQKBgD4awX5MPkxW6zi0KrAy357J2OHtfGpabycrFDO4'
-    'Ee8TcS25Ev1JY9/fFg9xYZTVzM05iMZBT3rLb4qTTwiZH7oln/cH1ZwJSrVvyec5'
-    'Fa2JUsn/o3bIc7m5p1A1LMUDCAiDPJb/PSAFaEabjkV7DFz13z+/eq1p3dawfMdC'
-    'rFTNAoGBAK7jG6V5jXr86jmrWGdKPkASxwpKx6pX13xBLbMKVEsTnS9buuNZH1ZK'
-    'BYEevyHNEyLcpqmoYSoraZ8/PaCQ8GnWpT5XO3dT1wJOiUjvN10jbCpqpzKqpdEr'
-    '0JDaHEd7RQWUodp0clEmTnao/OxppIhoy+d2g0x8WujuuQzxTqwi'
-    '-----END RSA PRIVATE KEY-----',
+  '-----BEGIN RSA PRIVATE KEY-----'
+      'MIIEowIBAAKCAQEAyBDlRpDFrQXY79ze3UqIFFOzY2E30IQDSiDXsTDHJR3pcvyc'
+      'LjhJV5w7SqVHYv9RCX2QkH2j9IEvo47sxykTgKjqE95I52hzXj+J6iIEiI+gUlU9'
+      'LblZWv0J/WzvqVSXlpraAlkus0otU/gJeZ762MDZw9KatgF9DiC6WHlNjzLgi79Z'
+      '3zsZcjJVf4T+Hk7fIcyaWSZIbBClvavHETYWVMsAhFIDds1cOGI4JyX2PL7Nrq+R'
+      'rRJrOm4SZzCH0mY5lA2OSiTt311VAc4t24tUfNDEff9jK+h5aQU/i0oOlKF9xNpq'
+      's0WT9YBVKtJSn9gbVPqeNdmY7yTCiwOpLU2GGQIDAQABAoIBACt7oJlptc0ZTEE1'
+      '3Cp0nIbuejrLUno7dwuRf8+/Lkle6vJW/Qr+qNIl3q0mpxFZNJ+/bsA4zn3B5jzC'
+      'P6w5vUdlbxrKYUYKaai+XpdItXuI2+uJIzbg5g7kmFtAZgaDoD7XgTKpd4D4SknJ'
+      'yyVn7FVX9PyetYmBYVDExDuegcDxh31ltfALoLylpCtTMdZzXfWdbLOSuG4i1Wpy'
+      'MFPBOuuFvkNddb6wSoN2NMVvrxa9bCTqaHEVYoIwBytEYtgxRBdPmEXgcmccRpI6'
+      'Xrz7RENl/B0fwsntpqEpx90skDJ1g7NMWVN3xtIlQGsAyOmMvdKWdgneo4vh5K2a'
+      'z4zxpUECgYEA55m1E2nhZiUqfF43qpVTvKisr2q224lQ6IPRsEnuPi9XL+TCKz/o'
+      'EOsw5FkhCb0ca3aAL8ice82PPMkXeIILvHINKsZMGalPNa8hKOYyQ+TriJJae4Rf'
+      'pz2SC8h5rU9xpp1M9vP5rLDuSbi6Oy8S37TWlU47KMcYjzRYJof/7G0CgYEA3SSz'
+      'cbRepZCi5mmQF1VqDa3nJ6kSZlQPi4bszWpxWT8/vAr4bKoZP7tQqsxJI06YoG8i'
+      'j8Rv1Po7eeYRVGPDAvtCLOyT4ambI+EAQCKspoIAITGF/mnF6tlqjpOlgkkJxZlI'
+      'ETCA2Foi21jEacjOTWT4YuetuaeN86cyI678nN0CgYAfSuZrfBfnbEgkS7qrwsdw'
+      'qz3B6eJRIWmcMQtpDWQyZMUcBIWzwEvD1XNityQ+o52ua3GAg1OZarna1bTlJHUf'
+      'fi2HRQnNQdIhB8usMgZCpDCq4FN3cvhVqX0NOIYwQ5awk3ptt6NZkQJxVZNcIc0k'
+      'CtQfklVt+hC4cLMkaaXLtQKBgD4awX5MPkxW6zi0KrAy357J2OHtfGpabycrFDO4'
+      'Ee8TcS25Ev1JY9/fFg9xYZTVzM05iMZBT3rLb4qTTwiZH7oln/cH1ZwJSrVvyec5'
+      'Fa2JUsn/o3bIc7m5p1A1LMUDCAiDPJb/PSAFaEabjkV7DFz13z+/eq1p3dawfMdC'
+      'rFTNAoGBAK7jG6V5jXr86jmrWGdKPkASxwpKx6pX13xBLbMKVEsTnS9buuNZH1ZK'
+      'BYEevyHNEyLcpqmoYSoraZ8/PaCQ8GnWpT5XO3dT1wJOiUjvN10jbCpqpzKqpdEr'
+      '0JDaHEd7RQWUodp0clEmTnao/OxppIhoy+d2g0x8WujuuQzxTqwi'
+      '-----END RSA PRIVATE KEY-----',
 ];
 
 const List<String> _rsaPrivateKeyPkcs8Pem = [
-    '-----BEGIN PRIVATE KEY-----'
-    'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDIEOVGkMWtBdjv'
-    '3N7dSogUU7NjYTfQhANKINexMMclHely/JwuOElXnDtKpUdi/1EJfZCQfaP0gS+j'
-    'juzHKROAqOoT3kjnaHNeP4nqIgSIj6BSVT0tuVla/Qn9bO+pVJeWmtoCWS6zSi1T'
-    '+Al5nvrYwNnD0pq2AX0OILpYeU2PMuCLv1nfOxlyMlV/hP4eTt8hzJpZJkhsEKW9'
-    'q8cRNhZUywCEUgN2zVw4YjgnJfY8vs2ur5GtEms6bhJnMIfSZjmUDY5KJO3fXVUB'
-    'zi3bi1R80MR9/2Mr6HlpBT+LSg6UoX3E2mqzRZP1gFUq0lKf2BtU+p412ZjvJMKL'
-    'A6ktTYYZAgMBAAECggEAK3ugmWm1zRlMQTXcKnSchu56OstSejt3C5F/z78uSV7q'
-    '8lb9Cv6o0iXerSanEVk0n79uwDjOfcHmPMI/rDm9R2VvGsphRgppqL5el0i1e4jb'
-    '64kjNuDmDuSYW0BmBoOgPteBMql3gPhKScnLJWfsVVf0/J61iYFhUMTEO56BwPGH'
-    'fWW18AugvKWkK1Mx1nNd9Z1ss5K4biLVanIwU8E664W+Q111vrBKg3Y0xW+vFr1s'
-    'JOpocRVigjAHK0Ri2DFEF0+YReByZxxGkjpevPtEQ2X8HR/Cye2moSnH3SyQMnWD'
-    's0xZU3fG0iVAawDI6Yy90pZ2Cd6ji+HkrZrPjPGlQQKBgQDnmbUTaeFmJSp8Xjeq'
-    'lVO8qKyvarbbiVDog9GwSe4+L1cv5MIrP+gQ6zDkWSEJvRxrdoAvyJx7zY88yRd4'
-    'ggu8cg0qxkwZqU81ryEo5jJD5OuIklp7hF+nPZILyHmtT3GmnUz28/mssO5JuLo7'
-    'LxLftNaVTjsoxxiPNFgmh//sbQKBgQDdJLNxtF6lkKLmaZAXVWoNrecnqRJmVA+L'
-    'huzNanFZPz+8Cvhsqhk/u1CqzEkjTpigbyKPxG/U+jt55hFUY8MC+0Is7JPhqZsj'
-    '4QBAIqymggAhMYX+acXq2WqOk6WCSQnFmUgRMIDYWiLbWMRpyM5NZPhi5625p43z'
-    'pzIjrvyc3QKBgB9K5mt8F+dsSCRLuqvCx3CrPcHp4lEhaZwxC2kNZDJkxRwEhbPA'
-    'S8PVc2K3JD6jna5rcYCDU5lqudrVtOUkdR9+LYdFCc1B0iEHy6wyBkKkMKrgU3dy'
-    '+FWpfQ04hjBDlrCTem23o1mRAnFVk1whzSQK1B+SVW36ELhwsyRppcu1AoGAPhrB'
-    'fkw+TFbrOLQqsDLfnsnY4e18alpvJysUM7gR7xNxLbkS/Ulj398WD3FhlNXMzTmI'
-    'xkFPestvipNPCJkfuiWf9wfVnAlKtW/J5zkVrYlSyf+jdshzubmnUDUsxQMICIM8'
-    'lv89IAVoRpuORXsMXPXfP796rWnd1rB8x0KsVM0CgYEAruMbpXmNevzqOatYZ0o+'
-    'QBLHCkrHqlfXfEEtswpUSxOdL1u641kfVkoFgR6/Ic0TItymqahhKitpnz89oJDw'
-    'adalPlc7d1PXAk6JSO83XSNsKmqnMqql0SvQkNocR3tFBZSh2nRyUSZOdqj87Gmk'
-    'iGjL53aDTHxa6O65DPFOrCI='
-    '-----END PRIVATE KEY-----',
+  '-----BEGIN PRIVATE KEY-----'
+      'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDIEOVGkMWtBdjv'
+      '3N7dSogUU7NjYTfQhANKINexMMclHely/JwuOElXnDtKpUdi/1EJfZCQfaP0gS+j'
+      'juzHKROAqOoT3kjnaHNeP4nqIgSIj6BSVT0tuVla/Qn9bO+pVJeWmtoCWS6zSi1T'
+      '+Al5nvrYwNnD0pq2AX0OILpYeU2PMuCLv1nfOxlyMlV/hP4eTt8hzJpZJkhsEKW9'
+      'q8cRNhZUywCEUgN2zVw4YjgnJfY8vs2ur5GtEms6bhJnMIfSZjmUDY5KJO3fXVUB'
+      'zi3bi1R80MR9/2Mr6HlpBT+LSg6UoX3E2mqzRZP1gFUq0lKf2BtU+p412ZjvJMKL'
+      'A6ktTYYZAgMBAAECggEAK3ugmWm1zRlMQTXcKnSchu56OstSejt3C5F/z78uSV7q'
+      '8lb9Cv6o0iXerSanEVk0n79uwDjOfcHmPMI/rDm9R2VvGsphRgppqL5el0i1e4jb'
+      '64kjNuDmDuSYW0BmBoOgPteBMql3gPhKScnLJWfsVVf0/J61iYFhUMTEO56BwPGH'
+      'fWW18AugvKWkK1Mx1nNd9Z1ss5K4biLVanIwU8E664W+Q111vrBKg3Y0xW+vFr1s'
+      'JOpocRVigjAHK0Ri2DFEF0+YReByZxxGkjpevPtEQ2X8HR/Cye2moSnH3SyQMnWD'
+      's0xZU3fG0iVAawDI6Yy90pZ2Cd6ji+HkrZrPjPGlQQKBgQDnmbUTaeFmJSp8Xjeq'
+      'lVO8qKyvarbbiVDog9GwSe4+L1cv5MIrP+gQ6zDkWSEJvRxrdoAvyJx7zY88yRd4'
+      'ggu8cg0qxkwZqU81ryEo5jJD5OuIklp7hF+nPZILyHmtT3GmnUz28/mssO5JuLo7'
+      'LxLftNaVTjsoxxiPNFgmh//sbQKBgQDdJLNxtF6lkKLmaZAXVWoNrecnqRJmVA+L'
+      'huzNanFZPz+8Cvhsqhk/u1CqzEkjTpigbyKPxG/U+jt55hFUY8MC+0Is7JPhqZsj'
+      '4QBAIqymggAhMYX+acXq2WqOk6WCSQnFmUgRMIDYWiLbWMRpyM5NZPhi5625p43z'
+      'pzIjrvyc3QKBgB9K5mt8F+dsSCRLuqvCx3CrPcHp4lEhaZwxC2kNZDJkxRwEhbPA'
+      'S8PVc2K3JD6jna5rcYCDU5lqudrVtOUkdR9+LYdFCc1B0iEHy6wyBkKkMKrgU3dy'
+      '+FWpfQ04hjBDlrCTem23o1mRAnFVk1whzSQK1B+SVW36ELhwsyRppcu1AoGAPhrB'
+      'fkw+TFbrOLQqsDLfnsnY4e18alpvJysUM7gR7xNxLbkS/Ulj398WD3FhlNXMzTmI'
+      'xkFPestvipNPCJkfuiWf9wfVnAlKtW/J5zkVrYlSyf+jdshzubmnUDUsxQMICIM8'
+      'lv89IAVoRpuORXsMXPXfP796rWnd1rB8x0KsVM0CgYEAruMbpXmNevzqOatYZ0o+'
+      'QBLHCkrHqlfXfEEtswpUSxOdL1u641kfVkoFgR6/Ic0TItymqahhKitpnz89oJDw'
+      'adalPlc7d1PXAk6JSO83XSNsKmqnMqql0SvQkNocR3tFBZSh2nRyUSZOdqj87Gmk'
+      'iGjL53aDTHxa6O65DPFOrCI='
+      '-----END PRIVATE KEY-----',
 ];
 
 String _joinPem(List<String> lines) => '${lines.join('\n')}\n';
@@ -142,9 +133,8 @@ CryptoParams _paramsFor(CryptoAlgorithm algo, {String? password}) {
   );
 }
 
-CryptoParams _paramsPrivateKey({String? pem}) => CryptoParams(
-      rsaPem: pem ?? _joinPem(_rsaPrivateKeyPkcs8Pem),
-    );
+CryptoParams _paramsPrivateKey({String? pem}) =>
+    CryptoParams(rsaPem: pem ?? _joinPem(_rsaPrivateKeyPkcs8Pem));
 
 void main() {
   group('全算法往返（含中文/emoji/空文本）', () {
@@ -176,11 +166,15 @@ void main() {
       const algoId = 'morse';
       const text = 'HELLO WORLD 123';
       final ct = CryptoToolbox.encrypt(
-          plaintext: text,
-          algorithmId: algoId,
-          params: const CryptoParams());
+        plaintext: text,
+        algorithmId: algoId,
+        params: const CryptoParams(),
+      );
       final back = CryptoToolbox.decrypt(
-          ciphertext: ct, algorithmId: algoId, params: const CryptoParams());
+        ciphertext: ct,
+        algorithmId: algoId,
+        params: const CryptoParams(),
+      );
       expect(back, text);
     });
 
@@ -194,19 +188,24 @@ void main() {
       };
       for (final e in cases.entries) {
         final a = CryptoToolbox.encrypt(
-            plaintext: 'abc',
-            algorithmId: e.key,
-            params: const CryptoParams());
+          plaintext: 'abc',
+          algorithmId: e.key,
+          params: const CryptoParams(),
+        );
         expect(a.length, e.value, reason: e.key);
-        expect(RegExp('^[0-9a-f]{${e.value}}\$').hasMatch(a), isTrue,
-            reason: e.key);
+        expect(
+          RegExp('^[0-9a-f]{${e.value}}\$').hasMatch(a),
+          isTrue,
+          reason: e.key,
+        );
       }
       // 已知向量
       expect(
         CryptoToolbox.encrypt(
-            plaintext: 'abc',
-            algorithmId: 'md5',
-            params: const CryptoParams()),
+          plaintext: 'abc',
+          algorithmId: 'md5',
+          params: const CryptoParams(),
+        ),
         '900150983cd24fb0d6963f7d28e17f72',
       );
     });
@@ -302,7 +301,8 @@ void main() {
       final sniffed = sniffCipher(_openSslVectors['aes-256-cbc']!);
       expect(sniffed?.kind, SniffedCipherKind.opensslSalted);
       final suggestion = CryptoToolbox.suggestDecrypt(
-          _openSslVectors['aes-256-cbc']!);
+        _openSslVectors['aes-256-cbc']!,
+      );
       expect(suggestion.algorithmId, 'aes-256-cbc');
     });
 
@@ -328,17 +328,20 @@ void main() {
       );
     });
 
-    test('\u6210\u7247\u975e UTF-8 \u5b57\u8282\uff1a\u4ecd\u56de\u9000 Latin-1', () {
-      final sample = base64.encode(<int>[0x43, 0x61, 0x66, 0xe9]);
-      expect(
-        CryptoToolbox.decrypt(
-          ciphertext: sample,
-          algorithmId: 'base64',
-          params: const CryptoParams(),
-        ),
-        'Caf\u00e9',
-      );
-    });
+    test(
+      '\u6210\u7247\u975e UTF-8 \u5b57\u8282\uff1a\u4ecd\u56de\u9000 Latin-1',
+      () {
+        final sample = base64.encode(<int>[0x43, 0x61, 0x66, 0xe9]);
+        expect(
+          CryptoToolbox.decrypt(
+            ciphertext: sample,
+            algorithmId: 'base64',
+            params: const CryptoParams(),
+          ),
+          'Caf\u00e9',
+        );
+      },
+    );
 
     test('\u957f Latin-1 \u6587\u672c\uff1a\u574f\u5b57\u8282\u5360\u6bd4\u4f4e\u4e5f\u4e0d\u8bb8\u6309 UTF-8 \u635f\u574f\u89e3', () {
       // \u5224\u636e\u82e5\u6309\u300c\u66ff\u6362\u7b26\u5360\u6bd4\u300d\u62cd\u9608\u503c\uff0c\u957f\u6587\u672c\u91cc\u7684\u96f6\u661f\u91cd\u97f3\u5b57\u6bcd\u4f1a\u88ab\u541e\u6210 U+FFFD\uff0c
@@ -365,7 +368,9 @@ void main() {
     });
 
     test('\u622a\u65ad\u7684 UTF-8 \u4e2d\u6587\uff1a\u53ea\u4e22\u5c3e\u5b57\uff0c\u6b63\u6587\u4e0d\u6574\u6bb5\u9000 Latin-1', () {
-      final full = utf8.encode('\u4e2d\u6587\u6d4b\u8bd5\u5185\u5bb9\u591f\u957f\u4e00\u4e9b');
+      final full = utf8.encode(
+        '\u4e2d\u6587\u6d4b\u8bd5\u5185\u5bb9\u591f\u957f\u4e00\u4e9b',
+      );
       final truncated = full.sublist(0, full.length - 1);
       final sample = base64.encode(truncated);
       // \u5c3e\u90e8\u622a\u65ad\u4ecd\u5e94\u8ba4\u4f5c\u6587\u672c\u7f16\u7801\uff0c\u4e0d\u8be5\u88ab\u63a8\u53bb\u5efa\u8bae\u5bf9\u79f0\u7b97\u6cd5
@@ -375,7 +380,10 @@ void main() {
         algorithmId: 'base64',
         params: const CryptoParams(),
       );
-      expect(decoded, startsWith('\u4e2d\u6587\u6d4b\u8bd5\u5185\u5bb9\u591f\u957f\u4e00'));
+      expect(
+        decoded,
+        startsWith('\u4e2d\u6587\u6d4b\u8bd5\u5185\u5bb9\u591f\u957f\u4e00'),
+      );
       // \u8001\u884c\u4e3a\u4f1a\u6574\u6bb5\u9000 Latin-1\uff0c\u628a\u6b63\u5e38\u4e2d\u6587\u4e00\u8d77\u53d8\u6210 \u00e4\u00b8\u00ad\u00e6 \u8fd9\u7c7b\u4e71\u7801
       expect(decoded.contains('\u00e4'), isFalse);
     });
@@ -385,8 +393,9 @@ void main() {
         ...utf8.encode('hello world this is a fairly long hex payload here ok'),
         0xff,
       ];
-      final hexText =
-          bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      final hexText = bytes
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
 
       expect(CryptoToolbox.suggestDecrypt(hexText).algorithmId, 'hex');
       expect(
@@ -402,11 +411,17 @@ void main() {
     test('Hex / Base32 \u901a\u9053\u540c\u6837\u4fee\u590d CESU-8', () {
       // U+1F389 \u7684 CESU-8 \u5f62\u6001\uff1aD83C DF89 -> ED A0 BC ED BE 89
       final bytes = <int>[
-        0xed, 0xa0, 0xbc, 0xed, 0xbe, 0x89,
+        0xed,
+        0xa0,
+        0xbc,
+        0xed,
+        0xbe,
+        0x89,
         ...utf8.encode(' \u4f1a\u8bae'),
       ];
-      final hexText =
-          bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      final hexText = bytes
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
       expect(
         CryptoToolbox.decrypt(
           ciphertext: hexText,
@@ -434,10 +449,11 @@ void main() {
     test('纯 base64 内容探测：UTF-8 文本建议 base64、二进制建议对称算法', () {
       // UTF-8 可读 → base64 编码
       expect(
-          CryptoToolbox.suggestDecrypt(
-                  base64.encode(utf8.encode('你好，世界')).toString())
-              .algorithmId,
-          'base64');
+        CryptoToolbox.suggestDecrypt(
+          base64.encode(utf8.encode('你好，世界')).toString(),
+        ).algorithmId,
+        'base64',
+      );
       // ENC1 裸 payload（剥前缀，二进制）→ 建议对称默认算法
       final enc1 = CryptoToolbox.encrypt(
         plaintext: '秘密内容',
@@ -446,11 +462,15 @@ void main() {
       );
       final naked = enc1.substring('ENC1:aes-256-cbc:'.length);
       expect(sniffCipher(naked)?.kind, SniffedCipherKind.plainBase64);
-      expect(CryptoToolbox.suggestDecrypt(naked).algorithmId,
-          CryptoToolbox.defaultAlgorithmId);
+      expect(
+        CryptoToolbox.suggestDecrypt(naked).algorithmId,
+        CryptoToolbox.defaultAlgorithmId,
+      );
       // Hex 同理
       expect(
-          CryptoToolbox.suggestDecrypt('e4bda0e5a5bde4bda0e5a5bd').algorithmId, 'hex');
+        CryptoToolbox.suggestDecrypt('e4bda0e5a5bde4bda0e5a5bd').algorithmId,
+        'hex',
+      );
     });
   });
 
@@ -462,10 +482,14 @@ void main() {
     });
 
     test('解析 PKCS#1 与 PKCS#8 私钥', () {
-      expect(parseRsaPem(_joinPem(_rsaPrivateKeyPkcs1Pem)),
-          isA<RsaParsedPrivateKey>());
-      expect(parseRsaPem(_joinPem(_rsaPrivateKeyPkcs8Pem)),
-          isA<RsaParsedPrivateKey>());
+      expect(
+        parseRsaPem(_joinPem(_rsaPrivateKeyPkcs1Pem)),
+        isA<RsaParsedPrivateKey>(),
+      );
+      expect(
+        parseRsaPem(_joinPem(_rsaPrivateKeyPkcs8Pem)),
+        isA<RsaParsedPrivateKey>(),
+      );
     });
 
     test('公钥加密 → 两种私钥均可解密', () {
@@ -515,44 +539,68 @@ void main() {
 
   group('划词嗅探器', () {
     test('识别各类密文特征', () {
-      expect(sniffCipher('ENC1:aes-256-cbc:QUJDRA==')?.kind,
-          SniffedCipherKind.enc1);
-      expect(sniffCipher(_openSslVectors['aes-256-cbc']!)?.kind,
-          SniffedCipherKind.opensslSalted);
-      expect(sniffCipher('SGVsbG8gRmx1eGRvIQ==')?.kind,
-          SniffedCipherKind.plainBase64);
-      expect(sniffCipher('48656c6c6f2c20776f726c64')?.kind,
-          SniffedCipherKind.plainHex);
+      expect(
+        sniffCipher('ENC1:aes-256-cbc:QUJDRA==')?.kind,
+        SniffedCipherKind.enc1,
+      );
+      expect(
+        sniffCipher(_openSslVectors['aes-256-cbc']!)?.kind,
+        SniffedCipherKind.opensslSalted,
+      );
+      expect(
+        sniffCipher('SGVsbG8gRmx1eGRvIQ==')?.kind,
+        SniffedCipherKind.plainBase64,
+      );
+      expect(
+        sniffCipher('48656c6c6f2c20776f726c64')?.kind,
+        SniffedCipherKind.plainHex,
+      );
       expect(sniffCipher('.... -- ..')?.kind, SniffedCipherKind.morse);
       // Unicode 变体（en dash / 间隔号）应识别
       expect(sniffCipher('.... –– ··')?.kind, SniffedCipherKind.morse);
       // 混入非法符号（… 省略号）不识别 —— 不合法输入宁缺毋滥
       expect(sniffCipher('.–. .-.. . .- … .- -.'), isNull);
       // URL 百分号编码
-      expect(sniffCipher('%E4%BD%A0%E5%A5%BD')?.kind,
-          SniffedCipherKind.urlEncoded);
-      expect(CryptoToolbox.suggestDecrypt('%E4%BD%A0%E5%A5%BD').algorithmId,
-          'url');
+      expect(
+        sniffCipher('%E4%BD%A0%E5%A5%BD')?.kind,
+        SniffedCipherKind.urlEncoded,
+      );
+      expect(
+        CryptoToolbox.suggestDecrypt('%E4%BD%A0%E5%A5%BD').algorithmId,
+        'url',
+      );
       // MIME 折行 Base64（多行纯 base64）
       expect(
-          sniffCipher('TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQ=\n'
-                  'Y29uc2VjdGV0dXIgYWRpcGlzY2luZw==')
-              ?.kind,
-          SniffedCipherKind.plainBase64);
+        sniffCipher(
+          'TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQ=\n'
+          'Y29uc2VjdGV0dXIgYWRpcGlzY2luZw==',
+        )?.kind,
+        SniffedCipherKind.plainBase64,
+      );
       // 分隔 Hex（MAC/指纹风格）
-      expect(sniffCipher('48:65:6c:6c:6f:20:77:6f')?.kind,
-          SniffedCipherKind.plainHex);
-      expect(sniffCipher('48-65-6c-6c-6f-20-77-6f')?.kind,
-          SniffedCipherKind.plainHex);
+      expect(
+        sniffCipher('48:65:6c:6c:6f:20:77:6f')?.kind,
+        SniffedCipherKind.plainHex,
+      );
+      expect(
+        sniffCipher('48-65-6c-6c-6f-20-77-6f')?.kind,
+        SniffedCipherKind.plainHex,
+      );
       // Base32（大写 + 2-7 数字 + 8 倍数长度）
-      expect(sniffCipher('NBSWY3DPEB3W64TMMQQGM33PEBRGC4Q=')?.kind,
-          SniffedCipherKind.plainBase32);
+      expect(
+        sniffCipher('NBSWY3DPEB3W64TMMQQGM33PEBRGC4Q=')?.kind,
+        SniffedCipherKind.plainBase32,
+      );
       // 含 2-7 数字的大写长串按 base32 认（纯字母则落入 base64 分支）
-      expect(sniffCipher('HELLOWORLDHELLOWORLDHELLOWORLD23')?.kind,
-          SniffedCipherKind.plainBase32);
+      expect(
+        sniffCipher('HELLOWORLDHELLOWORLDHELLOWORLD23')?.kind,
+        SniffedCipherKind.plainBase32,
+      );
       // 纯大写英文词（无数字）被 base64 规则接住（不误报 base32）
-      expect(sniffCipher('HELLOWORLDHELLOWORLDABCDEFGH')?.kind,
-          SniffedCipherKind.plainBase64);
+      expect(
+        sniffCipher('HELLOWORLDHELLOWORLDABCDEFGH')?.kind,
+        SniffedCipherKind.plainBase64,
+      );
 
       // ```enc 代码块语言信号：内容无特征也显示（只选中密文片段场景）
       expect(isDecryptableText('任意片段', codeLanguage: 'enc'), isTrue);
@@ -564,8 +612,10 @@ void main() {
       expect(sniffCipher('hello world 123'), isNull);
       expect(sniffCipher(''), isNull);
       // 纯 base64 猜测建议算法
-      expect(CryptoToolbox.suggestDecrypt('SGVsbG8gRmx1eGRvIQ==').algorithmId,
-          'base64');
+      expect(
+        CryptoToolbox.suggestDecrypt('SGVsbG8gRmx1eGRvIQ==').algorithmId,
+        'base64',
+      );
     });
   });
 
@@ -669,12 +719,18 @@ void main() {
       const params = CryptoParams(caesarShift: 3);
       expect(
         CryptoToolbox.encrypt(
-            plaintext: 'abc XYZ', algorithmId: 'caesar', params: params),
+          plaintext: 'abc XYZ',
+          algorithmId: 'caesar',
+          params: params,
+        ),
         'def ABC',
       );
       expect(
         CryptoToolbox.decrypt(
-            ciphertext: 'def ABC', algorithmId: 'caesar', params: params),
+          ciphertext: 'def ABC',
+          algorithmId: 'caesar',
+          params: params,
+        ),
         'abc XYZ',
       );
     });
@@ -682,11 +738,17 @@ void main() {
     test('维吉尼亚', () {
       const params = CryptoParams(vigenereKey: 'LEMON');
       final ct = CryptoToolbox.encrypt(
-          plaintext: 'ATTACKATDAWN', algorithmId: 'vigenere', params: params);
+        plaintext: 'ATTACKATDAWN',
+        algorithmId: 'vigenere',
+        params: params,
+      );
       expect(ct, 'LXFOPVEFRNHR'); // 经典教科书向量
       expect(
         CryptoToolbox.decrypt(
-            ciphertext: ct, algorithmId: 'vigenere', params: params),
+          ciphertext: ct,
+          algorithmId: 'vigenere',
+          params: params,
+        ),
         'ATTACKATDAWN',
       );
     });
@@ -695,17 +757,26 @@ void main() {
       const params = CryptoParams();
       // 标准编码输出
       final standard = CryptoToolbox.encrypt(
-          plaintext: 'SOS', algorithmId: 'morse', params: params);
+        plaintext: 'SOS',
+        algorithmId: 'morse',
+        params: params,
+      );
       expect(standard, '... --- ...');
       // 变体输入解码等价
       expect(
         CryptoToolbox.decrypt(
-            ciphertext: '... ——— ...', algorithmId: 'morse', params: params),
+          ciphertext: '... ——— ...',
+          algorithmId: 'morse',
+          params: params,
+        ),
         'SOS',
       );
       expect(
         CryptoToolbox.decrypt(
-            ciphertext: '··· −−− ···', algorithmId: 'morse', params: params),
+          ciphertext: '··· −−− ···',
+          algorithmId: 'morse',
+          params: params,
+        ),
         'SOS',
       );
     });
@@ -714,11 +785,17 @@ void main() {
       const params = CryptoParams(railCount: 3);
       const text = 'WEAREDISCOVEREDFLEEATONCE';
       final ct = CryptoToolbox.encrypt(
-          plaintext: text, algorithmId: 'railfence', params: params);
+        plaintext: text,
+        algorithmId: 'railfence',
+        params: params,
+      );
       expect(ct, 'WECRLTEERDSOEEFEAOCAIVDEN'); // 经典教科书向量
       expect(
         CryptoToolbox.decrypt(
-            ciphertext: ct, algorithmId: 'railfence', params: params),
+          ciphertext: ct,
+          algorithmId: 'railfence',
+          params: params,
+        ),
         text,
       );
     });
@@ -728,15 +805,19 @@ void main() {
     test('base64', () {
       expect(
         CryptoToolbox.encrypt(
-            plaintext: 'hello',
-            algorithmId: 'base64',
-            params: const CryptoParams()),
+          plaintext: 'hello',
+          algorithmId: 'base64',
+          params: const CryptoParams(),
+        ),
         'aGVsbG8=',
       );
       // URL-safe 输入兼容
       expect(
         CryptoToolbox.decrypt(
-            ciphertext: 'aGVsbG8', algorithmId: 'base64', params: const CryptoParams()),
+          ciphertext: 'aGVsbG8',
+          algorithmId: 'base64',
+          params: const CryptoParams(),
+        ),
         'hello',
       );
     });
@@ -744,14 +825,18 @@ void main() {
     test('hex', () {
       expect(
         CryptoToolbox.encrypt(
-            plaintext: 'hi', algorithmId: 'hex', params: const CryptoParams()),
+          plaintext: 'hi',
+          algorithmId: 'hex',
+          params: const CryptoParams(),
+        ),
         '6869',
       );
       expect(
         CryptoToolbox.decrypt(
-            ciphertext: '68 69',
-            algorithmId: 'hex',
-            params: const CryptoParams()),
+          ciphertext: '68 69',
+          algorithmId: 'hex',
+          params: const CryptoParams(),
+        ),
         'hi',
       );
     });
@@ -760,25 +845,35 @@ void main() {
       const params = CryptoParams();
       expect(
         CryptoToolbox.encrypt(
-            plaintext: 'foo', algorithmId: 'base32', params: params),
+          plaintext: 'foo',
+          algorithmId: 'base32',
+          params: params,
+        ),
         'MZXW6===',
       );
       expect(
         CryptoToolbox.encrypt(
-            plaintext: 'foobar', algorithmId: 'base32', params: params),
+          plaintext: 'foobar',
+          algorithmId: 'base32',
+          params: params,
+        ),
         'MZXW6YTBOI======',
       );
       // 解码容忍小写与缺 padding
       expect(
         CryptoToolbox.decrypt(
-            ciphertext: 'mzxw6ytboi', algorithmId: 'base32', params: params),
+          ciphertext: 'mzxw6ytboi',
+          algorithmId: 'base32',
+          params: params,
+        ),
         'foobar',
       );
       expect(
         CryptoToolbox.decrypt(
-            ciphertext: 'MZXW6YTBOI======',
-            algorithmId: 'base32',
-            params: params),
+          ciphertext: 'MZXW6YTBOI======',
+          algorithmId: 'base32',
+          params: params,
+        ),
         'foobar',
       );
     });
@@ -786,7 +881,10 @@ void main() {
     test('rot13', () {
       expect(
         CryptoToolbox.encrypt(
-            plaintext: 'Hello', algorithmId: 'rot13', params: const CryptoParams()),
+          plaintext: 'Hello',
+          algorithmId: 'rot13',
+          params: const CryptoParams(),
+        ),
         'Uryyb',
       );
     });
@@ -794,9 +892,10 @@ void main() {
     test('url', () {
       expect(
         CryptoToolbox.encrypt(
-            plaintext: 'a b&c',
-            algorithmId: 'url',
-            params: const CryptoParams()),
+          plaintext: 'a b&c',
+          algorithmId: 'url',
+          params: const CryptoParams(),
+        ),
         'a%20b%26c',
       );
     });

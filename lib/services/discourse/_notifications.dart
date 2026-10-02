@@ -12,10 +12,7 @@ mixin _NotificationsMixin on _DiscourseServiceBase {
     bool silent = false,
     bool bumpLastSeenReviewable = true,
   }) async {
-    final queryParams = <String, dynamic>{
-      'recent': true,
-      'limit': limit,
-    };
+    final queryParams = <String, dynamic>{'recent': true, 'limit': limit};
     if (bumpLastSeenReviewable) {
       queryParams['bump_last_seen_reviewable'] = true;
     }
@@ -43,9 +40,7 @@ mixin _NotificationsMixin on _DiscourseServiceBase {
     int? offset,
     String? filter,
   }) async {
-    final queryParams = <String, dynamic>{
-      'limit': 60,
-    };
+    final queryParams = <String, dynamic>{'limit': 60};
     if (offset != null) {
       queryParams['offset'] = offset;
     }

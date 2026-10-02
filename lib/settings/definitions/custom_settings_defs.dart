@@ -140,16 +140,13 @@ class _CustomSettingsCopy {
   static const _en = _CustomSettingsCopy(
     cacheGroupTitle: 'Experimental cache',
     preloadCacheTitle: 'Preload cache (experimental)',
-    preloadCacheDescription:
-        'Caches the home preload for up to 7 days in an account-isolated store. A hit skips the preload home request. Disabling stops reads and writes without deleting existing cache.',
+    preloadCacheDescription: 'Caches the home preload for up to 7 days in an account-isolated store. A hit skips the preload home request. Disabling stops reads and writes without deleting existing cache.',
     clearPreloadCacheTitle: 'Clear preload cache',
-    clearPreloadCacheDescription:
-        'Clears the independently stored preload cache for every account at once.',
+    clearPreloadCacheDescription: 'Clears the independently stored preload cache for every account at once.',
     preloadCacheCleared: 'Preload cache cleared for all accounts.',
     preloadCacheClearFailed: 'Failed to clear preload cache.',
     readingGroupTitle: 'Reading enhancements',
     quickReadingTitle: 'Quick reading',
-    quickReadingDescription:
-        'Immediately reports every currently unread post when entering a topic. More than 2,000 posts are sent in batches of 2,000.',
+    quickReadingDescription: 'Immediately reports every currently unread post when entering a topic. More than 2,000 posts are sent in batches of 2,000.',
   );
 }

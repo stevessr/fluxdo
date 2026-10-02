@@ -33,10 +33,8 @@ class ChatThreadListSheet extends ConsumerWidget {
       initialSize: 0.72,
       minSize: 0.4,
       contentPadding: EdgeInsets.zero,
-      bodyBuilder: (ctx, _) => ChatThreadListSheet(
-        channelId: channelId,
-        channelTitle: channelTitle,
-      ),
+      bodyBuilder: (ctx, _) =>
+          ChatThreadListSheet(channelId: channelId, channelTitle: channelTitle),
     );
   }
 
@@ -82,8 +80,9 @@ class ChatThreadListSheet extends ConsumerWidget {
                   Icon(
                     Icons.forum_outlined,
                     size: 52,
-                    color: theme.colorScheme.onSurfaceVariant
-                        .withValues(alpha: 0.4),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.4,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -125,12 +124,14 @@ class ChatThreadListSheet extends ConsumerWidget {
               final time = lastAt != null
                   ? TimeUtils.formatRelativeTime(lastAt)
                   : (om?.createdAt != null
-                      ? TimeUtils.formatRelativeTime(om!.createdAt!)
-                      : null);
+                        ? TimeUtils.formatRelativeTime(om!.createdAt!)
+                        : null);
 
               return ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 tileColor: theme.colorScheme.surfaceContainerLow,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

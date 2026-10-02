@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_platform_interface/flutter_inappwebview_platform_interface.dart';
+
 import 'web_message_port.dart';
 
 /// Object specifying creation parameters for creating a [LinuxWebMessageChannel].

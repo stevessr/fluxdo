@@ -771,7 +771,10 @@ class _RadialAccountLayout {
       );
     }
 
-    final accountRingCount = math.min(requiredAccountRingCount, maxAccountRingCount);
+    final accountRingCount = math.min(
+      requiredAccountRingCount,
+      maxAccountRingCount,
+    );
     final accountRadii = accountRadiiFor(accountRingCount).toList();
     final overflowed = requiredAccountRingCount > maxAccountRingCount;
     final manageRadius = accountRadii.isEmpty
