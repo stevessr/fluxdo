@@ -115,8 +115,7 @@ class EnhancedPersistCookieJar implements base.CookieJar {
     CanonicalCookie next,
     CanonicalCookie existing,
   ) {
-    final fromWebView =
-        next.source == CookieSource.webViewCdp ||
+    final fromWebView = next.source == CookieSource.webViewCdp ||
         next.source == CookieSource.webViewManager;
     return fromWebView &&
         next.value == existing.value &&
@@ -132,9 +131,8 @@ class EnhancedPersistCookieJar implements base.CookieJar {
     List<String> headers, {
     bool trusted = false,
   }) async {
-    final cookies = headers
-        .map((e) => SetCookieParser.parse(e, uri: uri))
-        .toList();
+    final cookies =
+        headers.map((e) => SetCookieParser.parse(e, uri: uri)).toList();
     await saveCanonicalCookies(uri, cookies, trusted: trusted);
   }
 
@@ -152,28 +150,27 @@ class EnhancedPersistCookieJar implements base.CookieJar {
 
   Future<List<CanonicalCookie>> loadCanonicalForRequest(Uri uri) async {
     final all = await _readAll();
-    final filtered =
-        all
-            .where(
-              (cookie) =>
-                  _matches(uri, cookie) && (ignoreExpires || !cookie.isExpired),
-            )
-            .toList()
-          ..sort((a, b) {
-            final pathCompare = b.path.length.compareTo(a.path.length);
-            if (pathCompare != 0) return pathCompare;
+    final filtered = all
+        .where(
+          (cookie) =>
+              _matches(uri, cookie) && (ignoreExpires || !cookie.isExpired),
+        )
+        .toList()
+      ..sort((a, b) {
+        final pathCompare = b.path.length.compareTo(a.path.length);
+        if (pathCompare != 0) return pathCompare;
 
-            final domainCompare = (b.normalizedDomain?.length ?? 0).compareTo(
-              a.normalizedDomain?.length ?? 0,
-            );
-            if (domainCompare != 0) return domainCompare;
+        final domainCompare = (b.normalizedDomain?.length ?? 0).compareTo(
+          a.normalizedDomain?.length ?? 0,
+        );
+        if (domainCompare != 0) return domainCompare;
 
-            if (a.hostOnly != b.hostOnly) {
-              return a.hostOnly ? -1 : 1;
-            }
+        if (a.hostOnly != b.hostOnly) {
+          return a.hostOnly ? -1 : 1;
+        }
 
-            return a.creationTime.compareTo(b.creationTime);
-          });
+        return a.creationTime.compareTo(b.creationTime);
+      });
     return _dedupePartitionVariants(filtered);
   }
 
@@ -221,9 +218,8 @@ class EnhancedPersistCookieJar implements base.CookieJar {
 
   @override
   Future<void> saveFromResponse(Uri uri, List<io.Cookie> cookies) async {
-    final canonical = cookies
-        .map((e) => SetCookieParser.fromIoCookie(e, uri: uri))
-        .toList();
+    final canonical =
+        cookies.map((e) => SetCookieParser.fromIoCookie(e, uri: uri)).toList();
     await saveCanonicalCookies(uri, canonical);
   }
 
@@ -234,9 +230,8 @@ class EnhancedPersistCookieJar implements base.CookieJar {
     List<io.Cookie> cookies, {
     bool trusted = false,
   }) async {
-    final canonical = cookies
-        .map((e) => SetCookieParser.fromIoCookie(e, uri: uri))
-        .toList();
+    final canonical =
+        cookies.map((e) => SetCookieParser.fromIoCookie(e, uri: uri)).toList();
     await saveCanonicalCookies(uri, canonical, trusted: trusted);
   }
 
@@ -295,9 +290,9 @@ class EnhancedPersistCookieJar implements base.CookieJar {
     required String path,
   }) {
     final normalizedDomain = domain.trim().toLowerCase().replaceFirst(
-      RegExp(r'^\.'),
-      '',
-    );
+          RegExp(r'^\.'),
+          '',
+        );
     final normalizedPath = path.isEmpty ? '/' : path;
     if (name.isEmpty || normalizedDomain.isEmpty) return Future.value(0);
 

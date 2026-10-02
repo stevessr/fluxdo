@@ -24,24 +24,27 @@ void main() {
     'exact identity delete preserves same-name cookies on other paths',
     () async {
       final uri = Uri.parse('https://example.com/');
-      await jar.saveCanonicalCookies(uri, [
-        CanonicalCookie(
-          name: 'sid',
-          value: 'root',
-          domain: 'example.com',
-          path: '/',
-          hostOnly: true,
-          originUrl: uri.toString(),
-        ),
-        CanonicalCookie(
-          name: 'sid',
-          value: 'account',
-          domain: '.example.com',
-          path: '/account',
-          hostOnly: false,
-          originUrl: uri.toString(),
-        ),
-      ], trusted: true);
+      await jar.saveCanonicalCookies(
+          uri,
+          [
+            CanonicalCookie(
+              name: 'sid',
+              value: 'root',
+              domain: 'example.com',
+              path: '/',
+              hostOnly: true,
+              originUrl: uri.toString(),
+            ),
+            CanonicalCookie(
+              name: 'sid',
+              value: 'account',
+              domain: '.example.com',
+              path: '/account',
+              hostOnly: false,
+              originUrl: uri.toString(),
+            ),
+          ],
+          trusted: true);
 
       final removed = await jar.deleteCookieIdentity(
         name: 'sid',
@@ -60,26 +63,29 @@ void main() {
 
   test('exact identity delete removes partition variants together', () async {
     final uri = Uri.parse('https://example.com/');
-    await jar.saveCanonicalCookies(uri, [
-      CanonicalCookie(
-        name: 'chips',
-        value: 'plain',
-        domain: 'example.com',
-        path: '/app',
-        hostOnly: false,
-        originUrl: uri.toString(),
-      ),
-      CanonicalCookie(
-        name: 'chips',
-        value: 'partitioned',
-        domain: 'example.com',
-        path: '/app',
-        hostOnly: false,
-        partitioned: true,
-        partitionKey: 'https://top.example',
-        originUrl: uri.toString(),
-      ),
-    ], trusted: true);
+    await jar.saveCanonicalCookies(
+        uri,
+        [
+          CanonicalCookie(
+            name: 'chips',
+            value: 'plain',
+            domain: 'example.com',
+            path: '/app',
+            hostOnly: false,
+            originUrl: uri.toString(),
+          ),
+          CanonicalCookie(
+            name: 'chips',
+            value: 'partitioned',
+            domain: 'example.com',
+            path: '/app',
+            hostOnly: false,
+            partitioned: true,
+            partitionKey: 'https://top.example',
+            originUrl: uri.toString(),
+          ),
+        ],
+        trusted: true);
 
     final removed = await jar.deleteCookieIdentity(
       name: 'chips',
