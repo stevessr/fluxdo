@@ -260,10 +260,7 @@ mixin _GroupsMixin on _DiscourseServiceBase {
     try {
       await _dio.put(
         '/groups/$groupId/handle_membership_request.json',
-        data: {
-          'user_id': userId,
-          'accept': accept,
-        },
+        data: {'user_id': userId, 'accept': accept},
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
     } on DioException catch (e) {
@@ -305,9 +302,7 @@ mixin _GroupsMixin on _DiscourseServiceBase {
     try {
       final response = await _dio.get(
         '/groups/$encoded/$type.json',
-        queryParameters: {
-          if (offset != null) 'offset': offset,
-        },
+        queryParameters: {if (offset != null) 'offset': offset},
       );
       return response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
@@ -316,5 +311,4 @@ mixin _GroupsMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
-
 }
