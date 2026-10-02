@@ -269,6 +269,267 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     }
   }
 
+  Future<void> _addColumn(DiscourseBoard board) async {
+    if (!board.canManage || board.archived) return;
+    final controller = TextEditingController();
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_isZh(context) ? '添加分栏' : 'Add column'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: _isZh(context) ? '分栏名称' : 'Column title',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(_isZh(context) ? '取消' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: Text(_isZh(context) ? '添加' : 'Add'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (title == null || !mounted) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .createBoardColumn(board.id, {'title': title});
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _addCard(
+    DiscourseBoard board,
+    BoardColumn column,
+  ) async {
+    if (!board.canWrite || board.archived) return;
+    final result = await showDialog<({String title, String notes})>(
+      context: context,
+      builder: (_) => const _BoardCardEditorDialog(),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await ref.read(discourseServiceProvider).createBoardCard(
+        board.id,
+        card: {
+          'column_id': column.id,
+          'title': result.title,
+          if (result.notes.isNotEmpty) 'notes': result.notes,
+        },
+      );
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _moveCard(
+    DiscourseBoard board,
+    BoardCard card,
+  ) async {
+    if (!board.canWrite || board.archived || board.columns.length < 2) return;
+    final destination = await showDialog<BoardColumn>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text(_isZh(context) ? '移动到分栏' : 'Move to column'),
+        children: [
+          for (final column in board.columns)
+            if (column.id != card.columnId)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(dialogContext, column),
+                child: Text(column.displayTitle),
+              ),
+        ],
+      ),
+    );
+    if (destination == null || !mounted) return;
+    try {
+      await ref.read(discourseServiceProvider).updateBoardCard(
+        board.id,
+        card.id,
+        {'column_id': destination.id},
+      );
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _deleteCard(
+    DiscourseBoard board,
+    BoardCard card,
+  ) async {
+    if (!board.canWrite || board.archived) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(_isZh(context) ? '删除卡片' : 'Delete card'),
+            content: Text(
+              _isZh(context)
+                  ? '确定删除“\${card.displayTitle}”吗？'
+                  : 'Delete “\${card.displayTitle}”?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_isZh(context) ? '删除' : 'Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .deleteBoardCard(board.id, card.id);
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _clearColumn(
+    DiscourseBoard board,
+    BoardColumn column,
+  ) async {
+    if (!board.canManage || board.archived || column.cards.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(_isZh(context) ? '清空分栏' : 'Clear column'),
+            content: Text(
+              _isZh(context)
+                  ? '确定删除“\${column.displayTitle}”中的全部卡片吗？'
+                  : 'Delete all cards in “\${column.displayTitle}”?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_isZh(context) ? '清空' : 'Clear'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .clearBoardColumn(board.id, column.id);
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _deleteColumn(
+    DiscourseBoard board,
+    BoardColumn column,
+  ) async {
+    if (!board.canManage || board.archived) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(_isZh(context) ? '删除分栏' : 'Delete column'),
+            content: Text(
+              _isZh(context)
+                  ? '确定删除分栏“\${column.displayTitle}”吗？'
+                  : 'Delete column “\${column.displayTitle}”?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_isZh(context) ? '删除' : 'Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .deleteBoardColumn(board.id, column.id);
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _toggleBoardArchived(DiscourseBoard board) async {
+    if (!board.canManage) return;
+    try {
+      final service = ref.read(discourseServiceProvider);
+      if (board.archived) {
+        await service.unarchiveBoard(board.id);
+      } else {
+        await service.archiveBoard(board.id);
+      }
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _deleteBoard(DiscourseBoard board) async {
+    if (!board.canManage) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(_isZh(context) ? '删除看板' : 'Delete board'),
+            content: Text(
+              _isZh(context)
+                  ? '确定永久删除“\${board.displayName}”吗？'
+                  : 'Permanently delete “\${board.displayName}”?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_isZh(context) ? '删除' : 'Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    try {
+      await ref.read(discourseServiceProvider).deleteBoard(board.id);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final board = _board;
