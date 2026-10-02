@@ -30,4 +30,4 @@ jobs:
       - name: Analyze Boards
         run: flutter analyze lib/models/board.dart lib/pages/boards_page.dart lib/navigation/nav_entry_registry.dart lib/services/deep_link_service.dart lib/services/discourse/discourse_service.dart lib/utils/discourse_url_parser.dart lib/utils/link_launcher.dart test/models/board_test.dart test/utils/board_link_parser_test.dart
       - name: Test Boards
-        run: dart test test/models/board_test.dart test/utils/board_link_parser_test.dart
+        run: flutter test test/models/board_test.dart test/utils/board_link_parser_test.dart
