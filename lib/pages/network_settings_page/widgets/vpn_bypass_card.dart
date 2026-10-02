@@ -34,9 +34,7 @@ class VpnBypassCard extends StatelessWidget {
                 color: status.bound ? theme.colorScheme.primary : null,
               ),
               value: enabled,
-              onChanged: status.supported || !enabled
-                  ? service.setEnabled
-                  : null,
+              onChanged: service.setEnabled,
             ),
             if (enabled)
               Padding(
