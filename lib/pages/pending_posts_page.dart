@@ -215,6 +215,15 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
     final targetKnown =
         !isReply || PendingReplyTargetRegistry.contains(pending.id);
     final replyToPostNumber = PendingReplyTargetRegistry.lookup(pending.id);
+
+    // 官方 PendingPostSerializer 不返回新主题 payload.tags。
+    // 优先接受服务器/自定义实例直接返回的 tags，否则读取送审时持久化补记。
+    final initialTags = pending.isNewTopic
+        ? pending.tags ??
+              await DiscourseService().getPendingTopicTags(pending.id)
+        : null;
+
+    if (!mounted) return;
     final confirmContent = targetKnown
         ? S.current.review_withdrawAndEditConfirmContent
         : '${S.current.review_withdrawAndEditConfirmContent}\n\n'
@@ -236,6 +245,7 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
         MaterialPageRoute(
           builder: (_) => CreateTopicPage(
             initialCategoryId: pending.categoryId,
+            initialTags: initialTags,
             initialTitle: pending.title,
             initialContent: pending.raw,
           ),
