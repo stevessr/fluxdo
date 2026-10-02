@@ -1371,29 +1371,69 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     });
   }
 
-  List<Chatable> _recentDirectMessageUsers() {
+  List<ChatChannel> _messageChannels(String query) {
     final state = ref.read(chatChannelsProvider).value;
     if (state == null) return const [];
 
-    final currentUserId = ref.read(currentUserProvider).value?.id;
-    final seen = <int>{};
-    final users = <Chatable>[];
+    final channels = <ChatChannel>[
+      ...state.publicChannels,
+      ...state.directMessageChannels,
+    ];
+    final trimmed = query.trim().toLowerCase();
+    if (trimmed.isEmpty) return channels;
 
-    for (final channel in state.directMessageChannels) {
-      if (channel.isGroupDm) continue;
+    final currentUserId = ref.read(currentUserProvider).value?.id;
+    return channels.where((channel) {
+      final title = _messageChannelTitle(channel, currentUserId).toLowerCase();
+      final slug = channel.slug?.toLowerCase() ?? '';
+      final target = channel.getDmTargetUser(currentUserId);
+      final username = target?.username.toLowerCase() ?? '';
+      final name = target?.name?.toLowerCase() ?? '';
+      return title.contains(trimmed) ||
+          slug.contains(trimmed) ||
+          username.contains(trimmed) ||
+          name.contains(trimmed);
+    }).toList();
+  }
+
+  String _messageChannelTitle(ChatChannel channel, int? currentUserId) {
+    if (channel.isDirectMessage) {
+      if (channel.isGroupDm &&
+          channel.title != null &&
+          channel.title!.trim().isNotEmpty) {
+        return channel.title!.trim();
+      }
       final user = channel.getDmTargetUser(currentUserId);
-      if (user == null || user.isSystemUser || !seen.add(user.id)) continue;
-      users.add(
-        Chatable(
-          id: user.id,
-          username: user.username,
-          name: user.name,
-          avatarTemplate: user.avatarTemplate,
-        ),
-      );
-      if (users.length >= 10) break;
+      if (user != null) return user.name ?? user.username;
+      final title = channel.title?.trim();
+      if (title != null && title.isNotEmpty) return title;
+      return context.l10n.chat_dm_placeholder;
     }
-    return users;
+
+    final title = channel.title?.trim();
+    if (title != null && title.isNotEmpty) return title;
+    final slug = channel.slug?.trim();
+    if (slug != null && slug.isNotEmpty) return slug;
+    return context.l10n.chat_unnamed_channel;
+  }
+
+  String? _resolveChatUserAvatarUrl(ChatUser? user) {
+    final template = user?.avatarTemplate;
+    if (template == null || template.isEmpty) return null;
+    return UrlHelper.resolveUrlWithCdn(template.replaceAll('{size}', '48'));
+  }
+
+  void _openExistingChannel(ChatChannel channel) {
+    final currentUserId = ref.read(currentUserProvider).value?.id;
+    final title = _messageChannelTitle(channel, currentUserId);
+    Navigator.of(context).pop();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ChatMessagePage(channelId: channel.id, channelTitle: title),
+      ),
+    );
   }
 
   void _removeSelected(Chatable user) {
@@ -1464,99 +1504,202 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     }
 
     final query = _searchController.text.trim();
-    final displayResults = query.isEmpty && !_isGroup
-        ? _recentDirectMessageUsers()
-        : _results;
 
-    if (displayResults.isEmpty) {
-      if (!_isGroup && query.isEmpty) {
-        return ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          children: [
-            ListTile(
-              leading: const Icon(Icons.group_add_outlined),
-              title: Text(l10n.chat_new_group),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: _switchToGroupMode,
+    if (_isGroup) {
+      if (_results.isEmpty) {
+        return Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            query.isEmpty ? l10n.chat_select_users_hint : l10n.chat_no_results,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(32),
-              child: Text(
-                l10n.chat_search_hint,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ],
+          ),
         );
       }
 
-      return Padding(
-        padding: const EdgeInsets.all(32),
-        child: Text(
-          query.isEmpty ? l10n.chat_select_users_hint : l10n.chat_no_results,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
+      return ListView.builder(
+        shrinkWrap: true,
+        itemCount: _results.length,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        itemBuilder: (context, index) {
+          final user = _results[index];
+          final avatarUrl = _resolveUserAvatarUrl(user);
+          final selected = _selected.any((s) => s.id == user.id);
+          return ListTile(
+            leading: SmartAvatar(
+              imageUrl: avatarUrl,
+              radius: 20,
+              fallbackText: user.username,
+            ),
+            title: _buildUserTitle(
+              theme,
+              user.name ?? user.username,
+              user.name == null ? null : user.username,
+            ),
+            trailing: Icon(
+              selected
+                  ? Icons.check_circle_rounded
+                  : Icons.add_circle_outline_rounded,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+            onTap: _isCreating ? null : () => _selectUser(user),
+          );
+        },
       );
     }
 
+    final currentUserId = ref.read(currentUserProvider).value?.id;
+    final channels = _messageChannels(query);
+    final channelUsernames = <String>{
+      for (final channel in channels)
+        if (channel.getDmTargetUser(currentUserId) case final user?)
+          user.username.toLowerCase(),
+    };
+    final remoteUsers = _results
+        .where(
+          (user) => !channelUsernames.contains(user.username.toLowerCase()),
+        )
+        .toList();
+
     return ListView.builder(
       shrinkWrap: true,
-      itemCount: displayResults.length + (!_isGroup && query.isEmpty ? 1 : 0),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.only(bottom: 8),
+      itemCount:
+          (query.isEmpty ? 1 : 0) + channels.length + remoteUsers.length,
       itemBuilder: (context, index) {
-        if (!_isGroup && query.isEmpty && index == 0) {
+        if (query.isEmpty && index == 0) {
           return ListTile(
-            leading: const Icon(Icons.group_add_outlined),
-            title: Text(l10n.chat_new_group),
-            trailing: const Icon(Icons.chevron_right_rounded),
+            minTileHeight: 62,
+            selected: true,
+            selectedTileColor: theme.colorScheme.primaryContainer.withValues(
+              alpha: 0.55,
+            ),
+            leading: CircleAvatar(
+              radius: 20,
+              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              child: Icon(
+                Icons.group_rounded,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            title: Text(
+              l10n.chat_new_group,
+              style: theme.textTheme.titleMedium,
+            ),
             onTap: _switchToGroupMode,
           );
         }
 
-        final resultIndex = index - (!_isGroup && query.isEmpty ? 1 : 0);
-        final user = displayResults[resultIndex];
-        final avatarUrl = _resolveUserAvatarUrl(user);
-        final selected = _selected.any((s) => s.id == user.id);
+        final dataIndex = index - (query.isEmpty ? 1 : 0);
+        if (dataIndex < channels.length) {
+          final channel = channels[dataIndex];
+          final targetUser = channel.getDmTargetUser(currentUserId);
+          final title = _messageChannelTitle(channel, currentUserId);
+
+          Widget leading;
+          String? username;
+          if (channel.isDirectMessage && !channel.isGroupDm && targetUser != null) {
+            leading = SmartAvatar(
+              imageUrl: _resolveChatUserAvatarUrl(targetUser),
+              radius: 20,
+              fallbackText: targetUser.username,
+            );
+            username = targetUser.username;
+          } else if (channel.emojiShortcode case final emoji?
+              when emoji.isNotEmpty) {
+            leading = CircleAvatar(
+              radius: 20,
+              backgroundColor: theme.colorScheme.primaryContainer,
+              child: EmojiText(emoji, style: const TextStyle(fontSize: 19)),
+            );
+          } else {
+            leading = CircleAvatar(
+              radius: 20,
+              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              child: Icon(
+                channel.isDirectMessage
+                    ? Icons.groups_rounded
+                    : Icons.chat_bubble_rounded,
+                size: 22,
+                color: channel.isDirectMessage
+                    ? theme.colorScheme.onSurfaceVariant
+                    : theme.colorScheme.primary,
+              ),
+            );
+          }
+
+          return ListTile(
+            minTileHeight: 62,
+            leading: leading,
+            title: _buildUserTitle(
+              theme,
+              title,
+              username != null && username != title ? username : null,
+            ),
+            onTap: () => _openExistingChannel(channel),
+          );
+        }
+
+        final user = remoteUsers[dataIndex - channels.length];
         return ListTile(
+          minTileHeight: 62,
           leading: SmartAvatar(
-            imageUrl: avatarUrl,
+            imageUrl: _resolveUserAvatarUrl(user),
             radius: 20,
             fallbackText: user.username,
           ),
-          title: Text(
+          title: _buildUserTitle(
+            theme,
             user.name ?? user.username,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            user.name == null ? null : user.username,
           ),
-          subtitle: user.name != null
-              ? Text(
-                  '@${user.username}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                )
-              : null,
-          trailing: _isGroup
-              ? Icon(
-                  selected
-                      ? Icons.check_circle_rounded
-                      : Icons.add_circle_outline_rounded,
-                  color: selected
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurfaceVariant,
-                )
-              : const Icon(Icons.chevron_right_rounded),
           onTap: _isCreating ? null : () => _selectUser(user),
         );
       },
+    );
+  }
+
+  Widget _buildUserTitle(
+    ThemeData theme,
+    String primary,
+    String? secondary,
+  ) {
+    if (secondary == null || secondary.isEmpty || secondary == primary) {
+      return Text(
+        primary,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.titleMedium,
+      );
+    }
+
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            primary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleMedium,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            secondary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1570,39 +1713,74 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 560),
+        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 680),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+            if (!_isGroup)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        autofocus: true,
+                        enabled: !_isCreating,
+                        decoration: InputDecoration(
+                          hintText: l10n.chat_channel_filter,
+                          prefixIcon: const Icon(AppIcons.search, size: 24),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onChanged: _onSearch,
                       ),
                     ),
-                  ),
-                  if (_isGroup && _selected.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                      icon: const Icon(AppIcons.close, size: 26),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+                child: Row(
+                  children: [
+                    Expanded(
                       child: Text(
-                        l10n.chat_members_selected(_selected.length),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                  IconButton(
-                    icon: const Icon(AppIcons.close, size: 20),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
+                    if (_selected.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Text(
+                          l10n.chat_members_selected(_selected.length),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    IconButton(
+                      icon: const Icon(AppIcons.close, size: 20),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
               ),
-            ),
             if (_isGroup) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -1647,29 +1825,28 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                   ),
                 ),
             ],
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: TextField(
-                controller: _searchController,
-                autofocus: true,
-                enabled: !_isCreating,
-                decoration: InputDecoration(
-                  hintText: _isGroup
-                      ? l10n.chat_add_more_members_hint
-                      : l10n.chat_new_message_user_search_hint,
-                  prefixIcon: const Icon(AppIcons.search, size: 20),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
+            if (_isGroup)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  enabled: !_isCreating,
+                  decoration: InputDecoration(
+                    hintText: l10n.chat_add_more_members_hint,
+                    prefixIcon: const Icon(AppIcons.search, size: 20),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  onChanged: _onSearch,
                 ),
-                onChanged: _onSearch,
               ),
-            ),
             const SizedBox(height: 8),
             Flexible(child: _buildSearchResults(theme, l10n)),
             if (_isGroup)
