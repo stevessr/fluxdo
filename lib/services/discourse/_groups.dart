@@ -143,4 +143,153 @@ mixin _GroupsMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
+
+  /// 从群组移除成员。
+  Future<void> removeGroupMember({
+    required int groupId,
+    required String username,
+  }) async {
+    final normalized = username.trim();
+    if (normalized.isEmpty) return;
+    try {
+      await _dio.delete(
+        '/groups/$groupId/members.json',
+        data: {'username': normalized},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 添加群组所有者。
+  Future<void> addGroupOwners({
+    required int groupId,
+    required List<String> usernames,
+  }) async {
+    final normalized = usernames
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalized.isEmpty) return;
+    try {
+      await _dio.put(
+        '/groups/$groupId/owners.json',
+        data: {'usernames': normalized.join(',')},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 移除群组所有者。
+  Future<void> removeGroupOwner({
+    required int groupId,
+    required String username,
+  }) async {
+    final normalized = username.trim();
+    if (normalized.isEmpty) return;
+    try {
+      await _dio.delete(
+        '/groups/$groupId/owners.json',
+        data: {'username': normalized},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 将群组设为当前用户的主要群组。
+  Future<void> setPrimaryGroup(int groupId) async {
+    try {
+      await _dio.put('/groups/$groupId/primary.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 申请加入需要审核的群组。
+  Future<void> requestGroupMembership(
+    String groupName, {
+    String? reason,
+  }) async {
+    final encoded = Uri.encodeComponent(groupName);
+    try {
+      await _dio.post(
+        '/groups/$encoded/request_membership.json',
+        data: {
+          if (reason != null && reason.trim().isNotEmpty)
+            'reason': reason.trim(),
+        },
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 审批群组加入申请。
+  Future<void> handleGroupMembershipRequest({
+    required int groupId,
+    required int userId,
+    required bool accept,
+  }) async {
+    try {
+      await _dio.put(
+        '/groups/$groupId/handle_membership_request.json',
+        data: {
+          'user_id': userId,
+          'accept': accept,
+        },
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 设置当前用户对群组的通知级别。
+  Future<void> setGroupNotificationLevel(
+    int groupId, {
+    required int notificationLevel,
+  }) async {
+    try {
+      await _dio.post(
+        '/groups/$groupId/notifications.json',
+        data: {'notification_level': notificationLevel},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 获取群组帖子/提及列表，供原生群组页扩展 activity。
+  Future<Map<String, dynamic>> fetchGroupActivity(
+    String name, {
+    String type = 'posts',
+    int? offset,
+  }) async {
+    if (type != 'posts' && type != 'mentions') {
+      throw ArgumentError.value(type, 'type', 'must be posts or mentions');
+    }
+    final encoded = Uri.encodeComponent(name);
+    try {
+      final response = await _dio.get(
+        '/groups/$encoded/$type.json',
+        queryParameters: {
+          if (offset != null) 'offset': offset,
+        },
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
 }
