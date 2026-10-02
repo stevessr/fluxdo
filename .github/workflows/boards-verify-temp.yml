@@ -26,21 +26,15 @@ jobs:
       - run: flutter pub get
       - name: Format Boards
         run: |
-          dart format lib/models/board.dart lib/pages/boards_page.dart lib/navigation/nav_action_bus.dart lib/navigation/nav_entry_registry.dart lib/services/deep_link_service.dart lib/services/discourse/discourse_service.dart lib/services/discourse/_boards.dart lib/utils/discourse_url_parser.dart lib/utils/link_launcher.dart test/models/board_test.dart test/utils/discourse_url_parser_test.dart
+          dart format lib/models/board.dart lib/pages/boards_page.dart lib/navigation/nav_action_bus.dart lib/navigation/nav_entry_registry.dart lib/services/deep_link_service.dart lib/services/discourse/discourse_service.dart lib/services/discourse/_boards.dart lib/utils/discourse_url_parser.dart lib/utils/link_launcher.dart test/models/board_test.dart test/utils/board_link_parser_test.dart
           if ! git diff --quiet; then
             git config user.name github-actions
             git config user.email github-actions@github.com
-            git add lib/models/board.dart lib/pages/boards_page.dart lib/navigation/nav_action_bus.dart lib/navigation/nav_entry_registry.dart lib/services/deep_link_service.dart lib/services/discourse/discourse_service.dart lib/services/discourse/_boards.dart lib/utils/discourse_url_parser.dart lib/utils/link_launcher.dart test/models/board_test.dart test/utils/discourse_url_parser_test.dart
+            git add lib/models/board.dart lib/pages/boards_page.dart lib/navigation/nav_action_bus.dart lib/navigation/nav_entry_registry.dart lib/services/deep_link_service.dart lib/services/discourse/discourse_service.dart lib/services/discourse/_boards.dart lib/utils/discourse_url_parser.dart lib/utils/link_launcher.dart test/models/board_test.dart test/utils/board_link_parser_test.dart
             git commit -m "style: format Boards implementation"
             git push origin HEAD:feature/discourse-boards-support
           fi
       - name: Analyze Boards
-        run: flutter analyze lib/models/board.dart lib/pages/boards_page.dart lib/navigation/nav_entry_registry.dart lib/services/deep_link_service.dart lib/services/discourse/discourse_service.dart lib/utils/discourse_url_parser.dart lib/utils/link_launcher.dart test/models/board_test.dart test/utils/discourse_url_parser_test.dart
-      - name: Patch unrelated baseline compile blockers in CI workspace only
-        run: |
-          sed -i 's/child: summaryAsync.when(/child: summaryAsync!.when(/' lib/widgets/topic/topic_summary_widget.dart
-          sed -i 's/return SegmentedCardGroup(/return Column(/' lib/pages/network_settings_page/widgets/vpn_bypass_card.dart
-      - name: Test Boards payload parsing
-        run: dart tool/flutterw.dart test test/models/board_test.dart
-      - name: Test Boards URL parsing
-        run: dart tool/flutterw.dart test test/utils/discourse_url_parser_test.dart --plain-name "解析 discourse-boards 看板与卡片链接"
+        run: flutter analyze lib/models/board.dart lib/pages/boards_page.dart lib/navigation/nav_entry_registry.dart lib/services/deep_link_service.dart lib/services/discourse/discourse_service.dart lib/utils/discourse_url_parser.dart lib/utils/link_launcher.dart test/models/board_test.dart test/utils/board_link_parser_test.dart
+      - name: Test Boards
+        run: dart test test/models/board_test.dart test/utils/board_link_parser_test.dart
