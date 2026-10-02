@@ -6,6 +6,7 @@ import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/chat/chat_conversation_tabs.dart';
