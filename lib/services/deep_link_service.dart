@@ -4,6 +4,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 
 import '../pages/topic_detail_page/topic_detail_page.dart';
+import '../pages/boards_page.dart';
 import '../pages/user_profile_page.dart';
 import '../pages/webview_login_page.dart';
 import '../pages/webview_page.dart';
@@ -112,6 +113,20 @@ class DeepLinkService {
     // 自定义 scheme (fluxdo://...)
     if (uri.scheme == 'fluxdo') {
       _handleCustomScheme(context, uri);
+      return;
+    }
+
+    // discourse-boards 原生看板。
+    final boardInfo = DiscourseUrlParser.parseBoard(uri.path);
+    if (boardInfo != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BoardDetailPage(
+            boardId: boardInfo.boardId,
+            initialCardId: boardInfo.cardId,
+          ),
+        ),
+      );
       return;
     }
 
