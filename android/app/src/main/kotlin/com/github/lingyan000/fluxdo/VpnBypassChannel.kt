@@ -20,8 +20,10 @@ import io.flutter.plugin.common.MethodChannel
  * when the active VPN was established with VpnService.Builder.allowBypass(), and
  * VPN lockdown policies can still block the resulting traffic.
  *
- * The binding is intentionally process-wide so Cronet / dart:io / WebView-created
- * sockets that follow the process default network share the same route.
+ * The binding is intentionally process-wide so networking stacks that honor the
+ * process default network (including normal dart:io/native sockets) share the route.
+ * WebView may use a separate Chromium network-service process and is not guaranteed
+ * to follow this binding on every Android/WebView version.
  */
 class VpnBypassChannel(
     context: Context,
@@ -98,11 +100,8 @@ class VpnBypassChannel(
 
     fun dispose() {
         stopWatching()
+        clearProcessBinding()
         channel.setMethodCallHandler(null)
-        // Keep the current process binding while the Flutter engine/activity is
-        // being reattached. A newly-created channel instance reads the persisted
-        // preference and immediately resumes monitoring. Process death clears the
-        // binding automatically.
     }
 
     @Synchronized
