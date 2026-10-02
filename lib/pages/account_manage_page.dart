@@ -78,9 +78,8 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        barrierColor: Theme.of(
-          context,
-        ).colorScheme.scrim.withValues(alpha: 0.4),
+        barrierColor: Theme.of(context).colorScheme.scrim
+            .withValues(alpha: 0.4),
         builder: (_) => PopScope(
           canPop: false,
           child: Center(child: AccountSwitchLoading(account: account)),
@@ -159,9 +158,8 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
     }
     var success = false;
     try {
-      final result = await Navigator.of(
-        context,
-      ).push<bool>(MaterialPageRoute(builder: (_) => const LoginPage()));
+      final result = await Navigator.of(context)
+          .push<bool>(MaterialPageRoute(builder: (_) => const LoginPage()));
       success = result == true;
     } finally {
       await _manager.completeNewLogin(success: success);

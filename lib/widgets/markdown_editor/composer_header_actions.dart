@@ -13,10 +13,9 @@ import 'composer_page_chrome.dart';
 import 'composer_view_mode_switcher.dart';
 import 'composer_submit_button.dart';
 
-typedef ComposerReviewBuilder =
-    Widget Function(
-      Widget Function(bool reviewing, VoidCallback? trigger) builder,
-    );
+typedef ComposerReviewBuilder = Widget Function(
+  Widget Function(bool reviewing, VoidCallback? trigger) builder,
+);
 
 enum _HeaderAction { preview, review, discard, draft }
 

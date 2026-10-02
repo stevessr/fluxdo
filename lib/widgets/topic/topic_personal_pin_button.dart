@@ -174,9 +174,7 @@ class _TopicPersonalPinButtonState
 
   String _optionDescription(bool pinned, PersonalTopicPinState state) {
     if (!pinned) return '仅对你取消置顶，不影响其他用户';
-    return state.pinnedGlobally
-        ? '在你看到的所有话题列表中保持置顶'
-        : '在你看到的所属板块话题列表中保持置顶';
+    return state.pinnedGlobally ? '在你看到的所有话题列表中保持置顶' : '在你看到的所属板块话题列表中保持置顶';
   }
 
   Widget _optionContent(
@@ -203,9 +201,8 @@ class _TopicPersonalPinButtonState
               const SizedBox(height: 2),
               Text(
                 _optionDescription(pinned, state),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: colors.onSurfaceVariant),
               ),
             ],
           ),
@@ -318,7 +315,11 @@ class _TopicPersonalPinButtonState
             ),
           ),
           const SizedBox(width: 4),
-          Icon(Icons.arrow_drop_down_rounded, size: 18, color: colors.onSurfaceVariant),
+          Icon(
+            Icons.arrow_drop_down_rounded,
+            size: 18,
+            color: colors.onSurfaceVariant,
+          ),
         ],
       ),
     );

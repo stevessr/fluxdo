@@ -1,12 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/legacy.dart';
+
 import 'filter_provider.dart';
 import 'sort_provider.dart';
 
 /// 每个 tab 独立的标签筛选（categoryId -> tags）
 /// null 表示"全部"tab
-final tabTagsProvider = StateProvider.family<List<String>, int?>((ref, categoryId) => []);
+final tabTagsProvider = StateProvider.family<List<String>, int?>(
+  (ref, categoryId) => [],
+);
 
 /// 当前选中 tab 对应的分类 ID（null 表示"全部"tab）
 final currentTabCategoryIdProvider = StateProvider<int?>((ref) => null);

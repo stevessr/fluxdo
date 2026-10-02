@@ -1,6 +1,7 @@
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../l10n/s.dart';
 import 'theme_provider.dart';
 
@@ -36,16 +37,15 @@ class SearchSettings {
   final SearchSortOrder sortOrder;
   final bool aiSearchEnabled;
 
-  const SearchSettings({
-    required this.sortOrder,
-    this.aiSearchEnabled = true,
-  });
+  const SearchSettings({required this.sortOrder, this.aiSearchEnabled = true});
 
-  SearchSettings copyWith({SearchSortOrder? sortOrder, bool? aiSearchEnabled}) =>
-      SearchSettings(
-        sortOrder: sortOrder ?? this.sortOrder,
-        aiSearchEnabled: aiSearchEnabled ?? this.aiSearchEnabled,
-      );
+  SearchSettings copyWith({
+    SearchSortOrder? sortOrder,
+    bool? aiSearchEnabled,
+  }) => SearchSettings(
+    sortOrder: sortOrder ?? this.sortOrder,
+    aiSearchEnabled: aiSearchEnabled ?? this.aiSearchEnabled,
+  );
 }
 
 /// 搜索设置 StateNotifier，管理状态和持久化
@@ -64,7 +64,10 @@ class SearchSettingsNotifier extends StateNotifier<SearchSettings> {
       orElse: () => SearchSortOrder.relevance,
     );
     final aiSearchEnabled = prefs.getBool(_aiSearchEnabledKey) ?? true;
-    return SearchSettings(sortOrder: sortOrder, aiSearchEnabled: aiSearchEnabled);
+    return SearchSettings(
+      sortOrder: sortOrder,
+      aiSearchEnabled: aiSearchEnabled,
+    );
   }
 
   Future<void> setSortOrder(SearchSortOrder order) async {

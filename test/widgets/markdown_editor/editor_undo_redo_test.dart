@@ -55,10 +55,8 @@ Future<void> _openActions(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Finder _action(String label) => find.ancestor(
-  of: find.text(label),
-  matching: find.byType(TextButton),
-);
+Finder _action(String label) =>
+    find.ancestor(of: find.text(label), matching: find.byType(TextButton));
 bool _enabled(WidgetTester tester, Finder finder) =>
     tester.widget<TextButton>(finder).onPressed != null;
 

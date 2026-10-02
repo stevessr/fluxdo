@@ -36,15 +36,27 @@ class PreloadCacheService {
   factory PreloadCacheService() => _instance;
 
   @visibleForTesting
-  PreloadCacheService.testing({
+  // 保留测试辅助构造器的公开参数名，同时让实际字段初始化使用 initializing formals。
+  factory PreloadCacheService.testing({
     required Future<Directory> Function() cacheBaseDirectory,
     required Future<String?> Function() namespaceSeed,
     required Future<bool> Function() isEnabled,
     DateTime Function()? now,
-  }) : _cacheBaseDirectory = cacheBaseDirectory,
-       _namespaceSeed = namespaceSeed,
-       _isEnabled = isEnabled,
-       _now = now ?? DateTime.now;
+  }) {
+    return PreloadCacheService._testing(
+      cacheBaseDirectory: cacheBaseDirectory,
+      namespaceSeed: namespaceSeed,
+      isEnabled: isEnabled,
+      now: now,
+    );
+  }
+
+  PreloadCacheService._testing({
+    required this._cacheBaseDirectory,
+    required this._namespaceSeed,
+    required this._isEnabled,
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now;
 
   /// 磁盘保留上限。旧快照可用于诊断/未来降级策略，但不代表可在正常
   /// 联网启动时直接作为最新 Discourse bootstrap 数据。

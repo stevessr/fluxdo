@@ -56,7 +56,9 @@ class RhttpAdapter implements HttpClientAdapter {
     final shouldTryHttp3 = _shouldTryHttp3(options, requestStream, baseConfig);
 
     if (shouldTryHttp3) {
-      final http3Config = baseConfig.withHttpVersion(rhttp.HttpVersionPref.http3);
+      final http3Config = baseConfig.withHttpVersion(
+        rhttp.HttpVersionPref.http3,
+      );
       try {
         final response = await _fetchOnce(
           options,
@@ -548,17 +550,19 @@ class _RhttpDelegate {
         cancelToken: cancelToken,
       );
 
-      final responseBody = ResponseBody(
-        response.body.cast<Uint8List>().handleError(
-          (error) {},
-          test: (error) => error.toString().contains('STREAM_CANCEL_ERROR'),
-        ),
-        response.statusCode,
-        headers: response.headerMapList,
-        isRedirect: false,
-      )
-        ..extra['remote_ip'] = response.remoteIp
-        ..extra['http_version'] = response.version.name;
+      final responseBody =
+          ResponseBody(
+              response.body.cast<Uint8List>().handleError(
+                (error) {},
+                test: (error) =>
+                    error.toString().contains('STREAM_CANCEL_ERROR'),
+              ),
+              response.statusCode,
+              headers: response.headerMapList,
+              isRedirect: false,
+            )
+            ..extra['remote_ip'] = response.remoteIp
+            ..extra['http_version'] = response.version.name;
 
       return _RhttpFetchResult(
         responseBody: responseBody,

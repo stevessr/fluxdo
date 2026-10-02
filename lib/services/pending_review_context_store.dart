@@ -18,10 +18,7 @@ class PendingReviewContextStore {
   @visibleForTesting
   static void resetMemoryCacheForTest() => _memory.clear();
 
-  static String _scopePrefix({
-    required String site,
-    required String username,
-  }) {
+  static String _scopePrefix({required String site, required String username}) {
     return '$_topicTagsPrefix::'
         '${Uri.encodeComponent(site)}::'
         '${Uri.encodeComponent(username)}::';
@@ -126,11 +123,14 @@ class PendingReviewContextStore {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final staleKeys = prefs.getKeys().where((key) {
-        if (!key.startsWith(prefix)) return false;
-        final id = int.tryParse(key.substring(prefix.length));
-        return id == null || !activeReviewableIds.contains(id);
-      }).toList(growable: false);
+      final staleKeys = prefs
+          .getKeys()
+          .where((key) {
+            if (!key.startsWith(prefix)) return false;
+            final id = int.tryParse(key.substring(prefix.length));
+            return id == null || !activeReviewableIds.contains(id);
+          })
+          .toList(growable: false);
 
       for (final key in staleKeys) {
         await prefs.remove(key);

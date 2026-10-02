@@ -317,9 +317,7 @@ String? _decodeQrInIsolate(Uint8List bytes) {
   if (image == null) return null;
 
   // 大图缩到合理宽度,加快解码且不伤识别
-  final src = image.width > 1200
-      ? img.copyResize(image, width: 1200)
-      : image;
+  final src = image.width > 1200 ? img.copyResize(image, width: 1200) : image;
 
   final abgr = src
       .convert(numChannels: 4)

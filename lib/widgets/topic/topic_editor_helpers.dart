@@ -66,9 +66,8 @@ class SmartListHandler {
     final prevLine = currentText.substring(prevLineStart, selection.start - 1);
 
     // 检测无序列表
-    final unorderedMatch = RegExp(
-      r'^(\s*)([-*+])\s+(.*)$',
-    ).firstMatch(prevLine);
+    final unorderedMatch = RegExp(r'^(\s*)([-*+])\s+(.*)$')
+        .firstMatch(prevLine);
     if (unorderedMatch != null) {
       final indent = unorderedMatch.group(1)!;
       final marker = unorderedMatch.group(2)!;

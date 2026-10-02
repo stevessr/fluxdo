@@ -18,8 +18,10 @@ const double _kMenuWidthStep = 56.0;
 const double _kMenuScreenPadding = 8.0;
 
 /// 自定义菜单外壳；需提供 Material，以保留菜单项的点击反馈。
-typedef PopupMenuSurfaceBuilder =
-    Widget Function(BuildContext context, Widget child);
+typedef PopupMenuSurfaceBuilder = Widget Function(
+  BuildContext context,
+  Widget child,
+);
 
 // 菜单顶部圆形快捷按钮配置。
 class MenuQuickAction {
@@ -1016,9 +1018,8 @@ class _PopupMenuRouteLayout extends SingleChildLayoutDelegate {
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
-    return BoxConstraints.loose(
-      constraints.biggest,
-    ).deflate(const EdgeInsets.all(_kMenuScreenPadding) + padding);
+    return BoxConstraints.loose(constraints.biggest)
+        .deflate(const EdgeInsets.all(_kMenuScreenPadding) + padding);
   }
 
   @override

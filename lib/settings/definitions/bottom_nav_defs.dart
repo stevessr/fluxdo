@@ -25,8 +25,7 @@ List<SettingsGroup> buildBottomNavGroups(BuildContext context) {
           title: l10n.bottomNav_labelless,
           subtitle: l10n.bottomNav_labellessDesc,
           icon: Symbols.label_off_rounded,
-          getValue: (ref) =>
-              ref.watch(preferencesProvider).bottomNavLabelless,
+          getValue: (ref) => ref.watch(preferencesProvider).bottomNavLabelless,
           onChanged: (ref, value) => ref
               .read(preferencesProvider.notifier)
               .setBottomNavLabelless(value),
@@ -151,10 +150,7 @@ class _ActionOptionTile extends StatelessWidget {
             ),
       title: Text(action.label),
       trailing: selected
-          ? Icon(
-              Symbols.check_rounded,
-              color: theme.colorScheme.primary,
-            )
+          ? Icon(Symbols.check_rounded, color: theme.colorScheme.primary)
           : null,
       onTap: onTap,
     );

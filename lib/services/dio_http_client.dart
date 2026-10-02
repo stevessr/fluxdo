@@ -1,7 +1,8 @@
 import 'download_request_queue.dart';
 import 'image_download_task_pools.dart';
 export 'download_request_queue.dart' show DownloadPriority;
-export 'image_download_task_pools.dart' show DownloadChannel, ImageDownloadTaskPools;
+export 'image_download_task_pools.dart'
+    show DownloadChannel, ImageDownloadTaskPools;
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -231,4 +232,3 @@ class DioHttpClient extends http.BaseClient {
     }
   }
 }
-

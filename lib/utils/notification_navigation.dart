@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_icons/app_icons.dart';
+
 import '../l10n/s.dart';
 import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
@@ -262,8 +263,7 @@ class _NotificationPagerDialogState extends State<_NotificationPagerDialog>
     final notification = widget.playlist[_index];
     final hasMultiple = widget.playlist.length > 1;
     // 常驻侧栏需要 880(内容) + 332(列表) + 页边距的空间
-    final useSidebar =
-        hasMultiple && MediaQuery.sizeOf(context).width >= 1240;
+    final useSidebar = hasMultiple && MediaQuery.sizeOf(context).width >= 1240;
 
     final list = _NotificationPagerList(
       playlist: widget.playlist,
@@ -394,11 +394,8 @@ class _NotificationPagerListState extends State<_NotificationPagerList> {
   static const double _estimatedItemExtent = 88;
 
   late final ScrollController _scrollController = ScrollController(
-    initialScrollOffset:
-        (widget.currentIndex * _estimatedItemExtent - 120).clamp(
-          0,
-          double.infinity,
-        ),
+    initialScrollOffset: (widget.currentIndex * _estimatedItemExtent - 120)
+        .clamp(0, double.infinity),
   );
 
   @override

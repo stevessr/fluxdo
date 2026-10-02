@@ -101,10 +101,11 @@ class AccountQuickSwitcherPreferencesNotifier
   }
 }
 
-final accountQuickSwitcherPreferencesProvider = StateNotifierProvider<
-  AccountQuickSwitcherPreferencesNotifier,
-  AccountQuickSwitcherPreferences
->((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return AccountQuickSwitcherPreferencesNotifier(prefs);
-});
+final accountQuickSwitcherPreferencesProvider =
+    StateNotifierProvider<
+      AccountQuickSwitcherPreferencesNotifier,
+      AccountQuickSwitcherPreferences
+    >((ref) {
+      final prefs = ref.watch(sharedPreferencesProvider);
+      return AccountQuickSwitcherPreferencesNotifier(prefs);
+    });

@@ -105,9 +105,7 @@ void main() {
     );
   });
 
-  testWidgets('对照组:每帧新建曲线必须复现断崖(保证上一条有鉴别力)', (
-    tester,
-  ) async {
+  testWidgets('对照组:每帧新建曲线必须复现断崖(保证上一条有鉴别力)', (tester) async {
     final (before, after) = await alphaAcrossReversal(tester, freshFade);
 
     expect(before, greaterThan(0.3));

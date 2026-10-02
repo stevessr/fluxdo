@@ -47,7 +47,8 @@ class SymmetricAlgorithm extends CryptoAlgorithm {
     Uint8List key,
     Uint8List iv,
     bool forEncryption,
-  ) processBytes;
+  )
+  processBytes;
 
   @override
   String get id => _id;
@@ -72,8 +73,7 @@ class SymmetricAlgorithm extends CryptoAlgorithm {
       iv,
       true,
     );
-    return base64
-        .encode(Uint8List.fromList([...salt, ...iv, ...ct]));
+    return base64.encode(Uint8List.fromList([...salt, ...iv, ...ct]));
   }
 
   @override
@@ -90,8 +90,7 @@ class SymmetricAlgorithm extends CryptoAlgorithm {
       throw const CryptoException('密文长度不完整');
     }
     final salt = payload.sublist(0, kSaltLength);
-    final iv =
-        payload.sublist(kSaltLength, kSaltLength + ivLength);
+    final iv = payload.sublist(kSaltLength, kSaltLength + ivLength);
     final ct = payload.sublist(kSaltLength + ivLength);
     final derived = pbkdf2(key, salt, keyLength, kPbkdf2Iterations);
     final plain = processBytes(ct, derived, iv, false);
@@ -110,8 +109,12 @@ class SymmetricAlgorithm extends CryptoAlgorithm {
 // ---- PBKDF2 / 随机数 / base64 规整 ----
 
 /// PBKDF2-HMAC-SHA256 密钥派生（[iterations] 轮，输出 [length] 字节）
-Uint8List pbkdf2(String password, Uint8List salt, int length,
-    [int iterations = SymmetricAlgorithm.kPbkdf2Iterations]) {
+Uint8List pbkdf2(
+  String password,
+  Uint8List salt,
+  int length, [
+  int iterations = SymmetricAlgorithm.kPbkdf2Iterations,
+]) {
   final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
     ..init(Pbkdf2Parameters(salt, iterations, length));
   return derivator.process(Uint8List.fromList(utf8.encode(password)));
@@ -161,7 +164,9 @@ Uint8List _runPaddedBlockCipher(
     final params = iv == null || iv.isEmpty
         ? PaddedBlockCipherParameters(KeyParameter(key), null)
         : PaddedBlockCipherParameters(
-            ParametersWithIV(KeyParameter(key), iv), null);
+            ParametersWithIV(KeyParameter(key), iv),
+            null,
+          );
     cipher.init(forEncryption, params);
     if (data.isEmpty && forEncryption) {
       // pointycastle 4.0 process() 对空输入有 RangeError（-16 块偏移），
@@ -176,18 +181,38 @@ Uint8List _runPaddedBlockCipher(
   }
 }
 
-Uint8List _processAesCbc(Uint8List data, Uint8List key, Uint8List iv,
-        bool forEncryption) =>
-    _runPaddedBlockCipher(
-        CBCBlockCipher(AESEngine()), forEncryption, data, key, iv);
+Uint8List _processAesCbc(
+  Uint8List data,
+  Uint8List key,
+  Uint8List iv,
+  bool forEncryption,
+) => _runPaddedBlockCipher(
+  CBCBlockCipher(AESEngine()),
+  forEncryption,
+  data,
+  key,
+  iv,
+);
 
-Uint8List _processAesEcb(Uint8List data, Uint8List key, Uint8List iv,
-        bool forEncryption) =>
-    _runPaddedBlockCipher(
-        ECBBlockCipher(AESEngine()), forEncryption, data, key, null);
+Uint8List _processAesEcb(
+  Uint8List data,
+  Uint8List key,
+  Uint8List iv,
+  bool forEncryption,
+) => _runPaddedBlockCipher(
+  ECBBlockCipher(AESEngine()),
+  forEncryption,
+  data,
+  key,
+  null,
+);
 
-Uint8List _processAesGcm(Uint8List data, Uint8List key, Uint8List iv,
-    bool forEncryption) {
+Uint8List _processAesGcm(
+  Uint8List data,
+  Uint8List key,
+  Uint8List iv,
+  bool forEncryption,
+) {
   try {
     final cipher = GCMBlockCipher(AESEngine())
       ..init(
@@ -203,8 +228,12 @@ Uint8List _processAesGcm(Uint8List data, Uint8List key, Uint8List iv,
   }
 }
 
-Uint8List _processAesCtr(Uint8List data, Uint8List key, Uint8List iv,
-    bool forEncryption) {
+Uint8List _processAesCtr(
+  Uint8List data,
+  Uint8List key,
+  Uint8List iv,
+  bool forEncryption,
+) {
   try {
     final cipher = CTRStreamCipher(AESEngine())
       ..init(forEncryption, ParametersWithIV(KeyParameter(key), iv));
@@ -217,18 +246,38 @@ Uint8List _processAesCtr(Uint8List data, Uint8List key, Uint8List iv,
 }
 
 /// Blowfish-CBC（key 16 字节、8 字节块与 IV；openssl enc -bf-cbc 兼容）
-Uint8List _processBlowfishCbc(Uint8List data, Uint8List key, Uint8List iv,
-        bool forEncryption) =>
-    _runPaddedBlockCipher(
-        CBCBlockCipher(BlowfishEngine()), forEncryption, data, key, iv);
+Uint8List _processBlowfishCbc(
+  Uint8List data,
+  Uint8List key,
+  Uint8List iv,
+  bool forEncryption,
+) => _runPaddedBlockCipher(
+  CBCBlockCipher(BlowfishEngine()),
+  forEncryption,
+  data,
+  key,
+  iv,
+);
 
-Uint8List _processDesEde3Cbc(Uint8List data, Uint8List key, Uint8List iv,
-        bool forEncryption) =>
-    _runPaddedBlockCipher(
-        CBCBlockCipher(DESedeEngine()), forEncryption, data, key, iv);
+Uint8List _processDesEde3Cbc(
+  Uint8List data,
+  Uint8List key,
+  Uint8List iv,
+  bool forEncryption,
+) => _runPaddedBlockCipher(
+  CBCBlockCipher(DESedeEngine()),
+  forEncryption,
+  data,
+  key,
+  iv,
+);
 
-Uint8List _processRc4(Uint8List data, Uint8List key, Uint8List iv,
-    bool forEncryption) {
+Uint8List _processRc4(
+  Uint8List data,
+  Uint8List key,
+  Uint8List iv,
+  bool forEncryption,
+) {
   try {
     final cipher = RC4Engine()..init(forEncryption, KeyParameter(key));
     return cipher.process(data);
@@ -238,8 +287,12 @@ Uint8List _processRc4(Uint8List data, Uint8List key, Uint8List iv,
 }
 
 /// ChaCha20（RFC 7539 / IETF，12 字节 nonce）
-Uint8List _processChaCha20(Uint8List data, Uint8List key, Uint8List iv,
-    bool forEncryption) {
+Uint8List _processChaCha20(
+  Uint8List data,
+  Uint8List key,
+  Uint8List iv,
+  bool forEncryption,
+) {
   try {
     final cipher = ChaCha7539Engine()
       ..init(forEncryption, ParametersWithIV(KeyParameter(key), iv));

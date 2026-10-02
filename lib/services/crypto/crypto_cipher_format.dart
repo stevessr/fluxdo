@@ -14,6 +14,7 @@ import 'package:crypto/crypto.dart' as crypto;
 
 import 'algorithms/classic_algorithms.dart' show normalizeMorseGlyphs;
 import 'algorithms/symmetric_algorithms.dart';
+
 /// ENC1 前缀
 const String kEnc1Prefix = 'ENC1:';
 
@@ -62,10 +63,7 @@ OpenSslParsed? openSslTryParse(String text) {
     // 需容纳 Salted__(8) + salt(8) + 至少 1 字节密文
     if (bytes.length < 8 + 8 + 1) return null;
     if (String.fromCharCodes(bytes.sublist(0, 8)) != 'Salted__') return null;
-    return OpenSslParsed(
-      bytes.sublist(8, 16),
-      bytes.sublist(16),
-    );
+    return OpenSslParsed(bytes.sublist(8, 16), bytes.sublist(16));
   } catch (_) {
     return null;
   }
@@ -73,11 +71,7 @@ OpenSslParsed? openSslTryParse(String text) {
 
 /// OpenSSL 兼容输出：`base64("Salted__" | salt[8] | ct)`
 String openSslPack(List<int> salt, List<int> ciphertext) {
-  final bytes = <int>[
-    ...'Salted__'.codeUnits,
-    ...salt,
-    ...ciphertext,
-  ];
+  final bytes = <int>[...'Salted__'.codeUnits, ...salt, ...ciphertext];
   return base64.encode(bytes);
 }
 
@@ -87,8 +81,12 @@ String openSslPack(List<int> salt, List<int> ciphertext) {
 ///   false = MD5 摘要（OpenSSL 1.x / CyberChef 经典行为）。
 ///   解密方无从密文分辨，因此解密路径两种都要尝试。
 DerivedKeyIv evpBytesToKey(
-    String password, List<int> salt, int keyLength, int ivLength,
-    {bool useSha256 = true}) {
+  String password,
+  List<int> salt,
+  int keyLength,
+  int ivLength, {
+  bool useSha256 = true,
+}) {
   final pwd = utf8.encode(password);
   final material = <int>[];
   var prev = <int>[];
@@ -167,7 +165,10 @@ SniffedCipher? sniffCipher(String rawText) {
     // payload 必须是合法 base64 才认
     try {
       base64.decode(normalizeBase64Input(enc1.payloadBase64));
-      return SniffedCipher(SniffedCipherKind.enc1, algorithmId: enc1.algorithmId);
+      return SniffedCipher(
+        SniffedCipherKind.enc1,
+        algorithmId: enc1.algorithmId,
+      );
     } catch (_) {
       return null;
     }
@@ -183,12 +184,15 @@ SniffedCipher? sniffCipher(String rawText) {
   if (hasWhitespace) {
     // MIME 折行 Base64（PEM/邮件风格）：逐行校验，每行都是纯 base64
     // 字母表且 ≥16 字符、至少 2 行 —— 普通多行英文几乎不可能满足
-    final lines =
-        text.split(RegExp(r'\s+')).where((l) => l.isNotEmpty).toList();
+    final lines = text
+        .split(RegExp(r'\s+'))
+        .where((l) => l.isNotEmpty)
+        .toList();
     if (lines.length >= 2 &&
-        lines.every((l) =>
-            l.length >= 16 &&
-            RegExp(r'^[A-Za-z0-9+/]+={0,2}$').hasMatch(l))) {
+        lines.every(
+          (l) =>
+              l.length >= 16 && RegExp(r'^[A-Za-z0-9+/]+={0,2}$').hasMatch(l),
+        )) {
       return const SniffedCipher(SniffedCipherKind.plainBase64);
     }
     // 含空白的仍可能是摩斯电码（仅由 . - · / 空格组成）
@@ -227,8 +231,7 @@ SniffedCipher? sniffCipher(String rawText) {
   }
 
   // 纯 Base64（标准或 URL-safe 字母表）
-  if (text.length >= 16 &&
-      RegExp(r'^[A-Za-z0-9+/_-]+={0,2}$').hasMatch(text)) {
+  if (text.length >= 16 && RegExp(r'^[A-Za-z0-9+/_-]+={0,2}$').hasMatch(text)) {
     try {
       final bytes = base64.decode(normalizeBase64Input(text));
       if (bytes.isNotEmpty) {

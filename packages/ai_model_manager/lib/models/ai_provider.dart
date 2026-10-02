@@ -64,7 +64,9 @@ List<Modality> _parseModalities(dynamic raw, List<Modality> fallback) {
     if (s == 'image') out.add(Modality.image);
   }
   if (out.isEmpty) return List.unmodifiable(fallback);
-  return List.unmodifiable(out.toList()..sort((a, b) => a.index.compareTo(b.index)));
+  return List.unmodifiable(
+    out.toList()..sort((a, b) => a.index.compareTo(b.index)),
+  );
 }
 
 List<ModelAbility> _parseAbilities(dynamic raw) {
@@ -75,7 +77,9 @@ List<ModelAbility> _parseAbilities(dynamic raw) {
     if (s == 'tool') out.add(ModelAbility.tool);
     if (s == 'reasoning') out.add(ModelAbility.reasoning);
   }
-  return List.unmodifiable(out.toList()..sort((a, b) => a.index.compareTo(b.index)));
+  return List.unmodifiable(
+    out.toList()..sort((a, b) => a.index.compareTo(b.index)),
+  );
 }
 
 /// AI 模型
@@ -118,8 +122,7 @@ class AiModel {
       input: _parseModalities(json['input'], const [Modality.text]),
       output: _parseModalities(json['output'], const [Modality.text]),
       abilities: _parseAbilities(json['abilities']),
-      capabilitiesUserEdited:
-          json['capabilitiesUserEdited'] as bool? ?? false,
+      capabilitiesUserEdited: json['capabilitiesUserEdited'] as bool? ?? false,
     );
   }
 
@@ -183,7 +186,8 @@ class AiProvider {
       name: json['name'] as String,
       type: type,
       baseUrl: json['base_url'] as String? ?? type.defaultBaseUrl,
-      models: (json['models'] as List<dynamic>?)
+      models:
+          (json['models'] as List<dynamic>?)
               ?.map((e) => AiModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],

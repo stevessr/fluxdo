@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../l10n/s.dart';
 import '../../models/nested_topic.dart';
 import '../../models/topic.dart';
@@ -167,9 +168,8 @@ class _NestedPostCardState extends ConsumerState<NestedPostCard> {
 
   void _listenChildCreated() {
     ref.listenManual(
-      nestedTopicProvider(
-        widget.params,
-      ).select((s) => s.value?.lastChildCreated),
+      nestedTopicProvider(widget.params)
+          .select((s) => s.value?.lastChildCreated),
       (previous, next) {
         if (next == null || next == previous) return;
         if (next.parentPostNumber != widget.node.post.postNumber) return;
@@ -651,7 +651,7 @@ class _NestedPostCardState extends ConsumerState<NestedPostCard> {
                       onQuoteReply: widget.onQuoteSelection == null
                           ? null
                           : (plaintext) =>
-                              widget.onQuoteSelection!(plaintext, post),
+                                widget.onQuoteSelection!(plaintext, post),
                     ),
                     decryptTextDetector: isDecryptableText,
                   ),

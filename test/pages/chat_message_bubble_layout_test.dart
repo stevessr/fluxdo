@@ -56,10 +56,10 @@ Widget bubble(String cooked) {
                                 heroTagNamespace: 'chat_msg_1',
                               ).render(
                                 cookedHtml: cooked,
-                                baseTextStyle:
-                                    theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurface,
-                                ),
+                                baseTextStyle: theme.textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: theme.colorScheme.onSurface,
+                                    ),
                                 selectionEnabled: true,
                                 compact: true,
                                 trimTopMargin: true,
@@ -109,8 +109,7 @@ void main() {
   // （内部含 LayoutBuilder），是原崩溃链路里最脆的一环。
   const cases = <String, String>{
     '纯文本': '<p>hello</p>',
-    '中文长文本':
-        '<p>这是一条相当长的聊天消息，长到必须在气泡的最大宽度处换行才能放下。</p>',
+    '中文长文本': '<p>这是一条相当长的聊天消息，长到必须在气泡的最大宽度处换行才能放下。</p>',
     'mention': '<p><a class="mention" href="/u/steve">@steve</a> 在吗</p>',
     'emoji':
         '<p>hi <img src="/images/emoji/twitter/tada.png?v=12" '
@@ -118,8 +117,7 @@ void main() {
     '图片':
         '<p><img src="https://example.com/uploads/a.png" alt="a" '
         'width="690" height="388"></p>',
-    '代码块':
-        '<pre data-code-wrap="ruby"><code class="lang-ruby">puts 1\n</code></pre>',
+    '代码块': '<pre data-code-wrap="ruby"><code class="lang-ruby">puts 1\n</code></pre>',
     '引用':
         '<aside class="quote no-group" data-username="a">'
         '<blockquote><p>被引用的内容</p></blockquote></aside>',

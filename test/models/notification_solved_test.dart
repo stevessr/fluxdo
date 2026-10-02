@@ -25,8 +25,7 @@ void main() {
       final notification = DiscourseNotification.fromJson(
         notificationJson(
           id: 2,
-          data:
-              '{"message":"solved.accepted_notification","display_username":"alice","topic_title":"topic","title":"solved.notification.title"}',
+          data: '{"message":"solved.accepted_notification","display_username":"alice","topic_title":"topic","title":"solved.notification.title"}',
         ),
       );
 

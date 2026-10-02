@@ -5,6 +5,7 @@ import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/legacy.dart';
+
 import '../models/topic.dart';
 import '../navigation/nav_action_bus.dart';
 import '../providers/core_providers.dart';
@@ -283,7 +284,8 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
     });
 
     final activeFilter = _filters[_activeTabIndex];
-    final activeTopics = _watchMessagesFor(activeFilter).value ?? const <Topic>[];
+    final activeTopics =
+        _watchMessagesFor(activeFilter).value ?? const <Topic>[];
     final canSelect =
         activeFilter != PrivateMessageFilter.archive && activeTopics.isNotEmpty;
     final materialL10n = MaterialLocalizations.of(context);
@@ -345,9 +347,7 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
         ),
         body: TabBarView(
           controller: _tabController,
-          physics: _selectionMode
-              ? const NeverScrollableScrollPhysics()
-              : null,
+          physics: _selectionMode ? const NeverScrollableScrollPhysics() : null,
           children: [
             for (final filter in _filters)
               _PrivateMessageTabView(
@@ -502,7 +502,9 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
   void _onItemTap(Topic topic) {
     final canShowDetailPane = MasterDetailLayout.canShowBothPanesFor(context);
     if (canShowDetailPane) {
-      ref.read(selectedMessageProvider.notifier).select(
+      ref
+          .read(selectedMessageProvider.notifier)
+          .select(
             topicId: topic.id,
             initialTitle: topic.title,
             scrollToPostNumber: topic.lastReadPostNumber,
@@ -580,7 +582,11 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Symbols.mail_rounded, size: 64, color: Colors.grey),
+                  const Icon(
+                    Symbols.mail_rounded,
+                    size: 64,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     context.l10n.privateMessages_empty,

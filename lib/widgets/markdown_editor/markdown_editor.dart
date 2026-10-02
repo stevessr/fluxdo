@@ -1282,4 +1282,3 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     );
   }
 }
-

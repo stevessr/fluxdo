@@ -32,16 +32,8 @@ void main() {
       service.startCooldown(round: round);
     }
 
-    expect(
-      service.consecutiveFailures,
-      1,
-      reason: '五个并发请求共享一轮验证,失败只应记一次',
-    );
-    expect(
-      service.isInCooldown,
-      isFalse,
-      reason: '一次失败远未到阈值,不该进冷却',
-    );
+    expect(service.consecutiveFailures, 1, reason: '五个并发请求共享一轮验证,失败只应记一次');
+    expect(service.isInCooldown, isFalse, reason: '一次失败远未到阈值,不该进冷却');
   });
 
   test('不同轮次各自记账,累积到阈值仍会熔断', () {
@@ -55,11 +47,7 @@ void main() {
     expect(service.isInCooldown, isFalse);
 
     service.startCooldown(round: 102);
-    expect(
-      service.isInCooldown,
-      isTrue,
-      reason: '连续三轮(非三个并发请求)失败才该熔断',
-    );
+    expect(service.isInCooldown, isTrue, reason: '连续三轮(非三个并发请求)失败才该熔断');
     expect(service.consecutiveFailures, greaterThanOrEqualTo(3));
   });
 

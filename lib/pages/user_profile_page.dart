@@ -51,9 +51,7 @@ class UserProfilePage extends ConsumerWidget {
     final actions = <VoidCallback?>[
       null,
       () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => MyBadgesPage(username: username),
-        ),
+        MaterialPageRoute(builder: (_) => MyBadgesPage(username: username)),
       ),
     ];
 
@@ -65,9 +63,9 @@ class UserProfilePage extends ConsumerWidget {
         ),
       );
       actions.add(
-        () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const BookmarksPage()),
-        ),
+        () =>
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const BookmarksPage())),
       );
 
       if (canAccessInvites) {

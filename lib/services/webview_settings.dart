@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:collection' show UnmodifiableListView;
 import 'dart:convert';
 import 'dart:io' show Platform;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+
 import '../constants.dart';
 import 'eruda_settings_service.dart';
 import 'log/log_writer.dart';

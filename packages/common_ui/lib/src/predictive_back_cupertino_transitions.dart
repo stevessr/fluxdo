@@ -97,8 +97,9 @@ class PredictiveBackCupertinoPageTransitionsBuilder
   }
 }
 
-typedef _PredictiveBackGestureDetectorWidgetBuilder =
-    Widget Function(BuildContext context);
+typedef _PredictiveBackGestureDetectorWidgetBuilder = Widget Function(
+  BuildContext context,
+);
 
 /// The phases of a predictive back gesture.
 enum _PredictiveBackPhase {

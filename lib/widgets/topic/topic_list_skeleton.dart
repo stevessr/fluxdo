@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../common/skeleton.dart';
 
 /// 话题列表骨架屏

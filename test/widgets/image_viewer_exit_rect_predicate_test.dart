@@ -116,8 +116,7 @@ void main() {
     });
 
     test('非有限矩形', () {
-      const nan =
-          Rect.fromLTRB(double.nan, double.nan, double.nan, double.nan);
+      const nan = Rect.fromLTRB(double.nan, double.nan, double.nan, double.nan);
       expect(
         ImageViewerPage.debugIsDisplacedFromBaseline(nan, baseline),
         isFalse,

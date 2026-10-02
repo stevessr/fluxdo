@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
+
 import '../../../models/topic.dart';
 import '../../../providers/preferences_provider.dart';
 import '../../../widgets/topic/topic_progress.dart';

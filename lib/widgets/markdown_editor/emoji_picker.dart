@@ -4,13 +4,16 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../models/emoji.dart';
 import '../../providers/discourse_providers.dart';
 import '../../services/emoji_handler.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../utils/dialog_utils.dart';
 import '../common/app_bottom_sheet.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../../../../l10n/s.dart';
 
 /// 常用表情的 Key
@@ -647,9 +650,8 @@ class _EmojiCell extends StatelessWidget {
           if (wasSynchronouslyLoaded || frame != null) return child;
           return DecoratedBox(
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurfaceVariant.withValues(alpha: 0.06),
+              color: Theme.of(context).colorScheme.onSurfaceVariant
+                  .withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(8),
             ),
             child: SizedBox(width: width, height: height),

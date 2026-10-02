@@ -19,8 +19,7 @@ InputDecoration cryptoSheetInputDecoration(
     isDense: true,
     filled: true,
     fillColor: theme.colorScheme.surfaceContainerHigh,
-    contentPadding:
-        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
       borderSide: BorderSide.none,
@@ -108,8 +107,9 @@ class CryptoSheetResultCard extends StatelessWidget {
         children: [
           Text(
             title,
-            style: theme.textTheme.labelSmall
-                ?.copyWith(color: theme.colorScheme.primary),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
           ),
           const SizedBox(height: 6),
           ConstrainedBox(
@@ -118,8 +118,9 @@ class CryptoSheetResultCard extends StatelessWidget {
               child: SelectableText(
                 content,
                 style: monospace
-                    ? theme.textTheme.bodySmall
-                        ?.copyWith(fontFamily: 'monospace')
+                    ? theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                      )
                     : theme.textTheme.bodyMedium,
               ),
             ),

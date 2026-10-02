@@ -66,9 +66,11 @@ extension _UserActions on _TopicDetailPageState {
           : <String>{
               if (detail.isPrivateMessage) ...[
                 ...detail.allowedUsers
-                    .where((user) =>
-                        user.username !=
-                        ref.read(currentUserProvider).value?.username)
+                    .where(
+                      (user) =>
+                          user.username !=
+                          ref.read(currentUserProvider).value?.username,
+                    )
                     .map((user) => user.username),
                 ...detail.allowedGroups,
               ] else if (replyToPost != null &&

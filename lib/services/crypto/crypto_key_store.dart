@@ -37,7 +37,9 @@ class CryptoKeyStore {
 
   /// 记住一条密码：去重置顶，超出上限裁掉最旧的。
   static Future<void> rememberPassword(
-      SecretStore store, String password) async {
+    SecretStore store,
+    String password,
+  ) async {
     final password_ = password.trim();
     if (password_.isEmpty) return;
     final current = await readPasswords(store);
@@ -76,5 +78,5 @@ class CryptoRememberedPasswords extends Notifier<List<String>> {
 
 final cryptoRememberedPasswordsProvider =
     NotifierProvider<CryptoRememberedPasswords, List<String>>(
-  CryptoRememberedPasswords.new,
-);
+      CryptoRememberedPasswords.new,
+    );

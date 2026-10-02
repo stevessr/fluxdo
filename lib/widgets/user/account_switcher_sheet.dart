@@ -39,7 +39,9 @@ abstract final class AccountSwitcherSheet {
   }) {
     if (_preferTouchQuickSwitcher) {
       final container = ProviderScope.containerOf(context, listen: false);
-      final preferences = container.read(accountQuickSwitcherPreferencesProvider);
+      final preferences = container.read(
+        accountQuickSwitcherPreferencesProvider,
+      );
       if (shouldUseRadialSwitcher(
         placement: placement,
         radialEnabled: preferences.radialEnabled,
@@ -141,7 +143,8 @@ abstract final class _TouchAccountSwitcherEntry {
 
     final globalAnchor = AccountQuickSwitcherTriggerState.takeAnchor();
     final overlayRenderObject = overlay.context.findRenderObject();
-    final overlayBox = overlayRenderObject is RenderBox && overlayRenderObject.hasSize
+    final overlayBox =
+        overlayRenderObject is RenderBox && overlayRenderObject.hasSize
         ? overlayRenderObject
         : null;
     final anchor = globalAnchor == null || overlayBox == null
@@ -373,10 +376,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     return null;
   }
 
-  Future<void> _finish(
-    String? target, {
-    bool fallbackToClassic = false,
-  }) async {
+  Future<void> _finish(String? target, {bool fallbackToClassic = false}) async {
     if (_finishing) return;
     _finishing = true;
     _dwellTimer?.cancel();
@@ -467,13 +467,14 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
     final edgeInset = fromTop
         ? media.padding.top + kToolbarHeight + 8.0
         : media.padding.bottom + 72.0;
-    final maxHeight = (media.size.height -
-            media.padding.top -
-            media.padding.bottom -
-            kToolbarHeight -
-            20)
-        .clamp(120.0, 520.0)
-        .toDouble();
+    final maxHeight =
+        (media.size.height -
+                media.padding.top -
+                media.padding.bottom -
+                kToolbarHeight -
+                20)
+            .clamp(120.0, 520.0)
+            .toDouble();
     final showManageDivider = _loading || _accounts.isNotEmpty;
     const switcherWidth = 72.0;
     final maxSwitcherLeft = media.size.width - 12.0 - switcherWidth;
@@ -642,7 +643,10 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
                     )
                   : null,
             ),
-            child: Semantics(label: semanticLabel, child: Center(child: child)),
+            child: Semantics(
+              label: semanticLabel,
+              child: Center(child: child),
+            ),
           ),
         ),
       ),
@@ -736,7 +740,11 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
     // Start the foreground switch while the sheet context is still alive, then
     // destroy the sheet route immediately. The root loading cover remains as
     // the only switching UI until the account/session refresh is complete.
-    final switchFuture = _performAccountSwitch(switchContext, _manager, account);
+    final switchFuture = _performAccountSwitch(
+      switchContext,
+      _manager,
+      account,
+    );
     if (route != null) {
       navigator.removeRoute(route);
     } else {

@@ -8,9 +8,10 @@ import 'file_cookie_store.dart';
 import 'set_cookie_parser.dart';
 
 class EnhancedPersistCookieJar implements base.CookieJar {
-  EnhancedPersistCookieJar(
-      {required FileCookieStore store, this.ignoreExpires = false})
-      : _store = store;
+  EnhancedPersistCookieJar({
+    required FileCookieStore store,
+    this.ignoreExpires = false,
+  }) : _store = store;
 
   final FileCookieStore _store;
 
@@ -76,8 +77,9 @@ class EnhancedPersistCookieJar implements base.CookieJar {
         domain: cookie.domain ?? uri.host.toLowerCase(),
         path: cookie.path.isEmpty ? '/' : cookie.path,
       );
-      final idx = all
-          .indexWhere((existing) => existing.storageKey == resolved.storageKey);
+      final idx = all.indexWhere(
+        (existing) => existing.storageKey == resolved.storageKey,
+      );
       if (idx >= 0) {
         final existing = all[idx];
         if (_isWebViewHostOnlyDowngrade(resolved, existing)) {
@@ -149,15 +151,18 @@ class EnhancedPersistCookieJar implements base.CookieJar {
   Future<List<CanonicalCookie>> loadCanonicalForRequest(Uri uri) async {
     final all = await _readAll();
     final filtered = all
-        .where((cookie) =>
-            _matches(uri, cookie) && (ignoreExpires || !cookie.isExpired))
+        .where(
+          (cookie) =>
+              _matches(uri, cookie) && (ignoreExpires || !cookie.isExpired),
+        )
         .toList()
       ..sort((a, b) {
         final pathCompare = b.path.length.compareTo(a.path.length);
         if (pathCompare != 0) return pathCompare;
 
-        final domainCompare = (b.normalizedDomain?.length ?? 0)
-            .compareTo(a.normalizedDomain?.length ?? 0);
+        final domainCompare = (b.normalizedDomain?.length ?? 0).compareTo(
+          a.normalizedDomain?.length ?? 0,
+        );
         if (domainCompare != 0) return domainCompare;
 
         if (a.hostOnly != b.hostOnly) {
@@ -440,8 +445,11 @@ class EnhancedPersistCookieJar implements base.CookieJar {
         matchDomain.endsWith('.$host');
   }
 
-  bool _domainMatches(String host, String? cookieDomain,
-      {bool hostOnly = false}) {
+  bool _domainMatches(
+    String host,
+    String? cookieDomain, {
+    bool hostOnly = false,
+  }) {
     final normalizedHost = host.toLowerCase();
     if (cookieDomain == null || cookieDomain.isEmpty) return false;
     if (hostOnly) return normalizedHost == cookieDomain;

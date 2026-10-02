@@ -191,9 +191,7 @@ class NetworkHealthSnapshot {
       parts.add(cronetForceFallback ? 'cronet=forced' : 'cronet=fallen');
     }
     if (webViewCompatSession || webViewCompatPersistent) {
-      parts.add(
-        'compat=${webViewCompatPersistent ? "persistent" : "session"}',
-      );
+      parts.add('compat=${webViewCompatPersistent ? "persistent" : "session"}');
     }
     if (!cfAutoVerifyEnabled) parts.add('autoVerify=off');
     if (cfConsecutiveFailures > 0) {

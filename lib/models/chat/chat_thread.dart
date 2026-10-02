@@ -26,15 +26,17 @@ class ChatThreadPreview {
       replyCount: (json['reply_count'] as num?)?.toInt() ?? 0,
       lastReplyId: (json['last_reply_id'] as num?)?.toInt(),
       lastReplyExcerpt: json['last_reply_excerpt']?.toString(),
-      lastReplyCreatedAt:
-          TimeUtils.parseUtcTime(json['last_reply_created_at']?.toString()),
+      lastReplyCreatedAt: TimeUtils.parseUtcTime(
+        json['last_reply_created_at']?.toString(),
+      ),
       lastReplyUser: json['last_reply_user'] is Map
           ? ChatUser.fromJson(
               Map<String, dynamic>.from(json['last_reply_user'] as Map),
             )
           : null,
       participantCount: (json['participant_count'] as num?)?.toInt(),
-      participantUsers: (json['participant_users'] as List?)
+      participantUsers:
+          (json['participant_users'] as List?)
               ?.whereType<Map>()
               .map((e) => ChatUser.fromJson(Map<String, dynamic>.from(e)))
               .toList() ??
@@ -81,13 +83,13 @@ class ChatThreadOriginalMessage {
 
   /// 转成 ChatMessage 需要的最小字段 map，供气泡复用
   Map<String, dynamic> toMessageJson() => {
-        'id': id,
-        'message': message,
-        if (cooked != null) 'cooked': cooked,
-        if (createdAt != null) 'created_at': createdAt!.toUtc().toIso8601String(),
-        if (chatChannelId != null) 'chat_channel_id': chatChannelId,
-        if (user != null) 'user': user!.toJson(),
-      };
+    'id': id,
+    'message': message,
+    if (cooked != null) 'cooked': cooked,
+    if (createdAt != null) 'created_at': createdAt!.toUtc().toIso8601String(),
+    if (chatChannelId != null) 'chat_channel_id': chatChannelId,
+    if (user != null) 'user': user!.toJson(),
+  };
 }
 
 /// 消息串（对齐 Discourse Chat::ThreadSerializer）
@@ -128,12 +130,14 @@ class ChatThread {
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['title']?.toString(),
       status: json['status']?.toString(),
-      channelId: (json['channel_id'] as num?)?.toInt() ??
+      channelId:
+          (json['channel_id'] as num?)?.toInt() ??
           (json['channel'] is Map
               ? ((json['channel'] as Map)['id'] as num?)?.toInt()
               : null) ??
           0,
-      replyCount: (json['reply_count'] as num?)?.toInt() ??
+      replyCount:
+          (json['reply_count'] as num?)?.toInt() ??
           (previewJson is Map
               ? (previewJson['reply_count'] as num?)?.toInt()
               : null) ??
@@ -141,9 +145,7 @@ class ChatThread {
       lastMessageId: (json['last_message_id'] as num?)?.toInt(),
       force: json['force'] as bool? ?? false,
       preview: previewJson is Map
-          ? ChatThreadPreview.fromJson(
-              Map<String, dynamic>.from(previewJson),
-            )
+          ? ChatThreadPreview.fromJson(Map<String, dynamic>.from(previewJson))
           : null,
       originalMessage: original,
     );

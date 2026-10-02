@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../models/topic.dart';
 import '../../utils/url_helper.dart';
 import '../common/radial_long_press_menu.dart';
@@ -83,7 +84,10 @@ class _NestedPostAvatarState extends State<NestedPostAvatar> {
           imageUrl: imageUrl,
           radius: rect.shortestSide / 2,
           fallbackText: widget.username,
-          border: Border.all(color: Theme.of(ctx).colorScheme.primary, width: 2),
+          border: Border.all(
+            color: Theme.of(ctx).colorScheme.primary,
+            width: 2,
+          ),
         ),
       ),
       child: CompositedTransformTarget(

@@ -84,10 +84,7 @@ AttemptOutcome _failure(
   final error = DioException.badResponse(
     statusCode: status,
     requestOptions: options,
-    response: Response<dynamic>(
-      requestOptions: options,
-      statusCode: status,
-    ),
+    response: Response<dynamic>(requestOptions: options, statusCode: status),
   );
   return AttemptOutcome.failure(error: error, attemptIndex: 0);
 }

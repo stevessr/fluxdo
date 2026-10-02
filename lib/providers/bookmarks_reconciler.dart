@@ -60,8 +60,9 @@ enum ReconcileStopReason {
 }
 
 /// 拉单页接口。reconciler 不直接依赖 dio / 服务层。
-typedef BookmarkRawPageLoader =
-    Future<BookmarkPageParseResult> Function(int page);
+typedef BookmarkRawPageLoader = Future<BookmarkPageParseResult> Function(
+  int page,
+);
 
 /// 书签对账器：协调三种触发时机（首次 / 进页面静默 / 手动 / 下拉刷新）的
 /// 数据同步，最终结果统一写回 [BookmarksRepository]。
@@ -137,11 +138,13 @@ class BookmarksReconciler {
         );
       }
 
-      final changed = result.entries.where((entry) {
-        final local = snapshot[entry.bookmarkId];
-        return local == null ||
-            local != entry.updatedAt.toUtc().toIso8601String();
-      }).toList(growable: false);
+      final changed = result.entries
+          .where((entry) {
+            final local = snapshot[entry.bookmarkId];
+            return local == null ||
+                local != entry.updatedAt.toUtc().toIso8601String();
+          })
+          .toList(growable: false);
 
       if (changed.isNotEmpty) {
         await _repository.upsertEntries(accountId, changed);

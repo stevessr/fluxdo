@@ -46,46 +46,42 @@ class _AiProviderListPageState extends ConsumerState<AiProviderListPage> {
       body: providers.isEmpty
           ? _buildEmpty(context)
           : _manageMode
-              ? _ManageProviderList(
-                  pinned: pinned,
-                  others: others,
-                  selectedIds: _selectedIds,
-                  onToggleSelection: _toggleSelection,
-                )
-              : SwipeActionScope(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                    children: [
-                      if (pinned.isNotEmpty) ...[
-                        _SectionLabel(text: AiL10n.current.pinnedProvidersSection),
-                        _ProviderReorderSection(
-                          providers: pinned,
-                          pinned: true,
-                          onReorder: _reorderProviders,
-                          onEdit: (provider) =>
-                              _navigateToEdit(context, provider),
-                          onDelete: (provider) =>
-                              _confirmDelete(context, provider),
-                          onTogglePin: _togglePin,
-                        ),
-                        if (others.isNotEmpty) const SizedBox(height: 16),
-                      ],
-                      if (others.isNotEmpty) ...[
-                        _SectionLabel(text: AiL10n.current.otherProvidersSection),
-                        _ProviderReorderSection(
-                          providers: others,
-                          pinned: false,
-                          onReorder: _reorderProviders,
-                          onEdit: (provider) =>
-                              _navigateToEdit(context, provider),
-                          onDelete: (provider) =>
-                              _confirmDelete(context, provider),
-                          onTogglePin: _togglePin,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+          ? _ManageProviderList(
+              pinned: pinned,
+              others: others,
+              selectedIds: _selectedIds,
+              onToggleSelection: _toggleSelection,
+            )
+          : SwipeActionScope(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                children: [
+                  if (pinned.isNotEmpty) ...[
+                    _SectionLabel(text: AiL10n.current.pinnedProvidersSection),
+                    _ProviderReorderSection(
+                      providers: pinned,
+                      pinned: true,
+                      onReorder: _reorderProviders,
+                      onEdit: (provider) => _navigateToEdit(context, provider),
+                      onDelete: (provider) => _confirmDelete(context, provider),
+                      onTogglePin: _togglePin,
+                    ),
+                    if (others.isNotEmpty) const SizedBox(height: 16),
+                  ],
+                  if (others.isNotEmpty) ...[
+                    _SectionLabel(text: AiL10n.current.otherProvidersSection),
+                    _ProviderReorderSection(
+                      providers: others,
+                      pinned: false,
+                      onReorder: _reorderProviders,
+                      onEdit: (provider) => _navigateToEdit(context, provider),
+                      onDelete: (provider) => _confirmDelete(context, provider),
+                      onTogglePin: _togglePin,
+                    ),
+                  ],
+                ],
+              ),
+            ),
     );
   }
 
@@ -98,7 +94,9 @@ class _AiProviderListPageState extends ConsumerState<AiProviderListPage> {
         IconButton(
           icon: const Icon(Symbols.delete_rounded),
           tooltip: AiL10n.current.deleteSelectedProviders,
-          onPressed: _selectedIds.isEmpty ? null : () => _confirmBatchDelete(context),
+          onPressed: _selectedIds.isEmpty
+              ? null
+              : () => _confirmBatchDelete(context),
         ),
       ];
     }
@@ -125,9 +123,11 @@ class _AiProviderListPageState extends ConsumerState<AiProviderListPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Symbols.dns_rounded,
-              size: 64,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Symbols.dns_rounded,
+            size: 64,
+            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 16),
           Text(
             AiL10n.current.noProviderConfigured,
@@ -156,9 +156,7 @@ class _AiProviderListPageState extends ConsumerState<AiProviderListPage> {
   void _navigateToEdit(BuildContext context, [AiProvider? provider]) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => AiProviderEditPage(provider: provider),
-      ),
+      MaterialPageRoute(builder: (_) => AiProviderEditPage(provider: provider)),
     );
   }
 
@@ -225,7 +223,9 @@ class _AiProviderListPageState extends ConsumerState<AiProviderListPage> {
       ),
     );
     if (confirmed == true) {
-      await ref.read(aiProviderListProvider.notifier).removeProvider(provider.id);
+      await ref
+          .read(aiProviderListProvider.notifier)
+          .removeProvider(provider.id);
     }
   }
 
@@ -253,7 +253,9 @@ class _AiProviderListPageState extends ConsumerState<AiProviderListPage> {
       ),
     );
     if (confirmed == true) {
-      await ref.read(aiProviderListProvider.notifier).removeProviders(_selectedIds);
+      await ref
+          .read(aiProviderListProvider.notifier)
+          .removeProviders(_selectedIds);
       if (mounted) {
         _exitManageMode();
       }
@@ -273,7 +275,8 @@ class _ProviderReorderSection extends StatelessWidget {
 
   final List<AiProvider> providers;
   final bool pinned;
-  final Future<void> Function(bool pinned, int oldIndex, int newIndex) onReorder;
+  final Future<void> Function(bool pinned, int oldIndex, int newIndex)
+  onReorder;
   final ValueChanged<AiProvider> onEdit;
   final ValueChanged<AiProvider> onDelete;
   final ValueChanged<AiProvider> onTogglePin;
@@ -294,7 +297,9 @@ class _ProviderReorderSection extends StatelessWidget {
           key: ValueKey(provider.id),
           index: index,
           child: Padding(
-            padding: EdgeInsets.only(bottom: index < providers.length - 1 ? 8 : 0),
+            padding: EdgeInsets.only(
+              bottom: index < providers.length - 1 ? 8 : 0,
+            ),
             child: SwipeActionCell(
               key: ValueKey('swipe_${provider.id}'),
               enableLongPressMenu: false,
@@ -361,7 +366,9 @@ class _ManageProviderList extends StatelessWidget {
     return [
       for (var index = 0; index < providers.length; index++)
         Padding(
-          padding: EdgeInsets.only(bottom: index < providers.length - 1 ? 8 : 0),
+          padding: EdgeInsets.only(
+            bottom: index < providers.length - 1 ? 8 : 0,
+          ),
           child: _ProviderCard(
             provider: providers[index],
             selected: selectedIds.contains(providers[index].id),
@@ -441,8 +448,9 @@ class _ProviderCard extends StatelessWidget {
                   children: [
                     Text(
                       provider.name,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w500),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -484,10 +492,7 @@ class _ProviderCard extends StatelessWidget {
                 ),
               ),
               if (showSelection)
-                Checkbox(
-                  value: selected,
-                  onChanged: (_) => onTap(),
-                )
+                Checkbox(value: selected, onChanged: (_) => onTap())
               else ...[
                 IconButton(
                   key: ValueKey('pin_${provider.id}'),

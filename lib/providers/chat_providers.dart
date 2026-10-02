@@ -162,8 +162,9 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
     state = AsyncData(
       current.copyWith(
         publicChannels: current.publicChannels.map(markRead).toList(),
-        directMessageChannels:
-            current.directMessageChannels.map(markRead).toList(),
+        directMessageChannels: current.directMessageChannels
+            .map(markRead)
+            .toList(),
       ),
     );
   }
@@ -835,9 +836,7 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
           }
           // 可能是服务端已有更高水位导致的 400，也可能是临时网络异常。
           // 静默刷新 membership；后续触发会先同步新的服务端下界再决定是否重试。
-          unawaited(
-            ref.read(chatChannelsProvider.notifier).refreshSilently(),
-          );
+          unawaited(ref.read(chatChannelsProvider.notifier).refreshSilently());
           // 不在这里紧循环重试，避免网络故障时产生请求风暴。
           break;
         }

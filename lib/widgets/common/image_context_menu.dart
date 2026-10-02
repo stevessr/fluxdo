@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:super_clipboard/super_clipboard.dart';
+
 import '../../l10n/s.dart';
 import '../../utils/image_save_utils.dart';
 import '../../utils/share_utils.dart';
@@ -14,6 +15,7 @@ import 'image_lift_menu.dart';
 import '../../utils/platform_utils.dart';
 import '../../utils/quote_builder.dart';
 import '../content/discourse_html_content/image_utils.dart';
+
 import 'package:common_ui/common_ui.dart';
 
 /// 图片上下文菜单
@@ -52,6 +54,7 @@ class ImageContextMenu {
     String? quoteMarkdown,
     String? heroTag,
     ImageLiftSpec? lift,
+
     /// 原始文件名(接口/cooked 提供):分享与「查看大图」的命名依据。
     String? fileName,
   }) {
@@ -89,6 +92,7 @@ class ImageContextMenu {
       );
     }
   }
+
   /// 桌面端：在鼠标位置弹出 Popup Menu
   static void _showDesktopMenu({
     required BuildContext context,
@@ -137,11 +141,17 @@ class ImageContextMenu {
         ),
       PopupMenuItem(
         value: 'copyImage',
-        child: _MenuItemRow(icon: Symbols.content_copy_rounded, label: S.current.image_copyImage),
+        child: _MenuItemRow(
+          icon: Symbols.content_copy_rounded,
+          label: S.current.image_copyImage,
+        ),
       ),
       PopupMenuItem(
         value: 'copyLink',
-        child: _MenuItemRow(icon: Symbols.link_rounded, label: S.current.image_copyLink),
+        child: _MenuItemRow(
+          icon: Symbols.link_rounded,
+          label: S.current.image_copyLink,
+        ),
       ),
       PopupMenuItem(
         value: 'save',
@@ -179,7 +189,10 @@ class ImageContextMenu {
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'close',
-          child: _MenuItemRow(icon: Symbols.close_rounded, label: S.current.common_close),
+          child: _MenuItemRow(
+            icon: Symbols.close_rounded,
+            label: S.current.common_close,
+          ),
         ),
       ],
     ];
@@ -273,15 +286,15 @@ class ImageContextMenu {
           Symbols.format_quote_rounded,
           S.current.common_quote,
           () => onQuoteImage(
-                QuoteBuilder.build(
-                  markdown: quoteMarkdown ?? '![image]($originalUrl)',
-                  displayName: post.name,
-                  username: post.username,
-                  postNumber: post.postNumber,
-                  topicId: topicId,
-                ),
-                post,
-              ),
+            QuoteBuilder.build(
+              markdown: quoteMarkdown ?? '![image]($originalUrl)',
+              displayName: post.name,
+              username: post.username,
+              postNumber: post.postNumber,
+              topicId: topicId,
+            ),
+            post,
+          ),
         ),
       if (post != null && topicId != null)
         _MobileAction(

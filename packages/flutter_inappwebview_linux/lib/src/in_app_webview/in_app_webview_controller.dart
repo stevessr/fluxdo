@@ -487,9 +487,8 @@ class LinuxInAppWebViewController extends PlatformInAppWebViewController
               jsAlertRequest,
             ))?.toMap();
           else
-            return (await _inAppBrowserEventHandler!.onJsAlert(
-              jsAlertRequest,
-            ))?.toMap();
+            return (await _inAppBrowserEventHandler!.onJsAlert(jsAlertRequest))
+                ?.toMap();
         }
         return null;
       case "onJsConfirm":
@@ -915,9 +914,8 @@ class LinuxInAppWebViewController extends PlatformInAppWebViewController
               request,
             ))?.toMap();
           else
-            return (await _inAppBrowserEventHandler!.onShowFileChooser(
-              request,
-            ))?.toMap();
+            return (await _inAppBrowserEventHandler!.onShowFileChooser(request))
+                ?.toMap();
         }
         return null;
       // onFindResultReceived is now handled by FindInteractionController
@@ -1059,9 +1057,8 @@ class LinuxInAppWebViewController extends PlatformInAppWebViewController
                 );
               else
                 return jsonEncode(
-                  (await _inAppBrowserEventHandler!.onAjaxProgress(
-                    request,
-                  ))?.toNativeValue(),
+                  (await _inAppBrowserEventHandler!.onAjaxProgress(request))
+                      ?.toNativeValue(),
                 );
             }
             return null;

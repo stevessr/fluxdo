@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/notification_category.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/preferences_provider.dart';
@@ -82,9 +83,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     // 的书签数据源/缓存/分页，因此这里进入真实书签页，避免继续把“书签”
     // 错做成只有 reminder 的通知列表。
     if (category == NotificationCategory.bookmarks) {
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const BookmarksPage()));
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const BookmarksPage()));
       return;
     }
 
@@ -113,8 +113,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       NotificationCategory.all => context.l10n.notification_categoryAll,
       NotificationCategory.replies => context.l10n.notification_categoryReplies,
       NotificationCategory.likes => context.l10n.notification_categoryLikes,
-      NotificationCategory.messages => context.l10n.notification_categoryMessages,
-      NotificationCategory.bookmarks => context.l10n.notification_categoryBookmarks,
+      NotificationCategory.messages =>
+        context.l10n.notification_categoryMessages,
+      NotificationCategory.bookmarks =>
+        context.l10n.notification_categoryBookmarks,
       NotificationCategory.other => context.l10n.notification_categoryOther,
     };
   }

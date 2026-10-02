@@ -79,8 +79,10 @@ void main() {
     test('requestTag 空串按未标注处理', () {
       expect(_options(const {}).spec.requestTag, isNull);
       expect(_options(const {'requestTag': ''}).spec.requestTag, isNull);
-      expect(_options(const {'requestTag': 'otp-redeem'}).spec.requestTag,
-          'otp-redeem');
+      expect(
+        _options(const {'requestTag': 'otp-redeem'}).spec.requestTag,
+        'otp-redeem',
+      );
     });
   });
 

@@ -218,10 +218,8 @@ Future<void> launchContentLink(
   if (badgeInfo != null && internal) {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => BadgePage(
-          badgeId: badgeInfo.badgeId,
-          badgeSlug: badgeInfo.slug,
-        ),
+        builder: (_) =>
+            BadgePage(badgeId: badgeInfo.badgeId, badgeSlug: badgeInfo.slug),
       ),
     );
     return;
@@ -231,9 +229,8 @@ Future<void> launchContentLink(
   if (internal && DiscourseUrlParser.isUpcomingEvents(url)) {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const CommunityEventsPage(
-          view: CommunityEventsView.upcoming,
-        ),
+        builder: (_) =>
+            const CommunityEventsPage(view: CommunityEventsView.upcoming),
       ),
     );
     return;

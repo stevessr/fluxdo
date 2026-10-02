@@ -289,11 +289,14 @@ class DiscourseNotification {
     return DiscourseNotification(
       id: json['id'] as int,
       userId: json['user_id'] as int,
-      notificationType: NotificationType.fromId(json['notification_type'] as int),
+      notificationType: NotificationType.fromId(
+        json['notification_type'] as int,
+      ),
       read: json['read'] as bool? ?? false,
       highPriority: json['high_priority'] as bool? ?? false,
       createdAt:
-          TimeUtils.parseUtcTime(json['created_at'] as String?) ?? DateTime.now(),
+          TimeUtils.parseUtcTime(json['created_at'] as String?) ??
+          DateTime.now(),
       postNumber: json['post_number'] as int?,
       topicId: json['topic_id'] as int?,
       slug: json['slug'] as String?,
@@ -561,12 +564,9 @@ class NotificationListResponse {
     final notificationsList = json['notifications'] as List<dynamic>? ?? [];
     return NotificationListResponse(
       notifications: notificationsList
-          .map(
-            (e) => DiscourseNotification.fromJson(e as Map<String, dynamic>),
-          )
+          .map((e) => DiscourseNotification.fromJson(e as Map<String, dynamic>))
           .toList(),
-      totalRowsNotifications:
-          json['total_rows_notifications'] as int? ?? 0,
+      totalRowsNotifications: json['total_rows_notifications'] as int? ?? 0,
       seenNotificationId: json['seen_notification_id'] as int? ?? 0,
       loadMoreNotifications: json['load_more_notifications'] as String?,
     );

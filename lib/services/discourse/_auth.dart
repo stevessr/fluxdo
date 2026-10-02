@@ -135,9 +135,9 @@ mixin _AuthMixin on _DiscourseServiceBase {
         requestOptions.headers[HttpHeaders.cookieHeader]?.toString() ??
         requestOptions.headers['Cookie']?.toString() ??
         '';
-    return RegExp(
-      r'(?:^|;\s*)_t=([^;]*)',
-    ).firstMatch(sentCookieHeader)?.group(1);
+    return RegExp(r'(?:^|;\s*)_t=([^;]*)')
+        .firstMatch(sentCookieHeader)
+        ?.group(1);
   }
 
   Map<String, dynamic> _sentTDiagnostics(RequestOptions requestOptions) {

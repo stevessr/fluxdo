@@ -72,10 +72,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       final service = ref.read(discourseServiceProvider);
       final response = await service.dio.get(
         '/leaderboard/1.json',
-        queryParameters: {
-          'period': requestedPeriod.apiValue,
-          'page': page,
-        },
+        queryParameters: {'period': requestedPeriod.apiValue, 'page': page},
       );
 
       if (response.statusCode == 202) {
@@ -90,7 +87,10 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       final rawUsers = data['users'] as List? ?? const [];
       final entries = rawUsers
           .whereType<Map>()
-          .map((item) => _LeaderboardEntry.fromJson(Map<String, dynamic>.from(item)))
+          .map(
+            (item) =>
+                _LeaderboardEntry.fromJson(Map<String, dynamic>.from(item)),
+          )
           .where((entry) => entry.username.isNotEmpty)
           .toList(growable: false);
 
@@ -118,7 +118,9 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
 
       // 周期切换在请求进行时被禁用；这里仍做兜底，确保外部状态变化后
       // 当前周期不会停留在未加载状态。
-      if (widget.isActive && !_cache.containsKey(_period) && !_errors.containsKey(_period)) {
+      if (widget.isActive &&
+          !_cache.containsKey(_period) &&
+          !_errors.containsKey(_period)) {
         scheduleMicrotask(_ensureLoaded);
       }
     }
@@ -469,7 +471,8 @@ class _LeaderboardError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final copy = _copy(context);
-    final isRateLimited = error is DioException &&
+    final isRateLimited =
+        error is DioException &&
         (error as DioException).response?.statusCode == 429;
     final isNotReady = error is _LeaderboardNotReadyException;
     final message = isRateLimited
@@ -671,7 +674,8 @@ _LeaderboardCopy _copy(BuildContext context) {
     );
   }
 
-  final traditional = locale.scriptCode == 'Hant' ||
+  final traditional =
+      locale.scriptCode == 'Hant' ||
       locale.countryCode == 'TW' ||
       locale.countryCode == 'HK';
   if (traditional) {

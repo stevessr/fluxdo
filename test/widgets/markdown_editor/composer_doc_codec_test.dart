@@ -50,10 +50,7 @@ void main() {
         EditorPosition(blockId: editor.blocks.first.id, offset: 3),
       ),
     );
-    expect(
-      (editor.blocks.first as TextBlock).content.text,
-      raw,
-    );
+    expect((editor.blocks.first as TextBlock).content.text, raw);
     // 语义宿主光标停在展开的链接内，只读导出不得把链接转义成正文。
     final back = codec.export(session.tree);
     expect(await cookWithNode(back), original, reason: '选择态回写：$back');

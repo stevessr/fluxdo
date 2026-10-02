@@ -57,7 +57,9 @@ class SiteCookieCleanupService {
         }
         if (host != currentHost && ownsCookie) hosts.add(host);
       } catch (e) {
-        debugPrint('[SiteCookieCleanup] 读取 WebView Cookie 失败: host=$host error=$e');
+        debugPrint(
+          '[SiteCookieCleanup] 读取 WebView Cookie 失败: host=$host error=$e',
+        );
       }
     }
 
@@ -125,7 +127,9 @@ class SiteCookieCleanupService {
         if (owner != host) continue;
 
         final rawDomain = cookie.domain?.trim();
-        final domain = rawDomain == null || rawDomain.isEmpty ? null : rawDomain;
+        final domain = rawDomain == null || rawDomain.isEmpty
+            ? null
+            : rawDomain;
         final path = cookie.path?.isNotEmpty == true ? cookie.path! : '/';
 
         final deleted = await RawCookieWriter.instance.deleteExactCookie(
@@ -146,7 +150,9 @@ class SiteCookieCleanupService {
         }
       }
     } catch (e) {
-      debugPrint('[SiteCookieCleanup] 清理 WebView Cookie 失败: host=$host error=$e');
+      debugPrint(
+        '[SiteCookieCleanup] 清理 WebView Cookie 失败: host=$host error=$e',
+      );
     }
   }
 

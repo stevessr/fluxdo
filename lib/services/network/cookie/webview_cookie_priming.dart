@@ -443,9 +443,9 @@ class WebViewCookiePriming {
     int postCount,
   ) async {
     if (cookie.name != 'cf_clearance' || postCount <= 1) return false;
-    final variants = (await _writer.getAllCookieInfos(
-      url,
-    )).where((variant) => variant.name == cookie.name).toList(growable: false);
+    final variants = (await _writer.getAllCookieInfos(url))
+        .where((variant) => variant.name == cookie.name)
+        .toList(growable: false);
     if (variants.length <= 1) return false;
     final sameValue = variants.every(
       (variant) => variant.value == cookie.value,

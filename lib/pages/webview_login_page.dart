@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../constants.dart';
 import '../providers/preferences_provider.dart';
 import '../services/credential_store_service.dart';
@@ -25,7 +26,9 @@ import '../services/webview_session_cookie_refresh_service.dart';
 import '../services/windows_webview_environment_service.dart';
 import '../services/log/log_writer.dart';
 import '../services/login_ready_coordinator.dart';
+
 import 'package:common_ui/common_ui.dart';
+
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
 
@@ -251,9 +254,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                         // Android: 启用 WebAuthn/PassKey 支持
                         if (Platform.isAndroid) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
-                            const MethodChannel(
-                              'com.fluxdo/webauthn',
-                            ).invokeMethod('enableWebAuthentication');
+                            const MethodChannel('com.fluxdo/webauthn')
+                                .invokeMethod('enableWebAuthentication');
                           });
                         }
                       },
@@ -310,9 +312,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                 if (_isCompletingLogin)
                   Positioned.fill(
                     child: ColoredBox(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surface.withValues(alpha: 0.88),
+                      color: Theme.of(context).colorScheme.surface
+                          .withValues(alpha: 0.88),
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -547,11 +548,9 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       if (!AuthSession().isValid(loginGeneration)) return;
       String? pageHtml;
       try {
-        pageHtml =
-            await controller.evaluateJavascript(
-                  source: 'window.__rawPreloaded || null',
-                )
-                as String?;
+        pageHtml = await controller.evaluateJavascript(
+          source: 'window.__rawPreloaded || null',
+        ) as String?;
       } catch (_) {}
 
       await _finalizeLoginBootstrap(

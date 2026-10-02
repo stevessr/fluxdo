@@ -26,8 +26,7 @@ class ChatBrowseChannelsPage extends ConsumerStatefulWidget {
       _ChatBrowseChannelsPageState();
 }
 
-class _ChatBrowseChannelsPageState
-    extends ConsumerState<ChatBrowseChannelsPage>
+class _ChatBrowseChannelsPageState extends ConsumerState<ChatBrowseChannelsPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
@@ -143,10 +142,7 @@ class _BrowseChannelListView extends ConsumerWidget {
   final String? status;
   final String searchQuery;
 
-  const _BrowseChannelListView({
-    this.status,
-    this.searchQuery = '',
-  });
+  const _BrowseChannelListView({this.status, this.searchQuery = ''});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -178,8 +174,9 @@ class _BrowseChannelListView extends ConsumerWidget {
                       ? Symbols.search_off_rounded
                       : Symbols.forum_rounded,
                   size: 64,
-                  color: theme.colorScheme.onSurfaceVariant
-                      .withValues(alpha: 0.5),
+                  color: theme.colorScheme.onSurfaceVariant.withValues(
+                    alpha: 0.5,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -204,7 +201,8 @@ class _BrowseChannelListView extends ConsumerWidget {
             itemBuilder: (context, index) {
               final channel = channels[index];
               // 优先用频道自身 current_user_membership.following
-              final isJoined = channel.following || followedIds.contains(channel.id);
+              final isJoined =
+                  channel.following || followedIds.contains(channel.id);
               return _BrowseChannelTile(
                 key: ValueKey('browse-channel-${channel.id}'),
                 channel: channel,
@@ -246,6 +244,7 @@ class _BrowseChannelTile extends ConsumerStatefulWidget {
 
 class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
   bool _isBusy = false;
+
   /// 本地乐观覆盖：null 表示用 widget.isJoined
   bool? _localJoined;
 
@@ -272,9 +271,8 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加入失败: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('加入失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isBusy = false);
@@ -298,9 +296,8 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('退出失败: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('退出失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isBusy = false);
@@ -335,10 +332,7 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
         backgroundColor: bg,
         child: Opacity(
           opacity: dimmed ? 0.55 : 1,
-          child: EmojiText(
-            emojiCode,
-            style: const TextStyle(fontSize: 20),
-          ),
+          child: EmojiText(emojiCode, style: const TextStyle(fontSize: 20)),
         ),
       );
     }
@@ -525,28 +519,23 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
               padding: const EdgeInsets.only(top: 4),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.people_outline_rounded,
-                    size: 14,
-                    color: subColor,
-                  ),
+                  Icon(Icons.people_outline_rounded, size: 14, color: subColor),
                   const SizedBox(width: 4),
                   Text(
                     _membersLabel(),
-                    style: theme.textTheme.labelSmall?.copyWith(color: subColor),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: subColor,
+                    ),
                   ),
                   if (channel.threadingEnabled) ...[
                     const SizedBox(width: 12),
-                    Icon(
-                      Icons.forum_outlined,
-                      size: 14,
-                      color: subColor,
-                    ),
+                    Icon(Icons.forum_outlined, size: 14, color: subColor),
                     const SizedBox(width: 4),
                     Text(
                       '消息串',
-                      style:
-                          theme.textTheme.labelSmall?.copyWith(color: subColor),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: subColor,
+                      ),
                     ),
                   ],
                 ],

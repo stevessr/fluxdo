@@ -181,9 +181,8 @@ class AppSheetScaffold extends StatelessWidget {
             IconButton(
               icon: const Icon(Symbols.close_rounded),
               visualDensity: VisualDensity.compact,
-              tooltip: MaterialLocalizations.of(
-                context,
-              ).modalBarrierDismissLabel,
+              tooltip: MaterialLocalizations.of(context)
+                  .modalBarrierDismissLabel,
               onPressed: () => Navigator.of(context).maybePop(),
             ),
         ],

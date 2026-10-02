@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/nested_topic.dart';
 import '../models/topic.dart';
 import '../services/discourse/discourse_service.dart';

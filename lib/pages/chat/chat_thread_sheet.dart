@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -166,9 +167,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('发送失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('发送失败: $e')));
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
@@ -197,9 +197,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('回应失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('回应失败: $e')));
     }
   }
 
@@ -224,9 +223,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('书签操作失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('书签操作失败: $e')));
     }
   }
 
@@ -247,9 +245,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('置顶操作失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('置顶操作失败: $e')));
     }
   }
 
@@ -265,9 +262,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     final shareUrl =
         '$baseUrl/chat/channel/${widget.channelId}?message_id=${message.id}';
     Clipboard.setData(ClipboardData(text: shareUrl));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('已复制分享链接到剪贴板')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('已复制分享链接到剪贴板')));
   }
 
   Future<void> _onDeleteMessage(ChatMessage message) async {
@@ -304,9 +300,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('删除失败: $e')));
     }
   }
 
@@ -322,14 +317,12 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
         )),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已恢复消息')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已恢复消息')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('恢复失败: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('恢复失败: $e')));
     }
   }
 
@@ -399,9 +392,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       });
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('表情包图片上传失败: $error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('表情包图片上传失败: $error')));
       }
     } finally {
       if (mounted) setState(() => _isUploadingImage = false);
@@ -487,9 +479,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     if (!mounted) return;
     setState(() => _isUploadingImage = false);
     if (!ok) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('上传失败: 1/1')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('上传失败: 1/1')));
     }
   }
 
@@ -719,9 +710,9 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                               child: Icon(
                                 Icons.add_rounded,
                                 size: 22,
-                                color: Theme.of(
-                                  ctx,
-                                ).colorScheme.onPrimaryContainer,
+                                color: Theme.of(ctx)
+                                    .colorScheme
+                                    .onPrimaryContainer,
                               ),
                             ),
                           ),

@@ -24,22 +24,23 @@ class PromptPresetStorage {
 
   final SharedPreferences _prefs;
 
-  ({
-    List<PresetCustomization> customizations,
-    List<PromptPreset> userPresets,
-  }) load() {
+  ({List<PresetCustomization> customizations, List<PromptPreset> userPresets})
+  load() {
     final raw = _prefs.getString(_key);
     if (raw == null || raw.isEmpty) {
       return (customizations: const [], userPresets: const []);
     }
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      final customizations = (json['customizations'] as List<dynamic>?)
-              ?.map((e) =>
-                  PresetCustomization.fromJson(e as Map<String, dynamic>))
+      final customizations =
+          (json['customizations'] as List<dynamic>?)
+              ?.map(
+                (e) => PresetCustomization.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           const <PresetCustomization>[];
-      final userPresets = (json['userPresets'] as List<dynamic>?)
+      final userPresets =
+          (json['userPresets'] as List<dynamic>?)
               ?.map((e) => PromptPreset.fromJson(e as Map<String, dynamic>))
               // 防御：用户自定义存进去的若被错误标记为 builtIn，强制纠正
               .map((p) => p.copyWith(builtIn: false))

@@ -9,8 +9,10 @@ const String unsetBookmarkNameFilterKey = '__bookmark_name_unset__';
 // Discourse 书签接口单页上限是 20，超过会直接返回 invalid_parameters。
 const int bookmarkRequestLimit = 20;
 
-typedef BookmarkPageLoader =
-    Future<TopicListResponse> Function(int page, int limit);
+typedef BookmarkPageLoader = Future<TopicListResponse> Function(
+  int page,
+  int limit,
+);
 
 int _normalizeBookmarkRequestLimit(int requestLimit) {
   if (requestLimit <= 0) {
@@ -343,26 +345,20 @@ class BookmarksWorkspaceState {
       return copyWith(activeTabId: topicTabId(topicId), topicTabs: updatedTabs);
     }
 
-    final limited = _applyTopicTabLimit(
-      [
-        ...topicTabs,
-        BookmarkWorkspaceTopicTab(
-          topicId: topicId,
-          title: title,
-          scrollToPostNumber: scrollToPostNumber,
-          bookmarkId: bookmarkId,
-          bookmarkName: bookmarkName,
-          bookmarkReminderAt: bookmarkReminderAt,
-          bookmarkableType: bookmarkableType,
-          instanceId: _uuid.v4(),
-        ),
-      ],
-      topicTabId(topicId),
-    );
-    return copyWith(
-      activeTabId: limited.activeTabId,
-      topicTabs: limited.tabs,
-    );
+    final limited = _applyTopicTabLimit([
+      ...topicTabs,
+      BookmarkWorkspaceTopicTab(
+        topicId: topicId,
+        title: title,
+        scrollToPostNumber: scrollToPostNumber,
+        bookmarkId: bookmarkId,
+        bookmarkName: bookmarkName,
+        bookmarkReminderAt: bookmarkReminderAt,
+        bookmarkableType: bookmarkableType,
+        instanceId: _uuid.v4(),
+      ),
+    ], topicTabId(topicId));
+    return copyWith(activeTabId: limited.activeTabId, topicTabs: limited.tabs);
   }
 
   BookmarksWorkspaceState openTopicTabInBackground({
@@ -390,26 +386,20 @@ class BookmarksWorkspaceState {
       return copyWith(topicTabs: updatedTabs);
     }
 
-    final limited = _applyTopicTabLimit(
-      [
-        ...topicTabs,
-        BookmarkWorkspaceTopicTab(
-          topicId: topicId,
-          title: title,
-          scrollToPostNumber: scrollToPostNumber,
-          bookmarkId: bookmarkId,
-          bookmarkName: bookmarkName,
-          bookmarkReminderAt: bookmarkReminderAt,
-          bookmarkableType: bookmarkableType,
-          instanceId: _uuid.v4(),
-        ),
-      ],
-      activeTabId,
-    );
-    return copyWith(
-      activeTabId: limited.activeTabId,
-      topicTabs: limited.tabs,
-    );
+    final limited = _applyTopicTabLimit([
+      ...topicTabs,
+      BookmarkWorkspaceTopicTab(
+        topicId: topicId,
+        title: title,
+        scrollToPostNumber: scrollToPostNumber,
+        bookmarkId: bookmarkId,
+        bookmarkName: bookmarkName,
+        bookmarkReminderAt: bookmarkReminderAt,
+        bookmarkableType: bookmarkableType,
+        instanceId: _uuid.v4(),
+      ),
+    ], activeTabId);
+    return copyWith(activeTabId: limited.activeTabId, topicTabs: limited.tabs);
   }
 
   BookmarksWorkspaceState closeTopicTab(int topicId) {

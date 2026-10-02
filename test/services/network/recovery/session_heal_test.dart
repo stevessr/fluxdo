@@ -53,10 +53,7 @@ void main() {
         readSessionToken: () async =>
             CanonicalCookie(name: '_t', value: 'valid'),
       );
-      final outcome = _failure(
-        401,
-        body: {'error_type': 'not_logged_in'},
-      );
+      final outcome = _failure(401, body: {'error_type': 'not_logged_in'});
       expect(policy.canHandle(outcome), isFalse);
     });
 
@@ -122,7 +119,9 @@ void main() {
         response: Response<dynamic>(
           requestOptions: options,
           statusCode: 200,
-          headers: Headers.fromMap({'discourse-logged-out': ['1']}),
+          headers: Headers.fromMap({
+            'discourse-logged-out': ['1'],
+          }),
           data: const {},
         ),
         attemptIndex: 0,
@@ -164,10 +163,7 @@ void main() {
         RecoveryCoordinator(
           dio: dio,
           policies: [
-            SessionSelfHealPolicy(
-              readSessionToken: readToken,
-              sentinel: null,
-            ),
+            SessionSelfHealPolicy(readSessionToken: readToken, sentinel: null),
           ],
           budgetFactory: () => AttemptBudget(maxAttempts: 2),
         ),

@@ -258,10 +258,8 @@ HttpClientAdapter _createNativeAdapter() {
     // 避免站点关闭 UDP/HTTP3 后仍被硬提示到不可达的 QUIC 端点。
     debugPrint('[DIO] Dynamic adapter -> NativeAdapter (Cronet HTTP/3/QUIC)');
     return NativeAdapter(
-      createCronetEngine: () => CronetEngine.build(
-        enableQuic: true,
-        enableHttp2: true,
-      ),
+      createCronetEngine: () =>
+          CronetEngine.build(enableQuic: true, enableHttp2: true),
     );
   }
   if (kDebugMode && (Platform.isMacOS || Platform.isIOS)) {

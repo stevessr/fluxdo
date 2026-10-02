@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
+
 import '../../config/site_customization.dart';
 import '../../l10n/s.dart';
 import '../../services/toast_service.dart';
@@ -320,7 +321,11 @@ class _LinkBlockedSheet extends StatelessWidget {
               color: Colors.red.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Symbols.block_rounded, color: Colors.red, size: 28),
+            child: const Icon(
+              Symbols.block_rounded,
+              color: Colors.red,
+              size: 28,
+            ),
           ),
           const SizedBox(height: 16),
           Text(

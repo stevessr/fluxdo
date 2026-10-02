@@ -1,6 +1,8 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+
 import '../typedef.dart';
 import '../utils.dart';
 import 'slide_page.dart';

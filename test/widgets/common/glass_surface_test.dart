@@ -116,8 +116,7 @@ void main() {
       expect(
         find.byWidgetPredicate(
           (widget) =>
-              widget is CustomPaint &&
-              widget.painter is GlassEdgePainter,
+              widget is CustomPaint && widget.painter is GlassEdgePainter,
         ),
         findsOneWidget,
       );

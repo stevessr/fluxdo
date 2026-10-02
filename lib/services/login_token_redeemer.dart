@@ -29,11 +29,7 @@ class LoginTokenRedeemer {
     bool isCurrent() => AuthSession().isValid(generation);
 
     if (!RegExp(r'^[0-9a-f]+$').hasMatch(otp)) {
-      _log(
-        'warning',
-        'login_otp_bad_format',
-        '登录 OTP 格式异常，拒绝兑换',
-      );
+      _log('warning', 'login_otp_bad_format', '登录 OTP 格式异常，拒绝兑换');
       return const LoginTokenRedeemResult.failed();
     }
 
@@ -58,11 +54,7 @@ class LoginTokenRedeemer {
       final csrf = await _fetchCsrf(dio);
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
       if (csrf == null || csrf.isEmpty) {
-        _log(
-          'warning',
-          'login_otp_missing_csrf',
-          '登录 OTP 兑换前未取得 CSRF token',
-        );
+        _log('warning', 'login_otp_missing_csrf', '登录 OTP 兑换前未取得 CSRF token');
         return const LoginTokenRedeemResult.failed();
       }
 
@@ -72,10 +64,7 @@ class LoginTokenRedeemer {
           followRedirects: false,
           validateStatus: (status) =>
               status != null && status >= 200 && status < 400,
-          headers: {
-            'X-CSRF-Token': csrf,
-            'X-Requested-With': 'XMLHttpRequest',
-          },
+          headers: {'X-CSRF-Token': csrf, 'X-Requested-With': 'XMLHttpRequest'},
           extra: const {
             'skipCsrf': true,
             'skipAuthCheck': true,
@@ -100,11 +89,7 @@ class LoginTokenRedeemer {
 
       final afterToken = afterSnapshot.token;
       if (_isFreshToken(beforeToken, afterToken)) {
-        _log(
-          'info',
-          'login_otp_redeem_success',
-          '登录 OTP 兑换成功，已获得新 _t',
-        );
+        _log('info', 'login_otp_redeem_success', '登录 OTP 兑换成功，已获得新 _t');
         return LoginTokenRedeemResult.success(afterToken!);
       }
 
@@ -164,23 +149,15 @@ class LoginTokenRedeemer {
         return const LoginTokenRedeemResult.blockedByChallenge();
       }
 
-      _log(
-        'warning',
-        'login_otp_redeem_failed',
-        '登录 OTP 兑换请求失败',
-        {
-          'statusCode': e.response?.statusCode,
-          'errorType': e.type.toString(),
-        },
-      );
+      _log('warning', 'login_otp_redeem_failed', '登录 OTP 兑换请求失败', {
+        'statusCode': e.response?.statusCode,
+        'errorType': e.type.toString(),
+      });
       return const LoginTokenRedeemResult.failed();
     } catch (e) {
-      _log(
-        'warning',
-        'login_otp_redeem_failed',
-        '登录 OTP 兑换发生非网络异常',
-        {'error': e.toString()},
-      );
+      _log('warning', 'login_otp_redeem_failed', '登录 OTP 兑换发生非网络异常', {
+        'error': e.toString(),
+      });
       return const LoginTokenRedeemResult.failed();
     }
   }
@@ -221,9 +198,7 @@ class LoginTokenRedeemer {
     return null;
   }
 
-  static Future<_TTokenSnapshot> _readTToken(
-    CookieJarService cookieJar,
-  ) async {
+  static Future<_TTokenSnapshot> _readTToken(CookieJarService cookieJar) async {
     try {
       return _TTokenSnapshot.success(await cookieJar.getTToken());
     } catch (e) {
@@ -257,13 +232,12 @@ class LoginTokenRedeemer {
 class LoginTokenRedeemResult {
   const LoginTokenRedeemResult._({this.token, this.challengeBlocked = false});
 
-  const LoginTokenRedeemResult.success(String token)
-      : this._(token: token);
+  const LoginTokenRedeemResult.success(String token) : this._(token: token);
 
   const LoginTokenRedeemResult.failed() : this._();
 
   const LoginTokenRedeemResult.blockedByChallenge()
-      : this._(challengeBlocked: true);
+    : this._(challengeBlocked: true);
 
   final String? token;
   final bool challengeBlocked;

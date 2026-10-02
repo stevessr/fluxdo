@@ -8,10 +8,7 @@ import 'package:flutter/material.dart';
 /// 2. 消息列表与输入组件看到稳定的 viewInsets/padding；
 /// 3. 仍通过 Flex 约束逐帧缩放可视区，因此不会遮住最新消息。
 class ChatKeyboardViewport extends StatelessWidget {
-  const ChatKeyboardViewport({
-    super.key,
-    required this.children,
-  });
+  const ChatKeyboardViewport({super.key, required this.children});
 
   final List<Widget> children;
 
@@ -20,9 +17,7 @@ class ChatKeyboardViewport extends StatelessWidget {
     return Column(
       children: [
         Expanded(
-          child: _StableKeyboardMediaQuery(
-            child: Column(children: children),
-          ),
+          child: _StableKeyboardMediaQuery(child: Column(children: children)),
         ),
         const _KeyboardInsetSpacer(),
       ],

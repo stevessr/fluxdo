@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/search_filter.dart';
 import '../models/topic.dart';
 import '../providers/discourse_providers.dart';
@@ -81,7 +82,9 @@ class _MyTopicsPageState extends ConsumerState<MyTopicsPage> {
   void _onItemTap(Topic topic) {
     // 宽屏进右栏,窄屏全屏 push——与草稿页同一套形态
     if (_canShowBothPanes) {
-      ref.read(selectedMyTopicsPaneProvider.notifier).select(
+      ref
+          .read(selectedMyTopicsPaneProvider.notifier)
+          .select(
             topicId: topic.id,
             initialTitle: topic.title,
             scrollToPostNumber: topic.lastReadPostNumber,
@@ -192,32 +195,32 @@ class _MyTopicsPageState extends ConsumerState<MyTopicsPage> {
           return TopicCardPrewarmScope(
             topics: topics,
             child: ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(12),
-            itemCount: topics.length + 1,
-            itemBuilder: (context, index) {
-              if (index == topics.length) {
-                final notifier = ref.watch(myTopicsProvider.notifier);
-                return PagedListFooter(
-                  hasMore: notifier.hasMore,
-                  isLoadingMore: notifier.isLoadingMore,
-                  isLoadMoreFailed: notifier.isLoadMoreFailed,
-                  onRetry: notifier.retryLoadMore,
-                );
-              }
+              controller: _scrollController,
+              padding: const EdgeInsets.all(12),
+              itemCount: topics.length + 1,
+              itemBuilder: (context, index) {
+                if (index == topics.length) {
+                  final notifier = ref.watch(myTopicsProvider.notifier);
+                  return PagedListFooter(
+                    hasMore: notifier.hasMore,
+                    isLoadingMore: notifier.isLoadingMore,
+                    isLoadMoreFailed: notifier.isLoadMoreFailed,
+                    onRetry: notifier.retryLoadMore,
+                  );
+                }
 
-              final topic = topics[index];
-              final enableLongPress = ref
-                  .watch(preferencesProvider)
-                  .longPressPreview;
-              return buildTopicItem(
-                context: context,
-                topic: topic,
-                isSelected: _canShowBothPanes && topic.id == selectedTopicId,
-                onTap: () => _onItemTap(topic),
-                enableLongPress: enableLongPress,
-              );
-            },
+                final topic = topics[index];
+                final enableLongPress = ref
+                    .watch(preferencesProvider)
+                    .longPressPreview;
+                return buildTopicItem(
+                  context: context,
+                  topic: topic,
+                  isSelected: _canShowBothPanes && topic.id == selectedTopicId,
+                  onTap: () => _onItemTap(topic),
+                  enableLongPress: enableLongPress,
+                );
+              },
             ),
           );
         },

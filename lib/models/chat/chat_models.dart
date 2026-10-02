@@ -37,12 +37,14 @@ class ChatChannelsState {
 
   factory ChatChannelsState.fromJson(Map<String, dynamic> json) {
     final membershipsMap = <int, Map<String, dynamic>>{};
-    final membershipsRaw = json['user_chat_channel_memberships'] ?? json['memberships'];
+    final membershipsRaw =
+        json['user_chat_channel_memberships'] ?? json['memberships'];
     if (membershipsRaw is List) {
       for (final m in membershipsRaw) {
         if (m is Map) {
           final map = Map<String, dynamic>.from(m);
-          final chId = (map['chat_channel_id'] as num?)?.toInt() ??
+          final chId =
+              (map['chat_channel_id'] as num?)?.toInt() ??
               (map['channel_id'] as num?)?.toInt();
           if (chId != null) {
             membershipsMap[chId] = map;
@@ -56,8 +58,11 @@ class ChatChannelsState {
     final tracking = _parseTracking(json['tracking']);
 
     return ChatChannelsState(
-      publicChannels:
-          _parseChannels(json['public_channels'], membershipsMap, tracking),
+      publicChannels: _parseChannels(
+        json['public_channels'],
+        membershipsMap,
+        tracking,
+      ),
       directMessageChannels: _parseChannels(
         json['direct_message_channels'],
         membershipsMap,
@@ -90,8 +95,8 @@ class ChatChannelsState {
     ChatChannel Function(ChatChannel) transform,
   ) {
     List<ChatChannel> mapList(List<ChatChannel> list) => [
-          for (final c in list) c.id == channelId ? transform(c) : c,
-        ];
+      for (final c in list) c.id == channelId ? transform(c) : c,
+    ];
     return copyWith(
       publicChannels: mapList(publicChannels),
       directMessageChannels: mapList(directMessageChannels),
@@ -158,9 +163,7 @@ class ChatChannelsState {
 
   static Map<String, int>? _parseMessageBusIds(dynamic ids) {
     if (ids is! Map) return null;
-    return ids.map(
-      (k, v) => MapEntry(k.toString(), (v as num).toInt()),
-    );
+    return ids.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
   }
 }
 

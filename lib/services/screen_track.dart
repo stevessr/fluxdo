@@ -10,8 +10,11 @@ import 'discourse/discourse_service.dart';
 /// [topicId] 话题 ID
 /// [postNumbers] 已上报的帖子编号集合
 /// [highestSeen] 最高已读帖子编号
-typedef OnTimingsSent =
-    void Function(int topicId, Set<int> postNumbers, int highestSeen);
+typedef OnTimingsSent = void Function(
+  int topicId,
+  Set<int> postNumbers,
+  int highestSeen,
+);
 
 /// 帖子浏览时间追踪服务
 class ScreenTrack {
@@ -123,7 +126,11 @@ class ScreenTrack {
         final candidateEnd = batchStart + _quickReadingBatchSize - 1;
         final batchEnd = candidateEnd < highest ? candidateEnd : highest;
         final timings = <int, int>{};
-        for (var postNumber = batchStart; postNumber <= batchEnd; postNumber++) {
+        for (
+          var postNumber = batchStart;
+          postNumber <= batchEnd;
+          postNumber++
+        ) {
           timings[postNumber] = _quickReadingPostTimeMs;
         }
 

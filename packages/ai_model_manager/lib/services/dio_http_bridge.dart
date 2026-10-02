@@ -43,18 +43,15 @@ class DioBackedHttpClient extends http.BaseClient {
       followRedirects: request.followRedirects,
       maxRedirects: request.maxRedirects,
       // 让 dio 自己根据请求 body 推断 Content-Length；显式 null 表示不强制
-      contentType: request.headers['content-type'] ??
-          request.headers['Content-Type'],
+      contentType:
+          request.headers['content-type'] ?? request.headers['Content-Type'],
     );
 
     final ResponseBody responseBody;
     try {
       responseBody = await _adapter.fetch(options, requestStream, null);
     } on DioException catch (e) {
-      throw http.ClientException(
-        e.message ?? e.toString(),
-        request.url,
-      );
+      throw http.ClientException(e.message ?? e.toString(), request.url);
     }
 
     final headers = _flattenHeaders(responseBody.headers);
@@ -168,7 +165,8 @@ class DioBackedHttpClient extends http.BaseClient {
   }
 
   static int? _parseContentLength(Map<String, List<String>> headers) {
-    final raw = headers['content-length']?.firstOrNull ??
+    final raw =
+        headers['content-length']?.firstOrNull ??
         headers['Content-Length']?.firstOrNull;
     if (raw == null) return null;
     return int.tryParse(raw);

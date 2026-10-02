@@ -40,8 +40,7 @@ void main() {
             listenable: HeroVisibilityController.instance,
             builder: (context, _) {
               final ctrl = HeroVisibilityController.instance;
-              final shouldHide =
-                  !ctrl.isPopping && ctrl.hiddenHeroTag == 'img';
+              final shouldHide = !ctrl.isPopping && ctrl.hiddenHeroTag == 'img';
               return Opacity(
                 opacity: shouldHide ? 0.0 : 1.0,
                 child: Hero(
@@ -93,9 +92,7 @@ void main() {
     });
   }
 
-  testWidgets('push 飞行中途 pop 打断:源端必须恢复可见(不留空洞)', (
-    tester,
-  ) async {
+  testWidgets('push 飞行中途 pop 打断:源端必须恢复可见(不留空洞)', (tester) async {
     final nav = GlobalKey<NavigatorState>();
     await tester.pumpWidget(buildApp(nav));
 
@@ -104,11 +101,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
 
     // 前提校验:此刻 push 飞行确实在途,且只构建过 push 方向的 shuttle
-    expect(
-      shuttleDirections,
-      ['push'],
-      reason: '前提:必须停在 push 飞行中途',
-    );
+    expect(shuttleDirections, ['push'], reason: '前提:必须停在 push 飞行中途');
 
     // ★ 飞行远未跑完就打断
     nav.currentState!.pop();

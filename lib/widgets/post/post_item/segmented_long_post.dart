@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluxdo_render/fluxdo_render.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
+
 import '../../../l10n/s.dart';
 import '../../../models/topic.dart';
 import '../../../providers/preferences_provider.dart';
@@ -132,9 +133,8 @@ class NewEngineLongPostData {
     final attrs = _attrsString(root); // 保留原 class 等属性
 
     // callout 识别:首行 [!type]([+-] = 可折叠 → 不拆)。
-    final callout = RegExp(
-      r'^\[!([^\]]+)\]([+-])?',
-    ).firstMatch(root.text.trimLeft());
+    final callout = RegExp(r'^\[!([^\]]+)\]([+-])?')
+        .firstMatch(root.text.trimLeft());
     if (callout != null) {
       if (callout.group(2) != null) return [whole()]; // 可折叠不拆
       final kind = callout.group(1)!.trim().toLowerCase();
@@ -241,61 +241,62 @@ class NewEngineChunkSegment extends ConsumerWidget {
       '${(chunk.html.length / 1000).toStringAsFixed(1)}k',
     );
     Widget content = FluxdoRender(
-          cookedHtml: chunk.html,
-          parsedNodes: parsedNodes,
-          // 正文字号注入 contentFontScale(与 PostItem 短帖路径一致):
-          // 不传时 NodeFactory 回退 theme.bodyMedium,长帖 chunk 的字号设置失效。
-          baseTextStyle: theme.textTheme.bodyMedium?.copyWith(
-            height: 1.5,
-            fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) *
-                ref.watch(preferencesProvider).contentFontScale,
+      cookedHtml: chunk.html,
+      parsedNodes: parsedNodes,
+      // 正文字号注入 contentFontScale(与 PostItem 短帖路径一致):
+      // 不传时 NodeFactory 回退 theme.bodyMedium,长帖 chunk 的字号设置失效。
+      baseTextStyle: theme.textTheme.bodyMedium?.copyWith(
+        height: 1.5,
+        fontSize:
+            (theme.textTheme.bodyMedium?.fontSize ?? 14) *
+            ref.watch(preferencesProvider).contentFontScale,
+      ),
+      imageIndexOffset: imageIndexOffset,
+      footnotesHtml: footnotesHtml,
+      // 同 post 各 chunk 共享一个选区作用域 → 选区可跨 chunk。
+      selectionScopeId: post.id,
+      // chunk 文档序号 → 跨 chunk 选区按 (chunkIndex, docOrder) 逻辑序排序。
+      chunkIndex: chunkIndex,
+      // 被分块切断的单段落接缝:裁掉接缝侧外边距 → 与连续渲染无缝拼接。
+      trimTopMargin: chunk.joinsPrevious,
+      trimBottomMargin: chunk.joinsNext,
+      linkHandler: callbacks.linkHandler,
+      emojiImageBuilder: callbacks.emojiImageBuilder,
+      mentionTapHandler: callbacks.mentionTapHandler,
+      imageContentBuilder: callbacks.imageContentBuilder,
+      codeBlockHighlighter: callbacks.codeBlockHighlighter,
+      codeBlockBuilder: callbacks.codeBlockBuilder,
+      quoteAvatarBuilder: callbacks.quoteAvatarBuilder,
+      footnoteTapHandler: callbacks.footnoteTapHandler,
+      lazyVideoBuilder: callbacks.lazyVideoBuilder,
+      iframeBuilder: callbacks.iframeBuilder,
+      localDateBuilder: callbacks.localDateBuilder,
+      mathBlockBuilder: callbacks.mathBlockBuilder,
+      mathInlineBuilder: callbacks.mathInlineBuilder,
+      oneboxBuilder: callbacks.oneboxBuilder,
+      imageGridBuilder: callbacks.imageGridBuilder,
+      policyBuilder: callbacks.policyBuilder,
+      pollBuilder: callbacks.pollBuilder,
+      chatTranscriptBuilder: callbacks.chatTranscriptBuilder,
+      svgBuilder: callbacks.svgBuilder,
+      videoBuilder: callbacks.videoBuilder,
+      audioBuilder: callbacks.audioBuilder,
+      onDownloadAttachment: callbacks.onDownloadAttachment,
+      // 自研选区恒开(外层系统 SelectionArea 已拆):未登录时
+      // onQuoteRequest 为 null,toolbar 自动降级只留「复制/复制引用」。
+      selectionEnabled: true,
+      onQuoteRequest: onQuoteSelection == null
+          ? null
+          : (plainText) => onQuoteSelection!(plainText, post),
+      onCopyQuoteRequest: (plainText) =>
+          QuoteSelectionHelper.copyQuoteToClipboard(
+            selectedText: plainText,
+            post: post,
+            topicId: topicId,
           ),
-          imageIndexOffset: imageIndexOffset,
-          footnotesHtml: footnotesHtml,
-          // 同 post 各 chunk 共享一个选区作用域 → 选区可跨 chunk。
-          selectionScopeId: post.id,
-          // chunk 文档序号 → 跨 chunk 选区按 (chunkIndex, docOrder) 逻辑序排序。
-          chunkIndex: chunkIndex,
-          // 被分块切断的单段落接缝:裁掉接缝侧外边距 → 与连续渲染无缝拼接。
-          trimTopMargin: chunk.joinsPrevious,
-          trimBottomMargin: chunk.joinsNext,
-          linkHandler: callbacks.linkHandler,
-          emojiImageBuilder: callbacks.emojiImageBuilder,
-          mentionTapHandler: callbacks.mentionTapHandler,
-          imageContentBuilder: callbacks.imageContentBuilder,
-          codeBlockHighlighter: callbacks.codeBlockHighlighter,
-          codeBlockBuilder: callbacks.codeBlockBuilder,
-          quoteAvatarBuilder: callbacks.quoteAvatarBuilder,
-          footnoteTapHandler: callbacks.footnoteTapHandler,
-          lazyVideoBuilder: callbacks.lazyVideoBuilder,
-          iframeBuilder: callbacks.iframeBuilder,
-          localDateBuilder: callbacks.localDateBuilder,
-          mathBlockBuilder: callbacks.mathBlockBuilder,
-          mathInlineBuilder: callbacks.mathInlineBuilder,
-          oneboxBuilder: callbacks.oneboxBuilder,
-          imageGridBuilder: callbacks.imageGridBuilder,
-          policyBuilder: callbacks.policyBuilder,
-          pollBuilder: callbacks.pollBuilder,
-          chatTranscriptBuilder: callbacks.chatTranscriptBuilder,
-          svgBuilder: callbacks.svgBuilder,
-          videoBuilder: callbacks.videoBuilder,
-          audioBuilder: callbacks.audioBuilder,
-          onDownloadAttachment: callbacks.onDownloadAttachment,
-          // 自研选区恒开(外层系统 SelectionArea 已拆):未登录时
-          // onQuoteRequest 为 null,toolbar 自动降级只留「复制/复制引用」。
-          selectionEnabled: true,
-          onQuoteRequest: onQuoteSelection == null
-              ? null
-              : (plainText) => onQuoteSelection!(plainText, post),
-          onCopyQuoteRequest: (plainText) =>
-              QuoteSelectionHelper.copyQuoteToClipboard(
-                selectedText: plainText,
-                post: post,
-                topicId: topicId,
-              ),
-          onCopyToast: () =>
-              ToastService.showSuccess(context.l10n.common_copiedToClipboard),
-        );
+      onCopyToast: () =>
+          ToastService.showSuccess(context.l10n.common_copiedToClipboard),
+    );
 
     // 首 chunk 弹幕层(与 PostItem 的短帖路径同一套开关判定)
     if (chunkIndex == 0) {
@@ -358,9 +359,8 @@ class NewEngineChunkSegment extends ConsumerWidget {
     );
     if (!danmakuPref) return null;
     final danmakuOff = ref.watch(
-      topicSessionProvider(
-        topicId,
-      ).select((s) => s.danmakuOffPostIds.contains(post.id)),
+      topicSessionProvider(topicId)
+          .select((s) => s.danmakuOffPostIds.contains(post.id)),
     );
     if (danmakuOff) return null;
     final blockedUsernames = ref.watch(
@@ -419,9 +419,8 @@ class LongPostHeaderSegment extends ConsumerWidget {
       ).isNotEmpty;
       if (hasBoosts) {
         final danmakuOff = ref.watch(
-          topicSessionProvider(
-            topicId,
-          ).select((s) => s.danmakuOffPostIds.contains(post.id)),
+          topicSessionProvider(topicId)
+              .select((s) => s.danmakuOffPostIds.contains(post.id)),
         );
         danmakuActive = !danmakuOff;
         onToggleDanmaku = () => ref
@@ -531,9 +530,8 @@ class LongPostFooterSegment extends ConsumerWidget {
       ).isNotEmpty;
       if (hasBoosts) {
         danmakuActive = !ref.watch(
-          topicSessionProvider(
-            topicId,
-          ).select((s) => s.danmakuOffPostIds.contains(post.id)),
+          topicSessionProvider(topicId)
+              .select((s) => s.danmakuOffPostIds.contains(post.id)),
         );
       }
     }

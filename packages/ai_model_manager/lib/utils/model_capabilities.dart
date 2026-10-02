@@ -127,7 +127,8 @@ class ModelCapabilities {
       if (!input.contains(Modality.image)) input.add(Modality.image);
     }
     // 推理
-    if (_reasoning.hasMatch(id) && !abilities.contains(ModelAbility.reasoning)) {
+    if (_reasoning.hasMatch(id) &&
+        !abilities.contains(ModelAbility.reasoning)) {
       abilities.add(ModelAbility.reasoning);
     }
     // 工具
@@ -135,11 +136,7 @@ class ModelCapabilities {
       abilities.add(ModelAbility.tool);
     }
 
-    return base.copyWith(
-      input: input,
-      output: output,
-      abilities: abilities,
-    );
+    return base.copyWith(input: input, output: output, abilities: abilities);
   }
 
   /// 是否为嵌入模型

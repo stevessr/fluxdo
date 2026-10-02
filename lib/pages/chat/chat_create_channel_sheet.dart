@@ -94,9 +94,8 @@ class _ChatCreateChannelBodyState
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final categoryId = _categoryId;
     if (categoryId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请选择分类')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请选择分类')));
       return;
     }
 
@@ -130,9 +129,8 @@ class _ChatCreateChannelBodyState
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('创建失败: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('创建失败: $e')));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -252,6 +250,7 @@ class _ChatCreateChannelBodyState
                       flat.add(c);
                     }
                   }
+
                   walk(categories);
                   return DropdownButtonFormField<int>(
                     // ignore: deprecated_member_use

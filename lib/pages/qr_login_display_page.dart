@@ -10,6 +10,7 @@ import '../services/qr_login_service.dart';
 import '../services/toast_service.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/time_utils.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
 
 /// 可选 API Key 有效期预设。
@@ -231,8 +232,7 @@ class _QrLoginDisplayPageState extends State<QrLoginDisplayPage> {
 
   Future<void> _generate() async {
     final expiresIn = _resolveExpiresIn();
-    if (_isCustomExpiry &&
-        (expiresIn == null || expiresIn.inSeconds <= 0)) {
+    if (_isCustomExpiry && (expiresIn == null || expiresIn.inSeconds <= 0)) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -412,7 +412,8 @@ class _QrLoginDisplayPageState extends State<QrLoginDisplayPage> {
                     ),
                     const SizedBox(height: 20),
                   ],
-                  if (_approved || _loading) _buildQrCard(theme, scheme, expired),
+                  if (_approved || _loading)
+                    _buildQrCard(theme, scheme, expired),
                   if (payload != null && !expired && !payload.neverExpires) ...[
                     const SizedBox(height: 20),
                     Text(
@@ -785,9 +786,8 @@ class _CustomExpiryDialogState extends State<_CustomExpiryDialog> {
       children: [
         Text(
           l10n.login_qrExpiryCustomHint,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
         Row(
@@ -894,10 +894,7 @@ class _CustomExpiryDialogState extends State<_CustomExpiryDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.common_cancel),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text(l10n.common_confirm),
-        ),
+        FilledButton(onPressed: _submit, child: Text(l10n.common_confirm)),
       ],
     );
   }

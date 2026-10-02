@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:html/parser.dart' as html_parser;
+
 import 'auth_session.dart';
 import 'network/discourse_dio.dart';
 import 'network/exceptions/oauth_exception.dart';

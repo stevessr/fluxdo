@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide Badge;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import '../models/badge.dart';
 import '../services/discourse/discourse_service.dart';
 import '../widgets/common/relative_time_text.dart';
@@ -8,7 +9,9 @@ import '../utils/font_awesome_helper.dart';
 import '../services/discourse_cache_manager.dart';
 import '../utils/url_helper.dart';
 import '../widgets/common/error_view.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../widgets/common/smart_avatar.dart';
 import '../widgets/badge/badge_ui_utils.dart';
 import '../utils/fluxdo_render_callbacks.dart';
@@ -19,6 +22,7 @@ import '../widgets/layout/master_detail_pane_host.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 import 'user_profile_page.dart';
 import '../l10n/s.dart';
+
 import 'package:app_icons/app_icons.dart';
 
 /// 徽章详情页面
@@ -145,9 +149,9 @@ class _BadgePageState extends ConsumerState<BadgePage> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainerHighest,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -174,17 +178,16 @@ class _BadgePageState extends ConsumerState<BadgePage> {
                                 Icon(
                                   Symbols.person_off_rounded,
                                   size: 48,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.outline.withValues(alpha: 0.5),
+                                  color: Theme.of(context).colorScheme.outline
+                                      .withValues(alpha: 0.5),
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
                                   context.l10n.badge_noGrantees,
                                   style: TextStyle(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outline,
                                   ),
                                 ),
                               ],
@@ -354,16 +357,19 @@ class _BadgeInfoCard extends StatelessWidget {
                 ),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: FluxdoRenderCallbacks.generic(
-                heroTagNamespace: 'badge_${badge.id}_longdesc',
-              ).render(
-                cookedHtml: EmojiHandler().replaceEmojis(badge.longDescription!),
-                baseTextStyle: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  height: 1.5,
-                ),
-                selectionEnabled: false,
-              ),
+              child:
+                  FluxdoRenderCallbacks.generic(
+                    heroTagNamespace: 'badge_${badge.id}_longdesc',
+                  ).render(
+                    cookedHtml: EmojiHandler().replaceEmojis(
+                      badge.longDescription!,
+                    ),
+                    baseTextStyle: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.5,
+                    ),
+                    selectionEnabled: false,
+                  ),
             ),
           ],
 
@@ -537,9 +543,10 @@ class _UserBadgeItem extends StatelessWidget {
   void _navigateToUser(BuildContext context) {
     // 宽屏进本页右栏,窄屏全屏 push(平行视界宿主标准分流)。
     if (MasterDetailLayout.canShowBothPanesFor(context)) {
-      ProviderScope.containerOf(context, listen: false)
-          .read(selectedBadgePaneProvider.notifier)
-          .selectProfile(user.username);
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(selectedBadgePaneProvider.notifier).selectProfile(user.username);
       return;
     }
     Navigator.push(

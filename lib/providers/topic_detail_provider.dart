@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../l10n/s.dart';
 import '../models/topic.dart';
 import '../models/pending_post.dart';
@@ -107,6 +108,7 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
   bool get isSummaryMode => _filter == 'summary';
   bool get isActivityMode => _filter == 'activity';
   bool get isAuthorOnlyMode => _usernameFilter != null;
+
   /// 当前按用户过滤的用户名(null = 未启用)。isAuthorOnlyMode 历史上
   /// 只用于楼主,现已泛化为任意参与者,靠这个字段区分过滤对象。
   String? get usernameFilter => _usernameFilter;

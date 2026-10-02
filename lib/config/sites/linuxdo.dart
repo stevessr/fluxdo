@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../site_customization.dart';
 import '../../plugins/character_counts/character_counts_plugin.dart';
 import '../../plugins/reply_cost/reply_cost_plugin.dart';
@@ -12,10 +13,7 @@ final linuxdoCustomization = SiteCustomization(
       primaryGroupName: 'g-merchant',
       glowColor: Color(0xFFF5BF03),
     ),
-    AvatarGlowRule(
-      username: 'neo',
-      glowColor: Color(0xFF00AEFF),
-    ),
+    AvatarGlowRule(username: 'neo', glowColor: Color(0xFF00AEFF)),
   ],
   userTitleStyleRules: [
     UserTitleStyleRule(

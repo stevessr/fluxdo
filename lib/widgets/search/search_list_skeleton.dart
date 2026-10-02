@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../common/skeleton.dart';
 
 /// 搜索结果列表骨架屏 — 匹配 SearchPostCard 的标题置顶布局:

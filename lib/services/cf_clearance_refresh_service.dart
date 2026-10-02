@@ -281,49 +281,64 @@ class CfClearanceRefreshService {
     if (!_canStartGeneration(gen)) return;
 
     final originLoadCompleter = Completer<void>();
-    final webView = HeadlessInAppWebView(
-      webViewEnvironment: io.Platform.isWindows
-          ? WindowsWebViewEnvironmentService.instance.environment
-          : null,
-      initialSettings: WebViewSettings.headlessCf,
-      initialUserScripts: WebViewSettings.compatPolyfillScripts,
-      onReceivedServerTrustAuthRequest: (_, challenge) =>
-          WebViewSettings.handleServerTrustAuthRequest(challenge),
-      onWebViewCreated: (controller) {
-        if (!_canHandleGeneration(gen)) {
-          CfChallengeLogger.log(
-            '[CfRefresh] 忽略过期 WebView 创建回调: gen=$gen current=$_generation',
-          );
-          return;
-        }
-        _webViewController = controller;
-        WebViewSettings.applyWindowsHeadlessMemoryTarget(controller);
-        WebViewSettings.registerJsErrorReporter(controller);
-        _registerJavaScriptHandlers(controller, gen);
-      },
-      onLoadStop: (_, url) {
-        final isInitialOriginLoad =
-            !originLoadCompleter.isCompleted &&
-            _isAppOriginUrl(url?.toString());
-        if (isInitialOriginLoad) {
-          // 首次真实 HTML load_stop 只负责解除等待。此时尚未判断页面是否
-          // 承载 Precursor/JSD，不能抢先用普通同步把新值判成“健康异值”。
-          originLoadCompleter.complete();
-        }
-        if (_canHandleGeneration(gen)) {
-          _lastSignalAt = DateTime.now();
-          if (!isInitialOriginLoad) {
-            unawaited(_syncAndCheckCookies('load_stop', gen));
+    late final HeadlessInAppWebView webView;
+    try {
+      webView = HeadlessInAppWebView(
+        webViewEnvironment: io.Platform.isWindows
+            ? WindowsWebViewEnvironmentService.instance.environment
+            : null,
+        initialSettings: WebViewSettings.headlessCf,
+        initialUserScripts: WebViewSettings.compatPolyfillScripts,
+        onReceivedServerTrustAuthRequest: (_, challenge) =>
+            WebViewSettings.handleServerTrustAuthRequest(challenge),
+        onWebViewCreated: (controller) {
+          if (!_canHandleGeneration(gen)) {
+            CfChallengeLogger.log(
+              '[CfRefresh] 忽略过期 WebView 创建回调: gen=$gen current=$_generation',
+            );
+            return;
           }
-          debugPrint('[CfRefresh] WebView load stop: $url');
-        }
-      },
-      onReceivedError: (_, request, error) {
-        debugPrint(
-          '[CfRefresh] WebView 错误: url=${request.url}, ${error.description}',
-        );
-      },
-    );
+          _webViewController = controller;
+          WebViewSettings.applyWindowsHeadlessMemoryTarget(controller);
+          WebViewSettings.registerJsErrorReporter(controller);
+          _registerJavaScriptHandlers(controller, gen);
+        },
+        onLoadStop: (_, url) {
+          final isInitialOriginLoad =
+              !originLoadCompleter.isCompleted &&
+              _isAppOriginUrl(url?.toString());
+          if (isInitialOriginLoad) {
+            // 首次真实 HTML load_stop 只负责解除等待。此时尚未判断页面是否
+            // 承载 Precursor/JSD，不能抢先用普通同步把新值判成“健康异值”。
+            originLoadCompleter.complete();
+          }
+          if (_canHandleGeneration(gen)) {
+            _lastSignalAt = DateTime.now();
+            if (!isInitialOriginLoad) {
+              unawaited(_syncAndCheckCookies('load_stop', gen));
+            }
+            debugPrint('[CfRefresh] WebView load stop: $url');
+          }
+        },
+        onReceivedError: (_, request, error) {
+          debugPrint(
+            '[CfRefresh] WebView 错误: url=${request.url}, ${error.description}',
+          );
+        },
+      );
+    } on UnimplementedError catch (e) {
+      _shouldBeRunning = false;
+      debugPrint('[CfRefresh] 当前平台不支持 Headless WebView，停止自动续期: $e');
+      CfChallengeLogger.log(
+        '[CfRefresh] 当前平台不支持 Headless WebView，停止自动续期: $e',
+      );
+      return;
+    } catch (e) {
+      debugPrint('[CfRefresh] 创建 Headless WebView 失败: $e');
+      CfChallengeLogger.log('[CfRefresh] 创建 Headless WebView 失败: $e');
+      _recordFailure('create_failed', gen: gen, restart: true);
+      return;
+    }
 
     _headlessWebView = webView;
     _isRunning = true;
@@ -345,11 +360,11 @@ class CfClearanceRefreshService {
       // 先记录导航前浏览器存储中所有已有 clearance，后续只把新出现的
       // 精确值视为本轮浏览器会话新铸值，避免历史 CHIPS 副本冒充 rotation。
       try {
-        _knownBrowserClearanceValues =
-            await BoundarySyncService.instance.readCookieValuesFromWebView(
-          name: _cookieName,
-          currentUrl: AppConstants.baseUrl,
-        );
+        _knownBrowserClearanceValues = await BoundarySyncService.instance
+            .readCookieValuesFromWebView(
+              name: _cookieName,
+              currentUrl: AppConstants.baseUrl,
+            );
         // 本服务只在 jar 已有 clearance 时启动。priming 后仍读不到任何
         // browser 值，说明这个平台无法建立可靠的“导航前”基线；此时关闭
         // 主动 rotation，宁可交给既有 403/429 challenge 自愈。
@@ -377,8 +392,9 @@ class CfClearanceRefreshService {
       }
       if (!_canHandleGeneration(gen)) return;
 
-      _browserSessionVerificationActive =
-          await _waitForClientSideVerification(controller);
+      _browserSessionVerificationActive = await _waitForClientSideVerification(
+        controller,
+      );
       if (_browserSessionVerificationActive) {
         CfChallengeLogger.log(
           '[CfRefresh] 检测到 Cloudflare client verification，'
@@ -738,16 +754,15 @@ document.close();
     // 后自然补上。初始 Turnstile 运行期(_initialTimer 未清)只恢复不
     // 挂起,避免把首次验证拖到超时误判重建。
     if (io.Platform.isAndroid) {
-      _scrollPauseTicker = Timer.periodic(
-        const Duration(milliseconds: 500),
-        (_) {
-          if (!_canHandleGeneration(gen)) {
-            _scrollPauseTicker?.cancel();
-            return;
-          }
-          unawaited(_updateScrollPause());
-        },
-      );
+      _scrollPauseTicker = Timer.periodic(const Duration(milliseconds: 500), (
+        _,
+      ) {
+        if (!_canHandleGeneration(gen)) {
+          _scrollPauseTicker?.cancel();
+          return;
+        }
+        unawaited(_updateScrollPause());
+      });
     }
   }
 
@@ -781,13 +796,12 @@ document.close();
     _isSyncingCookies = true;
     try {
       String? freshBrowserClearance;
-      if (_browserSessionVerificationActive &&
-          _browserClearanceBaselineReady) {
-        final observed =
-            await BoundarySyncService.instance.readCookieValuesFromWebView(
-          name: _cookieName,
-          currentUrl: AppConstants.baseUrl,
-        );
+      if (_browserSessionVerificationActive && _browserClearanceBaselineReady) {
+        final observed = await BoundarySyncService.instance
+            .readCookieValuesFromWebView(
+              name: _cookieName,
+              currentUrl: AppConstants.baseUrl,
+            );
         final freshValues = observed.difference(_knownBrowserClearanceValues);
         _knownBrowserClearanceValues.addAll(observed);
 

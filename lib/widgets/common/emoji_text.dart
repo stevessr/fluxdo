@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../services/emoji_handler.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../utils/emoji_shortcodes.dart';

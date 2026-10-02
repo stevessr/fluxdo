@@ -44,9 +44,9 @@ void main() {
                         .any((i) => i.id == 'dialogBlur'),
                     isTrue,
                   );
-                  final bottomItems = buildBottomNavGroups(
-                    context,
-                  ).expand((g) => g.items).toList();
+                  final bottomItems = buildBottomNavGroups(context)
+                      .expand((g) => g.items)
+                      .toList();
                   expect(
                     bottomItems.any((i) => i.id == 'bottomNavFloatingBlur'),
                     isFalse,

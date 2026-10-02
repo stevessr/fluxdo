@@ -13,7 +13,8 @@ class _RecordingAdapter implements HttpClientAdapter {
   final Future<ResponseBody> Function(
     RequestOptions options,
     Stream<Uint8List>? requestStream,
-  ) _respond;
+  )
+  _respond;
 
   RequestOptions? lastOptions;
   List<int>? lastBody;
@@ -61,8 +62,7 @@ void main() {
       );
 
       expect(adapter.lastOptions!.method, 'GET');
-      expect(adapter.lastOptions!.path,
-          'https://api.example.com/v1/hello?x=1');
+      expect(adapter.lastOptions!.path, 'https://api.example.com/v1/hello?x=1');
       expect(adapter.lastOptions!.headers['authorization'], 'Bearer abc');
       expect(adapter.lastOptions!.headers['x-test'], '1');
       expect(response.statusCode, 200);
@@ -72,8 +72,12 @@ void main() {
 
     test('POST 把 body 流式透传到 adapter', () async {
       final adapter = _RecordingAdapter((_, __) async {
-        return ResponseBody.fromString('{}', 201,
-            headers: {}, statusMessage: 'Created');
+        return ResponseBody.fromString(
+          '{}',
+          201,
+          headers: {},
+          statusMessage: 'Created',
+        );
       });
       final client = DioBackedHttpClient(adapter);
 
@@ -124,8 +128,12 @@ void main() {
 
     test('4xx 不抛错，状态码原样返回', () async {
       final adapter = _RecordingAdapter((_, __) async {
-        return ResponseBody.fromString('unauthorized', 401,
-            headers: {}, statusMessage: 'Unauthorized');
+        return ResponseBody.fromString(
+          'unauthorized',
+          401,
+          headers: {},
+          statusMessage: 'Unauthorized',
+        );
       });
       final client = DioBackedHttpClient(adapter);
 
@@ -137,9 +145,13 @@ void main() {
 
     test('多值响应头按逗号合并', () async {
       final adapter = _RecordingAdapter((_, __) async {
-        return ResponseBody.fromString('ok', 200, headers: {
-          'set-cookie': ['a=1', 'b=2'],
-        });
+        return ResponseBody.fromString(
+          'ok',
+          200,
+          headers: {
+            'set-cookie': ['a=1', 'b=2'],
+          },
+        );
       });
       final client = DioBackedHttpClient(adapter);
 

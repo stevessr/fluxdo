@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../../../constants.dart';
 import '../../../../utils/layout_lock.dart';
 import '../../../../utils/url_helper.dart';
@@ -217,9 +218,8 @@ class _IframeWidgetState extends State<IframeWidget> with RouteAware {
       onRevoked: _deactivateWindowsWebView,
     );
     if (lease == null) {
-      ScaffoldMessenger.maybeOf(
-        context,
-      )?.showSnackBar(SnackBar(content: Text(S.current.common_pleaseWait)));
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text(S.current.common_pleaseWait)));
       return;
     }
     _browserLease = lease;

@@ -234,9 +234,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       return Center(
         child: Text(
           _emptyLabel(context),
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          style: Theme.of(context).textTheme.bodyLarge
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       );
     }
@@ -319,9 +318,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           Text('${local.month}', style: Theme.of(context).textTheme.labelSmall),
           Text(
             '${local.day}',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
         ],
       ),

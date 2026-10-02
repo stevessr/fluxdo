@@ -300,16 +300,12 @@ class _ErrorViewState extends State<ErrorView> {
   }
 
   void _openNetworkSettings(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const NetworkSettingsPage()));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const NetworkSettingsPage()));
   }
 
   void _showErrorDetails(BuildContext context) {
-    final details = ErrorUtils.getErrorDetails(
-      widget.error,
-      widget.stackTrace,
-    );
+    final details = ErrorUtils.getErrorDetails(widget.error, widget.stackTrace);
 
     showAppBottomSheet(
       context: context,
@@ -616,10 +612,7 @@ class _HelperAction extends StatelessWidget {
               width: 20,
               height: 20,
               child: isLoading
-                  ? CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: color,
-                    )
+                  ? CircularProgressIndicator(strokeWidth: 2, color: color)
                   : Icon(icon, size: 20, color: color),
             ),
             const SizedBox(height: 6),

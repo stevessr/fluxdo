@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../utils/platform_utils.dart';
 
 import 'composer_tool_style.dart';

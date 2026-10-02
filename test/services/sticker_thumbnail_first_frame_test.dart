@@ -58,12 +58,18 @@ void main() {
     final loader = StickerThumbnailFirstFrameLoader();
     final decode = Completer<ui.Image>();
     var keepWarming = true;
-    final warm = loader.load('a', visible: false,
-        shouldContinue: () => keepWarming,
-        decode: () => decode.future, cache: (_) async {});
-    final visible = loader.load('a',
-        decode: () async => throw StateError('不应再次解码'),
-        cache: (_) async {});
+    final warm = loader.load(
+      'a',
+      visible: false,
+      shouldContinue: () => keepWarming,
+      decode: () => decode.future,
+      cache: (_) async {},
+    );
+    final visible = loader.load(
+      'a',
+      decode: () async => throw StateError('不应再次解码'),
+      cache: (_) async {},
+    );
     keepWarming = false;
     final original = await makeImage();
     decode.complete(original);

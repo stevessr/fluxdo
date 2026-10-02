@@ -49,10 +49,8 @@ List<SettingsGroup> buildNetworkGroups(BuildContext context) {
           id: 'customHosts',
           title: l10n.customHosts_title,
           subtitle: l10n.customHosts_subtitle,
-          builder: (context, ref) => const SizedBox(
-            width: double.infinity,
-            child: CustomHostsCard(),
-          ),
+          builder: (context, ref) =>
+              const SizedBox(width: double.infinity, child: CustomHostsCard()),
         ),
         CustomModel(
           id: 'httpProxy',

@@ -36,9 +36,8 @@ class _CustomHostsCardState extends State<CustomHostsCard> {
 
         return SegmentedCardGroup(
           color: hasHosts
-              ? Theme.of(
-                  context,
-                ).colorScheme.primaryContainer.withValues(alpha: 0.3)
+              ? Theme.of(context).colorScheme.primaryContainer
+                    .withValues(alpha: 0.3)
               : null,
           children: [
             ListTile(
@@ -87,9 +86,9 @@ class _CustomHostsCardState extends State<CustomHostsCard> {
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                           ),
                         ),

@@ -2867,7 +2867,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     });
   }
 
-  Future<void> _showTableStructureMenu(String tableId, bool row, Rect anchor) async {
+  Future<void> _showTableStructureMenu(
+    String tableId,
+    bool row,
+    Rect anchor,
+  ) async {
     final target = _tableContext.value;
     if (target == null || target.tableId != tableId) return;
     final releaseChrome = ComposerChromeScope.maybeOf(context)?.hold();
@@ -4028,8 +4032,18 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                                             // cook 替换
                                             onTableEdited: _onTableEdited,
                                             onTableCommit: _onTableEdited,
-                                            tableStructureControlsBuilder: _isDesktop ? null : (context, cell, open) => ComposerTableControls(cell: cell, onOpen: open),
-                                            onTableStructureMenuRequested: _isDesktop ? null : _showTableStructureMenu,
+                                            tableStructureControlsBuilder:
+                                                _isDesktop
+                                                ? null
+                                                : (context, cell, open) =>
+                                                      ComposerTableControls(
+                                                        cell: cell,
+                                                        onOpen: open,
+                                                      ),
+                                            onTableStructureMenuRequested:
+                                                _isDesktop
+                                                ? null
+                                                : _showTableStructureMenu,
                                             onTableContextChanged: _isDesktop
                                                 ? null
                                                 : _updateTableContext,
@@ -4283,7 +4297,6 @@ void toggleInlineSpoilerOn(EditorState state) {
 /// 富 composer 面板类型(ChatBottomPanelContainer 泛型)。
 enum _RichPanelType { none, keyboard, emoji }
 
-
 class _RichToolbar extends StatefulWidget {
   const _RichToolbar({
     required this.state,
@@ -4534,19 +4547,27 @@ class _RichToolbarState extends State<_RichToolbar> {
             ? child!
             : Tooltip(
                 message: context.l10n.editor.table_format_unavailable,
-                child: ExcludeFocus(child: AbsorbPointer(
-                  child: Opacity(opacity: .45, child: Row(
-                    key: const ValueKey('table-format-tools'),
-                    children: [
-                      _buildEmojiButton(theme),
-                      Expanded(child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(children: _buildMiddleTools(theme)),
-                      )),
-                      if (widget.onToggleTools != null) _buildToolsButton(theme),
-                    ],
-                  )),
-                )),
+                child: ExcludeFocus(
+                  child: AbsorbPointer(
+                    child: Opacity(
+                      opacity: .45,
+                      child: Row(
+                        key: const ValueKey('table-format-tools'),
+                        children: [
+                          _buildEmojiButton(theme),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(children: _buildMiddleTools(theme)),
+                            ),
+                          ),
+                          if (widget.onToggleTools != null)
+                            _buildToolsButton(theme),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
         child: ValueListenableBuilder<ComposerObjectSelection?>(
           valueListenable: widget.objectSelection,

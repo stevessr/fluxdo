@@ -9,8 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('models tab reorder callback persists duplicate model ids',
-      (tester) async {
+  testWidgets('models tab reorder callback persists duplicate model ids', (
+    tester,
+  ) async {
     final provider = AiProvider(
       id: 'provider-1',
       name: 'Test Provider',
@@ -31,12 +32,8 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          aiSharedPreferencesProvider.overrideWithValue(prefs),
-        ],
-        child: MaterialApp(
-          home: AiProviderEditPage(provider: provider),
-        ),
+        overrides: [aiSharedPreferencesProvider.overrideWithValue(prefs)],
+        child: MaterialApp(home: AiProviderEditPage(provider: provider)),
       ),
     );
     await tester.pumpAndSettle();
@@ -53,8 +50,9 @@ void main() {
     expect(modelCFinder, findsOneWidget);
     expect(find.byType(ReorderableDelayedDragStartListener), findsNWidgets(3));
 
-    final reorderableList =
-        tester.widget<ReorderableListView>(find.byType(ReorderableListView));
+    final reorderableList = tester.widget<ReorderableListView>(
+      find.byType(ReorderableListView),
+    );
     reorderableList.onReorderItem!(2, 0);
     await tester.pumpAndSettle();
 

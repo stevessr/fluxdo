@@ -1,6 +1,7 @@
 // ignore_for_file: unnecessary_null_comparison, always_put_control_body_on_new_line
 
 import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 
@@ -127,17 +128,15 @@ class ExtendedRenderSliverFillViewport
       scrollOffset,
       itemExtent,
     );
-    final int? targetLastIndex =
-        targetEndScrollOffset.isFinite
-            ? getMaxChildIndexForScrollOffset(targetEndScrollOffset, itemExtent)
-            : null;
+    final int? targetLastIndex = targetEndScrollOffset.isFinite
+        ? getMaxChildIndexForScrollOffset(targetEndScrollOffset, itemExtent)
+        : null;
 
     if (firstChild != null) {
       final int leadingGarbage = _calculateLeadingGarbage(firstIndex);
-      final int trailingGarbage =
-          targetLastIndex != null
-              ? _calculateTrailingGarbage(targetLastIndex)
-              : 0;
+      final int trailingGarbage = targetLastIndex != null
+          ? _calculateTrailingGarbage(targetLastIndex)
+          : 0;
       collectGarbage(leadingGarbage, trailingGarbage);
     } else {
       collectGarbage(0, 0);
@@ -270,13 +269,12 @@ class ExtendedRenderSliverFillViewport
 
     final double targetEndScrollOffsetForPaint =
         constraints.scrollOffset + constraints.remainingPaintExtent;
-    final int? targetLastIndexForPaint =
-        targetEndScrollOffsetForPaint.isFinite
-            ? getMaxChildIndexForScrollOffset(
-              targetEndScrollOffsetForPaint,
-              itemExtent,
-            )
-            : null;
+    final int? targetLastIndexForPaint = targetEndScrollOffsetForPaint.isFinite
+        ? getMaxChildIndexForScrollOffset(
+            targetEndScrollOffsetForPaint,
+            itemExtent,
+          )
+        : null;
     geometry = SliverGeometry(
       scrollExtent: estimatedMaxScrollOffset,
       paintExtent: paintExtent,

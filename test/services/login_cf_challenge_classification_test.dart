@@ -63,7 +63,9 @@ void main() {
       final response = Response<dynamic>(
         requestOptions: request,
         statusCode: 403,
-        data: {'errors': ['You are not permitted to view this resource.']},
+        data: {
+          'errors': ['You are not permitted to view this resource.'],
+        },
         headers: Headers.fromMap({
           'content-type': ['application/json'],
         }),

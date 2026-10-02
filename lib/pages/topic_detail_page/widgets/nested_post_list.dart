@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../../l10n/s.dart';
 import '../../../models/nested_topic.dart';
 import '../../../models/topic.dart';
@@ -407,9 +408,7 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
           // 帖子流末尾的推荐区(同平铺视图,根节点全部加载完才出现;
           // context 定位模式只展示局部,不放推荐区)
           if (!contextMode && !ns.hasMoreRoots)
-            SliverToBoxAdapter(
-              child: MoreTopicsSection(detail: widget.detail),
-            ),
+            SliverToBoxAdapter(child: MoreTopicsSection(detail: widget.detail)),
 
           if (!ns.hasMoreRoots &&
               widget.detail.isPrivateMessage &&
@@ -478,9 +477,8 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
                 ActionChip(
                   avatar: const Icon(Symbols.arrow_upward_rounded, size: 16),
                   label: Text(context.l10n.nested_contextViewParent),
-                  onPressed: () => widget.onViewParentContext!(
-                    ns.topAncestorPostNumber!,
-                  ),
+                  onPressed: () =>
+                      widget.onViewParentContext!(ns.topAncestorPostNumber!),
                 ),
             ],
           ),
