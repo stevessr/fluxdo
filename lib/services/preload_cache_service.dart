@@ -36,6 +36,7 @@ class PreloadCacheService {
   factory PreloadCacheService() => _instance;
 
   @visibleForTesting
+  // 保留测试辅助构造器的公开参数名，同时让实际字段初始化使用 initializing formals。
   factory PreloadCacheService.testing({
     required Future<Directory> Function() cacheBaseDirectory,
     required Future<String?> Function() namespaceSeed,
