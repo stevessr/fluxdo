@@ -303,19 +303,16 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     controller.dispose();
     if (title == null || !mounted) return;
     try {
-      await ref
-          .read(discourseServiceProvider)
-          .createBoardColumn(board.id, {'title': title});
+      await ref.read(discourseServiceProvider).createBoardColumn(board.id, {
+        'title': title,
+      });
       if (mounted) await _loadBoard(showLoading: false);
     } catch (e) {
       ToastService.showError('操作失败: $e');
     }
   }
 
-  Future<void> _addCard(
-    DiscourseBoard board,
-    BoardColumn column,
-  ) async {
+  Future<void> _addCard(DiscourseBoard board, BoardColumn column) async {
     if (!board.canWrite || board.archived) return;
     final result = await showDialog<({String title, String notes})>(
       context: context,
@@ -323,24 +320,23 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     );
     if (result == null || !mounted) return;
     try {
-      await ref.read(discourseServiceProvider).createBoardCard(
-        board.id,
-        card: {
-          'column_id': column.id,
-          'title': result.title,
-          if (result.notes.isNotEmpty) 'notes': result.notes,
-        },
-      );
+      await ref
+          .read(discourseServiceProvider)
+          .createBoardCard(
+            board.id,
+            card: {
+              'column_id': column.id,
+              'title': result.title,
+              if (result.notes.isNotEmpty) 'notes': result.notes,
+            },
+          );
       if (mounted) await _loadBoard(showLoading: false);
     } catch (e) {
       ToastService.showError('操作失败: $e');
     }
   }
 
-  Future<void> _moveCard(
-    DiscourseBoard board,
-    BoardCard card,
-  ) async {
+  Future<void> _moveCard(DiscourseBoard board, BoardCard card) async {
     if (!board.canWrite || board.archived || board.columns.length < 2) return;
     final destination = await showDialog<BoardColumn>(
       context: context,
@@ -369,12 +365,10 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     }
   }
 
-  Future<void> _deleteCard(
-    DiscourseBoard board,
-    BoardCard card,
-  ) async {
+  Future<void> _deleteCard(DiscourseBoard board, BoardCard card) async {
     if (!board.canWrite || board.archived) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(_isZh(context) ? '删除卡片' : 'Delete card'),
@@ -407,12 +401,10 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     }
   }
 
-  Future<void> _clearColumn(
-    DiscourseBoard board,
-    BoardColumn column,
-  ) async {
+  Future<void> _clearColumn(DiscourseBoard board, BoardColumn column) async {
     if (!board.canManage || board.archived || column.cards.isEmpty) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(_isZh(context) ? '清空分栏' : 'Clear column'),
@@ -445,12 +437,10 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     }
   }
 
-  Future<void> _deleteColumn(
-    DiscourseBoard board,
-    BoardColumn column,
-  ) async {
+  Future<void> _deleteColumn(DiscourseBoard board, BoardColumn column) async {
     if (!board.canManage || board.archived) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(_isZh(context) ? '删除分栏' : 'Delete column'),
@@ -500,7 +490,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
 
   Future<void> _deleteBoard(DiscourseBoard board) async {
     if (!board.canManage) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(_isZh(context) ? '删除看板' : 'Delete board'),
@@ -718,15 +709,11 @@ class _BoardColumnView extends StatelessWidget {
                       if (column.cards.isNotEmpty)
                         PopupMenuItem(
                           value: 'clear',
-                          child: Text(
-                            _isZh(context) ? '清空分栏' : 'Clear column',
-                          ),
+                          child: Text(_isZh(context) ? '清空分栏' : 'Clear column'),
                         ),
                       PopupMenuItem(
                         value: 'delete',
-                        child: Text(
-                          _isZh(context) ? '删除分栏' : 'Delete column',
-                        ),
+                        child: Text(_isZh(context) ? '删除分栏' : 'Delete column'),
                       ),
                     ],
                   ),
@@ -848,15 +835,11 @@ class _BoardCardTile extends StatelessWidget {
                       itemBuilder: (_) => [
                         PopupMenuItem(
                           value: 'move',
-                          child: Text(
-                            _isZh(context) ? '移动卡片' : 'Move card',
-                          ),
+                          child: Text(_isZh(context) ? '移动卡片' : 'Move card'),
                         ),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text(
-                            _isZh(context) ? '删除卡片' : 'Delete card',
-                          ),
+                          child: Text(_isZh(context) ? '删除卡片' : 'Delete card'),
                         ),
                       ],
                     ),
@@ -1077,13 +1060,10 @@ class _BoardCardEditorDialogState extends State<_BoardCardEditorDialog> {
         FilledButton(
           onPressed: _titleController.text.trim().isEmpty
               ? null
-              : () => Navigator.pop(
-                    context,
-                    (
-                      title: _titleController.text.trim(),
-                      notes: _notesController.text.trim(),
-                    ),
-                  ),
+              : () => Navigator.pop(context, (
+                  title: _titleController.text.trim(),
+                  notes: _notesController.text.trim(),
+                )),
           child: Text(zh ? '添加' : 'Add'),
         ),
       ],
