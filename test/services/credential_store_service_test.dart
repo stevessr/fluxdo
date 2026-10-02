@@ -32,11 +32,7 @@ void main() {
         'old-password',
         accountId: 'Alice@Example.com',
       );
-      await store.save(
-        'Alice@Example.com',
-        'new-password',
-        accountId: 'Alice',
-      );
+      await store.save('Alice@Example.com', 'new-password', accountId: 'Alice');
 
       final credentials = await store.list();
       expect(credentials, hasLength(1));
