@@ -160,9 +160,23 @@ class CredentialStoreService {
       jsonEncode(credential.toJson()),
     );
     final index = await _readIndex();
-    index.remove(canonical);
-    index.insert(0, canonical);
-    await _writeIndex(index);
+
+    // 同一登录标识曾可能由旧版以邮箱/用户名本身作为 accountId 保存。现在拿到
+    // 服务端真实 username 后，把这些别名槽合并掉，避免迁移后出现两个副本。
+    final normalizedIdentifierKey = _canonicalAccountId(normalizedIdentifier);
+    final retained = <String>[];
+    for (final id in index) {
+      if (id == canonical) continue;
+      final existing = await _readCredential(id);
+      if (existing != null &&
+          _canonicalAccountId(existing.identifier) == normalizedIdentifierKey) {
+        await _store.delete(_credentialKey(id));
+        continue;
+      }
+      retained.add(id);
+    }
+    retained.insert(0, canonical);
+    await _writeIndex(retained);
   }
 
   Future<void> _ensureLegacyMigrated() async {
