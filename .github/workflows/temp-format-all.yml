@@ -1,0 +1,45 @@
+name: Temporary Global Dart Format
+
+on:
+  push:
+    branches:
+      - chore/format-all-temp
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Format all tracked Dart files
+        shell: bash
+        run: |
+          git ls-files -z -- '*.dart' | xargs -0 -r dart format
+          git status --short
+
+      - name: Commit formatting and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/temp-format-all.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No formatting changes found."
+            exit 0
+          fi
+          git commit -m "style: format all Dart code"
+          git push origin HEAD:${GITHUB_REF_NAME}
