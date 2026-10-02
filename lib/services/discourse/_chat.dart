@@ -1000,9 +1000,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     try {
       await _dio.put(
         '/chat/api/channels/$channelId/threads/$threadId/read',
-        queryParameters: {
-          if (messageId != null) 'message_id': messageId,
-        },
+        queryParameters: {if (messageId != null) 'message_id': messageId},
       );
     } on DioException catch (e) {
       _throwApiError(e);
@@ -1044,9 +1042,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
       if (response.data is! Map) return null;
       final root = Map<String, dynamic>.from(response.data as Map);
       final membership = root['membership'];
-      return membership is Map
-          ? Map<String, dynamic>.from(membership)
-          : root;
+      return membership is Map ? Map<String, dynamic>.from(membership) : root;
     } on DioException catch (e) {
       _throwApiError(e);
     }
@@ -1183,14 +1179,10 @@ mixin _ChatMixin on _DiscourseServiceBase {
     try {
       await _dio.post(
         '/chat/api/channels/$channelId/memberships',
-        data: {
-          'usernames': normalizedUsers,
-          'groups': normalizedGroups,
-        },
+        data: {'usernames': normalizedUsers, 'groups': normalizedGroups},
       );
     } on DioException catch (e) {
       _throwApiError(e);
     }
   }
-
 }
