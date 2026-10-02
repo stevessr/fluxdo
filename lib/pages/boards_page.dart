@@ -852,7 +852,6 @@ Color? _parseHexColor(String value) {
 bool _isZh(BuildContext context) =>
     Localizations.localeOf(context).languageCode == 'zh';
 
-
 Topic _topicFromBoardTopic(BoardTopic source) {
   final replyCount = source.postsCount > 0 ? source.postsCount - 1 : 0;
   return Topic.fromJson({

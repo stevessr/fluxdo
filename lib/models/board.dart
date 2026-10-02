@@ -308,10 +308,8 @@ class BoardTopic {
       closed: json['closed'] as bool? ?? false,
       imageUrl: json['image_url'] as String?,
       postsCount: (json['posts_count'] as num?)?.toInt() ?? 0,
-      highestPostNumber:
-          (json['highest_post_number'] as num?)?.toInt() ?? 0,
-      lastReadPostNumber:
-          (json['last_read_post_number'] as num?)?.toInt(),
+      highestPostNumber: (json['highest_post_number'] as num?)?.toInt() ?? 0,
+      lastReadPostNumber: (json['last_read_post_number'] as num?)?.toInt(),
       lastPosterUsername: lastPoster is Map<String, dynamic>
           ? lastPoster['username'] as String?
           : null,
