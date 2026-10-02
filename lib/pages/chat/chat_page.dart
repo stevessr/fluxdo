@@ -375,8 +375,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     try {
       await ref.read(markAllChatChannelsReadProvider.future);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(context.l10n.chat_mark_all_read_success)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.chat_mark_all_read_success)),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -454,7 +455,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 const PopupMenuDivider(),
               ],
               if (canCreateChannel)
-                const PopupMenuItem<String>(
+                PopupMenuItem<String>(
                   value: 'create_channel',
                   child: ListTile(
                     dense: true,
@@ -463,7 +464,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     title: Text(context.l10n.chat_create_public_channel),
                   ),
                 ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 enabled: false,
                 height: 32,
                 child: Text(context.l10n.chat_channel_filter),
@@ -477,7 +478,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   ],
                 ),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 enabled: false,
                 height: 32,
                 child: Text(context.l10n.chat_channel_sort),
@@ -492,7 +493,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 ),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'mark_read',
                 child: ListTile(
                   dense: true,
