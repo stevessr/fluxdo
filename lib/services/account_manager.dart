@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import 'account_browser_session_policy.dart';
 import 'auth_session.dart';
+import 'credential_store_service.dart';
 import '../constants.dart';
 import 'discourse/discourse_service.dart';
 import 'network/cookie/cookie_full_info.dart';
@@ -705,6 +706,13 @@ class AccountManager {
     accounts.removeWhere((a) => a.username == username);
     await _saveRegistry(accounts);
     await _deleteSnapshot(username);
+    try {
+      await CredentialStoreService().clear(accountId: username);
+    } catch (e) {
+      // 删除账号本体不能因为系统安全存储暂时不可用而失败；残留凭证仍受
+      // Keychain/Keystore 保护，并会在用户下次主动清理时继续处理。
+      debugPrint('[AccountManager] 清理 $username 的保存密码失败(忽略): $e');
+    }
   }
 
   Future<Map<String, dynamic>> _readRequiredSnapshot(String username) async {

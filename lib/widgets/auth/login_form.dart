@@ -12,6 +12,7 @@ class LoginForm extends StatefulWidget {
     this.onForgotPassword,
     this.savedUsername,
     this.savedPassword,
+    this.savedCredentials = const {},
   });
 
   /// 提交回调。父组件返 true = 成功 (form 清空 password), false = 失败 (form 保留)。
@@ -25,9 +26,12 @@ class LoginForm extends StatefulWidget {
   /// 忘记密码点击 (一般跳 webview)。
   final VoidCallback? onForgotPassword;
 
-  /// 上次保存的账号 (来自 [CredentialStoreService])。
+  /// 最近一次保存的账号。
   final String? savedUsername;
   final String? savedPassword;
+
+  /// 所有已保存账号及其密码。仅存在于当前登录页内存，用于快速切换填充。
+  final Map<String, String> savedCredentials;
 
   @override
   State<LoginForm> createState() => _LoginFormState();
@@ -41,14 +45,38 @@ class _LoginFormState extends State<LoginForm> {
   bool _obscure = true;
   bool _remember = false;
   bool _submitting = false;
+  String? _autofilledPassword;
 
   @override
   void initState() {
     super.initState();
     _usernameCtrl = TextEditingController(text: widget.savedUsername ?? '');
     _passwordCtrl = TextEditingController(text: widget.savedPassword ?? '');
+    _autofilledPassword = widget.savedPassword;
     _remember =
         (widget.savedPassword != null && widget.savedPassword!.isNotEmpty);
+  }
+
+  @override
+  void didUpdateWidget(covariant LoginForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.savedUsername == widget.savedUsername &&
+        oldWidget.savedPassword == widget.savedPassword) {
+      return;
+    }
+
+    final oldUsername = oldWidget.savedUsername ?? '';
+    final oldPassword = oldWidget.savedPassword ?? '';
+    final stillShowingOldSavedCredential =
+        _usernameCtrl.text == oldUsername &&
+        (_passwordCtrl.text.isEmpty || _passwordCtrl.text == oldPassword);
+    if (!stillShowingOldSavedCredential) return;
+
+    _usernameCtrl.text = widget.savedUsername ?? '';
+    _passwordCtrl.text = widget.savedPassword ?? '';
+    _autofilledPassword = widget.savedPassword;
+    _remember =
+        widget.savedPassword != null && widget.savedPassword!.isNotEmpty;
   }
 
   @override
@@ -58,6 +86,51 @@ class _LoginFormState extends State<LoginForm> {
     _usernameFocus.dispose();
     _passwordFocus.dispose();
     super.dispose();
+  }
+
+  void _selectSavedCredential(String identifier) {
+    final password = widget.savedCredentials[identifier];
+    if (password == null) return;
+    setState(() {
+      _usernameCtrl.text = identifier;
+      _passwordCtrl.text = password;
+      _autofilledPassword = password;
+      _remember = true;
+    });
+    _passwordFocus.requestFocus();
+  }
+
+  void _handleIdentifierChanged(String rawValue) {
+    final value = rawValue.trim().toLowerCase();
+    String? matchedPassword;
+    for (final entry in widget.savedCredentials.entries) {
+      if (entry.key.trim().toLowerCase() == value) {
+        matchedPassword = entry.value;
+        break;
+      }
+    }
+
+    if (matchedPassword != null) {
+      if (_passwordCtrl.text.isEmpty ||
+          _passwordCtrl.text == _autofilledPassword) {
+        _passwordCtrl.text = matchedPassword;
+        _autofilledPassword = matchedPassword;
+        if (!_remember) setState(() => _remember = true);
+      }
+      return;
+    }
+
+    if (_autofilledPassword != null &&
+        _passwordCtrl.text == _autofilledPassword) {
+      _passwordCtrl.clear();
+      _autofilledPassword = null;
+    }
+  }
+
+  void _handlePasswordChanged(String value) {
+    if (_autofilledPassword != null && value != _autofilledPassword) {
+      _autofilledPassword = null;
+    }
   }
 
   Future<void> _submit() async {
@@ -76,6 +149,7 @@ class _LoginFormState extends State<LoginForm> {
       );
       if (ok && mounted) {
         _passwordCtrl.clear();
+        _autofilledPassword = null;
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -104,6 +178,27 @@ class _LoginFormState extends State<LoginForm> {
     );
   }
 
+  Widget? _buildSavedAccountPicker() {
+    if (widget.savedCredentials.length <= 1) return null;
+    return PopupMenuButton<String>(
+      tooltip: '选择已保存账号',
+      icon: const Icon(Symbols.expand_more_rounded),
+      onSelected: _selectSavedCredential,
+      itemBuilder: (context) => widget.savedCredentials.keys
+          .map(
+            (identifier) => PopupMenuItem<String>(
+              value: identifier,
+              child: Text(
+                identifier,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -125,7 +220,9 @@ class _LoginFormState extends State<LoginForm> {
               scheme,
               label: '用户名 / 邮箱',
               icon: Symbols.person_rounded,
+              suffixIcon: _buildSavedAccountPicker(),
             ),
+            onChanged: _handleIdentifierChanged,
             onSubmitted: (_) => _passwordFocus.requestFocus(),
           ),
           const SizedBox(height: 14),
@@ -150,6 +247,7 @@ class _LoginFormState extends State<LoginForm> {
                 onPressed: () => setState(() => _obscure = !_obscure),
               ),
             ),
+            onChanged: _handlePasswordChanged,
             onSubmitted: (_) => _submit(),
           ),
           const SizedBox(height: 4),
