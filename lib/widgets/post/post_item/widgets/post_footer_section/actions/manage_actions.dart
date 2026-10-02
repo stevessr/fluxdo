@@ -38,6 +38,21 @@ extension _PostFooterManageActions on _PostFooterSectionState {
     }
   }
 
+  Future<void> _toggleWiki() async {
+    try {
+      await _service.setPostWiki(widget.post.id, wiki: !widget.post.wiki);
+      if (!mounted) return;
+      ToastService.showSuccess(
+        widget.post.wiki ? '已取消 Wiki' : '已设为 Wiki',
+      );
+      widget.onRefreshPost?.call(widget.post.id);
+    } on DioException catch (_) {
+      // 网络错误已由 ErrorInterceptor 处理
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    }
+  }
+
   Future<void> _deletePost() async {
     if (_isDeleting) return;
     HapticFeedback.lightImpact();
