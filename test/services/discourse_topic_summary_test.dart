@@ -45,12 +45,7 @@ void main() {
     expect(widgetSource, contains('summaryAsyncOverride: summaryAsync'));
     expect(
       widgetSource,
-      isNot(
-        contains(
-          'void _refreshSummary(WidgetRef ref) {\n'
-          '    ref.invalidate(topicSummaryProvider(topicId));',
-        ),
-      ),
+      contains('.getTopicSummary(topicId, skipAgeCheck: true)'),
     );
   });
 }
