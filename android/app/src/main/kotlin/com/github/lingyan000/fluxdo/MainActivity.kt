@@ -88,6 +88,7 @@ class MainActivity : FlutterActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var ownsProvidedFlutterEngine = false
     private var interactiveKeyboardChannel: InteractiveKeyboardChannel? = null
+    private var vpnBypassChannel: VpnBypassChannel? = null
 
     // Cookie IPC 专用后台线程。CookieManager 的 getCookie / setCookie /
     // getCookieInfo 可从任意线程调用(Chromium cookie store 在自己的 IO
@@ -128,6 +129,8 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         interactiveKeyboardChannel?.dispose()
         interactiveKeyboardChannel = null
+        vpnBypassChannel?.dispose()
+        vpnBypassChannel = null
         FairMemoryReceiver.detachEngine(flutterEngine)
         super.cleanUpFlutterEngine(flutterEngine)
     }
@@ -171,6 +174,8 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         interactiveKeyboardChannel?.dispose()
         interactiveKeyboardChannel = InteractiveKeyboardChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        vpnBypassChannel?.dispose()
+        vpnBypassChannel = VpnBypassChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         // 公平内存预警 → Dart 标准 memoryPressure 的转发依赖 engine 引用
         FairMemoryReceiver.attachEngine(flutterEngine)
         // 媒体转码通道(音视频压缩到 4MB:media3 Transformer 硬编)
