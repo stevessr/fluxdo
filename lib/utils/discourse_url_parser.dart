@@ -7,6 +7,15 @@ class TopicLinkInfo {
   const TopicLinkInfo({required this.topicId, this.slug, this.postNumber});
 }
 
+/// discourse-boards 看板链接解析结果。
+class BoardLinkInfo {
+  const BoardLinkInfo({required this.boardId, required this.slug, this.cardId});
+
+  final int boardId;
+  final String slug;
+  final int? cardId;
+}
+
 /// 用户链接解析结果
 class UserLinkInfo {
   final String username;
@@ -86,6 +95,12 @@ class DiscourseUrlParser {
   /// 仅含 slug 格式：/t/some-slug（slug 不能以数字开头）
   static final _topicSlugOnlyRegex = RegExp(
     r'/t/([^/\d][^/?#]*)$',
+    caseSensitive: false,
+  );
+
+  /// discourse-boards：/boards/:slug/:id[/cards/:card_id]
+  static final _boardRegex = RegExp(
+    r'/boards/([^/?#]+)/(\d+)(?:/cards/(\d+))?(?:[/?#]|$)',
     caseSensitive: false,
   );
 
@@ -169,6 +184,19 @@ class DiscourseUrlParser {
   static String? parseTopicSlug(String url) {
     final match = _topicSlugOnlyRegex.firstMatch(url);
     return match?.group(1);
+  }
+
+  /// 解析 discourse-boards 页面链接。API 路径不会被误认为看板页面。
+  static BoardLinkInfo? parseBoard(String url) {
+    final match = _boardRegex.firstMatch(url);
+    if (match == null || match.group(1) == 'api') return null;
+    final boardId = int.tryParse(match.group(2) ?? '');
+    if (boardId == null) return null;
+    return BoardLinkInfo(
+      boardId: boardId,
+      slug: Uri.decodeComponent(match.group(1)!),
+      cardId: int.tryParse(match.group(3) ?? ''),
+    );
   }
 
   /// 解析用户链接，返回 [UserLinkInfo] 或 null

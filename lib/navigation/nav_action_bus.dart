@@ -182,6 +182,7 @@ class NavEntryIds {
   NavEntryIds._();
 
   static const String home = 'home';
+  static const String boards = 'boards';
   static const String profile = 'profile';
   static const String bookmarks = 'bookmarks';
   static const String history = 'history';
