@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -11,6 +13,7 @@ import '../../pages/network_settings_page/widgets/eruda_card.dart';
 import '../../pages/network_settings_page/widgets/http_proxy_card.dart';
 import '../../pages/network_settings_page/widgets/rate_limit_card.dart';
 import '../../pages/network_settings_page/widgets/vpn_auto_toggle_card.dart';
+import '../../pages/network_settings_page/widgets/vpn_bypass_card.dart';
 import '../settings_model.dart';
 import '../../providers/preferences_provider.dart';
 
@@ -73,6 +76,13 @@ List<SettingsGroup> buildNetworkGroups(BuildContext context) {
           subtitle: l10n.vpnToggle_subtitle,
           builder: (context, ref) => const VpnAutoToggleCard(),
         ),
+        if (Platform.isAndroid)
+          CustomModel(
+            id: 'vpnBypass',
+            title: l10n.vpnBypass_title,
+            subtitle: l10n.vpnBypass_subtitle,
+            builder: (context, ref) => const VpnBypassCard(),
+          ),
         CustomModel(
           id: 'cfVerify',
           title: l10n.cf_securityVerifyTitle,
