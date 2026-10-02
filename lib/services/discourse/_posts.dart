@@ -593,8 +593,7 @@ mixin _PostsMixin on _DiscourseServiceBase {
       );
       final data = Map<String, dynamic>.from(response.data as Map);
       return (
-        canPermanentlyDelete:
-            data['can_permanently_delete'] as bool? ?? false,
+        canPermanentlyDelete: data['can_permanently_delete'] as bool? ?? false,
         reason: data['reason']?.toString(),
       );
     } on DioException catch (e) {
@@ -613,13 +612,9 @@ mixin _PostsMixin on _DiscourseServiceBase {
       );
     }
     try {
-      await _dio.put(
-        '/posts/merge_posts.json',
-        data: {'post_ids': normalized},
-      );
+      await _dio.put('/posts/merge_posts.json', data: {'post_ids': normalized});
     } on DioException catch (e) {
       _throwApiError(e);
     }
   }
-
 }
