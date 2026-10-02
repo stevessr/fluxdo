@@ -57,8 +57,7 @@ void main() {
               'assigned_to': {
                 'type': 'User',
                 'username': 'bob',
-                'avatar_template':
-                    '/user_avatar/linux.do/bob/{size}/3.png',
+                'avatar_template': '/user_avatar/linux.do/bob/{size}/3.png',
               },
             },
           ],

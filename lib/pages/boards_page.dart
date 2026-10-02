@@ -202,10 +202,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
         onOpen: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => TopicDetailPage(
-                topicId: topic.id,
-                initialTitle: topic.title,
-              ),
+              builder: (_) =>
+                  TopicDetailPage(topicId: topic.id, initialTitle: topic.title),
             ),
           );
         },
@@ -221,11 +219,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     );
   }
 
-  bool _canAssign(
-    DiscourseBoard board,
-    BoardColumn column,
-    BoardCard card,
-  ) {
+  bool _canAssign(DiscourseBoard board, BoardColumn column, BoardCard card) {
     if (board.archived || column.isResolvedLike) return false;
     if (!PreloadedDataService().assignEnabled) return false;
     final user = ref.read(currentUserProvider).value;
@@ -252,22 +246,21 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
 
     final selection = await showDialog<_AssigneeSelection>(
       context: context,
-      builder: (_) => _BoardAssigneeDialog(
-        initialUsername: card.assignedTo?.username,
-      ),
+      builder: (_) =>
+          _BoardAssigneeDialog(initialUsername: card.assignedTo?.username),
     );
     if (selection == null) return;
 
     try {
-      await ref.read(discourseServiceProvider).updateBoardCardAssignee(
+      await ref
+          .read(discourseServiceProvider)
+          .updateBoardCardAssignee(
             boardId: board.id,
             cardId: card.id,
             assignedToName: selection.username,
           );
       if (!mounted) return;
-      ToastService.showSuccess(
-        selection.username == null ? '已取消指定' : '已更新负责人',
-      );
+      ToastService.showSuccess(selection.username == null ? '已取消指定' : '已更新负责人');
       await _loadBoard(showLoading: false);
     } catch (e) {
       ToastService.showError('操作失败: $e');
@@ -293,21 +286,16 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _BoardsErrorView(
-                  error: _error,
-                  onRetry: () => _loadBoard(),
-                )
-              : board == null
-                  ? const SizedBox.shrink()
-                  : _buildBoard(context, board),
+          ? _BoardsErrorView(error: _error, onRetry: () => _loadBoard())
+          : board == null
+          ? const SizedBox.shrink()
+          : _buildBoard(context, board),
     );
   }
 
   Widget _buildBoard(BuildContext context, DiscourseBoard board) {
     if (board.columns.isEmpty) {
-      return Center(
-        child: Text(_isZh(context) ? '这个看板还没有分栏' : 'No columns'),
-      );
+      return Center(child: Text(_isZh(context) ? '这个看板还没有分栏' : 'No columns'));
     }
 
     return LayoutBuilder(
@@ -639,8 +627,8 @@ class _FloaterDetailSheet extends StatelessWidget {
                     child: Text(
                       card.assignedUsers.isNotEmpty
                           ? card.assignedUsers
-                              .map((e) => e.displayName)
-                              .join(', ')
+                                .map((e) => e.displayName)
+                                .join(', ')
                           : card.assignedGroupName!,
                     ),
                   ),
@@ -673,8 +661,7 @@ class _BoardAssigneeDialog extends ConsumerStatefulWidget {
       _BoardAssigneeDialogState();
 }
 
-class _BoardAssigneeDialogState
-    extends ConsumerState<_BoardAssigneeDialog> {
+class _BoardAssigneeDialogState extends ConsumerState<_BoardAssigneeDialog> {
   late final TextEditingController _controller;
   Timer? _debounce;
   List<MentionUser> _results = const [];
@@ -705,11 +692,9 @@ class _BoardAssigneeDialogState
 
   Future<void> _search(String term) async {
     if (mounted) setState(() => _searching = true);
-    final result = await ref.read(discourseServiceProvider).searchUsers(
-          term: term,
-          includeGroups: false,
-          limit: 8,
-        );
+    final result = await ref
+        .read(discourseServiceProvider)
+        .searchUsers(term: term, includeGroups: false, limit: 8);
     if (!mounted || _controller.text.trim() != term) return;
     setState(() {
       _searching = false;

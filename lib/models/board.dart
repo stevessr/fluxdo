@@ -41,15 +41,17 @@ class DiscourseBoard {
   final List<BoardColumn> columns;
 
   factory DiscourseBoard.fromJson(Map<String, dynamic> json) {
-    final columns = (json['columns'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(BoardColumn.fromJson)
-        .toList()
-      ..sort((a, b) => a.position.compareTo(b.position));
+    final columns =
+        (json['columns'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(BoardColumn.fromJson)
+            .toList()
+          ..sort((a, b) => a.position.compareTo(b.position));
     return DiscourseBoard(
       id: (json['id'] as num?)?.toInt() ?? 0,
       name: json['name'] as String? ?? '',
-      unicodeName: json['unicode_name'] as String? ?? json['name'] as String? ?? '',
+      unicodeName:
+          json['unicode_name'] as String? ?? json['name'] as String? ?? '',
       slug: json['slug'] as String? ?? '',
       categoryIds: _intList(json['category_ids']),
       tagIds: _intList(json['tag_ids']),
@@ -102,11 +104,12 @@ class BoardColumn {
   final List<BoardCard> cards;
 
   factory BoardColumn.fromJson(Map<String, dynamic> json) {
-    final cards = (json['cards'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(BoardCard.fromJson)
-        .toList()
-      ..sort((a, b) => a.position.compareTo(b.position));
+    final cards =
+        (json['cards'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(BoardCard.fromJson)
+            .toList()
+          ..sort((a, b) => a.position.compareTo(b.position));
     return BoardColumn(
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['title'] as String? ?? '',
@@ -127,8 +130,13 @@ class BoardColumn {
   /// 这里只用于隐藏“指定用户”入口，不改变任何服务端状态。
   bool get isResolvedLike {
     final status = moveToStatus.trim().toLowerCase();
-    if (const {'closed', 'solved', 'resolved', 'done', 'completed'}
-        .contains(status)) {
+    if (const {
+      'closed',
+      'solved',
+      'resolved',
+      'done',
+      'completed',
+    }.contains(status)) {
       return true;
     }
     final normalized = displayTitle.trim().toLowerCase().replaceAll(' ', '');
@@ -267,17 +275,20 @@ class BoardTopic {
         .map(BoardAssignee.userFromJson)
         .toList();
     if (users.isEmpty && json['assigned_to_user'] is Map<String, dynamic>) {
-      users.add(BoardAssignee.userFromJson(
-        json['assigned_to_user'] as Map<String, dynamic>,
-      ));
+      users.add(
+        BoardAssignee.userFromJson(
+          json['assigned_to_user'] as Map<String, dynamic>,
+        ),
+      );
     }
     final group = json['assigned_to_group'];
     return BoardTopic(
       topic: Topic.fromJson(normalized),
       imageUrl: json['image_url'] as String?,
       assignedUsers: users,
-      assignedGroupName:
-          group is Map<String, dynamic> ? group['name'] as String? : null,
+      assignedGroupName: group is Map<String, dynamic>
+          ? group['name'] as String?
+          : null,
     );
   }
 }
@@ -289,9 +300,9 @@ class BoardCreator {
   final String? avatarTemplate;
 
   factory BoardCreator.fromJson(Map<String, dynamic> json) => BoardCreator(
-        username: json['username'] as String? ?? '',
-        avatarTemplate: json['avatar_template'] as String?,
-      );
+    username: json['username'] as String? ?? '',
+    avatarTemplate: json['avatar_template'] as String?,
+  );
 }
 
 class BoardAssignee {
@@ -312,12 +323,13 @@ class BoardAssignee {
   String get displayName => username ?? name ?? '';
 
   factory BoardAssignee.fromJson(Map<String, dynamic> json) => BoardAssignee(
-        type: json['type'] as String? ??
-            (json['username'] != null ? 'User' : 'Group'),
-        username: json['username'] as String?,
-        name: json['name'] as String?,
-        avatarTemplate: json['avatar_template'] as String?,
-      );
+    type:
+        json['type'] as String? ??
+        (json['username'] != null ? 'User' : 'Group'),
+    username: json['username'] as String?,
+    name: json['name'] as String?,
+    avatarTemplate: json['avatar_template'] as String?,
+  );
 
   factory BoardAssignee.userFromJson(Map<String, dynamic> json) =>
       BoardAssignee(

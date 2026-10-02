@@ -9,11 +9,7 @@ class TopicLinkInfo {
 
 /// discourse-boards 看板链接解析结果。
 class BoardLinkInfo {
-  const BoardLinkInfo({
-    required this.boardId,
-    required this.slug,
-    this.cardId,
-  });
+  const BoardLinkInfo({required this.boardId, required this.slug, this.cardId});
 
   final int boardId;
   final String slug;
