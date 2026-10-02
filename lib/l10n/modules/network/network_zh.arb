@@ -60,14 +60,20 @@
   "customHosts_loaded": "已加载 {hosts} 个域名、{addresses} 个地址",
   "@customHosts_loaded": {
     "placeholders": {
-      "hosts": { "type": "int" },
-      "addresses": { "type": "int" }
+      "hosts": {
+        "type": "int"
+      },
+      "addresses": {
+        "type": "int"
+      }
     }
   },
   "customHosts_source": "来源：{source}",
   "@customHosts_source": {
     "placeholders": {
-      "source": { "type": "String" }
+      "source": {
+        "type": "String"
+      }
     }
   },
   "customHosts_importUrl": "从网址导入",
@@ -79,14 +85,20 @@
   "customHosts_imported": "已导入 {hosts} 个域名、{addresses} 个地址",
   "@customHosts_imported": {
     "placeholders": {
-      "hosts": { "type": "int" },
-      "addresses": { "type": "int" }
+      "hosts": {
+        "type": "int"
+      },
+      "addresses": {
+        "type": "int"
+      }
     }
   },
   "customHosts_importFailed": "导入失败：{error}",
   "@customHosts_importFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "customHosts_clearTitle": "清除自定义 hosts",
@@ -112,9 +124,15 @@
   "networkSettings_rateLimitSummary": "每 {windowSeconds} 秒内最多 {maxPerWindow} 个请求,同时进行 {maxConcurrent} 个",
   "@networkSettings_rateLimitSummary": {
     "placeholders": {
-      "windowSeconds": { "type": "int" },
-      "maxPerWindow": { "type": "int" },
-      "maxConcurrent": { "type": "int" }
+      "windowSeconds": {
+        "type": "int"
+      },
+      "maxPerWindow": {
+        "type": "int"
+      },
+      "maxConcurrent": {
+        "type": "int"
+      }
     }
   },
   "network_adapterNativeAndroid": "Cronet 适配器",
@@ -177,5 +195,18 @@
   "webviewAdapter_title": "WebView 网络引擎",
   "networkSettings_upload": "文件上传",
   "networkSettings_forceDisableMultipart": "强制关闭分片上传",
-  "networkSettings_forceDisableMultipartDescription": "开启后，所有文件均使用普通上传，忽略站点分片配置。服务端分片异常时可开启，对下一次上传生效。"
+  "networkSettings_forceDisableMultipartDescription": "开启后，所有文件均使用普通上传，忽略站点分片配置。服务端分片异常时可开启，对下一次上传生效。",
+  "vpnBypass_title": "绕过 VPN",
+  "vpnBypass_subtitle": "VPN 连接时尝试让 FluxDO 直接使用 Wi‑Fi、以太网或移动网络",
+  "vpnBypass_bound": "已绑定直连网络",
+  "vpnBypass_waitingForVpn": "已开启，等待 VPN 连接",
+  "vpnBypass_noNetwork": "未找到可用的非 VPN 网络",
+  "vpnBypass_bindFailed": "系统拒绝直连；VPN 可能未允许应用旁路或启用了锁定模式",
+  "vpnBypass_unsupported": "当前系统不支持此功能",
+  "vpnBypass_error": "无法更新 VPN 旁路状态",
+  "vpnBypass_disclaimer": "是否能真正绕过由 VPN 配置决定；若 VPN 禁止旁路，开启后网络可能暂时不可用",
+  "vpnBypass_transportWifi": "Wi‑Fi",
+  "vpnBypass_transportEthernet": "以太网",
+  "vpnBypass_transportCellular": "移动网络",
+  "vpnBypass_transportOther": "物理网络"
 }
