@@ -1,0 +1,90 @@
+name: Discourse Compatibility PR Check
+
+on:
+  pull_request:
+    paths:
+      - 'lib/models/invite_link.dart'
+      - 'lib/pages/boards_page.dart'
+      - 'lib/pages/chat/chat_channel_members_sheet.dart'
+      - 'lib/pages/group_page.dart'
+      - 'lib/pages/invite_links_page.dart'
+      - 'lib/providers/chat_providers.dart'
+      - 'lib/services/discourse/_boards.dart'
+      - 'lib/services/discourse/_chat.dart'
+      - 'lib/services/discourse/_groups.dart'
+      - 'lib/services/discourse/_posts.dart'
+      - 'lib/services/discourse/_topics.dart'
+      - 'lib/services/discourse/_users.dart'
+      - 'lib/widgets/post/post_item/widgets/post_footer_section/**'
+      - '.github/workflows/discourse-compat-pr-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: |
+          dart format \
+            lib/models/invite_link.dart \
+            lib/pages/boards_page.dart \
+            lib/pages/chat/chat_channel_members_sheet.dart \
+            lib/pages/group_page.dart \
+            lib/pages/invite_links_page.dart \
+            lib/providers/chat_providers.dart \
+            lib/services/discourse/_boards.dart \
+            lib/services/discourse/_chat.dart \
+            lib/services/discourse/_groups.dart \
+            lib/services/discourse/_posts.dart \
+            lib/services/discourse/_topics.dart \
+            lib/services/discourse/_users.dart \
+            lib/widgets/post/post_item/widgets/post_footer_section/actions/manage_actions.dart \
+            lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart
+          git diff --exit-code -- \
+            lib/models/invite_link.dart \
+            lib/pages/boards_page.dart \
+            lib/pages/chat/chat_channel_members_sheet.dart \
+            lib/pages/group_page.dart \
+            lib/pages/invite_links_page.dart \
+            lib/providers/chat_providers.dart \
+            lib/services/discourse/_boards.dart \
+            lib/services/discourse/_chat.dart \
+            lib/services/discourse/_groups.dart \
+            lib/services/discourse/_posts.dart \
+            lib/services/discourse/_topics.dart \
+            lib/services/discourse/_users.dart \
+            lib/widgets/post/post_item/widgets/post_footer_section/actions/manage_actions.dart \
+            lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart
+
+      - name: Analyze changed compatibility surface
+        run: >-
+          flutter analyze
+          lib/models/invite_link.dart
+          lib/pages/boards_page.dart
+          lib/pages/chat/chat_channel_members_sheet.dart
+          lib/pages/group_page.dart
+          lib/pages/invite_links_page.dart
+          lib/providers/chat_providers.dart
+          lib/services/discourse/discourse_service.dart
+          lib/widgets/post/post_item/widgets/post_footer_section/post_footer_section.dart
