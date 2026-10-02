@@ -161,53 +161,70 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _ChatChannelFilter.active => channels
           .where(
             (channel) =>
-                channel.lastMessageSentAt?.isAfter(activeSince) ?? false,
+                channel.lastMessage != null &&
+                (channel.lastMessageSentAt?.isAfter(activeSince) ?? false),
           )
           .toList(),
-      _ChatChannelFilter.unread =>
-        channels.where((channel) => channel.unreadCount > 0).toList(),
-      _ChatChannelFilter.mentions =>
-        channels.where((channel) => channel.unreadMentions > 0).toList(),
+      _ChatChannelFilter.unread => channels
+          .where((channel) => !channel.muted && _channelHasUnread(channel))
+          .toList(),
+      _ChatChannelFilter.mentions => channels
+          .where(
+            (channel) => !channel.muted && channel.unreadMentions > 0,
+          )
+          .toList(),
     };
 
     channels.sort((a, b) {
       switch (_channelSort) {
         case _ChatChannelSort.alphabetical:
-          return _channelSortName(a).compareTo(_channelSortName(b));
+          return _compareAlphabetically(a, b);
         case _ChatChannelSort.recentActivity:
-          return _compareRecentActivity(a, b);
+          return _compareRecentActivity(a, b) ?? _compareAlphabetically(a, b);
         case _ChatChannelSort.priority:
-          final mentionCompare = _compareFlag(
-            a.unreadMentions > 0,
-            b.unreadMentions > 0,
-          );
-          if (mentionCompare != 0) return mentionCompare;
-
-          final unreadCompare = _compareFlag(
-            a.unreadCount > 0,
-            b.unreadCount > 0,
-          );
-          if (unreadCompare != 0) return unreadCompare;
-
-          return _compareRecentActivity(a, b);
+          final priority = _channelPriority(a).compareTo(_channelPriority(b));
+          if (priority != 0) return priority;
+          return _compareRecentActivity(a, b) ?? _compareAlphabetically(a, b);
       }
     });
 
     return channels;
   }
 
-  int _compareFlag(bool a, bool b) {
-    if (a == b) return 0;
-    return a ? -1 : 1;
+  bool _channelHasUnread(ChatChannel channel) =>
+      channel.unreadCount > 0 || channel.unreadMentions > 0;
+
+  int _channelPriority(ChatChannel channel) {
+    if (channel.muted) return 2;
+    if (channel.unreadMentions > 0) return 0;
+    return _channelHasUnread(channel) ? 1 : 2;
   }
 
-  int _compareRecentActivity(ChatChannel a, ChatChannel b) {
-    final aTime = a.lastMessageSentAt?.millisecondsSinceEpoch ?? 0;
-    final bTime = b.lastMessageSentAt?.millisecondsSinceEpoch ?? 0;
-    return bTime.compareTo(aTime);
+  int? _compareRecentActivity(ChatChannel a, ChatChannel b) {
+    final aTime = a.lastMessageSentAt?.millisecondsSinceEpoch;
+    final bTime = b.lastMessageSentAt?.millisecondsSinceEpoch;
+
+    if ((aTime != null) != (bTime != null)) {
+      return aTime != null ? -1 : 1;
+    }
+    if (aTime == null || bTime == null) return null;
+
+    final comparison = bTime.compareTo(aTime);
+    return comparison == 0 ? null : comparison;
+  }
+
+  int _compareAlphabetically(ChatChannel a, ChatChannel b) {
+    final comparison = _channelSortName(a).compareTo(_channelSortName(b));
+    return comparison != 0 ? comparison : a.id.compareTo(b.id);
   }
 
   String _channelSortName(ChatChannel channel) {
+    if (!channel.isDirectMessage) {
+      final slug = channel.slug?.trim();
+      if (slug != null && slug.isNotEmpty) return slug.toLowerCase();
+      return (channel.title ?? '').trim().toLowerCase();
+    }
+
     final title = channel.title?.trim();
     if (title != null && title.isNotEmpty) return title.toLowerCase();
 
