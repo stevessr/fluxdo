@@ -59,6 +59,7 @@ import 'services/eruda_settings_service.dart';
 import 'package:rhttp/rhttp.dart' as rhttp;
 
 import 'services/network/vpn_auto_toggle_service.dart';
+import 'services/network/vpn_bypass_service.dart';
 import 'services/network/doh_proxy/proxy_certificate.dart';
 import 'services/cf_challenge_logger.dart';
 import 'services/browser_trust_coordinator.dart';
@@ -290,6 +291,7 @@ Future<void> main() async {
   }
   final results = await Future.wait(futures);
   final prefs = results[0] as SharedPreferences;
+  await VpnBypassService.instance.initialize(prefs);
   await AuthIssueNoticeService.instance.initialize(prefs);
 
   // release 下按设置开关启用性能监控(debug/profile 已在上方无条件启用)
