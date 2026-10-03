@@ -238,7 +238,9 @@ mixin _GroupsMixin on _DiscourseServiceBase {
       await _dio.put(
         '/admin/groups/$groupId/primary.json',
         data: {
-          'usernames': normalized.join(','),
+          // Admin::GroupsController#set_primary reads usernames through
+          // params.require(:group), while `primary` remains top-level.
+          'group[usernames]': normalized.join(','),
           'primary': primary.toString(),
         },
         options: Options(contentType: Headers.formUrlEncodedContentType),
