@@ -388,7 +388,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       if (member.owner) {
         await service.removeGroupOwner(
           groupId: group.id,
-          username: member.username,
+          userId: member.id,
         );
       } else {
         await service.addGroupOwners(
