@@ -708,5 +708,4 @@ mixin _UsersMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
-
 }
