@@ -181,7 +181,9 @@ extension _PostFooterManageActions on _PostFooterSectionState {
       final missing = ids.where((id) => !byId.containsKey(id)).toList();
       const chunkSize = 40;
       for (var offset = 0; offset < missing.length; offset += chunkSize) {
-        final end = (offset + chunkSize).clamp(0, missing.length);
+        final end = offset + chunkSize < missing.length
+            ? offset + chunkSize
+            : missing.length;
         final stream = await _service.getPosts(
           widget.topicId,
           missing.sublist(offset, end),
@@ -307,10 +309,13 @@ extension _PostFooterManageActions on _PostFooterSectionState {
           false;
       if (!confirmed || !mounted) return;
 
+      final mergedTarget = candidates
+          .where((post) => result.contains(post.id))
+          .reduce((a, b) => a.postNumber > b.postNumber ? a : b);
       await _service.mergePosts(result);
       if (!mounted) return;
       ToastService.showSuccess(zh ? '帖子已合并' : 'Posts merged');
-      widget.onRefreshPost?.call(widget.post.id);
+      widget.onRefreshPost?.call(mergedTarget.id);
     } on DioException catch (_) {
       // 网络错误已由 ErrorInterceptor 处理
     } catch (e, s) {
