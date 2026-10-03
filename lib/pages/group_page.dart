@@ -388,10 +388,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     try {
       final service = ref.read(discourseServiceProvider);
       if (member.owner) {
-        await service.removeGroupOwner(
-          groupId: group.id,
-          userId: member.id,
-        );
+        await service.removeGroupOwner(groupId: group.id, userId: member.id);
       } else {
         await service.addGroupOwners(
           groupId: group.id,
@@ -738,7 +735,10 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                             },
                             itemBuilder: (_) => [
                               if (!member.owner ||
-                                  ref.read(currentUserProvider).value?.isStaff ==
+                                  ref
+                                          .read(currentUserProvider)
+                                          .value
+                                          ?.isStaff ==
                                       true)
                                 PopupMenuItem(
                                   value: 'toggle_owner',
@@ -748,7 +748,10 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                                         : copy.makeOwner,
                                   ),
                                 ),
-                              if (ref.read(currentUserProvider).value?.isStaff ==
+                              if (ref
+                                      .read(currentUserProvider)
+                                      .value
+                                      ?.isStaff ==
                                   true)
                                 PopupMenuItem(
                                   value: member.primaryGroupName == _group?.name
