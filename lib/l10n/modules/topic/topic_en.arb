@@ -44,6 +44,7 @@
   "topicDetail_markUnreadAllDesc": "Clear reading progress, start over next time",
   "topicDetail_markUnreadSuccess": "Marked as unread",
   "topicDetail_openInBrowser": "Open in browser",
+  "topicDetail_openInBuiltInBrowser": "Open in built-in browser",
   "topicDetail_readLaterFull": "Float is full (max {max})",
   "topicDetail_relatedTopics": "Related Topics",
   "topicDetail_removePrivateMessageParticipantConfirm": "Remove @{username} from this private message?",

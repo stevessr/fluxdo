@@ -18,6 +18,7 @@ void main() {
       onShareImage: () => fail('不应触发'),
       onExport: () => fail('不应触发'),
       onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => fail('不应触发'),
       onFilter: () => fail('不应触发'),
       onReadingSettings: () => fail('不应触发'),
       onToggleArchiveMessage: () => toggled++,
@@ -39,9 +40,32 @@ void main() {
       onShareImage: () => fail('不应触发'),
       onExport: () => fail('不应触发'),
       onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => fail('不应触发'),
       onFilter: () => fail('不应触发'),
       onReadingSettings: () => fail('不应触发'),
     );
+  });
+
+
+  test('open_in_built_in_browser 分发到内置浏览器回调', () {
+    var opened = 0;
+    handleTopicDetailMoreMenuSelection(
+      'open_in_built_in_browser',
+      onEditTopic: () => fail('不应触发'),
+      onBookmark: () => fail('不应触发'),
+      onReadLater: () => fail('不应触发'),
+      onSubscribe: () => fail('不应触发'),
+      onMarkUnread: () => fail('不应触发'),
+      onMarkUnreadAll: () => fail('不应触发'),
+      onShareLink: () => fail('不应触发'),
+      onShareImage: () => fail('不应触发'),
+      onExport: () => fail('不应触发'),
+      onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => opened++,
+      onFilter: () => fail('不应触发'),
+      onReadingSettings: () => fail('不应触发'),
+    );
+    expect(opened, 1);
   });
 
   test('其它菜单项不会误触归档', () {
@@ -59,6 +83,7 @@ void main() {
       onShareImage: () => fail('不应触发'),
       onExport: () => exported++,
       onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => fail('不应触发'),
       onFilter: () => fail('不应触发'),
       onReadingSettings: () => fail('不应触发'),
       onToggleArchiveMessage: () => toggled++,
