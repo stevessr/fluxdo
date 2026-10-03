@@ -798,7 +798,15 @@ class _ChatChannelListView extends ConsumerWidget {
     return DesktopRefreshIndicator(
       onRefresh: onRefresh,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        // AdaptiveScaffold 使用 extendBody，让页面绘制到底部导航栏后面。
+        // 将外层 Scaffold 注入到 MediaQuery 的底栏占位重新加回列表尾部，
+        // 这样最后一个会话可以完整滚到导航栏上方，而不会被底栏遮住。
+        padding: EdgeInsets.fromLTRB(
+          8,
+          4,
+          8,
+          8 + MediaQuery.paddingOf(context).bottom,
+        ),
         itemCount: channels.length,
         itemBuilder: (context, index) {
           final channel = channels[index];
