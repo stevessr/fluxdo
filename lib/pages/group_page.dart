@@ -376,8 +376,10 @@ class _GroupPageState extends ConsumerState<GroupPage> {
 
   Future<void> _toggleOwner(GroupMember member) async {
     final group = _group;
+    final currentUser = ref.read(currentUserProvider).value;
     if (group == null ||
         !group.canManageMembers ||
+        (member.owner && currentUser?.isStaff != true) ||
         _removingMemberIds.contains(member.id)) {
       return;
     }
@@ -430,7 +432,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     final group = _group;
     final currentUser = ref.read(currentUserProvider).value;
     if (group == null ||
-        currentUser?.admin != true ||
+        !group.canManageMembers ||
+        currentUser?.isStaff != true ||
         _removingMemberIds.contains(member.id)) {
       return;
     }
@@ -734,15 +737,18 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                               }
                             },
                             itemBuilder: (_) => [
-                              PopupMenuItem(
-                                value: 'toggle_owner',
-                                child: Text(
-                                  member.owner
-                                      ? copy.removeOwner
-                                      : copy.makeOwner,
+                              if (!member.owner ||
+                                  ref.read(currentUserProvider).value?.isStaff ==
+                                      true)
+                                PopupMenuItem(
+                                  value: 'toggle_owner',
+                                  child: Text(
+                                    member.owner
+                                        ? copy.removeOwner
+                                        : copy.makeOwner,
+                                  ),
                                 ),
-                              ),
-                              if (ref.read(currentUserProvider).value?.admin ==
+                              if (ref.read(currentUserProvider).value?.isStaff ==
                                   true)
                                 PopupMenuItem(
                                   value: member.primaryGroupName == _group?.name
