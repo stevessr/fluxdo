@@ -193,16 +193,17 @@ extension _PostFooterManageActions on _PostFooterSectionState {
         }
       }
 
-      final candidates = byId.values
-          .where(
-            (post) =>
-                post.username == widget.post.username &&
-                post.postNumber > 1 &&
-                !post.isDeleted &&
-                (post.id == widget.post.id || post.canDelete),
-          )
-          .toList()
-        ..sort((a, b) => a.postNumber.compareTo(b.postNumber));
+      final candidates =
+          byId.values
+              .where(
+                (post) =>
+                    post.username == widget.post.username &&
+                    post.postNumber > 1 &&
+                    !post.isDeleted &&
+                    (post.id == widget.post.id || post.canDelete),
+              )
+              .toList()
+            ..sort((a, b) => a.postNumber.compareTo(b.postNumber));
 
       if (candidates.length < 2) {
         ToastService.showError(
@@ -244,9 +245,7 @@ extension _PostFooterManageActions on _PostFooterSectionState {
                                 }
                               });
                             },
-                      title: Text(
-                        '#${post.postNumber} · @${post.username}',
-                      ),
+                      title: Text('#${post.postNumber} · @${post.username}'),
                       subtitle: Text(
                         post.cooked
                             .replaceAll(RegExp(r'<[^>]+>'), ' ')
@@ -273,9 +272,7 @@ extension _PostFooterManageActions on _PostFooterSectionState {
                         selected.toList(growable: false),
                       ),
                 child: Text(
-                  zh
-                      ? '合并 ${selected.length} 条'
-                      : 'Merge ${selected.length}',
+                  zh ? '合并 ${selected.length} 条' : 'Merge ${selected.length}',
                 ),
               ),
             ],
@@ -290,9 +287,7 @@ extension _PostFooterManageActions on _PostFooterSectionState {
             builder: (dialogContext) => AlertDialog(
               title: Text(zh ? '确认合并' : 'Confirm merge'),
               content: Text(
-                zh
-                    ? '被选中的内容会合并到最后一条回复，其余帖子会被删除。该操作将修改帖子历史。'
-                    : 'Content will be merged into the last selected reply and the other posts will be deleted.',
+                zh ? '被选中的内容会合并到最后一条回复，其余帖子会被删除。该操作将修改帖子历史。' : 'Content will be merged into the last selected reply and the other posts will be deleted.',
               ),
               actions: [
                 TextButton(
