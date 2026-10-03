@@ -42,9 +42,7 @@ extension _PostFooterManageActions on _PostFooterSectionState {
     try {
       await _service.setPostWiki(widget.post.id, wiki: !widget.post.wiki);
       if (!mounted) return;
-      ToastService.showSuccess(
-        widget.post.wiki ? '已取消 Wiki' : '已设为 Wiki',
-      );
+      ToastService.showSuccess(widget.post.wiki ? '已取消 Wiki' : '已设为 Wiki');
       widget.onRefreshPost?.call(widget.post.id);
     } on DioException catch (_) {
       // 网络错误已由 ErrorInterceptor 处理
