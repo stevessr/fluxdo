@@ -562,23 +562,44 @@ mixin _UsersMixin on _DiscourseServiceBase {
     return InviteLinkResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// 更新当前用户创建的邀请。
+  /// 更新当前用户创建的邀请，参数与 Discourse InvitesController#update 对齐。
   Future<InviteLinkResponse> updateInvite(
     int inviteId, {
     String? email,
+    String? description,
+    String? domain,
+    String? customMessage,
+    int? maxRedemptionsAllowed,
     int? topicId,
+    bool clearTopic = false,
     List<int>? groupIds,
     List<String>? groupNames,
+    DateTime? expiresAt,
+    bool? sendEmail,
+    bool? inviteToTopic,
     bool? skipEmail,
   }) async {
+    if (clearTopic && topicId != null) {
+      throw ArgumentError('clearTopic and topicId cannot both be set');
+    }
     try {
       final response = await _dio.put(
         '/invites/$inviteId.json',
         data: {
           if (email != null) 'email': email,
+          if (description != null) 'description': description,
+          if (domain != null) 'domain': domain,
+          if (customMessage != null) 'custom_message': customMessage,
+          if (maxRedemptionsAllowed != null)
+            'max_redemptions_allowed': maxRedemptionsAllowed,
+          if (clearTopic) 'topic_id': null,
           if (topicId != null) 'topic_id': topicId,
           if (groupIds != null) 'group_ids': groupIds,
           if (groupNames != null) 'group_names': groupNames,
+          if (expiresAt != null)
+            'expires_at': expiresAt.toUtc().toIso8601String(),
+          if (sendEmail != null) 'send_email': sendEmail,
+          if (inviteToTopic != null) 'invite_to_topic': inviteToTopic,
           if (skipEmail != null) 'skip_email': skipEmail,
         },
       );
