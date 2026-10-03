@@ -1189,7 +1189,9 @@ mixin _ChatMixin on _DiscourseServiceBase {
   /// 获取分类是否可用于 Chat 以及相关权限提示（staff）。
   ///
   /// 对齐 Discourse Chat: GET /chat/api/category-chatables/:id/permissions。
-  Future<Map<String, dynamic>> getCategoryChatPermissions(int categoryId) async {
+  Future<Map<String, dynamic>> getCategoryChatPermissions(
+    int categoryId,
+  ) async {
     try {
       final response = await _dio.get(
         '/chat/api/category-chatables/$categoryId/permissions',
@@ -1295,5 +1297,4 @@ mixin _ChatMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
-
 }
