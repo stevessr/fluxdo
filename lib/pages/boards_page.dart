@@ -53,15 +53,12 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
       );
     } else if (raw is List) {
       ids.addAll(
-        raw
-            .map((value) => int.tryParse(value.toString()))
-            .whereType<int>(),
+        raw.map((value) => int.tryParse(value.toString())).whereType<int>(),
       );
     }
 
     final acl = <Map<String, dynamic>>[
-      for (final id in ids)
-        {'type': 'group', 'id': id, 'permission': 'manage'},
+      for (final id in ids) {'type': 'group', 'id': id, 'permission': 'manage'},
     ];
     // Discourse AUTO_GROUPS.logged_in_users.id == 5。
     if (!ids.contains(5)) {
@@ -115,8 +112,10 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
       _reload();
       await Navigator.of(context).push<bool>(
         MaterialPageRoute(
-          builder: (_) =>
-              BoardDetailPage(boardId: board.id, initialName: board.displayName),
+          builder: (_) => BoardDetailPage(
+            boardId: board.id,
+            initialName: board.displayName,
+          ),
         ),
       );
       if (mounted) _reload();
@@ -456,10 +455,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     }
   }
 
-  Future<void> _editColumn(
-    DiscourseBoard board,
-    BoardColumn column,
-  ) async {
+  Future<void> _editColumn(DiscourseBoard board, BoardColumn column) async {
     if (!board.canManage || board.archived) return;
     final controller = TextEditingController(text: column.displayTitle);
     final title = await showDialog<String>(
@@ -492,9 +488,11 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     controller.dispose();
     if (title == null || !mounted || title == column.displayTitle) return;
     try {
-      await ref
-          .read(discourseServiceProvider)
-          .updateBoardColumn(board.id, column.id, {'title': title});
+      await ref.read(discourseServiceProvider).updateBoardColumn(
+        board.id,
+        column.id,
+        {'title': title},
+      );
       if (mounted) await _loadBoard(showLoading: false);
     } catch (e) {
       ToastService.showError('操作失败: $e');
@@ -717,9 +715,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                     contentPadding: EdgeInsets.zero,
                     value: requireConfirmation,
                     title: Text(
-                      _isZh(context)
-                          ? '移动操作需要确认'
-                          : 'Require move confirmation',
+                      _isZh(context) ? '移动操作需要确认' : 'Require move confirmation',
                     ),
                     onChanged: (value) =>
                         setDialogState(() => requireConfirmation = value),
@@ -1027,9 +1023,7 @@ class _BoardColumnView extends StatelessWidget {
                     itemBuilder: (_) => [
                       PopupMenuItem(
                         value: 'edit',
-                        child: Text(
-                          _isZh(context) ? '编辑分栏' : 'Edit column',
-                        ),
+                        child: Text(_isZh(context) ? '编辑分栏' : 'Edit column'),
                       ),
                       if (onMoveLeft != null)
                         PopupMenuItem(
@@ -1175,9 +1169,7 @@ class _BoardCardTile extends StatelessWidget {
                         if (!card.isTopic)
                           PopupMenuItem(
                             value: 'edit',
-                            child: Text(
-                              _isZh(context) ? '编辑卡片' : 'Edit card',
-                            ),
+                            child: Text(_isZh(context) ? '编辑卡片' : 'Edit card'),
                           ),
                         PopupMenuItem(
                           value: 'move',
