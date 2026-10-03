@@ -95,15 +95,14 @@ mixin _GroupsMixin on _DiscourseServiceBase {
     String? filter,
     String? order,
     bool? asc,
-  }) =>
-      fetchGroupMembers(
-        name,
-        offset: offset,
-        filter: filter,
-        order: order,
-        asc: asc,
-        requesters: true,
-      );
+  }) => fetchGroupMembers(
+    name,
+    offset: offset,
+    filter: filter,
+    order: order,
+    asc: asc,
+    requesters: true,
+  );
 
   /// 当前用户自助加入群组。入口是否展示由 GroupSerializer 下发的
   /// `public_admission` / `is_group_user` 决定，最终权限仍由服务端校验。
