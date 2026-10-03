@@ -5,6 +5,8 @@ on:
     paths:
       - 'lib/models/board.dart'
       - 'lib/models/invite_link.dart'
+      - 'lib/models/user.dart'
+      - 'lib/models/topic.dart'
       - 'lib/pages/boards_page.dart'
       - 'lib/pages/chat/chat_channel_members_sheet.dart'
       - 'lib/pages/group_page.dart'
@@ -55,6 +57,8 @@ jobs:
           dart format --set-exit-if-changed \
             lib/models/board.dart \
             lib/models/invite_link.dart \
+            lib/models/user.dart \
+            lib/models/topic.dart \
             lib/pages/boards_page.dart \
             lib/pages/chat/chat_channel_members_sheet.dart \
             lib/pages/group_page.dart \
@@ -76,6 +80,8 @@ jobs:
             git diff -- \
               lib/models/board.dart \
               lib/models/invite_link.dart \
+              lib/models/user.dart \
+              lib/models/topic.dart \
               lib/pages/boards_page.dart \
               lib/pages/chat/chat_channel_members_sheet.dart \
               lib/pages/group_page.dart \
@@ -97,6 +103,8 @@ jobs:
           flutter analyze
           lib/models/board.dart
           lib/models/invite_link.dart
+          lib/models/user.dart
+          lib/models/topic.dart
           lib/pages/boards_page.dart
           lib/pages/chat/chat_channel_members_sheet.dart
           lib/pages/group_page.dart
