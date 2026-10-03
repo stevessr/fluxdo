@@ -437,6 +437,24 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     }
   }
 
+  Future<void> _moveColumn(
+    DiscourseBoard board,
+    BoardColumn column,
+    int direction,
+  ) async {
+    if (!board.canManage || board.archived) return;
+    try {
+      await ref.read(discourseServiceProvider).moveBoardColumn(
+        board.id,
+        columnId: column.id,
+        direction: direction,
+      );
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
   Future<void> _deleteColumn(DiscourseBoard board, BoardColumn column) async {
     if (!board.canManage || board.archived) return;
     final confirmed =
@@ -612,6 +630,12 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                   onAddCard: () => _addCard(board, column),
                   onMoveCard: (card) => _moveCard(board, card),
                   onDeleteCard: (card) => _deleteCard(board, card),
+                  onMoveLeft: index > 0
+                      ? () => _moveColumn(board, column, -1)
+                      : null,
+                  onMoveRight: index < board.columns.length - 1
+                      ? () => _moveColumn(board, column, 1)
+                      : null,
                   onClearColumn: () => _clearColumn(board, column),
                   onDeleteColumn: () => _deleteColumn(board, column),
                 ),
@@ -634,6 +658,8 @@ class _BoardColumnView extends StatelessWidget {
     required this.onAddCard,
     required this.onMoveCard,
     required this.onDeleteCard,
+    required this.onMoveLeft,
+    required this.onMoveRight,
     required this.onClearColumn,
     required this.onDeleteColumn,
   });
@@ -646,6 +672,8 @@ class _BoardColumnView extends StatelessWidget {
   final VoidCallback onAddCard;
   final ValueChanged<BoardCard> onMoveCard;
   final ValueChanged<BoardCard> onDeleteCard;
+  final VoidCallback? onMoveLeft;
+  final VoidCallback? onMoveRight;
   final VoidCallback onClearColumn;
   final VoidCallback onDeleteColumn;
 
@@ -702,10 +730,26 @@ class _BoardColumnView extends StatelessWidget {
                   PopupMenuButton<String>(
                     tooltip: _isZh(context) ? '分栏管理' : 'Column management',
                     onSelected: (value) {
+                      if (value == 'move_left') onMoveLeft?.call();
+                      if (value == 'move_right') onMoveRight?.call();
                       if (value == 'clear') onClearColumn();
                       if (value == 'delete') onDeleteColumn();
                     },
                     itemBuilder: (_) => [
+                      if (onMoveLeft != null)
+                        PopupMenuItem(
+                          value: 'move_left',
+                          child: Text(
+                            _isZh(context) ? '向左移动' : 'Move left',
+                          ),
+                        ),
+                      if (onMoveRight != null)
+                        PopupMenuItem(
+                          value: 'move_right',
+                          child: Text(
+                            _isZh(context) ? '向右移动' : 'Move right',
+                          ),
+                        ),
                       if (column.cards.isNotEmpty)
                         PopupMenuItem(
                           value: 'clear',
