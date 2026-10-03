@@ -1166,14 +1166,15 @@ final chatAllThreadsProvider =
         final seenThreadIds = <int>{};
         const pageSize = 10;
         var offset = 0;
-        for (var page = 0; page < 20; page++) {
+        while (true) {
           final raw = await service.getCurrentUserChatThreads(
             offset: offset,
             limit: pageSize,
           );
           final list = raw['threads'];
-          if (list is! List) break;
+          if (list is! List || list.isEmpty) break;
 
+          final seenBefore = seenThreadIds.length;
           for (final item in list) {
             if (item is! Map) continue;
             try {
@@ -1196,7 +1197,11 @@ final chatAllThreadsProvider =
             }
           }
 
-          if (list.length < pageSize) break;
+          // 短页说明已到末尾；若服务端忽略 offset 导致重复页，也立即终止，
+          // 避免旧/非标准 Chat 实现造成无限请求。
+          if (list.length < pageSize || seenThreadIds.length == seenBefore) {
+            break;
+          }
           offset += list.length;
         }
         return sortThreads(result);
