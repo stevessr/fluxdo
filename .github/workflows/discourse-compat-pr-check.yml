@@ -46,6 +46,7 @@ jobs:
 
       - name: Check formatting
         run: |
+          set +e
           dart format --output=none --set-exit-if-changed \
             lib/models/invite_link.dart \
             lib/pages/boards_page.dart \
@@ -61,8 +62,28 @@ jobs:
             lib/services/discourse/_users.dart \
             lib/widgets/post/post_item/widgets/post_footer_section/actions/manage_actions.dart \
             lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart
+          format_status=$?
+          set -e
           git diff --check
           git diff --stat
+          if [ "$format_status" -ne 0 ]; then
+            git diff -- \
+              lib/models/invite_link.dart \
+              lib/pages/boards_page.dart \
+              lib/pages/chat/chat_channel_members_sheet.dart \
+              lib/pages/group_page.dart \
+              lib/pages/invite_links_page.dart \
+              lib/providers/chat_providers.dart \
+              lib/services/discourse/_boards.dart \
+              lib/services/discourse/_chat.dart \
+              lib/services/discourse/_groups.dart \
+              lib/services/discourse/_posts.dart \
+              lib/services/discourse/_topics.dart \
+              lib/services/discourse/_users.dart \
+              lib/widgets/post/post_item/widgets/post_footer_section/actions/manage_actions.dart \
+              lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart
+            exit "$format_status"
+          fi
 
       - name: Analyze changed compatibility surface
         run: >-
