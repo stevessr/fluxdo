@@ -275,11 +275,16 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     int cardId,
     Map<String, dynamic> updates, {
     String? clientId,
+    Map<String, dynamic>? constraintFix,
   }) async {
     try {
       final response = await _dio.put(
         '/boards/api/boards/$boardId/cards/$cardId.json',
-        data: {if (clientId != null) 'client_id': clientId, 'card': updates},
+        data: {
+          if (clientId != null) 'client_id': clientId,
+          'card': updates,
+          if (constraintFix != null) 'constraint_fix': constraintFix,
+        },
       );
       final root = Map<String, dynamic>.from(response.data as Map);
       return BoardCard.fromJson(Map<String, dynamic>.from(root['card'] as Map));
