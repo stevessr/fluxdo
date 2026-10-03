@@ -179,16 +179,19 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     }
   }
 
-  /// 调整列顺序。afterColumnId 为空表示移动到最前。
+  /// 调整列顺序。Discourse Boards 当前只接受 -1 / 1，分别向左/右移动一格。
   Future<void> moveBoardColumn(
     int boardId, {
     required int columnId,
-    int? afterColumnId,
+    required int direction,
   }) async {
+    if (direction != -1 && direction != 1) {
+      throw ArgumentError.value(direction, 'direction', 'must be -1 or 1');
+    }
     try {
       await _dio.post(
         '/boards/api/boards/$boardId/move-column.json',
-        data: {'column_id': columnId, 'after_column_id': afterColumnId},
+        data: {'column_id': columnId, 'direction': direction},
       );
     } on DioException catch (e) {
       _throwApiError(e);
@@ -278,14 +281,16 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     }
   }
 
+  /// 预览修改 Board 分类/标签约束后会移除多少张 topic 卡片。
   Future<Map<String, dynamic>> previewBoardConstraints(
     int boardId, {
-    required Map<String, dynamic> board,
+    List<int> categoryIds = const [],
+    List<String> tagNames = const [],
   }) async {
     try {
       final response = await _dio.post(
         '/boards/api/boards/$boardId/constraint-preview.json',
-        data: {'board': board},
+        data: {'category_ids': categoryIds, 'tag_names': tagNames},
       );
       return Map<String, dynamic>.from(response.data as Map);
     } on DioException catch (e) {
@@ -293,14 +298,19 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     }
   }
 
+  /// 检查把话题移动到目标列时需要补齐的 Board 分类/标签约束。
   Future<Map<String, dynamic>> checkBoardConstraintMismatches(
     int boardId, {
-    Map<String, dynamic>? board,
+    required int topicId,
+    required int targetColumnId,
   }) async {
     try {
       final response = await _dio.put(
         '/boards/api/boards/$boardId/check-constraint-mismatches.json',
-        data: {if (board != null) 'board': board},
+        data: {
+          'topic_id': topicId,
+          'target_column_id': targetColumnId,
+        },
       );
       return Map<String, dynamic>.from(response.data as Map);
     } on DioException catch (e) {
