@@ -443,16 +443,194 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       ),
     );
     if (destination == null || !mounted) return;
+
     try {
+      final constraintFix = await _resolveBoardConstraintFix(
+        board,
+        card,
+        destination,
+      );
+      if (constraintFix == null || !mounted) return;
+
+      if (constraintFix.isEmpty && board.requireConfirmation) {
+        final confirmed =
+            await showDialog<bool>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: Text(_isZh(context) ? '确认移动' : 'Confirm move'),
+                content: Text(
+                  _isZh(context)
+                      ? '将“${card.displayTitle}”移动到“${destination.displayTitle}”？'
+                      : 'Move “${card.displayTitle}” to “${destination.displayTitle}”?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: Text(_isZh(context) ? '取消' : 'Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: Text(_isZh(context) ? '移动' : 'Move'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!confirmed) return;
+      }
+
       await ref.read(discourseServiceProvider).updateBoardCard(
         board.id,
         card.id,
         {'column_id': destination.id},
+        constraintFix: constraintFix.isEmpty ? null : constraintFix,
       );
       if (mounted) await _loadBoard(showLoading: false);
     } catch (e) {
       ToastService.showError('操作失败: $e');
     }
+  }
+
+  /// Mirrors Discourse Boards' constraint-fix flow before moving a topic card.
+  ///
+  /// An empty map means no fix is required. A null result means the user
+  /// cancelled the metadata change.
+  Future<Map<String, dynamic>?> _resolveBoardConstraintFix(
+    DiscourseBoard board,
+    BoardCard card,
+    BoardColumn destination,
+  ) async {
+    final topicId = card.topicId;
+    if (!card.isTopic || topicId == null) return const <String, dynamic>{};
+
+    final mismatch = await ref
+        .read(discourseServiceProvider)
+        .checkBoardConstraintMismatches(
+          board.id,
+          topicId: topicId,
+          targetColumnId: destination.id,
+        );
+    if (mismatch['constraints_need_fixing'] != true) {
+      return const <String, dynamic>{};
+    }
+
+    final categoriesNeeded = (mismatch['categories_needed'] as List? ?? const [])
+        .whereType<num>()
+        .map((value) => value.toInt())
+        .toSet()
+        .toList(growable: false);
+    final tagsNeeded = (mismatch['tags_needed'] as List? ?? const [])
+        .map((value) => value.toString())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+
+    if (categoriesNeeded.isEmpty && tagsNeeded.isEmpty) {
+      return const <String, dynamic>{};
+    }
+
+    int? selectedCategory = categoriesNeeded.length == 1
+        ? categoriesNeeded.first
+        : null;
+    final selectedTags = <String>{
+      if (tagsNeeded.length == 1) tagsNeeded.first,
+    };
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final canApply =
+              (categoriesNeeded.isEmpty || selectedCategory != null) &&
+              (tagsNeeded.isEmpty || selectedTags.isNotEmpty);
+          return AlertDialog(
+            title: Text(
+              _isZh(context) ? '修正话题约束' : 'Fix topic constraints',
+            ),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isZh(context)
+                          ? '该话题不满足目标分栏的看板约束。选择要应用到话题的分类/标签后再移动。'
+                          : 'This topic does not match the destination constraints. Choose the category/tags to apply before moving it.',
+                    ),
+                    if (categoriesNeeded.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(_isZh(context) ? '分类' : 'Category'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final categoryId in categoriesNeeded)
+                            ChoiceChip(
+                              label: Text('#$categoryId'),
+                              selected: selectedCategory == categoryId,
+                              onSelected: (selected) {
+                                if (!selected) return;
+                                setDialogState(
+                                  () => selectedCategory = categoryId,
+                                );
+                              },
+                            ),
+                        ],
+                      ),
+                    ],
+                    if (tagsNeeded.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(_isZh(context) ? '标签' : 'Tags'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final tagName in tagsNeeded)
+                            FilterChip(
+                              label: Text(tagName),
+                              selected: selectedTags.contains(tagName),
+                              onSelected: (selected) {
+                                setDialogState(() {
+                                  if (selected) {
+                                    selectedTags.add(tagName);
+                                  } else {
+                                    selectedTags.remove(tagName);
+                                  }
+                                });
+                              },
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: canApply
+                    ? () => Navigator.pop(dialogContext, <String, dynamic>{
+                        if (categoriesNeeded.isNotEmpty)
+                          'category_id': selectedCategory,
+                        if (tagsNeeded.isNotEmpty)
+                          'tag_names': selectedTags.toList(growable: false),
+                      })
+                    : null,
+                child: Text(_isZh(context) ? '应用并移动' : 'Apply & move'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _editColumn(DiscourseBoard board, BoardColumn column) async {
