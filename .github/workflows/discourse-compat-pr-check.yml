@@ -115,3 +115,7 @@ jobs:
           lib/providers/chat_providers.dart
           lib/services/discourse/discourse_service.dart
           lib/widgets/post/post_item/widgets/post_footer_section/post_footer_section.dart
+
+
+      - name: Run management compatibility tests
+        run: flutter test test/models/discourse_management_compat_test.dart
