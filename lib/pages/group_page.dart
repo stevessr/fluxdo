@@ -97,7 +97,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
             filter: requestedFilter.isEmpty ? null : requestedFilter,
           );
       if (!mounted || requestedFilter != _memberFilter) return;
-      final byId = LinkedHashMap<int, GroupMember>();
+      final byId = <int, GroupMember>{};
       for (final member in [..._members, ...result.members]) {
         byId[member.id] = member;
       }
