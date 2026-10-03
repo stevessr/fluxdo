@@ -19,6 +19,7 @@ on:
       - 'lib/services/discourse/_topics.dart'
       - 'lib/services/discourse/_users.dart'
       - 'lib/widgets/post/post_item/widgets/post_footer_section/**'
+      - 'test/models/discourse_management_compat_test.dart'
       - '.github/workflows/discourse-compat-pr-check.yml'
 
 permissions:
@@ -71,7 +72,8 @@ jobs:
             lib/services/discourse/_topics.dart \
             lib/services/discourse/_users.dart \
             lib/widgets/post/post_item/widgets/post_footer_section/actions/manage_actions.dart \
-            lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart
+            lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart \
+            test/models/discourse_management_compat_test.dart
           format_status=$?
           set -e
           git diff --check
@@ -94,7 +96,8 @@ jobs:
               lib/services/discourse/_topics.dart \
               lib/services/discourse/_users.dart \
               lib/widgets/post/post_item/widgets/post_footer_section/actions/manage_actions.dart \
-              lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart
+              lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart \
+              test/models/discourse_management_compat_test.dart
             exit "$format_status"
           fi
 
