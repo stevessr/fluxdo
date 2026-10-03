@@ -436,11 +436,13 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
     setState(() => _removingMemberIds.add(member.id));
     try {
-      await ref.read(discourseServiceProvider).setPrimaryGroupForUsers(
-        groupId: group.id,
-        usernames: [member.username],
-        primary: primary,
-      );
+      await ref
+          .read(discourseServiceProvider)
+          .setPrimaryGroupForUsers(
+            groupId: group.id,
+            usernames: [member.username],
+            primary: primary,
+          );
       if (!mounted) return;
       await _reload();
       if (!mounted) return;
@@ -743,8 +745,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                               if (ref.read(currentUserProvider).value?.admin ==
                                   true)
                                 PopupMenuItem(
-                                  value:
-                                      member.primaryGroupName == _group?.name
+                                  value: member.primaryGroupName == _group?.name
                                       ? 'clear_primary'
                                       : 'set_primary',
                                   child: Text(
