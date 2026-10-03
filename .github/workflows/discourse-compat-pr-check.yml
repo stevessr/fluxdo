@@ -1,0 +1,121 @@
+name: Discourse Compatibility PR Check
+
+on:
+  pull_request:
+    paths:
+      - 'lib/models/board.dart'
+      - 'lib/models/invite_link.dart'
+      - 'lib/models/user.dart'
+      - 'lib/models/topic.dart'
+      - 'lib/pages/boards_page.dart'
+      - 'lib/pages/chat/chat_channel_members_sheet.dart'
+      - 'lib/pages/group_page.dart'
+      - 'lib/pages/invite_links_page.dart'
+      - 'lib/providers/chat_providers.dart'
+      - 'lib/services/discourse/_boards.dart'
+      - 'lib/services/discourse/_chat.dart'
+      - 'lib/services/discourse/_groups.dart'
+      - 'lib/services/discourse/_posts.dart'
+      - 'lib/services/discourse/_topics.dart'
+      - 'lib/services/discourse/_users.dart'
+      - 'lib/widgets/post/post_item/widgets/post_footer_section/**'
+      - 'test/models/discourse_management_compat_test.dart'
+      - '.github/workflows/discourse-compat-pr-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discourse-compat-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: |
+          set +e
+          dart format --set-exit-if-changed \
+            lib/models/board.dart \
+            lib/models/invite_link.dart \
+            lib/models/user.dart \
+            lib/models/topic.dart \
+            lib/pages/boards_page.dart \
+            lib/pages/chat/chat_channel_members_sheet.dart \
+            lib/pages/group_page.dart \
+            lib/pages/invite_links_page.dart \
+            lib/providers/chat_providers.dart \
+            lib/services/discourse/_boards.dart \
+            lib/services/discourse/_chat.dart \
+            lib/services/discourse/_groups.dart \
+            lib/services/discourse/_posts.dart \
+            lib/services/discourse/_topics.dart \
+            lib/services/discourse/_users.dart \
+            lib/widgets/post/post_item/widgets/post_footer_section/actions/manage_actions.dart \
+            lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart \
+            test/models/discourse_management_compat_test.dart
+          format_status=$?
+          set -e
+          git diff --check
+          git diff --stat
+          if [ "$format_status" -ne 0 ]; then
+            git diff -- \
+              lib/models/board.dart \
+              lib/models/invite_link.dart \
+              lib/models/user.dart \
+              lib/models/topic.dart \
+              lib/pages/boards_page.dart \
+              lib/pages/chat/chat_channel_members_sheet.dart \
+              lib/pages/group_page.dart \
+              lib/pages/invite_links_page.dart \
+              lib/providers/chat_providers.dart \
+              lib/services/discourse/_boards.dart \
+              lib/services/discourse/_chat.dart \
+              lib/services/discourse/_groups.dart \
+              lib/services/discourse/_posts.dart \
+              lib/services/discourse/_topics.dart \
+              lib/services/discourse/_users.dart \
+              lib/widgets/post/post_item/widgets/post_footer_section/actions/manage_actions.dart \
+              lib/widgets/post/post_item/widgets/post_footer_section/actions/menu_actions.dart \
+              test/models/discourse_management_compat_test.dart
+            exit "$format_status"
+          fi
+
+      - name: Analyze changed compatibility surface
+        run: >-
+          flutter analyze
+          lib/models/board.dart
+          lib/models/invite_link.dart
+          lib/models/user.dart
+          lib/models/topic.dart
+          lib/pages/boards_page.dart
+          lib/pages/chat/chat_channel_members_sheet.dart
+          lib/pages/group_page.dart
+          lib/pages/invite_links_page.dart
+          lib/providers/chat_providers.dart
+          lib/services/discourse/discourse_service.dart
+          lib/widgets/post/post_item/widgets/post_footer_section/post_footer_section.dart
+
+
+      - name: Run management compatibility tests
+        run: flutter test test/models/discourse_management_compat_test.dart

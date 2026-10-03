@@ -103,10 +103,27 @@ mixin _TopicsMixin on _DiscourseServiceBase {
         queryParams['tags[]'] = tags;
       }
     } else if (tags != null && tags.isNotEmpty) {
-      // 纯标签筛选：单标签用路径，多标签用第一个标签路径 + 其余标签查询参数
-      path = '/tag/${tags.first}/l/$filter.json';
-      if (tags.length > 1) {
-        queryParams['tags[]'] = tags.skip(1).toList();
+      // 对齐 Discourse 当前标签路由：
+      // - 单标签继续使用 /tag/:name/l/:filter
+      // - 多标签 latest 使用官方 canonical /tags/intersection/a/b.json
+      // - intersection 路由本身固定 show_latest；top/new 等过滤继续使用
+      //   tags[] + match_all_tags，由 TagsController#build_topic_list_options 处理。
+      final normalizedTags = tags
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty)
+          .toList(growable: false);
+      if (normalizedTags.isEmpty) {
+        path = '/$filter.json';
+      } else if (normalizedTags.length == 1) {
+        path =
+            '/tag/${Uri.encodeComponent(normalizedTags.first)}/l/$filter.json';
+      } else if (filter == 'latest') {
+        final encoded = normalizedTags.map(Uri.encodeComponent).join('/');
+        path = '/tags/intersection/$encoded.json';
+      } else {
+        path =
+            '/tag/${Uri.encodeComponent(normalizedTags.first)}/l/$filter.json';
+        queryParams['tags[]'] = normalizedTags.skip(1).toList();
         queryParams['match_all_tags'] = 'true';
       }
     } else {
@@ -665,9 +682,7 @@ mixin _TopicsMixin on _DiscourseServiceBase {
         final responseData = response.data;
         if (responseData is Map && responseData['ai_topic_summary'] is Map) {
           yield TopicSummary.fromJson(
-            Map<String, dynamic>.from(
-              responseData['ai_topic_summary'] as Map,
-            ),
+            Map<String, dynamic>.from(responseData['ai_topic_summary'] as Map),
           );
           return;
         }
@@ -720,10 +735,7 @@ mixin _TopicsMixin on _DiscourseServiceBase {
         }
 
         // 兼容尚未提供 POST create 路由的旧版 Discourse。
-        response = await _dio.get(
-          endpoint,
-          queryParameters: requestData,
-        );
+        response = await _dio.get(endpoint, queryParameters: requestData);
       }
 
       final responseData = response.data;

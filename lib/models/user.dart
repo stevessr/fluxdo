@@ -70,6 +70,10 @@ class User {
   /// 当前用户是否可创建直接消息
   final bool? canDirectMessage;
 
+  /// discourse-boards 插件能力（仅 CurrentUserSerializer 下发）。
+  final bool canManageBoards;
+  final bool canEditAnyBoards;
+
   /// 该用户在某话题内的发帖数(card.json 带 include_post_count_for=topicId
   /// 时 serializer 注入,形如 {topic_id: count};官方用它决定用户卡片
   /// 是否显示「过滤到该用户的 N 帖」按钮)
@@ -150,6 +154,8 @@ class User {
     this.canChat,
     this.hasChatEnabled,
     this.canDirectMessage,
+    this.canManageBoards = false,
+    this.canEditAnyBoards = false,
     this.topicPostCount = const {},
     this.gamificationScore,
     this.muted,
@@ -180,6 +186,8 @@ class User {
     bool? canChat,
     bool? hasChatEnabled,
     bool? canDirectMessage,
+    bool? canManageBoards,
+    bool? canEditAnyBoards,
     Map<int, int>? topicPostCount,
     bool? canChatUser,
   }) {
@@ -230,6 +238,8 @@ class User {
       canChat: canChat ?? this.canChat,
       hasChatEnabled: hasChatEnabled ?? this.hasChatEnabled,
       canDirectMessage: canDirectMessage ?? this.canDirectMessage,
+      canManageBoards: canManageBoards ?? this.canManageBoards,
+      canEditAnyBoards: canEditAnyBoards ?? this.canEditAnyBoards,
       topicPostCount: topicPostCount ?? this.topicPostCount,
       gamificationScore: gamificationScore,
       muted: muted ?? this.muted,

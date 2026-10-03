@@ -514,4 +514,122 @@ mixin _PostsMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
+
+  /// 切换 Wiki 帖子。
+  Future<void> setPostWiki(int postId, {required bool wiki}) async {
+    try {
+      await _dio.put(
+        '/posts/$postId/wiki.json',
+        data: {'wiki': wiki},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 锁定/解锁单个帖子，防止继续编辑。
+  Future<bool> setPostLocked(int postId, {required bool locked}) async {
+    try {
+      final response = await _dio.put(
+        '/posts/$postId/locked.json',
+        data: {'locked': locked.toString()},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+      if (response.data is Map) {
+        return (response.data as Map)['locked'] as bool? ?? locked;
+      }
+      return locked;
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 设置 staff notice；notice 为空时移除。
+  Future<String?> setPostNotice(int postId, {String? notice}) async {
+    try {
+      final response = await _dio.put(
+        '/posts/$postId/notice.json',
+        data: {'notice': notice ?? ''},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+      if (response.data is Map) {
+        return (response.data as Map)['cooked_notice'] as String?;
+      }
+      return null;
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 强制重新 cook 帖子（staff）。
+  Future<void> rebakePost(int postId) async {
+    try {
+      await _dio.put('/posts/$postId/rebake.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 修改帖子类型（如普通帖 / whisper）。具体可用值由服务端权限控制。
+  Future<void> setPostType(int postId, int postType) async {
+    try {
+      await _dio.put(
+        '/posts/$postId/post_type.json',
+        data: {'post_type': postType},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 查询当前帖子/主题是否满足永久删除条件。
+  Future<({bool canPermanentlyDelete, String? reason})>
+  getPostPermanentDeleteCheck(int postId) async {
+    try {
+      final response = await _dio.get(
+        '/posts/$postId/permanently_delete_check.json',
+      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      return (
+        canPermanentlyDelete: data['can_permanently_delete'] as bool? ?? false,
+        reason: data['reason']?.toString(),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 合并同一话题内的多个帖子。
+  Future<void> mergePosts(List<int> postIds) async {
+    var normalized = postIds.toSet().toList(growable: false);
+    if (normalized.length < 2) {
+      throw ArgumentError.value(
+        postIds,
+        'postIds',
+        'at least two posts are required',
+      );
+    }
+
+    // 当前 Discourse PostsController#merge_posts 会拒绝恰好按 id 升序传入的
+    // post_ids；PostMerger 本身随后仍会按 post_number 排序，因此在这种情况下
+    // 反转请求顺序即可保持语义不变并兼容上游。
+    final ascending = normalized.toList(growable: false)..sort();
+    final alreadyAscending =
+        normalized.length == ascending.length &&
+        List.generate(
+          normalized.length,
+          (index) => normalized[index] == ascending[index],
+        ).every((same) => same);
+    if (alreadyAscending) {
+      normalized = normalized.reversed.toList(growable: false);
+    }
+
+    try {
+      await _dio.put('/posts/merge_posts.json', data: {'post_ids': normalized});
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
 }

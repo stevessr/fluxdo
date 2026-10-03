@@ -467,18 +467,8 @@ mixin _ChatMixin on _DiscourseServiceBase {
   ///
   /// 对齐 Discourse chat-api.addMembersToChannel:
   /// POST /chat/api/channels/:id/memberships  body: { usernames: [...] }
-  Future<void> addChannelMember(int channelId, String username) async {
-    try {
-      await _dio.post(
-        '/chat/api/channels/$channelId/memberships',
-        data: {
-          'usernames': [username],
-        },
-      );
-    } on DioException catch (e) {
-      _throwApiError(e);
-    }
-  }
+  Future<void> addChannelMember(int channelId, String username) =>
+      addChannelMembers(channelId, usernames: [username]);
 
   /// 设置/取消频道收藏（starred）
   ///
@@ -956,6 +946,353 @@ mixin _ChatMixin on _DiscourseServiceBase {
       final data = <String, dynamic>{'user_ids': userIds};
       if (messageId != null) data['message_id'] = messageId;
       await _dio.post('/chat/api/channels/$channelId/invites', data: data);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 获取当前用户参与的所有消息串（跨频道）。
+  ///
+  /// 对齐 Discourse Chat: GET /chat/api/me/threads。
+  Future<Map<String, dynamic>> getCurrentUserChatThreads({
+    int? offset,
+    int? limit,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/chat/api/me/threads',
+        queryParameters: {
+          if (offset != null) 'offset': offset,
+          if (limit != null) 'limit': limit,
+        },
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 保存频道或消息串草稿。
+  ///
+  /// [draftData] 与 Discourse ChatMessage.toJSONDraft() 保持透传，避免客户端
+  /// 丢失未来新增的 upload / reply 等字段。
+  Future<void> saveChatDraft(
+    int channelId,
+    Map<String, dynamic> draftData, {
+    int? threadId,
+  }) async {
+    final path = threadId == null
+        ? '/chat/api/channels/$channelId/drafts'
+        : '/chat/api/channels/$channelId/threads/$threadId/drafts';
+    try {
+      await _dio.post(path, data: {'data': draftData});
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 标记消息串已读。messageId 为空时由服务端取该串最新消息。
+  Future<void> markChatThreadRead(
+    int channelId,
+    int threadId, {
+    int? messageId,
+  }) async {
+    try {
+      await _dio.put(
+        '/chat/api/channels/$channelId/threads/$threadId/read',
+        queryParameters: {if (messageId != null) 'message_id': messageId},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 编辑消息串标题。
+  Future<Map<String, dynamic>> updateChatThread(
+    int channelId,
+    int threadId, {
+    required String title,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/chat/api/channels/$channelId/threads/$threadId',
+        data: {'title': title},
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 修改当前用户对消息串的通知级别。
+  ///
+  /// 当前 Discourse 线程支持 regular / tracking。
+  Future<Map<String, dynamic>?> updateChatThreadNotificationLevel(
+    int channelId,
+    int threadId, {
+    required String notificationLevel,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/chat/api/channels/$channelId/threads/$threadId/notifications-settings/me',
+        data: {'notification_level': notificationLevel},
+      );
+      if (response.data is! Map) return null;
+      final root = Map<String, dynamic>.from(response.data as Map);
+      final membership = root['membership'];
+      return membership is Map ? Map<String, dynamic>.from(membership) : root;
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 标记当前用户已看过“为消息串命名”的提示。
+  Future<void> markChatThreadTitlePromptSeen(
+    int channelId,
+    int threadId,
+  ) async {
+    try {
+      await _dio.post(
+        '/chat/api/channels/$channelId/threads/$threadId/mark-thread-title-prompt-seen/me',
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 标记频道置顶消息列表已读。
+  Future<void> markChannelPinsRead(int channelId) async {
+    try {
+      await _dio.put('/chat/api/channels/$channelId/pins/read');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 更新频道状态（open / closed）。
+  Future<void> updateChannelStatus(int channelId, String status) async {
+    try {
+      await _dio.put(
+        '/chat/api/channels/$channelId/status',
+        data: {'status': status},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 永久删除频道（仅服务端授权用户可用）。
+  Future<void> deleteChatChannel(int channelId) async {
+    try {
+      await _dio.delete('/chat/api/channels/$channelId');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 在频道之间移动多条消息。
+  Future<void> moveChannelMessages({
+    required int channelId,
+    required List<int> messageIds,
+    required int destinationChannelId,
+  }) async {
+    if (messageIds.isEmpty) return;
+    try {
+      await _dio.post(
+        '/chat/api/channels/$channelId/messages/moves',
+        data: {
+          'move': {
+            'message_ids': messageIds,
+            'destination_channel_id': destinationChannelId,
+          },
+        },
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 批量删除频道消息。权限由 Chat::TrashMessages 在服务端验证。
+  Future<void> deleteChannelMessages(
+    int channelId,
+    List<int> messageIds,
+  ) async {
+    if (messageIds.isEmpty) return;
+    try {
+      await _dio.delete(
+        '/chat/api/channels/$channelId/messages',
+        data: {'message_ids': messageIds},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 将频道历史归档到新话题或已有话题。
+  Future<Map<String, dynamic>> createChatChannelArchive(
+    int channelId, {
+    required String selection,
+    String? title,
+    int? categoryId,
+    List<String>? tags,
+    int? topicId,
+  }) async {
+    final archive = <String, dynamic>{
+      'type': selection,
+      if (title != null && title.trim().isNotEmpty) 'title': title.trim(),
+      if (categoryId != null) 'category_id': categoryId,
+      if (tags != null && tags.isNotEmpty) 'tags': tags,
+      if (topicId != null) 'topic_id': topicId,
+    };
+    try {
+      final response = await _dio.post(
+        '/chat/api/channels/$channelId/archives',
+        data: {'archive': archive},
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 一次添加多个用户/群组到频道；保留 addChannelMember 作为旧调用兼容。
+  Future<void> addChannelMembers(
+    int channelId, {
+    List<String> usernames = const [],
+    List<String> groups = const [],
+  }) async {
+    final normalizedUsers = usernames
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final normalizedGroups = groups
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedUsers.isEmpty && normalizedGroups.isEmpty) return;
+    try {
+      await _dio.post(
+        '/chat/api/channels/$channelId/memberships',
+        data: {'usernames': normalizedUsers, 'groups': normalizedGroups},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 获取分类是否可用于 Chat 以及相关权限提示（staff）。
+  ///
+  /// 对齐 Discourse Chat: GET /chat/api/category-chatables/:id/permissions。
+  Future<Map<String, dynamic>> getCategoryChatPermissions(
+    int categoryId,
+  ) async {
+    try {
+      final response = await _dio.get(
+        '/chat/api/category-chatables/$categoryId/permissions',
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 停止服务端正在流式生成的 Chat 消息。
+  Future<void> stopChatMessageStreaming(int channelId, int messageId) async {
+    try {
+      await _dio.delete(
+        '/chat/api/channels/$channelId/messages/$messageId/streaming',
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 触发 Chat 消息交互动作（例如插件提供的 action button）。
+  Future<Map<String, dynamic>> createChatMessageInteraction(
+    int channelId,
+    int messageId, {
+    required String actionId,
+  }) async {
+    final normalized = actionId.trim();
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(actionId, 'actionId', 'must not be empty');
+    }
+    try {
+      final response = await _dio.post(
+        '/chat/api/channels/$channelId/messages/$messageId/interactions',
+        data: {'action_id': normalized},
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 获取某条 Chat 消息的 reaction 用户列表。
+  ///
+  /// 该端点仍位于旧的 /chat/:channel/:message/reactions-users 路由，
+  /// 与 publishReaction 保持一致。
+  Future<Map<String, dynamic>> getChatMessageReactionUsers(
+    int channelId,
+    int messageId, {
+    int page = 0,
+    int? limit,
+    String? emoji,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/chat/$channelId/$messageId/reactions-users',
+        queryParameters: {
+          'page': page < 0 ? 0 : page,
+          if (limit != null) 'limit': limit,
+          if (emoji != null && emoji.trim().isNotEmpty) 'emoji': emoji.trim(),
+        },
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 重新生成单条 Chat 消息的 cooked HTML（staff）。
+  Future<void> rebakeChatMessage(int channelId, int messageId) async {
+    try {
+      await _dio.put('/chat/$channelId/$messageId/rebake');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 更新当前用户的频道 membership 字段。
+  ///
+  /// 用于跟进 Discourse Chat 后续新增的 membership 设置；已存在的
+  /// setChannelStarred 继续作为便捷封装。
+  Future<Map<String, dynamic>?> updateCurrentUserChannelMembership(
+    int channelId,
+    Map<String, dynamic> updates,
+  ) async {
+    if (updates.isEmpty) return null;
+    try {
+      final response = await _dio.put(
+        '/chat/api/channels/$channelId/memberships/me',
+        data: updates,
+      );
+      if (response.data is! Map) return null;
+      final root = Map<String, dynamic>.from(response.data as Map);
+      final membership = root['membership'];
+      return membership is Map ? Map<String, dynamic>.from(membership) : root;
     } on DioException catch (e) {
       _throwApiError(e);
     }
