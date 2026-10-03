@@ -727,6 +727,33 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     }
   }
 
+  /// 批量删除频道消息（moderator/staff 权限由服务端最终校验）。
+  Future<void> deleteMessages(List<int> messageIds) async {
+    final ids = messageIds.toSet().toList(growable: false);
+    if (ids.isEmpty) return;
+    final service = ref.read(discourseServiceProvider);
+    await service.deleteChannelMessages(channelId, ids);
+    for (final id in ids) {
+      _markMessageDeleted(id);
+    }
+  }
+
+  /// 将多条消息移动到另一频道。
+  Future<void> moveMessages(
+    List<int> messageIds, {
+    required int destinationChannelId,
+  }) async {
+    final ids = messageIds.toSet().toList(growable: false);
+    if (ids.isEmpty || destinationChannelId == channelId) return;
+    final service = ref.read(discourseServiceProvider);
+    await service.moveChannelMessages(
+      channelId: channelId,
+      messageIds: ids,
+      destinationChannelId: destinationChannelId,
+    );
+    await loadMessages(preferLatest: true);
+  }
+
   /// 恢复已删除消息
   Future<void> restoreMessage(int messageId) async {
     final service = ref.read(discourseServiceProvider);
