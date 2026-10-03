@@ -307,10 +307,7 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     try {
       final response = await _dio.put(
         '/boards/api/boards/$boardId/check-constraint-mismatches.json',
-        data: {
-          'topic_id': topicId,
-          'target_column_id': targetColumnId,
-        },
+        data: {'topic_id': topicId, 'target_column_id': targetColumnId},
       );
       return Map<String, dynamic>.from(response.data as Map);
     } on DioException catch (e) {
