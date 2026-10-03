@@ -72,9 +72,7 @@ class DiscourseBoard {
       acl: (json['acl'] as List<dynamic>? ?? const [])
           .whereType<Map>()
           .map(
-            (item) => BoardAclEntry.fromJson(
-              Map<String, dynamic>.from(item),
-            ),
+            (item) => BoardAclEntry.fromJson(Map<String, dynamic>.from(item)),
           )
           .toList(growable: false),
       columns: columns,
