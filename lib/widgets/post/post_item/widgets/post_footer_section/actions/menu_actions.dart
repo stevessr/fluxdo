@@ -200,7 +200,9 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
                     title: Text(
                       widget.post.canPermanentlyDelete
                           ? (zh ? '可永久删除 · 查看条件' : 'Permanent delete available')
-                          : (zh ? '检查永久删除条件' : 'Check permanent delete eligibility'),
+                          : (zh
+                                ? '检查永久删除条件'
+                                : 'Check permanent delete eligibility'),
                     ),
                     onTap: () {
                       Navigator.pop(ctx);
