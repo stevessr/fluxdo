@@ -444,11 +444,9 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   ) async {
     if (!board.canManage || board.archived) return;
     try {
-      await ref.read(discourseServiceProvider).moveBoardColumn(
-        board.id,
-        columnId: column.id,
-        direction: direction,
-      );
+      await ref
+          .read(discourseServiceProvider)
+          .moveBoardColumn(board.id, columnId: column.id, direction: direction);
       if (mounted) await _loadBoard(showLoading: false);
     } catch (e) {
       ToastService.showError('操作失败: $e');
@@ -743,16 +741,12 @@ class _BoardColumnView extends StatelessWidget {
                       if (onMoveLeft != null)
                         PopupMenuItem(
                           value: 'move_left',
-                          child: Text(
-                            _isZh(context) ? '向左移动' : 'Move left',
-                          ),
+                          child: Text(_isZh(context) ? '向左移动' : 'Move left'),
                         ),
                       if (onMoveRight != null)
                         PopupMenuItem(
                           value: 'move_right',
-                          child: Text(
-                            _isZh(context) ? '向右移动' : 'Move right',
-                          ),
+                          child: Text(_isZh(context) ? '向右移动' : 'Move right'),
                         ),
                       if (column.cards.isNotEmpty)
                         PopupMenuItem(
