@@ -1140,7 +1140,7 @@ mixin _ChatMixin on _DiscourseServiceBase {
     int? topicId,
   }) async {
     final archive = <String, dynamic>{
-      'selection': selection,
+      'type': selection,
       if (title != null && title.trim().isNotEmpty) 'title': title.trim(),
       if (categoryId != null) 'category_id': categoryId,
       if (tags != null && tags.isNotEmpty) 'tags': tags,
