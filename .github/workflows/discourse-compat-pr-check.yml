@@ -3,6 +3,7 @@ name: Discourse Compatibility PR Check
 on:
   pull_request:
     paths:
+      - 'lib/models/board.dart'
       - 'lib/models/invite_link.dart'
       - 'lib/pages/boards_page.dart'
       - 'lib/pages/chat/chat_channel_members_sheet.dart'
@@ -48,6 +49,7 @@ jobs:
         run: |
           set +e
           dart format --output=none --set-exit-if-changed \
+            lib/models/board.dart \
             lib/models/invite_link.dart \
             lib/pages/boards_page.dart \
             lib/pages/chat/chat_channel_members_sheet.dart \
@@ -68,6 +70,7 @@ jobs:
           git diff --stat
           if [ "$format_status" -ne 0 ]; then
             git diff -- \
+              lib/models/board.dart \
               lib/models/invite_link.dart \
               lib/pages/boards_page.dart \
               lib/pages/chat/chat_channel_members_sheet.dart \
@@ -88,6 +91,7 @@ jobs:
       - name: Analyze changed compatibility surface
         run: >-
           flutter analyze
+          lib/models/board.dart
           lib/models/invite_link.dart
           lib/pages/boards_page.dart
           lib/pages/chat/chat_channel_members_sheet.dart
