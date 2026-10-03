@@ -191,6 +191,18 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
                       _togglePostType();
                     },
                   ),
+                if (!widget.post.isDeleted && widget.post.postNumber > 1)
+                  ListTile(
+                    leading: Icon(
+                      Icons.call_merge_rounded,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    title: Text(zh ? '合并同作者帖子' : 'Merge author posts'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _mergePostWithOthers();
+                    },
+                  ),
                 if (currentUser?.admin == true && widget.post.isDeleted)
                   ListTile(
                     leading: Icon(
