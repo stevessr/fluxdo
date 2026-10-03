@@ -365,6 +365,74 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     }
   }
 
+  Future<void> _editColumn(
+    DiscourseBoard board,
+    BoardColumn column,
+  ) async {
+    if (!board.canManage || board.archived) return;
+    final controller = TextEditingController(text: column.displayTitle);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_isZh(context) ? '编辑分栏' : 'Edit column'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: _isZh(context) ? '分栏名称' : 'Column title',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(_isZh(context) ? '取消' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: Text(_isZh(context) ? '保存' : 'Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (title == null || !mounted || title == column.displayTitle) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .updateBoardColumn(board.id, column.id, {'title': title});
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _editCard(DiscourseBoard board, BoardCard card) async {
+    if (!board.canWrite || board.archived || card.isTopic) return;
+    final result = await showDialog<({String title, String notes})>(
+      context: context,
+      builder: (_) => _BoardCardEditorDialog(
+        initialTitle: card.displayTitle,
+        initialNotes: card.notes ?? '',
+        editing: true,
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await ref.read(discourseServiceProvider).updateBoardCard(
+        board.id,
+        card.id,
+        {'title': result.title, 'notes': result.notes},
+      );
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
   Future<void> _deleteCard(DiscourseBoard board, BoardCard card) async {
     if (!board.canWrite || board.archived) return;
     final confirmed =
@@ -630,6 +698,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                   onCardTap: _openCard,
                   onAssign: (card) => _assign(board, column, card),
                   onAddCard: () => _addCard(board, column),
+                  onEditColumn: () => _editColumn(board, column),
+                  onEditCard: (card) => _editCard(board, card),
                   onMoveCard: (card) => _moveCard(board, card),
                   onDeleteCard: (card) => _deleteCard(board, card),
                   onMoveLeft: index > 0
@@ -658,6 +728,8 @@ class _BoardColumnView extends StatelessWidget {
     required this.onCardTap,
     required this.onAssign,
     required this.onAddCard,
+    required this.onEditColumn,
+    required this.onEditCard,
     required this.onMoveCard,
     required this.onDeleteCard,
     required this.onMoveLeft,
@@ -672,6 +744,8 @@ class _BoardColumnView extends StatelessWidget {
   final ValueChanged<BoardCard> onCardTap;
   final ValueChanged<BoardCard> onAssign;
   final VoidCallback onAddCard;
+  final VoidCallback onEditColumn;
+  final ValueChanged<BoardCard> onEditCard;
   final ValueChanged<BoardCard> onMoveCard;
   final ValueChanged<BoardCard> onDeleteCard;
   final VoidCallback? onMoveLeft;
@@ -732,12 +806,19 @@ class _BoardColumnView extends StatelessWidget {
                   PopupMenuButton<String>(
                     tooltip: _isZh(context) ? '分栏管理' : 'Column management',
                     onSelected: (value) {
+                      if (value == 'edit') onEditColumn();
                       if (value == 'move_left') onMoveLeft?.call();
                       if (value == 'move_right') onMoveRight?.call();
                       if (value == 'clear') onClearColumn();
                       if (value == 'delete') onDeleteColumn();
                     },
                     itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Text(
+                          _isZh(context) ? '编辑分栏' : 'Edit column',
+                        ),
+                      ),
                       if (onMoveLeft != null)
                         PopupMenuItem(
                           value: 'move_left',
@@ -785,6 +866,7 @@ class _BoardColumnView extends StatelessWidget {
                         canManageCard: board.canWrite && !board.archived,
                         onTap: () => onCardTap(card),
                         onAssign: () => onAssign(card),
+                        onEdit: () => onEditCard(card),
                         onMove: () => onMoveCard(card),
                         onDelete: () => onDeleteCard(card),
                       );
@@ -805,6 +887,7 @@ class _BoardCardTile extends StatelessWidget {
     required this.canManageCard,
     required this.onTap,
     required this.onAssign,
+    required this.onEdit,
     required this.onMove,
     required this.onDelete,
   });
@@ -815,6 +898,7 @@ class _BoardCardTile extends StatelessWidget {
   final bool canManageCard;
   final VoidCallback onTap;
   final VoidCallback onAssign;
+  final VoidCallback onEdit;
   final VoidCallback onMove;
   final VoidCallback onDelete;
 
@@ -871,10 +955,18 @@ class _BoardCardTile extends StatelessWidget {
                     PopupMenuButton<String>(
                       tooltip: _isZh(context) ? '卡片管理' : 'Card management',
                       onSelected: (value) {
+                        if (value == 'edit') onEdit();
                         if (value == 'move') onMove();
                         if (value == 'delete') onDelete();
                       },
                       itemBuilder: (_) => [
+                        if (!card.isTopic)
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Text(
+                              _isZh(context) ? '编辑卡片' : 'Edit card',
+                            ),
+                          ),
                         PopupMenuItem(
                           value: 'move',
                           child: Text(_isZh(context) ? '移动卡片' : 'Move card'),
@@ -1045,15 +1137,30 @@ class _FloaterDetailSheet extends StatelessWidget {
 }
 
 class _BoardCardEditorDialog extends StatefulWidget {
-  const _BoardCardEditorDialog();
+  const _BoardCardEditorDialog({
+    this.initialTitle = '',
+    this.initialNotes = '',
+    this.editing = false,
+  });
+
+  final String initialTitle;
+  final String initialNotes;
+  final bool editing;
 
   @override
   State<_BoardCardEditorDialog> createState() => _BoardCardEditorDialogState();
 }
 
 class _BoardCardEditorDialogState extends State<_BoardCardEditorDialog> {
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
+  late final TextEditingController _titleController;
+  late final TextEditingController _notesController;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.initialTitle);
+    _notesController = TextEditingController(text: widget.initialNotes);
+  }
 
   @override
   void dispose() {
@@ -1066,7 +1173,11 @@ class _BoardCardEditorDialogState extends State<_BoardCardEditorDialog> {
   Widget build(BuildContext context) {
     final zh = _isZh(context);
     return AlertDialog(
-      title: Text(zh ? '添加卡片' : 'Add card'),
+      title: Text(
+        widget.editing
+            ? (zh ? '编辑卡片' : 'Edit card')
+            : (zh ? '添加卡片' : 'Add card'),
+      ),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -1106,7 +1217,9 @@ class _BoardCardEditorDialogState extends State<_BoardCardEditorDialog> {
                   title: _titleController.text.trim(),
                   notes: _notesController.text.trim(),
                 )),
-          child: Text(zh ? '添加' : 'Add'),
+          child: Text(
+            widget.editing ? (zh ? '保存' : 'Save') : (zh ? '添加' : 'Add'),
+          ),
         ),
       ],
     );
