@@ -649,6 +649,15 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   Future<void> _editBoardSettings(DiscourseBoard board) async {
     if (!board.canManage || board.archived) return;
     final nameController = TextEditingController(text: board.displayName);
+    final categoriesController = TextEditingController(
+      text: board.categoryIds.join(', '),
+    );
+    final tagsController = TextEditingController(text: board.tagNames.join(', '));
+    var constraintType = board.categoryIds.isNotEmpty
+        ? 'categories'
+        : board.tagNames.isNotEmpty
+        ? 'tags'
+        : 'none';
     var showTags = board.showTags;
     var showThumbnail = board.showTopicThumbnail;
     var requireConfirmation = board.requireConfirmation;
@@ -660,7 +669,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
         builder: (context, setDialogState) => AlertDialog(
           title: Text(_isZh(context) ? '看板设置' : 'Board settings'),
           content: SizedBox(
-            width: 460,
+            width: 480,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -672,6 +681,64 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                       border: const OutlineInputBorder(),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: constraintType,
+                    decoration: InputDecoration(
+                      labelText: _isZh(context) ? '话题约束' : 'Topic constraint',
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'none',
+                        child: Text(_isZh(context) ? '无限制' : 'None'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'categories',
+                        child: Text(_isZh(context) ? '分类' : 'Categories'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'tags',
+                        child: Text(_isZh(context) ? '标签' : 'Tags'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => constraintType = value);
+                      }
+                    },
+                  ),
+                  if (constraintType == 'categories') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: categoriesController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: _isZh(context)
+                            ? '分类 ID（逗号分隔）'
+                            : 'Category IDs (comma separated)',
+                        helperText: _isZh(context)
+                            ? '只允许这些分类中的话题进入看板'
+                            : 'Only topics from these categories may enter the board',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                  if (constraintType == 'tags') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: tagsController,
+                      decoration: InputDecoration(
+                        labelText: _isZh(context)
+                            ? '标签（逗号分隔）'
+                            : 'Tags (comma separated)',
+                        helperText: _isZh(context)
+                            ? '只允许匹配这些标签的话题进入看板'
+                            : 'Only topics matching these tags may enter the board',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: cardStyle,
@@ -733,8 +800,29 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
+
+                final categoryIds = constraintType == 'categories'
+                    ? categoriesController.text
+                          .split(RegExp(r'[,，\s]+'))
+                          .map((value) => int.tryParse(value.trim()))
+                          .whereType<int>()
+                          .where((value) => value > 0)
+                          .toSet()
+                          .toList(growable: false)
+                    : const <int>[];
+                final tagNames = constraintType == 'tags'
+                    ? tagsController.text
+                          .split(RegExp(r'[,，\s]+'))
+                          .map((value) => value.trim())
+                          .where((value) => value.isNotEmpty)
+                          .toSet()
+                          .toList(growable: false)
+                    : const <String>[];
+
                 Navigator.pop(dialogContext, {
                   'name': name,
+                  'category_ids': categoryIds,
+                  'tag_names': tagNames,
                   'show_tags': showTags,
                   'show_topic_thumbnail': showThumbnail,
                   'require_confirmation': requireConfirmation,
@@ -748,9 +836,54 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       ),
     );
     nameController.dispose();
+    categoriesController.dispose();
+    tagsController.dispose();
     if (result == null || !mounted) return;
 
     try {
+      final categoryIds =
+          (result['category_ids'] as List?)?.whereType<int>().toList() ??
+          const <int>[];
+      final tagNames =
+          (result['tag_names'] as List?)?.map((e) => e.toString()).toList() ??
+          const <String>[];
+      final preview = await ref
+          .read(discourseServiceProvider)
+          .previewBoardConstraints(
+            board.id,
+            categoryIds: categoryIds,
+            tagNames: tagNames,
+          );
+      final cardsToRemove = (preview['cards_to_remove'] as num?)?.toInt() ?? 0;
+      if (cardsToRemove > 0 && mounted) {
+        final confirmed =
+            await showDialog<bool>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: Text(
+                  _isZh(context) ? '确认修改话题约束' : 'Confirm constraints',
+                ),
+                content: Text(
+                  _isZh(context)
+                      ? '新的约束将从看板移除 $cardsToRemove 张不匹配的话题卡片。是否继续？'
+                      : 'The new constraints will remove $cardsToRemove non-matching topic cards. Continue?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: Text(_isZh(context) ? '取消' : 'Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: Text(_isZh(context) ? '继续' : 'Continue'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!confirmed) return;
+      }
+
       await ref.read(discourseServiceProvider).updateBoard(board.id, result);
       if (mounted) await _loadBoard(showLoading: false);
     } catch (e) {
