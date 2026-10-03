@@ -649,13 +649,17 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   Future<void> _editBoardSettings(DiscourseBoard board) async {
     if (!board.canManage || board.archived) return;
     final nameController = TextEditingController(text: board.displayName);
+    final slugController = TextEditingController(text: board.slug);
     final categoriesController = TextEditingController(
       text: board.categoryIds.join(', '),
     );
     final tagsController = TextEditingController(
       text: board.tagNames.join(', '),
     );
-    var constraintType = board.categoryIds.isNotEmpty
+    var constraintType =
+        board.categoryIds.isNotEmpty && board.tagNames.isNotEmpty
+        ? 'categories_and_tags'
+        : board.categoryIds.isNotEmpty
         ? 'categories'
         : board.tagNames.isNotEmpty
         ? 'tags'
@@ -684,6 +688,17 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  TextField(
+                    controller: slugController,
+                    decoration: InputDecoration(
+                      labelText: _isZh(context) ? 'Slug' : 'Slug',
+                      helperText: _isZh(context)
+                          ? '留空由服务端按名称生成'
+                          : 'Leave empty to let the server derive it from the name',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: constraintType,
                     decoration: InputDecoration(
@@ -703,6 +718,14 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                         value: 'tags',
                         child: Text(_isZh(context) ? '标签' : 'Tags'),
                       ),
+                      DropdownMenuItem(
+                        value: 'categories_and_tags',
+                        child: Text(
+                          _isZh(context)
+                              ? '分类 + 标签'
+                              : 'Categories + tags',
+                        ),
+                      ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -710,7 +733,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                       }
                     },
                   ),
-                  if (constraintType == 'categories') ...[
+                  if (constraintType == 'categories' ||
+                      constraintType == 'categories_and_tags') ...[
                     const SizedBox(height: 12),
                     TextField(
                       controller: categoriesController,
@@ -724,7 +748,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                       ),
                     ),
                   ],
-                  if (constraintType == 'tags') ...[
+                  if (constraintType == 'tags' ||
+                      constraintType == 'categories_and_tags') ...[
                     const SizedBox(height: 12),
                     TextField(
                       controller: tagsController,
@@ -750,8 +775,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                         child: Text('Detailed'),
                       ),
                       DropdownMenuItem(
-                        value: 'compact',
-                        child: Text('Compact'),
+                        value: 'simple',
+                        child: Text('Simple'),
                       ),
                     ],
                     onChanged: (value) {
@@ -799,7 +824,9 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
 
-                final categoryIds = constraintType == 'categories'
+                final categoryIds =
+                    constraintType == 'categories' ||
+                        constraintType == 'categories_and_tags'
                     ? categoriesController.text
                           .split(RegExp(r'[,，\s]+'))
                           .map((value) => int.tryParse(value.trim()))
@@ -808,7 +835,9 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                           .toSet()
                           .toList(growable: false)
                     : const <int>[];
-                final tagNames = constraintType == 'tags'
+                final tagNames =
+                    constraintType == 'tags' ||
+                        constraintType == 'categories_and_tags'
                     ? tagsController.text
                           .split(RegExp(r'[,，\s]+'))
                           .map((value) => value.trim())
@@ -817,8 +846,10 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                           .toList(growable: false)
                     : const <String>[];
 
+                final slug = slugController.text.trim();
                 Navigator.pop(dialogContext, {
                   'name': name,
+                  if (slug.isNotEmpty) 'slug': slug,
                   'category_ids': categoryIds,
                   'tag_names': tagNames,
                   'show_tags': showTags,
@@ -834,6 +865,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       ),
     );
     nameController.dispose();
+    slugController.dispose();
     categoriesController.dispose();
     tagsController.dispose();
     if (result == null || !mounted) return;
