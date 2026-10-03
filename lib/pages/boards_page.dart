@@ -514,11 +514,12 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       return const <String, dynamic>{};
     }
 
-    final categoriesNeeded = (mismatch['categories_needed'] as List? ?? const [])
-        .whereType<num>()
-        .map((value) => value.toInt())
-        .toSet()
-        .toList(growable: false);
+    final categoriesNeeded =
+        (mismatch['categories_needed'] as List? ?? const [])
+            .whereType<num>()
+            .map((value) => value.toInt())
+            .toSet()
+            .toList(growable: false);
     final tagsNeeded = (mismatch['tags_needed'] as List? ?? const [])
         .map((value) => value.toString())
         .where((value) => value.isNotEmpty)
@@ -532,9 +533,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     int? selectedCategory = categoriesNeeded.length == 1
         ? categoriesNeeded.first
         : null;
-    final selectedTags = <String>{
-      if (tagsNeeded.length == 1) tagsNeeded.first,
-    };
+    final selectedTags = <String>{if (tagsNeeded.length == 1) tagsNeeded.first};
 
     return showDialog<Map<String, dynamic>>(
       context: context,
@@ -544,9 +543,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
               (categoriesNeeded.isEmpty || selectedCategory != null) &&
               (tagsNeeded.isEmpty || selectedTags.isNotEmpty);
           return AlertDialog(
-            title: Text(
-              _isZh(context) ? '修正话题约束' : 'Fix topic constraints',
-            ),
+            title: Text(_isZh(context) ? '修正话题约束' : 'Fix topic constraints'),
             content: SizedBox(
               width: 460,
               child: SingleChildScrollView(
@@ -555,9 +552,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _isZh(context)
-                          ? '该话题不满足目标分栏的看板约束。选择要应用到话题的分类/标签后再移动。'
-                          : 'This topic does not match the destination constraints. Choose the category/tags to apply before moving it.',
+                      _isZh(context) ? '该话题不满足目标分栏的看板约束。选择要应用到话题的分类/标签后再移动。' : 'This topic does not match the destination constraints. Choose the category/tags to apply before moving it.',
                     ),
                     if (categoriesNeeded.isNotEmpty) ...[
                       const SizedBox(height: 16),
