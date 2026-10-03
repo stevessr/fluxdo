@@ -17,12 +17,34 @@ void main() {
         'can_write': false,
         'can_archive': false,
         'can_unarchive': true,
+        'acl': [
+          {
+            'type': 'group',
+            'id': 5,
+            'permission': 'view',
+            'display_name': 'logged_in_users',
+          },
+          {
+            'type': 'group',
+            'id': 13,
+            'permission': 'manage',
+            'display_name': 'trust_level_3',
+          },
+        ],
       });
 
       expect(board.archived, isTrue);
       expect(board.canManage, isFalse);
       expect(board.canArchive, isFalse);
       expect(board.canUnarchive, isTrue);
+      expect(board.acl, hasLength(2));
+      expect(board.acl.first.id, 5);
+      expect(board.acl.first.permission, 'view');
+      expect(board.acl.last.toJson(), {
+        'type': 'group',
+        'id': 13,
+        'permission': 'manage',
+      });
     });
 
     test('Board falls back to can_manage on older payloads', () {
