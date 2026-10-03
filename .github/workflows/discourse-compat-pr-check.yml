@@ -48,7 +48,7 @@ jobs:
       - name: Check formatting
         run: |
           set +e
-          dart format --output=none --set-exit-if-changed \
+          dart format --set-exit-if-changed \
             lib/models/board.dart \
             lib/models/invite_link.dart \
             lib/pages/boards_page.dart \
