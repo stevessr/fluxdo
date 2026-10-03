@@ -1026,8 +1026,7 @@ class Post {
       canDelete: json['can_delete'] as bool? ?? false,
       canRecover: json['can_recover'] as bool? ?? false,
       canWiki: json['can_wiki'] as bool? ?? false,
-      canPermanentlyDelete:
-          json['can_permanently_delete'] as bool? ?? false,
+      canPermanentlyDelete: json['can_permanently_delete'] as bool? ?? false,
       locked: json['locked'] as bool? ?? false,
       bookmarked: json['bookmarked'] as bool? ?? false,
       bookmarkId: json['bookmark_id'] as int?,
