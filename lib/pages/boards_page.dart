@@ -664,6 +664,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
         : board.tagNames.isNotEmpty
         ? 'tags'
         : 'none';
+    var acl = board.acl.toList(growable: true);
     var showTags = board.showTags;
     var showThumbnail = board.showTopicThumbnail;
     var requireConfirmation = board.requireConfirmation;
@@ -763,6 +764,33 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                     ),
                   ],
                   const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.security_outlined),
+                    title: Text(
+                      _isZh(context) ? '访问控制' : 'Access control',
+                    ),
+                    subtitle: Text(
+                      _isZh(context)
+                          ? '${acl.length} 条授权规则'
+                          : '${acl.length} access rules',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final updated = await showDialog<List<BoardAclEntry>>(
+                        context: context,
+                        builder: (_) => _BoardAclEditorDialog(
+                          initialEntries: acl,
+                        ),
+                      );
+                      if (updated != null) {
+                        setDialogState(
+                          () => acl = updated.toList(growable: true),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: cardStyle,
                     decoration: InputDecoration(
@@ -852,6 +880,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                   if (slug.isNotEmpty) 'slug': slug,
                   'category_ids': categoryIds,
                   'tag_names': tagNames,
+                  'acl': acl.map((entry) => entry.toJson()).toList(growable: false),
                   'show_tags': showTags,
                   'show_topic_thumbnail': showThumbnail,
                   'require_confirmation': requireConfirmation,
@@ -877,6 +906,54 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       final tagNames =
           (result['tag_names'] as List?)?.map((e) => e.toString()).toList() ??
           const <String>[];
+      final aclEntries =
+          (result['acl'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (item) => BoardAclEntry.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
+              )
+              .toList(growable: false);
+      final accessEvaluation = await ref
+          .read(discourseServiceProvider)
+          .evaluateBoardAccessControl(board.id, aclEntries);
+      if (accessEvaluation['current_user_will_lose_permission'] == true &&
+          mounted) {
+        final warning =
+            accessEvaluation['error_message']?.toString().trim() ?? '';
+        final confirmed =
+            await showDialog<bool>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: Text(
+                  _isZh(context)
+                      ? '确认访问权限变更'
+                      : 'Confirm access change',
+                ),
+                content: Text(
+                  warning.isNotEmpty
+                      ? warning
+                      : (_isZh(context)
+                            ? '保存这些访问规则后，你可能失去管理此看板的权限。是否继续？'
+                            : 'You may lose permission to manage this board after saving these access rules. Continue?'),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: Text(_isZh(context) ? '取消' : 'Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: Text(_isZh(context) ? '仍然保存' : 'Save anyway'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!confirmed) return;
+      }
+
       final preview = await ref
           .read(discourseServiceProvider)
           .previewBoardConstraints(
@@ -1499,6 +1576,237 @@ class _FloaterDetailSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _BoardAclEditorDialog extends StatefulWidget {
+  const _BoardAclEditorDialog({required this.initialEntries});
+
+  final List<BoardAclEntry> initialEntries;
+
+  @override
+  State<_BoardAclEditorDialog> createState() => _BoardAclEditorDialogState();
+}
+
+class _BoardAclEditorDialogState extends State<_BoardAclEditorDialog> {
+  late List<BoardAclEntry> _entries;
+
+  @override
+  void initState() {
+    super.initState();
+    _entries = widget.initialEntries.toList(growable: true);
+  }
+
+  Future<void> _addEntry() async {
+    final idController = TextEditingController();
+    final nameController = TextEditingController();
+    var type = 'group';
+    var permission = 'view';
+    final entry = await showDialog<BoardAclEntry>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(_isZh(context) ? '添加访问规则' : 'Add access rule'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: type,
+                  decoration: InputDecoration(
+                    labelText: _isZh(context) ? '主体类型' : 'Subject type',
+                    border: const OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'group', child: Text('Group')),
+                    DropdownMenuItem(value: 'user', child: Text('User')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => type = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: idController,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: _isZh(context) ? 'ID' : 'ID',
+                    helperText: _isZh(context)
+                        ? 'Discourse 用户或群组的数字 ID'
+                        : 'Numeric Discourse user or group ID',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: _isZh(context)
+                        ? '显示名称（可选）'
+                        : 'Display name (optional)',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: permission,
+                  decoration: InputDecoration(
+                    labelText: _isZh(context) ? '权限' : 'Permission',
+                    border: const OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'view', child: Text('View')),
+                    DropdownMenuItem(value: 'edit', child: Text('Edit')),
+                    DropdownMenuItem(value: 'manage', child: Text('Manage')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => permission = value);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(_isZh(context) ? '取消' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final id = int.tryParse(idController.text.trim());
+                if (id == null || id < 0) return;
+                Navigator.pop(
+                  dialogContext,
+                  BoardAclEntry(
+                    type: type,
+                    id: id,
+                    permission: permission,
+                    displayName: nameController.text.trim().isEmpty
+                        ? null
+                        : nameController.text.trim(),
+                  ),
+                );
+              },
+              child: Text(_isZh(context) ? '添加' : 'Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+    idController.dispose();
+    nameController.dispose();
+    if (entry == null || !mounted) return;
+
+    setState(() {
+      final index = _entries.indexWhere(
+        (item) => item.type == entry.type && item.id == entry.id,
+      );
+      if (index >= 0) {
+        _entries[index] = entry;
+      } else {
+        _entries.add(entry);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_isZh(context) ? '访问控制' : 'Access control'),
+      content: SizedBox(
+        width: 520,
+        child: _entries.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  _isZh(context)
+                      ? '当前没有显式访问规则。服务端仍会应用强制 ACL。'
+                      : 'No explicit access rules. Server-side mandatory ACL still applies.',
+                ),
+              )
+            : ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _entries.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final entry = _entries[index];
+                    return ListTile(
+                      leading: Icon(
+                        entry.type == 'user'
+                            ? Icons.person_outline
+                            : Icons.group_outlined,
+                      ),
+                      title: Text(
+                        entry.displayName?.trim().isNotEmpty == true
+                            ? entry.displayName!
+                            : '${entry.type} #${entry.id}',
+                      ),
+                      subtitle: Text('${entry.type} #${entry.id}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          DropdownButton<String>(
+                            value: entry.permission,
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'view',
+                                child: Text('View'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'edit',
+                                child: Text('Edit'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'manage',
+                                child: Text('Manage'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() {
+                                _entries[index] =
+                                    entry.copyWith(permission: value);
+                              });
+                            },
+                          ),
+                          IconButton(
+                            tooltip: _isZh(context) ? '移除' : 'Remove',
+                            onPressed: () =>
+                                setState(() => _entries.removeAt(index)),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+      ),
+      actions: [
+        TextButton.icon(
+          onPressed: _addEntry,
+          icon: const Icon(Icons.add_rounded),
+          label: Text(_isZh(context) ? '添加规则' : 'Add rule'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(_isZh(context) ? '取消' : 'Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            _entries.toList(growable: false),
+          ),
+          child: Text(_isZh(context) ? '完成' : 'Done'),
+        ),
+      ],
     );
   }
 }
