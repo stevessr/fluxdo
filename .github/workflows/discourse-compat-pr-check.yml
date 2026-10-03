@@ -46,7 +46,7 @@ jobs:
 
       - name: Check formatting
         run: |
-          dart format \
+          dart format --output=none --set-exit-if-changed \
             lib/models/invite_link.dart \
             lib/pages/boards_page.dart \
             lib/pages/chat/chat_channel_members_sheet.dart \
