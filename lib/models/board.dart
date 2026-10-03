@@ -14,6 +14,8 @@ class DiscourseBoard {
     required this.cardStyle,
     required this.showTopicThumbnail,
     required this.archived,
+    required this.canArchive,
+    required this.canUnarchive,
     required this.canWrite,
     required this.canManage,
     required this.columns,
@@ -32,11 +34,14 @@ class DiscourseBoard {
   final String cardStyle;
   final bool showTopicThumbnail;
   final bool archived;
+  final bool canArchive;
+  final bool canUnarchive;
   final bool canWrite;
   final bool canManage;
   final List<BoardColumn> columns;
 
   factory DiscourseBoard.fromJson(Map<String, dynamic> json) {
+    final canManage = json['can_manage'] as bool? ?? false;
     final columns =
         (json['columns'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
@@ -58,8 +63,10 @@ class DiscourseBoard {
       cardStyle: json['card_style'] as String? ?? 'detailed',
       showTopicThumbnail: json['show_topic_thumbnail'] as bool? ?? false,
       archived: json['archived'] as bool? ?? false,
+      canArchive: json['can_archive'] as bool? ?? canManage,
+      canUnarchive: json['can_unarchive'] as bool? ?? canManage,
       canWrite: json['can_write'] as bool? ?? false,
-      canManage: json['can_manage'] as bool? ?? false,
+      canManage: canManage,
       columns: columns,
     );
   }
