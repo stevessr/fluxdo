@@ -682,9 +682,7 @@ mixin _TopicsMixin on _DiscourseServiceBase {
         final responseData = response.data;
         if (responseData is Map && responseData['ai_topic_summary'] is Map) {
           yield TopicSummary.fromJson(
-            Map<String, dynamic>.from(
-              responseData['ai_topic_summary'] as Map,
-            ),
+            Map<String, dynamic>.from(responseData['ai_topic_summary'] as Map),
           );
           return;
         }
@@ -737,10 +735,7 @@ mixin _TopicsMixin on _DiscourseServiceBase {
         }
 
         // 兼容尚未提供 POST create 路由的旧版 Discourse。
-        response = await _dio.get(
-          endpoint,
-          queryParameters: requestData,
-        );
+        response = await _dio.get(endpoint, queryParameters: requestData);
       }
 
       final responseData = response.data;
