@@ -74,8 +74,11 @@ extension _PostFooterManageActions on _PostFooterSectionState {
   }
 
   Future<void> _editPostNotice() async {
-    final zh = Localizations.localeOf(context).languageCode.toLowerCase() == 'zh';
-    final controller = TextEditingController(text: widget.post.notice?.raw ?? '');
+    final zh =
+        Localizations.localeOf(context).languageCode.toLowerCase() == 'zh';
+    final controller = TextEditingController(
+      text: widget.post.notice?.raw ?? '',
+    );
     final value = await showAppDialog<String?>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -173,10 +176,14 @@ extension _PostFooterManageActions on _PostFooterSectionState {
           title: Text(zh ? '永久删除检查' : 'Permanent delete check'),
           content: Text(
             check.canPermanentlyDelete
-                ? (zh ? '该帖子当前满足永久删除条件。' : 'This post can currently be permanently deleted.')
+                ? (zh
+                      ? '该帖子当前满足永久删除条件。'
+                      : 'This post can currently be permanently deleted.')
                 : (check.reason?.trim().isNotEmpty == true
                       ? check.reason!
-                      : (zh ? '该帖子当前不满足永久删除条件。' : 'This post cannot currently be permanently deleted.')),
+                      : (zh
+                            ? '该帖子当前不满足永久删除条件。'
+                            : 'This post cannot currently be permanently deleted.')),
           ),
           actions: [
             TextButton(
