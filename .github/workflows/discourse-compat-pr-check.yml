@@ -22,6 +22,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: discourse-compat-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
