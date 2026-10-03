@@ -374,6 +374,118 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
   }
 
+  Future<void> _toggleOwner(GroupMember member) async {
+    final group = _group;
+    if (group == null ||
+        !group.canManageMembers ||
+        _removingMemberIds.contains(member.id)) {
+      return;
+    }
+
+    setState(() => _removingMemberIds.add(member.id));
+    try {
+      final service = ref.read(discourseServiceProvider);
+      if (member.owner) {
+        await service.removeGroupOwner(
+          groupId: group.id,
+          username: member.username,
+        );
+      } else {
+        await service.addGroupOwners(
+          groupId: group.id,
+          usernames: [member.username],
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _members = _members
+            .map(
+              (item) => item.id == member.id
+                  ? item.copyWith(owner: !member.owner)
+                  : item,
+            )
+            .toList(growable: false);
+      });
+      final copy = _copy(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            member.owner
+                ? copy.ownerRemoved(member.username)
+                : copy.ownerAdded(member.username),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _removingMemberIds.remove(member.id));
+    }
+  }
+
+  Future<void> _setPrimaryGroup(GroupMember member, bool primary) async {
+    final group = _group;
+    final currentUser = ref.read(currentUserProvider).value;
+    if (group == null ||
+        currentUser?.admin != true ||
+        _removingMemberIds.contains(member.id)) {
+      return;
+    }
+    setState(() => _removingMemberIds.add(member.id));
+    try {
+      await ref.read(discourseServiceProvider).setPrimaryGroupForUsers(
+        groupId: group.id,
+        usernames: [member.username],
+        primary: primary,
+      );
+      if (!mounted) return;
+      await _reload();
+      if (!mounted) return;
+      final copy = _copy(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            primary
+                ? copy.primaryGroupSet(member.username)
+                : copy.primaryGroupCleared(member.username),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _removingMemberIds.remove(member.id));
+    }
+  }
+
+  Future<void> _showMembershipRequests() async {
+    final group = _group;
+    if (group == null || !group.canManageMembers) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _GroupMembershipRequestsDialog(
+        groupLabel: group.label,
+        loadPage: (offset) => ref
+            .read(discourseServiceProvider)
+            .fetchGroupMembershipRequests(group.name, offset: offset),
+        onHandle: (member, accept) => ref
+            .read(discourseServiceProvider)
+            .handleGroupMembershipRequest(
+              groupId: group.id,
+              userId: member.id,
+              accept: accept,
+            ),
+      ),
+    );
+    if (mounted) await _reload();
+  }
+
   void _openUser(GroupMember member) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -391,7 +503,12 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       appBar: AppBar(
         title: Text(group?.label ?? widget.groupName),
         actions: [
-          if (group?.canManageMembers == true)
+          if (group?.canManageMembers == true) ...[
+            IconButton(
+              tooltip: copy.membershipRequests,
+              onPressed: _showMembershipRequests,
+              icon: const Icon(Symbols.person_check_rounded),
+            ),
             IconButton(
               tooltip: copy.addMembers,
               onPressed: _adding ? null : _showAddMembers,
@@ -402,6 +519,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                     )
                   : const Icon(Symbols.person_add_rounded),
             ),
+          ],
           IconButton(
             tooltip: copy.refresh,
             onPressed: _loading || _membershipChanging ? null : _reload,
@@ -592,21 +710,56 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                 ],
               ),
               subtitle: Text('@${member.username}'),
-              trailing: _group?.canManageMembers == true && !member.owner
-                  ? IconButton(
-                      tooltip: copy.removeMember,
-                      onPressed: _removingMemberIds.contains(member.id)
-                          ? null
-                          : () => _removeMember(member),
-                      icon: _removingMemberIds.contains(member.id)
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator.adaptive(
-                                strokeWidth: 2,
+              trailing: _group?.canManageMembers == true
+                  ? _removingMemberIds.contains(member.id)
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator.adaptive(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : PopupMenuButton<String>(
+                            tooltip: copy.memberManagement,
+                            onSelected: (value) {
+                              if (value == 'toggle_owner') {
+                                _toggleOwner(member);
+                              } else if (value == 'set_primary') {
+                                _setPrimaryGroup(member, true);
+                              } else if (value == 'clear_primary') {
+                                _setPrimaryGroup(member, false);
+                              } else if (value == 'remove') {
+                                _removeMember(member);
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                value: 'toggle_owner',
+                                child: Text(
+                                  member.owner
+                                      ? copy.removeOwner
+                                      : copy.makeOwner,
+                                ),
                               ),
-                            )
-                          : const Icon(Symbols.person_remove_rounded),
-                    )
+                              if (ref.read(currentUserProvider).value?.admin ==
+                                  true)
+                                PopupMenuItem(
+                                  value:
+                                      member.primaryGroupName == _group?.name
+                                      ? 'clear_primary'
+                                      : 'set_primary',
+                                  child: Text(
+                                    member.primaryGroupName == _group?.name
+                                        ? copy.clearPrimaryGroup
+                                        : copy.setPrimaryGroup,
+                                  ),
+                                ),
+                              if (!member.owner)
+                                PopupMenuItem(
+                                  value: 'remove',
+                                  child: Text(copy.removeMember),
+                                ),
+                            ],
+                          )
                   : const Icon(Symbols.chevron_right_rounded),
               onTap: () => _openUser(member),
             );
@@ -766,6 +919,170 @@ class _SmallBadge extends StatelessWidget {
   }
 }
 
+class _GroupMembershipRequestsDialog extends StatefulWidget {
+  const _GroupMembershipRequestsDialog({
+    required this.groupLabel,
+    required this.loadPage,
+    required this.onHandle,
+  });
+
+  final String groupLabel;
+  final Future<GroupMembersResult> Function(int offset) loadPage;
+  final Future<void> Function(GroupMember member, bool accept) onHandle;
+
+  @override
+  State<_GroupMembershipRequestsDialog> createState() =>
+      _GroupMembershipRequestsDialogState();
+}
+
+class _GroupMembershipRequestsDialogState
+    extends State<_GroupMembershipRequestsDialog> {
+  List<GroupMember> _requests = const [];
+  final Set<int> _handling = <int>{};
+  Object? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_load);
+  }
+
+  Future<void> _load() async {
+    try {
+      final byId = <int, GroupMember>{};
+      var offset = 0;
+      for (var page = 0; page < 100; page++) {
+        final result = await widget.loadPage(offset);
+        for (final member in result.members) {
+          byId[member.id] = member;
+        }
+        if (!result.hasMore || result.nextOffset <= offset) break;
+        offset = result.nextOffset;
+      }
+      if (!mounted) return;
+      setState(() {
+        _requests = byId.values.toList(growable: false);
+        _loading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error;
+      });
+    }
+  }
+
+  Future<void> _handle(GroupMember member, bool accept) async {
+    if (_handling.contains(member.id)) return;
+    setState(() => _handling.add(member.id));
+    try {
+      await widget.onHandle(member, accept);
+      if (!mounted) return;
+      setState(() {
+        _requests = _requests
+            .where((item) => item.id != member.id)
+            .toList(growable: false);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => _handling.remove(member.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = _copy(context);
+    return AlertDialog(
+      title: Text('${copy.membershipRequests} · ${widget.groupLabel}'),
+      content: SizedBox(
+        width: 520,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator.adaptive())
+            : _error != null
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error.toString()),
+                  const SizedBox(height: 12),
+                  FilledButton.tonal(
+                    onPressed: () {
+                      setState(() {
+                        _loading = true;
+                        _error = null;
+                      });
+                      _load();
+                    },
+                    child: Text(copy.retry),
+                  ),
+                ],
+              )
+            : _requests.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Text(copy.noMembershipRequests),
+              )
+            : ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 460),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _requests.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final member = _requests[index];
+                    final busy = _handling.contains(member.id);
+                    return ListTile(
+                      leading: SmartAvatar(
+                        imageUrl: member.avatarUrl,
+                        radius: 20,
+                        fallbackText: member.username,
+                      ),
+                      title: Text(
+                        member.name?.trim().isNotEmpty == true
+                            ? member.name!.trim()
+                            : member.username,
+                      ),
+                      subtitle: Text('@${member.username}'),
+                      trailing: busy
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator.adaptive(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Wrap(
+                              spacing: 4,
+                              children: [
+                                TextButton(
+                                  onPressed: () => _handle(member, false),
+                                  child: Text(copy.deny),
+                                ),
+                                FilledButton.tonal(
+                                  onPressed: () => _handle(member, true),
+                                  child: Text(copy.accept),
+                                ),
+                              ],
+                            ),
+                    );
+                  },
+                ),
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(copy.cancel),
+        ),
+      ],
+    );
+  }
+}
+
 class _AddMembersRequest {
   const _AddMembersRequest({
     required this.usernames,
@@ -884,6 +1201,24 @@ class _GroupCopy {
   String get noMembers => zh ? '没有成员' : 'No members';
   String get loadMore => zh ? '加载更多' : 'Load more';
   String get owner => zh ? '所有者' : 'Owner';
+  String get memberManagement => zh ? '成员管理' : 'Member management';
+  String get makeOwner => zh ? '设为所有者' : 'Make owner';
+  String get removeOwner => zh ? '取消所有者' : 'Remove owner';
+  String ownerAdded(String username) =>
+      zh ? '已将 @$username 设为所有者' : '@$username is now an owner';
+  String ownerRemoved(String username) =>
+      zh ? '已取消 @$username 的所有者身份' : 'Removed owner role from @$username';
+  String get setPrimaryGroup => zh ? '设为主要群组' : 'Set as primary group';
+  String get clearPrimaryGroup => zh ? '取消主要群组' : 'Clear primary group';
+  String primaryGroupSet(String username) =>
+      zh ? '已将该群组设为 @$username 的主要群组' : 'Primary group set for @$username';
+  String primaryGroupCleared(String username) =>
+      zh ? '已取消 @$username 的主要群组' : 'Primary group cleared for @$username';
+  String get membershipRequests => zh ? '加入申请' : 'Membership requests';
+  String get noMembershipRequests =>
+      zh ? '当前没有待处理的加入申请' : 'No pending membership requests';
+  String get accept => zh ? '接受' : 'Accept';
+  String get deny => zh ? '拒绝' : 'Deny';
   String get automatic => zh ? '自动群组' : 'Automatic group';
   String get youAreOwner => zh ? '你是所有者' : 'You are an owner';
   String get join => zh ? '进入' : 'Join';
