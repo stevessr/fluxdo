@@ -81,6 +81,46 @@ mixin _BoardsMixin on _DiscourseServiceBase {
     }
   }
 
+  /// 预评估 Board ACL 修改，复用 Discourse AccessControlList 的安全检查。
+  ///
+  /// 当服务端以 422 返回“当前用户将失去权限”时，不把它当普通网络错误，
+  /// 而是把 extras 和错误文本返回给 UI 进行二次确认。
+  Future<Map<String, dynamic>> evaluateBoardAccessControl(
+    int boardId,
+    List<BoardAclEntry> acl,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/access-control/evaluate.json',
+        data: {
+          'target_type': 'Boards::Board',
+          'target_id': boardId,
+          'new_acl': acl.map((entry) => entry.toJson()).toList(growable: false),
+        },
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (e.response?.statusCode == 422 && data is Map) {
+        final root = Map<String, dynamic>.from(data);
+        final extras = root['extras'];
+        if (extras is Map &&
+            extras.containsKey('current_user_will_lose_permission')) {
+          final result = Map<String, dynamic>.from(extras);
+          final errors = root['errors'];
+          if (errors is List && errors.isNotEmpty) {
+            result['error_message'] = errors.first.toString();
+          }
+          return result;
+        }
+      }
+      _throwApiError(e);
+    }
+  }
+
   /// 创建 Board。字段直接对齐 Boards::Board contract，便于兼容插件后续扩展。
   Future<DiscourseBoard> createBoard(Map<String, dynamic> board) async {
     try {
