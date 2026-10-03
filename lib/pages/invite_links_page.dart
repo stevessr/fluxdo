@@ -652,11 +652,13 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
 
     setState(() => _isManagingInvite = true);
     try {
-      final updated = await ref.read(discourseServiceProvider).updateInvite(
-        id,
-        description: result.description,
-        email: result.email,
-      );
+      final updated = await ref
+          .read(discourseServiceProvider)
+          .updateInvite(
+            id,
+            description: result.description,
+            email: result.email,
+          );
       final resolved = _resolveInviteLink(updated);
       if (!mounted) return;
       setState(() => _latestInvite = resolved);
@@ -674,10 +676,9 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     if (_isManagingInvite) return;
     final emailsController = TextEditingController();
     final messageController = TextEditingController();
-    final result =
-        await showDialog<({List<String> emails, String message})>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
+    final result = await showDialog<({List<String> emails, String message})>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
             title: const Text('批量邮件邀请'),
             content: SizedBox(
               width: 480,
@@ -748,8 +749,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       final success =
           (response['num_successfully_created_invitations'] as num?)?.toInt() ??
           0;
-      final failed =
-          (response['num_failed_invitations'] as num?)?.toInt() ?? 0;
+      final failed = (response['num_failed_invitations'] as num?)?.toInt() ?? 0;
       if (!mounted) return;
       await _loadPendingInvites(force: true);
       ToastService.showSuccess('批量邀请完成：成功 $success，失败 $failed');
