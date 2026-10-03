@@ -492,7 +492,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   }
 
   Future<void> _toggleBoardArchived(DiscourseBoard board) async {
-    if (!board.canManage) return;
+    if (board.archived ? !board.canUnarchive : !board.canArchive) return;
     try {
       final service = ref.read(discourseServiceProvider);
       if (board.archived) {
@@ -549,7 +549,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       appBar: AppBar(
         title: Text(title),
         actions: [
-          if (board != null && board.canManage)
+          if (board != null &&
+              (board.canManage || board.canArchive || board.canUnarchive))
             PopupMenuButton<String>(
               tooltip: _isZh(context) ? '看板管理' : 'Board management',
               onSelected: (value) {
@@ -568,18 +569,21 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                     value: 'add_column',
                     child: Text(_isZh(context) ? '添加分栏' : 'Add column'),
                   ),
-                PopupMenuItem(
-                  value: 'archive',
-                  child: Text(
-                    board.archived
-                        ? (_isZh(context) ? '取消归档' : 'Unarchive')
-                        : (_isZh(context) ? '归档看板' : 'Archive board'),
+                if ((!board.archived && board.canArchive) ||
+                    (board.archived && board.canUnarchive))
+                  PopupMenuItem(
+                    value: 'archive',
+                    child: Text(
+                      board.archived
+                          ? (_isZh(context) ? '取消归档' : 'Unarchive')
+                          : (_isZh(context) ? '归档看板' : 'Archive board'),
+                    ),
                   ),
-                ),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Text(_isZh(context) ? '删除看板' : 'Delete board'),
-                ),
+                if (board.canManage)
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Text(_isZh(context) ? '删除看板' : 'Delete board'),
+                  ),
               ],
             ),
           IconButton(
