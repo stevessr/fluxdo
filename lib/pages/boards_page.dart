@@ -693,9 +693,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                     controller: slugController,
                     decoration: InputDecoration(
                       labelText: _isZh(context) ? 'Slug' : 'Slug',
-                      helperText: _isZh(context)
-                          ? '留空由服务端按名称生成'
-                          : 'Leave empty to let the server derive it from the name',
+                      helperText: _isZh(context) ? '留空由服务端按名称生成' : 'Leave empty to let the server derive it from the name',
                       border: const OutlineInputBorder(),
                     ),
                   ),
@@ -722,9 +720,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                       DropdownMenuItem(
                         value: 'categories_and_tags',
                         child: Text(
-                          _isZh(context)
-                              ? '分类 + 标签'
-                              : 'Categories + tags',
+                          _isZh(context) ? '分类 + 标签' : 'Categories + tags',
                         ),
                       ),
                     ],
@@ -767,9 +763,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.security_outlined),
-                    title: Text(
-                      _isZh(context) ? '访问控制' : 'Access control',
-                    ),
+                    title: Text(_isZh(context) ? '访问控制' : 'Access control'),
                     subtitle: Text(
                       _isZh(context)
                           ? '${acl.length} 条授权规则'
@@ -779,9 +773,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                     onTap: () async {
                       final updated = await showDialog<List<BoardAclEntry>>(
                         context: context,
-                        builder: (_) => _BoardAclEditorDialog(
-                          initialEntries: acl,
-                        ),
+                        builder: (_) =>
+                            _BoardAclEditorDialog(initialEntries: acl),
                       );
                       if (updated != null) {
                         setDialogState(
@@ -802,10 +795,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                         value: 'detailed',
                         child: Text('Detailed'),
                       ),
-                      DropdownMenuItem(
-                        value: 'simple',
-                        child: Text('Simple'),
-                      ),
+                      DropdownMenuItem(value: 'simple', child: Text('Simple')),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -880,7 +870,9 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                   if (slug.isNotEmpty) 'slug': slug,
                   'category_ids': categoryIds,
                   'tag_names': tagNames,
-                  'acl': acl.map((entry) => entry.toJson()).toList(growable: false),
+                  'acl': acl
+                      .map((entry) => entry.toJson())
+                      .toList(growable: false),
                   'show_tags': showTags,
                   'show_topic_thumbnail': showThumbnail,
                   'require_confirmation': requireConfirmation,
@@ -906,15 +898,12 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       final tagNames =
           (result['tag_names'] as List?)?.map((e) => e.toString()).toList() ??
           const <String>[];
-      final aclEntries =
-          (result['acl'] as List<dynamic>? ?? const [])
-              .whereType<Map>()
-              .map(
-                (item) => BoardAclEntry.fromJson(
-                  Map<String, dynamic>.from(item),
-                ),
-              )
-              .toList(growable: false);
+      final aclEntries = (result['acl'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => BoardAclEntry.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList(growable: false);
       final accessEvaluation = await ref
           .read(discourseServiceProvider)
           .evaluateBoardAccessControl(board.id, aclEntries);
@@ -927,9 +916,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
               context: context,
               builder: (dialogContext) => AlertDialog(
                 title: Text(
-                  _isZh(context)
-                      ? '确认访问权限变更'
-                      : 'Confirm access change',
+                  _isZh(context) ? '确认访问权限变更' : 'Confirm access change',
                 ),
                 content: Text(
                   warning.isNotEmpty
@@ -1724,9 +1711,7 @@ class _BoardAclEditorDialogState extends State<_BoardAclEditorDialog> {
             ? Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 child: Text(
-                  _isZh(context)
-                      ? '当前没有显式访问规则。服务端仍会应用强制 ACL。'
-                      : 'No explicit access rules. Server-side mandatory ACL still applies.',
+                  _isZh(context) ? '当前没有显式访问规则。服务端仍会应用强制 ACL。' : 'No explicit access rules. Server-side mandatory ACL still applies.',
                 ),
               )
             : ConstrainedBox(
@@ -1771,8 +1756,9 @@ class _BoardAclEditorDialogState extends State<_BoardAclEditorDialog> {
                             onChanged: (value) {
                               if (value == null) return;
                               setState(() {
-                                _entries[index] =
-                                    entry.copyWith(permission: value);
+                                _entries[index] = entry.copyWith(
+                                  permission: value,
+                                );
                               });
                             },
                           ),
@@ -1800,10 +1786,8 @@ class _BoardAclEditorDialogState extends State<_BoardAclEditorDialog> {
           child: Text(_isZh(context) ? '取消' : 'Cancel'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            _entries.toList(growable: false),
-          ),
+          onPressed: () =>
+              Navigator.pop(context, _entries.toList(growable: false)),
           child: Text(_isZh(context) ? '完成' : 'Done'),
         ),
       ],
