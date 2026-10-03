@@ -120,9 +120,7 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
                         : Symbols.description_rounded,
                     color: theme.colorScheme.onSurface,
                   ),
-                  title: Text(
-                    widget.post.wiki ? '取消 Wiki' : '设为 Wiki',
-                  ),
+                  title: Text(widget.post.wiki ? '取消 Wiki' : '设为 Wiki'),
                   onTap: () {
                     Navigator.pop(ctx);
                     _toggleWiki();
