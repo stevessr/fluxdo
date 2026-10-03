@@ -45,6 +45,7 @@
   "topicDetail_markUnreadAllDesc": "清空閱讀進度，下次從頭讀",
   "topicDetail_markUnreadSuccess": "已標記為未讀",
   "topicDetail_openInBrowser": "在瀏覽器打開",
+  "topicDetail_openInBuiltInBrowser": "在內置瀏覽器打開",
   "topicDetail_readLaterFull": "浮窗已滿（最多 {max} 個）",
   "@topicDetail_readLaterFull": {
     "placeholders": {
