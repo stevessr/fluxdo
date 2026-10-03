@@ -603,7 +603,7 @@ mixin _PostsMixin on _DiscourseServiceBase {
 
   /// 合并同一话题内的多个帖子。
   Future<void> mergePosts(List<int> postIds) async {
-    final normalized = postIds.toSet().toList(growable: false);
+    var normalized = postIds.toSet().toList(growable: false);
     if (normalized.length < 2) {
       throw ArgumentError.value(
         postIds,
@@ -611,6 +611,21 @@ mixin _PostsMixin on _DiscourseServiceBase {
         'at least two posts are required',
       );
     }
+
+    // 当前 Discourse PostsController#merge_posts 会拒绝恰好按 id 升序传入的
+    // post_ids；PostMerger 本身随后仍会按 post_number 排序，因此在这种情况下
+    // 反转请求顺序即可保持语义不变并兼容上游。
+    final ascending = normalized.toList(growable: false)..sort();
+    final alreadyAscending =
+        normalized.length == ascending.length &&
+        List.generate(
+          normalized.length,
+          (index) => normalized[index] == ascending[index],
+        ).every((same) => same);
+    if (alreadyAscending) {
+      normalized = normalized.reversed.toList(growable: false);
+    }
+
     try {
       await _dio.put('/posts/merge_posts.json', data: {'post_ids': normalized});
     } on DioException catch (e) {
