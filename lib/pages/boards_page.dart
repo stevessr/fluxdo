@@ -535,6 +535,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
         : null;
     final selectedTags = <String>{if (tagsNeeded.length == 1) tagsNeeded.first};
 
+    if (!mounted) return null;
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
