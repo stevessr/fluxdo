@@ -6,6 +6,7 @@ import '../../l10n/s.dart';
 import '../../models/chat/chat_models.dart';
 import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/chat/chat_conversation_tabs.dart';
@@ -24,6 +25,12 @@ typedef ChatConversationGroups = ({
   List<ChatChannel> privateChats,
   List<ChatChannel> groupChats,
 });
+
+enum _ChatChannelFilter { all, active, unread, mentions }
+
+enum _ChatChannelSort { alphabetical, recentActivity, priority }
+
+enum _NewChatCreatorMode { message, group }
 
 /// 按对话参与者拆分聊天频道。
 ///
@@ -58,11 +65,28 @@ class _ChatPageState extends ConsumerState<ChatPage>
   late final TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  _ChatChannelFilter _channelFilter = _ChatChannelFilter.all;
+  _ChatChannelSort _channelSort = _ChatChannelSort.priority;
+
+  static const _channelFilterPreferenceKey = 'chat_channel_list_filter';
+  static const _channelSortPreferenceKey = 'chat_channel_list_sort';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    final storedFilter = prefs.getString(_channelFilterPreferenceKey);
+    final storedSort = prefs.getString(_channelSortPreferenceKey);
+    _channelFilter = _ChatChannelFilter.values.firstWhere(
+      (value) => value.name == storedFilter,
+      orElse: () => _ChatChannelFilter.all,
+    );
+    _channelSort = _ChatChannelSort.values.firstWhere(
+      (value) => value.name == storedSort,
+      orElse: () => _ChatChannelSort.priority,
+    );
   }
 
   @override
@@ -77,7 +101,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   void _openNewDmDialog() {
-    showDialog(context: context, builder: (context) => const _NewDmDialog());
+    showDialog(
+      context: context,
+      builder: (context) =>
+          const _NewDmDialog(initialMode: _NewChatCreatorMode.message),
+    );
+  }
+
+  void _openNewGroupDialog() {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          const _NewDmDialog(initialMode: _NewChatCreatorMode.group),
+    );
   }
 
   void _openGlobalSearch() {
@@ -92,7 +128,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   List<ChatChannel> _filterChannels(List<ChatChannel> list, String query) {
-    if (query.isEmpty) return list;
+    if (query.isEmpty) return List<ChatChannel>.from(list);
     final q = query.toLowerCase();
     return list.where((c) {
       final titleMatch = c.title?.toLowerCase().contains(q) ?? false;
@@ -102,10 +138,119 @@ class _ChatPageState extends ConsumerState<ChatPage>
           c.lastMessage?.message.toLowerCase().contains(q) ?? false;
       final userMatch =
           (c.lastMessage?.user?.username.toLowerCase().contains(q) ?? false) ||
-          (c.lastMessage?.user?.name?.toLowerCase().contains(q) ?? false);
+          (c.lastMessage?.user?.name?.toLowerCase().contains(q) ?? false) ||
+          (c.dmUsers?.any(
+                (u) =>
+                    u.username.toLowerCase().contains(q) ||
+                    (u.name?.toLowerCase().contains(q) ?? false),
+              ) ??
+              false);
       return titleMatch || slugMatch || descMatch || msgMatch || userMatch;
     }).toList();
   }
+
+  List<ChatChannel> _prepareChannels(
+    List<ChatChannel> list,
+    String query,
+  ) {
+    var channels = _filterChannels(list, query);
+
+    final activeSince = DateTime.now().subtract(const Duration(days: 30));
+    channels = switch (_channelFilter) {
+      _ChatChannelFilter.all => channels,
+      _ChatChannelFilter.active => channels
+          .where(
+            (channel) =>
+                channel.lastMessage != null &&
+                (channel.lastMessageSentAt?.isAfter(activeSince) ?? false),
+          )
+          .toList(),
+      _ChatChannelFilter.unread => channels
+          .where((channel) => !channel.muted && _channelHasUnread(channel))
+          .toList(),
+      _ChatChannelFilter.mentions => channels
+          .where(
+            (channel) => !channel.muted && channel.unreadMentions > 0,
+          )
+          .toList(),
+    };
+
+    channels.sort((a, b) {
+      switch (_channelSort) {
+        case _ChatChannelSort.alphabetical:
+          return _compareAlphabetically(a, b);
+        case _ChatChannelSort.recentActivity:
+          return _compareRecentActivity(a, b) ?? _compareAlphabetically(a, b);
+        case _ChatChannelSort.priority:
+          final priority = _channelPriority(a).compareTo(_channelPriority(b));
+          if (priority != 0) return priority;
+          return _compareRecentActivity(a, b) ?? _compareAlphabetically(a, b);
+      }
+    });
+
+    return channels;
+  }
+
+  bool _channelHasUnread(ChatChannel channel) =>
+      channel.unreadCount > 0 || channel.unreadMentions > 0;
+
+  int _channelPriority(ChatChannel channel) {
+    if (channel.muted) return 2;
+    if (channel.unreadMentions > 0) return 0;
+    return _channelHasUnread(channel) ? 1 : 2;
+  }
+
+  int? _compareRecentActivity(ChatChannel a, ChatChannel b) {
+    final aTime = a.lastMessageSentAt?.millisecondsSinceEpoch;
+    final bTime = b.lastMessageSentAt?.millisecondsSinceEpoch;
+
+    if ((aTime != null) != (bTime != null)) {
+      return aTime != null ? -1 : 1;
+    }
+    if (aTime == null || bTime == null) return null;
+
+    final comparison = bTime.compareTo(aTime);
+    return comparison == 0 ? null : comparison;
+  }
+
+  int _compareAlphabetically(ChatChannel a, ChatChannel b) {
+    final comparison = _channelSortName(a).compareTo(_channelSortName(b));
+    return comparison != 0 ? comparison : a.id.compareTo(b.id);
+  }
+
+  String _channelSortName(ChatChannel channel) {
+    if (!channel.isDirectMessage) {
+      final slug = channel.slug?.trim();
+      if (slug != null && slug.isNotEmpty) return slug.toLowerCase();
+      return (channel.title ?? '').trim().toLowerCase();
+    }
+
+    final title = channel.title?.trim();
+    if (title != null && title.isNotEmpty) return title.toLowerCase();
+
+    final users = channel.dmUsers;
+    if (users != null && users.isNotEmpty) {
+      return users
+          .where((user) => !user.isSystemUser)
+          .map((user) => (user.name ?? user.username).toLowerCase())
+          .join(',');
+    }
+
+    return (channel.slug ?? '').toLowerCase();
+  }
+
+  String _currentFilterLabel(BuildContext context) => switch (_channelFilter) {
+    _ChatChannelFilter.all => context.l10n.chat_filter_all,
+    _ChatChannelFilter.active => context.l10n.chat_filter_active,
+    _ChatChannelFilter.unread => context.l10n.chat_filter_unread,
+    _ChatChannelFilter.mentions => context.l10n.chat_filter_mentions,
+  };
+
+  String _currentSortLabel(BuildContext context) => switch (_channelSort) {
+    _ChatChannelSort.alphabetical => context.l10n.chat_sort_alphabetical,
+    _ChatChannelSort.recentActivity => context.l10n.chat_sort_recent_activity,
+    _ChatChannelSort.priority => context.l10n.chat_sort_priority,
+  };
 
   void _openBrowseChannels() {
     Navigator.push(
@@ -114,12 +259,142 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
+  Future<void> _showChannelFilterPicker() async {
+    final selected = await showModalBottomSheet<_ChatChannelFilter>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        Widget option(
+          _ChatChannelFilter value,
+          String title, {
+          String? subtitle,
+        }) {
+          final selected = _channelFilter == value;
+          return ListTile(
+            leading: SizedBox(
+              width: 28,
+              child: selected
+                  ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
+                  : null,
+            ),
+            title: Text(title),
+            subtitle: subtitle == null ? null : Text(subtitle),
+            onTap: () => Navigator.pop(context, value),
+          );
+        }
+
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.only(bottom: 12),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+                child: Text(
+                  context.l10n.chat_filter_title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              option(_ChatChannelFilter.all, context.l10n.chat_filter_all),
+              option(
+                _ChatChannelFilter.active,
+                context.l10n.chat_filter_active,
+                subtitle: context.l10n.chat_filter_active_description,
+              ),
+              option(
+                _ChatChannelFilter.unread,
+                context.l10n.chat_filter_unread,
+              ),
+              option(
+                _ChatChannelFilter.mentions,
+                context.l10n.chat_filter_mentions,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected == null || !mounted) return;
+    setState(() => _channelFilter = selected);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setString(_channelFilterPreferenceKey, selected.name);
+  }
+
+  Future<void> _showChannelSortPicker() async {
+    final selected = await showModalBottomSheet<_ChatChannelSort>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        Widget option(
+          _ChatChannelSort value,
+          String title, {
+          String? subtitle,
+        }) {
+          final selected = _channelSort == value;
+          return ListTile(
+            leading: SizedBox(
+              width: 28,
+              child: selected
+                  ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
+                  : null,
+            ),
+            title: Text(title),
+            subtitle: subtitle == null ? null : Text(subtitle),
+            onTap: () => Navigator.pop(context, value),
+          );
+        }
+
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.only(bottom: 12),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+                child: Text(
+                  context.l10n.chat_sort_title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              option(
+                _ChatChannelSort.alphabetical,
+                context.l10n.chat_sort_alphabetical,
+              ),
+              option(
+                _ChatChannelSort.recentActivity,
+                context.l10n.chat_sort_recent_activity,
+              ),
+              option(
+                _ChatChannelSort.priority,
+                context.l10n.chat_sort_priority,
+                subtitle: context.l10n.chat_sort_priority_description,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected == null || !mounted) return;
+    setState(() => _channelSort = selected);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setString(_channelSortPreferenceKey, selected.name);
+  }
+
   Future<void> _markAllChannelsRead() async {
     try {
       await ref.read(markAllChatChannelsReadProvider.future);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('已将所有聊天频道标为已读')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.chat_mark_all_read_success)),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -149,41 +424,99 @@ class _ChatPageState extends ConsumerState<ChatPage>
         title: Text(context.l10n.chat_title),
         centerTitle: true,
         actions: [
-          // 全局消息搜索保留一级入口；管理型操作统一收进 overflow。
           IconButton(
             icon: const Icon(Icons.search_rounded),
-            tooltip: '搜索聊天消息',
+            tooltip: context.l10n.chat_search_messages,
             onPressed: _openGlobalSearch,
           ),
           PopupMenuButton<String>(
-            tooltip: '更多',
+            tooltip: context.l10n.chat_channel_options,
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (value) {
               switch (value) {
+                case 'new_dm':
+                  _openNewDmDialog();
+                case 'new_group':
+                  _openNewGroupDialog();
                 case 'create_channel':
                   _openCreateChannel();
+                case 'filter':
+                  _showChannelFilterPicker();
+                case 'sort':
+                  _showChannelSortPicker();
                 case 'mark_read':
                   _markAllChannelsRead();
               }
             },
             itemBuilder: (context) => [
+              if (forumChatEnabled &&
+                  (currentUser?.canDirectMessage ?? true)) ...[
+                PopupMenuItem<String>(
+                  value: 'new_dm',
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(context.l10n.chat_new_dm)),
+                      const Icon(Icons.add_rounded),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'new_group',
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(context.l10n.chat_new_group)),
+                      const Icon(Icons.add_rounded),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+              ],
               if (canCreateChannel)
-                const PopupMenuItem<String>(
+                PopupMenuItem<String>(
                   value: 'create_channel',
                   child: ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.add_box_outlined),
-                    title: Text('创建公开频道'),
+                    title: Text(context.l10n.chat_create_public_channel),
                   ),
                 ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
+                enabled: false,
+                height: 32,
+                child: Text(context.l10n.chat_channel_filter),
+              ),
+              PopupMenuItem<String>(
+                value: 'filter',
+                child: Row(
+                  children: [
+                    Expanded(child: Text(_currentFilterLabel(context))),
+                    const Icon(Icons.chevron_right_rounded),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                enabled: false,
+                height: 32,
+                child: Text(context.l10n.chat_channel_sort),
+              ),
+              PopupMenuItem<String>(
+                value: 'sort',
+                child: Row(
+                  children: [
+                    Expanded(child: Text(_currentSortLabel(context))),
+                    const Icon(Icons.chevron_right_rounded),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem<String>(
                 value: 'mark_read',
                 child: ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.done_all_rounded),
-                  title: Text('全部标为已读'),
+                  title: Text(context.l10n.chat_mark_all_read),
                 ),
               ),
             ],
@@ -204,58 +537,38 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
       body: Column(
         children: [
-          // 搜索栏 + 创建聊天（论坛开启 chat 时显示在搜索框右侧）
+          // 频道搜索。创建私信/群聊入口统一收进右上角频道列表选项。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: context.l10n.chat_search_channels,
-                      prefixIcon: const Icon(Symbols.search_rounded, size: 20),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Symbols.close_rounded, size: 18),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
-                            )
-                          : null,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHigh,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    onChanged: (val) {
-                      setState(() => _searchQuery = val.trim());
-                    },
-                  ),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: context.l10n.chat_search_channels,
+                prefixIcon: const Icon(Symbols.search_rounded, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Symbols.close_rounded, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
                 ),
-                if (forumChatEnabled &&
-                    (currentUser?.canDirectMessage ?? true)) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Symbols.add_comment_rounded),
-                    // 上限>1 时可多选建群；文案仍用「新建聊天」兼容单人 DM
-                    tooltip: context.l10n.chat_new_dm,
-                    onPressed: _openNewDmDialog,
-                    style: IconButton.styleFrom(
-                      backgroundColor: theme.colorScheme.secondaryContainer,
-                      foregroundColor: theme.colorScheme.onSecondaryContainer,
-                    ),
-                  ),
-                ],
-              ],
+                filled: true,
+                fillColor: theme.colorScheme.surfaceContainerHigh,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (val) {
+                setState(() => _searchQuery = val.trim());
+              },
             ),
           ),
           Expanded(
@@ -276,14 +589,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     // 收藏 Tab：1:1 私聊 / 多人会话二级分类
                     _ChatConversationSubtabs(
                       id: 'favorites',
-                      channels: _filterChannels(favoriteChannels, _searchQuery),
+                      channels: _prepareChannels(favoriteChannels, _searchQuery),
                       isFavorites: true,
                       searchQuery: _searchQuery,
                       onRefresh: _onRefresh,
                     ),
                     // 公开频道 Tab
                     _ChatChannelListView(
-                      channels: _filterChannels(
+                      channels: _prepareChannels(
                         state.publicChannels,
                         _searchQuery,
                       ),
@@ -293,7 +606,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     // 直接消息 Tab：1:1 私聊 / 群组 DM 二级分类
                     _ChatConversationSubtabs(
                       id: 'direct-messages',
-                      channels: _filterChannels(
+                      channels: _prepareChannels(
                         state.directMessageChannels,
                         _searchQuery,
                       ),
@@ -485,7 +798,15 @@ class _ChatChannelListView extends ConsumerWidget {
     return DesktopRefreshIndicator(
       onRefresh: onRefresh,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        // AdaptiveScaffold 使用 extendBody，让页面绘制到底部导航栏后面。
+        // 将外层 Scaffold 注入到 MediaQuery 的底栏占位重新加回列表尾部，
+        // 这样最后一个会话可以完整滚到导航栏上方，而不会被底栏遮住。
+        padding: EdgeInsets.fromLTRB(
+          8,
+          4,
+          8,
+          8 + MediaQuery.paddingOf(context).bottom,
+        ),
         itemCount: channels.length,
         itemBuilder: (context, index) {
           final channel = channels[index];
@@ -927,7 +1248,9 @@ class _ChatPageSkeleton extends StatelessWidget {
 ///
 /// 搜索用户并创建直接消息频道。
 class _NewDmDialog extends ConsumerStatefulWidget {
-  const _NewDmDialog();
+  const _NewDmDialog({required this.initialMode});
+
+  final _NewChatCreatorMode initialMode;
 
   @override
   ConsumerState<_NewDmDialog> createState() => _NewDmDialogState();
@@ -940,6 +1263,13 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   List<Chatable> _results = [];
   bool _isSearching = false;
   bool _isCreating = false;
+  late _NewChatCreatorMode _mode;
+
+  @override
+  void initState() {
+    super.initState();
+    _mode = widget.initialMode;
+  }
 
   @override
   void dispose() {
@@ -949,14 +1279,14 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
   }
 
   bool get _canCreateDm {
-    final user = ref.watch(currentUserProvider).value;
+    final user = ref.read(currentUserProvider).value;
     // canDirectMessage 来自 currentUser JSON；缺失时不阻断（站点若禁 DM，
     // 创建接口会返回错误，由 SnackBar 展示）。
     if (user?.canDirectMessage == false) return false;
     return true;
   }
 
-  bool get _isGroup => _selected.length >= 2;
+  bool get _isGroup => _mode == _NewChatCreatorMode.group;
 
   Future<void> _onSearch(String query) async {
     if (query.trim().isEmpty) {
@@ -1007,6 +1337,111 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
       _searchController.clear();
       _results = [];
     }
+  }
+
+  Future<void> _selectUser(Chatable user) async {
+    if (_mode == _NewChatCreatorMode.group) {
+      _toggleUser(user);
+      return;
+    }
+
+    setState(() {
+      _selected
+        ..clear()
+        ..add(user);
+    });
+    await _create();
+  }
+
+  void _switchToGroupMode() {
+    if (_isCreating) return;
+    setState(() {
+      _mode = _NewChatCreatorMode.group;
+      _selected.clear();
+      _results.clear();
+      _searchController.clear();
+    });
+  }
+
+  void _cancelGroupMode() {
+    if (_isCreating) return;
+    if (widget.initialMode == _NewChatCreatorMode.group) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    setState(() {
+      _mode = _NewChatCreatorMode.message;
+      _selected.clear();
+      _results.clear();
+      _groupNameController.clear();
+      _searchController.clear();
+    });
+  }
+
+  List<ChatChannel> _messageChannels(String query) {
+    final state = ref.read(chatChannelsProvider).value;
+    if (state == null) return const [];
+
+    final channels = <ChatChannel>[
+      ...state.publicChannels,
+      ...state.directMessageChannels,
+    ];
+    final trimmed = query.trim().toLowerCase();
+    if (trimmed.isEmpty) return channels;
+
+    final currentUserId = ref.read(currentUserProvider).value?.id;
+    return channels.where((channel) {
+      final title = _messageChannelTitle(channel, currentUserId).toLowerCase();
+      final slug = channel.slug?.toLowerCase() ?? '';
+      final target = channel.getDmTargetUser(currentUserId);
+      final username = target?.username.toLowerCase() ?? '';
+      final name = target?.name?.toLowerCase() ?? '';
+      return title.contains(trimmed) ||
+          slug.contains(trimmed) ||
+          username.contains(trimmed) ||
+          name.contains(trimmed);
+    }).toList();
+  }
+
+  String _messageChannelTitle(ChatChannel channel, int? currentUserId) {
+    if (channel.isDirectMessage) {
+      if (channel.isGroupDm &&
+          channel.title != null &&
+          channel.title!.trim().isNotEmpty) {
+        return channel.title!.trim();
+      }
+      final user = channel.getDmTargetUser(currentUserId);
+      if (user != null) return user.name ?? user.username;
+      final title = channel.title?.trim();
+      if (title != null && title.isNotEmpty) return title;
+      return context.l10n.chat_dm_placeholder;
+    }
+
+    final title = channel.title?.trim();
+    if (title != null && title.isNotEmpty) return title;
+    final slug = channel.slug?.trim();
+    if (slug != null && slug.isNotEmpty) return slug;
+    return context.l10n.chat_unnamed_channel;
+  }
+
+  String? _resolveChatUserAvatarUrl(ChatUser? user) {
+    final template = user?.avatarTemplate;
+    if (template == null || template.isEmpty) return null;
+    return UrlHelper.resolveUrlWithCdn(template.replaceAll('{size}', '48'));
+  }
+
+  void _openExistingChannel(ChatChannel channel) {
+    final currentUserId = ref.read(currentUserProvider).value?.id;
+    final title = _messageChannelTitle(channel, currentUserId);
+    Navigator.of(context).pop();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ChatMessagePage(channelId: channel.id, channelTitle: title),
+      ),
+    );
   }
 
   void _removeSelected(Chatable user) {
@@ -1071,200 +1506,387 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     );
   }
 
+  Widget _buildSearchResults(ThemeData theme, AppLocalizations l10n) {
+    if (_isSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final query = _searchController.text.trim();
+
+    if (_isGroup) {
+      if (_results.isEmpty) {
+        return Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            query.isEmpty ? l10n.chat_select_users_hint : l10n.chat_no_results,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        );
+      }
+
+      return ListView.builder(
+        shrinkWrap: true,
+        itemCount: _results.length,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        itemBuilder: (context, index) {
+          final user = _results[index];
+          final avatarUrl = _resolveUserAvatarUrl(user);
+          final selected = _selected.any((s) => s.id == user.id);
+          return ListTile(
+            leading: SmartAvatar(
+              imageUrl: avatarUrl,
+              radius: 20,
+              fallbackText: user.username,
+            ),
+            title: _buildUserTitle(
+              theme,
+              user.name ?? user.username,
+              user.name == null ? null : user.username,
+            ),
+            trailing: Icon(
+              selected
+                  ? Icons.check_circle_rounded
+                  : Icons.add_circle_outline_rounded,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+            onTap: _isCreating ? null : () => _selectUser(user),
+          );
+        },
+      );
+    }
+
+    final currentUserId = ref.read(currentUserProvider).value?.id;
+    final channels = _messageChannels(query);
+    final channelUsernames = <String>{};
+    for (final channel in channels) {
+      final user = channel.getDmTargetUser(currentUserId);
+      if (user != null) {
+        channelUsernames.add(user.username.toLowerCase());
+      }
+    }
+    final remoteUsers = _results
+        .where(
+          (user) => !channelUsernames.contains(user.username.toLowerCase()),
+        )
+        .toList();
+
+    return ListView.builder(
+      shrinkWrap: true,
+      padding: const EdgeInsets.only(bottom: 8),
+      itemCount:
+          (query.isEmpty ? 1 : 0) + channels.length + remoteUsers.length,
+      itemBuilder: (context, index) {
+        if (query.isEmpty && index == 0) {
+          return ListTile(
+            minTileHeight: 62,
+            selected: true,
+            selectedTileColor: theme.colorScheme.primaryContainer.withValues(
+              alpha: 0.55,
+            ),
+            selectedColor: theme.colorScheme.onPrimaryContainer,
+            leading: CircleAvatar(
+              radius: 20,
+              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              child: Icon(
+                Icons.group_rounded,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            title: Text(
+              l10n.chat_new_group,
+              style: theme.textTheme.titleMedium,
+            ),
+            onTap: _switchToGroupMode,
+          );
+        }
+
+        final dataIndex = index - (query.isEmpty ? 1 : 0);
+        if (dataIndex < channels.length) {
+          final channel = channels[dataIndex];
+          final targetUser = channel.getDmTargetUser(currentUserId);
+          final title = _messageChannelTitle(channel, currentUserId);
+
+          Widget leading;
+          String? username;
+          final emoji = channel.emojiShortcode;
+          if (channel.isDirectMessage &&
+              !channel.isGroupDm &&
+              targetUser != null) {
+            leading = SmartAvatar(
+              imageUrl: _resolveChatUserAvatarUrl(targetUser),
+              radius: 20,
+              fallbackText: targetUser.username,
+            );
+            username = targetUser.username;
+          } else if (emoji != null && emoji.isNotEmpty) {
+            leading = CircleAvatar(
+              radius: 20,
+              backgroundColor: theme.colorScheme.primaryContainer,
+              child: EmojiText(emoji, style: const TextStyle(fontSize: 19)),
+            );
+          } else {
+            leading = CircleAvatar(
+              radius: 20,
+              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              child: Icon(
+                channel.isDirectMessage
+                    ? Icons.groups_rounded
+                    : Icons.chat_bubble_rounded,
+                size: 22,
+                color: channel.isDirectMessage
+                    ? theme.colorScheme.onSurfaceVariant
+                    : theme.colorScheme.primary,
+              ),
+            );
+          }
+
+          return ListTile(
+            minTileHeight: 62,
+            leading: leading,
+            title: _buildUserTitle(
+              theme,
+              title,
+              username != null && username != title ? username : null,
+            ),
+            onTap: () => _openExistingChannel(channel),
+          );
+        }
+
+        final user = remoteUsers[dataIndex - channels.length];
+        return ListTile(
+          minTileHeight: 62,
+          leading: SmartAvatar(
+            imageUrl: _resolveUserAvatarUrl(user),
+            radius: 20,
+            fallbackText: user.username,
+          ),
+          title: _buildUserTitle(
+            theme,
+            user.name ?? user.username,
+            user.name == null ? null : user.username,
+          ),
+          onTap: _isCreating ? null : () => _selectUser(user),
+        );
+      },
+    );
+  }
+
+  Widget _buildUserTitle(
+    ThemeData theme,
+    String primary,
+    String? secondary,
+  ) {
+    if (secondary == null || secondary.isEmpty || secondary == primary) {
+      return Text(
+        primary,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.titleMedium,
+      );
+    }
+
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            primary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleMedium,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            secondary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = context.l10n;
-    final title = _isGroup ? l10n.chat_new_group : l10n.chat_new_dm;
-    final createLabel = _isGroup ? l10n.chat_create_group : l10n.chat_create_dm;
+    final title = _isGroup ? l10n.chat_new_group : l10n.chat_send_message_title;
+    final createLabel = l10n.chat_create_group_chat;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 560),
+        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 680),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+            if (!_isGroup)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        autofocus: true,
+                        enabled: !_isCreating,
+                        decoration: InputDecoration(
+                          hintText: l10n.chat_channel_filter,
+                          prefixIcon: const Icon(AppIcons.search, size: 24),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onChanged: _onSearch,
                       ),
                     ),
-                  ),
-                  if (_selected.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                      icon: const Icon(AppIcons.close, size: 26),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+                child: Row(
+                  children: [
+                    Expanded(
                       child: Text(
-                        l10n.chat_members_selected(_selected.length),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                  IconButton(
-                    icon: const Icon(AppIcons.close, size: 20),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-            if (_selected.isNotEmpty) ...[
-              SizedBox(
-                height: 48,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  itemCount: _selected.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final user = _selected[index];
-                    final label = user.name?.trim().isNotEmpty == true
-                        ? user.name!
-                        : user.username;
-                    return InputChip(
-                      avatar: SmartAvatar(
-                        imageUrl: _resolveUserAvatarUrl(user),
-                        radius: 12,
-                        fallbackText: user.username,
+                    if (_selected.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Text(
+                          l10n.chat_members_selected(_selected.length),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
-                      label: Text(label),
-                      onDeleted: _isCreating
-                          ? null
-                          : () => _removeSelected(user),
-                      deleteIconColor: theme.colorScheme.onSurfaceVariant,
-                    );
-                  },
+                    IconButton(
+                      icon: const Icon(AppIcons.close, size: 20),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
                 ),
               ),
-              if (_isGroup)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: TextField(
-                    controller: _groupNameController,
-                    enabled: !_isCreating,
-                    decoration: InputDecoration(
-                      labelText: l10n.chat_group_name_label,
-                      hintText: l10n.chat_group_name_hint,
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+            if (_isGroup) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: TextField(
+                  controller: _groupNameController,
+                  enabled: !_isCreating,
+                  decoration: InputDecoration(
+                    hintText: l10n.chat_group_name_hint,
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
+                  ),
+                ),
+              ),
+              if (_selected.isNotEmpty)
+                SizedBox(
+                  height: 48,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    itemCount: _selected.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final user = _selected[index];
+                      final label = user.name?.trim().isNotEmpty == true
+                          ? user.name!
+                          : user.username;
+                      return InputChip(
+                        avatar: SmartAvatar(
+                          imageUrl: _resolveUserAvatarUrl(user),
+                          radius: 12,
+                          fallbackText: user.username,
+                        ),
+                        label: Text(label),
+                        onDeleted: _isCreating
+                            ? null
+                            : () => _removeSelected(user),
+                        deleteIconColor: theme.colorScheme.onSurfaceVariant,
+                      );
+                    },
                   ),
                 ),
             ],
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: TextField(
-                controller: _searchController,
-                autofocus: true,
-                enabled: !_isCreating,
-                decoration: InputDecoration(
-                  hintText: l10n.chat_search_users,
-                  prefixIcon: const Icon(AppIcons.search, size: 20),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onChanged: _onSearch,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Flexible(
-              child: _isSearching
-                  ? const Center(child: CircularProgressIndicator())
-                  : _results.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text(
-                        _searchController.text.isEmpty
-                            ? (_selected.isEmpty
-                                  ? l10n.chat_select_users_hint
-                                  : l10n.chat_search_hint)
-                            : l10n.chat_no_results,
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _results.length,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      itemBuilder: (context, index) {
-                        final user = _results[index];
-                        final avatarUrl = _resolveUserAvatarUrl(user);
-                        final selected = _selected.any((s) => s.id == user.id);
-                        return ListTile(
-                          leading: SmartAvatar(
-                            imageUrl: avatarUrl,
-                            radius: 20,
-                            fallbackText: user.username,
-                          ),
-                          title: Text(
-                            user.name ?? user.username,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: user.name != null
-                              ? Text(
-                                  '@${user.username}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                )
-                              : null,
-                          trailing: Icon(
-                            selected
-                                ? Icons.check_circle_rounded
-                                : Icons.add_circle_outline_rounded,
-                            color: selected
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
-                          onTap: _isCreating ? null : () => _toggleUser(user),
-                        );
-                      },
+            if (_isGroup)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  enabled: !_isCreating,
+                  decoration: InputDecoration(
+                    hintText: l10n.chat_add_more_members_hint,
+                    prefixIcon: const Icon(AppIcons.search, size: 20),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
                     ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
-                children: [
-                  TextButton(
-                    onPressed: _isCreating
-                        ? null
-                        : () => Navigator.of(context).pop(),
-                    child: Text(l10n.chat_cancel),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: _isCreating || _selected.isEmpty
-                        ? null
-                        : _create,
-                    child: _isCreating
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(createLabel),
-                  ),
-                ],
+                  onChanged: _onSearch,
+                ),
               ),
-            ),
+            const SizedBox(height: 8),
+            Flexible(child: _buildSearchResults(theme, l10n)),
+            if (_isGroup)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Row(
+                  children: [
+                    TextButton(
+                      onPressed: _isCreating ? null : _cancelGroupMode,
+                      child: Text(l10n.chat_cancel),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: _isCreating || _selected.isEmpty
+                          ? null
+                          : _create,
+                      child: _isCreating
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(createLabel),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
