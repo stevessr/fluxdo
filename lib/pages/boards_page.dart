@@ -652,7 +652,9 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     final categoriesController = TextEditingController(
       text: board.categoryIds.join(', '),
     );
-    final tagsController = TextEditingController(text: board.tagNames.join(', '));
+    final tagsController = TextEditingController(
+      text: board.tagNames.join(', '),
+    );
     var constraintType = board.categoryIds.isNotEmpty
         ? 'categories'
         : board.tagNames.isNotEmpty
@@ -717,9 +719,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                         labelText: _isZh(context)
                             ? '分类 ID（逗号分隔）'
                             : 'Category IDs (comma separated)',
-                        helperText: _isZh(context)
-                            ? '只允许这些分类中的话题进入看板'
-                            : 'Only topics from these categories may enter the board',
+                        helperText: _isZh(context) ? '只允许这些分类中的话题进入看板' : 'Only topics from these categories may enter the board',
                         border: const OutlineInputBorder(),
                       ),
                     ),
@@ -732,9 +732,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                         labelText: _isZh(context)
                             ? '标签（逗号分隔）'
                             : 'Tags (comma separated)',
-                        helperText: _isZh(context)
-                            ? '只允许匹配这些标签的话题进入看板'
-                            : 'Only topics matching these tags may enter the board',
+                        helperText: _isZh(context) ? '只允许匹配这些标签的话题进入看板' : 'Only topics matching these tags may enter the board',
                         border: const OutlineInputBorder(),
                       ),
                     ),
