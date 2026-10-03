@@ -206,16 +206,15 @@ mixin _GroupsMixin on _DiscourseServiceBase {
   /// 移除群组所有者。
   Future<void> removeGroupOwner({
     required int groupId,
-    required String username,
+    required int userId,
   }) async {
-    final normalized = username.trim();
-    if (normalized.isEmpty) return;
     try {
-      // remove_owner 属于 Admin::GroupsController；普通 group owner 可添加
-      // owner，但移除 owner 仍由上游 admin 路由与 Guardian 决定。
+      // Admin::GroupsController#remove_owner accepts user_id directly (or
+      // group[usernames]). Prefer the stable scalar form to avoid nested form
+      // encoding differences between Dio versions.
       await _dio.delete(
         '/admin/groups/$groupId/owners.json',
-        data: {'usernames': normalized},
+        data: {'user_id': userId},
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
     } on DioException catch (e) {
