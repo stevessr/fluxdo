@@ -46,7 +46,6 @@ void main() {
     );
   });
 
-
   test('open_in_built_in_browser 分发到内置浏览器回调', () {
     var opened = 0;
     handleTopicDetailMoreMenuSelection(
