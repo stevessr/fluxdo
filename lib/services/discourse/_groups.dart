@@ -62,6 +62,7 @@ mixin _GroupsMixin on _DiscourseServiceBase {
     String? filter,
     String? order,
     bool? asc,
+    bool requesters = false,
   }) async {
     try {
       final encoded = Uri.encodeComponent(name);
@@ -72,6 +73,7 @@ mixin _GroupsMixin on _DiscourseServiceBase {
           if (filter != null && filter.isNotEmpty) 'filter': filter,
           if (order != null && order.isNotEmpty) 'order': order,
           if (asc != null) 'asc': asc,
+          if (requesters) 'requesters': true,
         },
       );
       if (response.data is! Map) {
@@ -84,6 +86,24 @@ mixin _GroupsMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
+
+  /// 获取待审批的群组加入申请。Discourse 复用 members 端点并加
+  /// requesters=true；分页元信息与普通成员列表相同。
+  Future<GroupMembersResult> fetchGroupMembershipRequests(
+    String name, {
+    int offset = 0,
+    String? filter,
+    String? order,
+    bool? asc,
+  }) =>
+      fetchGroupMembers(
+        name,
+        offset: offset,
+        filter: filter,
+        order: order,
+        asc: asc,
+        requesters: true,
+      );
 
   /// 当前用户自助加入群组。入口是否展示由 GroupSerializer 下发的
   /// `public_admission` / `is_group_user` 决定，最终权限仍由服务端校验。
