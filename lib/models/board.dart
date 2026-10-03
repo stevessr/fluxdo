@@ -18,6 +18,7 @@ class DiscourseBoard {
     required this.canUnarchive,
     required this.canWrite,
     required this.canManage,
+    required this.acl,
     required this.columns,
   });
 
@@ -38,6 +39,7 @@ class DiscourseBoard {
   final bool canUnarchive;
   final bool canWrite;
   final bool canManage;
+  final List<BoardAclEntry> acl;
   final List<BoardColumn> columns;
 
   factory DiscourseBoard.fromJson(Map<String, dynamic> json) {
@@ -67,6 +69,14 @@ class DiscourseBoard {
       canUnarchive: json['can_unarchive'] as bool? ?? canManage,
       canWrite: json['can_write'] as bool? ?? false,
       canManage: canManage,
+      acl: (json['acl'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => BoardAclEntry.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
+          .toList(growable: false),
       columns: columns,
     );
   }
@@ -83,6 +93,42 @@ class DiscourseBoard {
   }
 
   String get displayName => unicodeName.trim().isNotEmpty ? unicodeName : name;
+}
+
+class BoardAclEntry {
+  const BoardAclEntry({
+    required this.type,
+    required this.id,
+    required this.permission,
+    this.displayName,
+  });
+
+  final String type;
+  final int id;
+  final String permission;
+  final String? displayName;
+
+  factory BoardAclEntry.fromJson(Map<String, dynamic> json) {
+    return BoardAclEntry(
+      type: json['type']?.toString() ?? 'group',
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      permission: json['permission']?.toString() ?? 'view',
+      displayName: json['display_name']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'id': id,
+    'permission': permission,
+  };
+
+  BoardAclEntry copyWith({String? permission}) => BoardAclEntry(
+    type: type,
+    id: id,
+    permission: permission ?? this.permission,
+    displayName: displayName,
+  );
 }
 
 class BoardColumn {
