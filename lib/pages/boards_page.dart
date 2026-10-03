@@ -40,6 +40,91 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
 
   void _reload() => setState(() => _future = _load());
 
+  List<Map<String, dynamic>> _defaultBoardAcl() {
+    final raw = PreloadedDataService()
+        .siteSettingsSync?['boards_manage_board_allowed_groups'];
+    final ids = <int>{};
+    if (raw is String) {
+      ids.addAll(
+        raw
+            .split('|')
+            .map((value) => int.tryParse(value.trim()))
+            .whereType<int>(),
+      );
+    } else if (raw is List) {
+      ids.addAll(
+        raw
+            .map((value) => int.tryParse(value.toString()))
+            .whereType<int>(),
+      );
+    }
+
+    final acl = <Map<String, dynamic>>[
+      for (final id in ids)
+        {'type': 'group', 'id': id, 'permission': 'manage'},
+    ];
+    // Discourse AUTO_GROUPS.logged_in_users.id == 5。
+    if (!ids.contains(5)) {
+      acl.add({'type': 'group', 'id': 5, 'permission': 'view'});
+    }
+    return acl;
+  }
+
+  Future<void> _createBoard() async {
+    final user = ref.read(currentUserProvider).value;
+    if (user?.canManageBoards != true) return;
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_isZh(context) ? '新建看板' : 'New board'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: _isZh(context) ? '看板名称' : 'Board name',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(_isZh(context) ? '取消' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: Text(_isZh(context) ? '创建' : 'Create'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || !mounted) return;
+
+    try {
+      final board = await ref.read(discourseServiceProvider).createBoard({
+        'name': name,
+        'show_tags': true,
+        'acl': _defaultBoardAcl(),
+        'columns': const <Map<String, dynamic>>[],
+      });
+      if (!mounted) return;
+      _reload();
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) =>
+              BoardDetailPage(boardId: board.id, initialName: board.displayName),
+        ),
+      );
+      if (mounted) _reload();
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final zh = _isZh(context);
@@ -47,6 +132,12 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
       appBar: AppBar(
         title: Text(zh ? '看板' : 'Boards'),
         actions: [
+          if (ref.watch(currentUserProvider).value?.canManageBoards == true)
+            IconButton(
+              onPressed: _createBoard,
+              icon: const Icon(Icons.add_rounded),
+              tooltip: zh ? '新建看板' : 'New board',
+            ),
           IconButton(
             onPressed: _reload,
             icon: const Icon(Icons.refresh),
@@ -557,6 +648,120 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     }
   }
 
+  Future<void> _editBoardSettings(DiscourseBoard board) async {
+    if (!board.canManage || board.archived) return;
+    final nameController = TextEditingController(text: board.displayName);
+    var showTags = board.showTags;
+    var showThumbnail = board.showTopicThumbnail;
+    var requireConfirmation = board.requireConfirmation;
+    var cardStyle = board.cardStyle;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(_isZh(context) ? '看板设置' : 'Board settings'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      labelText: _isZh(context) ? '名称' : 'Name',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: cardStyle,
+                    decoration: InputDecoration(
+                      labelText: _isZh(context) ? '卡片样式' : 'Card style',
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'detailed',
+                        child: Text('Detailed'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'compact',
+                        child: Text('Compact'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => cardStyle = value);
+                      }
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: showTags,
+                    title: Text(_isZh(context) ? '显示标签' : 'Show tags'),
+                    onChanged: (value) =>
+                        setDialogState(() => showTags = value),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: showThumbnail,
+                    title: Text(
+                      _isZh(context) ? '显示话题缩略图' : 'Show topic thumbnails',
+                    ),
+                    onChanged: (value) =>
+                        setDialogState(() => showThumbnail = value),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: requireConfirmation,
+                    title: Text(
+                      _isZh(context)
+                          ? '移动操作需要确认'
+                          : 'Require move confirmation',
+                    ),
+                    onChanged: (value) =>
+                        setDialogState(() => requireConfirmation = value),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(_isZh(context) ? '取消' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
+                Navigator.pop(dialogContext, {
+                  'name': name,
+                  'show_tags': showTags,
+                  'show_topic_thumbnail': showThumbnail,
+                  'require_confirmation': requireConfirmation,
+                  'card_style': cardStyle,
+                });
+              },
+              child: Text(_isZh(context) ? '保存' : 'Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameController.dispose();
+    if (result == null || !mounted) return;
+
+    try {
+      await ref.read(discourseServiceProvider).updateBoard(board.id, result);
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
   Future<void> _toggleBoardArchived(DiscourseBoard board) async {
     if (board.archived ? !board.canUnarchive : !board.canArchive) return;
     try {
@@ -621,6 +826,8 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
               tooltip: _isZh(context) ? '看板管理' : 'Board management',
               onSelected: (value) {
                 switch (value) {
+                  case 'settings':
+                    _editBoardSettings(board);
                   case 'add_column':
                     _addColumn(board);
                   case 'archive':
@@ -630,7 +837,12 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                 }
               },
               itemBuilder: (_) => [
-                if (!board.archived)
+                if (board.canManage && !board.archived)
+                  PopupMenuItem(
+                    value: 'settings',
+                    child: Text(_isZh(context) ? '看板设置' : 'Board settings'),
+                  ),
+                if (board.canManage && !board.archived)
                   PopupMenuItem(
                     value: 'add_column',
                     child: Text(_isZh(context) ? '添加分栏' : 'Add column'),
