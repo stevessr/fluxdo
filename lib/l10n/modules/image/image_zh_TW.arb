@@ -143,7 +143,15 @@
       }
     }
   },
-  "imageUpload_longImageSplitHint": "長圖（高度 ≥ 寬度 3 倍）會在壓縮前自動切割，相鄰切片保留 10% 重疊。",
+  "imageUpload_longImageTool": "長圖上傳",
+  "imageUpload_longImageTitle": "長圖上傳",
+  "imageUpload_longImageReadFailed": "無法讀取此圖片，不能進行長圖切片。",
+  "imageUpload_longImageNotEligible": "此圖片不符合長圖切片要求（高度至少為寬度的 3 倍）。",
+  "imageUpload_longImageSliceCount": "切片數量",
+  "imageUpload_longImageSelectCount": "請選擇",
+  "imageUpload_longImageRecommendedPrefix": "建議切片數：",
+  "imageUpload_longImagePartHeightPrefix": "預計每片高度：",
+  "imageUpload_longImageOverlapHint": "相鄰切片保留約 10% 重疊；只有從獨立「長圖上傳」入口進入時才會執行切片。",
   "imageViewer_grantPermission": "請授予相簿訪問許可權",
   "imageViewer_saveFailed": "儲存失敗: {error}",
   "@imageViewer_saveFailed": {

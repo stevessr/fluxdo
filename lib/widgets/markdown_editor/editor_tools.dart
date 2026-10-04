@@ -78,6 +78,12 @@ final List<EditorTool> editorTools = [
     action: (t) => t.pickAndUploadImages(),
   ),
   EditorTool(
+    id: 'longImage',
+    icon: const FaIcon(FontAwesomeIcons.scissors),
+    label: (s) => s.imageUpload_longImageTool,
+    action: (t) => t.pickAndUploadLongImage(),
+  ),
+  EditorTool(
     id: 'attachment',
     icon: const FaIcon(FontAwesomeIcons.paperclip),
     label: (s) => s.toolPanel_attachment,

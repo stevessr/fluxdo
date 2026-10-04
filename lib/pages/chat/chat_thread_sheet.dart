@@ -15,7 +15,7 @@ import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/stevessr_composer_service.dart';
-import '../../services/uploads/long_image_splitter.dart';
+import '../../widgets/markdown_editor/long_image_upload_dialog.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
@@ -438,23 +438,40 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     }
   }
 
-  /// 上传图片并在需要时自动拆成长图分片。任一分片失败则返回 false。
-  Future<bool> _uploadAndTrackImage(String imagePath) async {
-    final slices = await LongImageSplitter.splitIfNeeded(
-      imagePath,
-      originalName: p.basename(imagePath),
+  /// 独立长图上传：单选、宽高比校验、用户选择切片数量后再上传。
+  Future<void> _pickAndUploadLongImage() async {
+    if (_isUploadingImage || !mounted) return;
+    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (image == null || !mounted) return;
+
+    final results = await showLongImageUploadDialog(
+      context,
+      imagePath: image.path,
+      imageName: image.name,
     );
-    var allSucceeded = true;
-    for (final slice in slices) {
-      if (!mounted) return false;
-      final ok = await _uploadSingleAndTrackImage(slice.path);
-      allSucceeded = allSucceeded && ok;
+    if (results == null || results.isEmpty || !mounted) return;
+
+    setState(() => _isUploadingImage = true);
+    var failedCount = 0;
+    try {
+      for (final result in results) {
+        if (!mounted) return;
+        final ok = await _uploadAndTrackImage(result.path);
+        if (!ok) failedCount++;
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
     }
-    return allSucceeded;
+
+    if (mounted && failedCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('长图切片上传失败: $failedCount/${results.length}')),
+      );
+    }
   }
 
-  /// 上传一个实际文件并进入待发送附件预览；失败（异常或无 id）返回 false。
-  Future<bool> _uploadSingleAndTrackImage(String imagePath) async {
+  /// 上传单张图片并进入待发送附件预览；失败（异常或无 id）返回 false。
+  Future<bool> _uploadAndTrackImage(String imagePath) async {
     final service = ref.read(discourseServiceProvider);
     final index = _pendingUploads.length;
     setState(() {
@@ -1109,6 +1126,13 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                               ? null
                               : _pickAndUploadImage,
                           icon: const Icon(Icons.add_photo_alternate_rounded),
+                        ),
+                        IconButton(
+                          tooltip: '长图上传',
+                          onPressed: _isUploadingImage
+                              ? null
+                              : _pickAndUploadLongImage,
+                          icon: const Icon(Icons.content_cut_rounded),
                         ),
                         IconButton(
                           tooltip: '生成表情包图片',

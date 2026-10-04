@@ -105,6 +105,7 @@ import '../content_actions_providers.dart';
 import '../emoji_popover.dart';
 import '../emoji_sticker_panel.dart';
 import '../image_upload_dialog.dart';
+import '../long_image_upload_dialog.dart';
 import '../uploads/task_controller.dart';
 import '../uploads/upload_task_panel.dart';
 import '../link_insert_dialog.dart';
@@ -1476,6 +1477,12 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       () async => _pickAndUploadImages(),
     ),
     (
+      ['longimage', '长图', '切图', 'ct'],
+      '长图上传',
+      Icons.content_cut_rounded,
+      () async => _pickAndUploadLongImage(),
+    ),
+    (
       ['callout', '标注', 'bz', 'note'],
       '标注 Callout',
       Icons.sticky_note_2_outlined,
@@ -2105,6 +2112,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     state: editor,
     onInsertLink: _insertLink,
     onPickImage: _pickAndUploadImages,
+    onPickLongImage: _pickAndUploadLongImage,
     onToggleInlineSpoiler: () => toggleInlineSpoilerOn(editor),
     onSetHeading: (level) => editor.setHeading(level),
     onApplyTextColor: () => unawaited(_applyTextColor(editor)),
@@ -2412,23 +2420,21 @@ class RichComposerEditorState extends State<RichComposerEditor> {
           imagePath: img.path,
           imageName: img.name,
         );
-        if (confirmed == null || confirmed.isEmpty) continue;
+        if (confirmed == null) continue;
         if (!mounted || !identical(editor, _editor)) return;
         if (gridId != null && editor.indexOfBlock(gridId) < 0) {
           ToastService.showError('图片组已被移除，无法添加图片');
           return;
         }
         if (!bookmark.valid) return;
-        for (final image in confirmed) {
-          _queueUpload(
-            image.path,
-            image.originalName,
-            image: true,
-            gridId: gridId,
-            insertionSelection: bookmark.selection,
-          );
-          bookmark.moveTo(editor.selection);
-        }
+        _queueUpload(
+          confirmed.path,
+          confirmed.originalName,
+          image: true,
+          gridId: gridId,
+          insertionSelection: bookmark.selection,
+        );
+        bookmark.moveTo(editor.selection);
       }
     } catch (e, s) {
       AppErrorHandler.handleUnexpected(e, s);
@@ -2437,6 +2443,44 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       if (mounted && gridId != null) {
         setState(() => _addingImageGrids.remove(gridId));
       }
+    }
+  }
+
+  /// 独立长图上传：只选一张，宽高比校验通过后由用户选择切片数量。
+  Future<void> _pickAndUploadLongImage() async {
+    final editor = _editor;
+    if (editor == null) return;
+    final bookmark = InsertionBookmark(editor);
+    try {
+      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (image == null || !mounted || !identical(editor, _editor)) return;
+
+      final results = await showLongImageUploadDialog(
+        context,
+        imagePath: image.path,
+        imageName: image.name,
+      );
+      if (results == null ||
+          results.isEmpty ||
+          !mounted ||
+          !identical(editor, _editor) ||
+          !bookmark.valid) {
+        return;
+      }
+
+      for (final image in results) {
+        _queueUpload(
+          image.path,
+          image.originalName,
+          image: true,
+          insertionSelection: bookmark.selection,
+        );
+        bookmark.moveTo(editor.selection);
+      }
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    } finally {
+      bookmark.dispose();
     }
   }
 
@@ -2686,6 +2730,13 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       ),
       ComposerToolAction(
         group: ComposerToolGroup.insert,
+        label: '长图上传',
+        icon: const Icon(Icons.content_cut_rounded),
+        searchText: 'long image split',
+        run: () => _runInsertAction('__long_image__'),
+      ),
+      ComposerToolAction(
+        group: ComposerToolGroup.insert,
         label: '上传文件',
         icon: const Icon(Icons.attach_file_rounded),
         searchText: 'file attachment',
@@ -2724,6 +2775,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       await _recordAndInsertVoice();
     } else if (selected == '__file__') {
       await _pickAndInsertFile();
+    } else if (selected == '__long_image__') {
+      await _pickAndUploadLongImage();
     } else if (selected == '__callout__') {
       await _insertCallout();
     } else if (selected == '__link__') {
@@ -3050,20 +3103,17 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         imagePath: tempFile.path,
         imageName: fileName,
       );
-      if (confirmed == null || confirmed.isEmpty) return;
+      if (confirmed == null) return;
       if (!mounted) return;
       if (_documentReplaced || !identical(editor, _editor) || !bookmark.valid) {
         return;
       }
-      for (final image in confirmed) {
-        _queueUpload(
-          image.path,
-          image.originalName,
-          image: true,
-          insertionSelection: bookmark.selection,
-        );
-        bookmark.moveTo(editor.selection);
-      }
+      _queueUpload(
+        confirmed.path,
+        confirmed.originalName,
+        image: true,
+        insertionSelection: bookmark.selection,
+      );
     } catch (e, s) {
       AppErrorHandler.handleUnexpected(e, s);
     } finally {

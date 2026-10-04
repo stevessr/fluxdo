@@ -9,7 +9,6 @@ import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/toast_service.dart';
-import '../../services/uploads/long_image_splitter.dart';
 import '../../utils/dialog_utils.dart';
 import 'image_compression_strategy.dart';
 import 'image_editor_i18n_zh.dart';
@@ -190,28 +189,25 @@ class _ImageUploadDialogState extends State<ImageUploadDialog> {
   String get _editorExtension =>
       _editorOutputFormat == OutputFormat.png ? 'png' : 'jpg';
 
+  Future<String> _compressImage() async {
+    return _compressionStrategy.compress(_currentImagePath, _quality);
+  }
+
   Future<void> _submit() async {
     setState(() => _isProcessing = true);
 
     try {
       await _saveQualityPreference(_quality);
-      final sourceName = widget.imageName ?? p.basename(widget.imagePath);
-      final slices = await LongImageSplitter.splitIfNeeded(
-        _currentImagePath,
-        originalName: sourceName,
-      );
-      final results = <ImageUploadResult>[];
-      for (final slice in slices) {
-        final strategy = ImageCompressionStrategyFactory.fromPath(slice.path);
-        final compressedPath = await strategy.compress(slice.path, _quality);
-        results.add(
-          ImageUploadResult(path: compressedPath, originalName: slice.name),
-        );
-      }
+      final compressedPath = await _compressImage();
 
       if (!mounted) return;
 
-      Navigator.of(context).pop(results);
+      Navigator.of(context).pop(
+        ImageUploadResult(
+          path: compressedPath,
+          originalName: widget.imageName ?? p.basename(widget.imagePath),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ToastService.showError(S.current.imageUpload_processFailed(e.toString()));
@@ -365,27 +361,6 @@ class _ImageUploadDialogState extends State<ImageUploadDialog> {
 
               const SizedBox(height: 8),
 
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Symbols.content_cut_rounded,
-                    size: 18,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      S.current.imageUpload_longImageSplitHint,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
               // 编辑图片按钮
               OutlinedButton.icon(
                 onPressed: _isProcessing || !_compressionStrategy.canEdit
@@ -423,12 +398,12 @@ class _ImageUploadDialogState extends State<ImageUploadDialog> {
 }
 
 /// 显示图片上传确认弹框
-Future<List<ImageUploadResult>?> showImageUploadDialog(
+Future<ImageUploadResult?> showImageUploadDialog(
   BuildContext context, {
   required String imagePath,
   String? imageName,
 }) {
-  return showAppDialog<List<ImageUploadResult>>(
+  return showAppDialog<ImageUploadResult>(
     context: context,
     barrierDismissible: false,
     builder: (context) =>
@@ -555,17 +530,13 @@ class _MultiImageUploadDialogState extends State<MultiImageUploadDialog> {
 
       final results = <ImageUploadResult>[];
       for (final item in _items) {
-        final slices = await LongImageSplitter.splitIfNeeded(
+        final compressedPath = await item.strategy.compress(
           item.path,
-          originalName: item.name,
+          _quality,
         );
-        for (final slice in slices) {
-          final strategy = ImageCompressionStrategyFactory.fromPath(slice.path);
-          final compressedPath = await strategy.compress(slice.path, _quality);
-          results.add(
-            ImageUploadResult(path: compressedPath, originalName: slice.name),
-          );
-        }
+        results.add(
+          ImageUploadResult(path: compressedPath, originalName: item.name),
+        );
       }
 
       if (!mounted) return;
@@ -757,27 +728,6 @@ class _MultiImageUploadDialogState extends State<MultiImageUploadDialog> {
                       ],
                     ),
                   ),
-
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Symbols.content_cut_rounded,
-                      size: 16,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        S.current.imageUpload_longImageSplitHint,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
 
                 // ≥3 张自动 grid 提示
                 if (_items.length >= 3)
