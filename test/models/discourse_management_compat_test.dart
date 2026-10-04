@@ -91,10 +91,7 @@ void main() {
       final groupDm = ChatChannel.fromJson({
         'id': 12,
         'chatable_type': 'DirectMessage',
-        'chatable': {
-          'group': true,
-          'users': const <Map<String, dynamic>>[],
-        },
+        'chatable': {'group': true, 'users': const <Map<String, dynamic>>[]},
       });
       final categoryChannel = ChatChannel.fromJson({
         'id': 13,
