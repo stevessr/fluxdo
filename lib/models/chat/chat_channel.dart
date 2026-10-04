@@ -193,11 +193,29 @@ class ChatChannel {
     return false;
   }
 
+  bool? _metaBool(String key) {
+    final value = meta?[key];
+    return value is bool ? value : null;
+  }
+
+  /// Discourse ChannelSerializer#meta 下发的细粒度能力。
+  ///
+  /// 保持 nullable：旧版本服务端没有这些字段时，调用方可回退到历史逻辑。
+  bool? get serverCanFlag => _metaBool('can_flag');
+  bool? get serverUserSilenced => _metaBool('user_silenced');
+  bool? get serverCanModerate => _metaBool('can_moderate');
+  bool? get serverCanDeleteSelf => _metaBool('can_delete_self');
+  bool? get serverCanDeleteOthers => _metaBool('can_delete_others');
+  bool? get serverCanRemoveMembers => _metaBool('can_remove_members');
+  bool? get serverCanManagePins => _metaBool('can_manage_pins');
+
   /// 是否可移除频道成员。
   ///
-  /// 对齐 Discourse Guardian#can_remove_members?：仅管理员可从分类频道
-  /// 或群组 DM 中移除成员。该权限与 [canAddMembers] 不同，不能共用。
+  /// 新版 Discourse 直接下发 meta.can_remove_members，优先服从服务端；
+  /// 旧版本没有该字段时再回退当前 Guardian 规则。
   bool canRemoveMembers({required bool isAdmin}) {
+    final serverCapability = serverCanRemoveMembers;
+    if (serverCapability != null) return serverCapability;
     return isAdmin && (isCategoryChannel || (isDirectMessage && isGroupDm));
   }
 
