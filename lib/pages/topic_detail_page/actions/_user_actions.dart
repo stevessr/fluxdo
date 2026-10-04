@@ -695,20 +695,26 @@ extension _UserActions on _TopicDetailPageState {
     SharePlus.instance.share(ShareParams(text: url));
   }
 
-  Future<void> _openInBrowser() async {
+  String _topicBrowserUrl() {
     final user = ref.read(currentUserProvider).value;
     final username = user?.username ?? '';
     final prefs = ref.read(preferencesProvider);
-    final url = ShareUtils.buildShareUrl(
+    return ShareUtils.buildShareUrl(
       path: '/t/topic/${widget.topicId}',
       username: username,
       anonymousShare: prefs.anonymousShare,
     );
+  }
 
-    final success = await launchInExternalBrowser(url);
+  Future<void> _openInBrowser() async {
+    final success = await launchInExternalBrowser(_topicBrowserUrl());
     if (!success && mounted) {
       ToastService.showError(S.current.topicDetail_cannotOpenBrowser);
     }
+  }
+
+  void _openInBuiltInBrowser() {
+    unawaited(WebViewPage.open(context, _topicBrowserUrl()));
   }
 
   void _shareAsImage() {

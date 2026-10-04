@@ -80,6 +80,7 @@
   "imageUpload_totalEstimatedSize": "~{size}",
   "imageUpload_totalOriginalSize": "Total size: {size}",
   "imageUpload_uploadCount": "Upload {count}",
+  "imageUpload_longImageSplitHint": "Long images (height ≥ 3× width) are split before compression; adjacent slices overlap by 10%.",
   "imageViewer_grantPermission": "Please grant gallery permission",
   "imageViewer_saveFailed": "Save failed: {error}",
   "imageViewer_saveFailedRetry": "Save failed, please retry",

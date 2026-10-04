@@ -43,6 +43,7 @@ import '../../utils/share_utils.dart';
 import '../../providers/preferences_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../reading_settings_page.dart';
+import '../webview_page.dart';
 import '../../providers/selected_topic_provider.dart';
 import '../../providers/discourse_providers.dart';
 import '../../providers/message_bus_providers.dart';
@@ -1845,6 +1846,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           onShareImage: _shareAsImage,
           onExport: _showExportSheet,
           onOpenInBrowser: _openInBrowser,
+          onOpenInBuiltInBrowser: _openInBuiltInBrowser,
           onFilter: _showFilterSheet,
           onToggleArchiveMessage: () =>
               unawaited(_handleToggleArchiveMessage(notifier)),
@@ -1940,6 +1942,21 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               ),
               const SizedBox(width: 12),
               Text(context.l10n.topicDetail_openInBrowser),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'open_in_built_in_browser',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Symbols.open_in_browser_rounded,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              const SizedBox(width: 12),
+              Text(context.l10n.topicDetail_openInBuiltInBrowser),
             ],
           ),
         ),

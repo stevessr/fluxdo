@@ -9,6 +9,7 @@ import '../../utils/url_helper.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/chat/online_status_avatar.dart';
 import '../user_profile_page.dart';
+import '../../utils/dialog_utils.dart';
 
 /// 聊天频道成员与添加成员弹窗
 ///
@@ -38,7 +39,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
     bool canRemoveMembers = false,
     int? membersCountHint,
   }) {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -81,7 +82,7 @@ class _ChatChannelMembersSheetState
   }
 
   void _showAddMemberDialog() {
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (ctx) => _AddChannelMemberDialog(
         channelId: widget.channelId,
@@ -97,7 +98,7 @@ class _ChatChannelMembersSheetState
   Future<void> _removeMember(ChatUser user) async {
     if (!widget.canRemoveMembers) return;
     final confirmed =
-        await showDialog<bool>(
+        await showAppDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('移除成员'),

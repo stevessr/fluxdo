@@ -998,18 +998,27 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     _uploadingCount++;
     try {
       if (!mounted) return;
-      final result = await showImageUploadDialog(
+      final results = await showImageUploadDialog(
         context,
         imagePath: imagePath,
         imageName: imageName,
       );
-      if (result == null || !mounted) return;
-      _enqueueUpload(
-        path: result.path,
-        name: result.originalName,
-        anchor: anchor,
-        image: true,
-      );
+      if (results == null || results.isEmpty || !mounted) return;
+
+      // 长图可能在确认阶段拆成多张；先为全部分片创建同位置锚点，
+      // 上传完成顺序不会改变从上到下的正文顺序。
+      final anchors = [
+        for (final _ in results) _uploadAnchors.fork(anchor),
+      ];
+      for (var i = 0; i < results.length; i++) {
+        _enqueueUpload(
+          path: results[i].path,
+          name: results[i].originalName,
+          anchor: anchors[i],
+          image: true,
+        );
+      }
+      _uploadAnchors.release(anchor);
       registered = true;
     } catch (e, s) {
       AppErrorHandler.handleUnexpected(e, s);

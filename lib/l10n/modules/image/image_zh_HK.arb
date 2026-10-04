@@ -143,6 +143,7 @@
       }
     }
   },
+  "imageUpload_longImageSplitHint": "長圖（高度 ≥ 寬度 3 倍）會在壓縮前自動切割，相鄰切片保留 10% 重疊。",
   "imageViewer_grantPermission": "請授予相冊訪問權限",
   "imageViewer_saveFailed": "保存失敗: {error}",
   "@imageViewer_saveFailed": {
