@@ -31,6 +31,7 @@ import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/stevessr_composer_service.dart';
+import '../../widgets/markdown_editor/long_image_upload_dialog.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
@@ -681,6 +682,38 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             context.l10n.chat_upload_failed('$failedCount/${images.length}'),
           ),
         ),
+      );
+    }
+  }
+
+  /// 独立长图上传：单选、宽高比校验、用户选择切片数量后再上传。
+  Future<void> _pickAndUploadLongImage() async {
+    if (_isUploadingImage || !mounted) return;
+    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (image == null || !mounted) return;
+
+    final results = await showLongImageUploadDialog(
+      context,
+      imagePath: image.path,
+      imageName: image.name,
+    );
+    if (results == null || results.isEmpty || !mounted) return;
+
+    setState(() => _isUploadingImage = true);
+    var failedCount = 0;
+    try {
+      for (final result in results) {
+        if (!mounted) return;
+        final ok = await _uploadAndTrackImage(result.path);
+        if (!ok) failedCount++;
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
+    }
+
+    if (mounted && failedCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('长图切片上传失败: $failedCount/${results.length}')),
       );
     }
   }
@@ -2196,6 +2229,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               switch (value) {
                                 case 'image':
                                   _pickAndUploadImage();
+                                case 'long_image':
+                                  _pickAndUploadLongImage();
                                 case 'stevessr':
                                   _createStevessrImage();
                               }
@@ -2210,6 +2245,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                     Icons.add_photo_alternate_rounded,
                                   ),
                                   title: Text(context.l10n.chat_upload_image),
+                                ),
+                              ),
+                              const PopupMenuItem<String>(
+                                value: 'long_image',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.content_cut_rounded),
+                                  title: Text('长图上传'),
                                 ),
                               ),
                               const PopupMenuItem<String>(
