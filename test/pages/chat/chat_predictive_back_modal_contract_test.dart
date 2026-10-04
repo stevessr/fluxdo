@@ -9,9 +9,9 @@ void main() {
       Directory('lib/widgets/chat'),
     ];
     final forbidden = <RegExp>[
-      RegExp(r'\\bshowModalBottomSheet(?:<[^>]+>)?\\s*\\('),
-      RegExp(r'\\bshowDialog(?:<[^>]+>)?\\s*\\('),
-      RegExp(r'\\bshowGeneralDialog(?:<[^>]+>)?\\s*\\('),
+      RegExp(r'\bshowModalBottomSheet(?:<[^>]+>)?\s*\('),
+      RegExp(r'\bshowDialog(?:<[^>]+>)?\s*\('),
+      RegExp(r'\bshowGeneralDialog(?:<[^>]+>)?\s*\('),
     ];
 
     final violations = <String>[];
@@ -21,7 +21,7 @@ void main() {
         final source = entity.readAsStringSync();
         for (final pattern in forbidden) {
           if (pattern.hasMatch(source)) {
-            violations.add('${entity.path}: ${pattern.pattern}');
+            violations.add(entity.path + ': ' + pattern.pattern);
           }
         }
       }
