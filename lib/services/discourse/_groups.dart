@@ -62,6 +62,7 @@ mixin _GroupsMixin on _DiscourseServiceBase {
     String? filter,
     String? order,
     bool? asc,
+    bool requesters = false,
   }) async {
     try {
       final encoded = Uri.encodeComponent(name);
@@ -72,6 +73,7 @@ mixin _GroupsMixin on _DiscourseServiceBase {
           if (filter != null && filter.isNotEmpty) 'filter': filter,
           if (order != null && order.isNotEmpty) 'order': order,
           if (asc != null) 'asc': asc,
+          if (requesters) 'requesters': true,
         },
       );
       if (response.data is! Map) {
@@ -84,6 +86,23 @@ mixin _GroupsMixin on _DiscourseServiceBase {
       _throwApiError(e);
     }
   }
+
+  /// 获取待审批的群组加入申请。Discourse 复用 members 端点并加
+  /// requesters=true；分页元信息与普通成员列表相同。
+  Future<GroupMembersResult> fetchGroupMembershipRequests(
+    String name, {
+    int offset = 0,
+    String? filter,
+    String? order,
+    bool? asc,
+  }) => fetchGroupMembers(
+    name,
+    offset: offset,
+    filter: filter,
+    order: order,
+    asc: asc,
+    requesters: true,
+  );
 
   /// 当前用户自助加入群组。入口是否展示由 GroupSerializer 下发的
   /// `public_admission` / `is_group_user` 决定，最终权限仍由服务端校验。
@@ -139,6 +158,175 @@ mixin _GroupsMixin on _DiscourseServiceBase {
         }
       }
       return normalized;
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 从群组移除成员。
+  Future<void> removeGroupMember({
+    required int groupId,
+    required String username,
+  }) async {
+    final normalized = username.trim();
+    if (normalized.isEmpty) return;
+    try {
+      await _dio.delete(
+        '/groups/$groupId/members.json',
+        data: {'username': normalized},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 添加群组所有者。
+  Future<void> addGroupOwners({
+    required int groupId,
+    required List<String> usernames,
+  }) async {
+    final normalized = usernames
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalized.isEmpty) return;
+    try {
+      await _dio.put(
+        '/groups/$groupId/owners.json',
+        data: {'usernames': normalized.join(',')},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 移除群组所有者。
+  Future<void> removeGroupOwner({
+    required int groupId,
+    required int userId,
+  }) async {
+    try {
+      // Admin::GroupsController#remove_owner accepts user_id directly (or
+      // group[usernames]). Prefer the stable scalar form to avoid nested form
+      // encoding differences between Dio versions.
+      await _dio.delete(
+        '/admin/groups/$groupId/owners.json',
+        data: {'user_id': userId},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 为一批用户设置/取消该主要群组（Discourse admin API）。
+  Future<void> setPrimaryGroupForUsers({
+    required int groupId,
+    required List<String> usernames,
+    required bool primary,
+  }) async {
+    final normalized = usernames
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalized.isEmpty) return;
+    try {
+      await _dio.put(
+        '/admin/groups/$groupId/primary.json',
+        data: {
+          // Admin::GroupsController#set_primary reads usernames through
+          // params.require(:group), while `primary` remains top-level.
+          'group[usernames]': normalized.join(','),
+          'primary': primary.toString(),
+        },
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 申请加入需要审核的群组。
+  Future<void> requestGroupMembership(
+    String groupName, {
+    required String reason,
+  }) async {
+    final normalizedReason = reason.trim();
+    if (normalizedReason.isEmpty) {
+      throw ArgumentError.value(reason, 'reason', 'must not be empty');
+    }
+    final encoded = Uri.encodeComponent(groupName);
+    try {
+      await _dio.post(
+        '/groups/$encoded/request_membership.json',
+        data: {'reason': normalizedReason},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 审批群组加入申请。
+  Future<void> handleGroupMembershipRequest({
+    required int groupId,
+    required int userId,
+    required bool accept,
+  }) async {
+    try {
+      await _dio.put(
+        '/groups/$groupId/handle_membership_request.json',
+        data: {'user_id': userId, 'accept': accept},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 设置当前用户对群组的通知级别。
+  Future<void> setGroupNotificationLevel(
+    String groupName, {
+    required int notificationLevel,
+    int? userId,
+  }) async {
+    final encoded = Uri.encodeComponent(groupName);
+    try {
+      await _dio.post(
+        '/groups/$encoded/notifications.json',
+        data: {
+          'notification_level': notificationLevel,
+          if (userId != null) 'user_id': userId,
+        },
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 获取群组帖子/提及列表，供原生群组页扩展 activity。
+  Future<Map<String, dynamic>> fetchGroupActivity(
+    String name, {
+    String type = 'posts',
+    int? offset,
+  }) async {
+    if (type != 'posts' && type != 'mentions') {
+      throw ArgumentError.value(type, 'type', 'must be posts or mentions');
+    }
+    final encoded = Uri.encodeComponent(name);
+    try {
+      final response = await _dio.get(
+        '/groups/$encoded/$type.json',
+        queryParameters: {if (offset != null) 'offset': offset},
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
     } on DioException catch (e) {
       _throwApiError(e);
     }

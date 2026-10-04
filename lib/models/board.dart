@@ -14,8 +14,13 @@ class DiscourseBoard {
     required this.cardStyle,
     required this.showTopicThumbnail,
     required this.archived,
+    this.oldSlugUsed = false,
+    this.createdBy,
+    required this.canArchive,
+    required this.canUnarchive,
     required this.canWrite,
     required this.canManage,
+    required this.acl,
     required this.columns,
   });
 
@@ -32,11 +37,17 @@ class DiscourseBoard {
   final String cardStyle;
   final bool showTopicThumbnail;
   final bool archived;
+  final bool oldSlugUsed;
+  final BoardCreator? createdBy;
+  final bool canArchive;
+  final bool canUnarchive;
   final bool canWrite;
   final bool canManage;
+  final List<BoardAclEntry> acl;
   final List<BoardColumn> columns;
 
   factory DiscourseBoard.fromJson(Map<String, dynamic> json) {
+    final canManage = json['can_manage'] as bool? ?? false;
     final columns =
         (json['columns'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
@@ -58,8 +69,22 @@ class DiscourseBoard {
       cardStyle: json['card_style'] as String? ?? 'detailed',
       showTopicThumbnail: json['show_topic_thumbnail'] as bool? ?? false,
       archived: json['archived'] as bool? ?? false,
+      oldSlugUsed: json['old_slug_used'] as bool? ?? false,
+      createdBy: json['created_by'] is Map
+          ? BoardCreator.fromJson(
+              Map<String, dynamic>.from(json['created_by'] as Map),
+            )
+          : null,
+      canArchive: json['can_archive'] as bool? ?? canManage,
+      canUnarchive: json['can_unarchive'] as bool? ?? canManage,
       canWrite: json['can_write'] as bool? ?? false,
-      canManage: json['can_manage'] as bool? ?? false,
+      canManage: canManage,
+      acl: (json['acl'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => BoardAclEntry.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList(growable: false),
       columns: columns,
     );
   }
@@ -78,6 +103,42 @@ class DiscourseBoard {
   String get displayName => unicodeName.trim().isNotEmpty ? unicodeName : name;
 }
 
+class BoardAclEntry {
+  const BoardAclEntry({
+    required this.type,
+    required this.id,
+    required this.permission,
+    this.displayName,
+  });
+
+  final String type;
+  final int id;
+  final String permission;
+  final String? displayName;
+
+  factory BoardAclEntry.fromJson(Map<String, dynamic> json) {
+    return BoardAclEntry(
+      type: json['type']?.toString() ?? 'group',
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      permission: json['permission']?.toString() ?? 'view',
+      displayName: json['display_name']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'id': id,
+    'permission': permission,
+  };
+
+  BoardAclEntry copyWith({String? permission}) => BoardAclEntry(
+    type: type,
+    id: id,
+    permission: permission ?? this.permission,
+    displayName: displayName,
+  );
+}
+
 class BoardColumn {
   const BoardColumn({
     required this.id,
@@ -85,6 +146,11 @@ class BoardColumn {
     required this.unicodeTitle,
     required this.position,
     required this.defaultSort,
+    this.icon,
+    this.tagId,
+    this.tagName,
+    this.moveToCategoryId,
+    this.moveToAssigned,
     required this.moveToStatus,
     required this.color,
     required this.cards,
@@ -95,6 +161,11 @@ class BoardColumn {
   final String unicodeTitle;
   final int position;
   final String defaultSort;
+  final String? icon;
+  final int? tagId;
+  final String? tagName;
+  final int? moveToCategoryId;
+  final String? moveToAssigned;
   final String moveToStatus;
   final String color;
   final List<BoardCard> cards;
@@ -113,6 +184,11 @@ class BoardColumn {
           json['unicode_title'] as String? ?? json['title'] as String? ?? '',
       position: (json['position'] as num?)?.toInt() ?? 0,
       defaultSort: json['default_sort'] as String? ?? 'priority',
+      icon: json['icon'] as String?,
+      tagId: (json['tag_id'] as num?)?.toInt(),
+      tagName: json['tag_name'] as String?,
+      moveToCategoryId: (json['move_to_category_id'] as num?)?.toInt(),
+      moveToAssigned: json['move_to_assigned'] as String?,
       moveToStatus: json['move_to_status'] as String? ?? '',
       color: json['color'] as String? ?? '',
       cards: cards,
@@ -155,10 +231,13 @@ class BoardCard {
     this.title,
     this.unicodeTitle,
     this.notes,
+    this.inlineOneboxData,
+    this.tagIds = const [],
     required this.tags,
     this.topicId,
     this.createdAt,
     this.updatedAt,
+    this.columnChangedAt,
     this.recencyAt,
     this.createdBy,
     this.assignedTo,
@@ -173,10 +252,13 @@ class BoardCard {
   final String? title;
   final String? unicodeTitle;
   final String? notes;
+  final Map<String, dynamic>? inlineOneboxData;
+  final List<int> tagIds;
   final List<BoardTag> tags;
   final int? topicId;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? columnChangedAt;
   final DateTime? recencyAt;
   final BoardCreator? createdBy;
   final BoardAssignee? assignedTo;
@@ -192,12 +274,17 @@ class BoardCard {
       title: json['title'] as String?,
       unicodeTitle: json['unicode_title'] as String?,
       notes: json['notes'] as String?,
+      inlineOneboxData: json['inline_onebox_data'] is Map
+          ? Map<String, dynamic>.from(json['inline_onebox_data'] as Map)
+          : null,
+      tagIds: _intList(json['tag_ids']),
       tags: (json['tags'] as List<dynamic>? ?? const [])
           .map(BoardTag.fromJson)
           .toList(),
       topicId: (json['topic_id'] as num?)?.toInt(),
       createdAt: _parseDateTime(json['created_at']),
       updatedAt: _parseDateTime(json['updated_at']),
+      columnChangedAt: _parseDateTime(json['column_changed_at']),
       recencyAt: _parseDateTime(json['recency_at']),
       createdBy: json['created_by'] is Map<String, dynamic>
           ? BoardCreator.fromJson(json['created_by'] as Map<String, dynamic>)

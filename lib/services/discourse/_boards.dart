@@ -54,4 +54,309 @@ mixin _BoardsMixin on _DiscourseServiceBase {
   }) async {
     await _dio.post('/boards/api/boards/$boardId/cards/$cardId/view');
   }
+
+  /// 获取当前话题可加入的 Boards。
+  Future<List<DiscourseBoard>> getAvailableBoards({
+    int? topicId,
+    List<String> allowedPermissions = const ['edit', 'manage'],
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/boards/api/boards/available.json',
+        queryParameters: {
+          if (topicId != null) 'topic_id': topicId,
+          if (allowedPermissions.isNotEmpty)
+            'allowed_permissions': allowedPermissions.join(','),
+        },
+      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      return (data['boards'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => DiscourseBoard.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList(growable: false);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 预评估 Board ACL 修改，复用 Discourse AccessControlList 的安全检查。
+  ///
+  /// 当服务端以 422 返回“当前用户将失去权限”时，不把它当普通网络错误，
+  /// 而是把 extras 和错误文本返回给 UI 进行二次确认。
+  Future<Map<String, dynamic>> evaluateBoardAccessControl(
+    int boardId,
+    List<BoardAclEntry> acl,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/access-control/evaluate.json',
+        data: {
+          'target_type': 'Boards::Board',
+          'target_id': boardId,
+          'new_acl': acl.map((entry) => entry.toJson()).toList(growable: false),
+        },
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (e.response?.statusCode == 422 && data is Map) {
+        final root = Map<String, dynamic>.from(data);
+        final extras = root['extras'];
+        if (extras is Map &&
+            extras.containsKey('current_user_will_lose_permission')) {
+          final result = Map<String, dynamic>.from(extras);
+          final errors = root['errors'];
+          if (errors is List && errors.isNotEmpty) {
+            result['error_message'] = errors.first.toString();
+          }
+          return result;
+        }
+      }
+      _throwApiError(e);
+    }
+  }
+
+  /// 创建 Board。字段直接对齐 Boards::Board contract，便于兼容插件后续扩展。
+  Future<DiscourseBoard> createBoard(Map<String, dynamic> board) async {
+    try {
+      final response = await _dio.post(
+        '/boards/api/boards.json',
+        data: {'board': board},
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      final root = Map<String, dynamic>.from(response.data as Map);
+      return DiscourseBoard.fromJson(
+        Map<String, dynamic>.from(root['board'] as Map),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<DiscourseBoard> updateBoard(
+    int boardId,
+    Map<String, dynamic> updates,
+  ) async {
+    try {
+      final response = await _dio.put(
+        '/boards/api/boards/$boardId.json',
+        data: {'board': updates},
+      );
+      final root = Map<String, dynamic>.from(response.data as Map);
+      return DiscourseBoard.fromJson(
+        Map<String, dynamic>.from(root['board'] as Map),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> archiveBoard(int boardId) async {
+    try {
+      await _dio.post('/boards/api/boards/$boardId/archive.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> unarchiveBoard(int boardId) async {
+    try {
+      await _dio.post('/boards/api/boards/$boardId/unarchive.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> deleteBoard(int boardId) async {
+    try {
+      await _dio.delete('/boards/api/boards/$boardId.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createBoardColumn(
+    int boardId,
+    Map<String, dynamic> column,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/boards/api/boards/$boardId/columns.json',
+        data: {'column': column},
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> updateBoardColumn(
+    int boardId,
+    int columnId,
+    Map<String, dynamic> updates,
+  ) async {
+    try {
+      final response = await _dio.put(
+        '/boards/api/boards/$boardId/columns/$columnId.json',
+        data: {'column': updates},
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> deleteBoardColumn(int boardId, int columnId) async {
+    try {
+      await _dio.delete('/boards/api/boards/$boardId/columns/$columnId.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 调整列顺序。Discourse Boards 当前只接受 -1 / 1，分别向左/右移动一格。
+  Future<void> moveBoardColumn(
+    int boardId, {
+    required int columnId,
+    required int direction,
+  }) async {
+    if (direction != -1 && direction != 1) {
+      throw ArgumentError.value(direction, 'direction', 'must be -1 or 1');
+    }
+    try {
+      await _dio.post(
+        '/boards/api/boards/$boardId/move-column.json',
+        data: {'column_id': columnId, 'direction': direction},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> clearBoardColumn(int boardId, int columnId) async {
+    try {
+      await _dio.delete(
+        '/boards/api/boards/$boardId/columns/$columnId/cards.json',
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<BoardCard> createBoardCard(
+    int boardId, {
+    required Map<String, dynamic> card,
+    Map<String, dynamic>? constraintFix,
+    String? clientId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/boards/api/boards/$boardId/cards.json',
+        data: {
+          if (clientId != null) 'client_id': clientId,
+          'card': card,
+          if (constraintFix != null) 'constraint_fix': constraintFix,
+        },
+      );
+      final root = Map<String, dynamic>.from(response.data as Map);
+      return BoardCard.fromJson(Map<String, dynamic>.from(root['card'] as Map));
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<BoardCard> updateBoardCard(
+    int boardId,
+    int cardId,
+    Map<String, dynamic> updates, {
+    String? clientId,
+    Map<String, dynamic>? constraintFix,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/boards/api/boards/$boardId/cards/$cardId.json',
+        data: {
+          if (clientId != null) 'client_id': clientId,
+          'card': updates,
+          if (constraintFix != null) 'constraint_fix': constraintFix,
+        },
+      );
+      final root = Map<String, dynamic>.from(response.data as Map);
+      return BoardCard.fromJson(Map<String, dynamic>.from(root['card'] as Map));
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> deleteBoardCard(
+    int boardId,
+    int cardId, {
+    String? clientId,
+  }) async {
+    try {
+      await _dio.delete(
+        '/boards/api/boards/$boardId/cards/$cardId.json',
+        data: {if (clientId != null) 'client_id': clientId},
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 将话题加入/移动到 Board 列。已存在卡片时服务端会更新其列。
+  Future<BoardCard> moveTopicToBoardColumn({
+    required int boardId,
+    required int topicId,
+    required int toColumnId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/boards/api/boards/$boardId/topic-moves.json',
+        data: {'topic_id': topicId, 'to_column_id': toColumnId},
+      );
+      final root = Map<String, dynamic>.from(response.data as Map);
+      return BoardCard.fromJson(Map<String, dynamic>.from(root['card'] as Map));
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 预览修改 Board 分类/标签约束后会移除多少张 topic 卡片。
+  Future<Map<String, dynamic>> previewBoardConstraints(
+    int boardId, {
+    List<int> categoryIds = const [],
+    List<String> tagNames = const [],
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/boards/api/boards/$boardId/constraint-preview.json',
+        data: {'category_ids': categoryIds, 'tag_names': tagNames},
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 检查把话题移动到目标列时需要补齐的 Board 分类/标签约束。
+  Future<Map<String, dynamic>> checkBoardConstraintMismatches(
+    int boardId, {
+    required int topicId,
+    required int targetColumnId,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/boards/api/boards/$boardId/check-constraint-mismatches.json',
+        data: {'topic_id': topicId, 'target_column_id': targetColumnId},
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
 }

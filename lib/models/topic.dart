@@ -738,14 +738,21 @@ class ReactionUsersGroup {
 class PostNotice {
   final String type; // "new_user" | "returning_user" | "custom"
   final String? lastPostedAt; // returning_user 类型的上次发帖时间
+  final String? raw; // custom 类型的原始 Markdown
   final String? cooked; // custom 类型的 HTML 内容
 
-  const PostNotice({required this.type, this.lastPostedAt, this.cooked});
+  const PostNotice({
+    required this.type,
+    this.lastPostedAt,
+    this.raw,
+    this.cooked,
+  });
 
   factory PostNotice.fromJson(Map<String, dynamic> json) {
     return PostNotice(
       type: json['type'] as String,
       lastPostedAt: json['last_posted_at'] as String?,
+      raw: json['raw'] as String?,
       cooked: json['cooked'] as String?,
     );
   }
@@ -771,6 +778,8 @@ class Post {
   final bool canDelete;
   final bool canRecover;
   final bool canWiki;
+  final bool canPermanentlyDelete;
+  final bool locked;
   final bool bookmarked;
   final int? bookmarkId; // 书签 ID（用于删除书签）
   final String? bookmarkName; // 书签名称
@@ -924,6 +933,8 @@ class Post {
     this.canDelete = false,
     this.canRecover = false,
     this.canWiki = false,
+    this.canPermanentlyDelete = false,
+    this.locked = false,
     this.bookmarked = false,
     this.bookmarkId,
     this.bookmarkName,
@@ -1015,6 +1026,8 @@ class Post {
       canDelete: json['can_delete'] as bool? ?? false,
       canRecover: json['can_recover'] as bool? ?? false,
       canWiki: json['can_wiki'] as bool? ?? false,
+      canPermanentlyDelete: json['can_permanently_delete'] as bool? ?? false,
+      locked: json['locked'] as bool? ?? false,
       bookmarked: json['bookmarked'] as bool? ?? false,
       bookmarkId: json['bookmark_id'] as int?,
       bookmarkName: normalizeBookmarkName(json['_bookmark_name'] as String?),
@@ -1171,6 +1184,8 @@ class Post {
           canEdit == other.canEdit &&
           canDelete == other.canDelete &&
           canRecover == other.canRecover &&
+          canPermanentlyDelete == other.canPermanentlyDelete &&
+          locked == other.locked &&
           read == other.read &&
           hidden == other.hidden &&
           cookedHidden == other.cookedHidden &&
@@ -1220,6 +1235,8 @@ class Post {
     bool? canDelete,
     bool? canRecover,
     bool? canWiki,
+    bool? canPermanentlyDelete,
+    bool? locked,
     bool? bookmarked,
     int? bookmarkId,
     String? bookmarkName,
@@ -1309,6 +1326,8 @@ class Post {
       canDelete: canDelete ?? this.canDelete,
       canRecover: canRecover ?? this.canRecover,
       canWiki: canWiki ?? this.canWiki,
+      canPermanentlyDelete: canPermanentlyDelete ?? this.canPermanentlyDelete,
+      locked: locked ?? this.locked,
       bookmarked: bookmarked ?? this.bookmarked,
       bookmarkId: bookmarkId ?? this.bookmarkId,
       bookmarkName: clearBookmarkName

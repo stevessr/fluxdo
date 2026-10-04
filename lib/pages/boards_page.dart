@@ -40,6 +40,90 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
 
   void _reload() => setState(() => _future = _load());
 
+  List<Map<String, dynamic>> _defaultBoardAcl() {
+    final raw = PreloadedDataService()
+        .siteSettingsSync?['boards_manage_board_allowed_groups'];
+    final ids = <int>{};
+    if (raw is String) {
+      ids.addAll(
+        raw
+            .split('|')
+            .map((value) => int.tryParse(value.trim()))
+            .whereType<int>(),
+      );
+    } else if (raw is List) {
+      ids.addAll(
+        raw.map((value) => int.tryParse(value.toString())).whereType<int>(),
+      );
+    }
+
+    final acl = <Map<String, dynamic>>[
+      for (final id in ids) {'type': 'group', 'id': id, 'permission': 'manage'},
+    ];
+    // Discourse AUTO_GROUPS.logged_in_users.id == 5。
+    if (!ids.contains(5)) {
+      acl.add({'type': 'group', 'id': 5, 'permission': 'view'});
+    }
+    return acl;
+  }
+
+  Future<void> _createBoard() async {
+    final user = ref.read(currentUserProvider).value;
+    if (user?.canManageBoards != true) return;
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_isZh(context) ? '新建看板' : 'New board'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: _isZh(context) ? '看板名称' : 'Board name',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(_isZh(context) ? '取消' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: Text(_isZh(context) ? '创建' : 'Create'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || !mounted) return;
+
+    try {
+      final board = await ref.read(discourseServiceProvider).createBoard({
+        'name': name,
+        'show_tags': true,
+        'acl': _defaultBoardAcl(),
+        'columns': const <Map<String, dynamic>>[],
+      });
+      if (!mounted) return;
+      _reload();
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => BoardDetailPage(
+            boardId: board.id,
+            initialName: board.displayName,
+          ),
+        ),
+      );
+      if (mounted) _reload();
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final zh = _isZh(context);
@@ -47,6 +131,12 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
       appBar: AppBar(
         title: Text(zh ? '看板' : 'Boards'),
         actions: [
+          if (ref.watch(currentUserProvider).value?.canManageBoards == true)
+            IconButton(
+              onPressed: _createBoard,
+              icon: const Icon(Icons.add_rounded),
+              tooltip: zh ? '新建看板' : 'New board',
+            ),
           IconButton(
             onPressed: _reload,
             icon: const Icon(Icons.refresh),
@@ -90,8 +180,8 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
                           : '${board.columns.length} columns',
                     ),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.of(context).push(
+                    onTap: () async {
+                      final changed = await Navigator.of(context).push<bool>(
                         MaterialPageRoute(
                           builder: (_) => BoardDetailPage(
                             boardId: board.id,
@@ -99,6 +189,7 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
                           ),
                         ),
                       );
+                      if (changed == true && mounted) _reload();
                     },
                   ),
                 );
@@ -269,6 +360,854 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     }
   }
 
+  Future<void> _addColumn(DiscourseBoard board) async {
+    if (!board.canManage || board.archived) return;
+    final controller = TextEditingController();
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_isZh(context) ? '添加分栏' : 'Add column'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: _isZh(context) ? '分栏名称' : 'Column title',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(_isZh(context) ? '取消' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: Text(_isZh(context) ? '添加' : 'Add'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (title == null || !mounted) return;
+    try {
+      await ref.read(discourseServiceProvider).createBoardColumn(board.id, {
+        'title': title,
+      });
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _addCard(DiscourseBoard board, BoardColumn column) async {
+    if (!board.canWrite || board.archived) return;
+    final result = await showDialog<({String title, String notes})>(
+      context: context,
+      builder: (_) => const _BoardCardEditorDialog(),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .createBoardCard(
+            board.id,
+            card: {
+              'column_id': column.id,
+              'title': result.title,
+              if (result.notes.isNotEmpty) 'notes': result.notes,
+            },
+          );
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _moveCard(DiscourseBoard board, BoardCard card) async {
+    if (!board.canWrite || board.archived || board.columns.length < 2) return;
+    final destination = await showDialog<BoardColumn>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text(_isZh(context) ? '移动到分栏' : 'Move to column'),
+        children: [
+          for (final column in board.columns)
+            if (column.id != card.columnId)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(dialogContext, column),
+                child: Text(column.displayTitle),
+              ),
+        ],
+      ),
+    );
+    if (destination == null || !mounted) return;
+
+    try {
+      final constraintFix = await _resolveBoardConstraintFix(
+        board,
+        card,
+        destination,
+      );
+      if (constraintFix == null || !mounted) return;
+
+      if (constraintFix.isEmpty && board.requireConfirmation) {
+        final confirmed =
+            await showDialog<bool>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: Text(_isZh(context) ? '确认移动' : 'Confirm move'),
+                content: Text(
+                  _isZh(context)
+                      ? '将“${card.displayTitle}”移动到“${destination.displayTitle}”？'
+                      : 'Move “${card.displayTitle}” to “${destination.displayTitle}”?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: Text(_isZh(context) ? '取消' : 'Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: Text(_isZh(context) ? '移动' : 'Move'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!confirmed) return;
+      }
+
+      await ref.read(discourseServiceProvider).updateBoardCard(
+        board.id,
+        card.id,
+        {'column_id': destination.id},
+        constraintFix: constraintFix.isEmpty ? null : constraintFix,
+      );
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  /// Mirrors Discourse Boards' constraint-fix flow before moving a topic card.
+  ///
+  /// An empty map means no fix is required. A null result means the user
+  /// cancelled the metadata change.
+  Future<Map<String, dynamic>?> _resolveBoardConstraintFix(
+    DiscourseBoard board,
+    BoardCard card,
+    BoardColumn destination,
+  ) async {
+    final topicId = card.topicId;
+    if (!card.isTopic || topicId == null) return const <String, dynamic>{};
+
+    final mismatch = await ref
+        .read(discourseServiceProvider)
+        .checkBoardConstraintMismatches(
+          board.id,
+          topicId: topicId,
+          targetColumnId: destination.id,
+        );
+    if (mismatch['constraints_need_fixing'] != true) {
+      return const <String, dynamic>{};
+    }
+
+    final categoriesNeeded =
+        (mismatch['categories_needed'] as List? ?? const [])
+            .whereType<num>()
+            .map((value) => value.toInt())
+            .toSet()
+            .toList(growable: false);
+    final tagsNeeded = (mismatch['tags_needed'] as List? ?? const [])
+        .map((value) => value.toString())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+
+    if (categoriesNeeded.isEmpty && tagsNeeded.isEmpty) {
+      return const <String, dynamic>{};
+    }
+
+    int? selectedCategory = categoriesNeeded.length == 1
+        ? categoriesNeeded.first
+        : null;
+    final selectedTags = <String>{if (tagsNeeded.length == 1) tagsNeeded.first};
+
+    if (!mounted) return null;
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final canApply =
+              (categoriesNeeded.isEmpty || selectedCategory != null) &&
+              (tagsNeeded.isEmpty || selectedTags.isNotEmpty);
+          return AlertDialog(
+            title: Text(_isZh(context) ? '修正话题约束' : 'Fix topic constraints'),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isZh(context) ? '该话题不满足目标分栏的看板约束。选择要应用到话题的分类/标签后再移动。' : 'This topic does not match the destination constraints. Choose the category/tags to apply before moving it.',
+                    ),
+                    if (categoriesNeeded.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(_isZh(context) ? '分类' : 'Category'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final categoryId in categoriesNeeded)
+                            ChoiceChip(
+                              label: Text('#$categoryId'),
+                              selected: selectedCategory == categoryId,
+                              onSelected: (selected) {
+                                if (!selected) return;
+                                setDialogState(
+                                  () => selectedCategory = categoryId,
+                                );
+                              },
+                            ),
+                        ],
+                      ),
+                    ],
+                    if (tagsNeeded.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(_isZh(context) ? '标签' : 'Tags'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final tagName in tagsNeeded)
+                            FilterChip(
+                              label: Text(tagName),
+                              selected: selectedTags.contains(tagName),
+                              onSelected: (selected) {
+                                setDialogState(() {
+                                  if (selected) {
+                                    selectedTags.add(tagName);
+                                  } else {
+                                    selectedTags.remove(tagName);
+                                  }
+                                });
+                              },
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: canApply
+                    ? () => Navigator.pop(dialogContext, <String, dynamic>{
+                        if (categoriesNeeded.isNotEmpty)
+                          'category_id': selectedCategory,
+                        if (tagsNeeded.isNotEmpty)
+                          'tag_names': selectedTags.toList(growable: false),
+                      })
+                    : null,
+                child: Text(_isZh(context) ? '应用并移动' : 'Apply & move'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _editColumn(DiscourseBoard board, BoardColumn column) async {
+    if (!board.canManage || board.archived) return;
+    final controller = TextEditingController(text: column.displayTitle);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_isZh(context) ? '编辑分栏' : 'Edit column'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: _isZh(context) ? '分栏名称' : 'Column title',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(_isZh(context) ? '取消' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: Text(_isZh(context) ? '保存' : 'Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (title == null || !mounted || title == column.displayTitle) return;
+    try {
+      await ref.read(discourseServiceProvider).updateBoardColumn(
+        board.id,
+        column.id,
+        {'title': title},
+      );
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _editCard(DiscourseBoard board, BoardCard card) async {
+    if (!board.canWrite || board.archived || card.isTopic) return;
+    final result = await showDialog<({String title, String notes})>(
+      context: context,
+      builder: (_) => _BoardCardEditorDialog(
+        initialTitle: card.displayTitle,
+        initialNotes: card.notes ?? '',
+        editing: true,
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await ref.read(discourseServiceProvider).updateBoardCard(
+        board.id,
+        card.id,
+        {'title': result.title, 'notes': result.notes},
+      );
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _deleteCard(DiscourseBoard board, BoardCard card) async {
+    if (!board.canWrite || board.archived) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(_isZh(context) ? '删除卡片' : 'Delete card'),
+            content: Text(
+              _isZh(context)
+                  ? '确定删除“${card.displayTitle}”吗？'
+                  : 'Delete “${card.displayTitle}”?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_isZh(context) ? '删除' : 'Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .deleteBoardCard(board.id, card.id);
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _clearColumn(DiscourseBoard board, BoardColumn column) async {
+    if (!board.canManage || board.archived || column.cards.isEmpty) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(_isZh(context) ? '清空分栏' : 'Clear column'),
+            content: Text(
+              _isZh(context)
+                  ? '确定删除“${column.displayTitle}”中的全部卡片吗？'
+                  : 'Delete all cards in “${column.displayTitle}”?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_isZh(context) ? '清空' : 'Clear'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .clearBoardColumn(board.id, column.id);
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _moveColumn(
+    DiscourseBoard board,
+    BoardColumn column,
+    int direction,
+  ) async {
+    if (!board.canManage || board.archived) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .moveBoardColumn(board.id, columnId: column.id, direction: direction);
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _deleteColumn(DiscourseBoard board, BoardColumn column) async {
+    if (!board.canManage || board.archived) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(_isZh(context) ? '删除分栏' : 'Delete column'),
+            content: Text(
+              _isZh(context)
+                  ? '确定删除分栏“${column.displayTitle}”吗？'
+                  : 'Delete column “${column.displayTitle}”?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_isZh(context) ? '删除' : 'Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .deleteBoardColumn(board.id, column.id);
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _editBoardSettings(DiscourseBoard board) async {
+    if (!board.canManage || board.archived) return;
+    final nameController = TextEditingController(text: board.displayName);
+    final slugController = TextEditingController(text: board.slug);
+    final categoriesController = TextEditingController(
+      text: board.categoryIds.join(', '),
+    );
+    final tagsController = TextEditingController(
+      text: board.tagNames.join(', '),
+    );
+    var constraintType =
+        board.categoryIds.isNotEmpty && board.tagNames.isNotEmpty
+        ? 'categories_and_tags'
+        : board.categoryIds.isNotEmpty
+        ? 'categories'
+        : board.tagNames.isNotEmpty
+        ? 'tags'
+        : 'none';
+    var acl = board.acl.toList(growable: true);
+    var showTags = board.showTags;
+    var showThumbnail = board.showTopicThumbnail;
+    var requireConfirmation = board.requireConfirmation;
+    var cardStyle = board.cardStyle;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(_isZh(context) ? '看板设置' : 'Board settings'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      labelText: _isZh(context) ? '名称' : 'Name',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: slugController,
+                    decoration: InputDecoration(
+                      labelText: _isZh(context) ? 'Slug' : 'Slug',
+                      helperText: _isZh(context) ? '留空由服务端按名称生成' : 'Leave empty to let the server derive it from the name',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: constraintType,
+                    decoration: InputDecoration(
+                      labelText: _isZh(context) ? '话题约束' : 'Topic constraint',
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'none',
+                        child: Text(_isZh(context) ? '无限制' : 'None'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'categories',
+                        child: Text(_isZh(context) ? '分类' : 'Categories'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'tags',
+                        child: Text(_isZh(context) ? '标签' : 'Tags'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'categories_and_tags',
+                        child: Text(
+                          _isZh(context) ? '分类 + 标签' : 'Categories + tags',
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => constraintType = value);
+                      }
+                    },
+                  ),
+                  if (constraintType == 'categories' ||
+                      constraintType == 'categories_and_tags') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: categoriesController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: _isZh(context)
+                            ? '分类 ID（逗号分隔）'
+                            : 'Category IDs (comma separated)',
+                        helperText: _isZh(context) ? '只允许这些分类中的话题进入看板' : 'Only topics from these categories may enter the board',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                  if (constraintType == 'tags' ||
+                      constraintType == 'categories_and_tags') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: tagsController,
+                      decoration: InputDecoration(
+                        labelText: _isZh(context)
+                            ? '标签（逗号分隔）'
+                            : 'Tags (comma separated)',
+                        helperText: _isZh(context) ? '只允许匹配这些标签的话题进入看板' : 'Only topics matching these tags may enter the board',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.security_outlined),
+                    title: Text(_isZh(context) ? '访问控制' : 'Access control'),
+                    subtitle: Text(
+                      _isZh(context)
+                          ? '${acl.length} 条授权规则'
+                          : '${acl.length} access rules',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final updated = await showDialog<List<BoardAclEntry>>(
+                        context: context,
+                        builder: (_) =>
+                            _BoardAclEditorDialog(initialEntries: acl),
+                      );
+                      if (updated != null) {
+                        setDialogState(
+                          () => acl = updated.toList(growable: true),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: cardStyle,
+                    decoration: InputDecoration(
+                      labelText: _isZh(context) ? '卡片样式' : 'Card style',
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'detailed',
+                        child: Text('Detailed'),
+                      ),
+                      DropdownMenuItem(value: 'simple', child: Text('Simple')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => cardStyle = value);
+                      }
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: showTags,
+                    title: Text(_isZh(context) ? '显示标签' : 'Show tags'),
+                    onChanged: (value) =>
+                        setDialogState(() => showTags = value),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: showThumbnail,
+                    title: Text(
+                      _isZh(context) ? '显示话题缩略图' : 'Show topic thumbnails',
+                    ),
+                    onChanged: (value) =>
+                        setDialogState(() => showThumbnail = value),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: requireConfirmation,
+                    title: Text(
+                      _isZh(context) ? '移动操作需要确认' : 'Require move confirmation',
+                    ),
+                    onChanged: (value) =>
+                        setDialogState(() => requireConfirmation = value),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(_isZh(context) ? '取消' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
+
+                final categoryIds =
+                    constraintType == 'categories' ||
+                        constraintType == 'categories_and_tags'
+                    ? categoriesController.text
+                          .split(RegExp(r'[,，\s]+'))
+                          .map((value) => int.tryParse(value.trim()))
+                          .whereType<int>()
+                          .where((value) => value > 0)
+                          .toSet()
+                          .toList(growable: false)
+                    : const <int>[];
+                final tagNames =
+                    constraintType == 'tags' ||
+                        constraintType == 'categories_and_tags'
+                    ? tagsController.text
+                          .split(RegExp(r'[,，\s]+'))
+                          .map((value) => value.trim())
+                          .where((value) => value.isNotEmpty)
+                          .toSet()
+                          .toList(growable: false)
+                    : const <String>[];
+
+                final slug = slugController.text.trim();
+                Navigator.pop(dialogContext, {
+                  'name': name,
+                  if (slug.isNotEmpty) 'slug': slug,
+                  'category_ids': categoryIds,
+                  'tag_names': tagNames,
+                  'acl': acl
+                      .map((entry) => entry.toJson())
+                      .toList(growable: false),
+                  'show_tags': showTags,
+                  'show_topic_thumbnail': showThumbnail,
+                  'require_confirmation': requireConfirmation,
+                  'card_style': cardStyle,
+                });
+              },
+              child: Text(_isZh(context) ? '保存' : 'Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameController.dispose();
+    slugController.dispose();
+    categoriesController.dispose();
+    tagsController.dispose();
+    if (result == null || !mounted) return;
+
+    try {
+      final categoryIds =
+          (result['category_ids'] as List?)?.whereType<int>().toList() ??
+          const <int>[];
+      final tagNames =
+          (result['tag_names'] as List?)?.map((e) => e.toString()).toList() ??
+          const <String>[];
+      final aclEntries = (result['acl'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => BoardAclEntry.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList(growable: false);
+      final accessEvaluation = await ref
+          .read(discourseServiceProvider)
+          .evaluateBoardAccessControl(board.id, aclEntries);
+      if (accessEvaluation['current_user_will_lose_permission'] == true &&
+          mounted) {
+        final warning =
+            accessEvaluation['error_message']?.toString().trim() ?? '';
+        final confirmed =
+            await showDialog<bool>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: Text(
+                  _isZh(context) ? '确认访问权限变更' : 'Confirm access change',
+                ),
+                content: Text(
+                  warning.isNotEmpty
+                      ? warning
+                      : (_isZh(context)
+                            ? '保存这些访问规则后，你可能失去管理此看板的权限。是否继续？'
+                            : 'You may lose permission to manage this board after saving these access rules. Continue?'),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: Text(_isZh(context) ? '取消' : 'Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: Text(_isZh(context) ? '仍然保存' : 'Save anyway'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!confirmed) return;
+      }
+
+      final preview = await ref
+          .read(discourseServiceProvider)
+          .previewBoardConstraints(
+            board.id,
+            categoryIds: categoryIds,
+            tagNames: tagNames,
+          );
+      final cardsToRemove = (preview['cards_to_remove'] as num?)?.toInt() ?? 0;
+      if (cardsToRemove > 0 && mounted) {
+        final confirmed =
+            await showDialog<bool>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: Text(
+                  _isZh(context) ? '确认修改话题约束' : 'Confirm constraints',
+                ),
+                content: Text(
+                  _isZh(context)
+                      ? '新的约束将从看板移除 $cardsToRemove 张不匹配的话题卡片。是否继续？'
+                      : 'The new constraints will remove $cardsToRemove non-matching topic cards. Continue?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: Text(_isZh(context) ? '取消' : 'Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: Text(_isZh(context) ? '继续' : 'Continue'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!confirmed) return;
+      }
+
+      await ref.read(discourseServiceProvider).updateBoard(board.id, result);
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _toggleBoardArchived(DiscourseBoard board) async {
+    if (board.archived ? !board.canUnarchive : !board.canArchive) return;
+    try {
+      final service = ref.read(discourseServiceProvider);
+      if (board.archived) {
+        await service.unarchiveBoard(board.id);
+      } else {
+        await service.archiveBoard(board.id);
+      }
+      if (mounted) await _loadBoard(showLoading: false);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
+  Future<void> _deleteBoard(DiscourseBoard board) async {
+    if (!board.canManage) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(_isZh(context) ? '删除看板' : 'Delete board'),
+            content: Text(
+              _isZh(context)
+                  ? '确定永久删除“${board.displayName}”吗？'
+                  : 'Permanently delete “${board.displayName}”?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(_isZh(context) ? '取消' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_isZh(context) ? '删除' : 'Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    try {
+      await ref.read(discourseServiceProvider).deleteBoard(board.id);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      ToastService.showError('操作失败: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final board = _board;
@@ -278,6 +1217,50 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       appBar: AppBar(
         title: Text(title),
         actions: [
+          if (board != null &&
+              (board.canManage || board.canArchive || board.canUnarchive))
+            PopupMenuButton<String>(
+              tooltip: _isZh(context) ? '看板管理' : 'Board management',
+              onSelected: (value) {
+                switch (value) {
+                  case 'settings':
+                    _editBoardSettings(board);
+                  case 'add_column':
+                    _addColumn(board);
+                  case 'archive':
+                    _toggleBoardArchived(board);
+                  case 'delete':
+                    _deleteBoard(board);
+                }
+              },
+              itemBuilder: (_) => [
+                if (board.canManage && !board.archived)
+                  PopupMenuItem(
+                    value: 'settings',
+                    child: Text(_isZh(context) ? '看板设置' : 'Board settings'),
+                  ),
+                if (board.canManage && !board.archived)
+                  PopupMenuItem(
+                    value: 'add_column',
+                    child: Text(_isZh(context) ? '添加分栏' : 'Add column'),
+                  ),
+                if ((!board.archived && board.canArchive) ||
+                    (board.archived && board.canUnarchive))
+                  PopupMenuItem(
+                    value: 'archive',
+                    child: Text(
+                      board.archived
+                          ? (_isZh(context) ? '取消归档' : 'Unarchive')
+                          : (_isZh(context) ? '归档看板' : 'Archive board'),
+                    ),
+                  ),
+                if (board.canManage)
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Text(_isZh(context) ? '删除看板' : 'Delete board'),
+                  ),
+              ],
+            ),
           IconButton(
             onPressed: () => _loadBoard(showLoading: false),
             icon: const Icon(Icons.refresh),
@@ -323,6 +1306,19 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                   canAssign: (card) => _canAssign(board, column, card),
                   onCardTap: _openCard,
                   onAssign: (card) => _assign(board, column, card),
+                  onAddCard: () => _addCard(board, column),
+                  onEditColumn: () => _editColumn(board, column),
+                  onEditCard: (card) => _editCard(board, card),
+                  onMoveCard: (card) => _moveCard(board, card),
+                  onDeleteCard: (card) => _deleteCard(board, card),
+                  onMoveLeft: index > 0
+                      ? () => _moveColumn(board, column, -1)
+                      : null,
+                  onMoveRight: index < board.columns.length - 1
+                      ? () => _moveColumn(board, column, 1)
+                      : null,
+                  onClearColumn: () => _clearColumn(board, column),
+                  onDeleteColumn: () => _deleteColumn(board, column),
                 ),
               );
             },
@@ -340,6 +1336,15 @@ class _BoardColumnView extends StatelessWidget {
     required this.canAssign,
     required this.onCardTap,
     required this.onAssign,
+    required this.onAddCard,
+    required this.onEditColumn,
+    required this.onEditCard,
+    required this.onMoveCard,
+    required this.onDeleteCard,
+    required this.onMoveLeft,
+    required this.onMoveRight,
+    required this.onClearColumn,
+    required this.onDeleteColumn,
   });
 
   final DiscourseBoard board;
@@ -347,6 +1352,15 @@ class _BoardColumnView extends StatelessWidget {
   final bool Function(BoardCard card) canAssign;
   final ValueChanged<BoardCard> onCardTap;
   final ValueChanged<BoardCard> onAssign;
+  final VoidCallback onAddCard;
+  final VoidCallback onEditColumn;
+  final ValueChanged<BoardCard> onEditCard;
+  final ValueChanged<BoardCard> onMoveCard;
+  final ValueChanged<BoardCard> onDeleteCard;
+  final VoidCallback? onMoveLeft;
+  final VoidCallback? onMoveRight;
+  final VoidCallback onClearColumn;
+  final VoidCallback onDeleteColumn;
 
   @override
   Widget build(BuildContext context) {
@@ -390,6 +1404,49 @@ class _BoardColumnView extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (board.canWrite && !board.archived)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: _isZh(context) ? '添加卡片' : 'Add card',
+                    onPressed: onAddCard,
+                    icon: const Icon(Icons.add_rounded, size: 20),
+                  ),
+                if (board.canManage && !board.archived)
+                  PopupMenuButton<String>(
+                    tooltip: _isZh(context) ? '分栏管理' : 'Column management',
+                    onSelected: (value) {
+                      if (value == 'edit') onEditColumn();
+                      if (value == 'move_left') onMoveLeft?.call();
+                      if (value == 'move_right') onMoveRight?.call();
+                      if (value == 'clear') onClearColumn();
+                      if (value == 'delete') onDeleteColumn();
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Text(_isZh(context) ? '编辑分栏' : 'Edit column'),
+                      ),
+                      if (onMoveLeft != null)
+                        PopupMenuItem(
+                          value: 'move_left',
+                          child: Text(_isZh(context) ? '向左移动' : 'Move left'),
+                        ),
+                      if (onMoveRight != null)
+                        PopupMenuItem(
+                          value: 'move_right',
+                          child: Text(_isZh(context) ? '向右移动' : 'Move right'),
+                        ),
+                      if (column.cards.isNotEmpty)
+                        PopupMenuItem(
+                          value: 'clear',
+                          child: Text(_isZh(context) ? '清空分栏' : 'Clear column'),
+                        ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text(_isZh(context) ? '删除分栏' : 'Delete column'),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -413,8 +1470,12 @@ class _BoardColumnView extends StatelessWidget {
                         board: board,
                         card: card,
                         canAssign: canAssign(card),
+                        canManageCard: board.canWrite && !board.archived,
                         onTap: () => onCardTap(card),
                         onAssign: () => onAssign(card),
+                        onEdit: () => onEditCard(card),
+                        onMove: () => onMoveCard(card),
+                        onDelete: () => onDeleteCard(card),
                       );
                     },
                   ),
@@ -430,15 +1491,23 @@ class _BoardCardTile extends StatelessWidget {
     required this.board,
     required this.card,
     required this.canAssign,
+    required this.canManageCard,
     required this.onTap,
     required this.onAssign,
+    required this.onEdit,
+    required this.onMove,
+    required this.onDelete,
   });
 
   final DiscourseBoard board;
   final BoardCard card;
   final bool canAssign;
+  final bool canManageCard;
   final VoidCallback onTap;
   final VoidCallback onAssign;
+  final VoidCallback onEdit;
+  final VoidCallback onMove;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -488,6 +1557,30 @@ class _BoardCardTile extends StatelessWidget {
                       ),
                       visualDensity: VisualDensity.compact,
                       tooltip: _isZh(context) ? '指定负责人' : 'Assign',
+                    ),
+                  if (canManageCard)
+                    PopupMenuButton<String>(
+                      tooltip: _isZh(context) ? '卡片管理' : 'Card management',
+                      onSelected: (value) {
+                        if (value == 'edit') onEdit();
+                        if (value == 'move') onMove();
+                        if (value == 'delete') onDelete();
+                      },
+                      itemBuilder: (_) => [
+                        if (!card.isTopic)
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Text(_isZh(context) ? '编辑卡片' : 'Edit card'),
+                          ),
+                        PopupMenuItem(
+                          value: 'move',
+                          child: Text(_isZh(context) ? '移动卡片' : 'Move card'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text(_isZh(context) ? '删除卡片' : 'Delete card'),
+                        ),
+                      ],
                     ),
                 ],
               ),
@@ -644,6 +1737,324 @@ class _FloaterDetailSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _BoardAclEditorDialog extends StatefulWidget {
+  const _BoardAclEditorDialog({required this.initialEntries});
+
+  final List<BoardAclEntry> initialEntries;
+
+  @override
+  State<_BoardAclEditorDialog> createState() => _BoardAclEditorDialogState();
+}
+
+class _BoardAclEditorDialogState extends State<_BoardAclEditorDialog> {
+  late List<BoardAclEntry> _entries;
+
+  @override
+  void initState() {
+    super.initState();
+    _entries = widget.initialEntries.toList(growable: true);
+  }
+
+  Future<void> _addEntry() async {
+    final idController = TextEditingController();
+    final nameController = TextEditingController();
+    var type = 'group';
+    var permission = 'view';
+    final entry = await showDialog<BoardAclEntry>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(_isZh(context) ? '添加访问规则' : 'Add access rule'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: type,
+                  decoration: InputDecoration(
+                    labelText: _isZh(context) ? '主体类型' : 'Subject type',
+                    border: const OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'group', child: Text('Group')),
+                    DropdownMenuItem(value: 'user', child: Text('User')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => type = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: idController,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: _isZh(context) ? 'ID' : 'ID',
+                    helperText: _isZh(context)
+                        ? 'Discourse 用户或群组的数字 ID'
+                        : 'Numeric Discourse user or group ID',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: _isZh(context)
+                        ? '显示名称（可选）'
+                        : 'Display name (optional)',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: permission,
+                  decoration: InputDecoration(
+                    labelText: _isZh(context) ? '权限' : 'Permission',
+                    border: const OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'view', child: Text('View')),
+                    DropdownMenuItem(value: 'edit', child: Text('Edit')),
+                    DropdownMenuItem(value: 'manage', child: Text('Manage')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => permission = value);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(_isZh(context) ? '取消' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final id = int.tryParse(idController.text.trim());
+                if (id == null || id < 0) return;
+                Navigator.pop(
+                  dialogContext,
+                  BoardAclEntry(
+                    type: type,
+                    id: id,
+                    permission: permission,
+                    displayName: nameController.text.trim().isEmpty
+                        ? null
+                        : nameController.text.trim(),
+                  ),
+                );
+              },
+              child: Text(_isZh(context) ? '添加' : 'Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+    idController.dispose();
+    nameController.dispose();
+    if (entry == null || !mounted) return;
+
+    setState(() {
+      final index = _entries.indexWhere(
+        (item) => item.type == entry.type && item.id == entry.id,
+      );
+      if (index >= 0) {
+        _entries[index] = entry;
+      } else {
+        _entries.add(entry);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_isZh(context) ? '访问控制' : 'Access control'),
+      content: SizedBox(
+        width: 520,
+        child: _entries.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  _isZh(context) ? '当前没有显式访问规则。服务端仍会应用强制 ACL。' : 'No explicit access rules. Server-side mandatory ACL still applies.',
+                ),
+              )
+            : ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _entries.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final entry = _entries[index];
+                    return ListTile(
+                      leading: Icon(
+                        entry.type == 'user'
+                            ? Icons.person_outline
+                            : Icons.group_outlined,
+                      ),
+                      title: Text(
+                        entry.displayName?.trim().isNotEmpty == true
+                            ? entry.displayName!
+                            : '${entry.type} #${entry.id}',
+                      ),
+                      subtitle: Text('${entry.type} #${entry.id}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          DropdownButton<String>(
+                            value: entry.permission,
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'view',
+                                child: Text('View'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'edit',
+                                child: Text('Edit'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'manage',
+                                child: Text('Manage'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() {
+                                _entries[index] = entry.copyWith(
+                                  permission: value,
+                                );
+                              });
+                            },
+                          ),
+                          IconButton(
+                            tooltip: _isZh(context) ? '移除' : 'Remove',
+                            onPressed: () =>
+                                setState(() => _entries.removeAt(index)),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+      ),
+      actions: [
+        TextButton.icon(
+          onPressed: _addEntry,
+          icon: const Icon(Icons.add_rounded),
+          label: Text(_isZh(context) ? '添加规则' : 'Add rule'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(_isZh(context) ? '取消' : 'Cancel'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, _entries.toList(growable: false)),
+          child: Text(_isZh(context) ? '完成' : 'Done'),
+        ),
+      ],
+    );
+  }
+}
+
+class _BoardCardEditorDialog extends StatefulWidget {
+  const _BoardCardEditorDialog({
+    this.initialTitle = '',
+    this.initialNotes = '',
+    this.editing = false,
+  });
+
+  final String initialTitle;
+  final String initialNotes;
+  final bool editing;
+
+  @override
+  State<_BoardCardEditorDialog> createState() => _BoardCardEditorDialogState();
+}
+
+class _BoardCardEditorDialogState extends State<_BoardCardEditorDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _notesController;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.initialTitle);
+    _notesController = TextEditingController(text: widget.initialNotes);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final zh = _isZh(context);
+    return AlertDialog(
+      title: Text(
+        widget.editing
+            ? (zh ? '编辑卡片' : 'Edit card')
+            : (zh ? '添加卡片' : 'Add card'),
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: zh ? '标题' : 'Title',
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              minLines: 2,
+              maxLines: 5,
+              decoration: InputDecoration(
+                labelText: zh ? '备注（可选）' : 'Notes (optional)',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(zh ? '取消' : 'Cancel'),
+        ),
+        FilledButton(
+          onPressed: _titleController.text.trim().isEmpty
+              ? null
+              : () => Navigator.pop(context, (
+                  title: _titleController.text.trim(),
+                  notes: _notesController.text.trim(),
+                )),
+          child: Text(
+            widget.editing ? (zh ? '保存' : 'Save') : (zh ? '添加' : 'Add'),
+          ),
+        ),
+      ],
     );
   }
 }

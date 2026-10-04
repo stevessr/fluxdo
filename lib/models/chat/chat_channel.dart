@@ -193,6 +193,32 @@ class ChatChannel {
     return false;
   }
 
+  bool? _metaBool(String key) {
+    final value = meta?[key];
+    return value is bool ? value : null;
+  }
+
+  /// Discourse ChannelSerializer#meta 下发的细粒度能力。
+  ///
+  /// 保持 nullable：旧版本服务端没有这些字段时，调用方可回退到历史逻辑。
+  bool? get serverCanFlag => _metaBool('can_flag');
+  bool? get serverUserSilenced => _metaBool('user_silenced');
+  bool? get serverCanModerate => _metaBool('can_moderate');
+  bool? get serverCanDeleteSelf => _metaBool('can_delete_self');
+  bool? get serverCanDeleteOthers => _metaBool('can_delete_others');
+  bool? get serverCanRemoveMembers => _metaBool('can_remove_members');
+  bool? get serverCanManagePins => _metaBool('can_manage_pins');
+
+  /// 是否可移除频道成员。
+  ///
+  /// 新版 Discourse 直接下发 meta.can_remove_members，优先服从服务端；
+  /// 旧版本没有该字段时再回退当前 Guardian 规则。
+  bool canRemoveMembers({required bool isAdmin}) {
+    final serverCapability = serverCanRemoveMembers;
+    if (serverCapability != null) return serverCapability;
+    return isAdmin && (isCategoryChannel || (isDirectMessage && isGroupDm));
+  }
+
   /// 获取 DM 频道的对方用户
   ///
   /// 过滤掉当前用户和系统用户（system）。系统用户在群聊中会被 Discourse
@@ -265,8 +291,9 @@ class ChatChannel {
         }
       } else if (val is String) {
         final str = val.trim().toLowerCase();
-        if (str == 'never' || str == 'none' || str == '0' || str.isEmpty)
+        if (str == 'never' || str == 'none' || str == '0' || str.isEmpty) {
           return;
+        }
         final match = RegExp(r'^(\d+)_?(day|days|hour|hours|year|years)?$')
             .firstMatch(str);
         if (match != null) {

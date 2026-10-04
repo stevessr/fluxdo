@@ -727,6 +727,33 @@ class ChatMessagesNotifier extends AsyncNotifier<List<ChatMessage>>
     }
   }
 
+  /// 批量删除频道消息（moderator/staff 权限由服务端最终校验）。
+  Future<void> deleteMessages(List<int> messageIds) async {
+    final ids = messageIds.toSet().toList(growable: false);
+    if (ids.isEmpty) return;
+    final service = ref.read(discourseServiceProvider);
+    await service.deleteChannelMessages(channelId, ids);
+    for (final id in ids) {
+      _markMessageDeleted(id);
+    }
+  }
+
+  /// 将多条消息移动到另一频道。
+  Future<void> moveMessages(
+    List<int> messageIds, {
+    required int destinationChannelId,
+  }) async {
+    final ids = messageIds.toSet().toList(growable: false);
+    if (ids.isEmpty || destinationChannelId == channelId) return;
+    final service = ref.read(discourseServiceProvider);
+    await service.moveChannelMessages(
+      channelId: channelId,
+      messageIds: ids,
+      destinationChannelId: destinationChannelId,
+    );
+    await loadMessages(preferLatest: true);
+  }
+
   /// 恢复已删除消息
   Future<void> restoreMessage(int messageId) async {
     final service = ref.read(discourseServiceProvider);
@@ -1133,53 +1160,104 @@ final chatAllThreadsProvider =
       final channelsState = ref.watch(chatChannelsProvider).value;
       if (channelsState == null) return const [];
 
-      final all = [
+      final allChannels = [
         ...channelsState.publicChannels,
         ...channelsState.directMessageChannels,
       ];
+      final channelsById = <int, ChatChannel>{
+        for (final channel in allChannels) channel.id: channel,
+      };
+      final service = ref.read(discourseServiceProvider);
 
-      // 优先取启用了消息串的频道；若没有则取前 15 个活跃频道
-      final candidates = all.where((c) => c.threadingEnabled).toList();
-      if (candidates.isEmpty) {
-        candidates.addAll(all.take(15));
+      List<(ChatThread, ChatChannel)> sortThreads(
+        List<(ChatThread, ChatChannel)> items,
+      ) {
+        items.sort((a, b) {
+          final aTime =
+              a.$1.preview?.lastReplyCreatedAt ??
+              a.$1.originalMessage?.createdAt ??
+              DateTime(2000);
+          final bTime =
+              b.$1.preview?.lastReplyCreatedAt ??
+              b.$1.originalMessage?.createdAt ??
+              DateTime(2000);
+          return bTime.compareTo(aTime);
+        });
+        return items;
       }
 
-      final service = ref.read(discourseServiceProvider);
-      final result = <(ChatThread, ChatChannel)>[];
+      // Discourse 当前提供专用 /chat/api/me/threads，单页最多 10 条。
+      // 按 offset 分页聚合，避免旧实现逐频道请求造成 N+1，同时不会截断活跃线程。
+      try {
+        final result = <(ChatThread, ChatChannel)>[];
+        final seenThreadIds = <int>{};
+        const pageSize = 10;
+        var offset = 0;
+        while (true) {
+          final raw = await service.getCurrentUserChatThreads(
+            offset: offset,
+            limit: pageSize,
+          );
+          final list = raw['threads'];
+          if (list is! List || list.isEmpty) break;
 
+          final seenBefore = seenThreadIds.length;
+          for (final item in list) {
+            if (item is! Map) continue;
+            try {
+              final json = Map<String, dynamic>.from(item);
+              final thread = ChatThread.fromJson(json);
+              if (thread.id <= 0 || !seenThreadIds.add(thread.id)) continue;
+
+              ChatChannel? channel = channelsById[thread.channelId];
+              final embedded = json['channel'];
+              if (channel == null && embedded is Map) {
+                try {
+                  channel = ChatChannel.fromJson(
+                    Map<String, dynamic>.from(embedded),
+                  );
+                } catch (_) {}
+              }
+              if (channel != null) result.add((thread, channel));
+            } catch (_) {
+              // 单个 thread payload 兼容失败不应拖垮整个列表。
+            }
+          }
+
+          // 短页说明已到末尾；若服务端忽略 offset 导致重复页，也立即终止，
+          // 避免旧/非标准 Chat 实现造成无限请求。
+          if (list.length < pageSize || seenThreadIds.length == seenBefore) {
+            break;
+          }
+          offset += list.length;
+        }
+        return sortThreads(result);
+      } catch (_) {
+        // 较旧的 Discourse Chat 可能尚无 /me/threads，下面保留逐频道兼容回退。
+      }
+
+      final candidates = allChannels.where((c) => c.threadingEnabled).toList();
+      if (candidates.isEmpty) candidates.addAll(allChannels.take(15));
+      final fallback = <(ChatThread, ChatChannel)>[];
       for (final channel in candidates) {
         try {
           final raw = await service.getChatChannelThreads(channel.id);
           final list = raw['threads'];
           if (list is! List) continue;
-          for (final e in list) {
-            if (e is! Map) continue;
+          for (final item in list) {
+            if (item is! Map) continue;
             try {
-              final thread = ChatThread.fromJson(Map<String, dynamic>.from(e));
-              if (thread.id > 0) {
-                result.add((thread, channel));
-              }
+              final thread = ChatThread.fromJson(
+                Map<String, dynamic>.from(item),
+              );
+              if (thread.id > 0) fallback.add((thread, channel));
             } catch (_) {}
           }
         } catch (_) {
-          // 单个频道加载失败不影响其他频道
+          // 单个频道不可用时继续其它频道。
         }
       }
-
-      // 按最后回复时间排序（最新的在前）
-      result.sort((a, b) {
-        final aTime =
-            a.$1.preview?.lastReplyCreatedAt ??
-            a.$1.originalMessage?.createdAt ??
-            DateTime(2000);
-        final bTime =
-            b.$1.preview?.lastReplyCreatedAt ??
-            b.$1.originalMessage?.createdAt ??
-            DateTime(2000);
-        return bTime.compareTo(aTime);
-      });
-
-      return result;
+      return sortThreads(fallback);
     });
 
 /// ============================================================================

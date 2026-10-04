@@ -55,7 +55,12 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
   }
 
   void _showMoreMenu(BuildContext context, ThemeData theme) {
-    final isGuest = ref.read(currentUserProvider).value == null;
+    final currentUser = ref.read(currentUserProvider).value;
+    final isGuest = currentUser == null;
+    final isStaff =
+        currentUser?.admin == true || currentUser?.moderator == true;
+    final zh =
+        Localizations.localeOf(context).languageCode.toLowerCase() == 'zh';
 
     showAppBottomSheet(
       context: context,
@@ -112,6 +117,111 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
                     widget.onEdit!();
                   },
                 ),
+              if (!isGuest && widget.post.canWiki)
+                ListTile(
+                  leading: Icon(
+                    widget.post.wiki
+                        ? Symbols.edit_note_rounded
+                        : Symbols.description_rounded,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  title: Text(widget.post.wiki ? '取消 Wiki' : '设为 Wiki'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _toggleWiki();
+                  },
+                ),
+              if (isStaff) ...[
+                ListTile(
+                  leading: Icon(
+                    widget.post.locked
+                        ? Icons.lock_open_outlined
+                        : Icons.lock_outline,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  title: Text(
+                    widget.post.locked
+                        ? (zh ? '解锁帖子' : 'Unlock post')
+                        : (zh ? '锁定帖子' : 'Lock post'),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _togglePostLocked();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.info_outline,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  title: Text(
+                    widget.post.notice?.type == 'custom'
+                        ? (zh ? '编辑 Staff 提示' : 'Edit staff notice')
+                        : (zh ? '添加 Staff 提示' : 'Add staff notice'),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _editPostNotice();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.refresh_rounded,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  title: Text(zh ? '重新渲染帖子' : 'Rebake post'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _rebakePost();
+                  },
+                ),
+                if (widget.post.postNumber != 1 || widget.post.postType == 4)
+                  ListTile(
+                    leading: Icon(
+                      Icons.visibility_off_outlined,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    title: Text(
+                      widget.post.postType == 4
+                          ? (zh ? '转为普通帖子' : 'Convert to regular post')
+                          : (zh ? '转为 Whisper' : 'Convert to whisper'),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _togglePostType();
+                    },
+                  ),
+                if (!widget.post.isDeleted && widget.post.postNumber > 1)
+                  ListTile(
+                    leading: Icon(
+                      Icons.call_merge_rounded,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    title: Text(zh ? '合并同作者帖子' : 'Merge author posts'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _mergePostWithOthers();
+                    },
+                  ),
+                if (currentUser?.admin == true && widget.post.isDeleted)
+                  ListTile(
+                    leading: Icon(
+                      Icons.delete_forever_outlined,
+                      color: theme.colorScheme.error,
+                    ),
+                    title: Text(
+                      widget.post.canPermanentlyDelete
+                          ? (zh ? '可永久删除 · 查看条件' : 'Permanent delete available')
+                          : (zh
+                                ? '检查永久删除条件'
+                                : 'Check permanent delete eligibility'),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showPermanentDeleteCheck();
+                    },
+                  ),
+              ],
               // 菜单点击后才构建，用 read 避免给楼层常驻树增加监听。
               if (ref.read(preferencesProvider).aiTranslationEnabled &&
                   ref.read(aiTranslationSelectedModelProvider) != null)

@@ -623,9 +623,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
     if (lastAtIndex >= 0) {
       final newText =
-          text.substring(0, lastAtIndex) +
-          '@${user.username} ' +
-          text.substring(cursorPosition);
+          '${text.substring(0, lastAtIndex)}@${user.username} '
+          '${text.substring(cursorPosition)}';
       _textController.value = TextEditingValue(
         text: newText,
         selection: TextSelection.collapsed(
@@ -838,6 +837,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   }
 
   ChatChannel? _currentChannelOrNull() {
+    final detail = ref.read(chatChannelDetailProvider(widget.channelId)).value;
+    if (detail != null) return detail;
+
     final channelsAsync = ref.read(chatChannelsProvider);
     final value = channelsAsync.value;
     if (value == null) return null;
@@ -1090,8 +1092,14 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   /// 长按弹出消息操作 BottomSheet
   void _showMessageActionSheet(ChatMessage message, bool isOwnMessage) {
-    // 已删除消息：仅提供恢复（若服务端仍返回该消息，通常需有审核权限）
+    final currentUser = ref.read(currentUserProvider).value;
+    final channel = _currentChannelOrNull();
+    final canModerate =
+        channel?.serverCanModerate ?? (currentUser?.isStaff ?? false);
+
+    // 已删除消息：仅审核权限可恢复。
     if (message.deleted) {
+      if (!canModerate) return;
       showAppBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
@@ -1121,10 +1129,19 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       return;
     }
 
-    final currentUser = ref.read(currentUserProvider).value;
+    final channelCanFlag = channel?.serverCanFlag ?? true;
     final canFlag =
         !isOwnMessage &&
+        channelCanFlag &&
         (message.availableFlags == null || message.availableFlags!.isNotEmpty);
+    final canManagePins = _pinEnabled && (channel?.serverCanManagePins ?? true);
+    final userSilenced =
+        channel?.serverUserSilenced ?? currentUser?.isSilenced ?? false;
+    final canEdit =
+        (isOwnMessage && !userSilenced) || (currentUser?.admin ?? false);
+    final canDelete = isOwnMessage
+        ? (channel?.serverCanDeleteSelf ?? true)
+        : (channel?.serverCanDeleteOthers ?? (currentUser?.isStaff ?? false));
 
     showAppBottomSheet(
       context: context,
@@ -1286,7 +1303,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       .toggleBookmark(message.id);
                 },
               ),
-              if (_pinEnabled)
+              if (canManagePins)
                 ListTile(
                   leading: Icon(
                     message.pinned
@@ -1319,8 +1336,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     _showFlagSheet(message);
                   },
                 ),
-              if (isOwnMessage || (currentUser?.isStaff ?? false)) ...[
-                if (isOwnMessage)
+              if (canDelete || canEdit) ...[
+                if (canEdit)
                   ListTile(
                     leading: const Icon(Icons.edit_outlined),
                     title: Text(ctx.l10n.chat_edit),
@@ -1329,20 +1346,21 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       _onStartEdit(message);
                     },
                   ),
-                ListTile(
-                  leading: Icon(
-                    Icons.delete_outline_rounded,
-                    color: Theme.of(ctx).colorScheme.error,
+                if (canDelete)
+                  ListTile(
+                    leading: Icon(
+                      Icons.delete_outline_rounded,
+                      color: Theme.of(ctx).colorScheme.error,
+                    ),
+                    title: Text(
+                      ctx.l10n.chat_delete,
+                      style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _onDeleteMessage(message);
+                    },
                   ),
-                  title: Text(
-                    ctx.l10n.chat_delete,
-                    style: TextStyle(color: Theme.of(ctx).colorScheme.error),
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _onDeleteMessage(message);
-                  },
-                ),
               ],
             ],
           ),
@@ -1557,6 +1575,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                   theme: theme,
                   channel: currentChannel,
                   canEditChannel: canEditChannel,
+                  canRemoveMembers:
+                      currentChannel?.canRemoveMembers(
+                        isAdmin: currentUser?.admin ?? false,
+                      ) ??
+                      false,
                 ),
               ],
             ),
@@ -1646,13 +1669,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           }
 
                           // 分组仍按时间升序；reverse 映射最新分组到 index 0。
-                          final groupIndex =
-                              messageGroups.length - 1 - index;
+                          final groupIndex = messageGroups.length - 1 - index;
                           final groupRange = messageGroups[groupIndex];
-                          final firstMessage =
-                              messages[groupRange.startIndex];
-                          final groupUser =
-                              firstMessage.deleted ? null : firstMessage.user;
+                          final firstMessage = messages[groupRange.startIndex];
+                          final groupUser = firstMessage.deleted
+                              ? null
+                              : firstMessage.user;
                           final isOwnGroup =
                               currentUser != null &&
                               groupUser != null &&
@@ -1724,7 +1746,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   message,
                                   isOwnMessage,
                                 ),
-                                onRestore: message.deleted
+                                onRestore:
+                                    message.deleted &&
+                                        (currentChannel?.serverCanModerate ??
+                                            isStaff)
                                     ? () => _restoreMessage(message)
                                     : null,
                                 onToggleReaction: (emoji) {
@@ -1757,10 +1782,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               if (showDateHeader)
-                                _buildDateHeader(
-                                  theme,
-                                  firstMessage.createdAt,
-                                ),
+                                _buildDateHeader(theme, firstMessage.createdAt),
                               _StickyChatMessageGroup(
                                 user: _isMultiSelectMode ? null : groupUser,
                                 avatarUrl: _buildAvatarUrl(groupUser),
@@ -1806,6 +1828,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     required ThemeData theme,
     required ChatChannel? channel,
     required bool canEditChannel,
+    required bool canRemoveMembers,
   }) {
     return PopupMenuButton<String>(
       tooltip: '更多',
@@ -1834,6 +1857,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               widget.channelId,
               widget.channelTitle,
               canAddMembers: channel?.canAddMembers ?? false,
+              canRemoveMembers: canRemoveMembers,
               membersCountHint: channel?.membersCount,
             );
           case 'settings':
@@ -2097,7 +2121,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     User? currentUser,
   ) {
     final isStaff = currentUser?.isStaff ?? false;
-    final userSilenced = currentUser?.isSilenced ?? false;
+    final userSilenced =
+        channel?.serverUserSilenced ?? currentUser?.isSilenced ?? false;
     // 频道详情未加载前保守禁用输入，避免关闭/只读频道短暂可发
     final canSend = channel == null
         ? false
@@ -2563,8 +2588,7 @@ class _StickyChatMessageGroup extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) =>
-                  UserProfilePage(username: avatarUser.username),
+              builder: (_) => UserProfilePage(username: avatarUser.username),
             ),
           );
         },
@@ -2610,8 +2634,8 @@ class _StickyChatAvatarLayer extends SingleChildRenderObjectWidget {
   @override
   _RenderStickyChatAvatarLayer createRenderObject(BuildContext context) {
     return _RenderStickyChatAvatarLayer(
-      alignRight: alignRight,
-      scrollController: scrollController,
+      alignRightValue: alignRight,
+      scrollControllerValue: scrollController,
     );
   }
 
@@ -2627,34 +2651,32 @@ class _StickyChatAvatarLayer extends SingleChildRenderObjectWidget {
 }
 
 class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
-  bool _alignRight;
-  ScrollController _scrollController;
+  bool alignRightValue;
+  ScrollController scrollControllerValue;
 
   _RenderStickyChatAvatarLayer({
-    required bool alignRight,
-    required ScrollController scrollController,
+    required this.alignRightValue,
+    required this.scrollControllerValue,
     RenderBox? child,
-  }) : _alignRight = alignRight,
-       _scrollController = scrollController,
-       super(child);
+  }) : super(child);
 
   @override
   bool get isRepaintBoundary => true;
 
   set alignRight(bool value) {
-    if (_alignRight == value) return;
-    _alignRight = value;
+    if (alignRightValue == value) return;
+    alignRightValue = value;
     markNeedsPaint();
   }
 
   set scrollController(ScrollController value) {
-    if (identical(_scrollController, value)) return;
+    if (identical(scrollControllerValue, value)) return;
     if (attached) {
-      _scrollController.removeListener(_handleScroll);
+      scrollControllerValue.removeListener(_handleScroll);
     }
-    _scrollController = value;
+    scrollControllerValue = value;
     if (attached) {
-      _scrollController.addListener(_handleScroll);
+      scrollControllerValue.addListener(_handleScroll);
     }
     markNeedsPaint();
   }
@@ -2667,12 +2689,12 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
   @override
   void attach(PipelineOwner owner) {
     super.attach(owner);
-    _scrollController.addListener(_handleScroll);
+    scrollControllerValue.addListener(_handleScroll);
   }
 
   @override
   void detach() {
-    _scrollController.removeListener(_handleScroll);
+    scrollControllerValue.removeListener(_handleScroll);
     super.detach();
   }
 
@@ -2689,7 +2711,7 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
   RenderBox? _findViewportBox() {
     RenderObject? ancestor = parent;
     while (ancestor != null) {
-      if (ancestor is RenderAbstractViewport && ancestor is RenderBox) {
+      if (ancestor is RenderBox && ancestor is RenderAbstractViewport) {
         return ancestor;
       }
       ancestor = ancestor.parent;
@@ -2701,16 +2723,20 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
     final child = this.child;
     if (child == null) return Offset.zero;
 
-    final maxX =
-        (size.width - child.size.width).clamp(0.0, double.infinity).toDouble();
-    final maxY =
-        (size.height - child.size.height).clamp(0.0, double.infinity).toDouble();
+    final maxX = (size.width - child.size.width)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final maxY = (size.height - child.size.height)
+        .clamp(0.0, double.infinity)
+        .toDouble();
 
     var y = maxY;
     final viewport = _findViewportBox();
     if (viewport != null && viewport.hasSize) {
-      final groupTopInViewport =
-          localToGlobal(Offset.zero, ancestor: viewport).dy;
+      final groupTopInViewport = localToGlobal(
+        Offset.zero,
+        ancestor: viewport,
+      ).dy;
       final stickyTopInViewport = viewport.size.height - child.size.height;
       final stickyTopInGroup = stickyTopInViewport - groupTopInViewport;
 
@@ -2720,7 +2746,7 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
       y = stickyTopInGroup.clamp(0.0, maxY).toDouble();
     }
 
-    return Offset(_alignRight ? maxX : 0, y);
+    return Offset(alignRightValue ? maxX : 0, y);
   }
 
   @override
@@ -2738,10 +2764,7 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
   }
 
   @override
-  bool hitTestChildren(
-    BoxHitTestResult result, {
-    required Offset position,
-  }) {
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
     final child = this.child;
     if (child == null) return false;
     return result.addWithPaintOffset(
@@ -2780,6 +2803,7 @@ class _ChatMessageBubble extends StatefulWidget {
   final ValueChanged<int>? onMessageVisible;
 
   const _ChatMessageBubble({
+    super.key,
     required this.message,
     this.replyToMessage,
     required this.isOwnMessage,
@@ -3896,34 +3920,38 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
               )
             else ...[
               Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _flagTypes.length,
-                  itemBuilder: (context, index) {
-                    final type = _flagTypes[index];
-                    return RadioListTile<FlagType>(
-                      value: type,
-                      groupValue: _selected,
-                      onChanged: _submitting
-                          ? null
-                          : (v) => setState(() => _selected = v),
-                      title: Text(type.name),
-                      subtitle:
-                          type.shortDescription != null ||
-                              type.description.isNotEmpty
-                          ? Text(
-                              (type.shortDescription ?? type.description)
-                                  .replaceAll('%{username}', widget.username)
-                                  .replaceAll(
-                                    '@%{username}',
-                                    '@${widget.username}',
-                                  ),
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                            )
-                          : null,
-                    );
+                child: RadioGroup<FlagType>(
+                  groupValue: _selected,
+                  onChanged: (value) {
+                    if (_submitting) return;
+                    setState(() => _selected = value);
                   },
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _flagTypes.length,
+                    itemBuilder: (context, index) {
+                      final type = _flagTypes[index];
+                      return RadioListTile<FlagType>(
+                        value: type,
+                        enabled: !_submitting,
+                        title: Text(type.name),
+                        subtitle:
+                            type.shortDescription != null ||
+                                type.description.isNotEmpty
+                            ? Text(
+                                (type.shortDescription ?? type.description)
+                                    .replaceAll('%{username}', widget.username)
+                                    .replaceAll(
+                                      '@%{username}',
+                                      '@${widget.username}',
+                                    ),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : null,
+                      );
+                    },
+                  ),
                 ),
               ),
               if (_selected?.requireMessage == true)

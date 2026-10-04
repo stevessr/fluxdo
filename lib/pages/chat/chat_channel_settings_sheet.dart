@@ -511,6 +511,11 @@ class _ChatChannelSettingsSheetState
     }
 
     final canAddMembers = channel?.canAddMembers ?? false;
+    final canRemoveMembers =
+        channel?.canRemoveMembers(
+          isAdmin: currentUser is User ? currentUser.admin : false,
+        ) ??
+        false;
     final canEdit = channel?.canEditChannel(isStaff: isStaff) ?? isStaff;
     final mutedValue = _localMuted ?? channel?.muted ?? false;
     final notifLevel =
@@ -740,6 +745,7 @@ class _ChatChannelSettingsSheetState
                     widget.channelId,
                     widget.channelTitle,
                     canAddMembers: canAddMembers,
+                    canRemoveMembers: canRemoveMembers,
                     membersCountHint: channel?.membersCount,
                   );
                 },
