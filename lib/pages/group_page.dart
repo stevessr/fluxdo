@@ -1251,8 +1251,7 @@ class _GroupCopy {
   String get membershipRequests => zh ? '加入申请' : 'Membership requests';
   String get noMembershipRequests =>
       zh ? '当前没有待处理的加入申请' : 'No pending membership requests';
-  String requestedAt(String value) =>
-      zh ? '申请时间：$value' : 'Requested: $value';
+  String requestedAt(String value) => zh ? '申请时间：$value' : 'Requested: $value';
   String get accept => zh ? '接受' : 'Accept';
   String get deny => zh ? '拒绝' : 'Deny';
   String get automatic => zh ? '自动群组' : 'Automatic group';

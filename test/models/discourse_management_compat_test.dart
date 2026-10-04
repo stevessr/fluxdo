@@ -76,7 +76,10 @@ void main() {
       });
 
       expect(result.members, hasLength(1));
-      expect(result.members.single.requestReason, 'Need access for the project');
+      expect(
+        result.members.single.requestReason,
+        'Need access for the project',
+      );
       expect(
         result.members.single.requestedAt,
         DateTime.utc(2026, 10, 3, 12, 34, 56),
