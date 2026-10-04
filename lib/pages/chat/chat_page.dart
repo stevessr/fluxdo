@@ -20,6 +20,7 @@ import 'chat_channel_settings_sheet.dart';
 import 'chat_create_channel_sheet.dart';
 import 'chat_search_page.dart';
 import 'chat_thread_sheet.dart';
+import '../../utils/dialog_utils.dart';
 
 typedef ChatConversationGroups = ({
   List<ChatChannel> privateChats,
@@ -101,7 +102,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   void _openNewDmDialog() {
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (context) =>
           const _NewDmDialog(initialMode: _NewChatCreatorMode.message),
@@ -109,7 +110,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   void _openNewGroupDialog() {
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (context) =>
           const _NewDmDialog(initialMode: _NewChatCreatorMode.group),
@@ -260,7 +261,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _showChannelFilterPicker() async {
-    final selected = await showModalBottomSheet<_ChatChannelFilter>(
+    final selected = await showAppBottomSheet<_ChatChannelFilter>(
       context: context,
       showDragHandle: true,
       builder: (context) {
@@ -325,7 +326,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _showChannelSortPicker() async {
-    final selected = await showModalBottomSheet<_ChatChannelSort>(
+    final selected = await showAppBottomSheet<_ChatChannelSort>(
       context: context,
       showDragHandle: true,
       builder: (context) {
@@ -991,7 +992,7 @@ class ChatChannelTile extends ConsumerWidget {
               ? l10n.chat_leave_confirm_group
               : l10n.chat_leave_confirm_dm)
         : l10n.chat_leave_confirm_channel;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(_leaveLabel(context)),
@@ -1039,7 +1040,7 @@ class ChatChannelTile extends ConsumerWidget {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final isFavorite = ref.read(chatFavoritesProvider).contains(channel.id);
-    showModalBottomSheet<void>(
+    showAppBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

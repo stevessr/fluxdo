@@ -13,6 +13,7 @@ import '../../services/preloaded_data_service.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import 'chat_channel_members_sheet.dart';
+import '../../utils/dialog_utils.dart';
 
 /// 聊天频道设置 Sheet 弹窗
 class ChatChannelSettingsSheet extends ConsumerStatefulWidget {
@@ -26,7 +27,7 @@ class ChatChannelSettingsSheet extends ConsumerStatefulWidget {
   });
 
   static void show(BuildContext context, int channelId, String channelTitle) {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -134,7 +135,7 @@ class _ChatChannelSettingsSheetState
   void _showNotificationLevelPicker(ChatChannel channel) {
     final current =
         _localNotificationLevel ?? channel.notificationLevel ?? 'mention';
-    showModalBottomSheet<void>(
+    showAppBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -227,13 +228,13 @@ class _ChatChannelSettingsSheetState
     final slugController = TextEditingController(text: channel?.slug ?? '');
     var selectedEmoji = ChatChannel.normalizeEmojiShortcode(channel?.emoji);
 
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             void openEmojiPicker() {
-              showModalBottomSheet<void>(
+              showAppBottomSheet<void>(
                 context: ctx,
                 isScrollControlled: true,
                 shape: const RoundedRectangleBorder(
@@ -428,7 +429,7 @@ class _ChatChannelSettingsSheetState
   /// - 1:1 私聊 / 公开频道：等价于 unfollow（following=false）
   Future<void> _confirmAndLeave(ChatChannel channel) async {
     final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(_leaveActionTitle(channel)),

@@ -8,6 +8,7 @@ import '../../utils/url_helper.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/chat/online_status_avatar.dart';
 import '../user_profile_page.dart';
+import '../../utils/dialog_utils.dart';
 
 /// 聊天频道成员与添加成员弹窗
 ///
@@ -34,7 +35,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
     bool canAddMembers = false,
     int? membersCountHint,
   }) {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -76,7 +77,7 @@ class _ChatChannelMembersSheetState
   }
 
   void _showAddMemberDialog() {
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (ctx) => _AddChannelMemberDialog(
         channelId: widget.channelId,

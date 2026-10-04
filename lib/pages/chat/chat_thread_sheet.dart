@@ -28,6 +28,7 @@ import '../../widgets/common/emoji_text.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import '../image_viewer_page.dart';
 import '../user_profile_page.dart';
+import '../../utils/dialog_utils.dart';
 
 /// 消息串底部面板：串内消息与主聊 UI 对齐（气泡 / cooked / 图片 / 反应）。
 class ChatThreadSheet extends ConsumerStatefulWidget {
@@ -90,6 +91,19 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
 
   /// 最近使用的反应表情 SharedPreferences key（与主聊共用）
   static const String _recentReactionEmojisKey = 'recent_reaction_emojis';
+
+  bool get _hasLocalBackTarget =>
+      _showEmojiPicker || _editingMessage != null || _replyToMessage != null;
+
+  void _consumeLocalBack() {
+    if (_showEmojiPicker) {
+      setState(() => _showEmojiPicker = false);
+      return;
+    }
+    if (_editingMessage != null || _replyToMessage != null) {
+      _onCancelEdit();
+    }
+  }
 
   bool get _pinEnabled =>
       PreloadedDataService().siteSettingsSync?['chat_pinned_messages'] == true;
@@ -268,7 +282,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
   }
 
   Future<void> _onDeleteMessage(ChatMessage message) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除消息'),
@@ -329,7 +343,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
 
   Future<void> _showFlagSheet(ChatMessage message) async {
     final username = message.user?.username ?? '用户';
-    await showModalBottomSheet<void>(
+    await showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -587,7 +601,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
   }
 
   void _showFullEmojiPickerForReaction(ChatMessage message) {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -611,7 +625,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
   /// 长按消息：弹出与主聊一致的操作面板
   void _showMessageActionSheet(ChatMessage message, bool isOwnMessage) {
     if (message.deleted) {
-      showModalBottomSheet(
+      showAppBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -645,7 +659,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
         !isOwnMessage &&
         (message.availableFlags == null || message.availableFlags!.isNotEmpty);
 
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -904,7 +918,13 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
               ? '回复 ${_replyToMessage!.user?.name ?? _replyToMessage!.user?.username ?? ''}…'
               : '回复消息串…');
 
-    return ChatKeyboardViewport(
+    return PopScope(
+      canPop: !_hasLocalBackTarget,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !_hasLocalBackTarget) return;
+        _consumeLocalBack();
+      },
+      child: ChatKeyboardViewport(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -1233,6 +1253,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
           ),
         ),
       ],
+      ),
     );
   }
 }

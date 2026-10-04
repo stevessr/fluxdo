@@ -9,6 +9,7 @@ import '../../providers/chat_providers.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/markdown_editor/emoji_sticker_panel.dart';
 import 'chat_message_page.dart';
+import '../../utils/dialog_utils.dart';
 
 /// 创建公开聊天频道对话框（staff）
 ///
@@ -16,7 +17,7 @@ import 'chat_message_page.dart';
 /// 名称 / slug / 描述 / 分类 / emoji / 消息串
 class ChatCreateChannelSheet {
   static Future<void> show(BuildContext context) {
-    return showModalBottomSheet<void>(
+    return showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -67,7 +68,7 @@ class _ChatCreateChannelBodyState
   }
 
   Future<void> _pickEmoji() async {
-    await showModalBottomSheet<void>(
+    await showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
