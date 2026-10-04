@@ -461,13 +461,25 @@ class _BlurRawDialogRoute<T> extends PopupRoute<T> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
+    final Widget transition;
     if (_transitionBuilder != null) {
-      return _transitionBuilder(context, animation, secondaryAnimation, child);
+      transition = _transitionBuilder(
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+      );
+    } else {
+      transition = FadeTransition(
+        opacity: CurvedAnimation(parent: animation, curve: Curves.linear),
+        child: child,
+      );
     }
-    return FadeTransition(
-      opacity: CurvedAnimation(parent: animation, curve: Curves.linear),
-      child: child,
-    );
+
+    // Dialog/GeneralDialog 也是 PopupRoute → ModalRoute → TransitionRoute，
+    // 与 bottom sheet 一样具备 PredictiveBackRoute 能力。统一挂探测器后，
+    // Android 返回手势直接驱动现有 dialog animation；其它平台原样返回。
+    return wrapPredictiveBackForModalRoute(route: this, child: transition);
   }
 
   @override

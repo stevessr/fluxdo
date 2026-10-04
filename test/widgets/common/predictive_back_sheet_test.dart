@@ -346,4 +346,51 @@ void main() {
     await send('cancelBackGesture');
     await tester.pumpAndSettle();
   }, variant: const TargetPlatformVariant({TargetPlatform.android}));
+
+  testWidgets('App dialog 参与 Android 预测返回且只关闭最上层 dialog', (
+    tester,
+  ) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(buildApp(navigatorKey));
+    await tester.tap(find.text('page A'));
+    await tester.pumpAndSettle();
+
+    showAppDialog<void>(
+      context: navigatorKey.currentContext!,
+      blur: false,
+      builder: (_) =>
+          const AlertDialog(content: Text('predictive dialog content')),
+    );
+    await tester.pumpAndSettle();
+
+    final route = ModalRoute.of(
+      tester.element(find.text('predictive dialog content')),
+    )!;
+    expect(route, isA<PopupRoute<dynamic>>());
+    expect(
+      route.popGestureEnabled,
+      isTrue,
+      reason: '统一 dialog route 必须允许 Android predictive back 认领',
+    );
+
+    await send('startBackGesture', gestureArgs(0.0));
+    await tester.pump();
+    expect(navigatorKey.currentState!.userGestureInProgress, isTrue);
+
+    await send('updateBackGestureProgress', gestureArgs(0.5));
+    await tester.pump();
+    expect(
+      route.animation!.value,
+      lessThan(1.0),
+      reason: '预测返回进度必须驱动 dialog route animation',
+    );
+
+    await send('commitBackGesture');
+    await tester.pumpAndSettle();
+
+    expect(find.text('predictive dialog content'), findsNothing);
+    expect(find.text('page B'), findsOneWidget, reason: '一次手势只应关闭顶层 dialog');
+    expect(navigatorKey.currentState!.userGestureInProgress, isFalse);
+  }, variant: const TargetPlatformVariant({TargetPlatform.android}));
+
 }

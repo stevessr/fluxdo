@@ -49,6 +49,7 @@ import 'chat_channel_members_sheet.dart';
 import 'chat_channel_settings_sheet.dart';
 import 'chat_thread_list_sheet.dart';
 import 'chat_thread_sheet.dart';
+import '../../utils/dialog_utils.dart';
 
 /// Chat 消息页面
 ///
@@ -127,6 +128,36 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     });
   }
 
+  bool get _hasLocalBackTarget =>
+      _showMentionSuggestions ||
+      _showEmojiPicker ||
+      _isSearchMode ||
+      _isMultiSelectMode ||
+      _editingMessage != null ||
+      _replyToMessage != null;
+
+  void _consumeLocalBack() {
+    if (_showMentionSuggestions) {
+      setState(() => _showMentionSuggestions = false);
+      return;
+    }
+    if (_showEmojiPicker) {
+      setState(() => _showEmojiPicker = false);
+      return;
+    }
+    if (_isSearchMode) {
+      _exitSearchMode();
+      return;
+    }
+    if (_isMultiSelectMode) {
+      _exitMultiSelectMode();
+      return;
+    }
+    if (_editingMessage != null || _replyToMessage != null) {
+      _onCancelReplyOrEdit();
+    }
+  }
+
   void _toggleSelectMessage(int messageId) {
     setState(() {
       if (_selectedMessageIds.contains(messageId)) {
@@ -199,7 +230,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   }
 
   void _showPinnedMessages() {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -249,7 +280,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   Future<void> _showFlagSheet(ChatMessage message) async {
     final username = message.user?.username ?? '用户';
-    await showModalBottomSheet<void>(
+    await showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -871,7 +902,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   }
 
   Future<void> _onDeleteMessage(ChatMessage message) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(ctx.l10n.chat_delete),
@@ -939,7 +970,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   /// 打开完整表情选择器用于反应
   void _showFullEmojiPickerForReaction(ChatMessage message) {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -964,7 +995,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   /// 气泡异侧 react 按钮：快捷表情 + 打开完整选择器
   void _showQuickReactionPicker(ChatMessage message) {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -1061,7 +1092,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void _showMessageActionSheet(ChatMessage message, bool isOwnMessage) {
     // 已删除消息：仅提供恢复（若服务端仍返回该消息，通常需有审核权限）
     if (message.deleted) {
-      showModalBottomSheet(
+      showAppBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -1095,7 +1126,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         !isOwnMessage &&
         (message.availableFlags == null || message.availableFlags!.isNotEmpty);
 
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -1420,7 +1451,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     final canEditChannel =
         currentChannel?.canEditChannel(isStaff: isStaff) ?? false;
 
-    return Scaffold(
+    final page = Scaffold(
       // Chat 自己用轻量 inset spacer 跟随 IME，避免 Scaffold 把整棵消息树
       // 每帧卷入 viewInsets 布局/MediaQuery 更新。
       resizeToAvoidBottomInset: false,
@@ -1759,6 +1790,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           ],
         ],
       ),
+    );
+
+    return PopScope(
+      canPop: !_hasLocalBackTarget,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !_hasLocalBackTarget) return;
+        _consumeLocalBack();
+      },
+      child: page,
     );
   }
 
