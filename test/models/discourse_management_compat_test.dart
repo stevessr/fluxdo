@@ -87,14 +87,40 @@ void main() {
       );
     });
 
-    test('Chat member removal follows Discourse admin-only policy', () {
+    test('Chat channel capabilities prefer server metadata', () {
       final groupDm = ChatChannel.fromJson({
         'id': 12,
         'chatable_type': 'DirectMessage',
         'chatable': {'group': true, 'users': const <Map<String, dynamic>>[]},
+        'meta': {
+          'can_flag': false,
+          'user_silenced': true,
+          'can_moderate': true,
+          'can_delete_self': false,
+          'can_delete_others': true,
+          'can_remove_members': false,
+          'can_manage_pins': true,
+        },
+      });
+
+      expect(groupDm.serverCanFlag, isFalse);
+      expect(groupDm.serverUserSilenced, isTrue);
+      expect(groupDm.serverCanModerate, isTrue);
+      expect(groupDm.serverCanDeleteSelf, isFalse);
+      expect(groupDm.serverCanDeleteOthers, isTrue);
+      expect(groupDm.serverCanManagePins, isTrue);
+      // 服务端 capability 必须覆盖本地 admin/type 推断。
+      expect(groupDm.canRemoveMembers(isAdmin: true), isFalse);
+    });
+
+    test('Chat member removal keeps legacy fallback without metadata', () {
+      final groupDm = ChatChannel.fromJson({
+        'id': 13,
+        'chatable_type': 'DirectMessage',
+        'chatable': {'group': true, 'users': const <Map<String, dynamic>>[]},
       });
       final categoryChannel = ChatChannel.fromJson({
-        'id': 13,
+        'id': 14,
         'chatable_type': 'Category',
       });
 
