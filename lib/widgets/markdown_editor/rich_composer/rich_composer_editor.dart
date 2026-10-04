@@ -2412,21 +2412,23 @@ class RichComposerEditorState extends State<RichComposerEditor> {
           imagePath: img.path,
           imageName: img.name,
         );
-        if (confirmed == null) continue;
+        if (confirmed == null || confirmed.isEmpty) continue;
         if (!mounted || !identical(editor, _editor)) return;
         if (gridId != null && editor.indexOfBlock(gridId) < 0) {
           ToastService.showError('图片组已被移除，无法添加图片');
           return;
         }
         if (!bookmark.valid) return;
-        _queueUpload(
-          confirmed.path,
-          confirmed.originalName,
-          image: true,
-          gridId: gridId,
-          insertionSelection: bookmark.selection,
-        );
-        bookmark.moveTo(editor.selection);
+        for (final image in confirmed) {
+          _queueUpload(
+            image.path,
+            image.originalName,
+            image: true,
+            gridId: gridId,
+            insertionSelection: bookmark.selection,
+          );
+          bookmark.moveTo(editor.selection);
+        }
       }
     } catch (e, s) {
       AppErrorHandler.handleUnexpected(e, s);
@@ -3048,17 +3050,20 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         imagePath: tempFile.path,
         imageName: fileName,
       );
-      if (confirmed == null) return;
+      if (confirmed == null || confirmed.isEmpty) return;
       if (!mounted) return;
       if (_documentReplaced || !identical(editor, _editor) || !bookmark.valid) {
         return;
       }
-      _queueUpload(
-        confirmed.path,
-        confirmed.originalName,
-        image: true,
-        insertionSelection: bookmark.selection,
-      );
+      for (final image in confirmed) {
+        _queueUpload(
+          image.path,
+          image.originalName,
+          image: true,
+          insertionSelection: bookmark.selection,
+        );
+        bookmark.moveTo(editor.selection);
+      }
     } catch (e, s) {
       AppErrorHandler.handleUnexpected(e, s);
     } finally {
