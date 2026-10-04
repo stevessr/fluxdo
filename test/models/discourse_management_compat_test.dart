@@ -15,6 +15,40 @@ void main() {
         'unicode_name': 'Roadmap',
         'slug': 'roadmap',
         'archived': true,
+        'old_slug_used': true,
+        'created_by': {
+          'username': 'alice',
+          'avatar_template': '/user_avatar/example/alice/{size}/1.png',
+        },
+        'columns': [
+          {
+            'id': 2,
+            'title': 'Doing',
+            'unicode_title': 'Doing',
+            'position': 0,
+            'default_sort': 'recency',
+            'icon': 'hammer',
+            'tag_id': 9,
+            'tag_name': 'work',
+            'move_to_category_id': 42,
+            'move_to_assigned': 'alice',
+            'move_to_status': 'closed',
+            'color': '336699',
+            'cards': [
+              {
+                'id': 3,
+                'board_id': 7,
+                'column_id': 2,
+                'card_type': 'floater',
+                'position': 1,
+                'inline_onebox_data': {'url': 'https://example.test'},
+                'tag_ids': [9, 10],
+                'tags': const <Map<String, dynamic>>[],
+                'column_changed_at': '2026-10-03T12:00:00.000Z',
+              },
+            ],
+          },
+        ],
         'can_manage': false,
         'can_write': false,
         'can_archive': false,
@@ -36,6 +70,22 @@ void main() {
       });
 
       expect(board.archived, isTrue);
+      expect(board.oldSlugUsed, isTrue);
+      expect(board.createdBy?.username, 'alice');
+      expect(board.columns.single.icon, 'hammer');
+      expect(board.columns.single.tagId, 9);
+      expect(board.columns.single.tagName, 'work');
+      expect(board.columns.single.moveToCategoryId, 42);
+      expect(board.columns.single.moveToAssigned, 'alice');
+      expect(board.columns.single.cards.single.tagIds, [9, 10]);
+      expect(
+        board.columns.single.cards.single.inlineOneboxData?['url'],
+        'https://example.test',
+      );
+      expect(
+        board.columns.single.cards.single.columnChangedAt?.toUtc(),
+        DateTime.utc(2026, 10, 3, 12),
+      );
       expect(board.canManage, isFalse);
       expect(board.canArchive, isFalse);
       expect(board.canUnarchive, isTrue);
