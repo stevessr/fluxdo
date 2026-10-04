@@ -50,6 +50,8 @@ class InviteLinkDetails {
   final String? customMessage;
   final bool? grantsAdmin;
   final bool? grantsModerator;
+  final List<Map<String, dynamic>> topics;
+  final List<Map<String, dynamic>> groups;
 
   const InviteLinkDetails({
     this.id,
@@ -68,6 +70,8 @@ class InviteLinkDetails {
     this.customMessage,
     this.grantsAdmin,
     this.grantsModerator,
+    this.topics = const [],
+    this.groups = const [],
   });
 
   factory InviteLinkDetails.fromJson(Map<String, dynamic> json) {
@@ -88,6 +92,14 @@ class InviteLinkDetails {
       customMessage: json['custom_message']?.toString(),
       grantsAdmin: json['grants_admin'] as bool?,
       grantsModerator: json['grants_moderator'] as bool?,
+      topics: (json['topics'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false),
+      groups: (json['groups'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false),
     );
   }
 
@@ -110,6 +122,8 @@ class InviteLinkDetails {
       if (customMessage != null) 'custom_message': customMessage,
       if (grantsAdmin != null) 'grants_admin': grantsAdmin,
       if (grantsModerator != null) 'grants_moderator': grantsModerator,
+      if (topics.isNotEmpty) 'topics': topics,
+      if (groups.isNotEmpty) 'groups': groups,
     };
   }
 }
