@@ -1184,6 +1184,8 @@ class Post {
           canEdit == other.canEdit &&
           canDelete == other.canDelete &&
           canRecover == other.canRecover &&
+          canPermanentlyDelete == other.canPermanentlyDelete &&
+          locked == other.locked &&
           read == other.read &&
           hidden == other.hidden &&
           cookedHidden == other.cookedHidden &&
@@ -1233,6 +1235,8 @@ class Post {
     bool? canDelete,
     bool? canRecover,
     bool? canWiki,
+    bool? canPermanentlyDelete,
+    bool? locked,
     bool? bookmarked,
     int? bookmarkId,
     String? bookmarkName,
@@ -1322,6 +1326,9 @@ class Post {
       canDelete: canDelete ?? this.canDelete,
       canRecover: canRecover ?? this.canRecover,
       canWiki: canWiki ?? this.canWiki,
+      canPermanentlyDelete:
+          canPermanentlyDelete ?? this.canPermanentlyDelete,
+      locked: locked ?? this.locked,
       bookmarked: bookmarked ?? this.bookmarked,
       bookmarkId: bookmarkId ?? this.bookmarkId,
       bookmarkName: clearBookmarkName
