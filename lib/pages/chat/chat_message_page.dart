@@ -73,7 +73,7 @@ class ChatMessagePage extends ConsumerStatefulWidget {
 }
 
 class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
-  final ScrollController _scrollController = ScrollController();
+  final ScrollController scrollControllerValue = ScrollController();
   final TextEditingController _textController = TextEditingController();
   final FocusNode _inputFocusNode = FocusNode();
 
@@ -326,7 +326,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
+    scrollControllerValue.addListener(_onScroll);
     _textController.addListener(_onTextChanged);
     // 上报用户进入聊天（用于在线状态追踪），并启动周期性心跳
     _reportPresence();
@@ -367,8 +367,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void dispose() {
     _presenceTimer?.cancel();
     _markAsReadTimer?.cancel();
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
+    scrollControllerValue.removeListener(_onScroll);
+    scrollControllerValue.dispose();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _searchController.dispose();
@@ -456,7 +456,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       if (!mounted) return;
       // reverse 列表：index 0 = 最新；按「距最新的距离」粗略定位
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scrollController.hasClients) return;
+        if (!scrollControllerValue.hasClients) return;
         final loaded =
             ref.read(chatMessagesProvider(widget.channelId)).value ?? [];
         final idx = loaded.indexWhere((m) => m.id == messageId);
@@ -465,12 +465,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               .showSnackBar(const SnackBar(content: Text('未找到被回复的消息')));
           return;
         }
-        final max = _scrollController.position.maxScrollExtent;
+        final max = scrollControllerValue.position.maxScrollExtent;
         // ASC 列表中 idx 越大越新；reverse 下距底部比例 ≈ 1 - (idx+1)/n
         final ratio = loaded.length <= 1
             ? 0.0
             : 1.0 - ((idx + 1) / loaded.length);
-        _scrollController.animateTo(
+        scrollControllerValue.animateTo(
           (max * ratio).clamp(0.0, max),
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
@@ -484,10 +484,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients) return;
+    if (!scrollControllerValue.hasClients) return;
 
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    final currentScroll = _scrollController.position.pixels;
+    final maxScroll = scrollControllerValue.position.maxScrollExtent;
+    final currentScroll = scrollControllerValue.position.pixels;
     // reverse ListView：pixels≈0 为视觉底部（最新消息）
     final atBottom = currentScroll <= 100;
     if (atBottom != _isAtBottom) {
@@ -507,17 +507,17 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   void _scrollToBottom({bool animate = true}) {
     void jump() {
-      if (!_scrollController.hasClients) return;
+      if (!scrollControllerValue.hasClients) return;
       // reverse ListView 底部即 minScrollExtent（通常为 0）
       const target = 0.0;
       if (animate) {
-        _scrollController.animateTo(
+        scrollControllerValue.animateTo(
           target,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
       } else {
-        _scrollController.jumpTo(target);
+        scrollControllerValue.jumpTo(target);
       }
     }
 
@@ -1633,7 +1633,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                         return false;
                       },
                       child: ListView.builder(
-                        controller: _scrollController,
+                        controller: scrollControllerValue,
                         // reverse：index 0 贴在视觉底部 = 最新消息，
                         // 首屏无需再等 jump，从根上消除「数据在但屏幕空白」。
                         reverse: true,
@@ -1765,7 +1765,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                 user: _isMultiSelectMode ? null : groupUser,
                                 avatarUrl: _buildAvatarUrl(groupUser),
                                 isOwnMessage: isOwnGroup,
-                                scrollController: _scrollController,
+                                scrollController: scrollControllerValue,
                                 children: groupChildren,
                               ),
                             ],
@@ -2611,8 +2611,8 @@ class _StickyChatAvatarLayer extends SingleChildRenderObjectWidget {
   @override
   _RenderStickyChatAvatarLayer createRenderObject(BuildContext context) {
     return _RenderStickyChatAvatarLayer(
-      alignRight: alignRight,
-      scrollController: scrollController,
+      alignRightValue: alignRight,
+      scrollControllerValue: scrollController,
     );
   }
 
@@ -2628,34 +2628,32 @@ class _StickyChatAvatarLayer extends SingleChildRenderObjectWidget {
 }
 
 class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
-  bool _alignRight;
-  ScrollController _scrollController;
+  bool alignRightValue;
+  ScrollController scrollControllerValue;
 
   _RenderStickyChatAvatarLayer({
-    required bool alignRight,
-    required ScrollController scrollController,
+    required this.alignRightValue,
+    required this.scrollControllerValue,
     RenderBox? child,
-  }) : _alignRight = alignRight,
-       _scrollController = scrollController,
-       super(child);
+  }) : super(child);
 
   @override
   bool get isRepaintBoundary => true;
 
   set alignRight(bool value) {
-    if (_alignRight == value) return;
-    _alignRight = value;
+    if (alignRightValue == value) return;
+    alignRightValue = value;
     markNeedsPaint();
   }
 
   set scrollController(ScrollController value) {
-    if (identical(_scrollController, value)) return;
+    if (identical(scrollControllerValue, value)) return;
     if (attached) {
-      _scrollController.removeListener(_handleScroll);
+      scrollControllerValue.removeListener(_handleScroll);
     }
-    _scrollController = value;
+    scrollControllerValue = value;
     if (attached) {
-      _scrollController.addListener(_handleScroll);
+      scrollControllerValue.addListener(_handleScroll);
     }
     markNeedsPaint();
   }
@@ -2668,12 +2666,12 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
   @override
   void attach(PipelineOwner owner) {
     super.attach(owner);
-    _scrollController.addListener(_handleScroll);
+    scrollControllerValue.addListener(_handleScroll);
   }
 
   @override
   void detach() {
-    _scrollController.removeListener(_handleScroll);
+    scrollControllerValue.removeListener(_handleScroll);
     super.detach();
   }
 
@@ -2690,7 +2688,7 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
   RenderBox? _findViewportBox() {
     RenderObject? ancestor = parent;
     while (ancestor != null) {
-      if (ancestor is RenderAbstractViewport && ancestor is RenderBox) {
+      if (ancestor is RenderBox && ancestor is RenderAbstractViewport) {
         return ancestor;
       }
       ancestor = ancestor.parent;
@@ -2725,7 +2723,7 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
       y = stickyTopInGroup.clamp(0.0, maxY).toDouble();
     }
 
-    return Offset(_alignRight ? maxX : 0, y);
+    return Offset(alignRightValue ? maxX : 0, y);
   }
 
   @override
@@ -2782,6 +2780,7 @@ class _ChatMessageBubble extends StatefulWidget {
   final ValueChanged<int>? onMessageVisible;
 
   const _ChatMessageBubble({
+    super.key,
     required this.message,
     this.replyToMessage,
     required this.isOwnMessage,
