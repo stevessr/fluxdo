@@ -692,8 +692,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       });
       return false;
     }
-    }
-
+  }
 
   /// 处理输入法（GBoard 等）直接粘贴进输入框的图片内容：
   /// 落盘临时文件后走与选图相同的上传通道。
