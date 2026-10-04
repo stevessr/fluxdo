@@ -1134,8 +1134,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         !isOwnMessage &&
         channelCanFlag &&
         (message.availableFlags == null || message.availableFlags!.isNotEmpty);
-    final canManagePins =
-        _pinEnabled && (channel?.serverCanManagePins ?? true);
+    final canManagePins = _pinEnabled && (channel?.serverCanManagePins ?? true);
     final userSilenced =
         channel?.serverUserSilenced ?? currentUser?.isSilenced ?? false;
     final canEdit =

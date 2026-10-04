@@ -197,12 +197,7 @@ void main() {
           },
         ],
         'groups': [
-          {
-            'id': 5,
-            'name': 'team',
-            'full_name': 'Team',
-            'user_count': 10,
-          },
+          {'id': 5, 'name': 'team', 'full_name': 'Team', 'user_count': 10},
         ],
         'created_at': '2026-10-03T00:00:00.000Z',
       });

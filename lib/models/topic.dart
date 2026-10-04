@@ -1326,8 +1326,7 @@ class Post {
       canDelete: canDelete ?? this.canDelete,
       canRecover: canRecover ?? this.canRecover,
       canWiki: canWiki ?? this.canWiki,
-      canPermanentlyDelete:
-          canPermanentlyDelete ?? this.canPermanentlyDelete,
+      canPermanentlyDelete: canPermanentlyDelete ?? this.canPermanentlyDelete,
       locked: locked ?? this.locked,
       bookmarked: bookmarked ?? this.bookmarked,
       bookmarkId: bookmarkId ?? this.bookmarkId,
