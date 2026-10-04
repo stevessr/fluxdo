@@ -42,6 +42,7 @@ import 'uploads/upload_task_panel.dart';
 import 'uploads/markdown_insertion_anchor.dart';
 import 'voice_recorder_sheet.dart';
 import 'image_upload_dialog.dart';
+import 'long_image_upload_dialog.dart';
 import 'color_insert_dialog.dart';
 import 'content_actions_button.dart';
 import 'content_actions_providers.dart';
@@ -1042,6 +1043,40 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       if (!mounted || results == null || results.isEmpty) return;
       // 先创建全部锚点，完成顺序不影响正文中的原始选择顺序。
       final anchors = [for (final _ in results) _uploadAnchors.fork(anchor)];
+      for (var i = 0; i < results.length; i++) {
+        _enqueueUpload(
+          path: results[i].path,
+          name: results[i].originalName,
+          anchor: anchors[i],
+          image: true,
+        );
+      }
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    } finally {
+      _uploadingCount--;
+      _uploadAnchors.release(anchor);
+    }
+  }
+
+  /// 独立长图上传：只允许单选，并在读取宽高比通过后显示切片数量选择。
+  Future<void> pickAndUploadLongImage() async {
+    final anchor = _uploadAnchors.capture();
+    _uploadingCount++;
+    try {
+      final image = await _picker.pickImage(source: ImageSource.gallery);
+      if (!mounted || image == null) return;
+
+      final results = await showLongImageUploadDialog(
+        context,
+        imagePath: image.path,
+        imageName: image.name,
+      );
+      if (!mounted || results == null || results.isEmpty) return;
+
+      final anchors = [
+        for (final _ in results) _uploadAnchors.fork(anchor),
+      ];
       for (var i = 0; i < results.length; i++) {
         _enqueueUpload(
           path: results[i].path,
