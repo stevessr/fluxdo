@@ -238,6 +238,10 @@ void main() {
 
       expect(post.canPermanentlyDelete, isTrue);
       expect(post.locked, isTrue);
+      final copied = post.copyWith(bookmarked: true);
+      expect(copied.canPermanentlyDelete, isTrue);
+      expect(copied.locked, isTrue);
+      expect(copied, isNot(equals(post)));
       expect(post.notice?.type, 'custom');
       expect(post.notice?.raw, 'Staff note');
     });
