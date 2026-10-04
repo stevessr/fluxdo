@@ -193,6 +193,14 @@ class ChatChannel {
     return false;
   }
 
+  /// 是否可移除频道成员。
+  ///
+  /// 对齐 Discourse Guardian#can_remove_members?：仅管理员可从分类频道
+  /// 或群组 DM 中移除成员。该权限与 [canAddMembers] 不同，不能共用。
+  bool canRemoveMembers({required bool isAdmin}) {
+    return isAdmin && (isCategoryChannel || (isDirectMessage && isGroupDm));
+  }
+
   /// 获取 DM 频道的对方用户
   ///
   /// 过滤掉当前用户和系统用户（system）。系统用户在群聊中会被 Discourse

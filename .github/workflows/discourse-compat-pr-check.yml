@@ -4,12 +4,15 @@ on:
   pull_request:
     paths:
       - 'lib/models/board.dart'
+      - 'lib/models/chat/chat_channel.dart'
       - 'lib/models/group.dart'
       - 'lib/models/invite_link.dart'
       - 'lib/models/user.dart'
       - 'lib/models/topic.dart'
       - 'lib/pages/boards_page.dart'
       - 'lib/pages/chat/chat_channel_members_sheet.dart'
+      - 'lib/pages/chat/chat_channel_settings_sheet.dart'
+      - 'lib/pages/chat/chat_message_page.dart'
       - 'lib/pages/group_page.dart'
       - 'lib/pages/invite_links_page.dart'
       - 'lib/providers/chat_providers.dart'
@@ -61,12 +64,15 @@ jobs:
           set +e
           dart format --set-exit-if-changed \
             lib/models/board.dart \
+            lib/models/chat/chat_channel.dart \
             lib/models/group.dart \
             lib/models/invite_link.dart \
             lib/models/user.dart \
             lib/models/topic.dart \
             lib/pages/boards_page.dart \
             lib/pages/chat/chat_channel_members_sheet.dart \
+            lib/pages/chat/chat_channel_settings_sheet.dart \
+            lib/pages/chat/chat_message_page.dart \
             lib/pages/group_page.dart \
             lib/pages/invite_links_page.dart \
             lib/providers/chat_providers.dart \
@@ -110,12 +116,15 @@ jobs:
         run: >-
           flutter analyze
           lib/models/board.dart
+          lib/models/chat/chat_channel.dart
           lib/models/group.dart
           lib/models/invite_link.dart
           lib/models/user.dart
           lib/models/topic.dart
           lib/pages/boards_page.dart
           lib/pages/chat/chat_channel_members_sheet.dart
+          lib/pages/chat/chat_channel_settings_sheet.dart
+          lib/pages/chat/chat_message_page.dart
           lib/pages/group_page.dart
           lib/pages/invite_links_page.dart
           lib/providers/chat_providers.dart

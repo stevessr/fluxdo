@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/models/board.dart';
+import 'package:fluxdo/models/chat/chat_channel.dart';
 import 'package:fluxdo/models/group.dart';
 import 'package:fluxdo/models/invite_link.dart';
 import 'package:fluxdo/models/topic.dart';
@@ -84,6 +85,25 @@ void main() {
         result.members.single.requestedAt?.toUtc(),
         DateTime.utc(2026, 10, 3, 12, 34, 56),
       );
+    });
+
+    test('Chat member removal follows Discourse admin-only policy', () {
+      final groupDm = ChatChannel.fromJson({
+        'id': 12,
+        'chatable_type': 'DirectMessage',
+        'chatable': {
+          'group': true,
+          'users': const <Map<String, dynamic>>[],
+        },
+      });
+      final categoryChannel = ChatChannel.fromJson({
+        'id': 13,
+        'chatable_type': 'Category',
+      });
+
+      expect(groupDm.canRemoveMembers(isAdmin: false), isFalse);
+      expect(groupDm.canRemoveMembers(isAdmin: true), isTrue);
+      expect(categoryChannel.canRemoveMembers(isAdmin: true), isTrue);
     });
 
     test('Invite parser accepts flat serializer payload', () {

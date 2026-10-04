@@ -18,6 +18,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
   final int channelId;
   final String channelTitle;
   final bool canAddMembers;
+  final bool canRemoveMembers;
   final int? membersCountHint;
 
   const ChatChannelMembersSheet({
@@ -25,6 +26,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
     required this.channelId,
     required this.channelTitle,
     this.canAddMembers = false,
+    this.canRemoveMembers = false,
     this.membersCountHint,
   });
 
@@ -33,6 +35,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
     int channelId,
     String channelTitle, {
     bool canAddMembers = false,
+    bool canRemoveMembers = false,
     int? membersCountHint,
   }) {
     showModalBottomSheet(
@@ -46,6 +49,7 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
         channelId: channelId,
         channelTitle: channelTitle,
         canAddMembers: canAddMembers,
+        canRemoveMembers: canRemoveMembers,
         membersCountHint: membersCountHint,
       ),
     );
@@ -91,7 +95,7 @@ class _ChatChannelMembersSheetState
   }
 
   Future<void> _removeMember(ChatUser user) async {
-    if (!widget.canAddMembers) return;
+    if (!widget.canRemoveMembers) return;
     final confirmed =
         await showDialog<bool>(
           context: context,
@@ -431,7 +435,7 @@ class _ChatChannelMembersSheetState
                             .value
                             ?.id;
                         final canRemove =
-                            widget.canAddMembers && currentUserId != user.id;
+                            widget.canRemoveMembers && currentUserId != user.id;
                         return ListTile(
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,

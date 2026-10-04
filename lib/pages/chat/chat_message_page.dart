@@ -1501,6 +1501,11 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                   theme: theme,
                   channel: currentChannel,
                   canEditChannel: canEditChannel,
+                  canRemoveMembers:
+                      currentChannel?.canRemoveMembers(
+                        isAdmin: currentUser?.admin ?? false,
+                      ) ??
+                      false,
                 ),
               ],
             ),
@@ -1694,6 +1699,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     required ThemeData theme,
     required ChatChannel? channel,
     required bool canEditChannel,
+    required bool canRemoveMembers,
   }) {
     return PopupMenuButton<String>(
       tooltip: '更多',
@@ -1722,6 +1728,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               widget.channelId,
               widget.channelTitle,
               canAddMembers: channel?.canAddMembers ?? false,
+              canRemoveMembers: canRemoveMembers,
               membersCountHint: channel?.membersCount,
             );
           case 'settings':
