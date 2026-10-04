@@ -73,7 +73,7 @@ class ChatMessagePage extends ConsumerStatefulWidget {
 }
 
 class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
-  final ScrollController scrollControllerValue = ScrollController();
+  final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
   final FocusNode _inputFocusNode = FocusNode();
 
@@ -326,7 +326,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   @override
   void initState() {
     super.initState();
-    scrollControllerValue.addListener(_onScroll);
+    _scrollController.addListener(_onScroll);
     _textController.addListener(_onTextChanged);
     // 上报用户进入聊天（用于在线状态追踪），并启动周期性心跳
     _reportPresence();
@@ -367,8 +367,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void dispose() {
     _presenceTimer?.cancel();
     _markAsReadTimer?.cancel();
-    scrollControllerValue.removeListener(_onScroll);
-    scrollControllerValue.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _searchController.dispose();
@@ -456,7 +456,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       if (!mounted) return;
       // reverse 列表：index 0 = 最新；按「距最新的距离」粗略定位
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!scrollControllerValue.hasClients) return;
+        if (!_scrollController.hasClients) return;
         final loaded =
             ref.read(chatMessagesProvider(widget.channelId)).value ?? [];
         final idx = loaded.indexWhere((m) => m.id == messageId);
@@ -465,12 +465,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               .showSnackBar(const SnackBar(content: Text('未找到被回复的消息')));
           return;
         }
-        final max = scrollControllerValue.position.maxScrollExtent;
+        final max = _scrollController.position.maxScrollExtent;
         // ASC 列表中 idx 越大越新；reverse 下距底部比例 ≈ 1 - (idx+1)/n
         final ratio = loaded.length <= 1
             ? 0.0
             : 1.0 - ((idx + 1) / loaded.length);
-        scrollControllerValue.animateTo(
+        _scrollController.animateTo(
           (max * ratio).clamp(0.0, max),
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
@@ -484,10 +484,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   }
 
   void _onScroll() {
-    if (!scrollControllerValue.hasClients) return;
+    if (!_scrollController.hasClients) return;
 
-    final maxScroll = scrollControllerValue.position.maxScrollExtent;
-    final currentScroll = scrollControllerValue.position.pixels;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
     // reverse ListView：pixels≈0 为视觉底部（最新消息）
     final atBottom = currentScroll <= 100;
     if (atBottom != _isAtBottom) {
@@ -507,17 +507,17 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   void _scrollToBottom({bool animate = true}) {
     void jump() {
-      if (!scrollControllerValue.hasClients) return;
+      if (!_scrollController.hasClients) return;
       // reverse ListView 底部即 minScrollExtent（通常为 0）
       const target = 0.0;
       if (animate) {
-        scrollControllerValue.animateTo(
+        _scrollController.animateTo(
           target,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
       } else {
-        scrollControllerValue.jumpTo(target);
+        _scrollController.jumpTo(target);
       }
     }
 
@@ -1633,7 +1633,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                         return false;
                       },
                       child: ListView.builder(
-                        controller: scrollControllerValue,
+                        controller: _scrollController,
                         // reverse：index 0 贴在视觉底部 = 最新消息，
                         // 首屏无需再等 jump，从根上消除「数据在但屏幕空白」。
                         reverse: true,
@@ -1765,7 +1765,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                 user: _isMultiSelectMode ? null : groupUser,
                                 avatarUrl: _buildAvatarUrl(groupUser),
                                 isOwnMessage: isOwnGroup,
-                                scrollController: scrollControllerValue,
+                                scrollController: _scrollController,
                                 children: groupChildren,
                               ),
                             ],
