@@ -81,7 +81,7 @@ void main() {
         'Need access for the project',
       );
       expect(
-        result.members.single.requestedAt,
+        result.members.single.requestedAt?.toUtc(),
         DateTime.utc(2026, 10, 3, 12, 34, 56),
       );
     });
@@ -141,6 +141,10 @@ void main() {
       expect(user.admin, isTrue);
       expect(user.canManageBoards, isTrue);
       expect(user.canEditAnyBoards, isTrue);
+
+      final cached = User.fromCacheJson(user.toCacheJson());
+      expect(cached.canManageBoards, isTrue);
+      expect(cached.canEditAnyBoards, isTrue);
     });
   });
 }

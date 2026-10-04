@@ -327,6 +327,8 @@ class User {
       canChat: json['can_chat'] as bool?,
       hasChatEnabled: json['has_chat_enabled'] as bool?,
       canDirectMessage: json['can_direct_message'] as bool?,
+      canManageBoards: json['can_manage_boards'] as bool? ?? false,
+      canEditAnyBoards: json['can_edit_any_boards'] as bool? ?? false,
       topicPostCount: {
         for (final e
             in (json['topic_post_count'] as Map<String, dynamic>? ?? const {})
@@ -375,6 +377,8 @@ class User {
     'admin': admin,
     'moderator': moderator,
     'can_assign': canAssign,
+    'can_manage_boards': canManageBoards,
+    'can_edit_any_boards': canEditAnyBoards,
   };
 
   /// 从缓存 JSON 恢复（不再调用 resolveUrl/fixHtml，直接读取）
@@ -397,6 +401,8 @@ class User {
       admin: json['admin'] as bool? ?? false,
       moderator: json['moderator'] as bool? ?? false,
       canAssign: json['can_assign'] as bool? ?? false,
+      canManageBoards: json['can_manage_boards'] as bool? ?? false,
+      canEditAnyBoards: json['can_edit_any_boards'] as bool? ?? false,
     );
   }
 
