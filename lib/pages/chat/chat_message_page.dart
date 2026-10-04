@@ -837,6 +837,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   }
 
   ChatChannel? _currentChannelOrNull() {
+    final detail = ref.read(chatChannelDetailProvider(widget.channelId)).value;
+    if (detail != null) return detail;
+
     final channelsAsync = ref.read(chatChannelsProvider);
     final value = channelsAsync.value;
     if (value == null) return null;
@@ -1089,8 +1092,14 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   /// 长按弹出消息操作 BottomSheet
   void _showMessageActionSheet(ChatMessage message, bool isOwnMessage) {
-    // 已删除消息：仅提供恢复（若服务端仍返回该消息，通常需有审核权限）
+    final currentUser = ref.read(currentUserProvider).value;
+    final channel = _currentChannelOrNull();
+    final canModerate =
+        channel?.serverCanModerate ?? (currentUser?.isStaff ?? false);
+
+    // 已删除消息：仅审核权限可恢复。
     if (message.deleted) {
+      if (!canModerate) return;
       showAppBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
@@ -1120,10 +1129,16 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       return;
     }
 
-    final currentUser = ref.read(currentUserProvider).value;
+    final channelCanFlag = channel?.serverCanFlag ?? true;
     final canFlag =
         !isOwnMessage &&
+        channelCanFlag &&
         (message.availableFlags == null || message.availableFlags!.isNotEmpty);
+    final canManagePins =
+        _pinEnabled && (channel?.serverCanManagePins ?? true);
+    final canDelete = isOwnMessage
+        ? (channel?.serverCanDeleteSelf ?? true)
+        : (channel?.serverCanDeleteOthers ?? (currentUser?.isStaff ?? false));
 
     showAppBottomSheet(
       context: context,
@@ -1285,7 +1300,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       .toggleBookmark(message.id);
                 },
               ),
-              if (_pinEnabled)
+              if (canManagePins)
                 ListTile(
                   leading: Icon(
                     message.pinned
@@ -1318,7 +1333,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     _showFlagSheet(message);
                   },
                 ),
-              if (isOwnMessage || (currentUser?.isStaff ?? false)) ...[
+              if (canDelete || isOwnMessage) ...[
                 if (isOwnMessage)
                   ListTile(
                     leading: const Icon(Icons.edit_outlined),
@@ -1328,20 +1343,21 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                       _onStartEdit(message);
                     },
                   ),
-                ListTile(
-                  leading: Icon(
-                    Icons.delete_outline_rounded,
-                    color: Theme.of(ctx).colorScheme.error,
+                if (canDelete)
+                  ListTile(
+                    leading: Icon(
+                      Icons.delete_outline_rounded,
+                      color: Theme.of(ctx).colorScheme.error,
+                    ),
+                    title: Text(
+                      ctx.l10n.chat_delete,
+                      style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _onDeleteMessage(message);
+                    },
                   ),
-                  title: Text(
-                    ctx.l10n.chat_delete,
-                    style: TextStyle(color: Theme.of(ctx).colorScheme.error),
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _onDeleteMessage(message);
-                  },
-                ),
               ],
             ],
           ),
@@ -1727,7 +1743,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   message,
                                   isOwnMessage,
                                 ),
-                                onRestore: message.deleted
+                                onRestore:
+                                    message.deleted &&
+                                        (currentChannel?.serverCanModerate ??
+                                            isStaff)
                                     ? () => _restoreMessage(message)
                                     : null,
                                 onToggleReaction: (emoji) {
@@ -2099,7 +2118,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     User? currentUser,
   ) {
     final isStaff = currentUser?.isStaff ?? false;
-    final userSilenced = currentUser?.isSilenced ?? false;
+    final userSilenced =
+        channel?.serverUserSilenced ?? currentUser?.isSilenced ?? false;
     // 频道详情未加载前保守禁用输入，避免关闭/只读频道短暂可发
     final canSend = channel == null
         ? false
