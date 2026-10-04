@@ -28,6 +28,7 @@ class RichToolContext {
     required this.state,
     required this.onInsertLink,
     required this.onPickImage,
+    this.onPickLongImage,
     required this.onToggleInlineSpoiler,
     required this.onSetHeading,
     this.onApplyTextColor,
@@ -40,6 +41,9 @@ class RichToolContext {
 
   /// 上传图片（要走文件选择 + 上传链路，宿主实现）
   final VoidCallback onPickImage;
+
+  /// 长图上传（独立入口；只处理单张且需通过宽高比检查）。
+  final VoidCallback? onPickLongImage;
 
   /// 行内剧透（无选区时要插占位并整选，逻辑在宿主）
   final VoidCallback onToggleInlineSpoiler;
@@ -237,6 +241,12 @@ final List<RichEditorTool> richEditorTools = [
     icon: FontAwesomeIcons.image,
     label: '上传图片',
     run: (c) => c.onPickImage(),
+  ),
+  RichEditorTool(
+    id: 'longImage',
+    icon: FontAwesomeIcons.scissors,
+    label: '长图上传',
+    run: (c) => c.onPickLongImage?.call(),
   ),
 ];
 
