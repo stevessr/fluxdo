@@ -1442,13 +1442,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     final canEditChannel =
         currentChannel?.canEditChannel(isStaff: isStaff) ?? false;
 
-    return PopScope(
-      canPop: !_hasLocalBackTarget,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop || !_hasLocalBackTarget) return;
-        _consumeLocalBack();
-      },
-      child: Scaffold(
+    final page = Scaffold(
       // Chat 自己用轻量 inset spacer 跟随 IME，避免 Scaffold 把整棵消息树
       // 每帧卷入 viewInsets 布局/MediaQuery 更新。
       resizeToAvoidBottomInset: false,
@@ -1740,7 +1734,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           ],
         ],
       ),
-      ),
+    );
+
+    return PopScope(
+      canPop: !_hasLocalBackTarget,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !_hasLocalBackTarget) return;
+        _consumeLocalBack();
+      },
+      child: page,
     );
   }
 

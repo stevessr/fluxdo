@@ -918,13 +918,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
               ? '回复 ${_replyToMessage!.user?.name ?? _replyToMessage!.user?.username ?? ''}…'
               : '回复消息串…');
 
-    return PopScope(
-      canPop: !_hasLocalBackTarget,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop || !_hasLocalBackTarget) return;
-        _consumeLocalBack();
-      },
-      child: ChatKeyboardViewport(
+    final page = ChatKeyboardViewport(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -1253,7 +1247,15 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
           ),
         ),
       ],
-      ),
+    );
+
+    return PopScope(
+      canPop: !_hasLocalBackTarget,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !_hasLocalBackTarget) return;
+        _consumeLocalBack();
+      },
+      child: page,
     );
   }
 }
