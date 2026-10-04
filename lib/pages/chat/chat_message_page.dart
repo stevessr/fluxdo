@@ -1136,6 +1136,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
         (message.availableFlags == null || message.availableFlags!.isNotEmpty);
     final canManagePins =
         _pinEnabled && (channel?.serverCanManagePins ?? true);
+    final userSilenced =
+        channel?.serverUserSilenced ?? currentUser?.isSilenced ?? false;
+    final canEdit =
+        (isOwnMessage && !userSilenced) || (currentUser?.admin ?? false);
     final canDelete = isOwnMessage
         ? (channel?.serverCanDeleteSelf ?? true)
         : (channel?.serverCanDeleteOthers ?? (currentUser?.isStaff ?? false));
@@ -1333,8 +1337,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     _showFlagSheet(message);
                   },
                 ),
-              if (canDelete || isOwnMessage) ...[
-                if (isOwnMessage)
+              if (canDelete || canEdit) ...[
+                if (canEdit)
                   ListTile(
                     leading: const Icon(Icons.edit_outlined),
                     title: Text(ctx.l10n.chat_edit),
