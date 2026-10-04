@@ -22,6 +22,7 @@ import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/stevessr_composer_service.dart';
+import '../../services/uploads/long_image_splitter.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
@@ -646,8 +647,23 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     }
   }
 
-  /// 上传单张图片并进入待发送附件预览；失败（异常或无 id）返回 false。
+  /// 上传图片并在需要时自动拆成长图分片。任一分片失败则返回 false。
   Future<bool> _uploadAndTrackImage(String imagePath) async {
+    final slices = await LongImageSplitter.splitIfNeeded(
+      imagePath,
+      originalName: p.basename(imagePath),
+    );
+    var allSucceeded = true;
+    for (final slice in slices) {
+      if (!mounted) return false;
+      final ok = await _uploadSingleAndTrackImage(slice.path);
+      allSucceeded = allSucceeded && ok;
+    }
+    return allSucceeded;
+  }
+
+  /// 上传一个实际文件并进入待发送附件预览；失败（异常或无 id）返回 false。
+  Future<bool> _uploadSingleAndTrackImage(String imagePath) async {
     final service = ref.read(discourseServiceProvider);
     final index = _pendingUploads.length;
     setState(() {
@@ -676,7 +692,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       });
       return false;
     }
-  }
+    }
+
 
   /// 处理输入法（GBoard 等）直接粘贴进输入框的图片内容：
   /// 落盘临时文件后走与选图相同的上传通道。
