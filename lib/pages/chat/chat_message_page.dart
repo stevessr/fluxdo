@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart'
     show
         BoxHitTestResult,
         PaintingContext,
+        PipelineOwner,
         RenderAbstractViewport,
         RenderBox,
         RenderObject,
@@ -1733,6 +1734,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                 user: _isMultiSelectMode ? null : groupUser,
                                 avatarUrl: _buildAvatarUrl(groupUser),
                                 isOwnMessage: isOwnGroup,
+                                scrollController: _scrollController,
                                 children: groupChildren,
                               ),
                             ],
@@ -2490,12 +2492,14 @@ class _StickyChatMessageGroup extends StatelessWidget {
   final ChatUser? user;
   final String? avatarUrl;
   final bool isOwnMessage;
+  final ScrollController scrollController;
 
   const _StickyChatMessageGroup({
     required this.children,
     required this.user,
     required this.avatarUrl,
     required this.isOwnMessage,
+    required this.scrollController,
   });
 
   @override
@@ -2540,6 +2544,7 @@ class _StickyChatMessageGroup extends StatelessWidget {
         Positioned.fill(
           child: _StickyChatAvatarLayer(
             alignRight: isOwnMessage,
+            scrollController: scrollController,
             child: avatar,
           ),
         ),
@@ -2550,19 +2555,24 @@ class _StickyChatMessageGroup extends StatelessWidget {
 
 /// 一个填满消息块的轻量 RenderBox，只改变头像的 paint/hit-test 位置。
 ///
-/// 使用 paint-time 的 viewport 坐标计算而不是滚动监听 + setState，因此滚动
-/// 时不会重建整段消息，也不会给长聊天列表增加逐帧 widget rebuild。
+/// ScrollController 只作为 markNeedsPaint 信号，不触发 setState；该层自身是
+/// repaint boundary，所以滚动时只重新绘制头像，而不会重建/重绘消息气泡。
 class _StickyChatAvatarLayer extends SingleChildRenderObjectWidget {
   final bool alignRight;
+  final ScrollController scrollController;
 
   const _StickyChatAvatarLayer({
     required this.alignRight,
+    required this.scrollController,
     required super.child,
   });
 
   @override
   _RenderStickyChatAvatarLayer createRenderObject(BuildContext context) {
-    return _RenderStickyChatAvatarLayer(alignRight: alignRight);
+    return _RenderStickyChatAvatarLayer(
+      alignRight: alignRight,
+      scrollController: scrollController,
+    );
   }
 
   @override
@@ -2570,23 +2580,60 @@ class _StickyChatAvatarLayer extends SingleChildRenderObjectWidget {
     BuildContext context,
     _RenderStickyChatAvatarLayer renderObject,
   ) {
-    renderObject.alignRight = alignRight;
+    renderObject
+      ..alignRight = alignRight
+      ..scrollController = scrollController;
   }
 }
 
 class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
   bool _alignRight;
+  ScrollController _scrollController;
 
   _RenderStickyChatAvatarLayer({
     required bool alignRight,
+    required ScrollController scrollController,
     RenderBox? child,
   }) : _alignRight = alignRight,
+       _scrollController = scrollController,
        super(child);
+
+  @override
+  bool get isRepaintBoundary => true;
 
   set alignRight(bool value) {
     if (_alignRight == value) return;
     _alignRight = value;
     markNeedsPaint();
+  }
+
+  set scrollController(ScrollController value) {
+    if (identical(_scrollController, value)) return;
+    if (attached) {
+      _scrollController.removeListener(_handleScroll);
+    }
+    _scrollController = value;
+    if (attached) {
+      _scrollController.addListener(_handleScroll);
+    }
+    markNeedsPaint();
+  }
+
+  void _handleScroll() {
+    markNeedsPaint();
+    markNeedsSemanticsUpdate();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _scrollController.addListener(_handleScroll);
+  }
+
+  @override
+  void detach() {
+    _scrollController.removeListener(_handleScroll);
+    super.detach();
   }
 
   @override
