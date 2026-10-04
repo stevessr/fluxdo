@@ -273,8 +273,9 @@ class ChatChannel {
         }
       } else if (val is String) {
         final str = val.trim().toLowerCase();
-        if (str == 'never' || str == 'none' || str == '0' || str.isEmpty)
+        if (str == 'never' || str == 'none' || str == '0' || str.isEmpty) {
           return;
+        }
         final match = RegExp(r'^(\d+)_?(day|days|hour|hours|year|years)?$')
             .firstMatch(str);
         if (match != null) {

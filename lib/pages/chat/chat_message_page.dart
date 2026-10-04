@@ -582,9 +582,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
     if (lastAtIndex >= 0) {
       final newText =
-          text.substring(0, lastAtIndex) +
-          '@${user.username} ' +
-          text.substring(cursorPosition);
+          '${text.substring(0, lastAtIndex)}@${user.username} '
+          '${text.substring(cursorPosition)}';
       _textController.value = TextEditingValue(
         text: newText,
         selection: TextSelection.collapsed(
@@ -3552,34 +3551,38 @@ class _ChatMessageFlagSheetState extends State<_ChatMessageFlagSheet> {
               )
             else ...[
               Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _flagTypes.length,
-                  itemBuilder: (context, index) {
-                    final type = _flagTypes[index];
-                    return RadioListTile<FlagType>(
-                      value: type,
-                      groupValue: _selected,
-                      onChanged: _submitting
-                          ? null
-                          : (v) => setState(() => _selected = v),
-                      title: Text(type.name),
-                      subtitle:
-                          type.shortDescription != null ||
-                              type.description.isNotEmpty
-                          ? Text(
-                              (type.shortDescription ?? type.description)
-                                  .replaceAll('%{username}', widget.username)
-                                  .replaceAll(
-                                    '@%{username}',
-                                    '@${widget.username}',
-                                  ),
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                            )
-                          : null,
-                    );
+                child: RadioGroup<FlagType>(
+                  groupValue: _selected,
+                  onChanged: (value) {
+                    if (_submitting) return;
+                    setState(() => _selected = value);
                   },
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _flagTypes.length,
+                    itemBuilder: (context, index) {
+                      final type = _flagTypes[index];
+                      return RadioListTile<FlagType>(
+                        value: type,
+                        enabled: !_submitting,
+                        title: Text(type.name),
+                        subtitle:
+                            type.shortDescription != null ||
+                                type.description.isNotEmpty
+                            ? Text(
+                                (type.shortDescription ?? type.description)
+                                    .replaceAll('%{username}', widget.username)
+                                    .replaceAll(
+                                      '@%{username}',
+                                      '@${widget.username}',
+                                    ),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : null,
+                      );
+                    },
+                  ),
                 ),
               ),
               if (_selected?.requireMessage == true)
