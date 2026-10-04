@@ -1650,13 +1650,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           }
 
                           // 分组仍按时间升序；reverse 映射最新分组到 index 0。
-                          final groupIndex =
-                              messageGroups.length - 1 - index;
+                          final groupIndex = messageGroups.length - 1 - index;
                           final groupRange = messageGroups[groupIndex];
-                          final firstMessage =
-                              messages[groupRange.startIndex];
-                          final groupUser =
-                              firstMessage.deleted ? null : firstMessage.user;
+                          final firstMessage = messages[groupRange.startIndex];
+                          final groupUser = firstMessage.deleted
+                              ? null
+                              : firstMessage.user;
                           final isOwnGroup =
                               currentUser != null &&
                               groupUser != null &&
@@ -1761,10 +1760,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               if (showDateHeader)
-                                _buildDateHeader(
-                                  theme,
-                                  firstMessage.createdAt,
-                                ),
+                                _buildDateHeader(theme, firstMessage.createdAt),
                               _StickyChatMessageGroup(
                                 user: _isMultiSelectMode ? null : groupUser,
                                 avatarUrl: _buildAvatarUrl(groupUser),
@@ -2569,8 +2565,7 @@ class _StickyChatMessageGroup extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) =>
-                  UserProfilePage(username: avatarUser.username),
+              builder: (_) => UserProfilePage(username: avatarUser.username),
             ),
           );
         },
@@ -2707,16 +2702,20 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
     final child = this.child;
     if (child == null) return Offset.zero;
 
-    final maxX =
-        (size.width - child.size.width).clamp(0.0, double.infinity).toDouble();
-    final maxY =
-        (size.height - child.size.height).clamp(0.0, double.infinity).toDouble();
+    final maxX = (size.width - child.size.width)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final maxY = (size.height - child.size.height)
+        .clamp(0.0, double.infinity)
+        .toDouble();
 
     var y = maxY;
     final viewport = _findViewportBox();
     if (viewport != null && viewport.hasSize) {
-      final groupTopInViewport =
-          localToGlobal(Offset.zero, ancestor: viewport).dy;
+      final groupTopInViewport = localToGlobal(
+        Offset.zero,
+        ancestor: viewport,
+      ).dy;
       final stickyTopInViewport = viewport.size.height - child.size.height;
       final stickyTopInGroup = stickyTopInViewport - groupTopInViewport;
 
@@ -2744,10 +2743,7 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
   }
 
   @override
-  bool hitTestChildren(
-    BoxHitTestResult result, {
-    required Offset position,
-  }) {
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
     final child = this.child;
     if (child == null) return false;
     return result.addWithPaintOffset(
