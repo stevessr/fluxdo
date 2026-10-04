@@ -15,6 +15,7 @@ import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/stevessr_composer_service.dart';
+import '../../widgets/markdown_editor/long_image_upload_dialog.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
@@ -433,6 +434,38 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     if (failedCount > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('上传失败: $failedCount/${images.length}')),
+      );
+    }
+  }
+
+  /// 独立长图上传：单选、宽高比校验、用户选择切片数量后再上传。
+  Future<void> _pickAndUploadLongImage() async {
+    if (_isUploadingImage || !mounted) return;
+    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (image == null || !mounted) return;
+
+    final results = await showLongImageUploadDialog(
+      context,
+      imagePath: image.path,
+      imageName: image.name,
+    );
+    if (results == null || results.isEmpty || !mounted) return;
+
+    setState(() => _isUploadingImage = true);
+    var failedCount = 0;
+    try {
+      for (final result in results) {
+        if (!mounted) return;
+        final ok = await _uploadAndTrackImage(result.path);
+        if (!ok) failedCount++;
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
+    }
+
+    if (mounted && failedCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('长图切片上传失败: $failedCount/${results.length}')),
       );
     }
   }
@@ -1093,6 +1126,13 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                               ? null
                               : _pickAndUploadImage,
                           icon: const Icon(Icons.add_photo_alternate_rounded),
+                        ),
+                        IconButton(
+                          tooltip: '长图上传',
+                          onPressed: _isUploadingImage
+                              ? null
+                              : _pickAndUploadLongImage,
+                          icon: const Icon(Icons.content_cut_rounded),
                         ),
                         IconButton(
                           tooltip: '生成表情包图片',
