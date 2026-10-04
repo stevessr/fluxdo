@@ -187,6 +187,23 @@ void main() {
         'description': 'team',
         'email': 'user@example.test',
         'can_delete_invite': true,
+        'topics': [
+          {
+            'id': 21,
+            'title': 'Welcome',
+            'fancy_title': 'Welcome',
+            'slug': 'welcome',
+            'posts_count': 3,
+          },
+        ],
+        'groups': [
+          {
+            'id': 5,
+            'name': 'team',
+            'full_name': 'Team',
+            'user_count': 10,
+          },
+        ],
         'created_at': '2026-10-03T00:00:00.000Z',
       });
 
@@ -196,6 +213,10 @@ void main() {
       expect(response.invite?.description, 'team');
       expect(response.invite?.email, 'user@example.test');
       expect(response.invite?.canDeleteInvite, isTrue);
+      expect(response.invite?.topics.single['id'], 21);
+      expect(response.invite?.topics.single['slug'], 'welcome');
+      expect(response.invite?.groups.single['id'], 5);
+      expect(response.invite?.groups.single['name'], 'team');
     });
 
     test('Post parses staff management state and custom notice raw text', () {
