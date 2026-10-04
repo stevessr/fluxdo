@@ -2644,6 +2644,13 @@ class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
   }
 
   @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) {
+    assert(child == this.child);
+    final offset = _avatarOffset();
+    transform.translateByDouble(offset.dx, offset.dy, 0, 1);
+  }
+
+  @override
   bool hitTestChildren(
     BoxHitTestResult result, {
     required Offset position,
