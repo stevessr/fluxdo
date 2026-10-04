@@ -143,7 +143,15 @@
       }
     }
   },
-  "imageUpload_longImageSplitHint": "长图（高度 ≥ 宽度 3 倍）会在压缩前自动切割，相邻切片保留 10% 重叠。",
+  "imageUpload_longImageTool": "长图上传",
+  "imageUpload_longImageTitle": "长图上传",
+  "imageUpload_longImageReadFailed": "无法读取该图片，不能进行长图切片。",
+  "imageUpload_longImageNotEligible": "该图片不符合长图切片要求（高度至少为宽度的 3 倍）。",
+  "imageUpload_longImageSliceCount": "切片数量",
+  "imageUpload_longImageSelectCount": "请选择",
+  "imageUpload_longImageRecommendedPrefix": "建议切片数：",
+  "imageUpload_longImagePartHeightPrefix": "预计每片高度：",
+  "imageUpload_longImageOverlapHint": "相邻切片保留约 10% 重叠；只有从独立“长图上传”入口进入时才会执行切片。",
   "imageViewer_grantPermission": "请授予相册访问权限",
   "imageViewer_saveFailed": "保存失败: {error}",
   "@imageViewer_saveFailed": {
