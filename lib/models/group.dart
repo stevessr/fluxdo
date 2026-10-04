@@ -158,6 +158,8 @@ class GroupMember {
     this.avatarTemplate,
     this.lastSeenAt,
     this.primaryGroupName,
+    this.requestReason,
+    this.requestedAt,
     this.owner = false,
   });
 
@@ -167,6 +169,8 @@ class GroupMember {
   final String? avatarTemplate;
   final DateTime? lastSeenAt;
   final String? primaryGroupName;
+  final String? requestReason;
+  final DateTime? requestedAt;
   final bool owner;
 
   String? get avatarUrl {
@@ -182,6 +186,8 @@ class GroupMember {
     avatarTemplate: avatarTemplate,
     lastSeenAt: lastSeenAt,
     primaryGroupName: primaryGroupName,
+    requestReason: requestReason,
+    requestedAt: requestedAt,
     owner: owner ?? this.owner,
   );
 
@@ -196,6 +202,8 @@ class GroupMember {
           : UrlHelper.resolveUrlWithCdn(rawAvatar),
       lastSeenAt: TimeUtils.parseUtcTime(json['last_seen_at']?.toString()),
       primaryGroupName: json['primary_group_name']?.toString(),
+      requestReason: json['reason']?.toString(),
+      requestedAt: TimeUtils.parseUtcTime(json['requested_at']?.toString()),
     );
   }
 }

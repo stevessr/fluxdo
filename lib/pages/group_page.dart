@@ -1057,7 +1057,24 @@ class _GroupMembershipRequestsDialogState
                             ? member.name!.trim()
                             : member.username,
                       ),
-                      subtitle: Text('@${member.username}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('@${member.username}'),
+                          if (member.requestReason?.trim().isNotEmpty == true)
+                            Text(member.requestReason!.trim()),
+                          if (member.requestedAt != null)
+                            Text(
+                              copy.requestedAt(
+                                _formatGroupRequestDateTime(
+                                  context,
+                                  member.requestedAt!,
+                                ),
+                              ),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
                       trailing: busy
                           ? const SizedBox.square(
                               dimension: 20,
@@ -1183,6 +1200,13 @@ class _AddMembersDialogState extends State<_AddMembersDialog> {
   }
 }
 
+String _formatGroupRequestDateTime(BuildContext context, DateTime value) {
+  final local = value.toLocal();
+  final material = MaterialLocalizations.of(context);
+  return '${material.formatMediumDate(local)} '
+      '${material.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
+}
+
 class _GroupCopy {
   const _GroupCopy({required this.zh});
   final bool zh;
@@ -1227,6 +1251,8 @@ class _GroupCopy {
   String get membershipRequests => zh ? '加入申请' : 'Membership requests';
   String get noMembershipRequests =>
       zh ? '当前没有待处理的加入申请' : 'No pending membership requests';
+  String requestedAt(String value) =>
+      zh ? '申请时间：$value' : 'Requested: $value';
   String get accept => zh ? '接受' : 'Accept';
   String get deny => zh ? '拒绝' : 'Deny';
   String get automatic => zh ? '自动群组' : 'Automatic group';

@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'lib/models/board.dart'
+      - 'lib/models/group.dart'
       - 'lib/models/invite_link.dart'
       - 'lib/models/user.dart'
       - 'lib/models/topic.dart'
@@ -60,6 +61,7 @@ jobs:
           set +e
           dart format --set-exit-if-changed \
             lib/models/board.dart \
+            lib/models/group.dart \
             lib/models/invite_link.dart \
             lib/models/user.dart \
             lib/models/topic.dart \
@@ -108,6 +110,7 @@ jobs:
         run: >-
           flutter analyze
           lib/models/board.dart
+          lib/models/group.dart
           lib/models/invite_link.dart
           lib/models/user.dart
           lib/models/topic.dart

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/models/board.dart';
+import 'package:fluxdo/models/group.dart';
 import 'package:fluxdo/models/invite_link.dart';
 import 'package:fluxdo/models/topic.dart';
 import 'package:fluxdo/models/user.dart';
@@ -58,6 +59,28 @@ void main() {
 
       expect(board.canArchive, isTrue);
       expect(board.canUnarchive, isTrue);
+    });
+
+    test('Group requester parser preserves moderation context', () {
+      final result = GroupMembersResult.fromJson({
+        'members': [
+          {
+            'id': 42,
+            'username': 'alice',
+            'name': 'Alice',
+            'reason': 'Need access for the project',
+            'requested_at': '2026-10-03T12:34:56.000Z',
+          },
+        ],
+        'meta': {'total': 1, 'limit': 50, 'offset': 0},
+      });
+
+      expect(result.members, hasLength(1));
+      expect(result.members.single.requestReason, 'Need access for the project');
+      expect(
+        result.members.single.requestedAt,
+        DateTime.utc(2026, 10, 3, 12, 34, 56),
+      );
     });
 
     test('Invite parser accepts flat serializer payload', () {
