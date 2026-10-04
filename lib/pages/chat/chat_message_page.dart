@@ -5,7 +5,15 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/rendering.dart'
+    show
+        BoxHitTestResult,
+        PaintingContext,
+        RenderAbstractViewport,
+        RenderBox,
+        RenderObject,
+        RenderShiftedBox,
+        ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1535,6 +1543,37 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                     return _buildEmptyState(theme);
                   }
 
+                  // Discourse chat 把连续同发送者消息作为一个 message block。
+                  // 这里也先建立稳定的连续分组，后续让头像在整个 block 内
+                  // 做 bottom-sticky，而不是把头像绑死在某一条消息上。
+                  final messageGroups = <_ChatMessageGroupRange>[];
+                  var groupStart = 0;
+                  for (var i = 1; i < messages.length; i++) {
+                    final previous = messages[i - 1];
+                    final current = messages[i];
+                    final previousUserId = previous.user?.id;
+                    final currentUserId = current.user?.id;
+                    final sameSender =
+                        !previous.deleted &&
+                        !current.deleted &&
+                        previousUserId != null &&
+                        currentUserId != null &&
+                        previousUserId == currentUserId;
+                    final sameDay = _isSameDay(
+                      previous.createdAt,
+                      current.createdAt,
+                    );
+                    if (!sameSender || !sameDay) {
+                      messageGroups.add(
+                        _ChatMessageGroupRange(groupStart, i - 1),
+                      );
+                      groupStart = i;
+                    }
+                  }
+                  messageGroups.add(
+                    _ChatMessageGroupRange(groupStart, messages.length - 1),
+                  );
+
                   return RefreshIndicator(
                     onRefresh: _scrollToLatest,
                     // reverse 列表在 scopeBottom（scroll position 0 =
@@ -1567,81 +1606,79 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                         // reverse 会翻转 padding：top 落在视觉底部（靠近输入框）
                         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                         // +1：最旧一侧的「加载更多」指示器
-                        itemCount: messages.length + 1,
+                        itemCount: messageGroups.length + 1,
                         itemBuilder: (context, index) {
                           // reverse 下最大 index 在视觉顶部
-                          if (index == messages.length) {
+                          if (index == messageGroups.length) {
                             return _buildLoadMoreIndicator();
                           }
 
-                          // messages 仍为时间升序；reverse 映射最新到 index 0
-                          final messageIndex = messages.length - 1 - index;
-                          final message = messages[messageIndex];
-                          final isOwnMessage =
+                          // 分组仍按时间升序；reverse 映射最新分组到 index 0。
+                          final groupIndex =
+                              messageGroups.length - 1 - index;
+                          final groupRange = messageGroups[groupIndex];
+                          final firstMessage =
+                              messages[groupRange.startIndex];
+                          final groupUser =
+                              firstMessage.deleted ? null : firstMessage.user;
+                          final isOwnGroup =
                               currentUser != null &&
-                              message.user != null &&
-                              message.user!.id == currentUser.id;
+                              groupUser != null &&
+                              groupUser.id == currentUser.id;
 
-                          // 日期分割：相对时间序上一条（更旧）
-                          bool showDateHeader = false;
-                          if (messageIndex == 0) {
-                            showDateHeader = true;
-                          } else {
-                            final prevMessage = messages[messageIndex - 1];
-                            showDateHeader = !_isSameDay(
-                              message.createdAt,
-                              prevMessage.createdAt,
-                            );
-                          }
+                          final showDateHeader =
+                              groupRange.startIndex == 0 ||
+                              !_isSameDay(
+                                firstMessage.createdAt,
+                                messages[groupRange.startIndex - 1].createdAt,
+                              );
 
-                          // 连续相同发送者的消息分组：不重复显示昵称和头像
-                          // 昵称只显示在第一条（最上面），头像只显示在最后一条
-                          // 自己的消息始终显示头像以保持对齐
-                          final bool isFirstInGroup;
-                          final bool isLastInGroup;
-                          if (message.user != null) {
-                            final userId = message.user!.id;
-                            isFirstInGroup =
-                                messageIndex == 0 ||
-                                messages[messageIndex - 1].user?.id != userId;
-                            isLastInGroup =
-                                isOwnMessage ||
-                                messageIndex == messages.length - 1 ||
-                                messages[messageIndex + 1].user?.id != userId;
-                          } else {
-                            isFirstInGroup = false;
-                            isLastInGroup = false;
-                          }
+                          final groupChildren = <Widget>[];
+                          for (
+                            var messageIndex = groupRange.startIndex;
+                            messageIndex <= groupRange.endIndex;
+                            messageIndex++
+                          ) {
+                            final message = messages[messageIndex];
+                            final isOwnMessage =
+                                currentUser != null &&
+                                message.user != null &&
+                                message.user!.id == currentUser.id;
 
-                          // 查找关联回复消息：优先用当前窗口内完整消息，
-                          // 找不到则回退到服务端嵌套的 in_reply_to 摘要。
-                          // 消息串开启时对齐 Discourse hideReplyToInfo：
-                          // 不展示频道内引用条，改走消息串指示器。
-                          final threadingOn =
-                              currentChannel?.threadingEnabled == true ||
-                              message.thread?.force == true;
-                          ChatMessage? replyToMsg;
-                          if (!threadingOn && message.inReplyToId != null) {
-                            for (final m in messages) {
-                              if (m.id == message.inReplyToId) {
-                                replyToMsg = m;
-                                break;
+                            // 查找关联回复消息：优先用当前窗口内完整消息，
+                            // 找不到则回退到服务端嵌套的 in_reply_to 摘要。
+                            // 消息串开启时对齐 Discourse hideReplyToInfo：
+                            // 不展示频道内引用条，改走消息串指示器。
+                            final threadingOn =
+                                currentChannel?.threadingEnabled == true ||
+                                message.thread?.force == true;
+                            ChatMessage? replyToMsg;
+                            if (!threadingOn && message.inReplyToId != null) {
+                              for (final m in messages) {
+                                if (m.id == message.inReplyToId) {
+                                  replyToMsg = m;
+                                  break;
+                                }
                               }
+                              replyToMsg ??= message.inReplyTo;
                             }
-                            replyToMsg ??= message.inReplyTo;
-                          }
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (showDateHeader)
-                                _buildDateHeader(theme, message.createdAt),
+                            groupChildren.add(
                               _ChatMessageBubble(
+                                key: ValueKey('chat_message_${message.id}'),
                                 message: message,
                                 replyToMessage: replyToMsg,
                                 isOwnMessage: isOwnMessage,
-                                showSender: isFirstInGroup,
-                                showAvatar: isLastInGroup,
+                                showSender:
+                                    messageIndex == groupRange.startIndex &&
+                                    message.user != null,
+                                // 普通浏览态由整个消息分组绘制唯一的粘滞头像；
+                                // 多选态恢复到末条消息内，避免 checkbox 改变
+                                // left-gutter 后头像与选择框发生重叠。
+                                showAvatar:
+                                    _isMultiSelectMode &&
+                                    messageIndex == groupRange.endIndex &&
+                                    message.user != null,
                                 avatarUrl: _buildAvatarUrl(message.user),
                                 theme: theme,
                                 threadingEnabled: threadingOn,
@@ -1680,6 +1717,23 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   // 当消息进入视口时触发延迟已读检查
                                   _markAsReadDelayed(messageId);
                                 },
+                              ),
+                            );
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (showDateHeader)
+                                _buildDateHeader(
+                                  theme,
+                                  firstMessage.createdAt,
+                                ),
+                              _StickyChatMessageGroup(
+                                user: _isMultiSelectMode ? null : groupUser,
+                                avatarUrl: _buildAvatarUrl(groupUser),
+                                isOwnMessage: isOwnGroup,
+                                children: groupChildren,
                               ),
                             ],
                           );
@@ -2415,6 +2469,193 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           );
         },
       ),
+    );
+  }
+}
+
+class _ChatMessageGroupRange {
+  final int startIndex;
+  final int endIndex;
+
+  const _ChatMessageGroupRange(this.startIndex, this.endIndex);
+}
+
+/// 连续同发送者消息块。
+///
+/// 头像不再属于某一条消息，而是作为整个消息块的 overlay：当消息块跨过
+/// 可视区域底边时，头像贴住底边；当消息块的首/尾边界逼近时，头像被边界
+/// 推动，从而始终只在自己的连续消息段内移动。
+class _StickyChatMessageGroup extends StatelessWidget {
+  final List<Widget> children;
+  final ChatUser? user;
+  final String? avatarUrl;
+  final bool isOwnMessage;
+
+  const _StickyChatMessageGroup({
+    required this.children,
+    required this.user,
+    required this.avatarUrl,
+    required this.isOwnMessage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+    final avatarUser = user;
+    if (avatarUser == null || children.isEmpty) return content;
+
+    final avatar = Padding(
+      padding: EdgeInsets.only(
+        left: isOwnMessage ? 8 : 0,
+        right: isOwnMessage ? 0 : 8,
+        bottom: 4,
+      ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  UserProfilePage(username: avatarUser.username),
+            ),
+          );
+        },
+        child: OnlineStatusAvatar(
+          userId: avatarUser.id,
+          imageUrl: avatarUrl,
+          radius: 16,
+          fallbackText: avatarUser.username,
+        ),
+      ),
+    );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        content,
+        Positioned.fill(
+          child: _StickyChatAvatarLayer(
+            alignRight: isOwnMessage,
+            child: avatar,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 一个填满消息块的轻量 RenderBox，只改变头像的 paint/hit-test 位置。
+///
+/// 使用 paint-time 的 viewport 坐标计算而不是滚动监听 + setState，因此滚动
+/// 时不会重建整段消息，也不会给长聊天列表增加逐帧 widget rebuild。
+class _StickyChatAvatarLayer extends SingleChildRenderObjectWidget {
+  final bool alignRight;
+
+  const _StickyChatAvatarLayer({
+    required this.alignRight,
+    required super.child,
+  });
+
+  @override
+  _RenderStickyChatAvatarLayer createRenderObject(BuildContext context) {
+    return _RenderStickyChatAvatarLayer(alignRight: alignRight);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderStickyChatAvatarLayer renderObject,
+  ) {
+    renderObject.alignRight = alignRight;
+  }
+}
+
+class _RenderStickyChatAvatarLayer extends RenderShiftedBox {
+  bool _alignRight;
+
+  _RenderStickyChatAvatarLayer({
+    required bool alignRight,
+    RenderBox? child,
+  }) : _alignRight = alignRight,
+       super(child);
+
+  set alignRight(bool value) {
+    if (_alignRight == value) return;
+    _alignRight = value;
+    markNeedsPaint();
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child != null) {
+      child.layout(constraints.loosen(), parentUsesSize: true);
+    }
+    // Positioned.fill 会给本层传入消息块的 tight constraints。
+    size = constraints.biggest;
+  }
+
+  RenderBox? _findViewportBox() {
+    RenderObject? ancestor = parent;
+    while (ancestor != null) {
+      if (ancestor is RenderAbstractViewport && ancestor is RenderBox) {
+        return ancestor;
+      }
+      ancestor = ancestor.parent;
+    }
+    return null;
+  }
+
+  Offset _avatarOffset() {
+    final child = this.child;
+    if (child == null) return Offset.zero;
+
+    final maxX =
+        (size.width - child.size.width).clamp(0.0, double.infinity).toDouble();
+    final maxY =
+        (size.height - child.size.height).clamp(0.0, double.infinity).toDouble();
+
+    var y = maxY;
+    final viewport = _findViewportBox();
+    if (viewport != null && viewport.hasSize) {
+      final groupTopInViewport =
+          localToGlobal(Offset.zero, ancestor: viewport).dy;
+      final stickyTopInViewport = viewport.size.height - child.size.height;
+      final stickyTopInGroup = stickyTopInViewport - groupTopInViewport;
+
+      // 等价于 CSS:
+      // position: sticky; bottom: 0;
+      // 但同时受当前连续消息块 top/bottom 双边界约束。
+      y = stickyTopInGroup.clamp(0.0, maxY).toDouble();
+    }
+
+    return Offset(_alignRight ? maxX : 0, y);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child == null) return;
+    context.paintChild(child, offset + _avatarOffset());
+  }
+
+  @override
+  bool hitTestChildren(
+    BoxHitTestResult result, {
+    required Offset position,
+  }) {
+    final child = this.child;
+    if (child == null) return false;
+    return result.addWithPaintOffset(
+      offset: _avatarOffset(),
+      position: position,
+      hitTest: (result, transformed) {
+        return child.hitTest(result, position: transformed);
+      },
     );
   }
 }
