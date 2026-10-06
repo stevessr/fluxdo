@@ -76,16 +76,27 @@ List<SettingsGroup> buildCustomSettingsGroups(BuildContext context) {
         title: copy.mobileSourceGroupTitle,
         icon: Icons.devices_rounded,
         items: [
-          SwitchModel(
+          ActionModel(
             id: 'mobilePostSource',
             title: copy.mobileSourceTitle,
             subtitle: copy.mobileSourceDescription,
-            icon: Icons.devices_rounded,
-            getValue: (ref) =>
-                ref.watch(mobilePostSourcePreferencesProvider).enabled,
-            onChanged: (ref, value) => ref
-                .read(mobilePostSourcePreferencesProvider.notifier)
-                .setEnabled(value),
+            icon: Icons.verified_user_outlined,
+            wrapSubtitle: true,
+            onTap: (context, ref) {
+              showDialog<void>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: Text(copy.mobileSourceTitle),
+                  content: Text(copy.mobileSourceDescription),
+                  actions: [
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: Text(copy.close),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
           ActionModel(
             id: 'mobilePostSourceModel',
@@ -200,6 +211,7 @@ class _CustomSettingsCopy {
     required this.mobileSourceUseDetected,
     required this.cancel,
     required this.save,
+    required this.close,
   });
 
   final String cacheGroupTitle;
@@ -226,6 +238,7 @@ class _CustomSettingsCopy {
   final String mobileSourceUseDetected;
   final String cancel;
   final String save;
+  final String close;
 
   static _CustomSettingsCopy of(BuildContext context) {
     final locale = Localizations.localeOf(context);
@@ -252,10 +265,10 @@ class _CustomSettingsCopy {
     quickReadingTitle: '快速阅读',
     quickReadingDescription: '进入话题时立即上报当前所有未读楼层；超过 2000 个楼层时按每批 2000 个分批发送。',
     mobileSourceGroupTitle: '发帖来源（实验性）',
-    mobileSourceTitle: '发送设备型号（实验性）',
-    mobileSourceDescription: '开启后，Android/iOS/Windows/macOS/Linux 的公开发帖与回复会按 Linux.do 当前协议发送 ios_device_name；Web 不发送。',
-    mobileSourceModelTitle: '发送的设备型号',
-    mobileSourceModelDescription: '可自定义；未设置时默认使用识别到的手机或电脑型号。',
+    mobileSourceTitle: '设备型号发送（等待官方认证）',
+    mobileSourceDescription: 'Linux.do 的 via_ios_app / ios_device_name 由官方 iOS 的 mTLS、App Attest 等受信任链路生成；普通 /posts.json 无法通过同名参数设置。当前仅解析并显示服务器返回值，不再伪造发送。',
+    mobileSourceModelTitle: '预设设备型号（暂不发送）',
+    mobileSourceModelDescription: '保留自动识别或自定义型号，等待未来获得受支持的认证发送链路后使用。',
     mobileSourceAutomaticPrefix: '自动',
     mobileSourceCustomPrefix: '自定义',
     mobileSourceDetecting: '正在识别本机设备型号…',
@@ -266,6 +279,7 @@ class _CustomSettingsCopy {
     mobileSourceUseDetected: '使用本机设备型号',
     cancel: '取消',
     save: '保存',
+    close: '关闭',
   );
 
   static const _zhHant = _CustomSettingsCopy(
@@ -281,10 +295,10 @@ class _CustomSettingsCopy {
     quickReadingTitle: '快速閱讀',
     quickReadingDescription: '進入話題時立即上報目前所有未讀樓層；超過 2000 個樓層時按每批 2000 個分批傳送。',
     mobileSourceGroupTitle: '發帖來源（實驗性）',
-    mobileSourceTitle: '傳送裝置型號（實驗性）',
-    mobileSourceDescription: '開啟後，Android/iOS/Windows/macOS/Linux 的公開發帖與回覆會依 Linux.do 目前協議傳送 ios_device_name；Web 不傳送。',
-    mobileSourceModelTitle: '傳送的裝置型號',
-    mobileSourceModelDescription: '可自訂；未設定時預設使用識別到的手機或電腦型號。',
+    mobileSourceTitle: '裝置型號傳送（等待官方認證）',
+    mobileSourceDescription: 'Linux.do 的 via_ios_app / ios_device_name 由官方 iOS 的 mTLS、App Attest 等受信任鏈路產生；一般 /posts.json 無法透過同名參數設定。目前僅解析並顯示伺服器回傳值，不再偽造傳送。',
+    mobileSourceModelTitle: '預設裝置型號（暫不傳送）',
+    mobileSourceModelDescription: '保留自動識別或自訂型號，等待未來取得受支援的認證傳送鏈路後使用。',
     mobileSourceAutomaticPrefix: '自動',
     mobileSourceCustomPrefix: '自訂',
     mobileSourceDetecting: '正在識別本機裝置型號…',
@@ -295,6 +309,7 @@ class _CustomSettingsCopy {
     mobileSourceUseDetected: '使用本機裝置型號',
     cancel: '取消',
     save: '儲存',
+    close: '關閉',
   );
 
   static const _en = _CustomSettingsCopy(
@@ -309,11 +324,11 @@ class _CustomSettingsCopy {
     quickReadingTitle: 'Quick reading',
     quickReadingDescription: 'Immediately reports every currently unread post when entering a topic. More than 2,000 posts are sent in batches of 2,000.',
     mobileSourceGroupTitle: 'Post source (experimental)',
-    mobileSourceTitle: 'Send device model (experimental)',
-    mobileSourceDescription: 'When enabled, native Android, iOS, Windows, macOS, and Linux topics and replies send the device model through Linux.do\'s current ios_device_name field. Web never sends it.',
-    mobileSourceModelTitle: 'Device model to send',
+    mobileSourceTitle: 'Device model sending (verified route required)',
+    mobileSourceDescription: 'Linux.do generates via_ios_app / ios_device_name through the trusted official iOS route (including mTLS/App Attest). Ordinary /posts.json requests cannot set those fields. FluxDO now only parses and displays server-returned values instead of spoofing them.',
+    mobileSourceModelTitle: 'Preset device model (not sent yet)',
     mobileSourceModelDescription:
-        'Customizable; defaults to the model detected on this device.',
+        'Keeps an automatically detected or custom model for a future supported verified sending route.',
     mobileSourceAutomaticPrefix: 'Automatic',
     mobileSourceCustomPrefix: 'Custom',
     mobileSourceDetecting: 'Detecting this device…',
@@ -323,5 +338,6 @@ class _CustomSettingsCopy {
     mobileSourceUseDetected: 'Use detected model',
     cancel: 'Cancel',
     save: 'Save',
+    close: 'Close',
   );
 }

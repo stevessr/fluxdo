@@ -18,11 +18,12 @@ class MobilePostSourceInfo {
   final String model;
 }
 
-/// Linux.do 发帖设备来源实验功能。
+/// Linux.do 设备型号识别与未来发送链路的本地数据服务。
 ///
-/// Linux.do 当前实际帖子字段为 `via_ios_app` / `ios_device_name`。
-/// 出于隐私考虑默认关闭；原生 Android / iOS / Windows / macOS / Linux
-/// 均可按该兼容协议发送设备型号，Web 不发送。
+/// Linux.do 帖子响应中的 `via_ios_app` / `ios_device_name` 是官方 iOS
+/// 认证链路生成的服务端可信来源信息。普通 Discourse `/posts.json` 请求
+/// 不能通过同名表单参数伪造，因此本服务当前只负责本机型号识别与预配置，
+/// 不向公开发帖接口注入来源字段。
 class MobilePostSourceService {
   MobilePostSourceService._();
 
@@ -130,44 +131,11 @@ class MobilePostSourceService {
     return normalized.isEmpty ? null : normalized;
   }
 
-  /// 纯函数版本，便于测试 Linux.do 当前真实协议字段及自定义型号覆盖行为。
+  /// 官方 iOS 来源字段需要经过 Linux.do 的受信任认证链路。
   ///
-  /// 注意：字段名虽然是 ios_device_name，但这是站点当前实际接受并序列化
-  /// 到 Post JSON 的设备型号字段。实验功能为了与服务端保持一致，所有原生
-  /// 平台都复用该字段；不再发送无效的 mobile_source_* 参数。
-  static Map<String, dynamic> buildFields({
-    required MobilePostSourceInfo info,
-    String? customModel,
-  }) {
-    final model = normalizeCustomModel(customModel) ??
-        normalizeCustomModel(info.model);
-    if (model == null) return const <String, dynamic>{};
-
-    return <String, dynamic>{
-      'via_ios_app': true,
-      'ios_device_name': model,
-    };
-  }
-
-  /// 根据本机设置构造公开发帖附加字段。
-  ///
-  /// 默认关闭；自定义型号为空时回退到设备识别型号。
-  static Future<Map<String, dynamic>> requestFieldsForCurrentDevice() async {
-    if (!isSupportedPlatform) return const <String, dynamic>{};
-
-    final prefs = await SharedPreferences.getInstance();
-    if (!(prefs.getBool(enabledKey) ?? false)) {
-      return const <String, dynamic>{};
-    }
-
-    final info = await detectDeviceInfo();
-    if (info == null) return const <String, dynamic>{};
-
-    return buildFields(
-      info: info,
-      customModel: prefs.getString(customModelKey),
-    );
-  }
+  /// 保留显式能力标记，防止后续调用方再次把 serializer 输出字段当成
+  /// /posts.json 的普通客户端参数。
+  static bool get canSendVerifiedPostSource => false;
 
   static _DesktopHardwareInfo _readWindowsHardwareInfo() {
     RegistryKey? key;
