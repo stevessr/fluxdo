@@ -9,13 +9,12 @@ void main() {
       model: '24129PN74C',
     );
 
-    test('builds the mobile_source protocol fields', () {
+    test('builds Linux.do ios_device_name protocol fields', () {
       expect(
         MobilePostSourceService.buildFields(info: info),
         {
-          'mobile_source_platform': 'android',
-          'mobile_source_brand': 'Xiaomi',
-          'mobile_source_model': '24129PN74C',
+          'via_ios_app': true,
+          'ios_device_name': '24129PN74C',
         },
       );
     });
@@ -25,7 +24,7 @@ void main() {
         MobilePostSourceService.buildFields(
           info: info,
           customModel: 'Xiaomi 15 Ultra',
-        )['mobile_source_model'],
+        )['ios_device_name'],
         'Xiaomi 15 Ultra',
       );
     });
@@ -35,12 +34,12 @@ void main() {
         MobilePostSourceService.buildFields(
           info: info,
           customModel: '   ',
-        )['mobile_source_model'],
+        )['ios_device_name'],
         '24129PN74C',
       );
     });
 
-    test('desktop models use the same wire protocol', () {
+    test('desktop models also use ios_device_name for server compatibility', () {
       const desktop = MobilePostSourceInfo(
         platform: 'windows',
         brand: 'LENOVO',
@@ -49,9 +48,8 @@ void main() {
       expect(
         MobilePostSourceService.buildFields(info: desktop),
         {
-          'mobile_source_platform': 'windows',
-          'mobile_source_brand': 'LENOVO',
-          'mobile_source_model': '83DF',
+          'via_ios_app': true,
+          'ios_device_name': '83DF',
         },
       );
     });

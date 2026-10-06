@@ -20,9 +20,9 @@ class MobilePostSourceInfo {
 
 /// Linux.do 发帖设备来源实验功能。
 ///
-/// 服务端识别 `mobile_source_platform` / `mobile_source_brand` /
-/// `mobile_source_model`。出于隐私考虑默认关闭；原生 Android / iOS /
-/// Windows / macOS / Linux 均可发送，Web 不发送。
+/// Linux.do 当前实际帖子字段为 `via_ios_app` / `ios_device_name`。
+/// 出于隐私考虑默认关闭；原生 Android / iOS / Windows / macOS / Linux
+/// 均可按该兼容协议发送设备型号，Web 不发送。
 class MobilePostSourceService {
   MobilePostSourceService._();
 
@@ -130,42 +130,38 @@ class MobilePostSourceService {
     return normalized.isEmpty ? null : normalized;
   }
 
-  /// 纯函数版本，便于测试协议字段及自定义型号覆盖行为。
-  static Map<String, String> buildFields({
+  /// 纯函数版本，便于测试 Linux.do 当前真实协议字段及自定义型号覆盖行为。
+  ///
+  /// 注意：字段名虽然是 ios_device_name，但这是站点当前实际接受并序列化
+  /// 到 Post JSON 的设备型号字段。实验功能为了与服务端保持一致，所有原生
+  /// 平台都复用该字段；不再发送无效的 mobile_source_* 参数。
+  static Map<String, dynamic> buildFields({
     required MobilePostSourceInfo info,
     String? customModel,
   }) {
-    final result = <String, String>{};
-    final platform = info.platform.trim();
-    final brand = info.brand?.trim();
     final model = normalizeCustomModel(customModel) ??
         normalizeCustomModel(info.model);
+    if (model == null) return const <String, dynamic>{};
 
-    if (platform.isNotEmpty) {
-      result['mobile_source_platform'] = platform;
-    }
-    if (brand != null && brand.isNotEmpty) {
-      result['mobile_source_brand'] = brand;
-    }
-    if (model != null) {
-      result['mobile_source_model'] = model;
-    }
-    return result;
+    return <String, dynamic>{
+      'via_ios_app': true,
+      'ios_device_name': model,
+    };
   }
 
   /// 根据本机设置构造公开发帖附加字段。
   ///
   /// 默认关闭；自定义型号为空时回退到设备识别型号。
-  static Future<Map<String, String>> requestFieldsForCurrentDevice() async {
-    if (!isSupportedPlatform) return const <String, String>{};
+  static Future<Map<String, dynamic>> requestFieldsForCurrentDevice() async {
+    if (!isSupportedPlatform) return const <String, dynamic>{};
 
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool(enabledKey) ?? false)) {
-      return const <String, String>{};
+      return const <String, dynamic>{};
     }
 
     final info = await detectDeviceInfo();
-    if (info == null) return const <String, String>{};
+    if (info == null) return const <String, dynamic>{};
 
     return buildFields(
       info: info,
@@ -265,7 +261,6 @@ class MobilePostSourceService {
   static String _normalizeDeviceHint(String value) =>
       value.toLowerCase().replaceAll(RegExp(r'\s+'), '');
 }
-
 
 class _DesktopHardwareInfo {
   const _DesktopHardwareInfo({this.brand, this.model});

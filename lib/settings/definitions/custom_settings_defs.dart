@@ -253,8 +253,7 @@ class _CustomSettingsCopy {
     quickReadingDescription: '进入话题时立即上报当前所有未读楼层；超过 2000 个楼层时按每批 2000 个分批发送。',
     mobileSourceGroupTitle: '发帖来源（实验性）',
     mobileSourceTitle: '发送设备型号（实验性）',
-    mobileSourceDescription:
-        '开启后，Android/iOS/Windows/macOS/Linux 的公开发帖与回复会附带平台、品牌和设备型号；Web 不发送。',
+    mobileSourceDescription: '开启后，Android/iOS/Windows/macOS/Linux 的公开发帖与回复会按 Linux.do 当前协议发送 ios_device_name；Web 不发送。',
     mobileSourceModelTitle: '发送的设备型号',
     mobileSourceModelDescription: '可自定义；未设置时默认使用识别到的手机或电脑型号。',
     mobileSourceAutomaticPrefix: '自动',
@@ -283,8 +282,7 @@ class _CustomSettingsCopy {
     quickReadingDescription: '進入話題時立即上報目前所有未讀樓層；超過 2000 個樓層時按每批 2000 個分批傳送。',
     mobileSourceGroupTitle: '發帖來源（實驗性）',
     mobileSourceTitle: '傳送裝置型號（實驗性）',
-    mobileSourceDescription:
-        '開啟後，Android/iOS/Windows/macOS/Linux 的公開發帖與回覆會附帶平台、品牌和裝置型號；Web 不傳送。',
+    mobileSourceDescription: '開啟後，Android/iOS/Windows/macOS/Linux 的公開發帖與回覆會依 Linux.do 目前協議傳送 ios_device_name；Web 不傳送。',
     mobileSourceModelTitle: '傳送的裝置型號',
     mobileSourceModelDescription: '可自訂；未設定時預設使用識別到的手機或電腦型號。',
     mobileSourceAutomaticPrefix: '自動',
@@ -312,7 +310,7 @@ class _CustomSettingsCopy {
     quickReadingDescription: 'Immediately reports every currently unread post when entering a topic. More than 2,000 posts are sent in batches of 2,000.',
     mobileSourceGroupTitle: 'Post source (experimental)',
     mobileSourceTitle: 'Send device model (experimental)',
-    mobileSourceDescription: 'When enabled, native Android, iOS, Windows, macOS, and Linux topics and replies include the platform, brand, and device model. Web never sends it.',
+    mobileSourceDescription: 'When enabled, native Android, iOS, Windows, macOS, and Linux topics and replies send the device model through Linux.do\'s current ios_device_name field. Web never sends it.',
     mobileSourceModelTitle: 'Device model to send',
     mobileSourceModelDescription:
         'Customizable; defaults to the model detected on this device.',

@@ -842,7 +842,11 @@ class Post {
   final String? userCakedate; // 加入社区的纪念日(年份为真实注册年份)
   final String? userBirthdate; // 生日(年份可能是隐私假值)
 
-  // 移动端发帖来源（Linux.do / Discourse post serializer 新字段）
+  // Linux.do 当前真实 iOS App 来源字段。
+  final bool viaIosApp;
+  final String? iosDeviceName;
+
+  // 旧实验字段，仅保留解析兼容；新发送链路不再使用 mobile_source_*。
   final String? mobileSourcePlatform;
   final String? mobileSourceBrand;
   final String? mobileSourceModel;
@@ -976,6 +980,8 @@ class Post {
     this.badgesGranted,
     this.userCakedate,
     this.userBirthdate,
+    this.viaIosApp = false,
+    this.iosDeviceName,
     this.mobileSourcePlatform,
     this.mobileSourceBrand,
     this.mobileSourceModel,
@@ -1117,6 +1123,13 @@ class Post {
           .toList(),
       userCakedate: json['user_cakedate'] as String?,
       userBirthdate: json['user_birthdate'] as String?,
+      viaIosApp: json['via_ios_app'] as bool? ?? false,
+      iosDeviceName: (() {
+        final value = json['ios_device_name'];
+        if (value == null) return null;
+        final text = value.toString().trim();
+        return text.isEmpty ? null : text;
+      })(),
       mobileSourcePlatform: readMobileSource('platform'),
       mobileSourceBrand: readMobileSource('brand'),
       mobileSourceModel: readMobileSource('model'),
@@ -1165,14 +1178,20 @@ class Post {
     );
   }
 
-  /// 移动来源徽章优先展示具体型号，其次品牌，最后平台。
+  /// 设备来源徽章优先使用 Linux.do 当前真实字段 ios_device_name。
+  ///
+  /// mobile_source_* 仅用于兼容早期实验数据。
   String? get mobileSourceLabel {
+    final iosModel = iosDeviceName?.trim();
+    if (iosModel != null && iosModel.isNotEmpty) return iosModel;
     final model = mobileSourceModel?.trim();
     if (model != null && model.isNotEmpty) return model;
     final brand = mobileSourceBrand?.trim();
     if (brand != null && brand.isNotEmpty) return brand;
     final platform = mobileSourcePlatform?.trim();
-    if (platform == null || platform.isEmpty) return null;
+    if (platform == null || platform.isEmpty) {
+      return viaIosApp ? 'iOS' : null;
+    }
     return switch (platform.toLowerCase()) {
       'ios' => 'iOS',
       'android' => 'Android',
@@ -1239,6 +1258,8 @@ class Post {
           wiki == other.wiki &&
           lastWikiEdit == other.lastWikiEdit &&
           editReason == other.editReason &&
+          viaIosApp == other.viaIosApp &&
+          iosDeviceName == other.iosDeviceName &&
           mobileSourcePlatform == other.mobileSourcePlatform &&
           mobileSourceBrand == other.mobileSourceBrand &&
           mobileSourceModel == other.mobileSourceModel;
@@ -1254,6 +1275,8 @@ class Post {
     canBoost,
     version,
     wiki,
+    viaIosApp,
+    iosDeviceName,
     mobileSourceModel,
   );
 
@@ -1319,6 +1342,8 @@ class Post {
     List<GrantedBadge>? badgesGranted,
     String? userCakedate,
     String? userBirthdate,
+    bool? viaIosApp,
+    String? iosDeviceName,
     String? mobileSourcePlatform,
     String? mobileSourceBrand,
     String? mobileSourceModel,
@@ -1419,6 +1444,8 @@ class Post {
       badgesGranted: badgesGranted ?? this.badgesGranted,
       userCakedate: userCakedate ?? this.userCakedate,
       userBirthdate: userBirthdate ?? this.userBirthdate,
+      viaIosApp: viaIosApp ?? this.viaIosApp,
+      iosDeviceName: iosDeviceName ?? this.iosDeviceName,
       mobileSourcePlatform: mobileSourcePlatform ?? this.mobileSourcePlatform,
       mobileSourceBrand: mobileSourceBrand ?? this.mobileSourceBrand,
       mobileSourceModel: mobileSourceModel ?? this.mobileSourceModel,
