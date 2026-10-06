@@ -409,6 +409,10 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       data['create_as_post_voting'] = 'true';
     }
 
+    data.addAll(
+      await MobilePostSourceService.requestFieldsForCurrentDevice(),
+    );
+
     final response = await _dio.post(
       '/posts.json',
       data: data,

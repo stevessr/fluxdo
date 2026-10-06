@@ -24,6 +24,10 @@ mixin _PostsMixin on _DiscourseServiceBase {
       data['draft_key'] = draftKey;
     }
 
+    data.addAll(
+      await MobilePostSourceService.requestFieldsForCurrentDevice(),
+    );
+
     final response = await _dio.post(
       '/posts.json',
       data: data,

@@ -54,6 +54,7 @@ import '../network/webview/webview_adapter_settings_service.dart';
 import '../login_ready_coordinator.dart';
 import '../network/discourse_dio.dart';
 import '../network/flux_request_spec.dart';
+import '../mobile_post_source_service.dart';
 import '../preloaded_data_service.dart';
 import '../pending_review_context_store.dart';
 import '../uploads/s3_multipart_upload.dart';
