@@ -3,7 +3,30 @@ import 'package:fluxdo/models/topic.dart';
 
 void main() {
   group('Post mobile source', () {
-    test('parses top-level mobile_source fields and prefers model label', () {
+    test('parses Linux.do ios_device_name and displays it first', () {
+      final post = Post.fromJson({
+        'id': 11,
+        'username': 'LowSector',
+        'via_ios_app': true,
+        'ios_device_name': 'iPhone 17 Pro Max',
+      });
+
+      expect(post.viaIosApp, isTrue);
+      expect(post.iosDeviceName, 'iPhone 17 Pro Max');
+      expect(post.mobileSourceLabel, 'iPhone 17 Pro Max');
+    });
+
+    test('via_ios_app without a device name falls back to iOS', () {
+      final post = Post.fromJson({
+        'id': 12,
+        'username': 'tester',
+        'via_ios_app': true,
+      });
+
+      expect(post.mobileSourceLabel, 'iOS');
+    });
+
+    test('parses legacy top-level mobile_source fields as fallback', () {
       final post = Post.fromJson({
         'id': 14,
         'username': 'tester',
