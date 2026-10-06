@@ -1419,8 +1419,7 @@ class Post {
       badgesGranted: badgesGranted ?? this.badgesGranted,
       userCakedate: userCakedate ?? this.userCakedate,
       userBirthdate: userBirthdate ?? this.userBirthdate,
-      mobileSourcePlatform:
-          mobileSourcePlatform ?? this.mobileSourcePlatform,
+      mobileSourcePlatform: mobileSourcePlatform ?? this.mobileSourcePlatform,
       mobileSourceBrand: mobileSourceBrand ?? this.mobileSourceBrand,
       mobileSourceModel: mobileSourceModel ?? this.mobileSourceModel,
       userId: userId ?? this.userId,

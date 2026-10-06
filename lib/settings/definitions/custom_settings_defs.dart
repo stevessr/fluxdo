@@ -158,8 +158,7 @@ Future<void> _showMobileSourceModelDialog(
             child: Text(copy.cancel),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(controller.text),
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
             child: Text(copy.save),
           ),
         ],
@@ -313,8 +312,7 @@ class _CustomSettingsCopy {
     quickReadingDescription: 'Immediately reports every currently unread post when entering a topic. More than 2,000 posts are sent in batches of 2,000.',
     mobileSourceGroupTitle: 'Post source (experimental)',
     mobileSourceTitle: 'Send phone model (experimental)',
-    mobileSourceDescription:
-        'When enabled, public topics and replies on Android/iOS include the platform, brand, and model. Private messages and desktop clients never send it.',
+    mobileSourceDescription: 'When enabled, public topics and replies on Android/iOS include the platform, brand, and model. Private messages and desktop clients never send it.',
     mobileSourceModelTitle: 'Phone model to send',
     mobileSourceModelDescription:
         'Customizable; defaults to the model detected on this device.',
@@ -323,8 +321,7 @@ class _CustomSettingsCopy {
     mobileSourceDetecting: 'Detecting this device…',
     mobileSourceUnavailable: 'Phone model unavailable',
     mobileSourceModelDialogTitle: 'Custom phone model',
-    mobileSourceModelDialogDescription:
-        'The detected local model is used by default. Enter a custom value, or leave it empty to return to automatic detection.',
+    mobileSourceModelDialogDescription: 'The detected local model is used by default. Enter a custom value, or leave it empty to return to automatic detection.',
     mobileSourceUseDetected: 'Use detected model',
     cancel: 'Cancel',
     save: 'Save',
