@@ -842,6 +842,11 @@ class Post {
   final String? userCakedate; // 加入社区的纪念日(年份为真实注册年份)
   final String? userBirthdate; // 生日(年份可能是隐私假值)
 
+  // 移动端发帖来源（Linux.do / Discourse post serializer 新字段）
+  final String? mobileSourcePlatform;
+  final String? mobileSourceBrand;
+  final String? mobileSourceModel;
+
   // 用户 ID（用于打赏等功能）
   final int? userId;
 
@@ -971,6 +976,9 @@ class Post {
     this.badgesGranted,
     this.userCakedate,
     this.userBirthdate,
+    this.mobileSourcePlatform,
+    this.mobileSourceBrand,
+    this.mobileSourceModel,
     this.userId,
     this.moderator = false,
     this.admin = false,
@@ -1000,6 +1008,19 @@ class Post {
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
+    final nestedMobileSource = json['mobile_source'];
+    final nested = nestedMobileSource is Map ? nestedMobileSource : null;
+
+    String? readMobileSource(String field) {
+      final value =
+          json['mobile_source_$field'] ??
+          nested?[field] ??
+          nested?['mobile_source_$field'];
+      if (value == null) return null;
+      final text = value.toString().trim();
+      return text.isEmpty ? null : text;
+    }
+
     return Post(
       id: json['id'] as int,
       name: json['name'] as String?,
@@ -1096,6 +1117,9 @@ class Post {
           .toList(),
       userCakedate: json['user_cakedate'] as String?,
       userBirthdate: json['user_birthdate'] as String?,
+      mobileSourcePlatform: readMobileSource('platform'),
+      mobileSourceBrand: readMobileSource('brand'),
+      mobileSourceModel: readMobileSource('model'),
       userId: json['user_id'] as int?,
       moderator: json['moderator'] as bool? ?? false,
       admin: json['admin'] as bool? ?? false,
@@ -1139,6 +1163,21 @@ class Post {
           ? json['edit_reason'] as String
           : null,
     );
+  }
+
+  /// 移动来源徽章优先展示具体型号，其次品牌，最后平台。
+  String? get mobileSourceLabel {
+    final model = mobileSourceModel?.trim();
+    if (model != null && model.isNotEmpty) return model;
+    final brand = mobileSourceBrand?.trim();
+    if (brand != null && brand.isNotEmpty) return brand;
+    final platform = mobileSourcePlatform?.trim();
+    if (platform == null || platform.isEmpty) return null;
+    return switch (platform.toLowerCase()) {
+      'ios' => 'iOS',
+      'android' => 'Android',
+      _ => platform,
+    };
   }
 
   /// 获取头像 URL，优先使用动画头像（GIF）
@@ -1199,7 +1238,10 @@ class Post {
           publicVersion == other.publicVersion &&
           wiki == other.wiki &&
           lastWikiEdit == other.lastWikiEdit &&
-          editReason == other.editReason;
+          editReason == other.editReason &&
+          mobileSourcePlatform == other.mobileSourcePlatform &&
+          mobileSourceBrand == other.mobileSourceBrand &&
+          mobileSourceModel == other.mobileSourceModel;
 
   @override
   int get hashCode => Object.hash(
@@ -1212,6 +1254,7 @@ class Post {
     canBoost,
     version,
     wiki,
+    mobileSourceModel,
   );
 
   /// 复制并修改部分字段
@@ -1276,6 +1319,9 @@ class Post {
     List<GrantedBadge>? badgesGranted,
     String? userCakedate,
     String? userBirthdate,
+    String? mobileSourcePlatform,
+    String? mobileSourceBrand,
+    String? mobileSourceModel,
     int? userId,
     bool? moderator,
     bool? admin,
@@ -1373,6 +1419,9 @@ class Post {
       badgesGranted: badgesGranted ?? this.badgesGranted,
       userCakedate: userCakedate ?? this.userCakedate,
       userBirthdate: userBirthdate ?? this.userBirthdate,
+      mobileSourcePlatform: mobileSourcePlatform ?? this.mobileSourcePlatform,
+      mobileSourceBrand: mobileSourceBrand ?? this.mobileSourceBrand,
+      mobileSourceModel: mobileSourceModel ?? this.mobileSourceModel,
       userId: userId ?? this.userId,
       moderator: moderator ?? this.moderator,
       admin: admin ?? this.admin,

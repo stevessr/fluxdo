@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/mobile_post_source_preferences.dart';
 import '../../providers/preload_cache_preferences.dart';
 import '../../providers/quick_reading_preferences.dart';
+import '../../services/mobile_post_source_service.dart';
 import '../../services/preload_cache_service.dart';
 import 'account_quick_switcher_appearance_defs.dart';
 import '../settings_model.dart';
@@ -68,8 +71,107 @@ List<SettingsGroup> buildCustomSettingsGroups(BuildContext context) {
         ),
       ],
     ),
+    if (MobilePostSourceService.isSupportedPlatform)
+      SettingsGroup(
+        title: copy.mobileSourceGroupTitle,
+        icon: Icons.devices_rounded,
+        items: [
+          SwitchModel(
+            id: 'mobilePostSource',
+            title: copy.mobileSourceTitle,
+            subtitle: copy.mobileSourceDescription,
+            icon: Icons.devices_rounded,
+            getValue: (ref) =>
+                ref.watch(mobilePostSourcePreferencesProvider).enabled,
+            onChanged: (ref, value) => ref
+                .read(mobilePostSourcePreferencesProvider.notifier)
+                .setEnabled(value),
+          ),
+          ActionModel(
+            id: 'mobilePostSourceModel',
+            title: copy.mobileSourceModelTitle,
+            subtitle: copy.mobileSourceModelDescription,
+            icon: Icons.edit_rounded,
+            getDynamicSubtitle: (ref) {
+              final state = ref.watch(mobilePostSourcePreferencesProvider);
+              final customModel = state.customModel;
+              if (customModel != null) {
+                return '${copy.mobileSourceCustomPrefix}: $customModel';
+              }
+              if (state.detecting) return copy.mobileSourceDetecting;
+              final model = state.detectedInfo?.model;
+              if (model == null || model.isEmpty) {
+                return copy.mobileSourceUnavailable;
+              }
+              return '${copy.mobileSourceAutomaticPrefix}: $model';
+            },
+            onTap: (context, ref) {
+              unawaited(_showMobileSourceModelDialog(context, ref, copy));
+            },
+          ),
+        ],
+      ),
     buildAccountQuickSwitcherAppearanceGroup(context),
   ];
+}
+
+Future<void> _showMobileSourceModelDialog(
+  BuildContext context,
+  WidgetRef ref,
+  _CustomSettingsCopy copy,
+) async {
+  final state = ref.read(mobilePostSourcePreferencesProvider);
+  final detectedModel = state.detectedInfo?.model;
+  final controller = TextEditingController(
+    text: state.customModel ?? detectedModel ?? '',
+  );
+
+  try {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(copy.mobileSourceModelDialogTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(copy.mobileSourceModelDialogDescription),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 80,
+              decoration: InputDecoration(
+                hintText: detectedModel ?? copy.mobileSourceUnavailable,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (detectedModel != null && detectedModel.isNotEmpty)
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(''),
+              child: Text(copy.mobileSourceUseDetected),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(copy.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: Text(copy.save),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null) return;
+    await ref
+        .read(mobilePostSourcePreferencesProvider.notifier)
+        .setCustomModel(result);
+  } finally {
+    controller.dispose();
+  }
 }
 
 class _CustomSettingsCopy {
@@ -84,6 +186,20 @@ class _CustomSettingsCopy {
     required this.readingGroupTitle,
     required this.quickReadingTitle,
     required this.quickReadingDescription,
+    required this.mobileSourceGroupTitle,
+    required this.mobileSourceTitle,
+    required this.mobileSourceDescription,
+    required this.mobileSourceModelTitle,
+    required this.mobileSourceModelDescription,
+    required this.mobileSourceAutomaticPrefix,
+    required this.mobileSourceCustomPrefix,
+    required this.mobileSourceDetecting,
+    required this.mobileSourceUnavailable,
+    required this.mobileSourceModelDialogTitle,
+    required this.mobileSourceModelDialogDescription,
+    required this.mobileSourceUseDetected,
+    required this.cancel,
+    required this.save,
   });
 
   final String cacheGroupTitle;
@@ -96,6 +212,20 @@ class _CustomSettingsCopy {
   final String readingGroupTitle;
   final String quickReadingTitle;
   final String quickReadingDescription;
+  final String mobileSourceGroupTitle;
+  final String mobileSourceTitle;
+  final String mobileSourceDescription;
+  final String mobileSourceModelTitle;
+  final String mobileSourceModelDescription;
+  final String mobileSourceAutomaticPrefix;
+  final String mobileSourceCustomPrefix;
+  final String mobileSourceDetecting;
+  final String mobileSourceUnavailable;
+  final String mobileSourceModelDialogTitle;
+  final String mobileSourceModelDialogDescription;
+  final String mobileSourceUseDetected;
+  final String cancel;
+  final String save;
 
   static _CustomSettingsCopy of(BuildContext context) {
     final locale = Localizations.localeOf(context);
@@ -121,6 +251,22 @@ class _CustomSettingsCopy {
     readingGroupTitle: '阅读增强',
     quickReadingTitle: '快速阅读',
     quickReadingDescription: '进入话题时立即上报当前所有未读楼层；超过 2000 个楼层时按每批 2000 个分批发送。',
+    mobileSourceGroupTitle: '发帖来源（实验性）',
+    mobileSourceTitle: '发送设备型号（实验性）',
+    mobileSourceDescription:
+        '开启后，Android/iOS/Windows/macOS/Linux 的公开发帖与回复会附带平台、品牌和设备型号；Web 不发送。',
+    mobileSourceModelTitle: '发送的设备型号',
+    mobileSourceModelDescription: '可自定义；未设置时默认使用识别到的手机或电脑型号。',
+    mobileSourceAutomaticPrefix: '自动',
+    mobileSourceCustomPrefix: '自定义',
+    mobileSourceDetecting: '正在识别本机设备型号…',
+    mobileSourceUnavailable: '未识别到本机设备型号',
+    mobileSourceModelDialogTitle: '自定义设备型号',
+    mobileSourceModelDialogDescription:
+        '默认使用识别到的手机或电脑型号。可以改成自定义文本；留空或点击“使用本机设备型号”会恢复自动识别。',
+    mobileSourceUseDetected: '使用本机设备型号',
+    cancel: '取消',
+    save: '保存',
   );
 
   static const _zhHant = _CustomSettingsCopy(
@@ -135,6 +281,22 @@ class _CustomSettingsCopy {
     readingGroupTitle: '閱讀增強',
     quickReadingTitle: '快速閱讀',
     quickReadingDescription: '進入話題時立即上報目前所有未讀樓層；超過 2000 個樓層時按每批 2000 個分批傳送。',
+    mobileSourceGroupTitle: '發帖來源（實驗性）',
+    mobileSourceTitle: '傳送裝置型號（實驗性）',
+    mobileSourceDescription:
+        '開啟後，Android/iOS/Windows/macOS/Linux 的公開發帖與回覆會附帶平台、品牌和裝置型號；Web 不傳送。',
+    mobileSourceModelTitle: '傳送的裝置型號',
+    mobileSourceModelDescription: '可自訂；未設定時預設使用識別到的手機或電腦型號。',
+    mobileSourceAutomaticPrefix: '自動',
+    mobileSourceCustomPrefix: '自訂',
+    mobileSourceDetecting: '正在識別本機裝置型號…',
+    mobileSourceUnavailable: '未識別到本機裝置型號',
+    mobileSourceModelDialogTitle: '自訂裝置型號',
+    mobileSourceModelDialogDescription:
+        '預設使用識別到的手機或電腦型號。可以改成自訂文字；留空或點擊「使用本機裝置型號」會恢復自動識別。',
+    mobileSourceUseDetected: '使用本機裝置型號',
+    cancel: '取消',
+    save: '儲存',
   );
 
   static const _en = _CustomSettingsCopy(
@@ -148,5 +310,20 @@ class _CustomSettingsCopy {
     readingGroupTitle: 'Reading enhancements',
     quickReadingTitle: 'Quick reading',
     quickReadingDescription: 'Immediately reports every currently unread post when entering a topic. More than 2,000 posts are sent in batches of 2,000.',
+    mobileSourceGroupTitle: 'Post source (experimental)',
+    mobileSourceTitle: 'Send device model (experimental)',
+    mobileSourceDescription: 'When enabled, native Android, iOS, Windows, macOS, and Linux topics and replies include the platform, brand, and device model. Web never sends it.',
+    mobileSourceModelTitle: 'Device model to send',
+    mobileSourceModelDescription:
+        'Customizable; defaults to the model detected on this device.',
+    mobileSourceAutomaticPrefix: 'Automatic',
+    mobileSourceCustomPrefix: 'Custom',
+    mobileSourceDetecting: 'Detecting this device…',
+    mobileSourceUnavailable: 'Device model unavailable',
+    mobileSourceModelDialogTitle: 'Custom device model',
+    mobileSourceModelDialogDescription: 'The detected local model is used by default. Enter a custom value, or leave it empty to return to automatic detection.',
+    mobileSourceUseDetected: 'Use detected model',
+    cancel: 'Cancel',
+    save: 'Save',
   );
 }
