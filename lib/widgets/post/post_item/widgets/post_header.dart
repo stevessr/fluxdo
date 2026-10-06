@@ -47,8 +47,8 @@ class _PostAnniversaryIcon extends StatelessWidget {
   }
 }
 
-class _PostMobileSourceBadge extends StatelessWidget {
-  const _PostMobileSourceBadge({required this.label});
+class _PostDeviceSourceBadge extends StatelessWidget {
+  const _PostDeviceSourceBadge({required this.label});
 
   final String label;
 
@@ -71,7 +71,7 @@ class _PostMobileSourceBadge extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.smartphone_rounded, size: 11, color: color),
+              Icon(Icons.devices_rounded, size: 11, color: color),
               const SizedBox(width: 3),
               Flexible(
                 child: Text(
@@ -341,7 +341,7 @@ class PostHeader extends StatelessWidget {
                     if (post.mobileSourceLabel != null) ...[
                       const SizedBox(width: 6),
                       Flexible(
-                        child: _PostMobileSourceBadge(
+                        child: _PostDeviceSourceBadge(
                           label: post.mobileSourceLabel!,
                         ),
                       ),

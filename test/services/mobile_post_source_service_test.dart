@@ -39,5 +39,21 @@ void main() {
         '24129PN74C',
       );
     });
+
+    test('desktop models use the same wire protocol', () {
+      const desktop = MobilePostSourceInfo(
+        platform: 'windows',
+        brand: 'LENOVO',
+        model: '83DF',
+      );
+      expect(
+        MobilePostSourceService.buildFields(info: desktop),
+        {
+          'mobile_source_platform': 'windows',
+          'mobile_source_brand': 'LENOVO',
+          'mobile_source_model': '83DF',
+        },
+      );
+    });
   });
 }
