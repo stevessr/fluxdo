@@ -2,10 +2,9 @@ import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:win32_registry/win32_registry.dart';
 
-/// 当前设备可随公开帖子发送的来源信息。
+/// 当前设备识别出的本地来源信息。
 class MobilePostSourceInfo {
   const MobilePostSourceInfo({
     required this.platform,
