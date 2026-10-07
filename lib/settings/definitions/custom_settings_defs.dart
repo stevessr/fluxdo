@@ -327,8 +327,7 @@ class _CustomSettingsCopy {
     mobileSourceTitle: 'Device model sending (verified route required)',
     mobileSourceDescription: 'Linux.do generates via_ios_app / ios_device_name through the trusted official iOS route (including mTLS/App Attest). Ordinary /posts.json requests cannot set those fields. FluxDO now only parses and displays server-returned values instead of spoofing them.',
     mobileSourceModelTitle: 'Preset device model (not sent yet)',
-    mobileSourceModelDescription:
-        'Keeps an automatically detected or custom model for a future supported verified sending route.',
+    mobileSourceModelDescription: 'Keeps an automatically detected or custom model for a future supported verified sending route.',
     mobileSourceAutomaticPrefix: 'Automatic',
     mobileSourceCustomPrefix: 'Custom',
     mobileSourceDetecting: 'Detecting this device…',
