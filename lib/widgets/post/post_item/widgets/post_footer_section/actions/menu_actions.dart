@@ -28,13 +28,11 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
     );
   }
 
-
   void _showPostJsonViewer(BuildContext context) {
     final zh =
         Localizations.localeOf(context).languageCode.toLowerCase() == 'zh';
-    final jsonText = const JsonEncoder.withIndent('  ').convert(
-      widget.post.rawJson,
-    );
+    final jsonText = const JsonEncoder.withIndent('  ')
+        .convert(widget.post.rawJson);
 
     AppBottomSheet.showDraggable<void>(
       context: context,
