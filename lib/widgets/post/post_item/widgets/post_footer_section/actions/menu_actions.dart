@@ -49,9 +49,7 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: jsonText));
             if (!mounted) return;
-            ToastService.showSuccess(
-              zh ? '原始 JSON 已复制' : 'Raw JSON copied',
-            );
+            ToastService.showSuccess(zh ? '原始 JSON 已复制' : 'Raw JSON copied');
           },
         ),
       ],
@@ -606,9 +604,7 @@ class _PostJsonTree extends StatelessWidget {
             ),
             _PostJsonSummaryChip(
               icon: Icons.account_tree_outlined,
-              label: zh
-                  ? '$complexCount 个结构值'
-                  : '$complexCount structured',
+              label: zh ? '$complexCount 个结构值' : '$complexCount structured',
             ),
             _PostJsonSummaryChip(
               icon: Icons.short_text_rounded,
@@ -618,9 +614,7 @@ class _PostJsonTree extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          zh
-              ? '点击对象或数组可展开子键值；普通值可直接选择复制。'
-              : 'Tap objects or arrays to expand them. Scalar values are selectable.',
+          zh ? '点击对象或数组可展开子键值；普通值可直接选择复制。' : 'Tap objects or arrays to expand them. Scalar values are selectable.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -851,4 +845,3 @@ class _PostJsonNode extends StatelessWidget {
     );
   }
 }
-
