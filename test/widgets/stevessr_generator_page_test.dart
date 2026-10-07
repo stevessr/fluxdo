@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/l10n/s.dart';
 import 'package:fluxdo/models/stevessr_render_params.dart';
 import 'package:fluxdo/pages/stevessr_generator_page.dart';
+import 'package:fluxdo/services/stevessr_character_assets.dart';
 import 'package:fluxdo/widgets/stevessr/stevessr_canvas.dart';
 
 void main() {
@@ -70,6 +71,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Claude 和 Deepseek 提供自己的表情列表', (tester) async {
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocaleUtils.supportedLocales,
+          home: const StevessrGeneratorPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (final character in [
+      StevessrCharacter.claude,
+      StevessrCharacter.deepseek,
+    ]) {
+      tester
+          .widget<DropdownButtonFormField<StevessrCharacter>>(
+            find.byType(DropdownButtonFormField<StevessrCharacter>),
+          )
+          .onChanged!(character);
+      await tester.pump();
+      final dropdown = tester
+          .widget<DropdownButtonFormField<StevessrExpression>>(
+            find.byType(DropdownButtonFormField<StevessrExpression>),
+          );
+      expect(dropdown.onChanged, isNotNull);
+      final button = tester.widget<DropdownButton<StevessrExpression>>(
+        find.descendant(
+          of: find.byType(DropdownButtonFormField<StevessrExpression>),
+          matching: find.byType(DropdownButton<StevessrExpression>),
+        ),
+      );
+      expect(button.items!.map((item) => item.value), character.expressions);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('嵌入编辑器模式显示生成并插入按钮', (tester) async {
     await tester.pumpWidget(
       TranslationProvider(
@@ -112,6 +154,12 @@ void main() {
     await tester.pump();
 
     for (final expression in StevessrExpression.values) {
+      await tester.runAsync(
+        () => StevessrCharacterAssets.load(
+          StevessrCharacter.original,
+          expression,
+        ),
+      );
       for (final bubble in StevessrBubble.values) {
         for (final tail in StevessrTail.values) {
           params = params.copyWith(

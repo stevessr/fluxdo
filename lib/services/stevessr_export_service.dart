@@ -6,7 +6,6 @@ import 'package:cross_file/cross_file.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_avif/flutter_avif.dart' as avif;
-import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter/widgets.dart';
 
@@ -17,6 +16,7 @@ import '../utils/image_save_utils.dart';
 import '../utils/screenshot_utils.dart';
 import '../utils/share_utils.dart';
 import 'stevessr_text_layout.dart';
+import 'stevessr_character_assets.dart';
 
 /// StevesSR 导出结果。
 class StevessrExportedImage {
@@ -38,8 +38,6 @@ class StevessrExportedImage {
 
 /// 将预览画布导出为 PNG、WebP、AVIF、JPEG 或 SVG。
 abstract final class StevessrExportService {
-  static const _assetRoot = 'assets/images/avater/';
-
   static Future<StevessrExportedImage> render({
     required StevessrRenderParams params,
     required GlobalKey repaintBoundaryKey,
@@ -187,6 +185,20 @@ abstract final class StevessrExportService {
     StevessrRenderParams params,
     GlobalKey key,
   ) async {
+    if (StevessrCharacterAssets.usesDelta(
+      params.character,
+      params.expression,
+    )) {
+      final bytes = await StevessrCharacterAssets.load(
+        params.character,
+        params.expression,
+      );
+      final context = key.currentContext;
+      if (context == null || !context.mounted) throw StateError('角色预览已关闭');
+      await precacheImage(MemoryImage(bytes), context);
+      // 等待 FutureBuilder 和图片解码后的下一帧，避免截到空白角色。
+      await WidgetsBinding.instance.endOfFrame;
+    }
     final boundary = key.currentContext?.findRenderObject();
     if (boundary is! RenderRepaintBoundary || boundary.size.width <= 0) {
       throw StateError('StevesSR 预览尚未完成布局');
@@ -233,12 +245,13 @@ abstract final class StevessrExportService {
   }
 
   static Future<List<int>> _buildSvg(StevessrRenderParams p) async {
-    final characterAsset =
-        '$_assetRoot${p.character.assetPath(emotion: p.expression)}';
-    final asset = await rootBundle.load(characterAsset);
     final imageBase64 = base64Encode(
-      asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes),
+      await StevessrCharacterAssets.load(p.character, p.expression),
     );
+    final characterMime =
+        StevessrCharacterAssets.usesDelta(p.character, p.expression)
+        ? 'image/png'
+        : 'image/webp';
     final usesBubbleImage = p.usesBubbleImage;
     final bubble = _bubbleMarkup(
       p,
@@ -261,7 +274,7 @@ $bubble
 $bubbleImage
 $bubbleStroke
 $text
-<image x="${c.x}" y="${c.y}" width="${c.width}" height="${c.height}" preserveAspectRatio="none" href="data:image/webp;base64,$imageBase64"/>
+<image x="${c.x}" y="${c.y}" width="${c.width}" height="${c.height}" preserveAspectRatio="none" href="data:$characterMime;base64,$imageBase64"/>
 </svg>''';
     return utf8.encode(svg);
   }

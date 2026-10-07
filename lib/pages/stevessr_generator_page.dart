@@ -538,7 +538,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               _buildEnumDropdown<StevessrExpression>(
                 label: l10n.expression,
                 value: _params.expression,
-                values: StevessrExpression.values,
+                values: _params.character.expressions,
                 labelBuilder: _enumLabel,
                 onChanged: (value) =>
                     _setParams(_params.copyWith(expression: value)),

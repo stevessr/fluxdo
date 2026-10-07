@@ -50,7 +50,7 @@ enum StevessrCharacterType {
 ///
 /// 角色通过 [type] 和 [name] 定位到
 /// `assets/images/avater/<type>/<name>.webp`；[StevessrCharacterType.stevessr]
-/// 类型没有固定角色名，改为渲染 `stevessr/<emotion>.webp` 表情素材。
+/// 类型没有固定角色名，使用 `stevessr/neutral.webp` 与对应的差分表情素材。
 class StevessrCharacter {
   const StevessrCharacter._(this.type, this.name, this.displayName);
 
@@ -63,14 +63,31 @@ class StevessrCharacter {
   /// 下拉列表显示名；东方角色使用官方中文译名。
   final String displayName;
 
-  /// StevesSR 表情素材是否生效。
-  bool get supportsExpression => type == StevessrCharacterType.stevessr;
+  /// 有表情的角色使用主图和差分，而不是完整表情图。
+  bool get usesExpressionDeltas => supportsExpression;
 
-  /// 资源路径（相对于 `assets/images/avater/`）。
+  bool get supportsExpression =>
+      type == StevessrCharacterType.stevessr ||
+      type == StevessrCharacterType.llm;
+
+  /// 每个角色只显示实际提供的表情；切换角色时不支持的表情回退为原图。
+  List<StevessrExpression> get expressions => type == StevessrCharacterType.llm
+      ? const [
+          StevessrExpression.neutral,
+          StevessrExpression.happy,
+          StevessrExpression.surprised,
+          StevessrExpression.love,
+        ]
+      : supportsExpression
+      ? StevessrExpression.values
+      : const [];
+
+  StevessrExpression resolveExpression(StevessrExpression emotion) =>
+      expressions.contains(emotion) ? emotion : StevessrExpression.neutral;
+
+  /// 主图资源路径（相对于 `assets/images/avater/`）；表情由差分服务还原。
   String assetPath({StevessrExpression? emotion}) {
-    final assetName = supportsExpression
-        ? (emotion ?? StevessrExpression.neutral).key
-        : name;
+    final assetName = type == StevessrCharacterType.stevessr ? 'neutral' : name;
     return '${type.directory}/$assetName.webp';
   }
 
@@ -216,6 +233,12 @@ class StevessrCharacter {
     '上白泽慧音',
   );
 
+  static const claude = StevessrCharacter._(
+    StevessrCharacterType.llm,
+    'claude',
+    'Claude',
+  );
+
   static const deepseek = StevessrCharacter._(
     StevessrCharacterType.llm,
     'deepseek',
@@ -349,6 +372,7 @@ class StevessrCharacter {
     sumireko,
     maribel,
     keine,
+    claude,
     deepseek,
     blueArchive01,
     blueArchive02,
@@ -573,7 +597,9 @@ class StevessrRenderParams {
     final imageBytes = bubbleImageBytes;
     return StevessrRenderParams(
       text: _truncateText(text),
-      expression: expression,
+      expression: character.supportsExpression
+          ? character.resolveExpression(expression)
+          : expression,
       character: character,
       bubble: bubble,
       format: format,

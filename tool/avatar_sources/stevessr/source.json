@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "width": 1254,
+  "height": 1254,
+  "originalBytes": 24284782,
+  "expressions": {
+    "angry": {
+      "asset": "angry.webp",
+      "x": 10,
+      "y": 9,
+      "width": 1222,
+      "height": 1234,
+      "pixelHash": "3f3cbca5c3f5f2b06cbe7186f34ad620d0aca867fd261edfb661cd47ff77e4dd"
+    },
+    "apologetic": {
+      "asset": "apologetic.webp",
+      "x": 10,
+      "y": 4,
+      "width": 1222,
+      "height": 1220,
+      "pixelHash": "057d040ca64ea70d8f172289be701f08d64cff6ab27c79bdeba08787da7939a0"
+    },
+    "bored": {
+      "asset": "bored.webp",
+      "x": 10,
+      "y": 24,
+      "width": 1222,
+      "height": 1209,
+      "pixelHash": "5dc2811f94c84283262d3210dd90261635d475d8d4f3ed28ad0664bdbd11d466"
+    },
+    "celebrating": {
+      "asset": "celebrating.webp",
+      "x": 10,
+      "y": 7,
+      "width": 1231,
+      "height": 1240,
+      "pixelHash": "2aa7f40c731ebf87523b09e826de62227e7f539b57dac4b386e949fb67db3fab"
+    },
+    "confused": {
+      "asset": "confused.webp",
+      "x": 3,
+      "y": 7,
+      "width": 1232,
+      "height": 1223,
+      "pixelHash": "ec4c95815d570df6e9125e03f20b7c42a4a25d31a0b9195073ed8649e3062273"
+    },
+    "cry": {
+      "asset": "cry.webp",
+      "x": 0,
+      "y": 3,
+      "width": 1232,
+      "height": 1219,
+      "pixelHash": "65b7113b120d68f50c35300baddd8cf8b394399ef5ee0e720ad91c2ad8dbba6b"
+    },
+    "dizzy": {
+      "asset": "dizzy.webp",
+      "x": 10,
+      "y": 28,
+      "width": 1226,
+      "height": 1184,
+      "pixelHash": "8533110c74ac09d59d2fe1a5eb6ee705872393cc82170727eabbca7488857c7f"
+    },
+    "embarrassed": {
+      "asset": "embarrassed.webp",
+      "x": 10,
+      "y": 3,
+      "width": 1222,
+      "height": 1244,
+      "pixelHash": "00654212d8bcd1435010983a77c7302753b6d4a7f06021aecec1852764d176d3"
+    },
+    "grateful": {
+      "asset": "grateful.webp",
+      "x": 8,
+      "y": 10,
+      "width": 1224,
+      "height": 1237,
+      "pixelHash": "7986122ed451e35a0e640d54176360df3534a0b2cc347cf00f9f4df9c0d94f22"
+    },
+    "happy": {
+      "asset": "happy.webp",
+      "x": 10,
+      "y": 0,
+      "width": 1222,
+      "height": 1254,
+      "pixelHash": "6531e8ea2aa9007fb6770126eccc9bdb1b4cb8007ec691b291180769d5f5e809"
+    },
+    "hungry": {
+      "asset": "hungry.webp",
+      "x": 10,
+      "y": 3,
+      "width": 1222,
+      "height": 1245,
+      "pixelHash": "8f60977400e0950cacdc0bc854285818ace4c864e14bbcd311a989903b8859a9"
+    },
+    "laughing": {
+      "asset": "laughing.webp",
+      "x": 10,
+      "y": 5,
+      "width": 1243,
+      "height": 1237,
+      "pixelHash": "8ee4df83da9a4c853f005e022a418e6e338686c971ed3cce7d330ebbffd58dfd"
+    },
+    "love": {
+      "asset": "love.webp",
+      "x": 9,
+      "y": 10,
+      "width": 1223,
+      "height": 1235,
+      "pixelHash": "323f7a80e416e2f4f83af645202d5b4940bb97142e5f682e306f5f22cffb1312"
+    },
+    "panic": {
+      "asset": "panic.webp",
+      "x": 10,
+      "y": 8,
+      "width": 1237,
+      "height": 1203,
+      "pixelHash": "c0e653229a7649d6c4e6ab3bf996347541b1d4cb6233c7f99b0d4bc336bff1ae"
+    },
+    "pleading": {
+      "asset": "pleading.webp",
+      "x": 10,
+      "y": 12,
+      "width": 1222,
+      "height": 1226,
+      "pixelHash": "dc5a1be81b835293061a8edaa0583817dcf949d8198d21436b9b415a621763d5"
+    },
+    "pout": {
+      "asset": "pout.webp",
+      "x": 0,
+      "y": 19,
+      "width": 1232,
+      "height": 1201,
+      "pixelHash": "9e535882416149ffc4f44d2dd4b70b598e6ac59fa723eb768667069ea85ab2df"
+    },
+    "scared": {
+      "asset": "scared.webp",
+      "x": 10,
+      "y": 7,
+      "width": 1222,
+      "height": 1205,
+      "pixelHash": "3e26ef5b8abc5a263172024bc5cb9fc88e8361c7904c8f0d9502617e039a579b"
+    },
+    "sleepy": {
+      "asset": "sleepy.webp",
+      "x": 10,
+      "y": 11,
+      "width": 1222,
+      "height": 1233,
+      "pixelHash": "40cb66751411e06fe9addef319e512b78fa19d85a103a7dfc12b9ae12dbfa746"
+    },
+    "smug": {
+      "asset": "smug.webp",
+      "x": 0,
+      "y": 27,
+      "width": 1232,
+      "height": 1183,
+      "pixelHash": "b33a096a88832e476e129a7815ac61c0f3d83bd7ffdbbe80e97d54cc67218532"
+    },
+    "surprised": {
+      "asset": "surprised.webp",
+      "x": 10,
+      "y": 0,
+      "width": 1222,
+      "height": 1215,
+      "pixelHash": "33c7cd711b7ec058930d718eb8a55736b53b33a5480cae8e91f9682424df65e3"
+    },
+    "thinking": {
+      "asset": "thinking.webp",
+      "x": 10,
+      "y": 35,
+      "width": 1222,
+      "height": 1178,
+      "pixelHash": "e6b5663af2c89336658a48d01214d3a61c150bb0c428bab09af6b3739f1ac5c7"
+    },
+    "wink": {
+      "asset": "wink.webp",
+      "x": 10,
+      "y": 3,
+      "width": 1229,
+      "height": 1247,
+      "pixelHash": "dea519046241fa2c3e637496107603da2f87a317ccd722f2946fb629b4d6da0a"
+    }
+  }
+}

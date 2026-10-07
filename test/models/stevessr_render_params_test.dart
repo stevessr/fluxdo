@@ -213,7 +213,7 @@ void main() {
     );
     expect(
       StevessrCharacter.original.assetPath(emotion: StevessrExpression.happy),
-      'stevessr/happy.webp',
+      'stevessr/neutral.webp',
     );
     expect(
       StevessrBubble.values.map((value) => value.key),

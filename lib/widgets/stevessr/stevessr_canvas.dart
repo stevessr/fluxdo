@@ -1,8 +1,10 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../../models/stevessr_render_params.dart';
+import '../../services/stevessr_character_assets.dart';
 import 'stevessr_bubble_shape.dart';
 import 'stevessr_painter.dart';
 
@@ -68,13 +70,7 @@ class StevessrCanvas extends StatelessWidget {
               top: character.y * scaleY,
               width: character.width * scaleX,
               height: character.height * scaleY,
-              child: Image.asset(
-                _expressionAsset,
-                fit: BoxFit.fill,
-                filterQuality: FilterQuality.high,
-                gaplessPlayback: true,
-                errorBuilder: (context, error, stackTrace) => const SizedBox(),
-              ),
+              child: _buildCharacter(p),
             ),
           ],
         ),
@@ -82,6 +78,40 @@ class StevessrCanvas extends StatelessWidget {
     );
 
     return RepaintBoundary(key: repaintBoundaryKey, child: content);
+  }
+
+  Widget _buildCharacter(StevessrRenderParams p) {
+    if (!StevessrCharacterAssets.usesDelta(p.character, p.expression)) {
+      return Image.asset(
+        _expressionAsset,
+        fit: BoxFit.fill,
+        filterQuality: FilterQuality.high,
+        gaplessPlayback: true,
+        errorBuilder: (context, error, stackTrace) => const SizedBox(),
+      );
+    }
+    return FutureBuilder<Uint8List>(
+      key: ValueKey('${p.character.name}/${p.expression.key}'),
+      future: StevessrCharacterAssets.load(p.character, p.expression),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const SizedBox();
+        final bytes = snapshot.data;
+        if (bytes == null) {
+          return Image.asset(
+            _expressionAsset,
+            fit: BoxFit.fill,
+            filterQuality: FilterQuality.high,
+            errorBuilder: (context, error, stackTrace) => const SizedBox(),
+          );
+        }
+        return Image.memory(
+          bytes,
+          fit: BoxFit.fill,
+          filterQuality: FilterQuality.high,
+          gaplessPlayback: true,
+        );
+      },
+    );
   }
 
   Widget _buildBubbleImage(

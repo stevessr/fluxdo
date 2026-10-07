@@ -42,6 +42,11 @@ Future<void> main(List<String> args) async {
 Future<void> _prepareApp({required bool includeCerts}) async {
   await ensurePubGet();
   await _generateL10n();
+  await runOrExit(
+    title: '生成角色主图和表情差分',
+    executable: Platform.resolvedExecutable,
+    arguments: const ['tool/gen_avatar_deltas.dart'],
+  );
   if (includeCerts) {
     await _ensureProxyCertResources();
   }
