@@ -40,7 +40,7 @@ void _generateLlm(Map<String, List<String>> names, bool check) {
     }
   }
   final inputHash = sha256
-      .convert(utf8.encode('avatar-delta-v2:$fingerprint'))
+      .convert(utf8.encode('avatar-delta-v3:$fingerprint'))
       .toString();
   final manifestFile = File('$outputRoot/manifest.json');
   // 日常构建跳过昂贵的重编码；输入/输出散列任何一处变化都会重新生成。
@@ -96,9 +96,13 @@ void _generateLlm(Map<String, List<String>> names, bool check) {
         width: right - left + 1,
         height: bottom - top + 1,
       );
-      const extension = 'png';
+      // 同时尝试两种无损编码，始终选择实际更小的一份。
+      final png = img.encodePng(patch, level: 9);
+      final webp = img.encodeWebP(patch, exact: false);
+      final useWebp = webp.length < png.length;
+      final extension = useWebp ? 'webp' : 'png';
       final path = '${name}_$expression.$extension';
-      outputs[path] = img.encodePng(patch, level: 9);
+      outputs[path] = useWebp ? webp : png;
       variants[expression] = {
         'asset': path,
         'x': left,

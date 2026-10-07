@@ -1,0 +1,232 @@
+{
+  "assets/images/avater/blue_archive/blue_archive_01.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "0fc735bfe9c4dfe7e3f77a0f49546d20947a1a6cd62f9afe1fdfbb9932ae2008"
+  },
+  "assets/images/avater/blue_archive/blue_archive_02.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "5a9e03de516601c797f926448af0fe6a702b2a6f3479ddb8287271f18983117f"
+  },
+  "assets/images/avater/blue_archive/blue_archive_03.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "5cd3f40e6ecad7863d30e72cd12cb5fbbcdcca09fbdd34bcb0eb89ac120d20ce"
+  },
+  "assets/images/avater/blue_archive/blue_archive_04.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "e6b832289daaad1f82f0253fb4a47742b78220dc53355f4adc13f2cb43daa626"
+  },
+  "assets/images/avater/blue_archive/blue_archive_05.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "1067ae42ef69e6c3c785437580ca1e59208e1ca5be292dbf9f380ac5633e00d8"
+  },
+  "assets/images/avater/blue_archive/blue_archive_06.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "725f65d0d801f7a359b6403716fae29d315c10fcc68a76e032f3574f35b8a865"
+  },
+  "assets/images/avater/touhou/akyuu.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "0ca3139b1fa18a713ad8a80826db12bccf94c216981e426763d568681313e6a5"
+  },
+  "assets/images/avater/touhou/aya.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "a7a48f8df118c2336082ac37e034afb8e7a74d787edffc4aaf88cd111dfdaa7f"
+  },
+  "assets/images/avater/touhou/cirno.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "2ccc127a816711e982c4ed6cd4760822e3d78eca7b250749d20f04f59e1e8657"
+  },
+  "assets/images/avater/touhou/einin.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "7f2e34819b9f318bf88878439ac9705002b8f76e217447b934721f1a52b90d65"
+  },
+  "assets/images/avater/touhou/flandre.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "a9f7a3a3e052c407c392e724a4f416e23e820d4dcf2a71deaa586873831e1098"
+  },
+  "assets/images/avater/touhou/kaguya.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "473fad6d80720094b1a58ef1fdb2df2b300cfb7f77c7356063f7e5c290017025"
+  },
+  "assets/images/avater/touhou/keine.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "462820d8b06d280ae01e556990e72057af5ecde13f9807a5371093dc78cca3fa"
+  },
+  "assets/images/avater/touhou/koishi.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "1c9fd3122e498c2110f5dabdc972d5b32c0a19b9e34a165da7201fe9b3247e7f"
+  },
+  "assets/images/avater/touhou/kokoro.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "622d16cac798422b3f451e33faf40b5cdc0319429c331c4c9d3951b4bb39ff7b"
+  },
+  "assets/images/avater/touhou/maribel.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "acaf0c01fd3a25fe6f76db87ffac553b421ee31f07ee4e98ad04099d24f5e7c0"
+  },
+  "assets/images/avater/touhou/marisa.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "e56ef12c47aad4bfc7251a0dc7d52c5ecde4c6261f10d3493c8b3b2c9e4d269f"
+  },
+  "assets/images/avater/touhou/okuu.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "0a946545a768a7aa0c66d98b7ad37538abe6c8b1934f27c2bd670b44a9c93645"
+  },
+  "assets/images/avater/touhou/okuu_rin.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "e4453acc2b5e596c4c2e4b3f4b556243eac68237357243ddad3eb0b7470096fc"
+  },
+  "assets/images/avater/touhou/patchouli.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "b6d1f076d653e92406126562c9cb71bb0f2fa008fda6017b4006107bdc8df9eb"
+  },
+  "assets/images/avater/touhou/reimu.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "84400e343e4f1d7c2880af91b42abacbf22ce77b9028149dea7f63bc77fc5d30"
+  },
+  "assets/images/avater/touhou/remilia.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "688e9f541d19199e2d3d291466603ce988b89291effa6315f8cd66f514c67f21"
+  },
+  "assets/images/avater/touhou/renko.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "13a9d3e840831be8071d295153e7aedf478c1f83073850bc6eca2a2bcc79a594"
+  },
+  "assets/images/avater/touhou/sakuya.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "c308ded5a4605cd0c69665a86fc12d50d25143960c3694bdf14bae7e236f789b"
+  },
+  "assets/images/avater/touhou/sanae.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "c34f2c988b7f8f3945e0070ded1d98edd94b3eed5599c4dbe0a140ad56d6867b"
+  },
+  "assets/images/avater/touhou/satori.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "7df34d03d8baefe6d7250bc90b17ce467aa74f10d950e08f0bc2e83dcb65741d"
+  },
+  "assets/images/avater/touhou/suika.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "dda3f312fb1c8faabeb2884b35ce3483dfdcee8929bd433bad911ca2fb5e41ef"
+  },
+  "assets/images/avater/touhou/sumireko.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "2ae56acf67b5fef6ead58d6aaeb688f6bcbdbea60511f32c638706889cd4aa57"
+  },
+  "assets/images/avater/touhou/suwako.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "c95cdf96266807bbea316dce222fa24170ba56b42f86acc2c8774f9a45e4d72d"
+  },
+  "assets/images/avater/touhou/tenshi.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "92dd253e2ffaf4cc64c7049ce3ecef53af3c922e5a41fb6c73fd9861e693254d"
+  },
+  "assets/images/avater/touhou/youmu.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "6de720eefa7890f89e13d9faa6fb9d0d74a7ee4312fad569000003a3be7ec3c2"
+  },
+  "assets/images/avater/touhou/yukari.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "af0b4aa2f2568c2bd66c2e43ab061094ff6fd1ff4690087868a98d9ad1aef2d4"
+  },
+  "assets/images/avater/touhou/yuyuko.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "91045560d6b58722e14ec153ec79570ac3defcc3bba4a253cbedc3dd4fe307f7"
+  },
+  "assets/images/avater/witch_judgment/二阶堂希罗.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "98522270f3fc6ed3decf0224c7fc4bba2d05f711b22e68a76c97525fc04ed4a8"
+  },
+  "assets/images/avater/witch_judgment/佐伯米莉亚.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "aeda9e1b8dfbdc5f74003bd2962735868b6e91539f707ad78b37a3203a4ea357"
+  },
+  "assets/images/avater/witch_judgment/冰上梅露露.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "564847fe66508c8a3545dd5881521b7212715ae6ffcc7ac6ec34caf302a979a0"
+  },
+  "assets/images/avater/witch_judgment/城崎诺亚.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "8dbdfdfe3e3d68be6fc1be441fa23da28a8c80b902a4846b60119572b63b970d"
+  },
+  "assets/images/avater/witch_judgment/夏目安安.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "b771cdefc909d4dc8c3792bd87ee6c5307cc1fe37274105f49858ed0a3f76e9a"
+  },
+  "assets/images/avater/witch_judgment/宝生玛格.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "714e32a1252f2e373a7e725615d62b48572fc976f3b46074fe9945c746591288"
+  },
+  "assets/images/avater/witch_judgment/樱羽艾玛.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "c00f7cd5e8ea5a84f424dfbd7765a73e81a8f8588b478d9e5f97f4d2a7061712"
+  },
+  "assets/images/avater/witch_judgment/橘雪莉.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "624da9b7066135a44540924da5bda140b1f5251bbf59c94e14005407744489ed"
+  },
+  "assets/images/avater/witch_judgment/泽渡可可.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "34eaa5821a832d361e6e5a57375b71122ce04343398686c0cc0d1759e1f72e45"
+  },
+  "assets/images/avater/witch_judgment/紫藤亚里沙.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "993f83dd05888356ec6e5e88f6e18dedb3372d5de2d236abd60298a62c3beab8"
+  },
+  "assets/images/avater/witch_judgment/莲见蕾雅.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "2e7945ac9419cdc80ba8f7c7a939d4d45fddf24aee9ff89d0b6484fa5cebe5a6"
+  },
+  "assets/images/avater/witch_judgment/远野汉娜.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "677fbcfe8e2cefe3bba0eaeea1605105783e5f17d97f16db917f72d8348a20f4"
+  },
+  "assets/images/avater/witch_judgment/黑部奈叶香.webp": {
+    "width": 1254,
+    "height": 1254,
+    "rgbaHash": "0815939ba925303b5238d756d91f5f4fa72b423c2fe83eaba7a7fc6a3a0420b4"
+  }
+}

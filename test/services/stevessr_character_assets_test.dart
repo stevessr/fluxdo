@@ -127,7 +127,7 @@ void main() {
       assets.where(
         (path) =>
             path.startsWith('assets/images/avater/llm/') &&
-            path.endsWith('.webp'),
+            (path.endsWith('/claude.webp') || path.endsWith('/deepseek.webp')),
       ),
       hasLength(2),
     );
