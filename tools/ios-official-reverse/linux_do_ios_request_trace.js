@@ -70,17 +70,47 @@ function dictionaryToObject(value) {
   return result;
 }
 
-function parseUrl(url) {
+function decodeComponent(value) {
   try {
-    const parsed = new URL(url);
-    const query = {};
-    for (const [key, value] of parsed.searchParams.entries()) {
-      query[key] = redact(key, value);
-    }
-    return {host: parsed.hostname, path: parsed.pathname, query};
+    return decodeURIComponent(String(value || '').replace(/\\+/g, ' '));
   } catch (_) {
-    return {host: '', path: url || '', query: {}};
+    return String(value || '');
   }
+}
+
+function parsePairs(text) {
+  const pairs = [];
+  for (const part of String(text || '').split('&')) {
+    if (!part) continue;
+    const separator = part.indexOf('=');
+    const rawKey = separator >= 0 ? part.slice(0, separator) : part;
+    const rawValue = separator >= 0 ? part.slice(separator + 1) : '';
+    pairs.push([decodeComponent(rawKey), decodeComponent(rawValue)]);
+  }
+  return pairs;
+}
+
+function parseUrl(url) {
+  const text = String(url || '');
+  const match = text.match(
+    /^([a-z][a-z0-9+.-]*):\\/\\/([^/?#]+)([^?#]*)(?:\\?([^#]*))?/i,
+  );
+  if (!match) return {host: '', path: text, query: {}, safeUrl: text};
+
+  const authority = match[2] || '';
+  const host = authority.replace(/:\\d+$/, '');
+  const path = match[3] || '/';
+  const query = {};
+  for (const [key, value] of parsePairs(match[4] || '')) {
+    query[key] = redact(key, value);
+  }
+
+  return {
+    host,
+    path,
+    query,
+    safeUrl: `${match[1]}://${authority}${path}`,
+  };
 }
 
 function collectJsonPaths(value, path, output) {
@@ -122,23 +152,20 @@ function analyzeBody(text, contentType) {
   }
 
   if (/x-www-form-urlencoded/i.test(contentType || '') || body.includes('=')) {
-    try {
-      const params = new URLSearchParams(body);
-      const preview = [];
-      for (const [key, value] of params.entries()) {
-        if (INTERESTING_RE.test(key)) {
-          interesting.push({path: key, value: redact(key, value)});
-        }
-        preview.push(
-          `${encodeURIComponent(key)}=${encodeURIComponent(redact(key, value))}`,
-        );
+    const preview = [];
+    for (const [key, value] of parsePairs(body)) {
+      if (INTERESTING_RE.test(key)) {
+        interesting.push({path: key, value: redact(key, value)});
       }
-      return {
-        kind: 'form',
-        interesting,
-        preview: preview.join('&').slice(0, MAX_BODY),
-      };
-    } catch (_) {}
+      preview.push(
+        `${encodeURIComponent(key)}=${encodeURIComponent(redact(key, value))}`,
+      );
+    }
+    return {
+      kind: 'form',
+      interesting,
+      preview: preview.join('&').slice(0, MAX_BODY),
+    };
   }
 
   if (INTERESTING_RE.test(body)) {
@@ -158,7 +185,7 @@ function printInteresting(prefix, object) {
   }
 }
 
-function inspectRequest(value, source) {
+function inspectRequest(value, source, explicitBodyValue) {
   if (!value) return;
   let request;
   try {
@@ -186,10 +213,12 @@ function inspectRequest(value, source) {
     headers = dictionaryToObject(request.allHTTPHeaderFields());
   } catch (_) {}
 
-  let body = null;
-  try {
-    body = nsDataToUtf8(request.HTTPBody());
-  } catch (_) {}
+  let body = nsDataToUtf8(explicitBodyValue);
+  if (body == null) {
+    try {
+      body = nsDataToUtf8(request.HTTPBody());
+    } catch (_) {}
+  }
 
   const dedupe = `${method} ${url}\n${body || ''}`.slice(0, 4096);
   if (seen.has(dedupe)) return;
@@ -201,7 +230,7 @@ function inspectRequest(value, source) {
 
   console.log('\n============================================================');
   console.log(`[linuxdo-ios-trace] ${source}: ${method} ${parsed.path}`);
-  console.log(`URL: ${url}`);
+  console.log(`URL: ${parsed.safeUrl}`);
   printInteresting('query', parsed.query);
   printInteresting('header', headers);
 
@@ -243,17 +272,25 @@ function hook(className, selector, callback) {
   return true;
 }
 
-const sessionSelectors = [
+const requestSelectors = [
   '- dataTaskWithRequest:',
   '- dataTaskWithRequest:completionHandler:',
-  '- uploadTaskWithRequest:fromData:',
-  '- uploadTaskWithRequest:fromData:completionHandler:',
   '- uploadTaskWithStreamedRequest:',
 ];
 
-for (const selector of sessionSelectors) {
+for (const selector of requestSelectors) {
   hook('NSURLSession', selector, args =>
     inspectRequest(args[2], `NSURLSession ${selector}`));
+}
+
+const uploadDataSelectors = [
+  '- uploadTaskWithRequest:fromData:',
+  '- uploadTaskWithRequest:fromData:completionHandler:',
+];
+
+for (const selector of uploadDataSelectors) {
+  hook('NSURLSession', selector, args =>
+    inspectRequest(args[2], `NSURLSession ${selector}`, args[3]));
 }
 
 for (const className of ['NSURLSessionTask', '__NSCFURLSessionTask']) {
