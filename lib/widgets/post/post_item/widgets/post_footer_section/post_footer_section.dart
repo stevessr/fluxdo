@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'dart:async';
+import 'dart:convert';
 
 import '../../../../../l10n/s.dart';
 import '../../../../../models/topic.dart';
