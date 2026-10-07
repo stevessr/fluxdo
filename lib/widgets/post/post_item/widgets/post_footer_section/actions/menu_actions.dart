@@ -28,6 +28,73 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
     );
   }
 
+
+  void _showPostJsonViewer(BuildContext context) {
+    final zh =
+        Localizations.localeOf(context).languageCode.toLowerCase() == 'zh';
+    final jsonText = const JsonEncoder.withIndent('  ').convert(
+      widget.post.rawJson,
+    );
+
+    AppBottomSheet.showDraggable<void>(
+      context: context,
+      title: zh ? '帖子 JSON' : 'Post JSON',
+      showCloseButton: true,
+      showTitleDivider: true,
+      initialSize: 0.78,
+      minSize: 0.45,
+      maxSize: 0.95,
+      actions: [
+        IconButton(
+          tooltip: zh ? '复制 JSON' : 'Copy JSON',
+          icon: const Icon(Icons.copy_all_rounded),
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: jsonText));
+            if (!mounted) return;
+            ToastService.showSuccess(zh ? '帖子 JSON 已复制' : 'Post JSON copied');
+          },
+        ),
+      ],
+      bodyBuilder: (sheetContext, scrollController) {
+        final sheetTheme = Theme.of(sheetContext);
+        return ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: [
+            Text(
+              zh
+                  ? '${widget.post.rawJson.length} 个顶层键值 · 服务端原始响应'
+                  : '${widget.post.rawJson.length} top-level keys · raw server response',
+              style: sheetTheme.textTheme.labelMedium?.copyWith(
+                color: sheetTheme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: sheetTheme.colorScheme.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: sheetTheme.colorScheme.outlineVariant,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: SelectableText(
+                  jsonText,
+                  style: sheetTheme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showDeleteConfirmDialog(BuildContext context, ThemeData theme) {
     showAppDialog(
       context: context,
@@ -239,6 +306,22 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
                     );
                   },
                 ),
+              ListTile(
+                leading: Icon(
+                  Icons.data_object_rounded,
+                  color: theme.colorScheme.onSurface,
+                ),
+                title: Text(zh ? '查看帖子 JSON' : 'View post JSON'),
+                subtitle: Text(
+                  zh
+                      ? '${widget.post.rawJson.length} 个顶层键值'
+                      : '${widget.post.rawJson.length} top-level keys',
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showPostJsonViewer(context);
+                },
+              ),
               ListTile(
                 leading: Icon(
                   Symbols.share_rounded,
