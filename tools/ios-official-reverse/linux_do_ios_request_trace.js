@@ -71,10 +71,11 @@ function dictionaryToObject(value) {
 }
 
 function decodeComponent(value) {
+  const text = String(value || '').split('+').join(' ');
   try {
-    return decodeURIComponent(String(value || '').replace(/\\+/g, ' '));
+    return decodeURIComponent(text);
   } catch (_) {
-    return String(value || '');
+    return text;
   }
 }
 
@@ -92,16 +93,38 @@ function parsePairs(text) {
 
 function parseUrl(url) {
   const text = String(url || '');
-  const match = text.match(
-    /^([a-z][a-z0-9+.-]*):\\/\\/([^/?#]+)([^?#]*)(?:\\?([^#]*))?/i,
-  );
-  if (!match) return {host: '', path: text, query: {}, safeUrl: text};
+  const schemeEnd = text.indexOf('://');
+  if (schemeEnd <= 0) {
+    return {host: '', path: text, query: {}, safeUrl: text};
+  }
 
-  const authority = match[2] || '';
-  const host = authority.replace(/:\\d+$/, '');
-  const path = match[3] || '/';
+  const scheme = text.slice(0, schemeEnd);
+  const rest = text.slice(schemeEnd + 3);
+  const fragmentIndex = rest.indexOf('#');
+  const withoutFragment =
+    fragmentIndex >= 0 ? rest.slice(0, fragmentIndex) : rest;
+  const queryIndex = withoutFragment.indexOf('?');
+  const authorityAndPath =
+    queryIndex >= 0 ? withoutFragment.slice(0, queryIndex) : withoutFragment;
+  const queryText =
+    queryIndex >= 0 ? withoutFragment.slice(queryIndex + 1) : '';
+
+  const slashIndex = authorityAndPath.indexOf('/');
+  const authority =
+    slashIndex >= 0 ? authorityAndPath.slice(0, slashIndex) : authorityAndPath;
+  const path = slashIndex >= 0 ? authorityAndPath.slice(slashIndex) : '/';
+
+  let host = authority;
+  if (host.startsWith('[')) {
+    const endBracket = host.indexOf(']');
+    if (endBracket >= 0) host = host.slice(1, endBracket);
+  } else {
+    const colon = host.lastIndexOf(':');
+    if (colon >= 0) host = host.slice(0, colon);
+  }
+
   const query = {};
-  for (const [key, value] of parsePairs(match[4] || '')) {
+  for (const [key, value] of parsePairs(queryText)) {
     query[key] = redact(key, value);
   }
 
@@ -109,7 +132,7 @@ function parseUrl(url) {
     host,
     path,
     query,
-    safeUrl: `${match[1]}://${authority}${path}`,
+    safeUrl: `${scheme}://${authority}${path}`,
   };
 }
 
