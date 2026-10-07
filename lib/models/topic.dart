@@ -759,6 +759,12 @@ class PostNotice {
 }
 
 class Post {
+  /// 服务端返回的原始 Post JSON。保留未建模/插件扩展字段，供帖子键值查看器使用。
+  ///
+  /// 这里保存的是解析时的顶层只读快照；后续本地 copyWith 状态更新不会篡改
+  /// 这份服务端原始数据，便于排查真实接口字段。
+  final Map<String, dynamic> rawJson;
+
   final int id;
   final String? name;
   final String username;
@@ -923,6 +929,7 @@ class Post {
   final String? editReason;
 
   Post({
+    this.rawJson = const <String, dynamic>{},
     required this.id,
     this.name,
     required this.username,
@@ -1028,6 +1035,7 @@ class Post {
     }
 
     return Post(
+      rawJson: Map<String, dynamic>.unmodifiable(json),
       id: json['id'] as int,
       name: json['name'] as String?,
       username: json['username'] as String? ?? 'Unknown',
@@ -1282,6 +1290,7 @@ class Post {
 
   /// 复制并修改部分字段
   Post copyWith({
+    Map<String, dynamic>? rawJson,
     int? id,
     String? name,
     String? username,
@@ -1378,6 +1387,7 @@ class Post {
     bool clearEditReason = false,
   }) {
     return Post(
+      rawJson: rawJson ?? this.rawJson,
       id: id ?? this.id,
       name: name ?? this.name,
       username: username ?? this.username,
