@@ -43,7 +43,13 @@ import '../../../../../utils/dialog_utils.dart';
 import '../../../../common/app_bottom_sheet.dart';
 import '../../../../ai/ai_translation_sheet.dart';
 
-/// Shared across visible posts; includes custom flags registered by the site.
+part 'actions/bookmark_actions.dart';
+part 'actions/manage_actions.dart';
+part 'actions/menu_actions.dart';
+part 'actions/reaction_actions.dart';
+part 'actions/reply_actions.dart';
+
+/// 全部帖子共用站点举报类型，兼容自定义举报选项。
 final postFlagTypesProvider = FutureProvider<List<FlagType>>((ref) async {
   ref.watch(currentUserProvider.select((user) => user.value?.username));
   final rawTypes = await PreloadedDataService().getPostActionTypes();
@@ -54,11 +60,6 @@ final postFlagTypesProvider = FutureProvider<List<FlagType>>((ref) async {
       .toList(growable: false);
 });
 
-part 'actions/bookmark_actions.dart';
-part 'actions/manage_actions.dart';
-part 'actions/menu_actions.dart';
-part 'actions/reaction_actions.dart';
-part 'actions/reply_actions.dart';
 
 class PostFooterSection extends ConsumerStatefulWidget {
   final Post post;
@@ -188,7 +189,7 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
     for (final type in _availableFlagTypes) {
       if (type.id == id) return type.name;
     }
-    // Retain the reported state even before the site's types finish loading.
+    // 举报类型尚未加载时仍保持已举报状态，禁止再次举报。
     return S.current.topic_flagOther;
   }
 
