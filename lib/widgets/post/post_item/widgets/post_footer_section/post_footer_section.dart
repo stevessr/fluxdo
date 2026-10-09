@@ -52,14 +52,20 @@ part 'actions/reply_actions.dart';
 /// 全部帖子共用站点举报类型，兼容自定义举报选项。
 final postFlagTypesProvider = FutureProvider<List<FlagType>>((ref) async {
   ref.watch(currentUserProvider.select((user) => user.value?.username));
-  final rawTypes = await PreloadedDataService().getPostActionTypes();
-  if (rawTypes == null || rawTypes.isEmpty) return FlagType.defaultTypes;
+  List<Map<String, dynamic>>? rawTypes;
+  try {
+    rawTypes = await PreloadedDataService().getPostActionTypes();
+  } catch (_) {
+    // 预加载失败时改从 Discourse 接口取得举报类型。
+  }
+  if (rawTypes == null || rawTypes.isEmpty) {
+    return ref.read(discourseServiceProvider).getFlagTypes();
+  }
   return rawTypes
       .map(FlagType.fromJson)
       .where((type) => type.isFlag && type.appliesToPost)
       .toList(growable: false);
 });
-
 
 class PostFooterSection extends ConsumerStatefulWidget {
   final Post post;
@@ -183,11 +189,15 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
 
   String? get _reportedFlagTypeName {
     final recent = _recentReportedFlagType;
-    if (recent != null) return recent.name;
+    if (recent != null) {
+      return recent.name.isNotEmpty ? recent.name : S.current.topic_flagOther;
+    }
     final id = _reportedFlagTypeId;
     if (id == null) return null;
     for (final type in _availableFlagTypes) {
-      if (type.id == id) return type.name;
+      if (type.id == id) {
+        return type.name.isNotEmpty ? type.name : S.current.topic_flagOther;
+      }
     }
     // 举报类型尚未加载时仍保持已举报状态，禁止再次举报。
     return S.current.topic_flagOther;
