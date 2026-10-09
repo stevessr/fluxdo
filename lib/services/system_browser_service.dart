@@ -191,7 +191,7 @@ class SystemBrowserService {
       ];
       for (final entry in paths) {
         for (final root in programFiles) {
-          final file = root + r'\' + entry.relative;
+          final file = root + '\\' + entry.relative;
           if (!await File(file).exists()) continue;
           browsers.add(LoginBrowser(
             id: 'win:' + file,
@@ -226,12 +226,15 @@ class SystemBrowserService {
         switch (browser.id) {
           case 'ios:chrome':
             target = authorizationUrl.replace(scheme: 'googlechromes');
+            break;
           case 'ios:firefox':
             target = Uri.parse('firefox://open-url').replace(
               queryParameters: {'url': authorizationUrl.toString()},
             );
+            break;
           case 'ios:edge':
             target = authorizationUrl.replace(scheme: 'microsoft-edge-https');
+            break;
           default:
             return false;
         }

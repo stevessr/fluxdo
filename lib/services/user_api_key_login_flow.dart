@@ -13,6 +13,7 @@ import 'network/cookie/cookie_jar_service.dart';
 import 'network/exceptions/api_exception.dart';
 import 'toast_service.dart';
 import 'user_api_key_service.dart';
+import 'system_browser_service.dart';
 
 import 'package:m3e_ui/m3e_ui.dart';
 
@@ -60,15 +61,15 @@ class UserApiKeyLoginFlow {
 
   /// 构建授权 URL 并拉起系统浏览器。返回是否成功拉起。
   /// 首次调用会懒生成 RSA 密钥对(isolate,可能耗时数秒)。
-  Future<bool> start() async {
+  Future<bool> start({LoginBrowser? browser}) async {
     final authorizeUrl = await UserApiKeyService().buildAuthorizeUrl();
     try {
-      // Android 用 Custom Tabs(inAppBrowserView),不用 externalApplication:
-      // Chrome 对已建立 App Links 关联的域名(fluxdo 已 autoVerify linux.do)会把
-      // externalApplication 打开的链接直接弹回本 app,表现为"浏览器一闪就跳回"
-      // (仅 Chrome 有此行为,换其他浏览器正常)。Custom Tabs 在 app 上下文内打开,
-      // 不触发该回弹,且共享 Chrome cookie 复用浏览器登录态(OAuth 标准做法)。
-      // 其他平台 externalApplication 已验证正常,保持不变。
+      // 指定安装的浏览器可以复用对应 profile 的 OAuth 提供商 cookie。
+      // 指定 Android 包名也可绕开 linux.do App Links 导致的回弹。
+      if (browser != null) {
+        return await SystemBrowserService.instance.open(browser, authorizeUrl);
+      }
+      // 兼容旧入口调用。新登录页面总是先让用户手动选择。
       final mode = Platform.isAndroid
           ? LaunchMode.inAppBrowserView
           : LaunchMode.externalApplication;

@@ -193,6 +193,18 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_URL", "URL is null", null)
                     }
                 }
+                "listLoginBrowsers" -> {
+                    result.success(listLoginBrowsers())
+                }
+                "launchLoginBrowser" -> {
+                    val url = call.argument<String>("url")
+                    val browserId = call.argument<String>("id")
+                    if (url == null || browserId == null) {
+                        result.error("INVALID_ARGS", "url and browser id required", null)
+                    } else {
+                        result.success(launchLoginBrowser(browserId, url))
+                    }
+                }
                 "resolveAppLink" -> {
                     val url = call.argument<String>("url")
                     if (url != null) {
@@ -1127,6 +1139,75 @@ class MainActivity : FlutterActivity() {
             e.printStackTrace()
         }
         return false
+    }
+
+    /**
+     * Only generic HTTPS handlers are eligible; never offer FluxDO itself,
+     * another app's deep-link target, or the Android resolver as a browser.
+     */
+    private fun listLoginBrowsers(): List<Map<String, String>> {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com/"))
+        intent.addCategory(Intent.CATEGORY_BROWSABLE)
+        val matches: List<ResolveInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.queryIntentActivities(
+                intent, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        }
+        val knownPackages = setOf(
+            "com.android.chrome", "com.chrome.beta", "com.chrome.dev",
+            "org.chromium.chrome", "org.chromium.chrome.stable",
+            "org.mozilla.firefox", "org.mozilla.firefox_beta", "org.mozilla.fenix",
+            "org.mozilla.focus", "org.mozilla.firefox_nightly",
+            "org.mozilla.fennec_fdroid", "com.brave.browser",
+            "com.microsoft.emmx", "com.sec.android.app.sbrowser",
+            "com.vivaldi.browser", "com.opera.browser", "com.opera.mini.native",
+            "com.duckduckgo.mobile.android", "com.kiwibrowser.browser",
+            "org.bromite.bromite", "org.cromite.cromite",
+            "org.torproject.torbrowser"
+        )
+        return matches.asSequence()
+            .filter { it.activityInfo.packageName != packageName }
+            .filter { it.activityInfo.packageName != "android" }
+            .filter {
+                it.handleAllWebDataURI ||
+                it.activityInfo.packageName in knownPackages
+            }
+            .distinctBy { it.activityInfo.packageName }
+            .map {
+                mapOf(
+                    "id" to it.activityInfo.packageName,
+                    "name" to it.loadLabel(packageManager).toString()
+                )
+            }
+            .sortedBy { it["name"] }
+            .toList()
+    }
+
+    private fun launchLoginBrowser(browserPackage: String, rawUrl: String): Boolean {
+        val uri = try { Uri.parse(rawUrl) } catch (_: Exception) { return false }
+        if (uri.scheme != "https" || uri.host != "linux.do" ||
+            uri.path != "/user-api-key/new") return false
+        // Re-check the selection to prevent package spoofing and unintentional
+        // disclosure of the one-time authorization request to other apps.
+        if (listLoginBrowsers().none { it["id"] == browserPackage }) return false
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                setPackage(browserPackage)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "Selected browser is no longer installed", e)
+            false
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Selected browser launch was denied", e)
+            false
+        }
     }
 
     // ======================== 外部浏览器 ========================

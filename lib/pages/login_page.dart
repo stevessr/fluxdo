@@ -9,6 +9,7 @@ import '../services/discourse/discourse_service.dart';
 import '../services/preloaded_data_service.dart';
 import '../services/toast_service.dart';
 import '../services/user_api_key_login_flow.dart';
+import '../services/system_browser_service.dart';
 import '../utils/blur_config.dart';
 import '../widgets/auth/webview_login_dialog.dart';
 import '../widgets/auth/login_form.dart';
@@ -105,13 +106,72 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _loginWithBrowserAuth() async {
     if (_browserAuthLaunching) return;
     setState(() => _browserAuthLaunching = true);
-    UserApiKeyLoginFlow.instance.onFlowFinished = _onBrowserAuthFinished;
     try {
-      // 首次会懒生成 RSA 密钥对(isolate),可能耗时数秒
-      final launched = await UserApiKeyLoginFlow.instance.start();
-      if (!launched && mounted) {
-        ToastService.showError('无法打开浏览器,请重试');
+      final browsers = await SystemBrowserService.instance.availableBrowsers();
+      if (!mounted) return;
+      if (browsers.isEmpty) {
+        ToastService.showError('没有找到可用于登录的浏览器');
+        return;
       }
+
+      // 选择必须发生在生成 nonce 和 RSA 授权 URL 之前，避免取消时
+      // 留下一个待处理的授权请求，也避免悄悄使用系统默认浏览器。
+      final selected = await showModalBottomSheet<LoginBrowser>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (sheetContext) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '选择浏览器',
+                  style: Theme.of(sheetContext).textTheme.titleLarge,
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 10, 20, 12),
+                  child: Text(
+                    '选择已登录 Google / GitHub 等账号的浏览器，'
+                    '在 LINUX DO 完成授权后将自动返回 FluxDO。',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: browsers.length,
+                    itemBuilder: (context, index) {
+                      final browser = browsers[index];
+                      return ListTile(
+                        leading: const Icon(Symbols.open_in_browser_rounded),
+                        title: Text(browser.name),
+                        onTap: () => Navigator.of(context).pop(browser),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (selected == null || !mounted) return;
+
+      UserApiKeyLoginFlow.instance.onFlowFinished = _onBrowserAuthFinished;
+      final launched = await UserApiKeyLoginFlow.instance.start(
+        browser: selected,
+      );
+      if (!launched && mounted) {
+        ToastService.showError('无法使用所选浏览器打开授权页面');
+      }
+    } catch (e) {
+      debugPrint('[LoginPage] 启动系统浏览器授权失败: $e');
+      if (mounted) ToastService.showError('浏览器授权启动失败，请重试');
     } finally {
       if (mounted) setState(() => _browserAuthLaunching = false);
     }
@@ -466,7 +526,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   child: LoadingSpinner(size: 20),
                 )
               : const Icon(Symbols.verified_user_rounded, size: 20),
-          label: const Text('浏览器授权登录'),
+          label: const Text('使用系统浏览器登录'),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),
             shape: RoundedRectangleBorder(

@@ -101,7 +101,12 @@ class DeepLinkService {
     _lastHandledUri = uri;
     _lastHandledTime = now;
 
-    debugPrint('DeepLinkService: 收到链接 $url');
+    // 回调参数含加密凭证和一次性 OTP，不应输出完整 URL。
+    if (UserApiKeyService().isAuthRedirect(uri)) {
+      debugPrint('DeepLinkService: 收到浏览器授权回调');
+    } else {
+      debugPrint('DeepLinkService: 收到链接 $url');
+    }
 
     // 浏览器授权登录回调:discourse://auth_redirect?payload=...
     // (discourse:// 是站点 auth_redirect 默认白名单 scheme,App 已注册)
