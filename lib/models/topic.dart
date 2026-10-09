@@ -793,11 +793,11 @@ class Post {
   final bool read; // 是否已读
   final List<dynamic>? actionsSummary;
 
-  /// Discourse marks the current user's actions via actions_summary[].acted.
-  /// Include site-provided flags to support custom moderation reasons.
+  /// Discourse 在 actions_summary[].acted 标记当前用户已执行的操作。
+  /// 联合站点提供的举报类型识别自定义举报，避免误认点赞等操作。
   int? actedFlagTypeId(Iterable<FlagType> flagTypes) {
     final flagIds = <int>{
-      3, 4, 6, 7, 8, // Core Discourse flag IDs, including notify_user.
+      3, 4, 6, 7, 8, // Discourse 内置举报类型，包含 notify_user。
       ...flagTypes.where((type) => type.isFlag).map((type) => type.id),
     };
     for (final action in actionsSummary ?? const <dynamic>[]) {
@@ -808,8 +808,7 @@ class Post {
     return null;
   }
 
-  /// Update the acknowledged flag locally, keeping all other action entries
-  /// and the unmodified raw JSON snapshot from the server.
+  /// 成功举报后即时更新状态，保留其它操作和未修改的服务端 JSON 快照。
   Post withReportedFlag(int flagTypeId) {
     final actions = List<dynamic>.from(actionsSummary ?? const <dynamic>[]);
     final index = actions.indexWhere(
