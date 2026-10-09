@@ -222,7 +222,7 @@ class SystemBrowserService {
             false;
       }
       if (Platform.isIOS) {
-        Uri? target;
+        late final Uri target;
         switch (browser.id) {
           case 'ios:chrome':
             target = authorizationUrl.replace(scheme: 'googlechromes');
