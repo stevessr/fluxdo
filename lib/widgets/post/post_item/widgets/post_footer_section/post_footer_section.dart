@@ -59,7 +59,8 @@ final postFlagTypesProvider = FutureProvider<List<FlagType>>((ref) async {
     // 预加载失败时改从 Discourse 接口取得举报类型。
   }
   if (rawTypes == null || rawTypes.isEmpty) {
-    return ref.read(discourseServiceProvider).getFlagTypes();
+    final types = await ref.read(discourseServiceProvider).getFlagTypes();
+    return types.where((type) => type.appliesToPost).toList(growable: false);
   }
   return rawTypes
       .map(FlagType.fromJson)
