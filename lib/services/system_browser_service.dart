@@ -176,11 +176,11 @@ class SystemBrowserService {
       }
     } else if (Platform.isWindows) {
       // Browser binaries are normally not in PATH on Windows.
-      final programFiles = <String>{
-        if (Platform.environment['PROGRAMFILES'] case final String path) path,
-        if (Platform.environment['PROGRAMFILES(X86)'] case final String path) path,
-        if (Platform.environment['LOCALAPPDATA'] case final String path) path,
-      };
+      final programFiles = [
+        Platform.environment['PROGRAMFILES'],
+        Platform.environment['PROGRAMFILES(X86)'],
+        Platform.environment['LOCALAPPDATA'],
+      ].whereType<String>().toSet();
       const paths = [
         (name: 'Google Chrome', relative: r'Google\Chrome\Application\chrome.exe'),
         (name: 'Firefox', relative: r'Mozilla Firefox\firefox.exe'),
