@@ -74,6 +74,11 @@ extension PostUpdateMethods on TopicDetailNotifier {
     }
   }
 
+  /// Apply a successful flag immediately across the current topic's post list.
+  void applyLocalPostFlagged(int postId, int flagTypeId) {
+    _updatePostById(postId, (post) => post.withReportedFlag(flagTypeId));
+  }
+
   /// 将获取到的帖子数据应用到 state
   void _applyPostUpdate(
     int postId,
@@ -97,12 +102,18 @@ extension PostUpdateMethods on TopicDetailNotifier {
     // 导致返回的 JSON 中不包含 boosts/can_boost 字段。
     // 此时 Post.fromJson 会将 boosts 设为 null、canBoost 设为 false。
     // 为避免丢失已有的 boost 数据，当新数据不含 boosts 时保留旧值。
-    final mergedPost = updatedPost.boosts == null
+    var mergedPost = updatedPost.boosts == null
         ? updatedPost.copyWith(
             boosts: oldPost.boosts,
             canBoost: oldPost.canBoost,
           )
         : updatedPost;
+
+    // The single-post API can omit actions_summary. Preserve locally
+    // acknowledged flags rather than reopening an already used report action.
+    if (updatedPost.actionsSummary == null && oldPost.actionsSummary != null) {
+      mergedPost = mergedPost.copyWith(actionsSummary: oldPost.actionsSummary);
+    }
 
     final finalPost = preserveCooked
         ? mergedPost.copyWith(cooked: oldPost.cooked, read: oldPost.read)
