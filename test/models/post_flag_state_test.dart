@@ -24,7 +24,7 @@ void main() {
           {'id': 2, 'acted': true, 'count': 1},
           {'id': id, 'acted': true},
         ]);
-        expect(post.actedFlagTypeId(FlagType.defaultTypes), id);
+        expect(post.actedFlagTypeId(const <FlagType>[]), id);
       }
     });
 
@@ -34,8 +34,8 @@ void main() {
         {'id': 42, 'acted': true},
         {'id': 99, 'acted': true},
       ]);
-      expect(post.actedFlagTypeId(FlagType.defaultTypes), isNull);
-      expect(post.actedFlagTypeId([...FlagType.defaultTypes, customFlag]), 42);
+      expect(post.actedFlagTypeId(const <FlagType>[]), isNull);
+      expect(post.actedFlagTypeId([customFlag]), 42);
     });
 
     test('未举报或仅有非举报操作时仍允许举报', () {
@@ -44,7 +44,7 @@ void main() {
         {'id': 3, 'can_act': true},
         {'id': 4, 'acted': false},
       ]);
-      expect(post.actedFlagTypeId(FlagType.defaultTypes), isNull);
+      expect(post.actedFlagTypeId(const <FlagType>[]), isNull);
     });
 
     test('举报成功后立即更新状态，不破坏其它动作与原始 JSON', () {
@@ -54,7 +54,7 @@ void main() {
       ]);
       final updated = post.withReportedFlag(3);
 
-      expect(updated.actedFlagTypeId(FlagType.defaultTypes), 3);
+      expect(updated.actedFlagTypeId(const <FlagType>[]), 3);
       expect(updated, isNot(post));
       expect(updated.actionsSummary, hasLength(2));
       expect(updated.actionsSummary![0], {
