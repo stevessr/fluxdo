@@ -1150,11 +1150,13 @@ class MainActivity : FlutterActivity() {
         intent.addCategory(Intent.CATEGORY_BROWSABLE)
         val matches: List<ResolveInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             packageManager.queryIntentActivities(
-                intent, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+                intent, PackageManager.ResolveInfoFlags.of(
+                    (PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_RESOLVED_FILTER).toLong()
+                )
             )
         } else {
             @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_RESOLVED_FILTER)
         }
         val knownPackages = setOf(
             "com.android.chrome", "com.chrome.beta", "com.chrome.dev",
@@ -1172,8 +1174,12 @@ class MainActivity : FlutterActivity() {
             .filter { it.activityInfo.packageName != packageName }
             .filter { it.activityInfo.packageName != "android" }
             .filter {
-                it.handleAllWebDataURI ||
-                it.activityInfo.packageName in knownPackages
+                val filter = it.filter
+                (filter != null &&
+                    filter.hasDataScheme("http") &&
+                    filter.hasDataScheme("https") &&
+                    filter.countDataAuthorities() == 0) ||
+                    it.activityInfo.packageName in knownPackages
             }
             .distinctBy { it.activityInfo.packageName }
             .map {
