@@ -74,7 +74,7 @@ extension PostUpdateMethods on TopicDetailNotifier {
     }
   }
 
-  /// Apply a successful flag immediately across the current topic's post list.
+  /// 举报成功后，立即将状态同步到当前话题的帖子列表。
   void applyLocalPostFlagged(int postId, int flagTypeId) {
     _updatePostById(postId, (post) => post.withReportedFlag(flagTypeId));
   }
@@ -109,8 +109,8 @@ extension PostUpdateMethods on TopicDetailNotifier {
           )
         : updatedPost;
 
-    // The single-post API can omit actions_summary. Preserve locally
-    // acknowledged flags rather than reopening an already used report action.
+    // 单帖接口可能不返回 actions_summary，此时保留已确认的本地举报，
+    // 避免刷新后重新出现可点击的举报入口。
     if (updatedPost.actionsSummary == null && oldPost.actionsSummary != null) {
       mergedPost = mergedPost.copyWith(actionsSummary: oldPost.actionsSummary);
     }
