@@ -53,6 +53,7 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
+pkg_check_modules(FLUXDO_EPOXY REQUIRED IMPORTED_TARGET epoxy)
 
 # Allow offline Flatpak builds to provide a vendored nlohmann_json checkout.
 set(FLUXDO_VENDORED_NLOHMANN_JSON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/nlohmann_json")

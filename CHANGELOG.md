@@ -28,6 +28,10 @@
 
 ### 🐛 修复
 
+- Linux 多显卡下让 WPE 的 DRM 设备与 GTK OpenGL 厂商匹配，避免错误设备选择触发 epoxy GLX/EGL context 断言 by @Lingyan000
+
+- Linux 优先通过 Mesa Zink 使用 Vulkan；初始化、首帧或运行时异常退出时自动回退到默认 OpenGL 渲染 by @Lingyan000
+
 - 表情包市场面板改可拖拽外壳,修键盘顶出标题栏 by @Lingyan000
 
 - 修 macOS 语音输入法/剪贴板管理器的 Cmd+V 粘贴失效 by @Lingyan000
