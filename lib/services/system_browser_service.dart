@@ -42,7 +42,9 @@ class SystemBrowserService {
     name: '选择系统已安装的浏览器',
   );
 
-  static bool get _inFlatpak => Platform.environment.containsKey('FLATPAK_ID');
+  static bool get _inFlatpak =>
+      Platform.environment.containsKey('FLATPAK_ID') ||
+      File('/.flatpak-info').existsSync();
 
   static const _linuxBrowsers = <({String name, String command})>[
     (name: 'Firefox', command: 'firefox'),
