@@ -101,7 +101,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   /// 浏览器授权登录:拉起系统浏览器打开 /user-api-key/new,授权后
-  /// 深链 fluxdo://auth_redirect 回 App,由 UserApiKeyLoginFlow 完成
+  /// 深链 discourse://auth_redirect 回 App,由 UserApiKeyLoginFlow 完成
   /// OTP 兑换与登录收口,这里只负责发起和成功后 pop。
   Future<void> _loginWithBrowserAuth() async {
     if (_browserAuthLaunching) return;
@@ -114,58 +114,58 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         return;
       }
 
-      // 选择必须发生在生成 nonce 和 RSA 授权 URL 之前，避免取消时
-      // 留下一个待处理的授权请求，也避免悄悄使用系统默认浏览器。
+      // 选择完成后才生成 nonce 和 RSA 授权 URL。用户取消选择时
+      // 不会创建待处理的授权请求。
       final LoginBrowser? selected;
       if (browsers.length == 1 && browsers.single.id == 'portal:chooser') {
-        // Flatpak uses the host XDG app chooser. Avoid presenting a second
-        // redundant sheet containing only one "choose browser" entry.
+        // Flatpak 直接调用宿主 XDG Portal 的浏览器选择器，
+        // 避免在应用中先显示一个只有单项的冗余对话框。
         selected = browsers.single;
       } else {
         selected = await showModalBottomSheet<LoginBrowser>(
           context: context,
-        showDragHandle: true,
-        isScrollControlled: true,
-        builder: (sheetContext) => SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '选择浏览器',
-                  style: Theme.of(sheetContext).textTheme.titleLarge,
-                ),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 10, 20, 12),
-                  child: Text(
-                    '选择已登录 Google / GitHub 等账号的浏览器，'
-                    '在 LINUX DO 完成授权后将自动返回 FluxDO。',
-                    textAlign: TextAlign.center,
+          showDragHandle: true,
+          isScrollControlled: true,
+          builder: (sheetContext) => SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '选择浏览器',
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
                   ),
-                ),
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: browsers.length,
-                    itemBuilder: (context, index) {
-                      final browser = browsers[index];
-                      return ListTile(
-                        leading: const Icon(Symbols.open_in_browser_rounded),
-                        title: Text(browser.name),
-                        onTap: () => Navigator.of(context).pop(browser),
-                      );
-                    },
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, 12),
+                    child: Text(
+                      '选择已登录 Google / GitHub 等账号的浏览器，'
+                      '在 LINUX DO 完成授权后将自动返回 FluxDO。',
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-              ],
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: browsers.length,
+                      itemBuilder: (context, index) {
+                        final browser = browsers[index];
+                        return ListTile(
+                          leading: const Icon(Symbols.open_in_browser_rounded),
+                          title: Text(browser.name),
+                          onTap: () => Navigator.of(context).pop(browser),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
           ),
-        ),
-      );
+        );
       }
       if (selected == null || !mounted) return;
 
