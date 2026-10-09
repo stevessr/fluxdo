@@ -116,8 +116,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
       // 选择必须发生在生成 nonce 和 RSA 授权 URL 之前，避免取消时
       // 留下一个待处理的授权请求，也避免悄悄使用系统默认浏览器。
-      final selected = await showModalBottomSheet<LoginBrowser>(
-        context: context,
+      final LoginBrowser? selected;
+      if (browsers.length == 1 && browsers.single.id == 'portal:chooser') {
+        // Flatpak uses the host XDG app chooser. Avoid presenting a second
+        // redundant sheet containing only one "choose browser" entry.
+        selected = browsers.single;
+      } else {
+        selected = await showModalBottomSheet<LoginBrowser>(
+          context: context,
         showDragHandle: true,
         isScrollControlled: true,
         builder: (sheetContext) => SafeArea(
@@ -160,6 +166,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
       );
+      }
       if (selected == null || !mounted) return;
 
       UserApiKeyLoginFlow.instance.onFlowFinished = _onBrowserAuthFinished;
