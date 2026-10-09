@@ -106,6 +106,14 @@
     }
   },
   "post_flagNotifyModerators": "私下通知管理人员",
+  "post_flaggedAs": "已举报为{reason}",
+  "@post_flaggedAs": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "post_flagSubmitted": "举报已提交",
   "post_flagTitle": "举报帖子",
   "post_generateShareImage": "生成分享图片",
