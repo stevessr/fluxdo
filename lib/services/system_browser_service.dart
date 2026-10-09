@@ -35,6 +35,15 @@ class SystemBrowserService {
     name: '系统默认浏览器',
   );
 
+  // Flatpak must not inspect or execute binaries on the host. The portal's
+  // OpenURI ask option displays the host's browser/application chooser.
+  static const _portalChooser = LoginBrowser(
+    id: 'portal:chooser',
+    name: '选择系统已安装的浏览器',
+  );
+
+  static bool get _inFlatpak => Platform.environment.containsKey('FLATPAK_ID');
+
   static const _linuxBrowsers = <({String name, String command})>[
     (name: 'Firefox', command: 'firefox'),
     (name: 'Firefox Developer Edition', command: 'firefox-developer-edition'),
@@ -106,6 +115,13 @@ class SystemBrowserService {
         }
       }
       return browsers;
+    }
+
+    if (Platform.isLinux && _inFlatpak) {
+      // Browser discovery via PATH/flatpak inside the sandbox only sees
+      // sandboxed tools. The host application chooser knows the actual
+      // installed browsers and retains their existing OAuth sessions.
+      return [_portalChooser];
     }
 
     final browsers = <LoginBrowser>[_default];
@@ -208,6 +224,9 @@ class SystemBrowserService {
   Future<bool> open(LoginBrowser browser, Uri authorizationUrl) async {
     if (!isAuthorizationUrl(authorizationUrl)) return false;
     try {
+      if (browser.id == _portalChooser.id && Platform.isLinux && _inFlatpak) {
+        return _openWithPortalChooser(authorizationUrl);
+      }
       if (browser.id == 'default') {
         return launchUrl(
           authorizationUrl,
@@ -248,6 +267,34 @@ class SystemBrowserService {
       );
       return true;
     } catch (_) {
+      return false;
+    }
+  }
+
+  /// XDG Desktop Portal OpenURI v3+ with ask=true. This delegates selection
+  /// to the host's trusted app chooser without sandbox escape permissions.
+  /// GDBus returns a Request handle immediately; the eventual user choice,
+  /// including cancellation, is handled asynchronously by the portal.
+  Future<bool> _openWithPortalChooser(Uri uri) async {
+    try {
+      final result = await Process.run(
+        'gdbus',
+        [
+          'call',
+          '--session',
+          '--dest',
+          'org.freedesktop.portal.Desktop',
+          '--object-path',
+          '/org/freedesktop/portal/desktop',
+          '--method',
+          'org.freedesktop.portal.OpenURI.OpenURI',
+          '',
+          uri.toString(),
+          "{'ask': <true>}",
+        ],
+      );
+      return result.exitCode == 0;
+    } on ProcessException {
       return false;
     }
   }
