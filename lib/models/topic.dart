@@ -792,6 +792,45 @@ class Post {
   final DateTime? bookmarkReminderAt; // 书签提醒时间
   final bool read; // 是否已读
   final List<dynamic>? actionsSummary;
+
+  /// Discourse marks the current user's actions via actions_summary[].acted.
+  /// Include site-provided flags to support custom moderation reasons.
+  int? actedFlagTypeId(Iterable<FlagType> flagTypes) {
+    final flagIds = <int>{
+      3, 4, 6, 7, 8, // Core Discourse flag IDs, including notify_user.
+      ...flagTypes.where((type) => type.isFlag).map((type) => type.id),
+    };
+    for (final action in actionsSummary ?? const <dynamic>[]) {
+      if (action is! Map || action['acted'] != true) continue;
+      final id = (action['id'] as num?)?.toInt();
+      if (id != null && flagIds.contains(id)) return id;
+    }
+    return null;
+  }
+
+  /// Update the acknowledged flag locally, keeping all other action entries
+  /// and the unmodified raw JSON snapshot from the server.
+  Post withReportedFlag(int flagTypeId) {
+    final actions = List<dynamic>.from(actionsSummary ?? const <dynamic>[]);
+    final index = actions.indexWhere(
+      (action) => action is Map && action['id'] == flagTypeId,
+    );
+    if (index >= 0) {
+      actions[index] = <String, dynamic>{
+        ...(actions[index] as Map).cast<String, dynamic>(),
+        'acted': true,
+        'can_act': false,
+      };
+    } else {
+      actions.add(<String, dynamic>{
+        'id': flagTypeId,
+        'acted': true,
+        'can_act': false,
+      });
+    }
+    return copyWith(actionsSummary: actions);
+  }
+
   final List<LinkCount>? linkCounts; // 链接点击统计
   final List<PostReaction>? reactions; // 回应/表情
   final PostReaction? currentUserReaction; // 当前用户的回应
@@ -1255,6 +1294,7 @@ class Post {
           read == other.read &&
           hidden == other.hidden &&
           cookedHidden == other.cookedHidden &&
+          listEquals(actionsSummary, other.actionsSummary) &&
           listEquals(reactions, other.reactions) &&
           currentUserReaction == other.currentUserReaction &&
           listEquals(boosts, other.boosts) &&
@@ -1286,6 +1326,7 @@ class Post {
     viaIosApp,
     iosDeviceName,
     mobileSourceModel,
+    Object.hashAll(actionsSummary ?? const []),
   );
 
   /// 复制并修改部分字段
