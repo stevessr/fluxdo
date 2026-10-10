@@ -53,6 +53,14 @@
     }
   },
   "post_flagNotifyModerators": "私下通知管理人員",
+  "post_flaggedAs": "已舉報為{reason}",
+  "@post_flaggedAs": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "post_flagSubmitted": "舉報已提交",
   "post_flagTitle": "舉報帖子",
   "post_generateShareImage": "生成分享圖片",

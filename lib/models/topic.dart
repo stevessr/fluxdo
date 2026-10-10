@@ -792,6 +792,44 @@ class Post {
   final DateTime? bookmarkReminderAt; // 书签提醒时间
   final bool read; // 是否已读
   final List<dynamic>? actionsSummary;
+
+  /// Discourse 在 actions_summary[].acted 标记当前用户已执行的操作。
+  /// 联合站点提供的举报类型识别自定义举报，避免误认点赞等操作。
+  int? actedFlagTypeId(Iterable<FlagType> flagTypes) {
+    final flagIds = <int>{
+      3, 4, 6, 7, 8, // Discourse 内置举报类型，包含 notify_user。
+      ...flagTypes.where((type) => type.isFlag).map((type) => type.id),
+    };
+    for (final action in actionsSummary ?? const <dynamic>[]) {
+      if (action is! Map || action['acted'] != true) continue;
+      final id = (action['id'] as num?)?.toInt();
+      if (id != null && flagIds.contains(id)) return id;
+    }
+    return null;
+  }
+
+  /// 成功举报后即时更新状态，保留其它操作和未修改的服务端 JSON 快照。
+  Post withReportedFlag(int flagTypeId) {
+    final actions = List<dynamic>.from(actionsSummary ?? const <dynamic>[]);
+    final index = actions.indexWhere(
+      (action) => action is Map && action['id'] == flagTypeId,
+    );
+    if (index >= 0) {
+      actions[index] = <String, dynamic>{
+        ...(actions[index] as Map).cast<String, dynamic>(),
+        'acted': true,
+        'can_act': false,
+      };
+    } else {
+      actions.add(<String, dynamic>{
+        'id': flagTypeId,
+        'acted': true,
+        'can_act': false,
+      });
+    }
+    return copyWith(actionsSummary: actions);
+  }
+
   final List<LinkCount>? linkCounts; // 链接点击统计
   final List<PostReaction>? reactions; // 回应/表情
   final PostReaction? currentUserReaction; // 当前用户的回应
@@ -1255,6 +1293,7 @@ class Post {
           read == other.read &&
           hidden == other.hidden &&
           cookedHidden == other.cookedHidden &&
+          listEquals(actionsSummary, other.actionsSummary) &&
           listEquals(reactions, other.reactions) &&
           currentUserReaction == other.currentUserReaction &&
           listEquals(boosts, other.boosts) &&
@@ -1286,6 +1325,7 @@ class Post {
     viaIosApp,
     iosDeviceName,
     mobileSourceModel,
+    Object.hashAll(actionsSummary ?? const []),
   );
 
   /// 复制并修改部分字段

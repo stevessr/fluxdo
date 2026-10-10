@@ -15,7 +15,7 @@ class PostFlagSheet extends StatefulWidget {
   final int postId;
   final String postUsername;
   final DiscourseService service;
-  final VoidCallback? onSuccess;
+  final ValueChanged<FlagType>? onSuccess;
 
   const PostFlagSheet({
     super.key,
@@ -98,8 +98,9 @@ class _PostFlagSheetState extends State<PostFlagSheet> {
       );
 
       if (mounted) {
+        final submittedType = _selectedType!;
         Navigator.pop(context);
-        widget.onSuccess?.call();
+        widget.onSuccess?.call(submittedType);
       }
     } catch (e) {
       if (mounted) {

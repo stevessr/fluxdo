@@ -74,6 +74,11 @@ extension PostUpdateMethods on TopicDetailNotifier {
     }
   }
 
+  /// 举报成功后，立即将状态同步到当前话题的帖子列表。
+  void applyLocalPostFlagged(int postId, int flagTypeId) {
+    _updatePostById(postId, (post) => post.withReportedFlag(flagTypeId));
+  }
+
   /// 将获取到的帖子数据应用到 state
   void _applyPostUpdate(
     int postId,
@@ -97,12 +102,18 @@ extension PostUpdateMethods on TopicDetailNotifier {
     // 导致返回的 JSON 中不包含 boosts/can_boost 字段。
     // 此时 Post.fromJson 会将 boosts 设为 null、canBoost 设为 false。
     // 为避免丢失已有的 boost 数据，当新数据不含 boosts 时保留旧值。
-    final mergedPost = updatedPost.boosts == null
+    var mergedPost = updatedPost.boosts == null
         ? updatedPost.copyWith(
             boosts: oldPost.boosts,
             canBoost: oldPost.canBoost,
           )
         : updatedPost;
+
+    // 单帖接口可能不返回 actions_summary，此时保留已确认的本地举报，
+    // 避免刷新后重新出现可点击的举报入口。
+    if (updatedPost.actionsSummary == null && oldPost.actionsSummary != null) {
+      mergedPost = mergedPost.copyWith(actionsSummary: oldPost.actionsSummary);
+    }
 
     final finalPost = preserveCooked
         ? mergedPost.copyWith(cooked: oldPost.cooked, read: oldPost.read)

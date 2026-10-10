@@ -22,6 +22,7 @@ import 'package:dio/dio.dart';
 
 import '../../../../../services/app_error_handler.dart';
 import '../../../../../services/discourse/discourse_service.dart';
+import '../../../../../services/preloaded_data_service.dart';
 import '../../../../../services/log/bookmark_edit_trace.dart';
 import '../../../../../services/notion/notion_bookmark_auto_sync.dart';
 import '../../../../../services/toast_service.dart';
@@ -47,6 +48,25 @@ part 'actions/manage_actions.dart';
 part 'actions/menu_actions.dart';
 part 'actions/reaction_actions.dart';
 part 'actions/reply_actions.dart';
+
+/// 全部帖子共用站点举报类型，兼容自定义举报选项。
+final postFlagTypesProvider = FutureProvider<List<FlagType>>((ref) async {
+  ref.watch(currentUserProvider.select((user) => user.value?.username));
+  List<Map<String, dynamic>>? rawTypes;
+  try {
+    rawTypes = await PreloadedDataService().getPostActionTypes();
+  } catch (_) {
+    // 预加载失败时改从 Discourse 接口取得举报类型。
+  }
+  if (rawTypes == null || rawTypes.isEmpty) {
+    final types = await ref.read(discourseServiceProvider).getFlagTypes();
+    return types.where((type) => type.appliesToPost).toList(growable: false);
+  }
+  return rawTypes
+      .map(FlagType.fromJson)
+      .where((type) => type.isFlag && type.appliesToPost)
+      .toList(growable: false);
+});
 
 class PostFooterSection extends ConsumerStatefulWidget {
   final Post post;
@@ -159,6 +179,58 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
   bool _isAcceptedAnswer = false;
   bool _isTogglingAnswer = false;
   bool _isDeleting = false;
+  FlagType? _recentReportedFlagType;
+  String? _recentReportedUsername;
+
+  /// 即时反馈只归属于提交举报的账户，不可泄漏到切换后的账户。
+  FlagType? get _currentUserRecentFlag {
+    final username = ref.read(currentUserProvider).value?.username;
+    return username != null && username == _recentReportedUsername
+        ? _recentReportedFlagType
+        : null;
+  }
+
+  List<FlagType> get _availableFlagTypes =>
+      ref.read(postFlagTypesProvider).value ?? FlagType.defaultTypes;
+
+  int? get _reportedFlagTypeId =>
+      _currentUserRecentFlag?.id ??
+      widget.post.actedFlagTypeId(_availableFlagTypes);
+
+  String? get _reportedFlagTypeName {
+    final recent = _currentUserRecentFlag;
+    if (recent != null) {
+      return recent.name.isNotEmpty ? recent.name : S.current.topic_flagOther;
+    }
+    final id = _reportedFlagTypeId;
+    if (id == null) return null;
+    for (final type in _availableFlagTypes) {
+      if (type.id == id) {
+        return type.name.isNotEmpty ? type.name : S.current.topic_flagOther;
+      }
+    }
+    // 举报类型尚未加载时仍保持已举报状态，禁止再次举报。
+    return S.current.topic_flagOther;
+  }
+
+  void _handleFlagSubmitted(FlagType type) {
+    if (!mounted) return;
+    setState(() {
+      _recentReportedFlagType = type;
+      _recentReportedUsername = ref.read(currentUserProvider).value?.username;
+    });
+    final params = TopicDetailNotifier.activeParamsFor(widget.topicId);
+    if (params != null) {
+      try {
+        ref
+            .read(topicDetailProvider(params).notifier)
+            .applyLocalPostFlagged(widget.post.id, type.id);
+      } catch (e, stackTrace) {
+        AppErrorHandler.handleUnexpected(e, stackTrace);
+      }
+    }
+    ToastService.showSuccess(S.current.post_flagSubmitted);
+  }
 
   bool get _canLoadMoreReplies => _replies.length < widget.post.replyCount;
 
@@ -171,6 +243,10 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
   @override
   void didUpdateWidget(PostFooterSection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.id != widget.post.id) {
+      _recentReportedFlagType = null;
+      _recentReportedUsername = null;
+    }
     if (oldWidget.post != widget.post) {
       _syncState();
     }
@@ -321,7 +397,9 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
     // 列表在 footer;监控关闭零开销)
     FrameJankMonitor.noteBuild('pFtr#${widget.post.postNumber}');
     final theme = Theme.of(context);
-    final currentUser = ref.read(currentUserProvider).value;
+    ref.watch(postFlagTypesProvider);
+    final currentUser = ref.watch(currentUserProvider).value;
+    final reportedFlagName = _reportedFlagTypeName;
     final isOwnPost =
         currentUser != null && currentUser.username == widget.post.username;
     final isGuest = currentUser == null;
@@ -387,6 +465,29 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
                   )
                 : null,
           ),
+          if (!isGuest && reportedFlagName != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Symbols.flag_rounded,
+                    size: 15,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      context.l10n.post_flaggedAs(reportedFlagName),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // 问答话题:评论区(官方语义——问题帖与顶层答案帖下方,
           // 评论代替对答案的追问;含点赞/加载更多/添加评论)
           if (widget.isPostVotingTopic &&

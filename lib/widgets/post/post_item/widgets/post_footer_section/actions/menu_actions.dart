@@ -23,7 +23,7 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
         postId: widget.post.id,
         postUsername: widget.post.username,
         service: _service,
-        onSuccess: () => ToastService.showSuccess(S.current.post_flagSubmitted),
+        onSuccess: _handleFlagSubmitted,
       ),
     );
   }
@@ -448,7 +448,7 @@ extension _PostFooterMenuActions on _PostFooterSectionState {
                     widget.onAssignPost!();
                   },
                 ),
-              if (!isGuest)
+              if (!isGuest && _reportedFlagTypeId == null)
                 ListTile(
                   leading: Icon(
                     Symbols.flag_rounded,
