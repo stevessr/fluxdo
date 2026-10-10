@@ -180,16 +180,25 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
   bool _isTogglingAnswer = false;
   bool _isDeleting = false;
   FlagType? _recentReportedFlagType;
+  String? _recentReportedUsername;
+
+  /// 即时反馈只归属于提交举报的账户，不可泄漏到切换后的账户。
+  FlagType? get _currentUserRecentFlag {
+    final username = ref.read(currentUserProvider).value?.username;
+    return username != null && username == _recentReportedUsername
+        ? _recentReportedFlagType
+        : null;
+  }
 
   List<FlagType> get _availableFlagTypes =>
       ref.read(postFlagTypesProvider).value ?? FlagType.defaultTypes;
 
   int? get _reportedFlagTypeId =>
-      _recentReportedFlagType?.id ??
+      _currentUserRecentFlag?.id ??
       widget.post.actedFlagTypeId(_availableFlagTypes);
 
   String? get _reportedFlagTypeName {
-    final recent = _recentReportedFlagType;
+    final recent = _currentUserRecentFlag;
     if (recent != null) {
       return recent.name.isNotEmpty ? recent.name : S.current.topic_flagOther;
     }
@@ -206,7 +215,10 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
 
   void _handleFlagSubmitted(FlagType type) {
     if (!mounted) return;
-    setState(() => _recentReportedFlagType = type);
+    setState(() {
+      _recentReportedFlagType = type;
+      _recentReportedUsername = ref.read(currentUserProvider).value?.username;
+    });
     final params = TopicDetailNotifier.activeParamsFor(widget.topicId);
     if (params != null) {
       try {
@@ -233,6 +245,7 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.post.id != widget.post.id) {
       _recentReportedFlagType = null;
+      _recentReportedUsername = null;
     }
     if (oldWidget.post != widget.post) {
       _syncState();
@@ -385,8 +398,8 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
     FrameJankMonitor.noteBuild('pFtr#${widget.post.postNumber}');
     final theme = Theme.of(context);
     ref.watch(postFlagTypesProvider);
+    final currentUser = ref.watch(currentUserProvider).value;
     final reportedFlagName = _reportedFlagTypeName;
-    final currentUser = ref.read(currentUserProvider).value;
     final isOwnPost =
         currentUser != null && currentUser.username == widget.post.username;
     final isGuest = currentUser == null;
