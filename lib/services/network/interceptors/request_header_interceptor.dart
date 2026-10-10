@@ -5,6 +5,7 @@ import '../../../config/discourse_instance_runtime.dart';
 import '../../../constants.dart';
 import '../../log/log_writer.dart';
 import '../../user_presence_service.dart';
+import '../cookie/app_cookie_manager.dart';
 import '../cookie/csrf_token_service.dart';
 import '../flux_request_spec.dart';
 import '../health/network_health_controller.dart';
@@ -37,6 +38,29 @@ class RequestHeaderInterceptor extends Interceptor {
     );
   }
 
+  /// A sibling application on the same origin as a subpath forum must not
+  /// receive inherited Discourse identity headers, even if a caller supplied
+  /// them manually through Options.headers rather than the CSRF injector.
+  @visibleForTesting
+  static void stripForumCredentialsFromSiblingPath(
+    Map<String, dynamic> headers,
+  ) {
+    headers.removeWhere((key, _) {
+      final lower = key.toLowerCase();
+      return lower == 'cookie' ||
+          lower == 'authorization' ||
+          lower == 'proxy-authorization' ||
+          lower == 'origin' ||
+          lower == 'referer' ||
+          lower == 'x-requested-with' ||
+          lower == 'x-shared-session-key' ||
+          lower == 'discourse-present' ||
+          lower.startsWith('x-csrf-') ||
+          lower.startsWith('user-api-') ||
+          lower.startsWith('sec-fetch-');
+    });
+  }
+
   @override
   Future<void> onRequest(
     RequestOptions options,
@@ -52,6 +76,9 @@ class RequestHeaderInterceptor extends Interceptor {
     }
 
     final isActiveDiscourse = targetsActiveDiscourse(options.uri);
+    if (AppCookieManager.isOutsideActiveInstanceRoot(options.uri)) {
+      stripForumCredentialsFromSiblingPath(options.headers);
+    }
 
     // 3. 设置 CSRF Token（未登录时无法获取，跳过）。CSRF 是活动 Discourse
     // 实例的 origin/path 凭证，绝不能因为共用 Dio 被发往外部 MessageBus/CDN。
