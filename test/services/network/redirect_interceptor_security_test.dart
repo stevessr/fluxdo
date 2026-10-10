@@ -1,5 +1,10 @@
+import 'dart:typed_data';
+
+import 'package:cookie_jar/cookie_jar.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/config/discourse_instance_runtime.dart';
+import 'package:fluxdo/services/network/cookie/app_cookie_manager.dart';
 import 'package:fluxdo/services/network/flux_request_spec.dart';
 import 'package:fluxdo/services/network/interceptors/redirect_interceptor.dart';
 
@@ -102,6 +107,44 @@ void main() {
     });
   });
 
+
+  group('RedirectInterceptor subpath cookie isolation', () {
+    test('redirect through sibling path cannot reload the forum session',
+        () async {
+      DiscourseInstanceRuntime.activate(
+        instanceId: 'ignored',
+        baseUrl: 'https://forum.example.com/forum',
+      );
+      final jar = CookieJar();
+      await jar.saveFromResponse(
+        Uri.parse('https://forum.example.com/forum/session'),
+        [Cookie('_t', 'forum-secret')..path = '/'],
+      );
+      final adapter = _SubpathRedirectAdapter();
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: 'https://forum.example.com',
+          followRedirects: false,
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 400,
+        ),
+      )..httpClientAdapter = adapter;
+      dio.interceptors.add(AppCookieManager(jar));
+      dio.interceptors.add(RedirectInterceptor(dio));
+
+      final result = await dio.get<dynamic>('/forum/start');
+      expect(result.statusCode, 200);
+      expect(adapter.requestedPaths,
+          ['/forum/start', '/other/redirect', '/forum/finished']);
+      expect(adapter.requestedCookies[0], contains('_t=forum-secret'));
+      expect(adapter.requestedCookies[1], isEmpty);
+      expect(adapter.requestedCookies[2], isEmpty);
+
+      await dio.get<dynamic>('/forum/fresh');
+      expect(adapter.requestedCookies.last, contains('_t=forum-secret'));
+    });
+  });
+
   group('RedirectInterceptor method handling', () {
     test('303 converts writes to GET but keeps HEAD', () {
       expect(RedirectInterceptor.redirectedMethod(303, 'POST'), 'GET');
@@ -196,4 +239,53 @@ void main() {
       expect(extra['requestTag'], 'original');
     });
   });
+}
+
+class _SubpathRedirectAdapter implements HttpClientAdapter {
+  final List<String> requestedPaths = [];
+  final List<String> requestedCookies = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requestedPaths.add(options.uri.path);
+    requestedCookies.add(
+      options.headers.entries
+              .where((entry) => entry.key.toLowerCase() == 'cookie')
+              .map((entry) => entry.value?.toString() ?? '')
+              .join('; '),
+    );
+    switch (options.uri.path) {
+      case '/forum/start':
+        return ResponseBody.fromString(
+          '',
+          302,
+          headers: {
+            'location': ['/other/redirect'],
+          },
+        );
+      case '/other/redirect':
+        return ResponseBody.fromString(
+          '',
+          302,
+          headers: {
+            'location': ['/forum/finished'],
+          },
+        );
+      default:
+        return ResponseBody.fromString(
+          '{}',
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+    }
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
