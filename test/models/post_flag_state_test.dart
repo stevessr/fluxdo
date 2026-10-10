@@ -47,6 +47,22 @@ void main() {
       expect(post.actedFlagTypeId(const <FlagType>[]), isNull);
     });
 
+    test('其它用户的举报计数不应被误判成自己已举报', () {
+      final post = postWithActions([
+        {'id': 3, 'count': 12, 'can_act': true},
+        {'id': 4, 'count': 3, 'acted': false},
+      ]);
+
+      expect(post.actedFlagTypeId(const <FlagType>[]), isNull);
+    });
+
+    test('服务端未返回 actions_summary 时不误判成已举报', () {
+      final post = Post.fromJson({'id': 502, 'username': 'other_user'});
+
+      expect(post.actedFlagTypeId(const <FlagType>[]), isNull);
+      expect(post.withReportedFlag(3).actedFlagTypeId(const <FlagType>[]), 3);
+    });
+
     test('举报成功后立即更新状态，不破坏其它动作与原始 JSON', () {
       final post = postWithActions([
         {'id': 2, 'count': 7, 'acted': true},
