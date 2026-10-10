@@ -55,7 +55,6 @@ void main() {
       expect(CookieJarService.criticalCookieNames, contains('cf_clearance'));
     });
 
-
     test('subpath forum cookies are not sent to same-host sibling app', () async {
       DiscourseInstanceRuntime.activate(
         instanceId: 'generic',
@@ -120,8 +119,10 @@ void main() {
       final cookies = await jar.loadForRequest(
         Uri.parse('https://forum.example.com/forum/posts.json'),
       );
-      expect(cookies.where((cookie) => cookie.name == '_t').single.value,
-          'forum-secret');
+      expect(
+        cookies.where((cookie) => cookie.name == '_t').single.value,
+        'forum-secret',
+      );
     });
 
     test('custom host matching is exact while linux.do keeps subdomains', () {
