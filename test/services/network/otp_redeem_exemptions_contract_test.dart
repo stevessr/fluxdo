@@ -9,9 +9,9 @@ import 'package:fluxdo/services/network/interceptors/request_header_interceptor.
 /// UserApiKey 的 OTP 兑换(`user_api_key_service.dart` 的 redeemOtp)对拦截器
 /// 链的两条豁免语义。两者都是事故驱动的设计,却一直没有测试保护。
 ///
-/// 1. `skipRedirect`:兑换成功的响应是 `302 → /`,调用方只要这一跳的
-///    `Set-Cookie: _t`。若让 RedirectInterceptor 跟随,它会用原 method
-///    重发 `POST /` → 404,把已经成功的兑换误判成失败。
+/// 1. `skipRedirect`:兑换成功的响应是 `302 → /`,调用方必须保留该跳
+///    的 `Set-Cookie: _t`。即使重定向现已正确将 POST 改为 GET，
+///    继续跟随也可能掩盖兑换响应或把后续请求失败误判成兑换失败。
 /// 2. `skipCsrf`:CSRF token 由调用方手动放进 `X-CSRF-Token` 头
 ///    (经主 dio 取得)。若 RequestHeaderInterceptor 介入,会在 token 为空时
 ///    回落到 CsrfTokenService 的独立 dio 刷新——后者在后台/会话失效窗口撞
@@ -33,7 +33,7 @@ void main() {
       expect(adapter.requestedPaths, ['/session/otp/deadbeef']);
     });
 
-    test('不带 skipRedirect 会跟随 302 并用原 method 重发，命中事故形态', () async {
+    test('不带 skipRedirect 会跟随 302，但按 HTTP 语义以 GET 重发', () async {
       final adapter = _RecordingAdapter();
       final dio = _buildDio(adapter);
 
@@ -42,10 +42,10 @@ void main() {
         options: _redeemOptions(skipRedirect: false),
       );
 
-      // 回归护栏:证明豁免确有必要 —— 第二跳是 POST /
-      expect(adapter.requestedPaths, hasLength(2));
-      expect(adapter.requestedPaths.last, '/');
-      expect(adapter.requestedMethods.last, 'POST');
+      // 302 的 POST 必须转为 GET；OTP 调用方仍应使用 skipRedirect
+      // 直接处理首次 302 响应中的 Set-Cookie。
+      expect(adapter.requestedPaths, ['/session/otp/deadbeef', '/']);
+      expect(adapter.requestedMethods, ['POST', 'GET']);
     });
   });
 
