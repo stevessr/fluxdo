@@ -27,6 +27,7 @@ on:
       - 'lib/modules/ldc_reward/providers/ldc_reward_provider.dart'
       - 'lib/modules/ldc_reward/widgets/ldc_reward_config_tile.dart'
       - 'lib/modules/ldc_reward/widgets/ldc_reward_sheet.dart'
+      - 'lib/services/network/cookie/app_cookie_manager.dart'
       - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
@@ -83,6 +84,7 @@ on:
       - 'lib/modules/ldc_reward/providers/ldc_reward_provider.dart'
       - 'lib/modules/ldc_reward/widgets/ldc_reward_config_tile.dart'
       - 'lib/modules/ldc_reward/widgets/ldc_reward_sheet.dart'
+      - 'lib/services/network/cookie/app_cookie_manager.dart'
       - 'lib/services/network/cookie/cookie_jar_service.dart'
       - 'lib/services/network/discourse_dio.dart'
       - 'lib/services/network/interceptors/discourse_base_path_interceptor.dart'
@@ -267,6 +269,7 @@ jobs:
           lib/modules/ldc_reward/providers/ldc_reward_provider.dart
           lib/modules/ldc_reward/widgets/ldc_reward_config_tile.dart
           lib/modules/ldc_reward/widgets/ldc_reward_sheet.dart
+          lib/services/network/cookie/app_cookie_manager.dart
           lib/services/network/cookie/cookie_jar_service.dart
           lib/services/network/discourse_dio.dart
           lib/services/network/interceptors/discourse_base_path_interceptor.dart
