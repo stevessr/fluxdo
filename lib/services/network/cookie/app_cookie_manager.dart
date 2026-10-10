@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../config/discourse_instance_runtime.dart';
 import '../../auth_session.dart';
 import '../../log/log_writer.dart';
 import '../flux_request_spec.dart';
@@ -21,6 +22,22 @@ class AppCookieManager extends Interceptor {
   final CookieJar cookieJar;
 
   static const String skipCookieManagerExtraKey = 'skipCookieManager';
+
+  /// A custom Discourse installed under /forum cannot share its root-path
+  /// session cookies with another application under /other on the same host.
+  /// Keep the default linux.do behavior and host-root installations unchanged.
+  @visibleForTesting
+  static bool isOutsideActiveInstanceRoot(Uri uri) {
+    if (DiscourseInstanceRuntime.isDefaultInstance) return false;
+    final base = DiscourseInstanceRuntime.baseUri;
+    if (base.path.isEmpty || base.path == '/') return false;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
+    return uri.origin == base.origin &&
+        !DiscourseInstanceRuntime.containsUri(
+          uri,
+          allowDefaultSubdomains: false,
+        );
+  }
 
   /// Whether to also save Set-Cookie to redirect target domains when
   /// followRedirects is false. Default false to avoid cross-domain pollution.
@@ -261,6 +278,15 @@ class AppCookieManager extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    // Even an explicit Cookie header must not bypass the relative-root
+    // boundary when the shared Dio client visits a sibling application.
+    if (isOutsideActiveInstanceRoot(options.uri)) {
+      options.headers.removeWhere(
+        (key, _) => key.toLowerCase() == HttpHeaders.cookieHeader,
+      );
+      handler.next(options);
+      return;
+    }
     if (options.extra[skipCookieManagerExtraKey] == true) {
       handler.next(options);
       return;
@@ -347,6 +373,7 @@ class AppCookieManager extends Interceptor {
 
   /// Load cookies in cookie string for the request.
   Future<String> loadCookies(RequestOptions options) async {
+    if (isOutsideActiveInstanceRoot(options.uri)) return '';
     List<Cookie> savedCookies;
     try {
       savedCookies = await cookieJar.loadForRequest(options.uri);
@@ -476,6 +503,7 @@ class AppCookieManager extends Interceptor {
 
   /// Save cookies from the response including redirected requests.
   Future<void> saveCookies(Response response) async {
+    if (isOutsideActiveInstanceRoot(response.requestOptions.uri)) return;
     final setCookies = response.headers[HttpHeaders.setCookieHeader];
     if (setCookies == null || setCookies.isEmpty) {
       return;
