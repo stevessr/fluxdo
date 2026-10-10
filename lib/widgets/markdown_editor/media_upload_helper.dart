@@ -238,7 +238,7 @@ Future<String?> compressMediaWithDialog(
   if (transcoder == null) {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
-        content: Text('当前平台不支持压缩,请压到 \${_formatUploadLimit(maxBytes)} 内再上传'),
+        content: Text('当前平台不支持压缩,请压到 ${_formatUploadLimit(maxBytes)} 内再上传'),
       ),
     );
     return null;
