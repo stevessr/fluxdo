@@ -70,6 +70,24 @@ void main() {
       );
     });
 
+    test('sibling paths strip manually supplied identity headers', () {
+      final headers = <String, dynamic>{
+        'Cookie': '_t=secret',
+        'authorization': 'Bearer secret',
+        'User-Api-Key': 'secret',
+        'X-CSRF-Token': 'secret',
+        'X-Shared-Session-Key': 'secret',
+        'Origin': 'https://forum.example.com',
+        'Referer': 'https://forum.example.com/forum/',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Discourse-Present': 'true',
+        'Sec-Fetch-Site': 'same-origin',
+        'Accept': 'application/json',
+      };
+      RequestHeaderInterceptor.stripForumCredentialsFromSiblingPath(headers);
+      expect(headers, {'Accept': 'application/json'});
+    });
+
     test('default linux.do credentials stay on the main host', () {
       expect(
         RequestHeaderInterceptor.targetsActiveDiscourse(
