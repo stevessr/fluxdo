@@ -33,7 +33,7 @@ Feature 的同一应用 split。它们可以独立提高 `versionCode` 并更新
 - 消息传输仅限短 JSON，不传账户凭据、cookie、token 或明文私有文件路径。
   DNS 查询会向设备系统解析器发送用户输入的域名。
 - **只有使用与主 APK 相同的发布密钥签名的插件才会识别为可用。**
-  CI 测试构建使用调试签名，不能直接装在正式发行版旁边启用。
+  CI 测试构建使用调试签名，不能直接装在正式发行版旁边启用；\n  CI 的调试密钥与本机 Android debug keystore 也可能不同，不能混装测试。
 - Android 包安装仍由系统 Package Installer 处理；不尝试绕过安装授权。
 
 ## 构建与测试
