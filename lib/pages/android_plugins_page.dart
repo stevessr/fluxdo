@@ -117,10 +117,10 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                 _t(
                   '可选功能使用独立 APK 安装和升级，不会替换主程序。'
                   '插件必须与 FluxDO 使用相同签名，并兼容当前协议。'
-                  '可在 GitHub Releases 获取对应 APK。',
+                  '发布签名版本后，可在 GitHub Releases 获取对应 APK。',
                   'Optional modules can be installed and updated independently. '
                   'Each APK must match the main app signer and protocol version. '
-                  'Install plugin APKs from the project GitHub Releases.',
+                  'After signed releases are published, install plugin APKs from GitHub Releases.',
                 ),
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
