@@ -107,7 +107,7 @@ class OptionalPluginChannel(
                     val spec = specs.firstOrNull { it.id == id }
                     when {
                         spec == null -> result.error("UNKNOWN_PLUGIN", "Unknown plugin id", null)
-                        operation !in spec.operations ->
+                        operation == null || operation !in spec.operations ->
                             result.error("UNKNOWN_OPERATION", "Operation is not allowed", null)
                         payload.length > 8192 ->
                             result.error("INVALID_ARGS", "Request too large", null)
