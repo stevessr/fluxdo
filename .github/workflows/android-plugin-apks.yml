@@ -14,6 +14,10 @@ on:
       - 'scripts/ci/check_android_plugin_contract.py'
       - 'lib/services/android_optional_plugin_service.dart'
       - 'lib/pages/android_plugins_page.dart'
+      - 'lib/pages/metaverse_page.dart'
+      - 'lib/services/android_sticker_companion_service.dart'
+      - 'lib/services/stevessr_composer_service.dart'
+      - 'test/services/android_sticker_companion_service_test.dart'
       - '.github/workflows/android-plugin-apks.yml'
   pull_request:
     paths:
@@ -25,6 +29,10 @@ on:
       - 'scripts/ci/check_android_plugin_contract.py'
       - 'lib/services/android_optional_plugin_service.dart'
       - 'lib/pages/android_plugins_page.dart'
+      - 'lib/pages/metaverse_page.dart'
+      - 'lib/services/android_sticker_companion_service.dart'
+      - 'lib/services/stevessr_composer_service.dart'
+      - 'test/services/android_sticker_companion_service_test.dart'
       - '.github/workflows/android-plugin-apks.yml'
 
 jobs:
@@ -44,12 +52,21 @@ jobs:
           cache: true
       - name: Resolve Flutter dependencies
         run: flutter pub get
+      - name: Validate standalone APK build scripts
+        run: python3 -m py_compile scripts/ci/build_sticker_companion.py scripts/ci/check_android_plugin_contract.py
       - name: Check plugin IPC manifests and allowlist
         run: python3 scripts/ci/check_android_plugin_contract.py
       - name: Analyze Flutter plugin manager
         run: |
           dart analyze lib/services/android_optional_plugin_service.dart
           dart analyze lib/pages/android_plugins_page.dart
+      - name: Analyze new companion callsites
+        run: |
+          dart analyze lib/services/android_sticker_companion_service.dart
+          dart analyze lib/services/stevessr_composer_service.dart
+          dart analyze lib/pages/metaverse_page.dart
+      - name: Test companion result protocol
+        run: flutter test test/services/android_sticker_companion_service_test.dart
       - name: Prepare generated locale and avatar assets
         run: dart tool/project_prep.dart test
       - name: Build independent Flutter sticker APK
