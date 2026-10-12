@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/s.dart';
 import '../models/shortcut_binding.dart';
+import '../services/android_sticker_companion_service.dart';
+import '../services/stevessr_export_service.dart';
 import '../providers/shortcut_provider.dart';
 import '../providers/theme_provider.dart';
 import '../settings/search/settings_search_index.dart';
@@ -415,8 +417,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               icon: Icons.auto_awesome_rounded,
               iconColor: Colors.pink,
               title: l10n.title,
-              onTap: () =>
-                  _openSettingsPage((_) => const StevessrGeneratorPage()),
+              onTap: () async {
+                if (await AndroidStickerCompanionService.isAvailable()) {
+                  try {
+                    final image = await AndroidStickerCompanionService.generate();
+                    if (image != null) await StevessrExportService.save(image);
+                  } catch (error) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(error.toString())),
+                      );
+                    }
+                  }
+                  return;
+                }
+                if (mounted) {
+                  _openSettingsPage((_) => const StevessrGeneratorPage());
+                }
+              },
             ),
             if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
               _buildOptionTile(
