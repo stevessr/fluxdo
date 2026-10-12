@@ -26,7 +26,7 @@ def execute(*args: str, cwd: Path) -> None:
     subprocess.run(args, cwd=cwd, check=True)
 
 
-def setup_project(target: Path) -> None:
+def setup_project(target: Path, mode: str) -> None:
     execute(
         "flutter", "create", "--platforms=android", "--org=com.github.lingyan000.fluxdo.plugin",
         "--project-name=sticker", "--no-pub", str(target),
@@ -103,6 +103,42 @@ def setup_project(target: Path) -> None:
             'dependencies {\n    implementation("androidx.core:core:1.16.0")',
             1,
         )
+    if mode == "release":
+        original_props = ROOT / "android/key.properties"
+        if not original_props.is_file():
+            raise RuntimeError("Release requires the same android/key.properties as FluxDO")
+        anchor = 'signingConfig = signingConfigs.getByName("debug")'
+        if anchor not in gradle:
+            raise RuntimeError("Generated Flutter release signing layout changed")
+        signing_block = '''
+    signingConfigs {
+        create("fluxdoSharedRelease") {
+            val props = java.util.Properties().apply {
+                java.io.File("PLACEHOLDER_PROPS").inputStream().use { load(it) }
+            }
+            val keyLocation = java.io.File(props.getProperty("storeFile"))
+            storeFile = if (keyLocation.isAbsolute) keyLocation
+                else java.io.File("PLACEHOLDER_ANDROID", props.getProperty("storeFile"))
+            require(storeFile?.isFile == true) { "Release keystore not found" }
+            storePassword = props.getProperty("storePassword")
+            keyAlias = props.getProperty("keyAlias")
+            keyPassword = props.getProperty("keyPassword")
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
+'''
+        signing_block = signing_block.replace(
+            "PLACEHOLDER_PROPS", original_props.as_posix()
+        ).replace("PLACEHOLDER_ANDROID", (ROOT / "android").as_posix())
+        if "    buildTypes {" not in gradle:
+            raise RuntimeError("Expected Flutter Android buildTypes block")
+        gradle = gradle.replace("    buildTypes {", signing_block + "    buildTypes {", 1)
+        gradle = gradle.replace(
+            anchor, 'signingConfig = signingConfigs.getByName("fluxdoSharedRelease")', 1
+        )
     build_file.write_text(gradle)
 
 
@@ -114,7 +150,7 @@ def main() -> None:
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="fluxdo-sticker-companion-") as temp:
         target = Path(temp) / "sticker"
-        setup_project(target)
+        setup_project(target, args.mode)
         execute("flutter", "pub", "get", cwd=target)
         execute("flutter", "build", "apk", "--" + args.mode,
                 "--target-platform", args.abi, "--no-pub", cwd=target)
