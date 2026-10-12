@@ -162,9 +162,13 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                                 ? Icons.extension_rounded
                                 : Icons.extension_off_rounded,
                           ),
-                          title: Text(plugin.id == 'deviceinfo'
-                              ? _t('设备诊断', 'Device diagnostics')
-                              : _t('网络诊断', 'Network diagnostics')),
+                          title: Text(switch (plugin.id) {
+                            'deviceinfo' => _t('设备诊断', 'Device diagnostics'),
+                            'network' => _t('网络诊断', 'Network diagnostics'),
+                            'cdk' => 'CDK',
+                            'ldc' => 'LDC',
+                            _ => plugin.name,
+                          }),
                           subtitle: Text(
                             '${plugin.packageName}\n'
                             '${plugin.version ?? "-"} · ${plugin.reason}',
@@ -186,9 +190,11 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                                 FilledButton.tonal(
                                   onPressed: () => _run(
                                     plugin,
-                                    plugin.id == 'deviceinfo'
-                                        ? 'device.snapshot'
-                                        : 'network.state',
+                                    switch (plugin.id) {
+                                      'deviceinfo' => 'device.snapshot',
+                                      'network' => 'network.state',
+                                      _ => 'metaverse.capabilities',
+                                    },
                                   ),
                                   child: Text(_t('运行诊断', 'Run diagnostics')),
                                 ),
@@ -196,6 +202,22 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                                   OutlinedButton(
                                     onPressed: () => _lookup(plugin),
                                     child: Text(_t('DNS 查询', 'DNS lookup')),
+                                  ),
+                                if (plugin.id == 'cdk' || plugin.id == 'ldc')
+                                  OutlinedButton.icon(
+                                    onPressed: () async {
+                                      try {
+                                        await AndroidOptionalPluginService.instance
+                                            .launch(plugin.id);
+                                      } catch (error) {
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text(error.toString())),
+                                        );
+                                      }
+                                    },
+                                    icon: const Icon(Icons.open_in_new),
+                                    label: Text(_t('打开独立插件', 'Open companion')),
                                   ),
                               ],
                             ),
