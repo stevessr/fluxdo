@@ -31,6 +31,7 @@ class OptionalPluginChannel(
         val packageName: String,
         val serviceClass: String,
         val operations: Set<String>,
+        val activityClass: String? = null,
     ) {
         val component get() = ComponentName(packageName, serviceClass)
     }
@@ -48,6 +49,20 @@ class OptionalPluginChannel(
             "com.github.lingyan000.fluxdo.plugin.network.NetworkService",
             setOf("network.state", "network.lookup"),
         ),
+        Spec(
+            "cdk", "CDK 元宇宙",
+            "com.github.lingyan000.fluxdo.plugin.cdk",
+            "com.github.lingyan000.fluxdo.plugin.cdk.CdkPluginService",
+            setOf("metaverse.capabilities"),
+            "com.github.lingyan000.fluxdo.plugin.cdk.CdkActivity",
+        ),
+        Spec(
+            "ldc", "LDC 元宇宙",
+            "com.github.lingyan000.fluxdo.plugin.ldc",
+            "com.github.lingyan000.fluxdo.plugin.ldc.LdcPluginService",
+            setOf("metaverse.capabilities"),
+            "com.github.lingyan000.fluxdo.plugin.ldc.LdcActivity",
+        ),
     )
     private val channel = MethodChannel(messenger, PluginProtocol.CHANNEL)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -62,6 +77,29 @@ class OptionalPluginChannel(
             }
             when (call.method) {
                 "list" -> result.success(specs.map(::describe))
+                "launch" -> {
+                    val spec = specs.firstOrNull {
+                        it.id == call.argument<String>("id") && it.activityClass != null
+                    }
+                    if (spec == null || describe(spec)["compatible"] != true) {
+                        result.error("PLUGIN_UNAVAILABLE", "Signed metaverse companion unavailable", null)
+                    } else {
+                        try {
+                            val component = ComponentName(spec.packageName, spec.activityClass!!)
+                            val info = context.packageManager.getActivityInfo(component, 0)
+                            if (!info.exported || info.permission != PluginProtocol.BIND_PERMISSION) {
+                                throw SecurityException("Companion activity is not protected")
+                            }
+                            context.startActivity(
+                                Intent().setComponent(component)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                            result.success(true)
+                        } catch (error: Exception) {
+                            result.error("LAUNCH_FAILED", error.message, null)
+                        }
+                    }
+                }
                 "invoke" -> {
                     val id = call.argument<String>("id")
                     val operation = call.argument<String>("operation")
