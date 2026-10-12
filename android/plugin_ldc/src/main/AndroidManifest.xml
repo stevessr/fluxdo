@@ -1,0 +1,12 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="com.github.lingyan000.fluxdo.permission.BIND_PLUGIN" />
+    <application android:label="FluxDO LDC" android:usesCleartextTraffic="false">
+        <service android:name=".LdcPluginService" android:exported="true"
+            android:permission="com.github.lingyan000.fluxdo.permission.BIND_PLUGIN">
+            <meta-data android:name="com.github.lingyan000.fluxdo.plugin.PROTOCOL" android:value="1" />
+        </service>
+        <activity android:name=".LdcActivity" android:exported="true"
+            android:permission="com.github.lingyan000.fluxdo.permission.BIND_PLUGIN" />
+    </application>
+</manifest>
