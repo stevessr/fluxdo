@@ -20,6 +20,14 @@ PLUGINS = {
         MAIN_PACKAGE + ".plugin.network",
         MAIN_PACKAGE + ".plugin.network.NetworkService",
     ),
+    "plugin_cdk": (
+        MAIN_PACKAGE + ".plugin.cdk",
+        MAIN_PACKAGE + ".plugin.cdk.CdkPluginService",
+    ),
+    "plugin_ldc": (
+        MAIN_PACKAGE + ".plugin.ldc",
+        MAIN_PACKAGE + ".plugin.ldc.LdcPluginService",
+    ),
 }
 
 
@@ -76,7 +84,7 @@ def main() -> None:
                   for meta in service.findall("meta-data")),
               f"{module}: protocol version mismatch")
 
-    print("Android optional APK contract: OK (two modules, signed IPC, protocol v1)")
+    print("Android optional APK contract: OK (four modules, signed IPC, protocol v1)")
 
 
 if __name__ == "__main__":
