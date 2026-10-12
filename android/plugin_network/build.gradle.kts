@@ -2,6 +2,12 @@ import java.io.File
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
 val keyFile = rootProject.file("key.properties")
 val keys = Properties().apply {
     if (keyFile.exists()) keyFile.inputStream().use { load(it) }
@@ -14,10 +20,6 @@ val keyStore = keys.getProperty("storeFile")?.trim()?.takeIf { it.isNotEmpty() }
 val signed = listOf("keyAlias", "keyPassword", "storePassword")
     .all { !keys.getProperty(it).isNullOrBlank() } && keyStore?.isFile == true
 
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-}
 
 android {
     namespace = "com.github.lingyan000.fluxdo.plugin.network"
