@@ -36,7 +36,7 @@ class StickerActivity : FlutterActivity() {
                 "avif" to "image/avif", "jpg" to "image/jpeg",
                 "svg" to "image/svg+xml",
             )
-            if (path == null || types[ext] != mime) {
+            if (path == null || ext == null || types[ext] != mime) {
                 result.error("INVALID", "Invalid export type", null)
                 return@setMethodCallHandler
             }
