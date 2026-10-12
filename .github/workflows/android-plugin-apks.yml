@@ -9,6 +9,9 @@ on:
       - 'android/plugin_*/**'
       - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
       - 'android/settings.gradle.kts'
+      - 'scripts/ci/check_android_plugin_contract.py'
+      - 'lib/services/android_optional_plugin_service.dart'
+      - 'lib/pages/android_plugins_page.dart'
       - '.github/workflows/android-plugin-apks.yml'
   pull_request:
     paths:
@@ -34,11 +37,19 @@ jobs:
           cache: true
       - name: Resolve Flutter dependencies
         run: flutter pub get
+      - name: Check plugin IPC manifests and allowlist
+        run: python3 scripts/ci/check_android_plugin_contract.py
+      - name: Analyze Flutter plugin manager
+        run: dart analyze lib/services/android_optional_plugin_service.dart lib/pages/android_plugins_page.dart
       - name: Build both optional APKs (debug test-signing only)
         run: |
           cd android
           chmod +x gradlew
           ./gradlew --no-daemon :plugin_deviceinfo:assembleDebug :plugin_network:assembleDebug
+      - name: Compile core host Kotlin integration
+        run: |
+          cd android
+          ./gradlew --no-daemon :app:compileDebugKotlin
       - name: Validate produced APKs
         shell: bash
         run: |
