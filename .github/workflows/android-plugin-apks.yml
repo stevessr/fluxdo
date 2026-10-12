@@ -9,6 +9,8 @@ on:
       - 'android/plugin_*/**'
       - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
       - 'android/settings.gradle.kts'
+      - 'android_companions/**'
+      - 'scripts/ci/build_sticker_companion.py'
       - 'scripts/ci/check_android_plugin_contract.py'
       - 'lib/services/android_optional_plugin_service.dart'
       - 'lib/pages/android_plugins_page.dart'
@@ -18,6 +20,8 @@ on:
       - 'android/plugin_*/**'
       - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
       - 'android/settings.gradle.kts'
+      - 'android_companions/**'
+      - 'scripts/ci/build_sticker_companion.py'
       - 'scripts/ci/check_android_plugin_contract.py'
       - 'lib/services/android_optional_plugin_service.dart'
       - 'lib/pages/android_plugins_page.dart'
@@ -46,6 +50,10 @@ jobs:
         run: |
           dart analyze lib/services/android_optional_plugin_service.dart
           dart analyze lib/pages/android_plugins_page.dart
+      - name: Prepare generated locale and avatar assets
+        run: dart tool/project_prep.dart test
+      - name: Build independent Flutter sticker APK
+        run: python3 scripts/ci/build_sticker_companion.py --mode debug --abi android-arm64
       - name: Build both optional APKs (debug test-signing only)
         run: |
           cd android
@@ -70,4 +78,9 @@ jobs:
         with:
           name: fluxdo-network-debug-apk
           path: build/plugin_network/outputs/apk/debug/plugin_network-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-sticker-arm64-debug-apk
+          path: build/plugin_sticker/fluxdo-sticker-android-arm64-debug.apk
           if-no-files-found: error
