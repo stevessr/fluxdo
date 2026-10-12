@@ -101,19 +101,24 @@ class OptionalPluginChannel(
         }
         val signed = pm.checkSignatures(context.packageName, spec.packageName) ==
             PackageManager.SIGNATURE_MATCH
-        val declaredApi = try {
+        val service = try {
             pm.getServiceInfo(spec.component, PackageManager.GET_META_DATA)
-                .metaData?.getInt(PluginProtocol.PROTOCOL_METADATA, -1) ?: -1
         } catch (_: PackageManager.NameNotFoundException) {
-            -1
+            null
         }
-        val compatible = signed && declaredApi == PluginProtocol.VERSION
+        val declaredApi = service?.metaData?.getInt(
+            PluginProtocol.PROTOCOL_METADATA, -1,
+        ) ?: -1
+        val protected = service?.exported == true &&
+            service.permission == PluginProtocol.BIND_PERMISSION
+        val compatible = signed && protected && declaredApi == PluginProtocol.VERSION
         return mapOf(
             "id" to spec.id, "name" to spec.name,
             "package" to spec.packageName, "installed" to true,
             "compatible" to compatible, "version" to packageInfo.versionName,
             "reason" to when {
                 !signed -> "signature_mismatch"
+                !protected -> "unprotected_service"
                 declaredApi != PluginProtocol.VERSION -> "incompatible_protocol"
                 else -> "ready"
             },
