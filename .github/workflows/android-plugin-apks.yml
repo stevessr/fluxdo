@@ -58,7 +58,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew --no-daemon :plugin_deviceinfo:assembleDebug :plugin_network:assembleDebug
+          ./gradlew --no-daemon :plugin_deviceinfo:assembleDebug :plugin_network:assembleDebug :plugin_cdk:assembleDebug :plugin_ldc:assembleDebug
       - name: Compile core host Kotlin integration
         run: |
           cd android
@@ -69,6 +69,8 @@ jobs:
           set -euo pipefail
           test -s build/plugin_deviceinfo/outputs/apk/debug/plugin_deviceinfo-debug.apk
           test -s build/plugin_network/outputs/apk/debug/plugin_network-debug.apk
+          test -s build/plugin_cdk/outputs/apk/debug/plugin_cdk-debug.apk
+          test -s build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: fluxdo-deviceinfo-debug-apk
@@ -83,4 +85,14 @@ jobs:
         with:
           name: fluxdo-sticker-arm64-debug-apk
           path: build/plugin_sticker/fluxdo-sticker-android-arm64-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-cdk-debug-apk
+          path: build/plugin_cdk/outputs/apk/debug/plugin_cdk-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-ldc-debug-apk
+          path: build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk
           if-no-files-found: error
