@@ -56,6 +56,8 @@ jobs:
         run: python3 -m py_compile scripts/ci/build_sticker_companion.py scripts/ci/check_android_plugin_contract.py
       - name: Check plugin IPC manifests and allowlist
         run: python3 scripts/ci/check_android_plugin_contract.py
+      - name: Prepare generated locale and avatar assets
+        run: dart tool/project_prep.dart test
       - name: Analyze Flutter plugin manager
         run: |
           dart analyze lib/services/android_optional_plugin_service.dart
@@ -67,8 +69,6 @@ jobs:
           dart analyze lib/pages/metaverse_page.dart
       - name: Test companion result protocol
         run: flutter test test/services/android_sticker_companion_service_test.dart
-      - name: Prepare generated locale and avatar assets
-        run: dart tool/project_prep.dart test
       - name: Build independent Flutter sticker APK
         run: python3 scripts/ci/build_sticker_companion.py --mode debug --abi android-arm64
       - name: Build both optional APKs (debug test-signing only)
