@@ -109,16 +109,16 @@ class OptionalPluginChannel(
         val declaredApi = service?.metaData?.getInt(
             PluginProtocol.PROTOCOL_METADATA, -1,
         ) ?: -1
-        val protected = service?.exported == true &&
+        val correctlyProtected = service?.exported == true &&
             service.permission == PluginProtocol.BIND_PERMISSION
-        val compatible = signed && protected && declaredApi == PluginProtocol.VERSION
+        val compatible = signed && correctlyProtected && declaredApi == PluginProtocol.VERSION
         return mapOf(
             "id" to spec.id, "name" to spec.name,
             "package" to spec.packageName, "installed" to true,
             "compatible" to compatible, "version" to packageInfo.versionName,
             "reason" to when {
                 !signed -> "signature_mismatch"
-                !protected -> "unprotected_service"
+                !correctlyProtected -> "unprotected_service"
                 declaredApi != PluginProtocol.VERSION -> "incompatible_protocol"
                 else -> "ready"
             },
