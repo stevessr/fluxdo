@@ -1,0 +1,57 @@
+name: Android optional plugin APKs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feat/android-independent-plugin-apks'
+    paths:
+      - 'android/plugin_*/**'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
+      - 'android/settings.gradle.kts'
+      - '.github/workflows/android-plugin-apks.yml'
+  pull_request:
+    paths:
+      - 'android/plugin_*/**'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
+      - 'android/settings.gradle.kts'
+      - '.github/workflows/android-plugin-apks.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Build both optional APKs (debug test-signing only)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon :plugin_deviceinfo:assembleDebug :plugin_network:assembleDebug
+      - name: Validate produced APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s build/plugin_deviceinfo/outputs/apk/debug/plugin_deviceinfo-debug.apk
+          test -s build/plugin_network/outputs/apk/debug/plugin_network-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-deviceinfo-debug-apk
+          path: build/plugin_deviceinfo/outputs/apk/debug/plugin_deviceinfo-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-network-debug-apk
+          path: build/plugin_network/outputs/apk/debug/plugin_network-debug.apk
+          if-no-files-found: error
