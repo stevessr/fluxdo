@@ -15,13 +15,16 @@ const _returnChannel = MethodChannel(
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   LocaleSettings.useDeviceLocale();
+  final isInsertMode = await _returnChannel.invokeMethod<bool>('insertMode') ?? false;
   runApp(
     TranslationProvider(
       child: MaterialApp(
         navigatorKey: navigatorKey,
         title: 'FluxDO StevesSR',
         theme: ThemeData(useMaterial3: true, fontFamily: 'MiSans'),
-        home: StevessrGeneratorPage(onInsert: _sendImageToHost),
+        home: StevessrGeneratorPage(
+          onInsert: isInsertMode ? _sendImageToHost : null,
+        ),
       ),
     ),
   );
