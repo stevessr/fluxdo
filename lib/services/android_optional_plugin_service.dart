@@ -19,10 +19,24 @@ class AndroidOptionalPluginService {
   Future<List<AndroidOptionalPlugin>> list() async {
     if (!supported) return const [];
     final items = await _channel.invokeMethod<List<dynamic>>('list');
-    return (items ?? const [])
+    final plugins = (items ?? const [])
         .whereType<Map>()
         .map((item) => AndroidOptionalPlugin.fromMap(item))
-        .toList(growable: false);
+        .toList();
+    try {
+      const stickerChannel = MethodChannel(
+        'com.github.lingyan000.fluxdo/sticker_companion',
+      );
+      final sticker = await stickerChannel.invokeMapMethod<dynamic, dynamic>(
+        'status',
+      );
+      if (sticker != null) {
+        plugins.add(AndroidOptionalPlugin.fromMap(sticker));
+      }
+    } on MissingPluginException {
+      // Older FluxDO installations have no sticker companion bridge.
+    }
+    return plugins;
   }
 
   Future<bool> launch(String id) async {
