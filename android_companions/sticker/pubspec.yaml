@@ -1,0 +1,26 @@
+name: fluxdo_sticker_companion
+description: Independently updatable StevesSR Android Flutter companion
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: ^3.13.0
+  flutter: ">=3.47.4"
+dependencies:
+  flutter:
+    sdk: flutter
+  fluxdo:
+    path: ../..
+  path_provider: ^2.1.5
+  slang_flutter: 4.14.0
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/avater/stevessr/
+    - assets/images/avater/llm/
+    - assets/images/avater/touhou/
+    - assets/images/avater/blue_archive/
+    - assets/images/avater/witch_judgment/
+  fonts:
+    - family: MiSans
+      fonts:
+        - asset: assets/fonts/MiSansVF.ttf
