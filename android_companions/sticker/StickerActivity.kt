@@ -20,6 +20,10 @@ class StickerActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "com.github.lingyan000.fluxdo.plugin.sticker/return",
         ).setMethodCallHandler { call, result ->
+            if (call.method == "insertMode") {
+                result.success(intent?.action == Intent.ACTION_GET_CONTENT)
+                return@setMethodCallHandler
+            }
             if (call.method != "complete") {
                 result.notImplemented()
                 return@setMethodCallHandler
