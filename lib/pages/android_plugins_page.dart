@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/android_optional_plugin_service.dart';
 
@@ -87,6 +88,21 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
     await _run(plugin, 'network.lookup', {'hostname': hostname});
   }
 
+  Future<void> _openReleases() async {
+    try {
+      final opened = await launchUrl(
+        Uri.parse('https://github.com/stevessr/fluxdo/releases'),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) throw StateError('Unable to open GitHub Releases');
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,6 +139,15 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                   'After signed releases are published, install plugin APKs from GitHub Releases.',
                 ),
                 style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _openReleases,
+                  icon: const Icon(Icons.open_in_new_rounded),
+                  label: Text(_t('查看发布页', 'Open releases')),
+                ),
               ),
               const SizedBox(height: 12),
               for (final plugin in plugins)
