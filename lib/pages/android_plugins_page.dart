@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/android_optional_plugin_service.dart';
+import '../services/android_sticker_companion_service.dart';
+import '../services/stevessr_export_service.dart';
 
 /// Displays separately installed Android companion APKs. Deliberately does not
 /// install unsigned/untrusted APKs automatically.
@@ -167,6 +169,7 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                             'network' => _t('网络诊断', 'Network diagnostics'),
                             'cdk' => 'CDK',
                             'ldc' => 'LDC',
+                            'sticker' => _t('表情包生成器', 'Sticker generator'),
                             _ => plugin.name,
                           }),
                           subtitle: Text(
@@ -187,17 +190,36 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                             child: Wrap(
                               spacing: 8,
                               children: [
-                                FilledButton.tonal(
-                                  onPressed: () => _run(
-                                    plugin,
-                                    switch (plugin.id) {
-                                      'deviceinfo' => 'device.snapshot',
-                                      'network' => 'network.state',
-                                      _ => 'metaverse.capabilities',
-                                    },
+                                if (plugin.id != 'sticker')
+                                  FilledButton.tonal(
+                                    onPressed: () => _run(
+                                      plugin,
+                                      switch (plugin.id) {
+                                        'deviceinfo' => 'device.snapshot',
+                                        'network' => 'network.state',
+                                        _ => 'metaverse.capabilities',
+                                      },
+                                    ),
+                                    child: Text(_t('查询插件能力', 'Query capabilities')),
                                   ),
-                                  child: Text(_t('运行诊断', 'Run diagnostics')),
-                                ),
+                                if (plugin.id == 'sticker')
+                                  FilledButton.tonal(
+                                    onPressed: () async {
+                                      try {
+                                        final image = await
+                                            AndroidStickerCompanionService.generate();
+                                        if (image != null) {
+                                          await StevessrExportService.save(image);
+                                        }
+                                      } catch (error) {
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text(error.toString())),
+                                        );
+                                      }
+                                    },
+                                    child: Text(_t('打开生成器', 'Open generator')),
+                                  ),
                                 if (plugin.id == 'network')
                                   OutlinedButton(
                                     onPressed: () => _lookup(plugin),
