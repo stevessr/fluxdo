@@ -13,6 +13,9 @@ Feature 的同一应用 split。它们可以独立提高 `versionCode` 并更新
 | `:plugin_api` | Android library（无 APK） | IPC 消息协议 v1 | 由其他模块编译进各 APK |
 | `:plugin_deviceinfo` | `com.github.lingyan000.fluxdo.plugin.deviceinfo` | 设备信息和内存诊断 | 是 |
 | `:plugin_network` | `com.github.lingyan000.fluxdo.plugin.network` | 网络状态、DNS 解析诊断 | 是 |
+| `:plugin_cdk` | `com.github.lingyan000.fluxdo.plugin.cdk` | CDK 独立站点 UI（独立登录）与能力协议 | 是 |
+| `:plugin_ldc` | `com.github.lingyan000.fluxdo.plugin.ldc` | LDC 独立站点 UI（独立登录）与能力协议 | 是 |
+| `android_companions/sticker` | `com.github.lingyan000.fluxdo.plugin.sticker` | **独立 Flutter 引擎**的 StevesSR 生成器；图片经限权 URI 返回主 App | 是 |
 
 第一阶段交付的是可独立部署的插件接口与两个可操作的原生诊断插件。
 **媒体转码、WebView、Flutter UI 等现有功能仍打包在主 APK 内**；
@@ -78,3 +81,73 @@ cd android
 取消、异常断线与同签名无损升级路径，确认退化行为后才能从 `:app`
 移除 Media3 依赖。Flutter 层业务功能仍需主应用升级，不能假装 Dart
 代码可以通过独立 APK 热替换。
+
+## 第二阶段：表情包生成器与元宇宙
+
+### 表情包生成器 (StevesSR)
+
+- 与 JNI/Binder 原生诊断插件不同，生成器使用自己的 Flutter Android **应用工程**
+  （构建时由 Flutter SDK 生成），具有独立的 `applicationId`、`versionCode`
+  和 Flutter Engine。UI 直接复用原来的 `StevessrGeneratorPage`、图片生成和导出逻辑。
+- 构建器先运行 `dart tool/project_prep.dart test` 生成 Slang 翻译与角色表情差分，
+  然后把角色素材、字体打入独立插件。否则从新检出的源码只看到 `.gitkeep`，
+  默认 StevesSR 表情不可用。
+- Android 主 App 的编辑器调用 `AndroidStickerCompanionService.generate()`，
+  插件生成图后写到它的私有 cache，原生 Activity 使用 FileProvider 生成受限制的
+  `content://` URI，通过 Activity Result + 临时读权限交还。主 App 严格校验
+  签名、固定包名、URI authority、MIME、非空和 16MiB 上限，之后继续沿用原有
+  Discourse 图片上传、保留 alpha 通道和插入 Markdown 逻辑。
+- 设置页生成器在检测到同签名 APK 已安装时也调用独立生成器；图片确认后落地
+  保存。未安装插件时沿用原生内嵌 Flutter 页面，**不破坏旧安装**。
+- 插件升级不需要更新主 APK，但打包构建仍依赖相同源代码版本的 Flutter
+  组件。Flutter AOT / Native ABI 不能直接跨 APK 装载成原进程里的 Dart 代码。
+- **当前尚未完成减重**：为保护 iOS/Linux/Windows、老 Android 安装和全部
+  编辑器入口，原生成器 Dart 代码及角色素材仍被主 App 引用；后续先增加
+  Android 专属裁剪/资源 flavor，测量安装总量与更新下载大小，再考虑删除
+  主包内对应功能。不要误称本轮已经大幅减小 core.apk。
+
+构建独立 Flutter APK：
+
+```bash
+flutter pub get
+dart tool/project_prep.dart test
+python3 scripts/ci/build_sticker_companion.py --mode debug --abi android-arm64
+# build/plugin_sticker/fluxdo-sticker-android-arm64-debug.apk
+# Release 必须有 android/key.properties，引用主 App 同一套 release 密钥
+python3 scripts/ci/build_sticker_companion.py --mode release --abi android-arm64
+```
+
+### CDK / LDC
+
+- 分别新建 `:plugin_cdk` 和 `:plugin_ldc`，各自是独立原生 APK，
+  提供签名保护的 `metaverse.capabilities` IPC 与 WebView 站点入口；
+  只允许打开对应的官方 HTTPS 服务、linux.do、connect.linux.do；
+  其它 URL 转外部浏览器。
+- 主应用「元宇宙」与「Android 插件」可打开这些入口。插件独立存放 WebView
+  Cookie，**不会读取、复制或自动同步 FluxDO 原登录凭据**；
+  用户可能需要在插件单独授权。
+- **功能迁移状态必须准确描述**：目前 CDK/LDC 的既有余额卡片、站内授权、
+  账号分区缓存仍在主 App，新增 APK 仅实现独立服务 UI 容器，不具备自动继承
+  宿主余额态的能力。
+- `lib/modules/ldc_reward` 打赏服务含 Basic Auth 的 Client ID/Secret，
+  交易接口 `/epay/pay/distribute` 属资金操作。它**还没有拆成可执行交易的
+  独立插件**。后续要实现仅一次有效的授权/交易许可、账户代际校验、幂等号、
+  超时后订单状态查询、撤销凭据和签名隔离后再迁移。不允许把密钥通过 JSON
+  接口随意发给新插件，也不能用页面壳冒充交易逻辑已完成。
+
+下一阶段正确目标是独立可升级的 **业务逻辑**（而非仅页面）：将宿主授权状态
+以最小权限能力委托给 CDK、LDC 插件，由插件执行其业务 API，返回无凭据的结果，
+原 App 只负责 UI 组合与会话撤销。必须有黑盒测试证明多账户切换无泄漏。
+
+### 回归重点
+
+1. 构建 debug 主 App + sticker + CDK + LDC，确认签名与安装包名一致；
+   `adb install -r` 独立升级任一包不卸载主应用。
+2. 插件未安装、签名错误、协议错误、升级中进程死亡、外部回调被取消均能
+   安全失败；未安装时原生成器仍可绘制与上传。
+3. 生成器逐一验证 PNG/WebP/AVIF/JPEG/SVG，透明 WebP/AVIF、气泡图片、
+   不同角色的差分素材及 16MiB 拒绝策略；禁止任意文件 URI、任意 authority。
+4. 切换 Discourse 账户后 CDK/LDC 不显示旧账号数据；测试插件独立浏览会话
+   与主 App 授权互不污染。
+5. 审查独立 Flutter APK 是否无意引入多余插件/系统权限，对比拆分前后的
+   **core APK bytes / 总安装 bytes / 单次增量更新 bytes / 冷启动 P95**。
