@@ -177,6 +177,7 @@
         <!-- Package visibility on Android 11+; no global enumeration needed for plugins. -->
         <package android:name="com.github.lingyan000.fluxdo.plugin.deviceinfo" />
         <package android:name="com.github.lingyan000.fluxdo.plugin.network" />
+        <package android:name="com.github.lingyan000.fluxdo.plugin.sticker" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
