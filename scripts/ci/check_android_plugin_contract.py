@@ -84,7 +84,30 @@ def main() -> None:
                   for meta in service.findall("meta-data")),
               f"{module}: protocol version mismatch")
 
-    print("Android optional APK contract: OK (four modules, signed IPC, protocol v1)")
+    # Activity-based companions use the same allowlist/signature boundary.
+    sticker_host = (ROOT / "android/app/src/main/kotlin/com/github/"
+                    "lingyan000/fluxdo/StickerCompanionChannel.kt").read_text()
+    sticker_native = (ROOT / "android_companions/sticker/StickerActivity.kt").read_text()
+    sticker_builder = (ROOT / "scripts/ci/build_sticker_companion.py").read_text()
+    check(MAIN_PACKAGE + ".plugin.sticker" in queried,
+          "Missing sticker package visibility")
+    check("PackageManager.SIGNATURE_MATCH" in sticker_host,
+          "Sticker host must validate same signer")
+    check('"$PACKAGE.files"' in sticker_host, "Sticker URI authority not validated")
+    check("FileProvider.getUriForFile" in sticker_native,
+          "Sticker companion must export grantable content URIs")
+    check("android/key.properties" in sticker_builder,
+          "Sticker release signer must refer to main keystore")
+    for name in ("cdk", "ldc"):
+        entry = (ROOT / f"android/plugin_{name}/src/main/AndroidManifest.xml")
+        root = ET.parse(entry).getroot()
+        activities = root.findall("./application/activity")
+        check(len(activities) == 1 and
+              attr(activities[0], "permission") == PERMISSION and
+              attr(activities[0], "exported") == "true",
+              f"{name}: companion Activity must require same-signature permission")
+
+    print("Android optional APK contract: OK (four native modules + Flutter sticker companion, signed IPC, protocol v1)")
 
 
 if __name__ == "__main__":
