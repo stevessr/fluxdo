@@ -40,6 +40,7 @@ class StickerCompanionChannel(
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "available" -> result.success(isAvailable())
+                "status" -> result.success(status())
                 "generate" -> {
                     if (pending != null) {
                         result.error("BUSY", "A sticker session is already open", null)
@@ -65,6 +66,34 @@ class StickerCompanionChannel(
                 else -> result.notImplemented()
             }
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun status(): Map<String, Any?> {
+        val pm = activity.packageManager
+        val installed = try {
+            pm.getPackageInfo(PACKAGE, 0)
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+        val sameSigner = installed != null &&
+            pm.checkSignatures(activity.packageName, PACKAGE) ==
+            PackageManager.SIGNATURE_MATCH
+        val ready = sameSigner && isAvailable()
+        return mapOf(
+            "id" to "sticker",
+            "name" to "StevesSR 表情包生成器",
+            "package" to PACKAGE,
+            "installed" to (installed != null),
+            "compatible" to ready,
+            "version" to installed?.versionName,
+            "reason" to when {
+                installed == null -> "not_installed"
+                !sameSigner -> "signature_mismatch"
+                !ready -> "missing_activity"
+                else -> "ready"
+            },
+        )
     }
 
     private fun isAvailable(): Boolean {
