@@ -25,6 +25,11 @@ class AndroidOptionalPluginService {
         .toList(growable: false);
   }
 
+  Future<bool> launch(String id) async {
+    if (!supported) return false;
+    return await _channel.invokeMethod<bool>('launch', {'id': id}) ?? false;
+  }
+
   Future<Map<String, dynamic>> invoke(
     String id,
     String operation, [
