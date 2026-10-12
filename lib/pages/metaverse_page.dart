@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
 import '../services/auth_session.dart';
+import '../services/android_optional_plugin_service.dart';
 import '../providers/theme_provider.dart';
 import '../services/ldc_oauth_service.dart';
 import '../services/cdk_oauth_service.dart';
@@ -30,6 +32,8 @@ class MetaversePage extends ConsumerStatefulWidget {
 class _MetaversePageState extends ConsumerState<MetaversePage> {
   static const String _ldcEnabledKey = 'ldc_enabled';
   static const String _cdkEnabledKey = 'cdk_enabled';
+  late final Future<List<AndroidOptionalPlugin>> _companionPlugins =
+      AndroidOptionalPluginService.instance.list();
   bool _ldcEnabled = false;
   bool _cdkEnabled = false;
   bool _ldcProcessing = false;
@@ -290,9 +294,11 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
                 ),
                 // LDC 服务卡片
                 _buildLdcServiceItem(theme),
+                _buildCompanionLaunch('ldc'),
                 const SizedBox(height: 16),
                 // CDK 服务卡片
                 _buildCdkServiceItem(theme),
+                _buildCompanionLaunch('cdk'),
                 const SizedBox(height: 16),
                 // LDC 打赏配置（仅在 LDC 已开启时显示）
                 if (_ldcEnabled) ...[
@@ -307,6 +313,45 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCompanionLaunch(String pluginId) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return const SizedBox.shrink();
+    }
+    return FutureBuilder<List<AndroidOptionalPlugin>>(
+      future: _companionPlugins,
+      builder: (context, snapshot) {
+        final installed = snapshot.data?.where(
+          (item) => item.id == pluginId && item.compatible,
+        );
+        if (installed == null || installed.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.extension_outlined),
+              label: Text(pluginId == 'ldc'
+                  ? '打开独立 LDC 插件（独立登录）'
+                  : '打开独立 CDK 插件（独立登录）'),
+              onPressed: () async {
+                try {
+                  await AndroidOptionalPluginService.instance.launch(pluginId);
+                } catch (error) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(error.toString())),
+                  );
+                }
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
