@@ -18,6 +18,9 @@ on:
       - 'android/plugin_*/**'
       - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
       - 'android/settings.gradle.kts'
+      - 'scripts/ci/check_android_plugin_contract.py'
+      - 'lib/services/android_optional_plugin_service.dart'
+      - 'lib/pages/android_plugins_page.dart'
       - '.github/workflows/android-plugin-apks.yml'
 
 jobs:
@@ -40,7 +43,9 @@ jobs:
       - name: Check plugin IPC manifests and allowlist
         run: python3 scripts/ci/check_android_plugin_contract.py
       - name: Analyze Flutter plugin manager
-        run: dart analyze lib/services/android_optional_plugin_service.dart lib/pages/android_plugins_page.dart
+        run: |
+          dart analyze lib/services/android_optional_plugin_service.dart
+          dart analyze lib/pages/android_plugins_page.dart
       - name: Build both optional APKs (debug test-signing only)
         run: |
           cd android
