@@ -339,13 +339,13 @@ jobs:
           timestamp=$(date -u +%Y%m%d-%H%M%S)
 
           if [ "${{ matrix.arch }}" = "universal" ]; then
-            dart tool/flutterw.dart build apk --release --dart-define=cronetHttpNoPlay=true
+            python3 scripts/ci/build_android_core_modular.py --mode release --abi all
             mkdir -p dist
             # fluxdo-v1.2.3-abc1234-20260726-123456-universal.apk
             mv build/app/outputs/flutter-apk/app-release.apk \
               "dist/fluxdo-v${version}-${commit_sha}-${timestamp}-universal.apk"
           else
-            dart tool/flutterw.dart build apk --release --target-platform ${{ matrix.flutter-target }} --dart-define=cronetHttpNoPlay=true
+            python3 scripts/ci/build_android_core_modular.py --mode release --abi ${{ matrix.flutter-target }}
             mkdir -p dist
             # fluxdo-v1.2.3-abc1234-20260726-123456-arm64-v8a.apk
             mv build/app/outputs/flutter-apk/app-release.apk \
