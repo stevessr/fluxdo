@@ -1,6 +1,7 @@
 void handleTopicDetailMoreMenuSelection(
   String value, {
   required void Function() onEditTopic,
+  void Function()? onAddToBoard,
   required void Function() onBookmark,
   required void Function() onReadLater,
   required void Function() onSubscribe,
@@ -18,6 +19,9 @@ void handleTopicDetailMoreMenuSelection(
   switch (value) {
     case 'edit_topic':
       onEditTopic();
+      return;
+    case 'add_to_board':
+      onAddToBoard?.call();
       return;
     case 'archive_message':
       onToggleArchiveMessage?.call();
