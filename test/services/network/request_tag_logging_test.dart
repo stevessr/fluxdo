@@ -64,6 +64,16 @@ void main() {
     expect(entry.containsKey('remote_ip'), isFalse);
   });
 
+  test('Dio IO adapter httpVersion metadata is recorded without Alt-Svc',
+      () async {
+    final dio = _buildDio(ioHttpVersion: '1.1');
+    await dio.get<dynamic>('/latest.json');
+
+    final entry = await _readSingleRequestEntry();
+    expect(entry['httpVersion'], '1.1');
+    expect(entry.containsKey('http3Advertised'), isFalse);
+  });
+
   test('an HTTP/3 advertisement never claims an HTTP/3 connection', () async {
     final dio = _buildDio(altSvc: 'h3=":443"; ma=86400');
     await dio.get<dynamic>('/latest.json');
@@ -105,17 +115,26 @@ Future<Map<String, dynamic>> _readSingleRequestEntry() async {
   return entries.single;
 }
 
-Dio _buildDio({String? httpVersion, String? altSvc}) {
+Dio _buildDio({
+  String? httpVersion,
+  String? ioHttpVersion,
+  String? altSvc,
+}) {
   final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'))
-    ..httpClientAdapter = _OkAdapter(httpVersion: httpVersion, altSvc: altSvc);
+    ..httpClientAdapter = _OkAdapter(
+      httpVersion: httpVersion,
+      ioHttpVersion: ioHttpVersion,
+      altSvc: altSvc,
+    );
   dio.interceptors.add(NetworkLogInterceptor());
   return dio;
 }
 
 class _OkAdapter implements HttpClientAdapter {
-  _OkAdapter({this.httpVersion, this.altSvc});
+  _OkAdapter({this.httpVersion, this.ioHttpVersion, this.altSvc});
 
   final String? httpVersion;
+  final String? ioHttpVersion;
   final String? altSvc;
 
   @override
@@ -134,6 +153,9 @@ class _OkAdapter implements HttpClientAdapter {
     );
     if (httpVersion != null) {
       response.extra['http_version'] = httpVersion;
+    }
+    if (ioHttpVersion != null) {
+      response.extra['httpVersion'] = ioHttpVersion;
     }
     return response;
   }
