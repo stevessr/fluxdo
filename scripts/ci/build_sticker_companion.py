@@ -8,9 +8,11 @@ avatar delta assets. Uses the same applicationId on every update.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import shutil
+from zipfile import ZipFile
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -298,6 +300,50 @@ subprojects {
     root_gradle.write_text(build_script)
 
 
+def verify_drawing_dependency_graph(target: Path) -> None:
+    """Reject accidental Flutter native-plugin dependencies from the host."""
+    lockfile = target / "pubspec.lock"
+    if not lockfile.is_file():
+        raise RuntimeError("Sticker Flutter pub get did not produce a lockfile")
+    lock = lockfile.read_text()
+    if "\\n  fluxdo:\\n" in lock:
+        raise RuntimeError("The sticker APK resolved the full FluxDO dependency")
+    registration = target / ".flutter-plugins-dependencies"
+    if registration.is_file():
+        data = json.loads(registration.read_text())
+        plugins = [item["name"] for item in data.get("plugins", {}).get("android", [])]
+        allowed_prefixes = (
+            "file_picker", "flutter_avif", "gal", "path_provider",
+            "share_plus",
+        )
+        unexpected = [
+            name for name in plugins
+            if not name.startswith(allowed_prefixes)
+        ]
+        if unexpected:
+            raise RuntimeError(
+                "Unexpected native plugins in Sticker-only APK: "
+                + ", ".join(unexpected)
+            )
+        print(f"Sticker Android native plugin registry: {plugins}")
+
+
+def verify_sticker_apk(apk: Path) -> None:
+    with ZipFile(apk) as bundle:
+        entries = bundle.namelist()
+    if not any("flutter_assets/assets/images/avater/" in name for name in entries):
+        raise RuntimeError("Sticker APK lost its companion-only character assets")
+    blocked_assets = (
+        "flutter_assets/assets/certs/",
+        "flutter_assets/assets/cook/",
+        "flutter_assets/assets/polyfill/",
+        "flutter_assets/assets/ai_brands/",
+    )
+    for asset in blocked_assets:
+        if any(asset in name for name in entries):
+            raise RuntimeError(f"FluxDO host asset leaked into Sticker: {asset}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["debug", "release"], default="debug")
@@ -312,6 +358,7 @@ def main() -> None:
         target = Path(temp) / "sticker"
         setup_project(target, args.mode)
         execute("flutter", "pub", "get", cwd=target)
+        verify_drawing_dependency_graph(target)
         flutter_abis = (
             "android-arm,android-arm64,android-x64"
             if args.abi == "universal" else args.abi
@@ -326,6 +373,7 @@ def main() -> None:
         apk_dir = target / "build/app/outputs/flutter-apk"
         candidates = list(apk_dir.glob("*.apk"))
         assert len(candidates) == 1, f"Expected single APK: {candidates}"
+        verify_sticker_apk(candidates[0])
         dest = ROOT / "build/plugin_sticker"
         dest.mkdir(parents=True, exist_ok=True)
         out = dest / f"fluxdo-sticker-{args.abi}-{args.mode}.apk"
