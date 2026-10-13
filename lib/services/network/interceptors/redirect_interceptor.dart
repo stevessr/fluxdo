@@ -149,31 +149,41 @@ class RedirectInterceptor extends Interceptor {
 
     debugPrint('[Dio] Redirect $code -> ${destination.scheme}://${destination.host}');
     try {
-      final redirected = await _dio.request<dynamic>(
-        destination.toString(),
+      // Dio.request() would merge BaseOptions.headers *again*, silently
+      // reinstating Authorization / Cookie / custom secrets on an external
+      // origin after our allowlist stripped them. Dio.fetch(RequestOptions)
+      // keeps the already-composed request context while still re-running
+      // all request/response interceptors for target-domain cookie selection.
+      final redirectedOptions = RequestOptions(
+        path: destination.toString(),
+        baseUrl: '',
+        queryParameters: <String, dynamic>{},
+        method: method,
         data: data,
+        headers: headers,
+        extra: extra,
         cancelToken: source.cancelToken,
         onSendProgress: source.onSendProgress,
         onReceiveProgress: source.onReceiveProgress,
-        options: Options(
-          method: method,
-          headers: headers,
-          extra: extra,
-          responseType: source.responseType,
-          contentType: switchToGet || isMultipartReplay
-              ? null
-              : source.contentType,
-          validateStatus: source.validateStatus,
-          sendTimeout: source.sendTimeout,
-          receiveTimeout: source.receiveTimeout,
-          receiveDataWhenStatusError: source.receiveDataWhenStatusError,
-          followRedirects: false,
-          persistentConnection: source.persistentConnection,
-          preserveHeaderCase: source.preserveHeaderCase,
-          requestEncoder: source.requestEncoder,
-          responseDecoder: source.responseDecoder,
-        ),
+        connectTimeout: source.connectTimeout,
+        sendTimeout: source.sendTimeout,
+        receiveTimeout: source.receiveTimeout,
+        transformTimeout: source.transformTimeout,
+        responseType: source.responseType,
+        contentType: switchToGet || isMultipartReplay
+            ? null
+            : source.contentType,
+        validateStatus: source.validateStatus,
+        receiveDataWhenStatusError: source.receiveDataWhenStatusError,
+        followRedirects: false,
+        maxRedirects: source.maxRedirects,
+        persistentConnection: source.persistentConnection,
+        preserveHeaderCase: source.preserveHeaderCase,
+        requestEncoder: source.requestEncoder,
+        responseDecoder: source.responseDecoder,
+        listFormat: source.listFormat,
       );
+      final redirected = await _dio.fetch<dynamic>(redirectedOptions);
       handler.resolve(redirected);
     } on DioException catch (error) {
       handler.reject(error);
