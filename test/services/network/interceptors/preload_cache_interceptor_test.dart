@@ -89,7 +89,7 @@ Discourse
     expect(cached, contains('"siteSettings"'));
   });
 
-  test('slow cache storage falls back to HTTP within a bounded budget', () async {
+  test('slow cache falls back to HTTP within the budget', () async {
     final slowCache = PreloadCacheService.testing(
       cacheBaseDirectory: () async => tempDirectory,
       namespaceSeed: () async {
