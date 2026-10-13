@@ -1,14 +1,19 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../flux_request_spec.dart';
+import 'https_security_interceptor.dart';
 
-/// 重定向拦截器
-/// 手动处理 301/302/307/308 重定向，确保重定向时使用正确的 cookie
+/// Manual 301/302/303/307/308 handling with cookie re-selection, strict
+/// HTTPS downgrade protection, and RFC-compatible request method semantics.
 class RedirectInterceptor extends Interceptor {
-  RedirectInterceptor(this._dio);
+  RedirectInterceptor(this._dio, {HttpsSecurityPolicy? httpsPolicy})
+      : _httpsPolicy = httpsPolicy ?? HttpsSecurityPolicy.instance;
 
   final Dio _dio;
+  final HttpsSecurityPolicy _httpsPolicy;
   static const String _redirectCountKey = '_redirectCount';
   static const int _maxRedirects = 10;
 
@@ -17,71 +22,158 @@ class RedirectInterceptor extends Interceptor {
     Response response,
     ResponseInterceptorHandler handler,
   ) async {
-    // 检查是否跳过重定向处理
-    if (response.requestOptions.spec.skipRedirect) {
-      return handler.next(response);
+    final source = response.requestOptions;
+    if (source.spec.skipRedirect) {
+      handler.next(response);
+      return;
     }
 
-    final statusCode = response.statusCode;
-    if (statusCode == 301 ||
-        statusCode == 302 ||
-        statusCode == 307 ||
-        statusCode == 308) {
-      final location = response.headers.value('location');
-      if (location != null) {
-        debugPrint('[Dio] Redirect $statusCode -> $location');
-
-        final redirectCount =
-            response.requestOptions.extra[_redirectCountKey] as int? ?? 0;
-        if (redirectCount >= _maxRedirects) {
-          return handler.reject(
-            DioException(
-              requestOptions: response.requestOptions,
-              response: response,
-              type: DioExceptionType.badResponse,
-              error: '重定向次数超过上限 $_maxRedirects',
-            ),
-          );
-        }
-
-        // 解析重定向 URL
-        final redirectUri = Uri.parse(location);
-        final absoluteUrl = redirectUri.isAbsolute
-            ? location
-            : response.requestOptions.uri.resolve(location).toString();
-
-        // 创建新请求，不保留原始 cookie header
-        // CookieManager 会为新 URL 重新获取正确的 cookie
-        final redirectExtra =
-            Map<String, dynamic>.from(response.requestOptions.extra)
-              // 当前原请求仍占用调度槽位。内部重定向必须绕过调度器，否则并发槽
-              // 和速率窗口会被重定向链自己耗尽，外层响应也无法完成释放。
-              ..['skipScheduler'] = true
-              ..[_redirectCountKey] = redirectCount + 1;
-        final newOptions = Options(
-          method: response.requestOptions.method,
-          headers: Map<String, dynamic>.from(response.requestOptions.headers)
-            ..remove('cookie')
-            ..remove('Cookie'),
-          extra: redirectExtra,
-          responseType: response.requestOptions.responseType,
-          validateStatus: response.requestOptions.validateStatus,
-        );
-
-        try {
-          final redirectResponse = await _dio.request(
-            absoluteUrl,
-            options: newOptions,
-          );
-          return handler.resolve(redirectResponse);
-        } catch (e) {
-          if (e is DioException) {
-            return handler.reject(e);
-          }
-          rethrow;
-        }
-      }
+    final code = response.statusCode;
+    if (code != 301 && code != 302 && code != 303 &&
+        code != 307 && code != 308) {
+      handler.next(response);
+      return;
     }
-    handler.next(response);
+
+    final location = response.headers.value('location');
+    if (location == null || location.isEmpty) {
+      handler.next(response);
+      return;
+    }
+
+    Uri destination;
+    try {
+      destination = _httpsPolicy.upgrade(source.uri.resolve(location));
+    } on FormatException {
+      handler.next(response);
+      return;
+    }
+
+    // Custom schemes (for example OAuth deep links) belong to the caller.
+    if (destination.scheme != 'http' && destination.scheme != 'https') {
+      handler.next(response);
+      return;
+    }
+
+    if (source.uri.scheme == 'https' && destination.scheme != 'https') {
+      handler.reject(_redirectError(
+        response, 'Blocked HTTPS to HTTP redirect',
+      ));
+      return;
+    }
+
+    final redirectCount = source.extra[_redirectCountKey] as int? ?? 0;
+    if (redirectCount >= _maxRedirects) {
+      handler.reject(_redirectError(response, 'Too many redirects ($_maxRedirects)'));
+      return;
+    }
+
+    // RFC 9110: 303 always changes to GET (except HEAD); browsers also turn
+    // POST into GET on 301/302. 307/308 preserve method and body.
+    final oldMethod = source.method.toUpperCase();
+    final switchToGet = (code == 303 && oldMethod != 'HEAD') ||
+        ((code == 301 || code == 302) && oldMethod == 'POST');
+    final method = switchToGet ? 'GET' : oldMethod;
+    final replayBody = !switchToGet && source.data != null;
+    final crossOrigin = source.uri.origin != destination.origin;
+
+    // Never replay non-repeatable streams or leak a write body to a different
+    // origin via an untrusted redirect. Multipart data is explicitly cloned.
+    if (replayBody && crossOrigin) {
+      handler.reject(_redirectError(
+        response, 'Cross-origin redirect of a request body is not allowed',
+      ));
+      return;
+    }
+    if (replayBody && source.data is Stream) {
+      handler.reject(_redirectError(
+        response, 'Cannot replay a streaming request body after redirect',
+      ));
+      return;
+    }
+
+    final headers = Map<String, dynamic>.from(source.headers);
+    // The cookie manager must select cookies for the destination URL again.
+    _removeHeaders(headers, const {'cookie'});
+    if (switchToGet) {
+      _removeHeaders(headers, const {
+        'content-type', 'content-length', 'content-encoding',
+        'transfer-encoding',
+      });
+    }
+    if (crossOrigin) {
+      _removeHeaders(headers, const {
+        'authorization', 'proxy-authorization', 'api-key', 'api-username',
+        'x-api-key', 'x-api-username', 'x-csrf-token',
+        'origin', 'referer', 'host', 'x-requested-with',
+        'if-none-match', 'if-modified-since',
+      });
+      headers.removeWhere((key, _) => key.toLowerCase().startsWith('sec-fetch-'));
+    }
+
+    // A redirect is an internal subrequest; retaining the scheduling slot
+    // without bypassing the scheduler could deadlock at concurrency = 1.
+    final extra = Map<String, dynamic>.from(source.extra)
+      ..[FluxRequestKeys.skipScheduler] = true
+      ..[_redirectCountKey] = redirectCount + 1;
+    if (crossOrigin) {
+      // The global forum CSRF interceptor must not inject a site credential
+      // into an unrelated origin on the redirected request.
+      extra[FluxRequestKeys.skipCsrf] = true;
+    }
+
+    final data = replayBody
+        ? (source.data is FormData
+              ? (source.data as FormData).clone()
+              : source.data)
+        : null;
+
+    debugPrint('[Dio] Redirect $code -> ${destination.scheme}://${destination.host}');
+    try {
+      final redirected = await _dio.request<dynamic>(
+        destination.toString(),
+        data: data,
+        cancelToken: source.cancelToken,
+        onSendProgress: source.onSendProgress,
+        onReceiveProgress: source.onReceiveProgress,
+        options: Options(
+          method: method,
+          headers: headers,
+          extra: extra,
+          responseType: source.responseType,
+          contentType: switchToGet ? null : source.contentType,
+          validateStatus: source.validateStatus,
+          sendTimeout: source.sendTimeout,
+          receiveTimeout: source.receiveTimeout,
+          receiveDataWhenStatusError: source.receiveDataWhenStatusError,
+          followRedirects: false,
+          persistentConnection: source.persistentConnection,
+          preserveHeaderCase: source.preserveHeaderCase,
+          requestEncoder: source.requestEncoder,
+          responseDecoder: source.responseDecoder,
+        ),
+      );
+      handler.resolve(redirected);
+    } on DioException catch (error) {
+      handler.reject(error);
+    } catch (error) {
+      handler.reject(DioException(
+        requestOptions: source,
+        error: error,
+        type: DioExceptionType.unknown,
+      ));
+    }
+  }
+
+  DioException _redirectError(Response response, String reason) =>
+      DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        type: DioExceptionType.badResponse,
+        error: reason,
+      );
+
+  void _removeHeaders(Map<String, dynamic> headers, Set<String> names) {
+    headers.removeWhere((name, _) => names.contains(name.toLowerCase()));
   }
 }
