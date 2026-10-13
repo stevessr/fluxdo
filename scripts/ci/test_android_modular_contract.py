@@ -37,6 +37,15 @@ class AndroidCoreIsolationTest(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("class PluginEntry {}\n", encoding="utf-8")
 
+    def test_core_builder_does_not_run_full_avatar_project_prep(self) -> None:
+        import inspect
+        source = inspect.getsource(modular.main)
+        self.assertNotIn('"tool/flutterw.dart"', source)
+        self.assertNotIn('"tool/project_prep.dart", "app"', source)
+        self.assertIn('"tool/gen_l10n.dart"', source)
+        self.assertIn('"native:prepare"', source)
+        self.assertIn('verify_sources(stage)', source)
+
     def test_minimal_isolated_core_is_valid(self) -> None:
         modular.verify_sources(self.stage)
 
