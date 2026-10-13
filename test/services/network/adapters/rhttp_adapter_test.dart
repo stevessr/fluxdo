@@ -11,6 +11,38 @@ void main() {
     );
   }
 
+  group('rhttp HTTP/3 Alt-Svc discovery', () {
+    test('recognizes valid modern H3 advertisements case-insensitively', () {
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h2=":443"; ma=60, h3=":443"; ma=86400'],
+      }), isTrue);
+      expect(http3AltSvcAdvertised({
+        'ALT-SVC': ['H3=":443"; ma=60'],
+      }), isTrue);
+    });
+
+    test('ignores expired hints, old protocol IDs and unrelated headers', () {
+      expect(http3AltSvcAdvertised({
+        'alt-svc': ['h3=":443"; ma=0'],
+      }), isFalse);
+      expect(http3AltSvcAdvertised({
+        'alt-svc': ['h3-29=":443"; ma=86400'],
+      }), isFalse);
+      expect(http3AltSvcAdvertised({
+        'content-type': ['h3=":443"'],
+      }), isFalse);
+    });
+
+    test('Alt-Svc clear invalidates the cached advertisement', () {
+      expect(http3AltSvcCleared({
+        'Alt-Svc': ['clear'],
+      }), isTrue);
+      expect(http3AltSvcCleared({
+        'Alt-Svc': ['h3=":443"; ma=3600'],
+      }), isFalse);
+    });
+  });
+
   group('requestCanProbeRhttpHttp3', () {
     test('allows replay-safe HTTPS requests', () {
       expect(requestCanProbeRhttpHttp3(options('https')), isTrue);
