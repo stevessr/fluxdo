@@ -90,4 +90,26 @@ void main() {
     expect(exported, 1);
     expect(toggled, 0);
   });
+
+  test('add_to_board 只触发看板操作', () {
+    var boardsOpened = 0;
+    handleTopicDetailMoreMenuSelection(
+      'add_to_board',
+      onEditTopic: () => fail('不应触发'),
+      onAddToBoard: () => boardsOpened++,
+      onBookmark: () => fail('不应触发'),
+      onReadLater: () => fail('不应触发'),
+      onSubscribe: () => fail('不应触发'),
+      onMarkUnread: () => fail('不应触发'),
+      onMarkUnreadAll: () => fail('不应触发'),
+      onShareLink: () => fail('不应触发'),
+      onShareImage: () => fail('不应触发'),
+      onExport: () => fail('不应触发'),
+      onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => fail('不应触发'),
+      onFilter: () => fail('不应触发'),
+      onReadingSettings: () => fail('不应触发'),
+    );
+    expect(boardsOpened, 1);
+  });
 }
