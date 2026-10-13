@@ -152,6 +152,43 @@ void main() {
     dio.close(force: true);
   });
 
+  test('cross-origin redirects discard internal preload and CSRF tags',
+      () async {
+    for (final tag in ['preload-home', 'csrf-refresh']) {
+      final adapter = _ScenarioAdapter(302, 'https://other.example/target');
+      final dio = _redirectDio(adapter);
+      await dio.get<void>(
+        '/from',
+        options: Options(extra: {'requestTag': tag}),
+      );
+      expect(adapter.seen.last.extra.containsKey('requestTag'), isFalse);
+      dio.close(force: true);
+    }
+  });
+
+  test('redirect URL credentials are rejected before a foreign request',
+      () async {
+    final adapter = _ScenarioAdapter(
+      302,
+      'https://someone:secret@other.example/path',
+    );
+    final dio = _redirectDio(adapter);
+    await expectLater(
+      dio.get<void>('/from'),
+      throwsA(isA<DioException>()),
+    );
+    expect(adapter.seen, hasLength(1));
+    dio.close(force: true);
+  });
+
+  test('redirect URL fragments do not enter the HTTP target', () async {
+    final adapter = _ScenarioAdapter(302, '/target#not-for-network');
+    final dio = _redirectDio(adapter);
+    await dio.get<void>('/from');
+    expect(adapter.seen.last.uri.fragment, isEmpty);
+    dio.close(force: true);
+  });
+
   test('cross-origin redirects discard private cache and cookie metadata',
       () async {
     final adapter = _ScenarioAdapter(302, 'https://other.example/final');
