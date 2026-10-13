@@ -24,6 +24,8 @@ on:
       - 'lib/services/android_sticker_companion_service.dart'
       - 'lib/services/stevessr_composer_service.dart'
       - 'test/services/android_sticker_companion_service_test.dart'
+      - 'test/services/android_optional_plugin_service_test.dart'
+      - 'android/plugin_api/src/main/kotlin/com/github/lingyan000/fluxdo/plugin/api/PluginWebSession.kt'
       - '.github/workflows/android-plugin-apks.yml'
   pull_request:
     paths:
@@ -45,6 +47,8 @@ on:
       - 'lib/services/android_sticker_companion_service.dart'
       - 'lib/services/stevessr_composer_service.dart'
       - 'test/services/android_sticker_companion_service_test.dart'
+      - 'test/services/android_optional_plugin_service_test.dart'
+      - 'android/plugin_api/src/main/kotlin/com/github/lingyan000/fluxdo/plugin/api/PluginWebSession.kt'
       - '.github/workflows/android-plugin-apks.yml'
 
 jobs:
@@ -97,8 +101,10 @@ jobs:
           dart analyze lib/services/android_sticker_companion_service.dart
           dart analyze lib/services/stevessr_composer_service.dart
           dart analyze lib/pages/metaverse_page.dart
-      - name: Test companion result protocol
-        run: flutter test test/services/android_sticker_companion_service_test.dart
+      - name: Test companion result protocol and account partition
+        run: |
+          flutter test test/services/android_sticker_companion_service_test.dart
+          flutter test test/services/android_optional_plugin_service_test.dart
       - name: Build independent Flutter sticker APK
         run: python3 scripts/ci/build_sticker_companion.py --mode debug --abi android-arm64
       - name: Build all five native APKs (debug test-signing only)
