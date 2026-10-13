@@ -20,6 +20,95 @@ SOURCE = ROOT / "android_companions/sticker"
 PACKAGE = "com.github.lingyan000.fluxdo.plugin.sticker"
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 
+# Copy only the editor's Dart import closure. No entire FluxDO package, no
+# account/network/chat code, and no broad plugin registration in the APK.
+DRAWING_SOURCES = (
+    "lib/pages/stevessr_generator_page.dart",
+    "lib/models/stevessr_render_params.dart",
+    "lib/services/stevessr_export_service.dart",
+    "lib/services/stevessr_text_layout.dart",
+    "lib/services/stevessr_character_assets.dart",
+    "lib/services/avatar_delta_codec.dart",
+    "lib/utils/screenshot_utils.dart",
+    "lib/l10n/s.dart",
+    "lib/l10n/app_localizations.dart",
+)
+DRAWING_TREES = ("lib/widgets/stevessr", "lib/l10n/slang", "lib/l10n/generated")
+SHIM_TREE = SOURCE / "shims/lib"
+FORBIDDEN_IMPORTED_PACKAGES = (
+    "package:fluxdo/",
+    "package:dio/",
+    "package:flutter_riverpod/",
+    "package:flutter_local_notifications/",
+    "package:rhttp/",
+)
+
+
+def stage_drawing_sources(target: Path) -> None:
+    for relative in DRAWING_SOURCES:
+        source = ROOT / relative
+        if not source.is_file():
+            raise FileNotFoundError(
+                f"Missing generated or checked-in drawing code: {source}; "
+                "run dart tool/project_prep.dart test"
+            )
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+    for relative in DRAWING_TREES:
+        source = ROOT / relative
+        if not source.is_dir():
+            raise FileNotFoundError(
+                f"Missing generated drawing/localization tree: {source}; "
+                "run dart tool/project_prep.dart test"
+            )
+        shutil.copytree(source, target / relative, dirs_exist_ok=True)
+    for source in SHIM_TREE.rglob("*.dart"):
+        destination = target / "lib" / source.relative_to(SHIM_TREE)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+
+    # The temporary companion app must own every imported source.
+    # Reject accidental references to the full app or unknown external code.
+    import re
+    external_packages = set()
+    for source in (target / "lib").rglob("*.dart"):
+        contents = source.read_text(encoding="utf-8")
+        for forbidden in FORBIDDEN_IMPORTED_PACKAGES:
+            if forbidden in contents:
+                raise RuntimeError(
+                    f"Heavy host dependency leaked into companion: "
+                    f"{source.relative_to(target)}: {forbidden}"
+                )
+        for match in re.finditer(
+            r"""(?m)^\\s*(?:import|export|part)\\s+['"]([^'"]+[.]dart)['"]""",
+            contents,
+        ):
+            uri = match.group(1)
+            if uri.startswith("dart:"):
+                continue
+            if uri.startswith("package:"):
+                package = uri[len("package:"):].split("/", 1)[0]
+                external_packages.add(package)
+                continue
+            if not (source.parent / uri).is_file():
+                raise RuntimeError(
+                    f"Missing local drawing dependency: "
+                    f"{source.relative_to(target)} imports {uri}"
+                )
+    allowed = {
+        "flutter", "flutter_localizations", "intl",
+        "slang", "slang_flutter", "file_picker", "flutter_avif",
+        "image", "cross_file", "path_provider", "share_plus", "gal",
+    }
+    if external_packages - allowed:
+        raise RuntimeError(
+            f"Unexpected external drawing dependencies: "
+            f"{sorted(external_packages - allowed)}"
+        )
+    print("Sticker source isolation: OK; no FluxDO root dependency")
+
+
 
 def execute(*args: str, cwd: Path) -> None:
     print("+", " ".join(args), flush=True)
@@ -33,11 +122,11 @@ def setup_project(target: Path, mode: str) -> None:
         cwd=ROOT,
     )
     yaml = (SOURCE / "pubspec.yaml").read_text()
-    # This is a standalone project in a temporary directory, not a nested
-    # Flutter workspace member. The path dependency still reuses real sources.
-    yaml = yaml.replace("path: ../..", f"path: {ROOT.as_posix()}")
+    if "fluxdo:" in yaml or "path: ../.." in yaml:
+        raise RuntimeError("Sticker APK must not depend on the FluxDO app")
     (target / "pubspec.yaml").write_text(yaml)
     (target / "lib/main.dart").write_text((SOURCE / "lib/main.dart").read_text())
+    stage_drawing_sources(target)
 
     source_assets = ROOT / "assets/images/avater"
     for name in ["stevessr", "llm", "touhou", "blue_archive", "witch_judgment"]:
@@ -98,6 +187,16 @@ def setup_project(target: Path, mode: str) -> None:
 
     build_file = target / "android/app/build.gradle.kts"
     gradle = build_file.read_text()
+    # flutter create derives "<org>.sticker" as the exact expected package.
+    # Explicitly verify rather than allowing a non-upgradable package ID.
+    if f'applicationId = "{PACKAGE}"' not in gradle:
+        raise RuntimeError(
+            f"Unexpected Sticker applicationId; expected {PACKAGE}"
+        )
+    if f'namespace = "{PACKAGE}"' not in gradle:
+        raise RuntimeError(
+            f"Unexpected Sticker Android namespace; expected {PACKAGE}"
+        )
     # Flutter currently emits a Kotlin DSL Android project. Preserve generated
     # Flutter Gradle wiring; only inject the APK's native bridge requirements.
     assert "flutter.compileSdkVersion" in gradle
