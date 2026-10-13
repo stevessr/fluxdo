@@ -107,7 +107,10 @@ class NetworkLogInterceptor extends Interceptor {
     if (response != null) {
       // Transport versions are only reported when the adapter actually
       // observed one. Having QUIC enabled does not mean a request used H3.
-      final version = response.extra['http_version'];
+      // rhttp reports http_version; Dio IOHttpClientAdapter (>=5.9.2)
+      // reports httpVersion in Response.extra. Use only observed values.
+      final version =
+          response.extra['http_version'] ?? response.extra['httpVersion'];
       if (version is String && version.isNotEmpty) {
         entry['httpVersion'] = version;
       }
