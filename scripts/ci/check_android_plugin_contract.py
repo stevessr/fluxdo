@@ -28,6 +28,10 @@ PLUGINS = {
         MAIN_PACKAGE + ".plugin.ldc",
         MAIN_PACKAGE + ".plugin.ldc.LdcPluginService",
     ),
+    "plugin_ldc_reward": (
+        MAIN_PACKAGE + ".plugin.ldc_reward",
+        MAIN_PACKAGE + ".plugin.ldc_reward.LdcRewardPluginService",
+    ),
 }
 
 
@@ -98,7 +102,7 @@ def main() -> None:
           "Sticker companion must export grantable content URIs")
     check("android/key.properties" in sticker_builder,
           "Sticker release signer must refer to main keystore")
-    for name in ("cdk", "ldc"):
+    for name in ("cdk", "ldc", "ldc_reward"):
         entry = (ROOT / f"android/plugin_{name}/src/main/AndroidManifest.xml")
         root = ET.parse(entry).getroot()
         activities = root.findall("./application/activity")
@@ -107,7 +111,7 @@ def main() -> None:
               attr(activities[0], "exported") == "true",
               f"{name}: companion Activity must require same-signature permission")
 
-    print("Android optional APK contract: OK (four native modules + Flutter sticker companion, signed IPC, protocol v1)")
+    print("Android optional APK contract: OK (five native modules + Flutter sticker companion, signed IPC, protocol v1)")
 
 
 if __name__ == "__main__":
