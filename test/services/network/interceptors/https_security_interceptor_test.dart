@@ -63,10 +63,11 @@ void main() {
     dio.interceptors.add(HttpsSecurityInterceptor(policy: policy));
 
     await dio.get<void>('/initial');
-    await dio.get<void>('http://example.org/next');
+    await dio.get<void>('http://example.org/next',
+        queryParameters: {'page': '1'});
     expect(adapter.urls, [
       'https://example.org/initial',
-      'https://example.org/next',
+      'https://example.org/next?page=1',
     ]);
     dio.close(force: true);
   });
