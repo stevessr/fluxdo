@@ -15,6 +15,14 @@ const _maxHttp3Origins = 128;
 const _http3ConnectTimeout = Duration(seconds: 3);
 const _normalConnectTimeout = Duration(seconds: 30);
 
+final RegExp _h3AuthorityPattern = RegExp(r'^h3\s*=\s*"(:[0-9]+)"');
+final RegExp _h3MaxAgePattern =
+    RegExp(r'(?:^|;)\s*ma\s*=\s*"?([0-9]+)"?\s*(?:;|$)');
+final RegExp _h3AnyMaxAgePattern = RegExp(r'(?:^|;)\s*ma\s*=');
+final RegExp _h3ZeroMaxAgePattern =
+    RegExp(r'(?:^|;)\s*ma\s*=\s*"?0"?\s*(?:;|$)');
+final RegExp _h3ProtocolPattern = RegExp(r'^h3\s*=');
+
 /// 基于 rhttp (Rust reqwest) 的 Dio 适配器。
 ///
 /// 直连 HTTPS 的安全幂等请求基于 Alt-Svc 探测 HTTP/3/QUIC；按 origin 记忆，
@@ -591,7 +599,7 @@ Duration? http3AltSvcLifetime(
     for (final value in header.value) {
       for (final item in value.split(',')) {
         final alternative = item.trim().toLowerCase();
-        final authority = RegExp(r'^h3\s*=\s*"(:[0-9]+)"')
+        final authority = _h3AuthorityPattern
             .firstMatch(alternative);
         if (authority == null || authority.group(1) != ':$originPort') {
           continue;
@@ -599,10 +607,10 @@ Duration? http3AltSvcLifetime(
 
         // RFC 7838 defaults ma to 24 hours if omitted; the application
         // intentionally caps its own probe cache at one hour.
-        final match = RegExp(r'(?:^|;)\s*ma\s*=\s*"?([0-9]+)"?\s*(?:;|$)')
+        final match = _h3MaxAgePattern
             .firstMatch(alternative);
         if (match == null &&
-            RegExp(r'(?:^|;)\s*ma\s*=').hasMatch(alternative)) {
+            _h3AnyMaxAgePattern.hasMatch(alternative)) {
           continue; // Malformed advertised max-age is not a valid hint.
         }
         final maxAge = match == null ? 86400 : int.tryParse(match.group(1)!);
@@ -649,15 +657,15 @@ bool http3AltSvcRevoked(
     for (final value in header.value) {
       for (final candidate in value.split(',')) {
         final alternative = candidate.trim().toLowerCase();
-        if (!RegExp(r'^h3\s*=').hasMatch(alternative)) continue;
+        if (!_h3ProtocolPattern.hasMatch(alternative)) continue;
         // An alternative for a different port is not this origin's QUIC
         // endpoint and must not revoke the currently cached capability.
-        final authority = RegExp(r'^h3\s*=\s*"(:[0-9]+)"')
+        final authority = _h3AuthorityPattern
             .firstMatch(alternative);
         if (authority == null || authority.group(1) != ':$originPort') {
           continue;
         }
-        if (!RegExp(r'(?:^|;)\s*ma\s*=\s*"?0"?\s*(?:;|$)')
+        if (!_h3ZeroMaxAgePattern
             .hasMatch(alternative)) {
           return false;
         }
