@@ -66,11 +66,14 @@ class RhttpAdapter implements HttpClientAdapter {
           cancelFuture,
           http3Config,
         );
-        if (response.version == rhttp.HttpVersion.http3) {
+        if (response.version == rhttp.HttpVersion.http3 &&
+            response.responseBody.statusCode >= 200) {
           _markHttp3Success(baseConfig.host);
         } else {
-          // A forced H3 probe may still be answered over HTTP/2.
-          // Do not repeatedly probe a host whose QUIC negotiation failed.
+          // A forced H3 probe might negotiate HTTP/2 or expose Cloudflare's
+          // 103 Early Hints as a premature response. Neither proves a usable
+          // HTTP/3 API connection; back off subsequent H3 probes. The existing
+          // recovery coordinator owns any necessary replay of the 103.
           _markHttp3Failure(baseConfig.host);
         }
         _markConfigSuccess(http3Config, response.remoteIp);
@@ -109,7 +112,9 @@ class RhttpAdapter implements HttpClientAdapter {
         config,
       );
       _markConfigSuccess(config, response.remoteIp);
-      _observeHttp3Advertisement(config.host, response.responseBody.headers);
+      if (response.responseBody.statusCode >= 200) {
+        _observeHttp3Advertisement(config.host, response.responseBody.headers);
+      }
       return response.responseBody;
     } catch (error) {
       if (!_canRetryWithAlternateIp(options, requestStream, config, error)) {
@@ -139,10 +144,12 @@ class RhttpAdapter implements HttpClientAdapter {
         retryConfig,
       );
       _markConfigSuccess(retryConfig, response.remoteIp);
-      _observeHttp3Advertisement(
-        retryConfig.host,
-        response.responseBody.headers,
-      );
+      if (response.responseBody.statusCode >= 200) {
+        _observeHttp3Advertisement(
+          retryConfig.host,
+          response.responseBody.headers,
+        );
+      }
       return response.responseBody;
     }
   }
