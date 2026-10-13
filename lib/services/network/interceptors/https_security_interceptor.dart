@@ -169,7 +169,9 @@ class HttpsSecurityInterceptor extends Interceptor {
           // clearing the query map to avoid duplicate parameters.
           options.baseUrl = '';
           options.path = upgraded.toString();
-          options.queryParameters.clear();
+          // The map can originate from an immutable caller-owned map.
+          // Replace it instead of mutating it in place.
+          options.queryParameters = <String, dynamic>{};
         }
       }
     }
