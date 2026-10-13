@@ -67,6 +67,31 @@ void main() {
     dio.close(force: true);
   });
 
+  test('cross-origin redirects discard private cache and cookie metadata',
+      () async {
+    final adapter = _ScenarioAdapter(302, 'https://other.example/final');
+    final dio = _redirectDio(adapter);
+
+    await dio.get<void>('/cached', options: Options(extra: {
+      '_fluxHttpRevalidationEntry': 'cache-for-original-host',
+      '_fluxHttpRevalidationKey': 'original',
+      '_sessionGeneration': 41,
+      'allowRedirectSetCookie': true,
+      'skipScheduler': false,
+      'isSilent': true,
+    }));
+
+    final forwarded = adapter.seen.last.extra;
+    expect(forwarded.containsKey('_fluxHttpRevalidationEntry'), isFalse);
+    expect(forwarded.containsKey('_fluxHttpRevalidationKey'), isFalse);
+    expect(forwarded.containsKey('_sessionGeneration'), isFalse);
+    expect(forwarded.containsKey('allowRedirectSetCookie'), isFalse);
+    expect(forwarded['isSilent'], isTrue);
+    expect(forwarded['skipScheduler'], isTrue);
+    expect(forwarded['skipCsrf'], isTrue);
+    dio.close(force: true);
+  });
+
   test('303 converts POST to bodyless GET and 307 preserves same-origin body',
       () async {
     final adapter303 = _ScenarioAdapter(303, '/finish');
