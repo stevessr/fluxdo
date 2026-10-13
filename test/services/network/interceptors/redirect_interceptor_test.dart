@@ -174,6 +174,32 @@ void main() {
     dio.close(force: true);
   });
 
+  test('malformed redirect counter does not crash the interceptor',
+      () async {
+    final adapter = _ScenarioAdapter(302, '/destination');
+    final dio = _redirectDio(adapter);
+    final result = await dio.get<void>(
+      '/initial',
+      options: Options(extra: {'_redirectCount': 'invalid'}),
+    );
+    expect(result.statusCode, 200);
+    expect(adapter.seen, hasLength(2));
+    expect(adapter.seen.last.extra['_redirectCount'], 1);
+    dio.close(force: true);
+  });
+
+  test('unreplayable multipart rejects with DioException, not a hanging future',
+      () async {
+    final adapter = _ScenarioAdapter(307, '/upload-final');
+    final dio = _redirectDio(adapter);
+    await expectLater(
+      dio.post<void>('/upload', data: _ThrowingCloneFormData()),
+      throwsA(isA<DioException>()),
+    );
+    expect(adapter.seen, hasLength(1));
+    dio.close(force: true);
+  });
+
   test('redirect loop ends after configured limit without another fetch',
       () async {
     final adapter = _RedirectLoopAdapter();
@@ -526,4 +552,9 @@ class _RedirectLoopAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+class _ThrowingCloneFormData extends FormData {
+  @override
+  FormData clone() => throw StateError('Cannot replay this multipart body');
 }
