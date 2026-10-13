@@ -162,6 +162,7 @@ class RedirectInterceptor extends Interceptor {
     extra[FluxRequestKeys.skipScheduler] = true;
     extra[_redirectCountKey] = redirectCount + 1;
     if (crossOrigin) {
+      extra[FluxRequestKeys.crossOriginRedirect] = true;
       // A foreign origin must not borrow forum credentials, trigger CSRF
       // refreshes, mutate the current Discourse auth state or engage the
       // forum-specific Cloudflare/session-recovery machinery on its 401/403.
@@ -250,6 +251,9 @@ class RedirectInterceptor extends Interceptor {
       FluxRequestKeys.noRecovery,
       FluxRequestKeys.skipCfChallenge,
       FluxRequestKeys.skipCfBlock,
+      // Once a redirect chain leaves the original origin, all subsequent
+      // hops remain untrusted for canonical cookie synchronization.
+      FluxRequestKeys.crossOriginRedirect,
     };
     return <String, dynamic>{
       for (final entry in original.entries)
