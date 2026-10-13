@@ -102,8 +102,9 @@ class RedirectInterceptor extends Interceptor {
         'transfer-encoding',
       });
     } else if (isMultipartReplay) {
-      // FormData.clone() creates a new multipart boundary. Carrying the old
-      // finalized Content-Type/Length corrupts 307/308 redirected uploads.
+      // Derive the multipart boundary and length from the replayed FormData.
+      // Clone implementations may preserve or regenerate their boundary;
+      // stale caller headers must not override the actual encoded body.
       _removeHeaders(headers, const {
         'content-type', 'content-length', 'transfer-encoding',
       });
