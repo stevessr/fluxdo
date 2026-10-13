@@ -255,6 +255,25 @@ void main() {
     dio.close(force: true);
   });
 
+  test('external cookie quarantine survives another same-origin hop',
+      () async {
+    final adapter = _ExternalRedirectChainAdapter();
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://linux.do',
+      validateStatus: (status) => status != null && status < 400,
+    ))..httpClientAdapter = adapter;
+    dio.interceptors.add(RedirectInterceptor(dio));
+
+    await dio.get<void>('/start');
+    expect(adapter.requests, hasLength(3));
+    expect(adapter.requests.first.extra.containsKey('_fluxCrossOriginRedirect'),
+        isFalse);
+    for (final foreignRequest in adapter.requests.skip(1)) {
+      expect(foreignRequest.extra['_fluxCrossOriginRedirect'], isTrue);
+    }
+    dio.close(force: true);
+  });
+
   test('same hostname on a different HTTPS port is a foreign origin',
       () async {
     final adapter = _ScenarioAdapter(
@@ -584,4 +603,33 @@ class _RedirectLoopAdapter implements HttpClientAdapter {
 class _ThrowingCloneFormData extends FormData {
   @override
   FormData clone() => throw StateError('Cannot replay this multipart body');
+}
+
+class _ExternalRedirectChainAdapter implements HttpClientAdapter {
+  final List<RequestOptions> requests = <RequestOptions>[];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    if (requests.length == 1) {
+      return ResponseBody.fromString('', 302, headers: {
+        'location': ['https://external.example/landing'],
+      });
+    }
+    if (requests.length == 2) {
+      return ResponseBody.fromString('', 302, headers: {
+        'location': ['/final'],
+      });
+    }
+    return ResponseBody.fromString('{"ok":true}', 200, headers: {
+      Headers.contentTypeHeader: ['application/json'],
+    });
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
