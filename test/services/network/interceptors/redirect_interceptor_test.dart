@@ -124,9 +124,9 @@ void main() {
     final secondType = adapter.seen.last.headers[Headers.contentTypeHeader]
         ?.toString();
     expect(firstType, contains('boundary='));
-    expect(secondType, contains('boundary='));
-    expect(secondType, isNot(firstType));
     expect(adapter.seen.last.data, isA<FormData>());
+    final replay = adapter.seen.last.data as FormData;
+    expect(secondType, contains('boundary=${replay.boundary}'));
     dio.close(force: true);
   });
 
