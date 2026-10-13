@@ -101,7 +101,7 @@ void main() {
     final adapter = _ScenarioAdapter(307, '/again');
     final dio = _redirectDio(adapter);
     await expectLater(
-      dio.post<void>('/submit', data: Stream<List<int>>.value([1, 2, 3])),
+      dio.post<void>('/submit', data: Stream<Uint8List>.value(Uint8List.fromList([1, 2, 3]))),
       throwsA(isA<DioException>()),
     );
     expect(adapter.seen, hasLength(1));
