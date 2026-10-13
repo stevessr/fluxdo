@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../providers/core_providers.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/android_optional_plugin_service.dart';
@@ -9,14 +12,14 @@ import '../services/stevessr_export_service.dart';
 
 /// Displays separately installed Android companion APKs. Deliberately does not
 /// install unsigned/untrusted APKs automatically.
-class AndroidPluginsPage extends StatefulWidget {
+class AndroidPluginsPage extends ConsumerStatefulWidget {
   const AndroidPluginsPage({super.key});
 
   @override
-  State<AndroidPluginsPage> createState() => _AndroidPluginsPageState();
+  ConsumerState<AndroidPluginsPage> createState() => _AndroidPluginsPageState();
 }
 
-class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
+class _AndroidPluginsPageState extends ConsumerState<AndroidPluginsPage> {
   late Future<List<AndroidOptionalPlugin>> _plugins = _load();
 
   bool get _zh => Localizations.localeOf(context).languageCode == 'zh';
@@ -233,7 +236,14 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                                         ? null
                                         : () async {
                                       try {
-                                        await AndroidOptionalPluginService.instance.launch(plugin.id);
+                                        await AndroidOptionalPluginService.instance.launch(
+                                          plugin.id,
+                                          payload: {
+                                            'accountSlot': AndroidOptionalPluginService.sessionSlotForUsername(
+                                              ref.read(currentUserProvider).value?.username,
+                                            ),
+                                          },
+                                        );
                                       } catch (error) {
                                         if (!mounted) return;
                                         ScaffoldMessenger.of(context).showSnackBar(
