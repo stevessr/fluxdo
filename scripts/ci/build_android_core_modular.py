@@ -57,6 +57,14 @@ SOURCE_IGNORES = (
 )
 
 
+def _core_copy_ignores(directory: str, names: list[str]) -> set[str]:
+    """Prune all avatar bytes before staging, not just at Flutter pubspec."""
+    ignored = set(shutil.ignore_patterns(*SOURCE_IGNORES)(directory, names))
+    if Path(directory).resolve() == (ROOT / "assets/images").resolve():
+        ignored.add("avater")
+    return ignored
+
+
 def run(args: list[str], cwd: Path) -> None:
     print("+", " ".join(args), flush=True)
     subprocess.run(args, cwd=cwd, check=True)
@@ -67,7 +75,7 @@ def prepare(destination: Path) -> None:
         raise RuntimeError(f"Refusing to overwrite existing directory: {destination}")
     shutil.copytree(
         ROOT, destination,
-        ignore=shutil.ignore_patterns(*SOURCE_IGNORES),
+        ignore=_core_copy_ignores,
         symlinks=False,
     )
     # Copy overlays only after cloning the original source, so other targets
@@ -130,6 +138,10 @@ def prepare(destination: Path) -> None:
 
 def verify_sources(stage: Path) -> None:
     manifest = (stage / "pubspec.yaml").read_text()
+    # Character sprites belong only to the separately compiled Sticker APK.
+    assert not (stage / "assets/images/avater").exists(), (
+        "Sticker assets leaked into Android Core staging directory"
+    )
     for group in EXCLUDED_AVATAR_ASSETS:
         assert f"{AVATAR_ROOT}{group}/" not in manifest, (
             f"Avatar assets still declared in Android Core: {group}"
