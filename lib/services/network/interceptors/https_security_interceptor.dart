@@ -73,7 +73,13 @@ class HttpsSecurityPolicy {
               continue;
             }
             if (!_validHost(host) || _normalizedHost(host) != host) continue;
-            final until = DateTime.fromMillisecondsSinceEpoch(epoch);
+            DateTime until;
+            try {
+              until = DateTime.fromMillisecondsSinceEpoch(epoch);
+            } on RangeError {
+              // A corrupted entry must not suppress other valid host policies.
+              continue;
+            }
             if (!until.isAfter(now) || until.isAfter(maximum)) continue;
             // If a live TLS response was observed while loading, that newer
             // response is authoritative over the disk snapshot.
