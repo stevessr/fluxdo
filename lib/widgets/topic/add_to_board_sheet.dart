@@ -245,7 +245,8 @@ class _AddTopicToBoardSheetState extends ConsumerState<_AddTopicToBoardSheet> {
                 ]);
               }
               final available = (snapshot.data ?? const <DiscourseBoard>[])
-                  .where((item) => !item.archived && (item.canWrite || item.canManage))
+                  // available.json 已按 edit/manage ACL 筛选，BasicBoardSerializer 不返回 can_write。
+                  .where((item) => !item.archived)
                   .toList();
               if (available.isEmpty) {
                 return Padding(padding: const EdgeInsets.all(24),
