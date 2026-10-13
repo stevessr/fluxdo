@@ -198,7 +198,8 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                                       switch (plugin.id) {
                                         'deviceinfo' => 'device.snapshot',
                                         'network' => 'network.state',
-                                        _ => 'metaverse.capabilities',
+                                        'ldc_reward' => 'reward.capabilities',
+                                      _ => 'metaverse.capabilities',
                                       },
                                     ),
                                     child: Text(_t('查询插件能力', 'Query capabilities')),
@@ -226,12 +227,16 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                                     onPressed: () => _lookup(plugin),
                                     child: Text(_t('DNS 查询', 'DNS lookup')),
                                   ),
-                                if (plugin.id == 'cdk' || plugin.id == 'ldc')
+                                if (plugin.id == 'cdk' || plugin.id == 'ldc' || plugin.id == 'ldc_reward')
                                   OutlinedButton.icon(
                                     onPressed: () async {
                                       try {
-                                        await AndroidOptionalPluginService.instance
-                                            .launch(plugin.id);
+                                        if (plugin.id == 'ldc_reward') {
+                                          throw StateError(
+                                            _t('请从帖子菜单选择打赏对象', 'Select a recipient in the post menu'),
+                                          );
+                                        }
+                                        await AndroidOptionalPluginService.instance.launch(plugin.id);
                                       } catch (error) {
                                         if (!mounted) return;
                                         ScaffoldMessenger.of(context).showSnackBar(
