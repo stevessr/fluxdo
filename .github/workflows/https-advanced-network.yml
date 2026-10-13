@@ -6,6 +6,8 @@ on:
       - 'lib/services/network/adapters/**'
       - 'lib/services/network/interceptors/**'
       - 'lib/services/network/discourse_dio.dart'
+      - 'lib/services/network/flux_request_spec.dart'
+      - 'lib/services/network/cookie/app_cookie_manager.dart'
       - 'test/services/network/**'
       - '.github/workflows/https-advanced-network.yml'
   # Keep this suite available when repository PR checks are delayed.
@@ -16,6 +18,8 @@ on:
       - 'lib/services/network/adapters/**'
       - 'lib/services/network/interceptors/**'
       - 'lib/services/network/discourse_dio.dart'
+      - 'lib/services/network/flux_request_spec.dart'
+      - 'lib/services/network/cookie/app_cookie_manager.dart'
       - 'test/services/network/**'
       - '.github/workflows/https-advanced-network.yml'
   workflow_dispatch:
@@ -46,9 +50,12 @@ jobs:
             lib/services/network/adapters/rhttp_adapter.dart \
             lib/services/network/interceptors/https_security_interceptor.dart \
             lib/services/network/interceptors/redirect_interceptor.dart \
+            lib/services/network/flux_request_spec.dart \
+            lib/services/network/cookie/app_cookie_manager.dart \
             lib/services/network/interceptors/network_log_interceptor.dart \
             test/services/network/interceptors/https_security_interceptor_test.dart \
             test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/cookie/app_cookie_manager_test.dart \
             test/services/network/request_tag_logging_test.dart
           git diff --check
 
@@ -83,9 +90,12 @@ jobs:
             lib/services/network/adapters/rhttp_adapter.dart \
             lib/services/network/interceptors/https_security_interceptor.dart \
             lib/services/network/interceptors/redirect_interceptor.dart \
+            lib/services/network/flux_request_spec.dart \
+            lib/services/network/cookie/app_cookie_manager.dart \
             lib/services/network/interceptors/network_log_interceptor.dart \
             test/services/network/interceptors/https_security_interceptor_test.dart \
             test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/cookie/app_cookie_manager_test.dart \
             test/services/network/request_tag_logging_test.dart
 
   test:
@@ -116,6 +126,7 @@ jobs:
           dart tool/flutterw.dart test \
             test/services/network/interceptors/https_security_interceptor_test.dart \
             test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/cookie/app_cookie_manager_test.dart \
             test/services/network/request_tag_logging_test.dart \
             test/services/network/adapters/rhttp_adapter_test.dart
 
