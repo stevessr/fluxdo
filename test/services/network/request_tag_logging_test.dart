@@ -73,6 +73,15 @@ void main() {
     expect(entry.containsKey('httpVersion'), isFalse);
   });
 
+  test('revoked H3 Alt-Svc hint is not logged as an advertisement', () async {
+    final dio = _buildDio(altSvc: 'h3=":443"; ma=0');
+    await dio.get<dynamic>('/latest.json');
+
+    final entry = await _readSingleRequestEntry();
+    expect(entry.containsKey('http3Advertised'), isFalse);
+    expect(entry.containsKey('httpVersion'), isFalse);
+  });
+
   test('Alt-Svc clear is not mistaken for HTTP/3 support', () async {
     final dio = _buildDio(altSvc: 'clear');
     await dio.get<dynamic>('/latest.json');
