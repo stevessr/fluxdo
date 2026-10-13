@@ -102,9 +102,13 @@ class RedirectInterceptor extends Interceptor {
     });
     final isMultipartReplay = replayBody && source.data is FormData;
     if (switchToGet) {
+      // 303 and browser-style POST 301/302 become bodyless GETs. Remove
+      // all metadata that describes the old POST entity or its checksum.
       _removeHeaders(headers, const {
         'content-type', 'content-length', 'content-encoding',
-        'transfer-encoding',
+        'transfer-encoding', 'content-md5', 'content-range',
+        'content-language', 'content-disposition', 'digest', 'trailer',
+        'expect',
       });
     } else if (isMultipartReplay) {
       // Derive the multipart boundary and length from the replayed FormData.
