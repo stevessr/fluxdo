@@ -102,6 +102,7 @@ import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/user/account_switcher_sheet.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
 import '../../widgets/topic/assign_sheet.dart';
+import '../../widgets/topic/add_to_board_sheet.dart';
 
 part 'actions/_scroll_actions.dart';
 part 'actions/_user_actions.dart';
@@ -1830,6 +1831,16 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         handleTopicDetailMoreMenuSelection(
           value,
           onEditTopic: () => unawaited(_handleEditTopic()),
+          onAddToBoard: () {
+            // Avoid overlapping the popup's exit transition with a new modal.
+            unawaited(Future<void>.delayed(Duration.zero, () {
+              if (!mounted) return;
+              unawaited(showAddTopicToBoardSheet(
+                context,
+                topicId: widget.topicId,
+              ));
+            }));
+          },
           onBookmark: () => unawaited(
             _handleBookmark(
               notifier,
@@ -1960,6 +1971,27 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             ],
           ),
         ),
+        if (!detail.isPrivateMessage &&
+            ref.read(currentUserProvider).value != null)
+          PopupMenuItem(
+            value: 'add_to_board',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.view_kanban_outlined,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  Localizations.localeOf(context).languageCode == 'zh'
+                      ? '添加到看板'
+                      : 'Add to board',
+                ),
+              ],
+            ),
+          ),
         if (canAssignTopic)
           PopupMenuItem(
             value: 'assign',
