@@ -276,6 +276,14 @@ jobs:
           cp build/plugin_ldc/outputs/apk/release/plugin_ldc-release.apk dist/fluxdo-plugin-ldc.apk
           cp build/plugin_ldc_reward/outputs/apk/release/plugin_ldc_reward-release.apk dist/fluxdo-plugin-ldc-reward.apk
           cp build/plugin_sticker/fluxdo-sticker-${{ matrix.flutter-target }}-release.apk dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
+          python3 scripts/ci/check_android_apk_contract.py \
+            --core dist/fluxdo-${{ matrix.arch }}.apk \
+            --plugin deviceinfo dist/fluxdo-plugin-deviceinfo.apk \
+            --plugin network dist/fluxdo-plugin-network.apk \
+            --plugin cdk dist/fluxdo-plugin-cdk.apk \
+            --plugin ldc dist/fluxdo-plugin-ldc.apk \
+            --plugin ldc_reward dist/fluxdo-plugin-ldc-reward.apk \
+            --plugin sticker dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
 
       - name: Authenticate to Google Cloud
         if: startsWith(matrix.platform, 'android') && env.GCP_WIF != '' && env.GCP_SA != ''
