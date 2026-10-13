@@ -18,7 +18,7 @@ The locked `rhttp` dependency resolves to `Lingyan000/rhttp_plus` commit `02eb41
 - HSTS upgrades happen before CSRF/cookie/cache/scheduling interceptors. The localhost HTTP hop used by the application's own gateway is a transport implementation detail, **not** an HTTPS origin downgrade.
 - HTTPS-to-HTTP redirects are rejected unless the target is upgraded under a previously learned HSTS policy.
 - Redirects support 301/302/303/307/308, preserving the body for same-origin 307/308 with replayable payloads; streaming bodies and cross-origin body replays are rejected rather than silently duplicated.
-- Cross-origin redirects copy only safe request headers and a small set of known control flags. **They use `dio.fetch(RequestOptions)` rather than `dio.request(Options)`**, preventing `BaseOptions.headers` from restoring original-origin Authorization/Cookie/API-key headers. `Accept-Encoding` is not forwarded: each adapter must renegotiate an encoding it can decode. Cached validators (including same-origin redirect validators), auth copying intent, and session-private metadata are discarded; destination cookies must be selected independently. Foreign-origin redirect hops also set `skipAuthCheck`, `skipSessionStateSync`, `skipCfChallenge` and `noRecovery` so an external 401/403 cannot start a forum-specific session repair or Cloudflare challenge. They also discard internal `requestTag` markers (avoiding preload/CSRF routing), refuse URLs containing userinfo credentials, drop original `If-Range` validators, and remove URL fragments before issuing the next request.
+- Cross-origin redirects copy only safe request headers and a small set of known control flags. **They use `dio.fetch(RequestOptions)` rather than `dio.request(Options)`**, preventing `BaseOptions.headers` from restoring original-origin Authorization/Cookie/API-key headers. `Accept-Encoding` is not forwarded: each adapter must renegotiate an encoding it can decode. Cached validators (including same-origin redirect validators), auth copying intent, and session-private metadata are discarded; destination cookies must be selected independently. Foreign-origin redirect hops also set `skipAuthCheck`, `skipSessionStateSync`, `skipCfChallenge` and `noRecovery` so an external 401/403 cannot start a forum-specific session repair or Cloudflare challenge. Once a redirect crosses an origin, the `_fluxCrossOriginRedirect` flag persists through subsequent hops, and `AppCookieManager` refuses to apply canonical forum/Cloudflare/LDC `Set-Cookie` mutations from that untrusted chain (preventing a foreign `Set-Cookie: _t=del` from logging out the forum). They also discard internal `requestTag` markers (avoiding preload/CSRF routing), refuse URLs containing userinfo credentials, drop original `If-Range` validators, and remove URL fragments before issuing the next request.
 - Cloudflare `103 Early Hints` is informational, never an API success response. The existing recovery fallback remains in place.
 
 ## QUIC discovery and diagnostics
@@ -38,10 +38,13 @@ dart format --output=none --set-exit-if-changed \
   lib/services/network/adapters/rhttp_adapter.dart \
   lib/services/network/interceptors/https_security_interceptor.dart \
   lib/services/network/interceptors/redirect_interceptor.dart \
+  lib/services/network/flux_request_spec.dart \
+  lib/services/network/cookie/app_cookie_manager.dart \
   lib/services/network/interceptors/network_log_interceptor.dart \
   test/services/network/adapters/rhttp_adapter_test.dart \
   test/services/network/interceptors/https_security_interceptor_test.dart \
   test/services/network/interceptors/redirect_interceptor_test.dart \
+  test/services/network/cookie/app_cookie_manager_test.dart \
   test/services/network/request_tag_logging_test.dart
 flutter analyze lib/services/network test/services/network
 dart tool/flutterw.dart test test/services/network
