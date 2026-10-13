@@ -28,6 +28,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Dart formatter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4' # Match .fvmrc
+          cache: true
+      - name: Verify Dart formatting
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/adapters/platform_adapter.dart \
+            lib/services/network/adapters/rhttp_adapter.dart \
+            lib/services/network/interceptors/https_security_interceptor.dart \
+            lib/services/network/interceptors/redirect_interceptor.dart \
+            lib/services/network/interceptors/network_log_interceptor.dart \
+            test/services/network/interceptors/https_security_interceptor_test.dart \
+            test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/request_tag_logging_test.dart
+          git diff --check
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -50,20 +74,6 @@ jobs:
 
       - name: Generate localization
         run: dart run tool/gen_l10n.dart
-
-      - name: Verify Dart formatting
-        run: |
-          dart format --output=none --set-exit-if-changed \
-            lib/services/network/discourse_dio.dart \
-            lib/services/network/adapters/platform_adapter.dart \
-            lib/services/network/adapters/rhttp_adapter.dart \
-            lib/services/network/interceptors/https_security_interceptor.dart \
-            lib/services/network/interceptors/redirect_interceptor.dart \
-            lib/services/network/interceptors/network_log_interceptor.dart \
-            test/services/network/interceptors/https_security_interceptor_test.dart \
-            test/services/network/interceptors/redirect_interceptor_test.dart \
-            test/services/network/request_tag_logging_test.dart
-          git diff --check
 
       - name: Static analysis of HTTPS changes
         run: |
