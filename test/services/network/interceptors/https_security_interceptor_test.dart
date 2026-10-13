@@ -201,6 +201,32 @@ void main() {
         'https');
   });
 
+  test('live max-age=0 before cache load cannot resurrect old HSTS',
+      () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final original = HttpsSecurityPolicy(persist: true);
+    await original.ensureLoaded();
+    original.observe(Uri.parse('https://example.org'), st);
+    await original.flushPending();
+
+    // Another verified response may arrive before the lazy disk restoration
+    // finishes. Removal must win over the old persisted snapshot.
+    final policy = HttpsSecurityPolicy(persist: true);
+    policy.observe(
+      Uri.parse('https://example.org'),
+      Headers.fromMap({
+        'strict-transport-security': ['max-age=0'],
+      }),
+    );
+    await policy.ensureLoaded();
+    await policy.flushPending();
+    expect(policy.upgrade(Uri.parse('http://example.org')).scheme, 'http');
+
+    final next = HttpsSecurityPolicy(persist: true);
+    await next.ensureLoaded();
+    expect(next.upgrade(Uri.parse('http://example.org')).scheme, 'http');
+  });
+
   test('invalid, expired or impossible persisted HSTS entries are ignored',
       () async {
     SharedPreferences.setMockInitialValues({
