@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cookie_jar/cookie_jar.dart';
+import 'package:fluxdo/services/network/cookie/app_cookie_manager.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/network/interceptors/redirect_interceptor.dart';
@@ -252,6 +255,37 @@ void main() {
     final dio = _redirectDio(adapter);
     await dio.get<void>('/from');
     expect(adapter.seen.last.uri.fragment, isEmpty);
+    dio.close(force: true);
+  });
+
+  test('full redirect chain blocks external Set-Cookie from revoking login',
+      () async {
+    final jar = CookieJar();
+    final forumUri = Uri.parse('https://linux.do/');
+    await jar.saveFromResponse(
+      forumUri,
+      [Cookie('_t', 'forum-login-is-still-valid')..path = '/'],
+    );
+
+    final adapter = _ExternalCookieRedirectAdapter();
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: 'https://linux.do',
+        validateStatus: (status) => status != null && status < 400,
+      ),
+    )..httpClientAdapter = adapter;
+    // This is the production interceptor order: the cookie manager runs
+    // before redirect handling on both response and error paths.
+    dio.interceptors.add(AppCookieManager(jar));
+    dio.interceptors.add(RedirectInterceptor(dio));
+    await dio.get<void>('/forum-attachment');
+
+    expect(adapter.fetchCount, 2);
+    final forumCookies = await jar.loadForRequest(forumUri);
+    expect(
+      forumCookies.where((cookie) => cookie.name == '_t').single.value,
+      'forum-login-is-still-valid',
+    );
     dio.close(force: true);
   });
 
@@ -627,6 +661,31 @@ class _ExternalRedirectChainAdapter implements HttpClientAdapter {
     }
     return ResponseBody.fromString('{"ok":true}', 200, headers: {
       Headers.contentTypeHeader: ['application/json'],
+    });
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _ExternalCookieRedirectAdapter implements HttpClientAdapter {
+  int fetchCount = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    fetchCount++;
+    if (fetchCount == 1) {
+      return ResponseBody.fromString('', 302, headers: {
+        'location': ['https://external.example/attachment'],
+      });
+    }
+    return ResponseBody.fromString('ok', 200, headers: {
+      HttpHeaders.setCookieHeader: ['_t=del; Path=/'],
+      Headers.contentTypeHeader: ['text/plain'],
     });
   }
 
