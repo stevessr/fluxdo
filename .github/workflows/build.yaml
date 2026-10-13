@@ -248,6 +248,33 @@ jobs:
           mkdir -p dist
           mv build/app/outputs/flutter-apk/app-release.apk dist/fluxdo-${{ matrix.arch }}.apk
 
+      - name: Build modular Android companion APKs
+        if: matrix.platform == 'android' && matrix.arch == 'arm64-v8a'
+        run: |
+          set -euo pipefail
+          plugin_code=$(($(date -u +%s) / 60))
+          plugin_name="0.1.${plugin_code}"
+          dart tool/project_prep.dart test
+          (
+            cd android
+            ./gradlew --no-daemon \
+              -PpluginVersionCode="${plugin_code}" \
+              -PpluginVersionName="${plugin_name}" \
+              :plugin_deviceinfo:assembleRelease \
+              :plugin_network:assembleRelease \
+              :plugin_cdk:assembleRelease \
+              :plugin_ldc:assembleRelease
+          )
+          python3 scripts/ci/build_sticker_companion.py \
+            --mode release --abi android-arm64 \
+            --version-code "${plugin_code}" --version-name "${plugin_name}"
+          mkdir -p dist
+          cp build/plugin_deviceinfo/outputs/apk/release/plugin_deviceinfo-release.apk dist/fluxdo-plugin-deviceinfo.apk
+          cp build/plugin_network/outputs/apk/release/plugin_network-release.apk dist/fluxdo-plugin-network.apk
+          cp build/plugin_cdk/outputs/apk/release/plugin_cdk-release.apk dist/fluxdo-plugin-cdk.apk
+          cp build/plugin_ldc/outputs/apk/release/plugin_ldc-release.apk dist/fluxdo-plugin-ldc.apk
+          cp build/plugin_sticker/fluxdo-sticker-android-arm64-release.apk dist/fluxdo-plugin-sticker-arm64.apk
+
       - name: Authenticate to Google Cloud
         if: startsWith(matrix.platform, 'android') && env.GCP_WIF != '' && env.GCP_SA != ''
         env:
