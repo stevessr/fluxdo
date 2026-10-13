@@ -111,6 +111,7 @@ void main() {
         'Api-Key': 'from-global-defaults',
         'X-Requested-With': 'XMLHttpRequest',
         'X-Custom-Secret': 'private-default',
+        'Accept-Encoding': 'br, zstd',
         'Accept': 'application/json',
       },
       validateStatus: (status) => status != null && status < 400,
@@ -133,10 +134,16 @@ void main() {
       'api-key',
       'x-requested-with',
       'x-custom-secret',
+      'accept-encoding',
     ]) {
       expect(sentHeaders, isNot(contains(secret)));
     }
-    expect(redirected.headers['Accept'], 'application/json');
+    expect(
+      redirected.headers.entries.any((header) =>
+          header.key.toLowerCase() == 'accept' &&
+          header.value == 'application/json'),
+      isTrue,
+    );
     dio.close(force: true);
   });
 
