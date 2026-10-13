@@ -4,12 +4,21 @@ name: TEMP PR132 HTTPS Verification
 # Remove once PR #132 passes and is merged.
 on:
   workflow_dispatch:
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
 
 jobs:
   verify:
+    # Only the owner can request this PR-specific, secret-free validation.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 132 &&
+       github.event.comment.user.login == 'stevessr' &&
+       github.event.comment.body == '/verify-https-132')
     name: HTTPS ${{ matrix.task }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
