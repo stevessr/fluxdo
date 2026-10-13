@@ -3,6 +3,7 @@ package com.github.lingyan000.fluxdo.plugin.cdk
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import com.github.lingyan000.fluxdo.plugin.api.PluginWebSession
 import android.view.Menu
 import android.view.MenuItem
 import android.webkit.WebView
@@ -11,8 +12,8 @@ import android.webkit.WebResourceRequest
 
 /**
  * Standalone CDK site view. Uses its own WebView cookie store;
- * host OAuth, session and balances deliberately remain in the core until a
- * credential delegation protocol with account revocation is implemented.
+ * host credentials are never copied; the APK clears cookies when the
+ * hashed FluxDO account partition changes (including guest sessions).
  */
 class CdkActivity : Activity() {
     private var browser: WebView? = null
@@ -48,7 +49,10 @@ class CdkActivity : Activity() {
             }
         }
         setContentView(view)
-        view.loadUrl("https://cdk.linux.do")
+        PluginWebSession.load(
+            this, view, intent.getStringExtra("account_slot"),
+            "https://cdk.linux.do",
+        )
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
