@@ -102,13 +102,14 @@ class RedirectInterceptor extends Interceptor {
       });
     }
     if (crossOrigin) {
-      _removeHeaders(headers, const {
-        'authorization', 'proxy-authorization', 'api-key', 'api-username',
-        'x-api-key', 'x-api-username', 'x-csrf-token',
-        'origin', 'referer', 'host', 'x-requested-with',
-        'if-none-match', 'if-modified-since',
-      });
-      headers.removeWhere((key, _) => key.toLowerCase().startsWith('sec-fetch-'));
+      // Only forward innocuous representation/range preferences. An allowlist
+      // also protects future custom authentication headers we do not yet know
+      // about, instead of relying on an incomplete list of secret names.
+      const allowed = {
+        'accept', 'accept-language', 'accept-encoding', 'user-agent',
+        'range', 'if-range', 'cache-control', 'pragma',
+      };
+      headers.removeWhere((name, _) => !allowed.contains(name.toLowerCase()));
     }
 
     // A redirect is an internal subrequest; retaining the scheduling slot
