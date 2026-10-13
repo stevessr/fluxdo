@@ -15,9 +15,14 @@ void main() {
         .readAsStringSync();
   });
 
-  test('preload uses upstream loading wait semantics', () {
-    expect(preloadSource, contains('bool _loading = false;'));
-    expect(preloadSource, isNot(contains('_loadingFuture')));
+  test('preload is single-flight without 50ms polling or retry storms', () {
+    expect(preloadSource, contains('Future<void>? _loadingFuture;'));
+    expect(preloadSource, isNot(contains('bool _loading = false;')));
+    expect(preloadSource, isNot(contains('while (_loading)')));
+    expect(
+      preloadSource,
+      isNot(contains('Future.delayed(const Duration(milliseconds: 50))')),
+    );
 
     final start = preloadSource.indexOf(
       'Future<void> _waitForActiveLoad() async',
@@ -30,16 +35,20 @@ void main() {
     expect(end, greaterThan(start));
 
     final body = preloadSource.substring(start, end);
-    expect(body, contains('while (_loading)'));
-    expect(body, contains('Duration(milliseconds: 50)'));
+    expect(body, contains('await active;'));
+    expect(body, contains('while (!_loaded)'));
+    expect(body, contains('joinedStaleLoad'));
+    expect(body, contains('_activeLoadRevision != revision'));
+    expect(body, contains('_activeLoadGeneration != generation'));
     expect(
       body,
       contains(
-        'Future<void> _ensureLoaded({bool suppressCfChallenge = false}) async',
+        'if (!joinedStaleLoad && _isCurrent(revision, generation)) rethrow;',
       ),
     );
-    expect(body, contains('if (_loading)'));
-    expect(body, contains('if (_loaded) return;'));
+    expect(body, contains('if (active != null) return active;'));
+    expect(body, contains('return _loadingFuture = _runPreload('));
+    expect(body, contains('_loadingFuture = null;'));
   });
 
   test('native preload probe is high priority and can suppress CF UI', () {

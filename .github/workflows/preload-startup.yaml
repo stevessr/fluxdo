@@ -5,6 +5,10 @@ on:
     paths:
       - 'lib/services/browser_trust_coordinator.dart'
       - 'lib/services/preloaded_data_service.dart'
+      - 'lib/services/preload_cache_service.dart'
+      - 'lib/services/network/interceptors/preload_cache_interceptor.dart'
+      - 'test/services/preload_cache_service_test.dart'
+      - 'test/services/network/interceptors/preload_cache_interceptor_test.dart'
       - 'lib/providers/topic_list/topic_list_provider.dart'
       - 'lib/pages/topics_screen.dart'
       - 'lib/widgets/preheat_gate.dart'
@@ -18,6 +22,10 @@ on:
     paths:
       - 'lib/services/browser_trust_coordinator.dart'
       - 'lib/services/preloaded_data_service.dart'
+      - 'lib/services/preload_cache_service.dart'
+      - 'lib/services/network/interceptors/preload_cache_interceptor.dart'
+      - 'test/services/preload_cache_service_test.dart'
+      - 'test/services/network/interceptors/preload_cache_interceptor_test.dart'
       - 'lib/providers/topic_list/topic_list_provider.dart'
       - 'lib/pages/topics_screen.dart'
       - 'lib/widgets/preheat_gate.dart'
@@ -64,11 +72,15 @@ jobs:
           targets=(
             lib/services/browser_trust_coordinator.dart
             lib/services/preloaded_data_service.dart
+            lib/services/preload_cache_service.dart
+            lib/services/network/interceptors/preload_cache_interceptor.dart
             lib/providers/topic_list/topic_list_provider.dart
             lib/pages/topics_screen.dart
             lib/widgets/preheat_gate.dart
             test/services/browser_trust_preload_latency_contract_test.dart
             test/services/preloaded_data_progress_test.dart
+            test/services/preload_cache_service_test.dart
+            test/services/network/interceptors/preload_cache_interceptor_test.dart
           )
 
           base=""
@@ -106,11 +118,15 @@ jobs:
           flutter analyze
           lib/services/browser_trust_coordinator.dart
           lib/services/preloaded_data_service.dart
+          lib/services/preload_cache_service.dart
+          lib/services/network/interceptors/preload_cache_interceptor.dart
           lib/providers/topic_list/topic_list_provider.dart
           lib/pages/topics_screen.dart
           lib/widgets/preheat_gate.dart
           test/services/browser_trust_preload_latency_contract_test.dart
           test/services/preloaded_data_progress_test.dart
+          test/services/preload_cache_service_test.dart
+          test/services/network/interceptors/preload_cache_interceptor_test.dart
 
       - name: Test preload latency and progress contracts
         id: test
@@ -119,6 +135,8 @@ jobs:
           dart tool/flutterw.dart test
           test/services/browser_trust_preload_latency_contract_test.dart
           test/services/preloaded_data_progress_test.dart
+          test/services/preload_cache_service_test.dart
+          test/services/network/interceptors/preload_cache_interceptor_test.dart
 
       - name: Enforce quality gates
         if: ${{ always() && !cancelled() }}

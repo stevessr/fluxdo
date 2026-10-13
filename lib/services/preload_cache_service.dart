@@ -119,13 +119,12 @@ class PreloadCacheService {
 
     final file = await _fileForCurrentAccount(createRoot: false);
     if (file == null) return null;
-    final root = file.parent;
-    if (!await root.exists()) return null;
 
-    // 启动读取只检查当前会话文件，不在关键路径遍历所有账号缓存。
-    // 全局过期维护留给后台写入路径执行。
-    if (!await file.exists()) return null;
-
+    // A missing file/directory makes lastModified throw FileSystemException.
+    // That is the normal cache-miss path; probing root.exists + file.exists
+    // beforehand adds two serial filesystem round trips to every startup
+    // (notably expensive on Windows and mobile external-backed storage).
+    // Expired-entry cleanup remains best-effort and off the hot path.
     try {
       final modifiedAt = await file.lastModified();
       if (_isExpired(modifiedAt)) {
