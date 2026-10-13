@@ -50,6 +50,7 @@ void main() {
       'Origin': 'https://linux.do',
       'Referer': 'https://linux.do/private',
       'Sec-Fetch-Site': 'same-origin',
+      'X-Unrecognized-Secret': 'private',
     }));
     expect(adapter.seen, hasLength(2));
     final redirected = adapter.seen.last;
@@ -57,6 +58,7 @@ void main() {
     for (final sensitive in [
       'authorization', 'cookie', 'x-csrf-token', 'api-key',
       'x-requested-with', 'origin', 'referer', 'sec-fetch-site',
+      'x-unrecognized-secret',
     ]) {
       expect(redirected.headers.keys.map((e) => e.toLowerCase()),
           isNot(contains(sensitive)));
