@@ -266,6 +266,37 @@ def setup_project(target: Path, mode: str) -> None:
         )
     build_file.write_text(gradle)
 
+    # The original FluxDO Android Gradle setup patches a duplicate Java/Kotlin
+    # FlutterAvifPlugin class. A standalone Sticker app cannot inherit the
+    # host Gradle fix, so reproduce only this narrowly scoped workaround.
+    root_gradle = target / "android/build.gradle.kts"
+    build_script = root_gradle.read_text()
+    if "patchStandaloneStickerAvifRedeclaration" not in build_script:
+        build_script += """
+// flutter_avif_android 3.1.0 still contains both Java and Kotlin plugin
+// classes under the same name; use the same fix as FluxDO Core.
+subprojects {
+    if (name == "flutter_avif_android") {
+        afterEvaluate {
+            val patchTask = tasks.register("patchStandaloneStickerAvifRedeclaration") {
+                doFirst {
+                    val duplicate = file(
+                        "src/main/java/com/teknorota/flutter_avif/FlutterAvifPlugin.java"
+                    )
+                    if (duplicate.isFile) duplicate.delete()
+                }
+            }
+            tasks.matching {
+                it.name.startsWith("compile")
+            }.configureEach {
+                dependsOn(patchTask)
+            }
+        }
+    }
+}
+"""
+    root_gradle.write_text(build_script)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
