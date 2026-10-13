@@ -67,6 +67,36 @@ void main() {
     dio.close(force: true);
   });
 
+  test('same-origin redirects discard validators and old cache snapshots',
+      () async {
+    final adapter = _ScenarioAdapter(301, '/different-resource.json');
+    final dio = _redirectDio(adapter);
+    await dio.get<void>('/old.json', options: Options(
+      headers: {
+        'If-None-Match': '"etag-for-old"',
+        'If-Modified-Since': 'Wed, 21 Oct 2015 07:28:00 GMT',
+        'If-Match': '"old"',
+      },
+      extra: {
+        '_fluxHttpRevalidationEntry': 'old-response',
+        '_fluxHttpRevalidationKey': 'old-cache-key',
+        '_schedulerCounted': true,
+      },
+    ));
+
+    final redirected = adapter.seen.last;
+    for (final name in [
+      'if-none-match', 'if-modified-since', 'if-match'
+    ]) {
+      expect(redirected.headers.keys.map((k) => k.toLowerCase()),
+          isNot(contains(name)));
+    }
+    expect(redirected.extra.containsKey('_fluxHttpRevalidationEntry'), isFalse);
+    expect(redirected.extra.containsKey('_fluxHttpRevalidationKey'), isFalse);
+    expect(redirected.extra['_schedulerCounted'], isTrue);
+    dio.close(force: true);
+  });
+
   test('cross-origin redirects discard private cache and cookie metadata',
       () async {
     final adapter = _ScenarioAdapter(302, 'https://other.example/final');
