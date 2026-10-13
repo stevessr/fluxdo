@@ -14,8 +14,11 @@ val keys = Properties().apply {
 }
 val keyStore = keys.getProperty("storeFile")?.trim()?.takeIf { it.isNotEmpty() }?.let { path ->
     val raw = File(path)
-    if (raw.isAbsolute) raw else listOf(file(path), rootProject.file(path))
-        .firstOrNull { it.exists() } ?: rootProject.file(path)
+    if (raw.isAbsolute) raw else listOf(
+        file(path),
+        rootProject.file(path),
+        rootProject.file("app/$path"),
+    ).firstOrNull { it.isFile } ?: rootProject.file("app/$path")
 }
 val signed = listOf("keyAlias", "keyPassword", "storePassword")
     .all { !keys.getProperty(it).isNullOrBlank() } && keyStore?.isFile == true
@@ -55,6 +58,15 @@ android {
             if (signed) signingConfig = signingConfigs.getByName("pluginRelease")
         }
         getByName("release") {
+            // An unsigned or debug-signed Release cannot be loaded by the
+            // signed host. Fail explicitly when building this plugin release.
+            val thisPluginRelease = gradle.startParameter.taskNames.any {
+                it.contains("plugin_ldc:assembleRelease", ignoreCase = true) ||
+                it.contains("plugin_ldc:bundleRelease", ignoreCase = true)
+            }
+            if (thisPluginRelease && !signed) {
+                throw GradleException("plugin_ldc Release must use FluxDO host key.properties")
+            }
             signingConfig = signingConfigs.getByName(if (signed) "pluginRelease" else "debug")
             isMinifyEnabled = false
         }
