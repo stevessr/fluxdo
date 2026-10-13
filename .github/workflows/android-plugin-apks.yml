@@ -79,7 +79,7 @@ jobs:
       - name: Resolve Flutter dependencies
         run: flutter pub get
       - name: Validate standalone APK build scripts
-        run: python3 -m py_compile scripts/ci/build_sticker_companion.py scripts/ci/build_android_core_modular.py scripts/ci/check_android_plugin_contract.py scripts/ci/check_android_apk_contract.py
+        run: python3 -m py_compile scripts/ci/build_sticker_companion.py scripts/ci/check_sticker_isolation.py scripts/ci/build_android_core_modular.py scripts/ci/check_android_plugin_contract.py scripts/ci/check_android_apk_contract.py
       - name: Test Android Core source/asset exclusion (without SDK)
         run: python3 -m unittest discover -s scripts/ci -p test_android_modular_contract.py -v
       - name: Check plugin IPC manifests and allowlist
