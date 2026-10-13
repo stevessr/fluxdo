@@ -164,6 +164,11 @@ def setup_project(target: Path, mode: str) -> None:
     assert activity is not None
     activity.set(ANDROID_NS + "name", ".StickerActivity")
     activity.set(ANDROID_NS + "exported", "true")
+    # This is a host-launched capability APK, NOT an independently launchable
+    # application. Do not advertise a launcher icon that cannot be opened
+    # without the host's signature-level permission.
+    for intent_filter in list(activity.findall("intent-filter")):
+        activity.remove(intent_filter)
     # Host-only launch, including ACTION_GET_CONTENT image handoff.
     # Third-party apps must not be able to impersonate an export request.
     activity.set(
