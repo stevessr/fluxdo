@@ -151,3 +151,72 @@ python3 scripts/ci/build_sticker_companion.py --mode release --abi android-arm64
    与主 App 授权互不污染。
 5. 审查独立 Flutter APK 是否无意引入多余插件/系统权限，对比拆分前后的
    **core APK bytes / 总安装 bytes / 单次增量更新 bytes / 冷启动 P95**。
+
+## 第三阶段：Android 实际主包剔除（本 PR 新增）
+
+这不是在 Dart 运行时用 `Platform.isAndroid` 隐藏页面，那样仍可能将图片
+和业务逻辑链接到 APK。项目现在维护以下**两套编译入口**：
+
+- **Android 正式 CI**：`python3 scripts/ci/build_android_core_modular.py --mode
+  release --abi android-arm64`。脚本复制一份隔离工程，将 `lib/pages/metaverse_page.dart`
+  替换成 LDC/CDK 插件启动页；将 `lib/pages/stevessr_generator_page.dart`、
+  `lib/services/stevessr_export_service.dart` 换成独立 APK 的薄桥接层；帖子
+  打赏菜单不再查询主包凭据；移除相关 OAuth、余额 Provider、打赏交易模型/
+  服务和生成器画布实现源码，然后从独立工程的 `pubspec.yaml` 删除五组
+  角色素材。**根目录原代码和 pubspec 不被修改**。
+- **其他平台**：原来的 `dart tool/flutterw.dart build linux/windows/macos/ios/web`
+  等入口完全不变。正常保留内嵌 StevesSR 生成器、全部角色图像、元宇宙
+  LDC/CDK 账户功能和原打赏 UI。
+- **Android 插件**：`:plugin_deviceinfo`、`:plugin_network`、
+  `:plugin_cdk`、`:plugin_ldc` 是单独签名的 Native APK。
+  `android_companions/sticker` 独立建 Flutter Application，分别构建
+  `android-arm`、`android-arm64`、`android-x64` 与 `universal`
+  APK，拥有自己的 Flutter AOT、角色素材和更新 `versionCode`。
+  同一次构建生成 Core 和所有插件 APK，用户只安装所需插件即可。
+
+### 构建示例
+
+```bash
+# Android: Core APK 不含角色素材及生成器/元宇宙业务实现
+python3 scripts/ci/build_android_core_modular.py --mode release --abi android-arm64
+
+# 单独构建并更新 Sticker APK（必须与 Core 同签名）
+dart tool/project_prep.dart test
+python3 scripts/ci/build_sticker_companion.py --mode release --abi android-arm64 \
+  --version-code 200 --version-name 0.2.0
+
+# 可选 Native APK (各自拥有独立包名及 versionCode)
+(cd android && ./gradlew -PpluginVersionCode=200 \
+  :plugin_ldc:assembleRelease :plugin_cdk:assembleRelease \
+  :plugin_network:assembleRelease :plugin_deviceinfo:assembleRelease)
+```
+
+Android CI 使用上述独立构建器，严格检查编译出的 Core APK 不再包含
+`flutter_assets/assets/images/avater/` 的角色素材。打包器绝不静默回退
+到旧版 monolith；若仍有对已迁走 Dart 实现的 import，Flutter 编译会失败。
+CI 另外产生 `build/android_modular_sizes.md`，列出 **Core 独立安装体积、
+每个可选插件安装体积、全部安装总量**；有旧版 APK 时可运行
+`scripts/ci/report_android_modular_size.py --baseline old.apk` 做准确对比。
+
+### 兼容性与未完成部分
+
+- **只有使用独立构建脚本/更新后的官方 Android CI 才能得到瘦身主包。**
+  开发时直接执行普通 `flutter build apk` 仍是全功能单 APK，以保留现有
+  开发调试流；正式 Android 发布必须使用独立入口。
+- Android Core 仍保留 `StevessrExportedImage` 简单传输类型、
+  图片上传/透明度检查、插件发现/进程安全桥接和必要的菜单入口。独立
+  图片的编辑与编码、角色素材及 LDC/CDK 原登录实现不再包含于该构建入口。
+- **LDC/CDK 独立插件尚未实现和旧版等价的余额/授权 UI。** 目前以隔离
+  WebView 访问相应服务页面，用户在插件里单独登录。旧账户 Cookie 不会跨 APK
+  复制。独立插件不能冒充原有 Flutter 页面已经迁移完毕。
+- **打赏暂不具备旧版一键操作的功能等价性**：独立 LDC 插件承载站点
+  交易页面，但自动预填用户/额度、客户端 ID/Secret 管理、确认、
+  幂等对账和失败恢复还未实现。Android Core 的打赏入口只提示使用独立
+  LDC 插件，不再从主包取 Basic Auth 凭据。旧凭据不会被自动迁移、
+  复制或删除；待安全迁移方案验证后才可正式替换。
+- 当前没有已完成的设备实测或 CI 成功证据。本 PR 在签名、资源、
+  Flutter 构建、插件安装/更新和业务流程均验证前必须保持 Draft，
+  不能宣称已生产可用。
+
+本次采用隔离构建副本而非删除多平台共用源码，主要是保证非 Android 平台
+完整保留原功能且不会产生源代码和 `pubspec.yaml` 临时覆盖/恢复的竞态。
