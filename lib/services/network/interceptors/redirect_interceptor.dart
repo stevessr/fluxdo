@@ -55,6 +55,17 @@ class RedirectInterceptor extends Interceptor {
       return;
     }
 
+    // URI userinfo may be interpreted as Basic credentials by an underlying
+    // native HTTP stack; a redirect must never inject or change credentials.
+    if (destination.userInfo.isNotEmpty) {
+      handler.reject(_redirectError(
+        response, 'Redirect target contains URL credentials',
+      ));
+      return;
+    }
+    // Fragments are browser-local state and not part of the HTTP target.
+    destination = destination.replace(fragment: '');
+
     if (source.uri.scheme == 'https' && destination.scheme != 'https') {
       handler.reject(_redirectError(
         response, 'Blocked HTTPS to HTTP redirect',
@@ -218,7 +229,8 @@ class RedirectInterceptor extends Interceptor {
       FluxRequestKeys.isSilent,
       FluxRequestKeys.showErrorToast,
       FluxRequestKeys.priority,
-      FluxRequestKeys.requestTag,
+      // Request tags include 'preload-home' and 'csrf-refresh'. Forwarding
+      // them can cause a foreign response to enter the Discourse cache path.
       FluxRequestKeys.skipNetworkLog,
       FluxRequestKeys.skipSessionStateSync,
       FluxRequestKeys.skipAuthCheck,
