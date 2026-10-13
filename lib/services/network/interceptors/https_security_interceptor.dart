@@ -1,26 +1,123 @@
+import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Process-local HSTS policy learned only from authenticated HTTPS responses.
+/// HSTS policy learned only from authenticated HTTPS responses.
 ///
-/// This is intentionally not a preload list or a persistent browser profile.
+/// The application-wide instance persists bounded, expiring host policies
+/// across restarts. Standalone policies are in-memory by default for tests.
 /// HTTPS upgrades apply to the original request URL, before the proxy/gateway
 /// adapter rewrites transport details; a local HTTP proxy must never be mistaken
 /// for an insecure origin.
 class HttpsSecurityPolicy {
-  HttpsSecurityPolicy({DateTime Function()? now}) : _now = now ?? DateTime.now;
+  HttpsSecurityPolicy({DateTime Function()? now, bool persist = false})
+      : _now = now ?? DateTime.now,
+        _persist = persist;
 
-  static final HttpsSecurityPolicy instance = HttpsSecurityPolicy();
+  static final HttpsSecurityPolicy instance = HttpsSecurityPolicy(persist: true);
 
+  static const String _storageKey = 'network_hsts_policies_v1';
   static const int _maxHosts = 128;
   static const int _maxAgeSeconds = 2 * 365 * 24 * 60 * 60;
 
   final DateTime Function() _now;
+  final bool _persist;
   final LinkedHashMap<String, _HstsEntry> _hosts =
       LinkedHashMap<String, _HstsEntry>();
+  SharedPreferences? _preferences;
+  Future<void>? _loadFuture;
+  Timer? _persistTimer;
+  Future<void> _writeTail = Future<void>.value();
+
+  /// Lazily load before the first outgoing request so a remembered policy can
+  /// prevent a downgrade even before this process has seen a TLS response.
+  /// Storage failures must never block the network path.
+  Future<void> ensureLoaded() {
+    if (!_persist) return Future<void>.value();
+    return _loadFuture ??= _loadStoredPolicies();
+  }
+
+  Future<void> _loadStoredPolicies() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final raw = preferences.getString(_storageKey);
+      if (raw != null) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          final now = _now();
+          final maximum = now.add(const Duration(seconds: _maxAgeSeconds));
+          for (final item in decoded) {
+            if (item is! Map) continue;
+            final host = item['host'];
+            final epoch = item['until'];
+            final include = item['includeSubDomains'];
+            if (host is! String || epoch is! int || include is! bool) {
+              continue;
+            }
+            if (!_validHost(host) || _normalizedHost(host) != host) continue;
+            final until = DateTime.fromMillisecondsSinceEpoch(epoch);
+            if (!until.isAfter(now) || until.isAfter(maximum)) continue;
+            // If a live TLS response was observed while loading, that newer
+            // response is authoritative over the disk snapshot.
+            _hosts.putIfAbsent(
+              host,
+              () => _HstsEntry(until: until, includeSubDomains: include),
+            );
+          }
+          while (_hosts.length > _maxHosts) {
+            _hosts.remove(_hosts.keys.first);
+          }
+        }
+      }
+      _preferences = preferences;
+    } catch (error) {
+      debugPrint('[HTTPS] Failed to load HSTS cache: $error');
+    }
+  }
+
+  void _schedulePersistence({bool immediately = false}) {
+    if (!_persist || _preferences == null) return;
+    if (immediately) {
+      _persistTimer?.cancel();
+      _persistTimer = null;
+      unawaited(flushPending());
+      return;
+    }
+    // A single timer, not one preferences write per network response.
+    _persistTimer ??= Timer(const Duration(seconds: 5), () {
+      _persistTimer = null;
+      unawaited(flushPending());
+    });
+  }
+
+  @visibleForTesting
+  Future<void> flushPending() async {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    final preferences = _preferences;
+    if (preferences == null) return;
+    final now = _now();
+    final serialized = jsonEncode([
+      for (final entry in _hosts.entries)
+        if (entry.value.until.isAfter(now))
+          {
+            'host': entry.key,
+            'until': entry.value.until.millisecondsSinceEpoch,
+            'includeSubDomains': entry.value.includeSubDomains,
+          },
+    ]);
+    _writeTail = _writeTail.then((_) async {
+      await preferences.setString(_storageKey, serialized);
+    }).catchError((Object error) {
+      debugPrint('[HTTPS] Failed to persist HSTS cache: $error');
+    });
+    await _writeTail;
+  }
 
   /// Upgrade only hosts for which a valid HSTS directive was observed.
   Uri upgrade(Uri uri) {
@@ -44,7 +141,9 @@ class HttpsSecurityPolicy {
     if (parsed == null) return;
 
     if (parsed.maxAge == 0) {
-      _hosts.remove(host);
+      if (_hosts.remove(host) != null) {
+        _schedulePersistence(immediately: true);
+      }
       return;
     }
 
@@ -56,6 +155,7 @@ class HttpsSecurityPolicy {
     while (_hosts.length > _maxHosts) {
       _hosts.remove(_hosts.keys.first);
     }
+    _schedulePersistence();
   }
 
   bool _hasHsts(String rawHost) {
@@ -69,6 +169,7 @@ class HttpsSecurityPolicy {
       if (entry != null) {
         if (!now.isBefore(entry.until)) {
           _hosts.remove(current);
+          _schedulePersistence();
         } else if (exact || entry.includeSubDomains) {
           return true;
         }
@@ -120,7 +221,11 @@ class HttpsSecurityPolicy {
   }
 
   @visibleForTesting
-  void clearForTest() => _hosts.clear();
+  void clearForTest() {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    _hosts.clear();
+  }
 }
 
 class _HstsEntry {
@@ -146,7 +251,11 @@ class HttpsSecurityInterceptor extends Interceptor {
   final HttpsSecurityPolicy _policy;
 
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+  Future<void> onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    await _policy.ensureLoaded();
     final origin = options.uri;
     final upgraded = _policy.upgrade(origin);
     if (upgraded != origin) {
