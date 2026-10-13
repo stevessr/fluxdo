@@ -11,6 +11,7 @@ import '../system_proxy_service.dart';
 
 const _http3FailureBackoff = Duration(minutes: 10);
 const _http3SuccessTtl = Duration(hours: 1);
+const _maxHttp3Origins = 128;
 const _http3ConnectTimeout = Duration(seconds: 3);
 const _normalConnectTimeout = Duration(seconds: 30);
 
@@ -225,10 +226,13 @@ class RhttpAdapter implements HttpClientAdapter {
   void _markHttp3Success(String host) {
     if (host.isEmpty) return;
     final previous = _http3Capabilities[host];
-    _http3Capabilities[host] = _Http3Capability(
-      supported: true,
-      // A successful probe does not extend the server's Alt-Svc lifetime.
-      expiresAt: previous?.expiresAt ?? DateTime.now().add(_http3SuccessTtl),
+    _storeHttp3Capability(
+      host,
+      _Http3Capability(
+        supported: true,
+        // A successful probe does not extend the server's Alt-Svc lifetime.
+        expiresAt: previous?.expiresAt ?? DateTime.now().add(_http3SuccessTtl),
+      ),
     );
     if (previous?.supported != true) {
       debugPrint('[DIO] RhttpAdapter HTTP/3 available: $host');
@@ -237,9 +241,12 @@ class RhttpAdapter implements HttpClientAdapter {
 
   void _markHttp3Failure(String host) {
     if (host.isEmpty) return;
-    _http3Capabilities[host] = _Http3Capability(
-      supported: false,
-      expiresAt: DateTime.now().add(_http3FailureBackoff),
+    _storeHttp3Capability(
+      host,
+      _Http3Capability(
+        supported: false,
+        expiresAt: DateTime.now().add(_http3FailureBackoff),
+      ),
     );
   }
 
@@ -266,10 +273,21 @@ class RhttpAdapter implements HttpClientAdapter {
         DateTime.now().isBefore(previous.expiresAt)) {
       return;
     }
-    _http3Capabilities[originKey] = _Http3Capability(
-      supported: true,
-      expiresAt: DateTime.now().add(lifetime),
+    _storeHttp3Capability(
+      originKey,
+      _Http3Capability(
+        supported: true,
+        expiresAt: DateTime.now().add(lifetime),
+      ),
     );
+  }
+
+  void _storeHttp3Capability(String key, _Http3Capability capability) {
+    _http3Capabilities.remove(key);
+    _http3Capabilities[key] = capability;
+    while (_http3Capabilities.length > _maxHttp3Origins) {
+      _http3Capabilities.remove(_http3Capabilities.keys.first);
+    }
   }
 
   String _http3OriginKey(Uri uri) => '${uri.host.toLowerCase()}:${uri.port}';
