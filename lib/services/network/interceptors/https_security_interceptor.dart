@@ -147,10 +147,31 @@ class HttpsSecurityInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    final upgraded = _policy.upgrade(options.uri);
-    if (upgraded != options.uri) {
-      options.baseUrl = '';
-      options.path = upgraded.toString();
+    final origin = options.uri;
+    final upgraded = _policy.upgrade(origin);
+    if (upgraded != origin) {
+      // Change only the URL component that owns the scheme. Replacing path
+      // with options.uri (which already includes queryParameters) would make
+      // Dio append those parameters a second time on the next uri read.
+      final pathUri = Uri.tryParse(options.path);
+      if (pathUri != null &&
+          pathUri.scheme.toLowerCase() == 'http' &&
+          pathUri.host == origin.host) {
+        options.path = _policy.upgrade(pathUri).toString();
+      } else {
+        final baseUri = Uri.tryParse(options.baseUrl);
+        if (baseUri != null &&
+            baseUri.scheme.toLowerCase() == 'http' &&
+            baseUri.host == origin.host) {
+          options.baseUrl = _policy.upgrade(baseUri).toString();
+        } else {
+          // Uncommon scheme-relative URLs: use the complete resolved URI,
+          // clearing the query map to avoid duplicate parameters.
+          options.baseUrl = '';
+          options.path = upgraded.toString();
+          options.queryParameters.clear();
+        }
+      }
     }
     handler.next(options);
   }
