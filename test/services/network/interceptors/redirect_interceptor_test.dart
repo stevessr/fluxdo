@@ -189,6 +189,45 @@ void main() {
     dio307.close(force: true);
   });
 
+  test('301/302 POST follows as GET without original entity headers', () async {
+    for (final code in [301, 302]) {
+      final adapter = _ScenarioAdapter(code, '/after');
+      final dio = _redirectDio(adapter);
+      await dio.post<void>(
+        '/write',
+        data: {'message': 'hello'},
+        options: Options(headers: {
+          'Content-MD5': 'digest-of-old-body',
+          'Digest': 'sha-256=old',
+          'Expect': '100-continue',
+          'Content-Language': 'en',
+          'Trailer': 'checksum',
+        }),
+      );
+      final target = adapter.seen.last;
+      expect(target.method, 'GET');
+      expect(target.data, isNull);
+      final headerNames =
+          target.headers.keys.map((name) => name.toLowerCase()).toSet();
+      for (final name in [
+        'content-md5', 'digest', 'expect', 'content-language', 'trailer',
+        'content-type', 'content-length', 'transfer-encoding',
+      ]) {
+        expect(headerNames, isNot(contains(name)));
+      }
+      dio.close(force: true);
+    }
+  });
+
+  test('303 HEAD stays HEAD and does not invent a GET payload', () async {
+    final adapter = _ScenarioAdapter(303, '/resource');
+    final dio = _redirectDio(adapter);
+    await dio.head<void>('/original');
+    expect(adapter.seen.last.method, 'HEAD');
+    expect(adapter.seen.last.data, isNull);
+    dio.close(force: true);
+  });
+
   test('307 multipart redirect regenerates its content-type boundary', () async {
     final adapter = _ScenarioAdapter(307, '/upload/finish');
     final dio = _redirectDio(adapter);
