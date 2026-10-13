@@ -50,6 +50,37 @@ void main() {
     final entry = await _readSingleRequestEntry();
     expect(entry.containsKey('requestTag'), isFalse);
   });
+
+  test('actual HTTP/3 version is logged separately from Alt-Svc hints', () async {
+    final dio = _buildDio(
+      httpVersion: 'http3',
+      altSvc: 'h3=":443"; ma=86400',
+    );
+    await dio.get<dynamic>('/latest.json');
+
+    final entry = await _readSingleRequestEntry();
+    expect(entry['httpVersion'], 'http3');
+    expect(entry['http3Advertised'], true);
+    expect(entry.containsKey('remote_ip'), isFalse);
+  });
+
+  test('an HTTP/3 advertisement never claims an HTTP/3 connection', () async {
+    final dio = _buildDio(altSvc: 'h3=":443"; ma=86400');
+    await dio.get<dynamic>('/latest.json');
+
+    final entry = await _readSingleRequestEntry();
+    expect(entry['http3Advertised'], true);
+    expect(entry.containsKey('httpVersion'), isFalse);
+  });
+
+  test('Alt-Svc clear is not mistaken for HTTP/3 support', () async {
+    final dio = _buildDio(altSvc: 'clear');
+    await dio.get<dynamic>('/latest.json');
+
+    final entry = await _readSingleRequestEntry();
+    expect(entry.containsKey('http3Advertised'), isFalse);
+    expect(entry.containsKey('httpVersion'), isFalse);
+  });
 }
 
 Future<Map<String, dynamic>> _readSingleRequestEntry() async {
@@ -65,27 +96,37 @@ Future<Map<String, dynamic>> _readSingleRequestEntry() async {
   return entries.single;
 }
 
-Dio _buildDio() {
+Dio _buildDio({String? httpVersion, String? altSvc}) {
   final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'))
-    ..httpClientAdapter = _OkAdapter();
+    ..httpClientAdapter = _OkAdapter(httpVersion: httpVersion, altSvc: altSvc);
   dio.interceptors.add(NetworkLogInterceptor());
   return dio;
 }
 
 class _OkAdapter implements HttpClientAdapter {
+  _OkAdapter({this.httpVersion, this.altSvc});
+
+  final String? httpVersion;
+  final String? altSvc;
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    return ResponseBody.fromString(
+    final response = ResponseBody.fromString(
       '{"ok":true}',
       200,
       headers: {
         Headers.contentTypeHeader: ['application/json'],
+        if (altSvc != null) 'alt-svc': [altSvc!],
       },
     );
+    if (httpVersion != null) {
+      response.extra['http_version'] = httpVersion;
+    }
+    return response;
   }
 
   @override
