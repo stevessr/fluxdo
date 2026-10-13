@@ -305,14 +305,28 @@ subprojects {
     root_gradle.write_text(build_script)
 
 
-def verify_drawing_dependency_graph(target: Path) -> None:
+def verify_drawing_dependency_graph(target: Path) -> tuple[int, list[str]]:
     """Reject accidental Flutter native-plugin dependencies from the host."""
     lockfile = target / "pubspec.lock"
     if not lockfile.is_file():
         raise RuntimeError("Sticker Flutter pub get did not produce a lockfile")
     lock = lockfile.read_text()
-    if "  fluxdo:" in lock.splitlines():
+    lines = lock.splitlines()
+    try:
+        packages_start = lines.index("packages:")
+        packages_end = lines.index("sdks:", packages_start + 1)
+    except ValueError as error:
+        raise RuntimeError("Unexpected pubspec.lock package structure") from error
+    import re
+    package_count = sum(
+        1 for line in lines[packages_start + 1:packages_end]
+        if re.fullmatch(r"  [a-zA-Z][a-zA-Z0-9_]*:", line)
+    )
+    if package_count < 8:
+        raise RuntimeError("Sticker dependency graph appears incomplete")
+    if "  fluxdo:" in lines:
         raise RuntimeError("The sticker APK resolved the full FluxDO dependency")
+    plugins: list[str] = []
     registration = target / ".flutter-plugins-dependencies"
     if registration.is_file():
         data = json.loads(registration.read_text())
@@ -331,6 +345,8 @@ def verify_drawing_dependency_graph(target: Path) -> None:
                 + ", ".join(unexpected)
             )
         print(f"Sticker Android native plugin registry: {plugins}")
+    print(f"Sticker resolved Dart packages: {package_count}")
+    return package_count, plugins
 
 
 def verify_sticker_apk(apk: Path) -> None:
@@ -363,7 +379,7 @@ def main() -> None:
         target = Path(temp) / "sticker"
         setup_project(target, args.mode)
         execute("flutter", "pub", "get", cwd=target)
-        verify_drawing_dependency_graph(target)
+        dart_packages, native_plugins = verify_drawing_dependency_graph(target)
         flutter_abis = (
             "android-arm,android-arm64,android-x64"
             if args.abi == "universal" else args.abi
@@ -383,7 +399,18 @@ def main() -> None:
         dest.mkdir(parents=True, exist_ok=True)
         out = dest / f"fluxdo-sticker-{args.abi}-{args.mode}.apk"
         shutil.copy2(candidates[0], out)
+        report = dest / f"sticker-dependencies-{args.abi}-{args.mode}.md"
+        report.write_text(
+            "# Standalone Sticker dependencies\\n\\n"
+            f"- Dart packages resolved: **{dart_packages}**\\n"
+            f"- Android native Flutter plugins: **{len(native_plugins)}**\\n"
+            f"- Native plugin names: {', '.join(native_plugins)}\\n"
+            f"- APK compressed bytes: **{out.stat().st_size:,}**\\n"
+            "- FluxDO root application dependency: **none**\\n"
+            "- Forum/account/messaging native plugins: **excluded**\\n"
+        )
         print(f"Independent companion APK: {out} ({out.stat().st_size} bytes)")
+        print(report.read_text())
 
 
 if __name__ == "__main__":
