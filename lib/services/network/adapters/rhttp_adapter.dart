@@ -583,6 +583,10 @@ Duration? http3AltSvcLifetime(
         // intentionally caps its own probe cache at one hour.
         final match = RegExp(r'(?:^|;)\s*ma\s*=\s*"?([0-9]+)"?\s*(?:;|$)')
             .firstMatch(alternative);
+        if (match == null &&
+            RegExp(r'(?:^|;)\s*ma\s*=').hasMatch(alternative)) {
+          continue; // Malformed advertised max-age is not a valid hint.
+        }
         final maxAge = match == null ? 86400 : int.tryParse(match.group(1)!);
         if (maxAge == null || maxAge <= 0) continue;
         final duration = Duration(
