@@ -1,17 +1,31 @@
 name: fluxdo_sticker_companion
-description: Independently updatable StevesSR Android Flutter companion
+description: Minimal independently updatable StevesSR Android-only drawing app
 publish_to: none
 version: 0.1.0+1
+
 environment:
   sdk: ^3.13.0
   flutter: ">=3.47.4"
+
+# Deliberately no 'fluxdo' dependency. The build script copies just the
+# generator implementation and generated localization files into this app.
+# This avoids registering hundreds of unrelated Android native plugins.
 dependencies:
   flutter:
     sdk: flutter
-  fluxdo:
-    path: ../..
-  path_provider: ^2.1.5
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
+  slang: 4.14.0
   slang_flutter: 4.14.0
+  file_picker: ^10.3.10
+  flutter_avif: ^3.1.0
+  image: ^4.10.1
+  cross_file: ^0.3.4+2
+  path_provider: ^2.1.5
+  share_plus: ^12.0.1
+  gal: ^2.3.2
+
 flutter:
   uses-material-design: true
   assets:
