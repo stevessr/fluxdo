@@ -2,6 +2,7 @@ name: HTTPS Advanced Network
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, edited]
     paths:
       - 'lib/services/network/adapters/**'
       - 'lib/services/network/interceptors/**'
