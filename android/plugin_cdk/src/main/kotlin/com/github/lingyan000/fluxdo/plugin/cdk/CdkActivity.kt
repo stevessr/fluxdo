@@ -59,6 +59,7 @@ class CdkActivity : Activity() {
         menu.add(0, 1, 0, "首页").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
         menu.add(0, 2, 1, "余额 / 我的信息")
         menu.add(0, 3, 2, "刷新").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+        menu.add(0, 4, 3, "清除插件登录状态")
         return true
     }
 
@@ -67,6 +68,11 @@ class CdkActivity : Activity() {
             1 -> browser?.loadUrl("https://cdk.linux.do")
             2 -> browser?.loadUrl("https://cdk.linux.do/api/v1/oauth/user-info")
             3 -> browser?.reload()
+            4 -> browser?.let {
+                // Guest sessions are intentionally transient. Clearing this
+                // plugin never signs out the host app or another plugin.
+                PluginWebSession.load(this, it, "guest", "https://cdk.linux.do")
+            }
             else -> return super.onOptionsItemSelected(item)
         }
         return true
