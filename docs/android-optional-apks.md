@@ -220,3 +220,46 @@ CI 另外产生 `build/android_modular_sizes.md`，列出 **Core 独立安装体
 
 本次采用隔离构建副本而非删除多平台共用源码，主要是保证非 Android 平台
 完整保留原功能且不会产生源代码和 `pubspec.yaml` 临时覆盖/恢复的竞态。
+
+## 第四阶段：独立打赏模块、源码依赖及 APK 签名校验
+
+- 增加第五个原生插件 `:plugin_ldc_reward`（包名
+  `com.github.lingyan000.fluxdo.plugin.ldc_reward`）。与 `plugin_ldc`
+  完全不同的安装和版本生命周期。主应用帖子菜单只经
+  `AndroidOptionalPluginService.launch('ldc_reward', payload: ...)`
+  传递收款人公开 ID/用户名；原有 Basic Auth 凭据、Cookie、支付金额
+  和支付指令都**不会**送到这个独立 APK。
+- 打赏插件当前是**显式的人工交易交接**：显示目标用户和风险说明，
+  由用户手动打开 LDC 官方站点，自己确认收款人、金额和交易结果。
+  **没有**假定已完成原一键打赏功能，也不会自动请求
+  `/epay/pay/distribute`。补齐账户隔离、Keystore 存储、不可重复
+  提交和服务器侧交易对账前，仍不可标为功能等价。
+- CDK、LDC 独立 APK 新增站点主页、我的信息 API 页面、刷新入口；
+  顶层导航保持 HTTPS 官方域名白名单，iframe/子资源不误开外部浏览器。
+  不复用 Core 的 Session，独立站点登录仍需测试。
+- `scripts/ci/build_android_core_modular.py` 的预构建检查现在会扫描
+  Dart 直接 import/export/part，发现引用已剔除的文件就终止构建；
+  对预生成的 Slang 翻译文件只豁免两个明确路径。
+  `scripts/ci/test_android_modular_contract.py` 对旧模型导入、
+  多平台 API 兼容层、角色目录、打赏服务残留及翻译生成时序添加了回归用例。
+- `scripts/ci/check_android_apk_contract.py` 在真正生成 APK 后使用 Android
+  SDK 的 `aapt` / `apksigner` 检查 **Core + 六个独立 APK**
+  的 packageName、versionCode 和签名 SHA-256 摘要。
+  如果签名不同或错误地使用了 debug 签名，CI 不再上传标记为有效的产物。
+  表情包 APK 的签名解析顺序已与 Android 主项目一致，调试版
+  在有主发布密钥时也使用同一身份。
+- 原来的 `.github/workflows/build-apk.yaml` 现在可以作为 PR 检查入口；
+  `.github/workflows/android-plugin-apks.yml` 明确安装 Rust target、
+  cargo-ndk、Android NDK，检出 Git 子模块后再执行完整 Flutter / Kotlin 编译。
+
+### 仍需通过的真实性门禁
+
+1. 一次真实、成功的 CI 构建与 Android 模拟器/真机安装验证；
+   每次更新只替换选中的 `applicationId` 且不破坏宿主会话。
+2. 将原 `StevessrGeneratorPage` 的跨平台依赖从根 `fluxdo`
+   进一步提取为**小型纯生成器 Package**。当前独立 Flutter APK 仍依赖
+   根包的代码和依赖解析，虽然 Core 的渲染实现已从独立编译副本剔除，
+   但 Sticker APK 的传递依赖与 Flutter 插件注册仍偏重，不能宣称整体安装
+   或更新流量最优。
+3. CDK/LDC 旧余额卡片的功能等价迁移以及 LDC Reward 的支付功能迁移。
+4. 以上任一门禁未完成：PR 必须维持 Draft，不进入正式发布。
