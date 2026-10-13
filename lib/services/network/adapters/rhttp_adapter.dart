@@ -239,7 +239,7 @@ class RhttpAdapter implements HttpClientAdapter {
     Map<String, List<String>> headers,
   ) {
     if (host.isEmpty) return;
-    if (http3AltSvcCleared(headers)) {
+    if (http3AltSvcCleared(headers) || http3AltSvcRevoked(headers)) {
       _http3Capabilities.remove(host);
       return;
     }
@@ -574,6 +574,28 @@ bool http3AltSvcCleared(Map<String, List<String>> headers) {
     }
   }
   return false;
+}
+
+/// An H3 alternative with ma=0 withdraws that alternative. Ignore unrelated
+/// alternatives so their expiry cannot revoke a valid H3 advertisement.
+@visibleForTesting
+bool http3AltSvcRevoked(Map<String, List<String>> headers) {
+  var sawRevocation = false;
+  for (final header in headers.entries) {
+    if (header.key.toLowerCase() != 'alt-svc') continue;
+    for (final value in header.value) {
+      for (final candidate in value.split(',')) {
+        final alternative = candidate.trim().toLowerCase();
+        if (!RegExp(r'^h3\s*=').hasMatch(alternative)) continue;
+        if (!RegExp(r'(?:^|;)\s*ma\s*=\s*"?0"?\s*(?:;|$)')
+            .hasMatch(alternative)) {
+          return false;
+        }
+        sawRevocation = true;
+      }
+    }
+  }
+  return sawRevocation;
 }
 
 class _Http3Capability {
