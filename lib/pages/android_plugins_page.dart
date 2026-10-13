@@ -169,6 +169,7 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                             'network' => _t('网络诊断', 'Network diagnostics'),
                             'cdk' => 'CDK',
                             'ldc' => 'LDC',
+                            'ldc_reward' => _t('LDC 打赏', 'LDC reward'),
                             'sticker' => _t('表情包生成器', 'Sticker generator'),
                             _ => plugin.name,
                           }),
