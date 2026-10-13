@@ -79,4 +79,5 @@ kotlin {
 
 dependencies {
     implementation(project(":plugin_api"))
+    implementation(project(":plugin_web_session"))
 }
