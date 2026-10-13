@@ -38,6 +38,7 @@ buildCache {
 
 include(":app")
 include(":plugin_api")
+include(":plugin_web_session")
 include(":plugin_deviceinfo")
 include(":plugin_network")
 include(":plugin_cdk")
