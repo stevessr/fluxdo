@@ -128,6 +128,41 @@ void main() {
         'http');
   });
 
+  test('first request applies persisted HSTS before touching the adapter',
+      () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final previousProcess = HttpsSecurityPolicy(persist: true);
+    await previousProcess.ensureLoaded();
+    previousProcess.observe(Uri.parse('https://example.org'), st);
+    await previousProcess.flushPending();
+
+    // Simulate an app restart and an initial plaintext URL.
+    final policy = HttpsSecurityPolicy(persist: true);
+    final adapter = _HstsAdapter();
+    final dio = Dio(BaseOptions(baseUrl: 'http://example.org'))
+      ..httpClientAdapter = adapter;
+    dio.interceptors.add(HttpsSecurityInterceptor(policy: policy));
+    await dio.get<void>('/first');
+    expect(adapter.urls, ['https://example.org/first']);
+    dio.close(force: true);
+  });
+
+  test('corrupt saved HSTS JSON does not disable new policy persistence',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'network_hsts_policies_v1': 'not-json',
+    });
+    final policy = HttpsSecurityPolicy(persist: true);
+    await policy.ensureLoaded();
+    policy.observe(Uri.parse('https://example.org'), st);
+    await policy.flushPending();
+
+    final restored = HttpsSecurityPolicy(persist: true);
+    await restored.ensureLoaded();
+    expect(restored.upgrade(Uri.parse('http://sub.example.org')).scheme,
+        'https');
+  });
+
   test('invalid, expired or impossible persisted HSTS entries are ignored',
       () async {
     SharedPreferences.setMockInitialValues({
