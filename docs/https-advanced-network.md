@@ -18,7 +18,7 @@ The locked `rhttp` dependency resolves to `Lingyan000/rhttp_plus` commit `02eb41
 - HSTS upgrades happen before CSRF/cookie/cache/scheduling interceptors. The localhost HTTP hop used by the application's own gateway is a transport implementation detail, **not** an HTTPS origin downgrade.
 - HTTPS-to-HTTP redirects are rejected unless the target is upgraded under a previously learned HSTS policy.
 - Redirects support 301/302/303/307/308, preserving the body for same-origin 307/308 with replayable payloads; streaming bodies and cross-origin body replays are rejected rather than silently duplicated.
-- Cross-origin redirects copy only safe request headers and a small set of known control flags. Cached validators (including same-origin redirect validators), auth copying intent, and session-private metadata are discarded; destination cookies must be selected independently.
+- Cross-origin redirects copy only safe request headers and a small set of known control flags. **They use `dio.fetch(RequestOptions)` rather than `dio.request(Options)`**, preventing `BaseOptions.headers` from restoring original-origin Authorization/Cookie/API-key headers. `Accept-Encoding` is not forwarded: each adapter must renegotiate an encoding it can decode. Cached validators (including same-origin redirect validators), auth copying intent, and session-private metadata are discarded; destination cookies must be selected independently.
 - Cloudflare `103 Early Hints` is informational, never an API success response. The existing recovery fallback remains in place.
 
 ## QUIC discovery and diagnostics
@@ -36,4 +36,4 @@ flutter analyze lib/services/network test/services/network
 flutter test test/services/network
 ```
 
-The PR-specific `.github/workflows/https-advanced-network.yml` runs focused analysis, protocol/security tests and network regressions. Browser TLS fingerprint, ECH, and compression features should be tested on a real device/network per adapter. HTTP/3 support cannot be demonstrated by a successful HTTP/2 response that merely contains Alt-Svc.
+The PR-specific `.github/workflows/https-advanced-network.yml` uses Flutter 3.47.4 from `.fvmrc`, restores the locked dependencies, and runs focused analysis, protocol/security tests and network regressions through the repository's `tool/flutterw.dart` test entrypoint. Browser TLS fingerprint, ECH, and compression features should be tested on a real device/network per adapter. HTTP/3 support cannot be demonstrated by a successful HTTP/2 response that merely contains Alt-Svc.
