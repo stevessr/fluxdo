@@ -229,13 +229,10 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                                   ),
                                 if (plugin.id == 'cdk' || plugin.id == 'ldc' || plugin.id == 'ldc_reward')
                                   OutlinedButton.icon(
-                                    onPressed: () async {
+                                    onPressed: plugin.id == 'ldc_reward'
+                                        ? null
+                                        : () async {
                                       try {
-                                        if (plugin.id == 'ldc_reward') {
-                                          throw StateError(
-                                            _t('请从帖子菜单选择打赏对象', 'Select a recipient in the post menu'),
-                                          );
-                                        }
                                         await AndroidOptionalPluginService.instance.launch(plugin.id);
                                       } catch (error) {
                                         if (!mounted) return;
@@ -245,7 +242,9 @@ class _AndroidPluginsPageState extends State<AndroidPluginsPage> {
                                       }
                                     },
                                     icon: const Icon(Icons.open_in_new),
-                                    label: Text(_t('打开独立插件', 'Open companion')),
+                                    label: Text(plugin.id == 'ldc_reward'
+                                        ? _t('请从帖子发起', 'Open from a post')
+                                        : _t('打开独立插件', 'Open companion')),
                                   ),
                               ],
                             ),
