@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:fluxdo/l10n/app_localizations.dart';
-import 'package:fluxdo/pages/stevessr_generator_page.dart';
-import 'package:fluxdo/services/local_notification_service.dart';
-import 'package:fluxdo/services/stevessr_export_service.dart';
+import 'l10n/app_localizations.dart';
+import 'pages/stevessr_generator_page.dart';
+import 'services/local_notification_service.dart';
+import 'services/stevessr_export_service.dart';
 import 'package:path_provider/path_provider.dart';
 
 const _returnChannel = MethodChannel(
