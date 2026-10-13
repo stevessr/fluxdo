@@ -29,6 +29,9 @@ class HttpsSecurityPolicy {
   final bool _persist;
   final LinkedHashMap<String, _HstsEntry> _hosts =
       LinkedHashMap<String, _HstsEntry>();
+  // Record in-memory changes made while SharedPreferences is still loading,
+  // including max-age=0 deletions. Disk must never resurrect these policies.
+  final Set<String> _changedDuringLoad = <String>{};
   SharedPreferences? _preferences;
   Future<void>? _loadFuture;
   Timer? _persistTimer;
@@ -71,10 +74,12 @@ class HttpsSecurityPolicy {
             if (!until.isAfter(now) || until.isAfter(maximum)) continue;
             // If a live TLS response was observed while loading, that newer
             // response is authoritative over the disk snapshot.
-            _hosts.putIfAbsent(
-              host,
-              () => _HstsEntry(until: until, includeSubDomains: include),
-            );
+            if (!_changedDuringLoad.contains(host)) {
+              _hosts.putIfAbsent(
+                host,
+                () => _HstsEntry(until: until, includeSubDomains: include),
+              );
+            }
           }
           while (_hosts.length > _maxHosts) {
             _hosts.remove(_hosts.keys.first);
@@ -83,6 +88,10 @@ class HttpsSecurityPolicy {
       }
     } catch (error) {
       debugPrint('[HTTPS] Failed to load HSTS cache: $error');
+    }
+    if (_changedDuringLoad.isNotEmpty) {
+      _changedDuringLoad.clear();
+      _schedulePersistence(immediately: true);
     }
   }
 
@@ -145,11 +154,13 @@ class HttpsSecurityPolicy {
     if (values == null || values.length != 1) return;
     final parsed = _parse(values.single);
     if (parsed == null) return;
+    if (_persist && _preferences == null) {
+      _changedDuringLoad.add(host);
+    }
 
     if (parsed.maxAge == 0) {
-      if (_hosts.remove(host) != null) {
-        _schedulePersistence(immediately: true);
-      }
+      _hosts.remove(host);
+      _schedulePersistence(immediately: true);
       return;
     }
 
@@ -231,6 +242,7 @@ class HttpsSecurityPolicy {
     _persistTimer?.cancel();
     _persistTimer = null;
     _hosts.clear();
+    _changedDuringLoad.clear();
   }
 }
 
