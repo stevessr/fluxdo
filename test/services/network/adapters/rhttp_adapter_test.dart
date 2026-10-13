@@ -33,6 +33,30 @@ void main() {
       }), isFalse);
     });
 
+    test('does not probe unsupported alternative host or port', () {
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h3=":8443"; ma=3600'],
+      }), isFalse);
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h3="alt.example.org:443"; ma=3600'],
+      }), isFalse);
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h3=":8443"; ma=3600'],
+      }, originPort: 8443), isTrue);
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h3=":443"; ma=3600'],
+      }, originPort: 8443), isFalse);
+    });
+
+    test('a different-port revocation cannot clear this origin', () {
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h3=":8443"; ma=0'],
+      }), isFalse);
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h3=":8443"; ma=0'],
+      }, originPort: 8443), isTrue);
+    });
+
     test('Alt-Svc clear invalidates the cached advertisement', () {
       expect(http3AltSvcCleared({
         'Alt-Svc': ['clear'],
