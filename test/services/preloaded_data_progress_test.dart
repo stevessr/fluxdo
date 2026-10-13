@@ -40,7 +40,12 @@ void main() {
     expect(body, contains('joinedStaleLoad'));
     expect(body, contains('_activeLoadRevision != revision'));
     expect(body, contains('_activeLoadGeneration != generation'));
-    expect(body, contains('if (!joinedStaleLoad && _isCurrent(revision, generation)) rethrow;'));
+    expect(
+      body,
+      contains(
+        'if (!joinedStaleLoad && _isCurrent(revision, generation)) rethrow;',
+      ),
+    );
     expect(body, contains('if (active != null) return active;'));
     expect(body, contains('return _loadingFuture = _runPreload('));
     expect(body, contains('_loadingFuture = null;'));
