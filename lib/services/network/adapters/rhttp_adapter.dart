@@ -68,6 +68,10 @@ class RhttpAdapter implements HttpClientAdapter {
         );
         if (response.version == rhttp.HttpVersion.http3) {
           _markHttp3Success(baseConfig.host);
+        } else {
+          // A forced H3 probe may still be answered over HTTP/2.
+          // Do not repeatedly probe a host whose QUIC negotiation failed.
+          _markHttp3Failure(baseConfig.host);
         }
         _markConfigSuccess(http3Config, response.remoteIp);
         return response.responseBody;
@@ -105,6 +109,7 @@ class RhttpAdapter implements HttpClientAdapter {
         config,
       );
       _markConfigSuccess(config, response.remoteIp);
+      _observeHttp3Advertisement(config.host, response.responseBody.headers);
       return response.responseBody;
     } catch (error) {
       if (!_canRetryWithAlternateIp(options, requestStream, config, error)) {
@@ -134,6 +139,10 @@ class RhttpAdapter implements HttpClientAdapter {
         retryConfig,
       );
       _markConfigSuccess(retryConfig, response.remoteIp);
+      _observeHttp3Advertisement(
+        retryConfig.host,
+        response.responseBody.headers,
+      );
       return response.responseBody;
     }
   }
@@ -164,12 +173,13 @@ class RhttpAdapter implements HttpClientAdapter {
     }
 
     final capability = _http3Capabilities[config.host];
-    if (capability == null) {
-      return true;
-    }
-    if (DateTime.now().isAfter(capability.expiresAt)) {
+    // RFC 7838: wait for a server Alt-Svc advertisement instead of
+    // speculatively attempting QUIC against every new host. A failed H3
+    // connection can otherwise delay the first request by several seconds.
+    if (capability == null) return false;
+    if (!DateTime.now().isBefore(capability.expiresAt)) {
       _http3Capabilities.remove(config.host);
-      return true;
+      return false;
     }
     return capability.supported;
   }
@@ -221,6 +231,30 @@ class RhttpAdapter implements HttpClientAdapter {
     _http3Capabilities[host] = _Http3Capability(
       supported: false,
       expiresAt: DateTime.now().add(_http3FailureBackoff),
+    );
+  }
+
+  void _observeHttp3Advertisement(
+    String host,
+    Map<String, List<String>> headers,
+  ) {
+    if (host.isEmpty) return;
+    if (http3AltSvcCleared(headers)) {
+      _http3Capabilities.remove(host);
+      return;
+    }
+    if (!http3AltSvcAdvertised(headers)) return;
+
+    final previous = _http3Capabilities[host];
+    // Respect an active failure backoff even if the server keeps advertising H3.
+    if (previous != null &&
+        !previous.supported &&
+        DateTime.now().isBefore(previous.expiresAt)) {
+      return;
+    }
+    _http3Capabilities[host] = _Http3Capability(
+      supported: true,
+      expiresAt: DateTime.now().add(_http3SuccessTtl),
     );
   }
 
@@ -507,6 +541,39 @@ bool requestCanProbeRhttpHttp3(
   }
   final method = options.method.toUpperCase();
   return method == 'GET' || method == 'HEAD' || method == 'OPTIONS';
+}
+
+/// Server advertisement is a hint to *probe*, never proof of a negotiated H3
+/// connection. Only authenticated origin response headers are observed.
+@visibleForTesting
+bool http3AltSvcAdvertised(Map<String, List<String>> headers) {
+  for (final header in headers.entries) {
+    if (header.key.toLowerCase() != 'alt-svc') continue;
+    for (final value in header.value) {
+      for (final candidate in value.split(',')) {
+        final alternative = candidate.trim().toLowerCase();
+        if (!RegExp(r'^h3\s*=').hasMatch(alternative)) continue;
+        if (RegExp(r'(?:^|;)\s*ma\s*=\s*"?0"?\s*(?:;|$)')
+            .hasMatch(alternative)) {
+          continue;
+        }
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/// Alt-Svc: clear revokes a previously advertised alternative.
+@visibleForTesting
+bool http3AltSvcCleared(Map<String, List<String>> headers) {
+  for (final header in headers.entries) {
+    if (header.key.toLowerCase() != 'alt-svc') continue;
+    if (header.value.any((value) => value.trim().toLowerCase() == 'clear')) {
+      return true;
+    }
+  }
+  return false;
 }
 
 class _Http3Capability {
