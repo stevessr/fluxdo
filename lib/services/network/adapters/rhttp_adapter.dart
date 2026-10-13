@@ -53,7 +53,7 @@ class RhttpAdapter implements HttpClientAdapter {
     }
 
     final baseConfig = await _prepareClientConfig(options.uri.host);
-    final shouldTryHttp3 = _shouldTryHttp3(options, requestStream, baseConfig);
+    final shouldTryHttp3 = _shouldTryHttp3(options, requestStream);
     final http3Origin = _http3OriginKey(options.uri);
 
     if (shouldTryHttp3) {
@@ -168,7 +168,6 @@ class RhttpAdapter implements HttpClientAdapter {
   bool _shouldTryHttp3(
     RequestOptions options,
     Stream<Uint8List>? requestStream,
-    _PreparedClientConfig config,
   ) {
     if (!requestCanProbeRhttpHttp3(
       options,
@@ -251,7 +250,8 @@ class RhttpAdapter implements HttpClientAdapter {
     // sense for the same HTTPS origin/port that served the advertisement.
     if (origin.scheme != 'https' || origin.host.isEmpty) return;
     final originKey = _http3OriginKey(origin);
-    if (http3AltSvcCleared(headers) || http3AltSvcRevoked(headers)) {
+    if (http3AltSvcCleared(headers) ||
+        http3AltSvcRevoked(headers, originPort: origin.port)) {
       _http3Capabilities.remove(originKey);
       return;
     }
@@ -605,7 +605,10 @@ bool http3AltSvcCleared(Map<String, List<String>> headers) {
 /// An H3 alternative with ma=0 withdraws that alternative. Ignore unrelated
 /// alternatives so their expiry cannot revoke a valid H3 advertisement.
 @visibleForTesting
-bool http3AltSvcRevoked(Map<String, List<String>> headers) {
+bool http3AltSvcRevoked(
+  Map<String, List<String>> headers, {
+  int originPort = 443,
+}) {
   var sawRevocation = false;
   for (final header in headers.entries) {
     if (header.key.toLowerCase() != 'alt-svc') continue;
@@ -613,6 +616,13 @@ bool http3AltSvcRevoked(Map<String, List<String>> headers) {
       for (final candidate in value.split(',')) {
         final alternative = candidate.trim().toLowerCase();
         if (!RegExp(r'^h3\s*=').hasMatch(alternative)) continue;
+        // An alternative for a different port is not this origin's QUIC
+        // endpoint and must not revoke the currently cached capability.
+        final authority = RegExp(r'^h3\s*=\s*"(:[0-9]+)"')
+            .firstMatch(alternative);
+        if (authority == null || authority.group(1) != ':$originPort') {
+          continue;
+        }
         if (!RegExp(r'(?:^|;)\s*ma\s*=\s*"?0"?\s*(?:;|$)')
             .hasMatch(alternative)) {
           return false;
