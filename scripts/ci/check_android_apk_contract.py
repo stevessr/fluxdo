@@ -54,8 +54,8 @@ def details(apk: Path, aapt: str, signer: str) -> tuple[str, int, str]:
         raise FileNotFoundError(apk)
     badging = output(aapt, "dump", "badging", str(apk))
     first_line = badging.splitlines()[0] if badging else ""
-    package_match = re.search(r"\\bname='([^']+)'", first_line)
-    version_match = re.search(r"\\bversionCode='(\\d+)'", first_line)
+    package_match = re.search("name='([^']+)'", first_line)
+    version_match = re.search("versionCode='([0-9]+)'", first_line)
     if not package_match or not version_match:
         raise RuntimeError(f"Unreadable package/version: {apk}")
     version = int(version_match.group(1))
@@ -63,7 +63,7 @@ def details(apk: Path, aapt: str, signer: str) -> tuple[str, int, str]:
         raise RuntimeError(f"Nonpositive Android versionCode: {apk}")
     signatures = output(signer, "verify", "--print-certs", str(apk))
     digest = re.findall(
-        r"Signer #\\d+ certificate SHA-256 digest: ([0-9a-fA-F:]{64,95})",
+        "Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-fA-F:]{64,95})",
         signatures,
     )
     if len(digest) != 1:
