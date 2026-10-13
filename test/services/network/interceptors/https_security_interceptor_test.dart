@@ -2,9 +2,12 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fluxdo/services/network/interceptors/https_security_interceptor.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   final st = Headers.fromMap({
     'strict-transport-security': ['max-age=60; includeSubDomains'],
   });
@@ -92,6 +95,53 @@ void main() {
     );
     expect(adapter.urls, ['https://example.org/latest.json?sort=created&page=2']);
     dio.close(force: true);
+  });
+
+  test('HSTS survives restart and max-age=0 removes the persisted policy',
+      () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final first = HttpsSecurityPolicy(persist: true);
+    await first.ensureLoaded();
+    first.observe(Uri.parse('https://example.org'),
+        Headers.fromMap({
+          'strict-transport-security': ['max-age=3600; includeSubDomains'],
+        }));
+    await first.flushPending();
+
+    final restored = HttpsSecurityPolicy(persist: true);
+    await restored.ensureLoaded();
+    expect(restored.upgrade(Uri.parse('http://example.org/p')).scheme,
+        'https');
+    expect(restored.upgrade(Uri.parse('http://a.example.org')).scheme,
+        'https');
+    restored.observe(Uri.parse('https://example.org'),
+        Headers.fromMap({
+          'strict-transport-security': ['max-age=0'],
+        }));
+    await restored.flushPending();
+
+    final afterRemoval = HttpsSecurityPolicy(persist: true);
+    await afterRemoval.ensureLoaded();
+    expect(afterRemoval.upgrade(Uri.parse('http://example.org')).scheme,
+        'http');
+    expect(afterRemoval.upgrade(Uri.parse('http://a.example.org')).scheme,
+        'http');
+  });
+
+  test('invalid, expired or impossible persisted HSTS entries are ignored',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'network_hsts_policies_v1': '[{"host":"example.org","until":1,'
+          '"includeSubDomains":true},'
+          '{"host":"127.0.0.1","until":9999999999999,'
+          '"includeSubDomains":true}]',
+    });
+    final policy = HttpsSecurityPolicy(persist: true);
+    await policy.ensureLoaded();
+    expect(policy.upgrade(Uri.parse('http://example.org')).scheme,
+        'http');
+    expect(policy.upgrade(Uri.parse('http://127.0.0.1')).scheme,
+        'http');
   });
 
   test('duplicate HSTS age directives do not override an existing policy',
