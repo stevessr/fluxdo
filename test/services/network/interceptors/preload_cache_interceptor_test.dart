@@ -93,7 +93,7 @@ Discourse
     final slowCache = PreloadCacheService.testing(
       cacheBaseDirectory: () async => tempDirectory,
       namespaceSeed: () async {
-        await Future<void>.delayed(const Duration(seconds: 2));
+        await Future<void>.delayed(const Duration(milliseconds: 250));
         return 'account-session-token';
       },
       isEnabled: () async => true,
