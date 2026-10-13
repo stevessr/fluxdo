@@ -16,6 +16,21 @@ Future<void> showAddTopicToBoardSheet(BuildContext context, {required int topicI
   );
 }
 
+/// available.json 使用 BasicBoardSerializer，不带 can_write/can_manage。
+/// 服务端已根据 edit/manage ACL 筛选；不能再检查缺失的权限字段。
+List<DiscourseBoard> availableTopicBoards(List<DiscourseBoard> boards) =>
+    boards.where((board) => !board.archived).toList(growable: false);
+
+/// 复用既有话题卡片，避免在其他分栏意外创建重复条目。
+BoardCard? existingTopicBoardCard(DiscourseBoard board, int topicId) {
+  for (final column in board.columns) {
+    for (final card in column.cards) {
+      if (card.cardType == 'topic' && card.topicId == topicId) return card;
+    }
+  }
+  return null;
+}
+
 class _AddTopicToBoardSheet extends ConsumerStatefulWidget {
   const _AddTopicToBoardSheet({required this.topicId});
   final int topicId;
@@ -58,15 +73,6 @@ class _AddTopicToBoardSheetState extends ConsumerState<_AddTopicToBoardSheet> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  BoardCard? _findExisting(DiscourseBoard board) {
-    for (final column in board.columns) {
-      for (final card in column.cards) {
-        if (card.cardType == 'topic' && card.topicId == widget.topicId) return card;
-      }
-    }
-    return null;
   }
 
   /// null means cancelled; an empty map means no mutation of topic metadata.
@@ -167,7 +173,7 @@ class _AddTopicToBoardSheetState extends ConsumerState<_AddTopicToBoardSheet> {
   Future<void> _submit(BoardColumn column) async {
     final board = _board;
     if (_busy || board == null || board.archived) return;
-    final existing = _findExisting(board);
+    final existing = existingTopicBoardCard(board, widget.topicId);
     if (existing?.columnId == column.id) {
       ToastService.showSuccess(_zh ? '话题已在此分栏' : 'Topic already in this column');
       return;
@@ -244,10 +250,7 @@ class _AddTopicToBoardSheetState extends ConsumerState<_AddTopicToBoardSheet> {
                   ),
                 ]);
               }
-              final available = (snapshot.data ?? const <DiscourseBoard>[])
-                  // available.json 已按 edit/manage ACL 筛选，BasicBoardSerializer 不返回 can_write。
-                  .where((item) => !item.archived)
-                  .toList();
+              final available = availableTopicBoards(snapshot.data ?? const <DiscourseBoard>[]);
               if (available.isEmpty) {
                 return Padding(padding: const EdgeInsets.all(24),
                   child: Text(_zh ? '没有可编辑的看板' : 'No editable boards available'));
