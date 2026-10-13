@@ -227,7 +227,8 @@ class RhttpAdapter implements HttpClientAdapter {
     final previous = _http3Capabilities[host];
     _http3Capabilities[host] = _Http3Capability(
       supported: true,
-      expiresAt: DateTime.now().add(_http3SuccessTtl),
+      // A successful probe does not extend the server's Alt-Svc lifetime.
+      expiresAt: previous?.expiresAt ?? DateTime.now().add(_http3SuccessTtl),
     );
     if (previous?.supported != true) {
       debugPrint('[DIO] RhttpAdapter HTTP/3 available: $host');
@@ -255,7 +256,8 @@ class RhttpAdapter implements HttpClientAdapter {
       _http3Capabilities.remove(originKey);
       return;
     }
-    if (!http3AltSvcAdvertised(headers, originPort: origin.port)) return;
+    final lifetime = http3AltSvcLifetime(headers, originPort: origin.port);
+    if (lifetime == null) return;
 
     final previous = _http3Capabilities[originKey];
     // Respect an active failure backoff even if the server keeps advertising H3.
@@ -266,7 +268,7 @@ class RhttpAdapter implements HttpClientAdapter {
     }
     _http3Capabilities[originKey] = _Http3Capability(
       supported: true,
-      expiresAt: DateTime.now().add(_http3SuccessTtl),
+      expiresAt: DateTime.now().add(lifetime),
     );
   }
 
@@ -557,38 +559,48 @@ bool requestCanProbeRhttpHttp3(
   return method == 'GET' || method == 'HEAD' || method == 'OPTIONS';
 }
 
-/// Server advertisement is a hint to *probe*, never proof of a negotiated H3
-/// connection. Only authenticated origin response headers are observed.
+/// Returns the bounded useful lifetime of an authenticated origin's H3
+/// alternative. For compatibility we only support the same host and port;
+/// rhttp's current configuration cannot connect to another authority.
+@visibleForTesting
+Duration? http3AltSvcLifetime(
+  Map<String, List<String>> headers, {
+  int originPort = 443,
+}) {
+  Duration? result;
+  for (final header in headers.entries) {
+    if (header.key.toLowerCase() != 'alt-svc') continue;
+    for (final value in header.value) {
+      for (final item in value.split(',')) {
+        final alternative = item.trim().toLowerCase();
+        final authority = RegExp(r'^h3\s*=\s*"(:[0-9]+)"')
+            .firstMatch(alternative);
+        if (authority == null || authority.group(1) != ':$originPort') {
+          continue;
+        }
+
+        // RFC 7838 defaults ma to 24 hours if omitted; the application
+        // intentionally caps its own probe cache at one hour.
+        final match = RegExp(r'(?:^|;)\s*ma\s*=\s*"?([0-9]+)"?\s*(?:;|$)')
+            .firstMatch(alternative);
+        final maxAge = match == null ? 86400 : int.tryParse(match.group(1)!);
+        if (maxAge == null || maxAge <= 0) continue;
+        final duration = Duration(
+          seconds: maxAge < 3600 ? maxAge : 3600,
+        );
+        if (result == null || duration < result) result = duration;
+      }
+    }
+  }
+  return result;
+}
+
+/// The presence of an Alt-Svc H3 hint does not prove H3 was negotiated.
 @visibleForTesting
 bool http3AltSvcAdvertised(
   Map<String, List<String>> headers, {
   int originPort = 443,
-}) {
-  for (final header in headers.entries) {
-    if (header.key.toLowerCase() != 'alt-svc') continue;
-    for (final value in header.value) {
-      for (final candidate in value.split(',')) {
-        final alternative = candidate.trim().toLowerCase();
-        if (!RegExp(r'^h3\s*=').hasMatch(alternative)) continue;
-        // This reqwest path connects to the original origin. It cannot route
-        // an Alt-Svc authority on another host or port without explicit
-        // support for that alternative endpoint.
-        final authority = RegExp(r'^h3\s*=\s*"(:[0-9]+)"')
-            .firstMatch(alternative);
-        if (authority == null ||
-            authority.group(1) != ':$originPort') {
-          continue;
-        }
-        if (RegExp(r'(?:^|;)\s*ma\s*=\s*"?0"?\s*(?:;|$)')
-            .hasMatch(alternative)) {
-          continue;
-        }
-        return true;
-      }
-    }
-  }
-  return false;
-}
+}) => http3AltSvcLifetime(headers, originPort: originPort) != null;
 
 /// Alt-Svc: clear revokes a previously advertised alternative.
 @visibleForTesting
