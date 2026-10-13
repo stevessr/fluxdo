@@ -26,6 +26,10 @@ on:
   pull_request:
     paths:
       - 'android/plugin_*/**'
+      - 'android_modular/**'
+      - 'scripts/ci/build_android_core_modular.py'
+      - 'scripts/ci/test_android_modular_contract.py'
+      - 'scripts/ci/check_android_apk_contract.py'
       - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
       - 'android/settings.gradle.kts'
       - 'android_companions/**'
@@ -45,15 +49,29 @@ jobs:
     timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.4'
+          flutter-version: '3.47.5'
           channel: stable
           cache: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK & Rust NDK build requirements
+        run: |
+          set -euo pipefail
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+          rustup target add aarch64-linux-android
+          if ! command -v cargo-ndk >/dev/null 2>&1; then
+            cargo install cargo-ndk --locked
+          fi
       - name: Resolve Flutter dependencies
         run: flutter pub get
       - name: Validate standalone APK build scripts
