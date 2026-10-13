@@ -9,6 +9,10 @@ on:
     paths:
       - 'lib/**'
       - 'android/**'
+      - 'android_modular/**'
+      - 'android_companions/**'
+      - 'scripts/ci/build_android_core_modular.py'
+      - 'scripts/ci/build_sticker_companion.py'
       - 'core/doh_proxy/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
