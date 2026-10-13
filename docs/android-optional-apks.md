@@ -313,3 +313,51 @@ Android 调试/发布 APK 仍需运行 Flutter/Gradle 构建与真机验证。
 
 此阶段只精简**独立 Sticker**的依赖树。Core 使用的 AVIF、图片解码和
 文件处理依赖在其他功能仍可能需要，不能为了减少声明行数随意删除。
+
+## 第六阶段：构建闭包修复、账户隔离与 Core 依赖边界
+
+### 核心构建前处理顺序修复
+
+精简 Core **不能**在最后再次调用 `dart tool/flutterw.dart build apk`：
+该 wrapper 固定执行 `project_prep.dart app`，会重建应当只存在于
+Sticker APK 中的整组头像差分素材。现在 CI 的 Core 构建器改为：
+
+```text
+复制隔离工程（跳过 avatar）
+  → flutter pub get
+  → dart tool/gen_l10n.dart
+  → dart tool/project_tasks.dart native:prepare android <mode> --target-platform=<ABIs>
+  → verify_sources（禁止 avatar 与旧插件 Dart 重新出现）
+  → flutter build apk <mode> --target-platform=<ABIs>
+  → verify_sources + APK Zip 检查
+```
+
+这种做法仍使用原项目的证书准备及 DOH Rust 本机编译流程，
+但**不触发多余的表情包图像生成**，也不会修改 Linux/Windows/macOS/iOS
+原构建入口。
+
+### LDC/CDK 独立 WebView 的账户状态边界
+
+- Core 将当前用户的规范化用户名哈希为本机账号分区标识（SHA-256）；
+  发给 LDC/CDK 的仅是 `accountSlot`，不携带凭据、邮箱、
+  密码、Cookie 或登录 Token。
+- 宿主在 Kotlin 端只接受 `guest` 或 64 位小写十六进制标识；
+  重新打开插件时执行 `FLAG_ACTIVITY_CLEAR_TASK`，避免旧会话
+  WebView 停留在 Android 返回栈。
+- 独立 Native 模块 `:plugin_web_session` **仅编入**
+  `:plugin_ldc` 与 `:plugin_cdk`。通用 `:plugin_api` 仍保持
+  轻量协议定义；宿主 Core 不依赖这个 WebView 实现。
+- 每个 APK 独立保存自己的上次账号分区标识。检测到变化，或访客
+  `guest` 模式时，先隐藏 WebView，异步清空当前插件私有
+  `CookieManager`、`WebStorage`、WebView 缓存和历史，
+  再重新访问该插件官方 HTTPS 页面。
+- 两个插件均增加“清除插件登录状态”菜单项，它只清理该插件的
+  会话，不修改主程序账号或另一插件的 Cookie。
+- Android Core 的元宇宙页面和插件管理页同时传递账号分区标识；
+  Kotlin 和 Dart 均增加防回归检查。
+
+**安全边界**：账号分区哈希是区分本机登录身份的普通索引，并非密码、
+加密密钥或用户身份凭据。若网站自身的 OAuth 流程使用系统外部浏览器，
+仍需实机检查返回登录、切换账号及会话恢复行为。本模块不能替代服务器
+端会话撤销，也不能保证用户在独立 WebView 中手动登录的账号一定与
+FluxDO 主应用账号相同。
