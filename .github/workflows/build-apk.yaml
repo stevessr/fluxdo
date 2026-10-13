@@ -17,6 +17,17 @@ on:
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/build-apk.yaml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'android_modular/**'
+      - 'android_companions/**'
+      - 'scripts/ci/build_android_core_modular.py'
+      - 'scripts/ci/build_sticker_companion.py'
+      - 'scripts/ci/check_android_apk_contract.py'
+      - 'lib/services/android_optional_plugin_service.dart'
+      - 'lib/services/android_sticker_companion_service.dart'
+      - '.github/workflows/build-apk.yaml'
   workflow_dispatch:
     inputs:
       arch:
