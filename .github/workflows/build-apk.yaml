@@ -389,6 +389,14 @@ jobs:
           cp build/plugin_sticker/fluxdo-sticker-${{ matrix.flutter-target }}-release.apk dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
           core_apk=$(find dist -maxdepth 1 -name 'fluxdo-v*${{ matrix.arch }}.apk' -print -quit)
           test -n "${core_apk}"
+          python3 scripts/ci/check_android_apk_contract.py \
+            --core "${core_apk}" \
+            --plugin deviceinfo dist/fluxdo-plugin-deviceinfo.apk \
+            --plugin network dist/fluxdo-plugin-network.apk \
+            --plugin cdk dist/fluxdo-plugin-cdk.apk \
+            --plugin ldc dist/fluxdo-plugin-ldc.apk \
+            --plugin ldc_reward dist/fluxdo-plugin-ldc-reward.apk \
+            --plugin sticker dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
           python3 scripts/ci/report_android_modular_size.py \
             --core "${core_apk}" \
             --plugin dist/fluxdo-plugin-deviceinfo.apk \
