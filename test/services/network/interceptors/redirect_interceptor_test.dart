@@ -152,6 +152,46 @@ void main() {
     dio.close(force: true);
   });
 
+  test('cross-origin redirect drops original If-Range validator', () async {
+    final adapter = _ScenarioAdapter(302, 'https://other.example/file');
+    final dio = _redirectDio(adapter);
+    await dio.get<void>(
+      '/download',
+      options: Options(headers: {
+        'Range': 'bytes=0-1023',
+        'If-Range': '"etag-original-resource"',
+      }),
+    );
+    final sent = adapter.seen.last.headers;
+    expect(sent.keys.map((key) => key.toLowerCase()), isNot(contains('if-range')));
+    expect(
+      sent.entries.any(
+        (entry) => entry.key.toLowerCase() == 'range' &&
+            entry.value == 'bytes=0-1023',
+      ),
+      isTrue,
+    );
+    dio.close(force: true);
+  });
+
+  test('redirect loop ends after configured limit without another fetch',
+      () async {
+    final adapter = _RedirectLoopAdapter();
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://linux.do',
+      validateStatus: (status) => status != null && status < 400,
+    ))..httpClientAdapter = adapter;
+    dio.interceptors.add(RedirectInterceptor(dio));
+
+    await expectLater(
+      dio.get<void>('/loop'),
+      throwsA(isA<DioException>()),
+    );
+    // First fetch plus 10 allowed followed redirects; the 11th is blocked.
+    expect(adapter.fetchCount, 11);
+    dio.close(force: true);
+  });
+
   test('cross-origin redirects discard internal preload and CSRF tags',
       () async {
     for (final tag in ['preload-home', 'csrf-refresh']) {
@@ -459,6 +499,29 @@ class _CapturedMultipartAdapter implements HttpClientAdapter {
     return ResponseBody.fromString('{"ok":true}', 200, headers: {
       Headers.contentTypeHeader: ['application/json'],
     });
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _RedirectLoopAdapter implements HttpClientAdapter {
+  int fetchCount = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    fetchCount++;
+    return ResponseBody.fromString(
+      '',
+      302,
+      headers: {
+        'location': ['/loop'],
+      },
+    );
   }
 
   @override
