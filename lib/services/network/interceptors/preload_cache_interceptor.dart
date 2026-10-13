@@ -28,6 +28,10 @@ class PreloadCacheInterceptor extends Interceptor {
 
   final PreloadCacheService _cache;
 
+  /// An uncached or slow-disk launch must not wait indefinitely on cache IO
+  /// before it can even begin the real bootstrap HTTP request.
+  static const Duration cacheLookupBudget = Duration(milliseconds: 90);
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     unawaited(_handleRequest(options, handler));
@@ -43,9 +47,17 @@ class PreloadCacheInterceptor extends Interceptor {
     }
 
     try {
-      final cached = await _cache.readCurrentAccount(
-        maxAge: PreloadCacheService.startupFastPathTtl,
-      );
+      final cached = await _cache
+          .readCurrentAccount(
+            maxAge: PreloadCacheService.startupFastPathTtl,
+          )
+          .timeout(
+            cacheLookupBudget,
+            onTimeout: () {
+              debugPrint('[PreloadCache] 缓存读取超过 90ms，立即回退网络');
+              return null;
+            },
+          );
       if (cached == null || cached.isEmpty || !_isReusablePreloadHtml(cached)) {
         handler.next(options);
         return;
