@@ -7,6 +7,66 @@ import 'package:fluxdo/services/network/cookie/app_cookie_manager.dart';
 import 'package:fluxdo/services/network/cookie/cookie_jar_service.dart';
 
 void main() {
+  group('redirect Set-Cookie target restrictions', () {
+    test('explicit redirect cookie forwarding cannot bind a token externally',
+        () async {
+      final jar = CookieJar();
+      final manager = AppCookieManager(jar);
+      final response = Response<void>(
+        requestOptions: RequestOptions(
+          path: 'https://linux.do/oauth/redirect',
+          extra: const {'allowRedirectSetCookie': true},
+        ),
+        statusCode: 302,
+        headers: Headers.fromMap({
+          HttpHeaders.setCookieHeader: ['oauth-ticket=secret; Path=/'],
+          HttpHeaders.locationHeader: [
+            'https://untrusted.example/collect',
+          ],
+        }),
+      );
+
+      await manager.saveCookies(response);
+      final source = await jar.loadForRequest(
+        Uri.parse('https://linux.do/'),
+      );
+      final foreign = await jar.loadForRequest(
+        Uri.parse('https://untrusted.example/'),
+      );
+      expect(source.any((cookie) => cookie.name == 'oauth-ticket'), isTrue);
+      expect(foreign.any((cookie) => cookie.name == 'oauth-ticket'), isFalse);
+    });
+
+    test('explicit redirect cookie forwarding still supports HTTPS app subdomains',
+        () async {
+      final jar = CookieJar();
+      final manager = AppCookieManager(jar);
+      await manager.saveCookies(
+        Response<void>(
+          requestOptions: RequestOptions(
+            path: 'https://linux.do/oauth/redirect',
+            extra: const {'allowRedirectSetCookie': true},
+          ),
+          statusCode: 302,
+          headers: Headers.fromMap({
+            HttpHeaders.setCookieHeader: ['oauth-ticket=for-app; Path=/'],
+            HttpHeaders.locationHeader: [
+              'https://connect.linux.do/authorize',
+            ],
+          }),
+        ),
+      );
+      final trusted = await jar.loadForRequest(
+        Uri.parse('https://connect.linux.do/'),
+      );
+      expect(
+        trusted.any((cookie) =>
+            cookie.name == 'oauth-ticket' && cookie.value == 'for-app'),
+        isTrue,
+      );
+    });
+  });
+
   group('cross-origin redirected Set-Cookie isolation', () {
     test('foreign response cannot revoke login or Cloudflare cookies',
         () async {
