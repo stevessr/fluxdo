@@ -3,6 +3,8 @@ package com.github.lingyan000.fluxdo.plugin.ldc
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
@@ -32,6 +34,9 @@ class LdcActivity : Activity() {
                 view: WebView?, request: WebResourceRequest?
             ): Boolean {
                 val uri = request?.url ?: return true
+                // OAuth widgets/iframes load cross-site resources; only
+                // top-level navigation should be delegated to the browser.
+                if (!request.isForMainFrame) return false
                 val host = uri.host?.lowercase()
                 val trusted = uri.scheme == "https" &&
                     host in setOf("credit.linux.do", "connect.linux.do", "linux.do")
@@ -44,6 +49,23 @@ class LdcActivity : Activity() {
         }
         setContentView(view)
         view.loadUrl("https://credit.linux.do")
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menu.add(0, 1, 0, "首页").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+        menu.add(0, 2, 1, "余额 / 我的信息")
+        menu.add(0, 3, 2, "刷新").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            1 -> browser?.loadUrl("https://credit.linux.do")
+            2 -> browser?.loadUrl("https://credit.linux.do/api/v1/oauth/user-info")
+            3 -> browser?.reload()
+            else -> return super.onOptionsItemSelected(item)
+        }
+        return true
     }
 
     override fun onDestroy() {
