@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../providers/core_providers.dart';
 
 import '../services/android_optional_plugin_service.dart';
 
 /// Android core intentionally contains no LDC/CDK OAuth, balance or reward
 /// implementation. Each feature is installed/upgraded as its own APK.
-class MetaversePage extends StatefulWidget {
+class MetaversePage extends ConsumerStatefulWidget {
   const MetaversePage({super.key});
 
   @override
-  State<MetaversePage> createState() => _MetaversePageState();
+  ConsumerState<MetaversePage> createState() => _MetaversePageState();
 }
 
-class _MetaversePageState extends State<MetaversePage> {
+class _MetaversePageState extends ConsumerState<MetaversePage> {
   Future<List<AndroidOptionalPlugin>> _available =
       AndroidOptionalPluginService.instance.list();
 
@@ -43,7 +46,15 @@ class _MetaversePageState extends State<MetaversePage> {
                         : Icons.download_outlined),
                     onTap: !usable ? null : () async {
                       try {
-                        await AndroidOptionalPluginService.instance.launch(id);
+                        await AndroidOptionalPluginService.instance.launch(
+                          id,
+                          payload: {
+                            'accountSlot':
+                                AndroidOptionalPluginService.sessionSlotForUsername(
+                              ref.read(currentUserProvider).value?.username,
+                            ),
+                          },
+                        );
                       } catch (error) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
