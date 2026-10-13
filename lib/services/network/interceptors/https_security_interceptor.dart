@@ -34,14 +34,17 @@ class HttpsSecurityPolicy {
   final Set<String> _changedDuringLoad = <String>{};
   SharedPreferences? _preferences;
   Future<void>? _loadFuture;
+  bool _loadCompleted = false;
   Timer? _persistTimer;
   Future<void> _writeTail = Future<void>.value();
 
   /// Lazily load before the first outgoing request so a remembered policy can
   /// prevent a downgrade even before this process has seen a TLS response.
   /// Storage failures must never block the network path.
+  bool get isLoaded => !_persist || _loadCompleted;
+
   Future<void> ensureLoaded() {
-    if (!_persist) return Future<void>.value();
+    if (isLoaded) return Future<void>.value();
     return _loadFuture ??= _loadStoredPolicies();
   }
 
@@ -93,6 +96,7 @@ class HttpsSecurityPolicy {
       _changedDuringLoad.clear();
       _schedulePersistence(immediately: true);
     }
+    _loadCompleted = true;
   }
 
   void _schedulePersistence({bool immediately = false}) {
@@ -269,11 +273,23 @@ class HttpsSecurityInterceptor extends Interceptor {
   final HttpsSecurityPolicy _policy;
 
   @override
-  Future<void> onRequest(
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (_policy.isLoaded) {
+      _upgradeAndContinue(options, handler);
+      return;
+    }
+    // Cold start waits for restored HSTS so the first request is protected.
+    // Hot requests stay synchronous (avoids a microtask on every preload).
+    _policy.ensureLoaded().then(
+      (_) => _upgradeAndContinue(options, handler),
+      onError: (Object _) => _upgradeAndContinue(options, handler),
+    );
+  }
+
+  void _upgradeAndContinue(
     RequestOptions options,
     RequestInterceptorHandler handler,
-  ) async {
-    await _policy.ensureLoaded();
+  ) {
     final origin = options.uri;
     final upgraded = _policy.upgrade(origin);
     if (upgraded != origin) {
