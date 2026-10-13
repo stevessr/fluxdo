@@ -113,10 +113,12 @@ def setup_project(target: Path, mode: str) -> None:
             'dependencies {\n    implementation("androidx.core:core:1.16.0")',
             1,
         )
-    if mode == "release":
-        original_props = ROOT / "android/key.properties"
-        if not original_props.is_file():
-            raise RuntimeError("Release requires the same android/key.properties as FluxDO")
+    original_props = ROOT / "android/key.properties"
+    if mode == "release" and not original_props.is_file():
+        raise RuntimeError("Release requires the same android/key.properties as FluxDO")
+    # Core :app signs *all* build variants with the release key when present.
+    # Apply the identical rule here so debug Core and debug Sticker match.
+    if original_props.is_file():
         anchor = 'signingConfig = signingConfigs.getByName("debug")'
         if anchor not in gradle:
             raise RuntimeError("Generated Flutter release signing layout changed")
@@ -153,6 +155,15 @@ def setup_project(target: Path, mode: str) -> None:
         gradle = gradle.replace("    buildTypes {", signing_block + "    buildTypes {", 1)
         gradle = gradle.replace(
             anchor, 'signingConfig = signingConfigs.getByName("fluxdoSharedRelease")', 1
+        )
+        # Flutter's template declares release only; add an explicit debug
+        # signer in the generated app. Same-signer check must pass locally.
+        gradle = gradle.replace(
+            "    buildTypes {",
+            '    buildTypes {\n        getByName("debug") {\n'
+            '            signingConfig = signingConfigs.getByName("fluxdoSharedRelease")\n'
+            '        }',
+            1,
         )
     build_file.write_text(gradle)
 
