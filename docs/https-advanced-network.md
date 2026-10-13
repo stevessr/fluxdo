@@ -23,7 +23,7 @@ The locked `rhttp` dependency resolves to `Lingyan000/rhttp_plus` commit `02eb41
 
 ## QUIC discovery and diagnostics
 
-The rhttp path must observe an authenticated HTTPS origin `Alt-Svc: h3=":443"; ma=...` on a normal request **before** attempting a subsequent QUIC request. H3 discovery is keyed by HTTPS host+port and only accepts same-port alternatives; other-host or alternate-port endpoints cannot safely be attempted by the existing rhttp configuration. Unadvertised hosts use HTTP/2 or HTTP/1.1 normally. A connection failure triggers a ten-minute backoff; a successful negotiated H3 session is remembered for up to one hour. `Alt-Svc: clear` and `ma=0` revoke the advertisement.
+The rhttp path must observe an authenticated HTTPS origin `Alt-Svc: h3=":443"; ma=...` on a normal request **before** attempting a subsequent QUIC request. H3 discovery is keyed by HTTPS host+port and only accepts same-port alternatives; other-host or alternate-port endpoints cannot safely be attempted by the existing rhttp configuration. Unadvertised hosts use HTTP/2 or HTTP/1.1 normally. A connection failure triggers a ten-minute backoff; a successful negotiated H3 session retains the origin's advertised `ma` expiry, capped at one hour rather than extending beyond the server policy. The origin cache is bounded at 128 entries. `Alt-Svc: clear` and `ma=0` revoke the advertisement; malformed `ma` entries are rejected.
 
 The JSONL network log records `httpVersion` only when the adapter actually supplies the negotiated protocol (currently rhttp), separately from `http3Advertised`, which only reflects a response hint. When unknown, no negotiated protocol is asserted. Raw certificate contents, headers, token values and remote IPs are not added to this log.
 
