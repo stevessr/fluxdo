@@ -12,16 +12,16 @@ Fluxdo uses a **dynamic** Dio adapter chain, not one universal HTTP client. Feat
 
 ## HTTPS security
 
-- HSTS is learned from authenticated HTTPS responses, scoped by host with optional `includeSubDomains`, and capped at two years / 128 entries. In this implementation it is **process-local**, not a browser-equivalent persistent preload store. Invalid directives and cleartext responses cannot add policies.
+- HSTS is learned from authenticated HTTPS responses, scoped by host with optional `includeSubDomains`, and capped at two years / 128 entries. The application-wide policy is persisted in bounded SharedPreferences storage (five-second coalesced writes and pre-request restoration), while standalone policy instances remain memory-only by default. There is no bundled HSTS preload list. Invalid directives and cleartext responses cannot add policies.
 - HSTS upgrades happen before CSRF/cookie/cache/scheduling interceptors. The localhost HTTP hop used by the application's own gateway is a transport implementation detail, **not** an HTTPS origin downgrade.
 - HTTPS-to-HTTP redirects are rejected unless the target is upgraded under a previously learned HSTS policy.
 - Redirects support 301/302/303/307/308, preserving the body for same-origin 307/308 with replayable payloads; streaming bodies and cross-origin body replays are rejected rather than silently duplicated.
-- Cross-origin redirects copy only safe request headers and a small set of known control flags. Cached validators, auth copying intent, and session-private metadata are discarded; destination cookies must be selected independently.
+- Cross-origin redirects copy only safe request headers and a small set of known control flags. Cached validators (including same-origin redirect validators), auth copying intent, and session-private metadata are discarded; destination cookies must be selected independently.
 - Cloudflare `103 Early Hints` is informational, never an API success response. The existing recovery fallback remains in place.
 
 ## QUIC discovery and diagnostics
 
-The rhttp path must observe an authenticated `Alt-Svc: h3=":443"; ma=...` on a normal request **before** attempting a subsequent QUIC request. Unadvertised hosts use HTTP/2 or HTTP/1.1 normally. A connection failure triggers a ten-minute backoff; a successful negotiated H3 session is remembered for up to one hour. `Alt-Svc: clear` and `ma=0` revoke the advertisement.
+The rhttp path must observe an authenticated HTTPS origin `Alt-Svc: h3=":443"; ma=...` on a normal request **before** attempting a subsequent QUIC request. H3 discovery is keyed by HTTPS host+port and only accepts same-port alternatives; other-host or alternate-port endpoints cannot safely be attempted by the existing rhttp configuration. Unadvertised hosts use HTTP/2 or HTTP/1.1 normally. A connection failure triggers a ten-minute backoff; a successful negotiated H3 session is remembered for up to one hour. `Alt-Svc: clear` and `ma=0` revoke the advertisement.
 
 The JSONL network log records `httpVersion` only when the adapter actually supplies the negotiated protocol (currently rhttp), separately from `http3Advertised`, which only reflects a response hint. When unknown, no negotiated protocol is asserted. Raw certificate contents, headers, token values and remote IPs are not added to this log.
 
