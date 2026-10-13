@@ -98,7 +98,13 @@ class OptionalPluginChannel(
                                 throw SecurityException("Companion activity is not protected")
                             }
                             val launch = Intent().setComponent(component)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                // Separate package task: discard any prior
+                                // companion Activity before changing accounts,
+                                // otherwise Back could reveal a stale WebView.
+                                .addFlags(
+                                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                                        Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                )
                             if (spec.id == "ldc" || spec.id == "cdk") {
                                 // SHA-256 username partition, not an account token.
                                 // A missing slot always means an ephemeral guest
