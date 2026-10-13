@@ -111,10 +111,16 @@ class NetworkLogInterceptor extends Interceptor {
       if (version is String && version.isNotEmpty) {
         entry['httpVersion'] = version;
       }
-      // Alt-Svc is an origin advertisement, NOT the negotiated protocol.
+      // Alt-Svc is only an origin advertisement, NOT the negotiated
+      // protocol. ma=0 revokes an alternative rather than advertising it.
       final altSvc = response.headers.value('alt-svc')?.toLowerCase();
       if (altSvc != null &&
-          RegExp(r'(?:^|,)\s*h3(?:-\d+)?\s*=').hasMatch(altSvc)) {
+          altSvc.split(',').any((value) {
+            final alternative = value.trim();
+            return RegExp(r'^h3\s*=').hasMatch(alternative) &&
+                !RegExp(r'(?:^|;)\s*ma\s*=\s*"?0"?\s*(?:;|$)')
+                    .hasMatch(alternative);
+          })) {
         entry['http3Advertised'] = true;
       }
       // Content-Encoding is intentionally not used as proof that the payload
