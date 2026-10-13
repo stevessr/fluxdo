@@ -255,6 +255,33 @@ void main() {
     dio.close(force: true);
   });
 
+  test('same hostname on a different HTTPS port is a foreign origin',
+      () async {
+    final adapter = _ScenarioAdapter(
+      302,
+      'https://linux.do:8443/other-service',
+    );
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://linux.do',
+      headers: {
+        'Authorization': 'Bearer original-port',
+        'Api-Key': 'sensitive',
+      },
+      validateStatus: (status) => status != null && status < 400,
+    ))..httpClientAdapter = adapter;
+    dio.interceptors.add(RedirectInterceptor(dio));
+
+    await dio.get<void>('/private');
+    final redirected = adapter.seen.last;
+    expect(redirected.uri.port, 8443);
+    final headerNames =
+        redirected.headers.keys.map((key) => key.toLowerCase()).toSet();
+    expect(headerNames, isNot(contains('authorization')));
+    expect(headerNames, isNot(contains('api-key')));
+    expect(redirected.extra['skipAuthCheck'], isTrue);
+    dio.close(force: true);
+  });
+
   test('cross-origin redirects discard private cache and cookie metadata',
       () async {
     final adapter = _ScenarioAdapter(302, 'https://other.example/final');
