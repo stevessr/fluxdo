@@ -10,6 +10,11 @@ on:
       - 'lib/models/user.dart'
       - 'lib/models/topic.dart'
       - 'lib/pages/boards_page.dart'
+      - 'lib/pages/topic_detail_page/topic_detail_page.dart'
+      - 'lib/pages/topic_detail_page/topic_more_menu_actions.dart'
+      - 'lib/widgets/topic/add_to_board_sheet.dart'
+      - 'test/pages/topic_detail_page/topic_more_menu_actions_test.dart'
+      - 'test/widgets/topic/add_to_board_sheet_test.dart'
       - 'lib/pages/chat/chat_channel_members_sheet.dart'
       - 'lib/pages/chat/chat_channel_settings_sheet.dart'
       - 'lib/pages/chat/chat_message_page.dart'
@@ -137,3 +142,10 @@ jobs:
 
       - name: Run management compatibility tests
         run: flutter test test/models/discourse_management_compat_test.dart
+
+      - name: Analyze topic board picker
+        run: flutter analyze lib/widgets/topic/add_to_board_sheet.dart lib/pages/topic_detail_page/topic_more_menu_actions.dart
+
+      - name: Run topic board picker tests
+        run: flutter test test/pages/topic_detail_page/topic_more_menu_actions_test.dart test/widgets/topic/add_to_board_sheet_test.dart
+
