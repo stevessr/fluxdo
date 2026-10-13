@@ -21,6 +21,8 @@ class StickerCompanionChannel(
     companion object {
         private const val CHANNEL = "com.github.lingyan000.fluxdo/sticker_companion"
         private const val PACKAGE = "com.github.lingyan000.fluxdo.plugin.sticker"
+        private const val BIND_PERMISSION =
+            "com.github.lingyan000.fluxdo.permission.BIND_PLUGIN"
         private const val ACTIVITY = "$PACKAGE.StickerActivity"
         private const val REQUEST_CODE = 0x571C
         private const val MAX_BYTES = 16 * 1024 * 1024
@@ -102,7 +104,7 @@ class StickerCompanionChannel(
             PackageManager.SIGNATURE_MATCH) return false
         return try {
             val info = pm.getActivityInfo(ComponentName(PACKAGE, ACTIVITY), 0)
-            info.exported && info.enabled
+            info.exported && info.enabled && info.permission == BIND_PERMISSION
         } catch (_: PackageManager.NameNotFoundException) {
             false
         }
