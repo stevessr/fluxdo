@@ -54,6 +54,44 @@ void main() {
     expect(policy.upgrade(Uri.parse('http://example.org')).scheme, 'http');
   });
 
+  test('Cloudflare 103 Early Hints cannot install an HSTS policy', () async {
+    final policy = HttpsSecurityPolicy();
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://example.org',
+      validateStatus: (status) => true,
+    ))..httpClientAdapter = _HstsAdapter(statusCode: 103);
+    dio.interceptors.add(HttpsSecurityInterceptor(policy: policy));
+
+    await dio.get<void>('/hint');
+    expect(policy.upgrade(Uri.parse('http://example.org')).scheme, 'http');
+    dio.close(force: true);
+  });
+
+  test('an untrusted TLS certificate error cannot install HSTS', () async {
+    final policy = HttpsSecurityPolicy();
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.org'))
+      ..httpClientAdapter = _HstsAdapter();
+    dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        handler.reject(DioException(
+          requestOptions: options,
+          type: DioExceptionType.badCertificate,
+          response: Response<dynamic>(
+            requestOptions: options,
+            statusCode: 200,
+            headers: st,
+          ),
+        ));
+      },
+    ));
+    dio.interceptors.add(HttpsSecurityInterceptor(policy: policy));
+
+    await expectLater(dio.get<void>('/untrusted'),
+        throwsA(isA<DioException>()));
+    expect(policy.upgrade(Uri.parse('http://example.org')).scheme, 'http');
+    dio.close(force: true);
+  });
+
   test('interceptor learns secure response and upgrades following HTTP URL',
       () async {
     final policy = HttpsSecurityPolicy();
@@ -194,13 +232,16 @@ void main() {
 }
 
 class _HstsAdapter implements HttpClientAdapter {
+  _HstsAdapter({this.statusCode = 200});
+
+  final int statusCode;
   final List<String> urls = [];
 
   @override
   Future<ResponseBody> fetch(RequestOptions options,
       Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     urls.add(options.uri.toString());
-    return ResponseBody.fromString('ok', 200, headers: {
+    return ResponseBody.fromString('ok', statusCode, headers: {
       Headers.contentTypeHeader: ['text/plain'],
       'strict-transport-security': ['max-age=60; includeSubDomains'],
     });
