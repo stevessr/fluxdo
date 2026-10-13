@@ -119,7 +119,9 @@ class RedirectInterceptor extends Interceptor {
       // also protects future custom authentication headers we do not yet know
       // about, instead of relying on an incomplete list of secret names.
       const allowed = {
-        'accept', 'accept-language', 'accept-encoding', 'user-agent',
+        // Let each target adapter negotiate an encoding it can decode.
+        // An original engine's br/zstd choice may not work after fallback.
+        'accept', 'accept-language', 'user-agent',
         'range', 'if-range', 'cache-control', 'pragma',
       };
       headers.removeWhere((name, _) => !allowed.contains(name.toLowerCase()));
