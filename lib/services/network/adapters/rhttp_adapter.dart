@@ -599,18 +599,15 @@ Duration? http3AltSvcLifetime(
     for (final value in header.value) {
       for (final item in value.split(',')) {
         final alternative = item.trim().toLowerCase();
-        final authority = _h3AuthorityPattern
-            .firstMatch(alternative);
+        final authority = _h3AuthorityPattern.firstMatch(alternative);
         if (authority == null || authority.group(1) != ':$originPort') {
           continue;
         }
 
         // RFC 7838 defaults ma to 24 hours if omitted; the application
         // intentionally caps its own probe cache at one hour.
-        final match = _h3MaxAgePattern
-            .firstMatch(alternative);
-        if (match == null &&
-            _h3AnyMaxAgePattern.hasMatch(alternative)) {
+        final match = _h3MaxAgePattern.firstMatch(alternative);
+        if (match == null && _h3AnyMaxAgePattern.hasMatch(alternative)) {
           continue; // Malformed advertised max-age is not a valid hint.
         }
         final maxAge = match == null ? 86400 : int.tryParse(match.group(1)!);
@@ -660,13 +657,11 @@ bool http3AltSvcRevoked(
         if (!_h3ProtocolPattern.hasMatch(alternative)) continue;
         // An alternative for a different port is not this origin's QUIC
         // endpoint and must not revoke the currently cached capability.
-        final authority = _h3AuthorityPattern
-            .firstMatch(alternative);
+        final authority = _h3AuthorityPattern.firstMatch(alternative);
         if (authority == null || authority.group(1) != ':$originPort') {
           continue;
         }
-        if (!_h3ZeroMaxAgePattern
-            .hasMatch(alternative)) {
+        if (!_h3ZeroMaxAgePattern.hasMatch(alternative)) {
           return false;
         }
         sawRevocation = true;
