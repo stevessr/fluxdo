@@ -306,7 +306,7 @@ def verify_drawing_dependency_graph(target: Path) -> None:
     if not lockfile.is_file():
         raise RuntimeError("Sticker Flutter pub get did not produce a lockfile")
     lock = lockfile.read_text()
-    if "\\n  fluxdo:\\n" in lock:
+    if "  fluxdo:" in lock.splitlines():
         raise RuntimeError("The sticker APK resolved the full FluxDO dependency")
     registration = target / ".flutter-plugins-dependencies"
     if registration.is_file():
