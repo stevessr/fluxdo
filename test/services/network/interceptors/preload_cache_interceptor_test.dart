@@ -89,6 +89,30 @@ Discourse
     expect(cached, contains('"siteSettings"'));
   });
 
+  test('slow cache storage falls back to HTTP within a bounded budget', () async {
+    final slowCache = PreloadCacheService.testing(
+      cacheBaseDirectory: () async => tempDirectory,
+      namespaceSeed: () async {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        return 'account-session-token';
+      },
+      isEnabled: () async => true,
+      now: () => now,
+    );
+    final adapter = _HtmlAdapter('<html>network fallback</html>');
+    final dio = _testDio(adapter, slowCache);
+
+    final response = await dio
+        .get<String>(
+          '/',
+          options: Options(extra: {'requestTag': 'preload-home'}),
+        )
+        .timeout(const Duration(seconds: 1));
+
+    expect(adapter.fetchCount, 1);
+    expect(response.data, contains('network fallback'));
+  });
+
   test('fresh bootstrap cache skips the network adapter entirely', () async {
     const cachedHtml = '''
 <html>
