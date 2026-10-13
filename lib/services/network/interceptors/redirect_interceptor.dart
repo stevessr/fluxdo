@@ -143,8 +143,14 @@ class RedirectInterceptor extends Interceptor {
     extra[FluxRequestKeys.skipScheduler] = true;
     extra[_redirectCountKey] = redirectCount + 1;
     if (crossOrigin) {
-      // Prevent CSRF refresh or injection for an unrelated origin.
+      // A foreign origin must not borrow forum credentials, trigger CSRF
+      // refreshes, mutate the current Discourse auth state or engage the
+      // forum-specific Cloudflare/session-recovery machinery on its 401/403.
       extra[FluxRequestKeys.skipCsrf] = true;
+      extra[FluxRequestKeys.skipAuthCheck] = true;
+      extra[FluxRequestKeys.skipSessionStateSync] = true;
+      extra[FluxRequestKeys.skipCfChallenge] = true;
+      extra[FluxRequestKeys.noRecovery] = true;
     }
 
     final data = replayBody
