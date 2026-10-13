@@ -388,6 +388,7 @@ jobs:
               :plugin_ldc:assembleRelease \
               :plugin_ldc_reward:assembleRelease
           )
+          python3 scripts/ci/check_sticker_isolation.py
           python3 scripts/ci/build_sticker_companion.py \
             --mode release --abi ${{ matrix.flutter-target }} \
             --version-code "${plugin_code}" --version-name "${plugin_name}"
