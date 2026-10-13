@@ -231,8 +231,22 @@ def main() -> None:
         if args.prepare_only:
             return
         run(["flutter", "pub", "get"], cwd=stage)
+        # flutterw.dart always calls project_prep.dart app, which regenerates
+        # the complete 40MB+ avatar pack INSIDE Core staging. That defeats
+        # source isolation and wastes CPU/disk. Prepare ONLY Core's actual
+        # dependencies: l10n, proxy cert and Rust native libraries.
+        run(["dart", "tool/gen_l10n.dart"], cwd=stage)
+        native_targets = (
+            "android-arm,android-arm64,android-x64"
+            if args.abi == "all" else args.abi
+        )
+        run([
+            "dart", "tool/project_tasks.dart", "native:prepare", "android",
+            "--" + args.mode, "--target-platform=" + native_targets,
+        ], cwd=stage)
+        verify_sources(stage)
         build = [
-            "dart", "tool/flutterw.dart", "build", "apk", "--" + args.mode,
+            "flutter", "build", "apk", "--" + args.mode,
             "--dart-define=cronetHttpNoPlay=true",
         ]
         if args.abi != "all":
@@ -240,6 +254,8 @@ def main() -> None:
         if args.split_debug_info:
             build.append("--split-debug-info=build/symbols")
         run(build, cwd=stage)
+        # Flutter must not regenerate the excluded avatar tree either.
+        verify_sources(stage)
         apk = stage / "build/app/outputs/flutter-apk/app-release.apk"
         if args.mode == "debug":
             apk = stage / "build/app/outputs/flutter-apk/app-debug.apk"
