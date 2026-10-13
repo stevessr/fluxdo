@@ -26,6 +26,7 @@ class NetworkLogInterceptor extends Interceptor {
         options: response.requestOptions,
         statusCode: response.statusCode,
         level: isSilent ? 'debug' : 'info',
+        response: response,
       );
     }
     handler.next(response);
@@ -56,6 +57,7 @@ class NetworkLogInterceptor extends Interceptor {
       options: err.requestOptions,
       statusCode: err.response?.statusCode,
       level: level,
+      response: err.response,
     );
     handler.next(err);
   }
@@ -64,6 +66,7 @@ class NetworkLogInterceptor extends Interceptor {
     required RequestOptions options,
     required int? statusCode,
     required String level,
+    Response<dynamic>? response,
   }) {
     final startTime = options.extra[_startTimeKey] as int?;
     final duration = startTime != null
@@ -100,6 +103,22 @@ class NetworkLogInterceptor extends Interceptor {
     final adapterName = getRequestAdapterLogName(options);
     if (adapterName != null) {
       entry['networkAdapter'] = adapterName;
+    }
+    if (response != null) {
+      // Transport versions are only reported when the adapter actually
+      // observed one. Having QUIC enabled does not mean a request used H3.
+      final version = response.extra['http_version'];
+      if (version is String && version.isNotEmpty) {
+        entry['httpVersion'] = version;
+      }
+      // Alt-Svc is an origin advertisement, NOT the negotiated protocol.
+      final altSvc = response.headers.value('alt-svc')?.toLowerCase();
+      if (altSvc != null &&
+          RegExp(r'(?:^|,)\\s*h3(?:-\\d+)?\\s*=').hasMatch(altSvc)) {
+        entry['http3Advertised'] = true;
+      }
+      // Content-Encoding is intentionally not used as proof that the payload
+      // was decompressed: some adapters strip this header after decoding.
     }
     LogWriter.instance.write(entry);
   }
