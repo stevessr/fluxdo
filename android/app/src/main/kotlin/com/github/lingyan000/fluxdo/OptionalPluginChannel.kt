@@ -63,6 +63,13 @@ class OptionalPluginChannel(
             setOf("metaverse.capabilities"),
             "com.github.lingyan000.fluxdo.plugin.ldc.LdcActivity",
         ),
+        Spec(
+            "ldc_reward", "LDC 打赏",
+            "com.github.lingyan000.fluxdo.plugin.ldc_reward",
+            "com.github.lingyan000.fluxdo.plugin.ldc_reward.LdcRewardPluginService",
+            setOf("reward.capabilities"),
+            "com.github.lingyan000.fluxdo.plugin.ldc_reward.LdcRewardActivity",
+        ),
     )
     private val channel = MethodChannel(messenger, PluginProtocol.CHANNEL)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -90,10 +97,24 @@ class OptionalPluginChannel(
                             if (!info.exported || info.permission != PluginProtocol.BIND_PERMISSION) {
                                 throw SecurityException("Companion activity is not protected")
                             }
-                            context.startActivity(
-                                Intent().setComponent(component)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
+                            val launch = Intent().setComponent(component)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            if (spec.id == "ldc_reward") {
+                                // Public post identity only. Never pass tokens,
+                                // payment amounts, cookies or Basic Auth secrets.
+                                val raw = call.argument<Map<String, Any?>>("payload")
+                                    ?: emptyMap()
+                                val username = (raw["username"] as? String)
+                                    ?.trim()?.take(64).orEmpty()
+                                val userId = (raw["userId"] as? Number)
+                                    ?.toLong() ?: -1L
+                                require(username.isNotEmpty() && userId > 0L) {
+                                    "Missing recipient identity"
+                                }
+                                launch.putExtra("recipient_username", username)
+                                launch.putExtra("recipient_user_id", userId)
+                            }
+                            context.startActivity(launch)
                             result.success(true)
                         } catch (error: Exception) {
                             result.error("LAUNCH_FAILED", error.message, null)
