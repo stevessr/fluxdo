@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -212,11 +211,163 @@ class HttpsSecurityPolicy {
   String _normalizedHost(String host) =>
       host.toLowerCase().replaceFirst(RegExp(r'\.$'), '');
 
-  bool _validHost(String host) =>
-      host.contains('.') &&
-      host != 'localhost' &&
-      !host.endsWith('.localhost') &&
-      InternetAddress.tryParse(host) == null;
+  /// Pure Dart host validation: importing dart:io solely for IP detection
+  /// breaks web/Wasm builds. Reject IP literals (including IPv4-mapped IPv6),
+  /// localhost, all-numeric names and malformed DNS labels.
+  bool _validHost(String host) {
+    if (host.length > 253 ||
+        !host.contains('.') ||
+        host.contains(':') ||
+        host.contains('[') ||
+        host.contains(']') ||
+        host == 'localhost' ||
+        host.endsWith('.localhost')) {
+      return false;
+    }
+    final labels = host.split('.');
+    if (labels.every((label) => int.tryParse(label) != null)) return false;
+    return labels.every(
+      (label) =>
+          label.isNotEmpty &&
+          label.length <= 63 &&
+          !label.startsWith('-') &&
+          !label.endsWith('-') &&
+          RegExp(r'^[a-z0-9-]+
+
+  _ParsedHsts? _parse(String header) {
+    int? maxAge;
+    var includeSubDomains = false;
+    for (final part in header.split(';')) {
+      final directive = part.trim();
+      if (directive.isEmpty) continue;
+      final equal = directive.indexOf('=');
+      final name = (equal < 0 ? directive : directive.substring(0, equal))
+          .trim()
+          .toLowerCase();
+      if (name == 'includesubdomains') {
+        if (equal < 0) includeSubDomains = true;
+        continue;
+      }
+      if (name != 'max-age') continue;
+      if (maxAge != null || equal < 0) return null;
+      var raw = directive.substring(equal + 1).trim();
+      if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
+        raw = raw.substring(1, raw.length - 1);
+      }
+      if (!RegExp(r'^\d+$').hasMatch(raw)) return null;
+      final age = int.tryParse(raw);
+      if (age == null) return null;
+      maxAge = age > _maxAgeSeconds ? _maxAgeSeconds : age;
+    }
+    if (maxAge == null) return null;
+    return _ParsedHsts(maxAge: maxAge, includeSubDomains: includeSubDomains);
+  }
+
+  @visibleForTesting
+  void clearForTest() {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    _hosts.clear();
+    _changedDuringLoad.clear();
+  }
+}
+
+class _HstsEntry {
+  const _HstsEntry({required this.until, required this.includeSubDomains});
+
+  final DateTime until;
+  final bool includeSubDomains;
+}
+
+class _ParsedHsts {
+  const _ParsedHsts({required this.maxAge, required this.includeSubDomains});
+
+  final int maxAge;
+  final bool includeSubDomains;
+}
+
+/// Applies HSTS before request scheduling/cookies and learns from responses,
+/// including error status responses with valid TLS.
+class HttpsSecurityInterceptor extends Interceptor {
+  HttpsSecurityInterceptor({HttpsSecurityPolicy? policy})
+      : _policy = policy ?? HttpsSecurityPolicy.instance;
+
+  final HttpsSecurityPolicy _policy;
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (_policy.isLoaded) {
+      _upgradeAndContinue(options, handler);
+      return;
+    }
+    // Cold start waits for restored HSTS so the first request is protected.
+    // Hot requests stay synchronous (avoids a microtask on every preload).
+    _policy.ensureLoaded().then(
+      (_) => _upgradeAndContinue(options, handler),
+      onError: (Object _) => _upgradeAndContinue(options, handler),
+    );
+  }
+
+  void _upgradeAndContinue(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) {
+    final origin = options.uri;
+    final upgraded = _policy.upgrade(origin);
+    if (upgraded != origin) {
+      // Change only the URL component that owns the scheme. Replacing path
+      // with options.uri (which already includes queryParameters) would make
+      // Dio append those parameters a second time on the next uri read.
+      final pathUri = Uri.tryParse(options.path);
+      if (pathUri != null &&
+          pathUri.scheme.toLowerCase() == 'http' &&
+          pathUri.host == origin.host) {
+        options.path = _policy.upgrade(pathUri).toString();
+      } else {
+        final baseUri = Uri.tryParse(options.baseUrl);
+        if (baseUri != null &&
+            baseUri.scheme.toLowerCase() == 'http' &&
+            baseUri.host == origin.host) {
+          options.baseUrl = _policy.upgrade(baseUri).toString();
+        } else {
+          // Uncommon scheme-relative URLs: use the complete resolved URI,
+          // clearing the query map to avoid duplicate parameters.
+          options.baseUrl = '';
+          options.path = upgraded.toString();
+          // The map can originate from an immutable caller-owned map.
+          // Replace it instead of mutating it in place.
+          options.queryParameters = <String, dynamic>{};
+        }
+      }
+    }
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    // Informational 1xx responses, including Cloudflare 103 Early Hints,
+    // must not alter transport security policy.
+    if ((response.statusCode ?? 0) >= 200) {
+      _policy.observe(response.requestOptions.uri, response.headers);
+    }
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException error, ErrorInterceptorHandler handler) {
+    final response = error.response;
+    // A rejected certificate is NOT an authenticated HTTPS response.
+    if (error.type != DioExceptionType.badCertificate &&
+        response != null &&
+        (response.statusCode ?? 0) >= 200) {
+      _policy.observe(error.requestOptions.uri, response.headers);
+    }
+    handler.next(error);
+  }
+}
+).hasMatch(label),
+    );
+  }
 
   _ParsedHsts? _parse(String header) {
     int? maxAge;
