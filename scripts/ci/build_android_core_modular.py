@@ -78,6 +78,26 @@ def prepare(destination: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, target)
 
+    # Post action menu used to read host LDC Basic Auth credentials before
+    # opening the reward sheet. Android now delegates to the separate LDC APK.
+    # Remove the credential lookup at build time; desktop keeps original code.
+    menu = destination / (
+        "lib/widgets/post/post_item/widgets/"
+        "post_footer_section/actions/menu_actions.dart"
+    )
+    original_menu = menu.read_text()
+    check_start = """                         try {
+                           final credentials = await ref.read(
+                             ldcRewardCredentialsProvider.future,
+                           );"""
+    check_end = """                         if (!mounted) return;
+                         showLdcRewardSheet("""
+    if original_menu.count(check_start) != 1 or original_menu.count(check_end) != 1:
+        raise RuntimeError("LDC reward callsite changed; refusing unsafe Core build")
+    begin = original_menu.index(check_start)
+    finish = original_menu.index(check_end, begin)
+    menu.write_text(original_menu[:begin] + original_menu[finish:])
+
     for rel in EXCLUDED_DART:
         (destination / rel).unlink(missing_ok=True)
     for rel in EXCLUDED_TREES:
