@@ -13,6 +13,7 @@ on:
       - 'scripts/ci/build_sticker_companion.py'
       - 'scripts/ci/build_android_core_modular.py'
       - 'scripts/ci/test_android_modular_contract.py'
+      - 'scripts/ci/check_android_apk_contract.py'
       - 'android_modular/**'
       - 'scripts/ci/check_android_plugin_contract.py'
       - 'lib/services/android_optional_plugin_service.dart'
@@ -56,7 +57,7 @@ jobs:
       - name: Resolve Flutter dependencies
         run: flutter pub get
       - name: Validate standalone APK build scripts
-        run: python3 -m py_compile scripts/ci/build_sticker_companion.py scripts/ci/build_android_core_modular.py scripts/ci/check_android_plugin_contract.py
+        run: python3 -m py_compile scripts/ci/build_sticker_companion.py scripts/ci/build_android_core_modular.py scripts/ci/check_android_plugin_contract.py scripts/ci/check_android_apk_contract.py
       - name: Test Android Core source/asset exclusion (without SDK)
         run: python3 -m unittest discover -s scripts/ci -p test_android_modular_contract.py -v
       - name: Check plugin IPC manifests and allowlist
@@ -98,6 +99,14 @@ jobs:
           test -s build/plugin_cdk/outputs/apk/debug/plugin_cdk-debug.apk
           test -s build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk
           test -s build/plugin_ldc_reward/outputs/apk/debug/plugin_ldc_reward-debug.apk
+          python3 scripts/ci/check_android_apk_contract.py \
+            --core build/app/outputs/flutter-apk/app-debug.apk \
+            --plugin deviceinfo build/plugin_deviceinfo/outputs/apk/debug/plugin_deviceinfo-debug.apk \
+            --plugin network build/plugin_network/outputs/apk/debug/plugin_network-debug.apk \
+            --plugin cdk build/plugin_cdk/outputs/apk/debug/plugin_cdk-debug.apk \
+            --plugin ldc build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk \
+            --plugin ldc_reward build/plugin_ldc_reward/outputs/apk/debug/plugin_ldc_reward-debug.apk \
+            --plugin sticker build/plugin_sticker/fluxdo-sticker-android-arm64-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: fluxdo-deviceinfo-debug-apk
