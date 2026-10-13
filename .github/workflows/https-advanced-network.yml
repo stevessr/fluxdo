@@ -51,9 +51,9 @@ jobs:
       - name: Generate localization
         run: dart run tool/gen_l10n.dart
 
-      - name: Normalize Dart formatting before diagnostics
+      - name: Verify Dart formatting
         run: |
-          dart format \
+          dart format --output=none --set-exit-if-changed \
             lib/services/network/discourse_dio.dart \
             lib/services/network/adapters/platform_adapter.dart \
             lib/services/network/adapters/rhttp_adapter.dart \
