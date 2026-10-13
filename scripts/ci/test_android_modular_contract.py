@@ -37,6 +37,30 @@ class AndroidCoreIsolationTest(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("class PluginEntry {}\n", encoding="utf-8")
 
+    def test_reward_gate_is_removed_without_stripping_plugin_launcher(self) -> None:
+        source = (modular.ROOT /
+            "lib/widgets/post/post_item/widgets/post_footer_section/"
+            "actions/menu_actions.dart").read_text(encoding="utf-8")
+        rewritten = modular.strip_host_reward_credentials(source)
+        self.assertNotIn("ldcRewardCredentialsProvider", rewritten)
+        self.assertNotIn("toast_rewardNotConfigured", rewritten)
+        self.assertIn("showLdcRewardSheet(", rewritten)
+        self.assertIn("RewardTargetInfo(", rewritten)
+        self.assertIn("Navigator.pop(ctx);", rewritten)
+        self.assertIn("if (!mounted) return;", rewritten)
+        self.assertLess(len(rewritten), len(source))
+
+    def test_reward_gate_refuses_partial_or_unknown_source(self) -> None:
+        source = (modular.ROOT /
+            "lib/widgets/post/post_item/widgets/post_footer_section/"
+            "actions/menu_actions.dart").read_text(encoding="utf-8")
+        invalid = source.replace(
+            "ldcRewardCredentialsProvider.future,",
+            "changedCredentialProvider.future,",
+        )
+        with self.assertRaisesRegex(RuntimeError, "LDC reward callsite changed"):
+            modular.strip_host_reward_credentials(invalid)
+
     def test_core_builder_does_not_run_full_avatar_project_prep(self) -> None:
         import inspect
         source = inspect.getsource(modular.main)
