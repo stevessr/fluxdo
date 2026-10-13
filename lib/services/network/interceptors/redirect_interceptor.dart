@@ -114,12 +114,13 @@ class RedirectInterceptor extends Interceptor {
 
     // A redirect is an internal subrequest; retaining the scheduling slot
     // without bypassing the scheduler could deadlock at concurrency = 1.
-    final extra = Map<String, dynamic>.from(source.extra)
-      ..[FluxRequestKeys.skipScheduler] = true
-      ..[_redirectCountKey] = redirectCount + 1;
+    final extra = crossOrigin
+        ? _crossOriginRequestExtras(source.extra)
+        : Map<String, dynamic>.from(source.extra);
+    extra[FluxRequestKeys.skipScheduler] = true;
+    extra[_redirectCountKey] = redirectCount + 1;
     if (crossOrigin) {
-      // The global forum CSRF interceptor must not inject a site credential
-      // into an unrelated origin on the redirected request.
+      // Prevent CSRF refresh or injection for an unrelated origin.
       extra[FluxRequestKeys.skipCsrf] = true;
     }
 
@@ -164,6 +165,32 @@ class RedirectInterceptor extends Interceptor {
         type: DioExceptionType.unknown,
       ));
     }
+  }
+
+  /// Drop cache snapshots, auth-cookie copying intent, stale request-scoped
+  /// recovery state, and future private metadata when redirecting off-origin.
+  /// Only retain known non-credential request behavior flags.
+  Map<String, dynamic> _crossOriginRequestExtras(
+    Map<String, dynamic> original,
+  ) {
+    const allowedKeys = <String>{
+      FluxRequestKeys.isSilent,
+      FluxRequestKeys.showErrorToast,
+      FluxRequestKeys.priority,
+      FluxRequestKeys.requestTag,
+      FluxRequestKeys.skipNetworkLog,
+      FluxRequestKeys.skipSessionStateSync,
+      FluxRequestKeys.skipAuthCheck,
+      FluxRequestKeys.skipRhttpAdapter,
+      FluxRequestKeys.skipWebViewAdapter,
+      FluxRequestKeys.noRecovery,
+      FluxRequestKeys.skipCfChallenge,
+      FluxRequestKeys.skipCfBlock,
+    };
+    return <String, dynamic>{
+      for (final entry in original.entries)
+        if (allowedKeys.contains(entry.key)) entry.key: entry.value,
+    };
   }
 
   DioException _redirectError(Response response, String reason) =>
