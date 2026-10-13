@@ -109,6 +109,27 @@ void main() {
     dio307.close(force: true);
   });
 
+  test('307 multipart redirect regenerates its content-type boundary', () async {
+    final adapter = _ScenarioAdapter(307, '/upload/finish');
+    final dio = _redirectDio(adapter);
+
+    await dio.post<void>(
+      '/upload/start',
+      data: FormData.fromMap({'text': 'hello'}),
+    );
+
+    expect(adapter.seen, hasLength(2));
+    final firstType = adapter.seen.first.headers[Headers.contentTypeHeader]
+        ?.toString();
+    final secondType = adapter.seen.last.headers[Headers.contentTypeHeader]
+        ?.toString();
+    expect(firstType, contains('boundary='));
+    expect(secondType, contains('boundary='));
+    expect(secondType, isNot(firstType));
+    expect(adapter.seen.last.data, isA<FormData>());
+    dio.close(force: true);
+  });
+
   test('HTTPS downgrade and cross-origin body forwarding are rejected', () async {
     final insecure = _ScenarioAdapter(302, 'http://linux.do/plain');
     final dio = _redirectDio(insecure);
