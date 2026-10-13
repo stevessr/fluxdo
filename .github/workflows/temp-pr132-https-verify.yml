@@ -34,6 +34,11 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      - name: Identify tested PR branch revision
+        run: |
+          echo "PR132_TESTED_HEAD=$(git rev-parse HEAD)"
+          git log -1 --format='Commit: %H%nSubject: %s'
+
       - name: Setup pinned Flutter
         uses: subosito/flutter-action@v2
         with:
