@@ -65,6 +65,10 @@ void main() {
           isNot(contains(sensitive)));
     }
     expect(redirected.extra['skipCsrf'], isTrue);
+    expect(redirected.extra['skipAuthCheck'], isTrue);
+    expect(redirected.extra['skipSessionStateSync'], isTrue);
+    expect(redirected.extra['skipCfChallenge'], isTrue);
+    expect(redirected.extra['noRecovery'], isTrue);
     dio.close(force: true);
   });
 
