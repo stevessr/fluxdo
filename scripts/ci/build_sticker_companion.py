@@ -81,7 +81,7 @@ def stage_drawing_sources(target: Path) -> None:
                     f"{source.relative_to(target)}: {forbidden}"
                 )
         for match in re.finditer(
-            r"""(?m)^\\s*(?:import|export|part)\\s+['"]([^'"]+[.]dart)['"]""",
+            r"""(?m)^[ ]*(?:import|export|part)[ ]+['"]([^'"]+[.]dart)['"]""",
             contents,
         ):
             uri = match.group(1)
