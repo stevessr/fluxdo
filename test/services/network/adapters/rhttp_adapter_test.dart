@@ -40,6 +40,15 @@ void main() {
       expect(http3AltSvcCleared({
         'Alt-Svc': ['h3=":443"; ma=3600'],
       }), isFalse);
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h3=":443"; ma=0'],
+      }), isTrue);
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h3=":443"; ma=3600'],
+      }), isFalse);
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h2=":443"; ma=0'],
+      }), isFalse);
     });
   });
 
