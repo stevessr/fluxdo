@@ -358,7 +358,6 @@ jobs:
           ls -lh dist/
 
       - name: Build independently signed companion APKs
-        if: matrix.arch == 'arm64-v8a'
         run: |
           set -euo pipefail
           # Each APK has its own application ID and can be replaced without
@@ -378,15 +377,15 @@ jobs:
               :plugin_ldc:assembleRelease
           )
           python3 scripts/ci/build_sticker_companion.py \
-            --mode release --abi android-arm64 \
+            --mode release --abi ${{ matrix.flutter-target }} \
             --version-code "${plugin_code}" --version-name "${plugin_name}"
           mkdir -p dist
           cp build/plugin_deviceinfo/outputs/apk/release/plugin_deviceinfo-release.apk dist/fluxdo-plugin-deviceinfo.apk
           cp build/plugin_network/outputs/apk/release/plugin_network-release.apk dist/fluxdo-plugin-network.apk
           cp build/plugin_cdk/outputs/apk/release/plugin_cdk-release.apk dist/fluxdo-plugin-cdk.apk
           cp build/plugin_ldc/outputs/apk/release/plugin_ldc-release.apk dist/fluxdo-plugin-ldc.apk
-          cp build/plugin_sticker/fluxdo-sticker-android-arm64-release.apk dist/fluxdo-plugin-sticker-arm64.apk
-          core_apk=$(find dist -maxdepth 1 -name 'fluxdo-v*arm64-v8a.apk' -print -quit)
+          cp build/plugin_sticker/fluxdo-sticker-${{ matrix.flutter-target }}-release.apk dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
+          core_apk=$(find dist -maxdepth 1 -name 'fluxdo-v*${{ matrix.arch }}.apk' -print -quit)
           test -n "${core_apk}"
           python3 scripts/ci/report_android_modular_size.py \
             --core "${core_apk}" \
@@ -394,7 +393,7 @@ jobs:
             --plugin dist/fluxdo-plugin-network.apk \
             --plugin dist/fluxdo-plugin-cdk.apk \
             --plugin dist/fluxdo-plugin-ldc.apk \
-            --plugin dist/fluxdo-plugin-sticker-arm64.apk
+            --plugin dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
           cat build/android_modular_sizes.md >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload APK Artifact
