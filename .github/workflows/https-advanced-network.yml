@@ -8,6 +8,16 @@ on:
       - 'lib/services/network/discourse_dio.dart'
       - 'test/services/network/**'
       - '.github/workflows/https-advanced-network.yml'
+  # Keep this suite available when repository PR checks are delayed.
+  push:
+    branches:
+      - 'feat/https-advanced-security-*'
+    paths:
+      - 'lib/services/network/adapters/**'
+      - 'lib/services/network/interceptors/**'
+      - 'lib/services/network/discourse_dio.dart'
+      - 'test/services/network/**'
+      - '.github/workflows/https-advanced-network.yml'
   workflow_dispatch:
 
 permissions:
