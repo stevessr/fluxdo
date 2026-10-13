@@ -386,6 +386,16 @@ jobs:
           cp build/plugin_cdk/outputs/apk/release/plugin_cdk-release.apk dist/fluxdo-plugin-cdk.apk
           cp build/plugin_ldc/outputs/apk/release/plugin_ldc-release.apk dist/fluxdo-plugin-ldc.apk
           cp build/plugin_sticker/fluxdo-sticker-android-arm64-release.apk dist/fluxdo-plugin-sticker-arm64.apk
+          core_apk=$(find dist -maxdepth 1 -name 'fluxdo-v*arm64-v8a.apk' -print -quit)
+          test -n "${core_apk}"
+          python3 scripts/ci/report_android_modular_size.py \
+            --core "${core_apk}" \
+            --plugin dist/fluxdo-plugin-deviceinfo.apk \
+            --plugin dist/fluxdo-plugin-network.apk \
+            --plugin dist/fluxdo-plugin-cdk.apk \
+            --plugin dist/fluxdo-plugin-ldc.apk \
+            --plugin dist/fluxdo-plugin-sticker-arm64.apk
+          cat build/android_modular_sizes.md >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
