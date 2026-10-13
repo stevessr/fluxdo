@@ -265,6 +265,29 @@ void main() {
         'http');
   });
 
+  test('oversized persisted HSTS data is ignored before JSON decoding',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'network_hsts_policies_v1': 'x' * (65 * 1024),
+    });
+    final policy = HttpsSecurityPolicy(persist: true);
+    await policy.ensureLoaded();
+    expect(policy.upgrade(Uri.parse('http://example.org')).scheme, 'http');
+
+    // Oversized corrupt storage must not prevent subsequent legitimate
+    // policies from being learned and written.
+    policy.observe(
+      Uri.parse('https://example.org'),
+      Headers.fromMap({
+        'strict-transport-security': ['max-age=3600'],
+      }),
+    );
+    await policy.flushPending();
+    final restored = HttpsSecurityPolicy(persist: true);
+    await restored.ensureLoaded();
+    expect(restored.upgrade(Uri.parse('http://example.org')).scheme, 'https');
+  });
+
   test('invalid, expired or impossible persisted HSTS entries are ignored',
       () async {
     SharedPreferences.setMockInitialValues({
