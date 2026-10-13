@@ -7,8 +7,8 @@ import '../../services/toast_service.dart';
 import '../common/app_bottom_sheet.dart';
 
 /// Use the Boards plugin's ACL-checked endpoints to attach a topic to a column.
-Future<void> showAddTopicToBoardSheet(BuildContext context, {required int topicId}) {
-  return AppBottomSheet.show<void>(
+Future<void> showAddTopicToBoardSheet(BuildContext context, {required int topicId}) async {
+  await AppBottomSheet.show<void>(
     context: context,
     title: Localizations.localeOf(context).languageCode == 'zh'
         ? '添加到看板' : 'Add to board',
@@ -63,7 +63,7 @@ class _AddTopicToBoardSheetState extends ConsumerState<_AddTopicToBoardSheet> {
   BoardCard? _findExisting(DiscourseBoard board) {
     for (final column in board.columns) {
       for (final card in column.cards) {
-        if (card.isTopic && card.topicId == widget.topicId) return card;
+        if (card.cardType == 'topic' && card.topicId == widget.topicId) return card;
       }
     }
     return null;
