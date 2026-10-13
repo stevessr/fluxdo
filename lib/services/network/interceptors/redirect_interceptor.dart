@@ -95,10 +95,17 @@ class RedirectInterceptor extends Interceptor {
     final headers = Map<String, dynamic>.from(source.headers);
     // The cookie manager must select cookies for the destination URL again.
     _removeHeaders(headers, const {'cookie'});
+    final isMultipartReplay = replayBody && source.data is FormData;
     if (switchToGet) {
       _removeHeaders(headers, const {
         'content-type', 'content-length', 'content-encoding',
         'transfer-encoding',
+      });
+    } else if (isMultipartReplay) {
+      // FormData.clone() creates a new multipart boundary. Carrying the old
+      // finalized Content-Type/Length corrupts 307/308 redirected uploads.
+      _removeHeaders(headers, const {
+        'content-type', 'content-length', 'transfer-encoding',
       });
     }
     if (crossOrigin) {
@@ -143,7 +150,9 @@ class RedirectInterceptor extends Interceptor {
           headers: headers,
           extra: extra,
           responseType: source.responseType,
-          contentType: switchToGet ? null : source.contentType,
+          contentType: switchToGet || isMultipartReplay
+              ? null
+              : source.contentType,
           validateStatus: source.validateStatus,
           sendTimeout: source.sendTimeout,
           receiveTimeout: source.receiveTimeout,
