@@ -45,9 +45,16 @@ class HttpsSecurityPolicy {
   Future<void> _loadStoredPolicies() async {
     try {
       final preferences = await SharedPreferences.getInstance();
+      // A corrupt cache must not permanently disable future HSTS writes.
+      _preferences = preferences;
       final raw = preferences.getString(_storageKey);
       if (raw != null) {
-        final decoded = jsonDecode(raw);
+        Object? decoded;
+        try {
+          decoded = jsonDecode(raw);
+        } on FormatException {
+          decoded = null;
+        }
         if (decoded is List) {
           final now = _now();
           final maximum = now.add(const Duration(seconds: _maxAgeSeconds));
@@ -74,7 +81,6 @@ class HttpsSecurityPolicy {
           }
         }
       }
-      _preferences = preferences;
     } catch (error) {
       debugPrint('[HTTPS] Failed to load HSTS cache: $error');
     }
