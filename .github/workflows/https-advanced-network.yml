@@ -51,7 +51,7 @@ jobs:
       - name: Generate localization
         run: dart run tool/gen_l10n.dart
 
-      - name: Check formatting and whitespace
+      - name: Normalize Dart formatting before diagnostics
         run: |
           dart format \
             lib/services/network/discourse_dio.dart \
@@ -80,11 +80,11 @@ jobs:
 
       - name: HTTPS security and transport diagnostics tests
         run: |
-          flutter test \
+          dart tool/flutterw.dart test \
             test/services/network/interceptors/https_security_interceptor_test.dart \
             test/services/network/interceptors/redirect_interceptor_test.dart \
             test/services/network/request_tag_logging_test.dart \
             test/services/network/adapters/rhttp_adapter_test.dart
 
       - name: Network regression tests
-        run: flutter test test/services/network
+        run: dart tool/flutterw.dart test test/services/network
