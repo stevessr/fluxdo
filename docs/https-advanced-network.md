@@ -5,10 +5,12 @@ Fluxdo uses a **dynamic** Dio adapter chain, not one universal HTTP client. Feat
 | Transport | HTTP/2 | HTTP/3 | Compression handling | Caveat |
 | --- | --- | --- | --- | --- |
 | Android Cronet | enabled | QUIC enabled, negotiated via Alt-Svc | native gzip/Brotli (`enableBrotli: true`) | Enabled is not equal to negotiated |
-| rhttp (opt-in) | reqwest ALPN | probe after a valid H3 Alt-Svc hint, with failure backoff | delegated to the compiled Rust client | Never force br/zstd from Dart without verifying Rust features |
+| rhttp (opt-in) | reqwest ALPN | probe after a valid H3 Alt-Svc hint, with failure backoff | Rust reqwest gzip, deflate, Brotli and Zstandard features enabled | Decoding is native; do not manually decompress it again |
 | Apple URLSession | platform-managed | platform-managed when available | URLSession-managed | Cookie auto-management disabled to avoid two jars |
 | Dart IO / local proxy | HTTP/1.1 to the next hop | no H3 at the Dart IO hop | gzip auto-uncompression | An upstream proxy may use a different HTTP version |
 | WebView fallback | browser-managed | browser-managed | browser-managed | Only eligible same-origin requests |
+
+The locked `rhttp` dependency resolves to `Lingyan000/rhttp_plus` commit `02eb4114b57c108e76a9ed526b6118bc048b5604`; that commit's `rhttp/rust/Cargo.toml` explicitly enables reqwest features `gzip`, `deflate`, `brotli`, and `zstd`. Runtime tests are still required to ensure target binaries contain that implementation and server responses are decoded correctly.
 
 ## HTTPS security
 
