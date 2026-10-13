@@ -99,6 +99,20 @@ class OptionalPluginChannel(
                             }
                             val launch = Intent().setComponent(component)
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            if (spec.id == "ldc" || spec.id == "cdk") {
+                                // SHA-256 username partition, not an account token.
+                                // A missing slot always means an ephemeral guest
+                                // session; plugins clear cookies before opening.
+                                val payload = call.argument<Map<String, Any?>>("payload")
+                                    ?: emptyMap()
+                                val slot = (payload["accountSlot"] as? String)
+                                    ?: "guest"
+                                require(slot == "guest" ||
+                                    Regex("^[0-9a-f]{64}$").matches(slot)) {
+                                    "Invalid account isolation slot"
+                                }
+                                launch.putExtra("account_slot", slot)
+                            }
                             if (spec.id == "ldc_reward") {
                                 // Public post identity only. Never pass tokens,
                                 // payment amounts, cookies or Basic Auth secrets.
