@@ -52,7 +52,7 @@ jobs:
             test/services/network/request_tag_logging_test.dart
           git diff --check
 
-  verify:
+  analyze:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -87,6 +87,29 @@ jobs:
             test/services/network/interceptors/https_security_interceptor_test.dart \
             test/services/network/interceptors/redirect_interceptor_test.dart \
             test/services/network/request_tag_logging_test.dart
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          cache: true
+
+      - name: Prepare test environment
+        run: mkdir -p assets/certs assets/images/llm
+
+      - name: Restore locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
 
       - name: HTTPS security and transport diagnostics tests
         run: |
