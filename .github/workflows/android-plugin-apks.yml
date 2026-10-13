@@ -73,11 +73,11 @@ jobs:
         run: flutter test test/services/android_sticker_companion_service_test.dart
       - name: Build independent Flutter sticker APK
         run: python3 scripts/ci/build_sticker_companion.py --mode debug --abi android-arm64
-      - name: Build both optional APKs (debug test-signing only)
+      - name: Build all five native APKs (debug test-signing only)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew --no-daemon :plugin_deviceinfo:assembleDebug :plugin_network:assembleDebug :plugin_cdk:assembleDebug :plugin_ldc:assembleDebug
+          ./gradlew --no-daemon :plugin_deviceinfo:assembleDebug :plugin_network:assembleDebug :plugin_cdk:assembleDebug :plugin_ldc:assembleDebug :plugin_ldc_reward:assembleDebug
       - name: Compile lean Android Core APK (Dart AOT resources isolated)
         run: |
           python3 scripts/ci/build_android_core_modular.py --mode debug --abi android-arm64
@@ -94,6 +94,7 @@ jobs:
           test -s build/plugin_network/outputs/apk/debug/plugin_network-debug.apk
           test -s build/plugin_cdk/outputs/apk/debug/plugin_cdk-debug.apk
           test -s build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk
+          test -s build/plugin_ldc_reward/outputs/apk/debug/plugin_ldc_reward-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: fluxdo-deviceinfo-debug-apk
@@ -118,4 +119,9 @@ jobs:
         with:
           name: fluxdo-ldc-debug-apk
           path: build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-ldc-reward-debug-apk
+          path: build/plugin_ldc_reward/outputs/apk/debug/plugin_ldc_reward-debug.apk
           if-no-files-found: error
