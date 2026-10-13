@@ -22,6 +22,9 @@ class HttpsSecurityPolicy {
 
   static const String _storageKey = 'network_hsts_policies_v1';
   static const int _maxHosts = 128;
+  // Serialized 128-host policy records are well below this budget. Reject
+  // unexpectedly large/corrupt local storage before JSON parsing at startup.
+  static const int _maxSerializedLength = 32 * 1024;
   static const int _maxAgeSeconds = 2 * 365 * 24 * 60 * 60;
   static final RegExp _dnsLabelPattern = RegExp(r'^[a-z0-9-]+
 
@@ -54,7 +57,7 @@ class HttpsSecurityPolicy {
       // A corrupt cache must not permanently disable future HSTS writes.
       _preferences = preferences;
       final raw = preferences.getString(_storageKey);
-      if (raw != null) {
+      if (raw != null && raw.length <= _maxSerializedLength) {
         Object? decoded;
         try {
           decoded = jsonDecode(raw);
@@ -64,7 +67,7 @@ class HttpsSecurityPolicy {
         if (decoded is List) {
           final now = _now();
           final maximum = now.add(const Duration(seconds: _maxAgeSeconds));
-          for (final item in decoded) {
+          for (final item in decoded.take(_maxHosts)) {
             if (item is! Map) continue;
             final host = item['host'];
             final epoch = item['until'];
