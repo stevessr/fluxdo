@@ -16,7 +16,7 @@ const _normalConnectTimeout = Duration(seconds: 30);
 
 /// 基于 rhttp (Rust reqwest) 的 Dio 适配器。
 ///
-/// 直连 HTTPS 的可安全重放请求优先探测 HTTP/3/QUIC；成功后按 host 记忆，
+/// 直连 HTTPS 的安全幂等请求基于 Alt-Svc 探测 HTTP/3/QUIC；按 origin 记忆，
 /// 失败则立即回退 HTTP/2/1.1 并短期熔断 H3，避免 UDP 被阻断时反复等待。
 /// 代理/本地中转仍使用普通 HTTP/2/1.1 链路。
 class RhttpAdapter implements HttpClientAdapter {
@@ -54,6 +54,7 @@ class RhttpAdapter implements HttpClientAdapter {
 
     final baseConfig = await _prepareClientConfig(options.uri.host);
     final shouldTryHttp3 = _shouldTryHttp3(options, requestStream, baseConfig);
+    final http3Origin = _http3OriginKey(options.uri);
 
     if (shouldTryHttp3) {
       final http3Config = baseConfig.withHttpVersion(
@@ -68,13 +69,13 @@ class RhttpAdapter implements HttpClientAdapter {
         );
         if (response.version == rhttp.HttpVersion.http3 &&
             response.responseBody.statusCode >= 200) {
-          _markHttp3Success(baseConfig.host);
+          _markHttp3Success(http3Origin);
         } else {
           // A forced H3 probe might negotiate HTTP/2 or expose Cloudflare's
           // 103 Early Hints as a premature response. Neither proves a usable
           // HTTP/3 API connection; back off subsequent H3 probes. The existing
           // recovery coordinator owns any necessary replay of the 103.
-          _markHttp3Failure(baseConfig.host);
+          _markHttp3Failure(http3Origin);
         }
         _markConfigSuccess(http3Config, response.remoteIp);
         return response.responseBody;
@@ -82,7 +83,7 @@ class RhttpAdapter implements HttpClientAdapter {
         if (!_canFallbackFromHttp3(error)) {
           rethrow;
         }
-        _markHttp3Failure(baseConfig.host);
+        _markHttp3Failure(http3Origin);
         debugPrint(
           '[DIO] RhttpAdapter HTTP/3 failed for ${baseConfig.host}; '
           'falling back to HTTP/2/1.1: $error',
@@ -113,7 +114,7 @@ class RhttpAdapter implements HttpClientAdapter {
       );
       _markConfigSuccess(config, response.remoteIp);
       if (response.responseBody.statusCode >= 200) {
-        _observeHttp3Advertisement(config.host, response.responseBody.headers);
+        _observeHttp3Advertisement(options.uri, response.responseBody.headers);
       }
       return response.responseBody;
     } catch (error) {
@@ -146,7 +147,7 @@ class RhttpAdapter implements HttpClientAdapter {
       _markConfigSuccess(retryConfig, response.remoteIp);
       if (response.responseBody.statusCode >= 200) {
         _observeHttp3Advertisement(
-          retryConfig.host,
+          options.uri,
           response.responseBody.headers,
         );
       }
@@ -179,13 +180,14 @@ class RhttpAdapter implements HttpClientAdapter {
       return false;
     }
 
-    final capability = _http3Capabilities[config.host];
+    final originKey = _http3OriginKey(options.uri);
+    final capability = _http3Capabilities[originKey];
     // RFC 7838: wait for a server Alt-Svc advertisement instead of
     // speculatively attempting QUIC against every new host. A failed H3
     // connection can otherwise delay the first request by several seconds.
     if (capability == null) return false;
     if (!DateTime.now().isBefore(capability.expiresAt)) {
-      _http3Capabilities.remove(config.host);
+      _http3Capabilities.remove(originKey);
       return false;
     }
     return capability.supported;
@@ -242,28 +244,33 @@ class RhttpAdapter implements HttpClientAdapter {
   }
 
   void _observeHttp3Advertisement(
-    String host,
+    Uri origin,
     Map<String, List<String>> headers,
   ) {
-    if (host.isEmpty) return;
+    // HTTP Alt-Svc is not an authenticated policy source. A probe only makes
+    // sense for the same HTTPS origin/port that served the advertisement.
+    if (origin.scheme != 'https' || origin.host.isEmpty) return;
+    final originKey = _http3OriginKey(origin);
     if (http3AltSvcCleared(headers) || http3AltSvcRevoked(headers)) {
-      _http3Capabilities.remove(host);
+      _http3Capabilities.remove(originKey);
       return;
     }
-    if (!http3AltSvcAdvertised(headers)) return;
+    if (!http3AltSvcAdvertised(headers, originPort: origin.port)) return;
 
-    final previous = _http3Capabilities[host];
+    final previous = _http3Capabilities[originKey];
     // Respect an active failure backoff even if the server keeps advertising H3.
     if (previous != null &&
         !previous.supported &&
         DateTime.now().isBefore(previous.expiresAt)) {
       return;
     }
-    _http3Capabilities[host] = _Http3Capability(
+    _http3Capabilities[originKey] = _Http3Capability(
       supported: true,
       expiresAt: DateTime.now().add(_http3SuccessTtl),
     );
   }
+
+  String _http3OriginKey(Uri uri) => '${uri.host.toLowerCase()}:${uri.port}';
 
   Future<_RhttpDelegate> _ensureDelegate(_PreparedClientConfig config) {
     final settingsVersion = _networkSettings.version;
@@ -553,13 +560,25 @@ bool requestCanProbeRhttpHttp3(
 /// Server advertisement is a hint to *probe*, never proof of a negotiated H3
 /// connection. Only authenticated origin response headers are observed.
 @visibleForTesting
-bool http3AltSvcAdvertised(Map<String, List<String>> headers) {
+bool http3AltSvcAdvertised(
+  Map<String, List<String>> headers, {
+  int originPort = 443,
+}) {
   for (final header in headers.entries) {
     if (header.key.toLowerCase() != 'alt-svc') continue;
     for (final value in header.value) {
       for (final candidate in value.split(',')) {
         final alternative = candidate.trim().toLowerCase();
         if (!RegExp(r'^h3\s*=').hasMatch(alternative)) continue;
+        // This reqwest path connects to the original origin. It cannot route
+        // an Alt-Svc authority on another host or port without explicit
+        // support for that alternative endpoint.
+        final authority = RegExp(r'^h3\s*=\s*"(:[0-9]+)"')
+            .firstMatch(alternative);
+        if (authority == null ||
+            authority.group(1) != ':$originPort') {
+          continue;
+        }
         if (RegExp(r'(?:^|;)\s*ma\s*=\s*"?0"?\s*(?:;|$)')
             .hasMatch(alternative)) {
           continue;
