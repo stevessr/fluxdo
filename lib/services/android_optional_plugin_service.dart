@@ -39,9 +39,15 @@ class AndroidOptionalPluginService {
     return plugins;
   }
 
-  Future<bool> launch(String id) async {
+  Future<bool> launch(
+    String id, {
+    Map<String, dynamic> payload = const {},
+  }) async {
     if (!supported) return false;
-    return await _channel.invokeMethod<bool>('launch', {'id': id}) ?? false;
+    return await _channel.invokeMethod<bool>('launch', {
+      'id': id,
+      'payload': payload,
+    }) ?? false;
   }
 
   Future<Map<String, dynamic>> invoke(
