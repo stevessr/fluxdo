@@ -7,6 +7,59 @@ import 'package:fluxdo/services/network/cookie/app_cookie_manager.dart';
 import 'package:fluxdo/services/network/cookie/cookie_jar_service.dart';
 
 void main() {
+  group('cross-origin redirected Set-Cookie isolation', () {
+    test('foreign response cannot revoke login or Cloudflare cookies',
+        () async {
+      final jar = CookieJar();
+      final forum = Uri.parse('https://linux.do/');
+      final foreign = Uri.parse('https://untrusted.example/final');
+      await jar.saveFromResponse(forum, [
+        Cookie('_t', 'live-forum-token')..path = '/',
+        Cookie('cf_clearance', 'live-cf-token')..path = '/',
+      ]);
+      final manager = AppCookieManager(jar);
+      await manager.saveCookies(
+        Response<void>(
+          requestOptions: RequestOptions(
+            path: foreign.toString(),
+            extra: const {'_fluxCrossOriginRedirect': true},
+          ),
+          statusCode: 200,
+          headers: Headers.fromMap({
+            HttpHeaders.setCookieHeader: [
+              '_t=del; Path=/',
+              '_forum_session=del; Path=/',
+              'cf_clearance=malicious; Path=/',
+              'linux_do_credit_session_id=malicious; Path=/',
+            ],
+          }),
+        ),
+      );
+
+      final forumCookies = await jar.loadForRequest(forum);
+      expect(
+        forumCookies.where((cookie) => cookie.name == '_t').single.value,
+        'live-forum-token',
+      );
+      expect(
+        forumCookies
+            .where((cookie) => cookie.name == 'cf_clearance')
+            .single
+            .value,
+        'live-cf-token',
+      );
+      final foreignCookies = await jar.loadForRequest(foreign);
+      expect(
+        foreignCookies.where(
+          (cookie) => CookieJarService.criticalCookieNames.contains(
+            cookie.name,
+          ),
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   group('AppCookieManager.loadCookies', () {
     test('忽略 RequestOptions 上残留的旧 Cookie 头，始终使用 CookieJar 最新值', () async {
       final jar = CookieJar();
