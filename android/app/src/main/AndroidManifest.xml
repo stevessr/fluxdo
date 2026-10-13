@@ -180,6 +180,7 @@
         <package android:name="com.github.lingyan000.fluxdo.plugin.sticker" />
         <package android:name="com.github.lingyan000.fluxdo.plugin.cdk" />
         <package android:name="com.github.lingyan000.fluxdo.plugin.ldc" />
+        <package android:name="com.github.lingyan000.fluxdo.plugin.ldc_reward" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
