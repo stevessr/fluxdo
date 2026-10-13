@@ -45,7 +45,17 @@ void main() {
 
   test('invalid HSTS and IP-localhost policies are ignored', () {
     final policy = HttpsSecurityPolicy();
-    const domains = ['localhost', '127.0.0.1', '[::1]'];
+    const domains = [
+      'localhost',
+      'sub.localhost',
+      '127.0.0.1',
+      '127.1',
+      '[::1]',
+      '[::ffff:127.0.0.1]',
+      'example..org',
+      '-bad.example.org',
+      'bad-.example.org',
+    ];
     for (final domain in domains) {
       policy.observe(Uri.parse('https://$domain/'), st);
       expect(policy.upgrade(Uri.parse('http://$domain/')).scheme, 'http');
