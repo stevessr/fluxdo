@@ -94,7 +94,12 @@ class RedirectInterceptor extends Interceptor {
 
     final headers = Map<String, dynamic>.from(source.headers);
     // The cookie manager must select cookies for the destination URL again.
-    _removeHeaders(headers, const {'cookie'});
+    // Validators (ETag / Last-Modified) are scoped to the original target;
+    // even an intra-origin redirect can resolve to an unrelated resource.
+    _removeHeaders(headers, const {
+      'cookie', 'if-none-match', 'if-modified-since', 'if-match',
+      'if-unmodified-since',
+    });
     final isMultipartReplay = replayBody && source.data is FormData;
     if (switchToGet) {
       _removeHeaders(headers, const {
@@ -125,6 +130,10 @@ class RedirectInterceptor extends Interceptor {
     final extra = crossOrigin
         ? _crossOriginRequestExtras(source.extra)
         : Map<String, dynamic>.from(source.extra);
+    // Avoid expanding a destination 304 against the original URL's cached
+    // representation. This applies to same-origin redirects as well.
+    extra.remove('_fluxHttpRevalidationEntry');
+    extra.remove('_fluxHttpRevalidationKey');
     extra[FluxRequestKeys.skipScheduler] = true;
     extra[_redirectCountKey] = redirectCount + 1;
     if (crossOrigin) {
