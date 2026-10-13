@@ -159,7 +159,7 @@ def verify_sources(stage: Path) -> None:
     for source in (stage / "lib").rglob("*.dart"):
         body = source.read_text(encoding="utf-8")
         for declaration in re.finditer(
-            r"\\b(?:import|export|part)\\s+['\\\"]([^'\\\"]+\\.dart)['\\\"]",
+            r"""(?m)^[ ]*(?:import|export|part)[ ]+['"]([^'"]+[.]dart)['"]""",
             body,
         ):
             uri = declaration.group(1)
