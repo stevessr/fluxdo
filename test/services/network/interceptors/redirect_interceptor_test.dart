@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -249,6 +250,34 @@ void main() {
     dio.close(force: true);
   });
 
+  test('307/308 multipart redirect replays actual uploaded file bytes',
+      () async {
+    for (final code in [307, 308]) {
+      final adapter = _CapturedMultipartAdapter(code);
+      final dio = Dio(BaseOptions(
+        baseUrl: 'https://linux.do',
+        validateStatus: (status) => status != null && status < 400,
+      ))..httpClientAdapter = adapter;
+      dio.interceptors.add(RedirectInterceptor(dio));
+
+      final payload = FormData.fromMap({
+        'note': 'keep-this-field',
+        'upload': MultipartFile.fromBytes(
+          utf8.encode('file-payload-that-must-survive'),
+          filename: 'sample.txt',
+        ),
+      });
+      await dio.post<void>('/upload', data: payload);
+      expect(adapter.payloads, hasLength(2));
+      for (final body in adapter.payloads) {
+        expect(body, contains('keep-this-field'));
+        expect(body, contains('file-payload-that-must-survive'));
+        expect(body, contains('sample.txt'));
+      }
+      dio.close(force: true);
+    }
+  });
+
   test('HTTPS downgrade and cross-origin body forwarding are rejected', () async {
     final insecure = _ScenarioAdapter(302, 'http://linux.do/plain');
     final dio = _redirectDio(insecure);
@@ -351,6 +380,39 @@ class _ScenarioAdapter implements HttpClientAdapter {
     if (seen.length == 1) {
       return ResponseBody.fromString('', statusCode, headers: {
         'location': [location],
+      });
+    }
+    return ResponseBody.fromString('{"ok":true}', 200, headers: {
+      Headers.contentTypeHeader: ['application/json'],
+    });
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _CapturedMultipartAdapter implements HttpClientAdapter {
+  _CapturedMultipartAdapter(this.statusCode);
+
+  final int statusCode;
+  final List<String> payloads = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final chunks = <int>[];
+    if (requestStream != null) {
+      await for (final bytes in requestStream) {
+        chunks.addAll(bytes);
+      }
+    }
+    payloads.add(utf8.decode(chunks));
+    if (payloads.length == 1) {
+      return ResponseBody.fromString('', statusCode, headers: {
+        'location': ['/upload-destination'],
       });
     }
     return ResponseBody.fromString('{"ok":true}', 200, headers: {
