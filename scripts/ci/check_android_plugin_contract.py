@@ -60,6 +60,16 @@ def main() -> None:
     check(re.search(r"const val VERSION\s*=\s*" + VERSION + r"\b", protocol) is not None,
           "Unexpected plugin wire protocol version")
     check('include(":plugin_api")' in settings, "Missing Gradle plugin_api module")
+    check('include(":plugin_web_session")' in settings,
+          "Missing LDC/CDK-only WebView session library")
+    for companion in ("plugin_ldc", "plugin_cdk"):
+        deps = (ROOT / f"android/{companion}/build.gradle.kts").read_text()
+        check('implementation(project(":plugin_web_session"))' in deps,
+              f"{companion}: WebView isolation must be compiled inside companion APK")
+    host_gradle = (ROOT / "android/app/build.gradle.kts").read_text()
+    check('implementation(project(":plugin_web_session"))' not in host_gradle,
+          "WebView session code leaked into Core's dependencies")
+
 
     for module, (package, service_name) in PLUGINS.items():
         check(f'include(":{module}")' in settings, f"Missing Gradle {module}")
@@ -90,7 +100,7 @@ def main() -> None:
 
     # LDC/CDK host account switches must not reuse the previous app's
     # authenticated WebView session. No cookie/token may cross the APK IPC.
-    web_session = (ROOT / "android/plugin_api/src/main/kotlin/com/github/"
+    web_session = (ROOT / "android/plugin_web_session/src/main/kotlin/com/github/"
                    "lingyan000/fluxdo/plugin/web_session/PluginWebSession.kt").read_text()
     account_host = (ROOT / "lib/services/android_optional_plugin_service.dart").read_text()
     metaverse_overlay = (ROOT / "android_modular/core_overlay/lib/pages/metaverse_page.dart").read_text()
