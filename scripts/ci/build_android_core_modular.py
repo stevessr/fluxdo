@@ -151,10 +151,33 @@ def verify_sources(stage: Path) -> None:
         assert "CdkOAuthService" not in staged
         assert "MediaQuery" not in staged or rel.endswith("metaverse_page.dart")
 
-    # No dangling direct imports from staged source into files we remove.
-    # A strong import-graph check is applied separately by CI and compilation.
-    for rel in EXCLUDED_DART:
-        assert rel not in manifest
+    # Fail before Flutter compilation if the staged code still imports an
+    # implementation which was physically removed. Check imports/exports/parts
+    # including conditional and package:fluxdo imports; do not rely on
+    # Platform.isAndroid tree shaking.
+    missing = []
+    for source in (stage / "lib").rglob("*.dart"):
+        body = source.read_text(encoding="utf-8")
+        for declaration in re.finditer(
+            r"\\b(?:import|export|part)\\s+['\\\"]([^'\\\"]+\\.dart)['\\\"]",
+            body,
+        ):
+            uri = declaration.group(1)
+            if uri.startswith("dart:") or uri.startswith("package:flutter/"):
+                continue
+            if uri.startswith("package:fluxdo/"):
+                target = stage / "lib" / uri[len("package:fluxdo/"):]
+            elif uri.startswith("package:") or uri.startswith("http"):
+                continue
+            else:
+                target = source.parent / uri
+            if not target.is_file():
+                missing.append(f"{source.relative_to(stage)} -> {uri}")
+    if missing:
+        raise RuntimeError(
+            "Broken Dart import graph in Android Core:\\n" +
+            "\\n".join(missing[:30])
+        )
 
 
 def check_apk(apk: Path) -> None:
