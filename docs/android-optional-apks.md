@@ -263,3 +263,53 @@ CI 另外产生 `build/android_modular_sizes.md`，列出 **Core 独立安装体
    或更新流量最优。
 3. CDK/LDC 旧余额卡片的功能等价迁移以及 LDC Reward 的支付功能迁移。
 4. 以上任一门禁未完成：PR 必须维持 Draft，不进入正式发布。
+
+## 第五阶段：Sticker 移除根包依赖（本轮）
+
+**已经不再使用** `flutter: fluxdo: path: ../..` 这种整个应用的
+path dependency。Sticker 现在有 Android-only 的极简 Flutter pubspec，
+见 `android_companions/sticker/pubspec.yaml`。
+
+- 根项目的生成器代码**仍是跨平台唯一的源文件**；编译独立 Sticker 时，
+  `scripts/ci/build_sticker_companion.py` 根据固定的
+  `DRAWING_SOURCES` / `DRAWING_TREES` 清单，只复制
+  StevessrGeneratorPage、RenderParams、画布、绘制/导出引擎、角色 delta
+  还原、分块截图、生成的 Slang 翻译文件等必要源码。
+  这样不必维护两份绘图算法，也不会通过 Dart package 导入主程序的
+  Discourse / Dio / Riverpod / 聊天 / 系统通知模块。
+- 生成器原有 `ShareUtils`、`ImageSaveUtils`、
+  `ToastService`、`navigatorKey` 使用
+  `android_companions/sticker/shims/lib` 的独立小型 Android 适配器。
+  文件保存走系统 SAF 或相册插件；分享走 share_plus。
+  导出质量和格式仍由原绘制引擎决定。
+- Android/Flutter 插件依赖严格限制在
+  Flutter、flutter_localizations、slang、intl、file_picker、
+  flutter_avif、image、cross_file、path_provider、share_plus、gal。
+  与主项目不同的是：构建脚本不再从应用依赖解析大批 Android 插件。
+- `python3 scripts/ci/check_sticker_isolation.py` 会在 Flutter
+  编译前检查源码完整性、所有相对 import/export/part、第三方依赖白名单
+  和无 `fluxdo` package import。
+  构建后还检查 `pubspec.lock` 没有 `fluxdo`，Flutter 自动生成的
+  Android plugin registry 只包含绘图所需原生插件，且 APK 未混入主站证书、
+  cook、polyfill、AI 资源。
+- 生成与主 App 完全相同的签名；FlutterAVIF 重复 Java/Kotlin 类、
+  JDK17 编译目标这两项 Android 原生插件兼容补丁在独立工程中独立处理。
+  移除插件专有 Activity 的系统 LAUNCHER 图标，仅接受同签名宿主启动。
+- `build/plugin_sticker/sticker-dependencies-<ABI>-<mode>.md` 自动记录
+  **实际解析的 Dart package 数、注册的 Android native plugin 数和
+  Sticker APK 体积**，并追加到 Android release CI 的运行摘要。
+  不能在 CI 未运行的情况下伪称节省了具体多少 MB。
+- `android/build.gradle.kts` 允许原生 `:plugin_*`
+  Gradle 工程不再强制 `evaluationDependsOn(":app")`，单独构建 APK
+  时不必等待完整 Flutter Core 项目评估。
+
+详见 `android_companions/sticker/README.md`。
+
+### 待确认
+
+Android 调试/发布 APK 仍需运行 Flutter/Gradle 构建与真机验证。
+新的 Android-only 的保存/分享适配器需要重点检查 WebP/AVIF/SVG 保存、
+透明 PNG、文件类型、权限及 SAF 返回状态是否与旧内嵌版一致。
+
+此阶段只精简**独立 Sticker**的依赖树。Core 使用的 AVIF、图片解码和
+文件处理依赖在其他功能仍可能需要，不能为了减少声明行数随意删除。
