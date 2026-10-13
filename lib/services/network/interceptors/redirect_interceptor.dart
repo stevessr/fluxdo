@@ -73,7 +73,13 @@ class RedirectInterceptor extends Interceptor {
       return;
     }
 
-    final redirectCount = source.extra[_redirectCountKey] as int? ?? 0;
+    // Request extras may originate from plugins/callers. Never allow an
+    // unexpected extra type to crash an asynchronous response interceptor.
+    final rawRedirectCount = source.extra[_redirectCountKey];
+    final redirectCount =
+        rawRedirectCount is int && rawRedirectCount > 0
+            ? rawRedirectCount
+            : 0;
     if (redirectCount >= _maxRedirects) {
       handler.reject(_redirectError(response, 'Too many redirects ($_maxRedirects)'));
       return;
@@ -166,14 +172,17 @@ class RedirectInterceptor extends Interceptor {
       extra[FluxRequestKeys.noRecovery] = true;
     }
 
-    final data = replayBody
-        ? (source.data is FormData
-              ? (source.data as FormData).clone()
-              : source.data)
-        : null;
-
     debugPrint('[Dio] Redirect $code -> ${destination.scheme}://${destination.host}');
     try {
+      // Cloning a multipart body can throw (for example when a file part
+      // cannot be replayed). Handle that as a DioException rather than
+      // abandoning the response interceptor's handler and hanging the caller.
+      final data = replayBody
+          ? (source.data is FormData
+                ? (source.data as FormData).clone()
+                : source.data)
+          : null;
+
       // Dio.request() would merge BaseOptions.headers *again*, silently
       // reinstating Authorization / Cookie / custom secrets on an external
       // origin after our allowlist stripped them. Dio.fetch(RequestOptions)
