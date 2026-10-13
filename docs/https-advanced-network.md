@@ -30,12 +30,27 @@ The JSONL network log records `httpVersion` only when the adapter actually suppl
 ## Verification
 
 ```sh
-flutter pub get
+mkdir -p assets/certs assets/images/llm
+flutter pub get --enforce-lockfile
 dart run tool/gen_l10n.dart
+dart format --output=none --set-exit-if-changed \
+  lib/services/network/adapters/platform_adapter.dart \
+  lib/services/network/adapters/rhttp_adapter.dart \
+  lib/services/network/interceptors/https_security_interceptor.dart \
+  lib/services/network/interceptors/redirect_interceptor.dart \
+  lib/services/network/interceptors/network_log_interceptor.dart \
+  test/services/network/adapters/rhttp_adapter_test.dart \
+  test/services/network/interceptors/https_security_interceptor_test.dart \
+  test/services/network/interceptors/redirect_interceptor_test.dart \
+  test/services/network/request_tag_logging_test.dart
 flutter analyze lib/services/network test/services/network
-flutter test test/services/network
+dart tool/flutterw.dart test test/services/network
 ```
 
 The network redirect regression suite includes in-memory adapters that fully consume multipart upload streams on both 307 and 308, verifying bytes survive the replay. HTTP-version diagnostics accept `http_version` (rhttp) and `httpVersion` (Dio IO adapter) while keeping `Alt-Svc` hints separate.
 
-The PR-specific `.github/workflows/https-advanced-network.yml` uses Flutter 3.47.4 from `.fvmrc` and runs **independent** `format` and `verify` jobs, so formatting errors do not hide analyzer/test failures. The verification job restores locked dependencies and runs focused analysis, protocol/security tests and network regressions through the repository's `tool/flutterw.dart` test entrypoint. Browser TLS fingerprint, ECH, and compression features should be tested on a real device/network per adapter. HTTP/3 support cannot be demonstrated by a successful HTTP/2 response that merely contains Alt-Svc.
+The PR-specific `.github/workflows/https-advanced-network.yml` uses Flutter 3.47.4 from `.fvmrc` and runs **independent** `format`, `analyze`, and `test` jobs, so formatting or analysis errors do not suppress the other results. Each code-verification job restores locked dependencies; tests run through the repository's `tool/flutterw.dart` entrypoint. Browser TLS fingerprint, ECH, and compression features should be tested on a real device/network per adapter. HTTP/3 support cannot be demonstrated by a successful HTTP/2 response that merely contains Alt-Svc.
+
+## Current CI visibility blocker
+
+As of the latest PR review, GitHub returned **zero workflow runs and zero check runs** on this branch despite repeated pushes, so none of the code changes or tests are confirmed by CI yet. The workflow declares `push`, `pull_request`, and `workflow_dispatch` triggers; the cause of missing runs is not established. Check the repository's Actions settings, runner/usage status, and any event restrictions on app-authored commits; do **not** merge purely because GitHub reports the PR as mergeable. A local checkout of this PR branch can run the exact commands above without relying on Actions. In addition to these unit tests, verify login, normal uploads, 307/308 replay, Cloudflare 103, proxy fallback and browser/Wasm builds on applicable real targets.
