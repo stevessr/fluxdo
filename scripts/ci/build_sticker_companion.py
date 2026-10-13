@@ -155,7 +155,7 @@ def setup_project(target: Path, mode: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["debug", "release"], default="debug")
-    parser.add_argument("--abi", choices=["android-arm", "android-arm64", "android-x64"],
+    parser.add_argument("--abi", choices=["android-arm", "android-arm64", "android-x64", "universal"],
                         default="android-arm64")
     parser.add_argument("--version-code", type=int)
     parser.add_argument("--version-name")
@@ -166,8 +166,12 @@ def main() -> None:
         target = Path(temp) / "sticker"
         setup_project(target, args.mode)
         execute("flutter", "pub", "get", cwd=target)
+        flutter_abis = (
+            "android-arm,android-arm64,android-x64"
+            if args.abi == "universal" else args.abi
+        )
         command = ["flutter", "build", "apk", "--" + args.mode,
-                   "--target-platform", args.abi, "--no-pub"]
+                   "--target-platform", flutter_abis, "--no-pub"]
         if args.version_code is not None:
             command += ["--build-number", str(args.version_code)]
         if args.version_name:
