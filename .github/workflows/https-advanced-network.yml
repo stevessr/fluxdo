@@ -39,19 +39,19 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.5'
+          flutter-version: '3.47.4' # Match .fvmrc (keep in sync)
           cache: true
 
       - name: Prepare generated asset directories
         run: mkdir -p assets/certs assets/images/llm
 
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Restore locked dependencies
+        run: flutter pub get --enforce-lockfile
 
       - name: Generate localization
         run: dart run tool/gen_l10n.dart
 
-      - name: Format HTTPS implementation and tests
+      - name: Check formatting and whitespace
         run: |
           dart format \
             lib/services/network/discourse_dio.dart \
