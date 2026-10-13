@@ -280,6 +280,29 @@ def setup_project(target: Path, mode: str) -> None:
     build_script = root_gradle.read_text()
     if "patchStandaloneStickerAvifRedeclaration" not in build_script:
         build_script += """
+// Flutter native plugin Kotlin and Java toolchains must agree on JVM 17;
+// the host build does the same to avoid compile task target mismatches.
+subprojects {
+    afterEvaluate {
+        tasks.withType<JavaCompile>().configureEach {
+            sourceCompatibility = "17"
+            targetCompatibility = "17"
+        }
+        tasks.matching {
+            it.name.startsWith("compile") && it.name.endsWith("Kotlin")
+        }.configureEach {
+            try {
+                val kotlinOptions = javaClass.getMethod("getKotlinOptions")
+                    .invoke(this)
+                kotlinOptions.javaClass.getMethod("setJvmTarget", String::class.java)
+                    .invoke(kotlinOptions, "17")
+            } catch (_: Exception) {
+                // Not all plugins use the legacy Kotlin task interface.
+            }
+        }
+    }
+}
+
 // flutter_avif_android 3.1.0 still contains both Java and Kotlin plugin
 // classes under the same name; use the same fix as FluxDO Core.
 subprojects {
