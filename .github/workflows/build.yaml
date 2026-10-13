@@ -277,6 +277,7 @@ jobs:
           cp build/plugin_ldc/outputs/apk/release/plugin_ldc-release.apk dist/fluxdo-plugin-ldc.apk
           cp build/plugin_ldc_reward/outputs/apk/release/plugin_ldc_reward-release.apk dist/fluxdo-plugin-ldc-reward.apk
           cp build/plugin_sticker/fluxdo-sticker-${{ matrix.flutter-target }}-release.apk dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
+          cat build/plugin_sticker/sticker-dependencies-${{ matrix.flutter-target }}-release.md >> "${GITHUB_STEP_SUMMARY}"
           python3 scripts/ci/check_android_apk_contract.py \
             --core dist/fluxdo-${{ matrix.arch }}.apk \
             --plugin deviceinfo dist/fluxdo-plugin-deviceinfo.apk \
