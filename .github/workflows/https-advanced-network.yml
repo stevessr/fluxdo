@@ -1,0 +1,80 @@
+name: HTTPS Advanced Network
+
+on:
+  pull_request:
+    paths:
+      - 'lib/services/network/adapters/**'
+      - 'lib/services/network/interceptors/**'
+      - 'lib/services/network/discourse_dio.dart'
+      - 'test/services/network/**'
+      - '.github/workflows/https-advanced-network.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: https-advanced-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs assets/images/llm
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+
+      - name: Format HTTPS implementation and tests
+        run: |
+          dart format \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/adapters/platform_adapter.dart \
+            lib/services/network/adapters/rhttp_adapter.dart \
+            lib/services/network/interceptors/https_security_interceptor.dart \
+            lib/services/network/interceptors/redirect_interceptor.dart \
+            lib/services/network/interceptors/network_log_interceptor.dart \
+            test/services/network/interceptors/https_security_interceptor_test.dart \
+            test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/request_tag_logging_test.dart
+          git diff --check
+
+      - name: Static analysis of HTTPS changes
+        run: |
+          flutter analyze \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/adapters/platform_adapter.dart \
+            lib/services/network/adapters/rhttp_adapter.dart \
+            lib/services/network/interceptors/https_security_interceptor.dart \
+            lib/services/network/interceptors/redirect_interceptor.dart \
+            lib/services/network/interceptors/network_log_interceptor.dart \
+            test/services/network/interceptors/https_security_interceptor_test.dart \
+            test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/request_tag_logging_test.dart
+
+      - name: HTTPS security and transport diagnostics tests
+        run: |
+          flutter test \
+            test/services/network/interceptors/https_security_interceptor_test.dart \
+            test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/request_tag_logging_test.dart \
+            test/services/network/adapters/rhttp_adapter_test.dart
+
+      - name: Network regression tests
+        run: flutter test test/services/network
