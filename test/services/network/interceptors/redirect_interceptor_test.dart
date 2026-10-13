@@ -97,6 +97,49 @@ void main() {
     dio.close(force: true);
   });
 
+  test('BaseOptions credentials are not reintroduced on a foreign origin',
+      () async {
+    final adapter = _ScenarioAdapter(
+      302,
+      'https://external.example/resource?one=1',
+    );
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://linux.do',
+      headers: {
+        'Authorization': 'Bearer from-global-defaults',
+        'Cookie': '_t=from-global-defaults',
+        'Api-Key': 'from-global-defaults',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Custom-Secret': 'private-default',
+        'Accept': 'application/json',
+      },
+      validateStatus: (status) => status != null && status < 400,
+    ))..httpClientAdapter = adapter;
+    dio.interceptors.add(RedirectInterceptor(dio));
+
+    await dio.get<void>('/private?old=1', queryParameters: {'page': 2});
+    expect(adapter.seen, hasLength(2));
+    final redirected = adapter.seen.last;
+    expect(
+      redirected.uri.toString(),
+      'https://external.example/resource?one=1',
+    );
+    final sentHeaders = redirected.headers.keys
+        .map((name) => name.toLowerCase())
+        .toSet();
+    for (final secret in [
+      'authorization',
+      'cookie',
+      'api-key',
+      'x-requested-with',
+      'x-custom-secret',
+    ]) {
+      expect(sentHeaders, isNot(contains(secret)));
+    }
+    expect(redirected.headers['Accept'], 'application/json');
+    dio.close(force: true);
+  });
+
   test('cross-origin redirects discard private cache and cookie metadata',
       () async {
     final adapter = _ScenarioAdapter(302, 'https://other.example/final');
