@@ -39,7 +39,13 @@ void showLdcRewardSheet(BuildContext context, RewardTargetInfo target) {
         FilledButton(
           onPressed: () async {
             try {
-              await AndroidOptionalPluginService.instance.launch('ldc');
+              await AndroidOptionalPluginService.instance.launch(
+                'ldc_reward',
+                payload: {
+                  'username': target.username,
+                  'userId': target.userId,
+                },
+              );
               if (context.mounted) Navigator.of(context).pop();
             } catch (error) {
               if (!context.mounted) return;
