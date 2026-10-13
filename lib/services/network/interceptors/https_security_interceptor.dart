@@ -24,7 +24,7 @@ class HttpsSecurityPolicy {
   static const int _maxHosts = 128;
   // Serialized 128-host policy records are well below this budget. Reject
   // unexpectedly large/corrupt local storage before JSON parsing at startup.
-  static const int _maxSerializedLength = 32 * 1024;
+  static const int _maxSerializedLength = 64 * 1024;
   static const int _maxAgeSeconds = 2 * 365 * 24 * 60 * 60;
   static final RegExp _dnsLabelPattern = RegExp(r'^[a-z0-9-]+
 
