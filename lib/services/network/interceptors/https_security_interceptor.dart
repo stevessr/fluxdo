@@ -295,14 +295,21 @@ class HttpsSecurityInterceptor extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    _policy.observe(response.requestOptions.uri, response.headers);
+    // Informational 1xx responses, including Cloudflare 103 Early Hints,
+    // must not alter transport security policy.
+    if ((response.statusCode ?? 0) >= 200) {
+      _policy.observe(response.requestOptions.uri, response.headers);
+    }
     handler.next(response);
   }
 
   @override
   void onError(DioException error, ErrorInterceptorHandler handler) {
     final response = error.response;
-    if (response != null) {
+    // A rejected certificate is NOT an authenticated HTTPS response.
+    if (error.type != DioExceptionType.badCertificate &&
+        response != null &&
+        (response.statusCode ?? 0) >= 200) {
       _policy.observe(error.requestOptions.uri, response.headers);
     }
     handler.next(error);
