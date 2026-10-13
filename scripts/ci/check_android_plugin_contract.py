@@ -114,53 +114,23 @@ def main() -> None:
         check(feature in web_session, f"WebView account isolation missing: {feature}")
     check('Intent.FLAG_ACTIVITY_CLEAR_TASK' in host,
           "Companion launches must clear previously authenticated Activity task")
-    check('account_slot' in host and 'accountSlot' in host and '^[0-9a-f]{64}
-    sticker_host = (ROOT / "android/app/src/main/kotlin/com/github/"
-                    "lingyan000/fluxdo/StickerCompanionChannel.kt").read_text()
-    sticker_native = (ROOT / "android_companions/sticker/StickerActivity.kt").read_text()
-    sticker_builder = (ROOT / "scripts/ci/build_sticker_companion.py").read_text()
-    check(MAIN_PACKAGE + ".plugin.sticker" in queried,
-          "Missing sticker package visibility")
-    check("PackageManager.SIGNATURE_MATCH" in sticker_host,
-          "Sticker host must validate same signer")
-    check('"$PACKAGE.files"' in sticker_host, "Sticker URI authority not validated")
-    check("FileProvider.getUriForFile" in sticker_native,
-          "Sticker companion must export grantable content URIs")
-    check("android/key.properties" in sticker_builder,
-          "Sticker release signer must refer to main keystore")
-    for name in ("cdk", "ldc", "ldc_reward"):
-        entry = (ROOT / f"android/plugin_{name}/src/main/AndroidManifest.xml")
-        root = ET.parse(entry).getroot()
-        activities = root.findall("./application/activity")
-        check(len(activities) == 1 and
-              attr(activities[0], "permission") == PERMISSION and
-              attr(activities[0], "exported") == "true",
-              f"{name}: companion Activity must require same-signature permission")
-
-    print("Android optional APK contract: OK (five native modules + Flutter sticker companion, signed IPC, protocol v1)")
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (AssertionError, OSError, ET.ParseError) as error:
-        print(f"Android optional APK contract: FAILED: {error}", file=sys.stderr)
-        sys.exit(1)
- in host,
-          "Host must pass only validated opaque account slots")
-    for feature in ('sessionSlotForUsername', 'sha256.convert'):
+    check(
+        "'account_slot'" in host and "'accountSlot'" in host and
+        "^[0-9a-f]{64}$" in host,
+        "Host must pass only validated opaque account slots",
+    )
+    for feature in ("sessionSlotForUsername", "sha256.convert"):
         check(feature in account_host,
               f"Flutter account partition hashing missing: {feature}")
-    check('sessionSlotForUsername' in metaverse_overlay and
-          'sessionSlotForUsername' in plugin_manager,
+    check("sessionSlotForUsername" in metaverse_overlay and
+          "sessionSlotForUsername" in plugin_manager,
           "Metaverse launches must receive current account slot")
     for name in ("cdk", "ldc"):
         activity = (ROOT / f"android/plugin_{name}/src/main/kotlin/com/github/"
                     f"lingyan000/fluxdo/plugin/{name}/{name.capitalize()}Activity.kt").read_text()
-        check('PluginWebSession.load(' in activity and 'account_slot' in activity,
+        check("PluginWebSession.load(" in activity and "account_slot" in activity,
               f"{name}: must clear old WebView profile before loading site")
 
-    # Activity-based companions use the same allowlist/signature boundary.
     sticker_host = (ROOT / "android/app/src/main/kotlin/com/github/"
                     "lingyan000/fluxdo/StickerCompanionChannel.kt").read_text()
     sticker_native = (ROOT / "android_companions/sticker/StickerActivity.kt").read_text()
