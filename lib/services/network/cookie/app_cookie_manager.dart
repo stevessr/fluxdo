@@ -539,6 +539,14 @@ class AppCookieManager extends Interceptor {
     final filteredSetCookieHeaders = <String>[];
     for (var i = 0; i < cookies.length; i++) {
       final cookie = cookies[i];
+      if (response.requestOptions.spec.isCrossOriginRedirect &&
+          SessionCookieSentinel.criticalCookieNames.contains(cookie.name)) {
+        // An external redirect target cannot rotate/revoke canonical forum
+        // login, Cloudflare, or LDC cookies. Without this, a foreign
+        // Set-Cookie: _t=del could reach deleteCookie()/WV sweep globally.
+        // Ordinary destination-scoped cookies remain eligible for the jar.
+        continue;
+      }
       if (isCfChallengePlatform && !_isCloudflareCookieName(cookie.name)) {
         debugPrint(
           '[CookieManager] drop non-CF cookie from challenge-platform response: '
