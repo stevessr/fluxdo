@@ -60,7 +60,9 @@ class PreloadedDataService {
   /// 表情配置从预加载数据就绪/失效时发布变更。首屏门禁可能超时或被跳过，
   /// 已挂载的表情和 reaction 选择器仍需在后台 preload 完成后刷新 URL。
   final ValueNotifier<int> emojiDataRevision = ValueNotifier<int>(0);
-  bool _loading = false;
+  Future<void>? _loadingFuture;
+  int? _activeLoadRevision;
+  int? _activeLoadGeneration;
 
   PreloadedDataService._internal()
     : _dio = DiscourseDio.create(
@@ -618,37 +620,73 @@ class PreloadedDataService {
     _pluginCandidates = null;
   }
 
+  /// Refresh and WebView hydration replace any pending native preload, even
+  /// when that native request failed. Wait on its completion instead of polling
+  /// every 50 ms (which delays every startup consumer on average).
   Future<void> _waitForActiveLoad() async {
-    while (_loading) {
-      await Future.delayed(const Duration(milliseconds: 50));
+    final active = _loadingFuture;
+    if (active == null) return;
+    try {
+      await active;
+    } catch (_) {
+      // A failed native probe must not prevent a refresh/WebView hydrate.
     }
   }
 
-  /// 确保数据已加载。
+  /// Deduplicate concurrent preload requests. Every caller joins the same
+  /// Future and receives its success/error immediately rather than polling.
   ///
-  /// 等待语义与 upstream/dev 保持一致：若已有 preload 正在执行，则以
-  /// 50ms 间隔等待它结束；成功后直接复用，失败后当前调用者重新加载。
+  /// Account switching can invalidate an in-flight request. In that case,
+  /// wait for the previous request to retire before loading the new session;
+  /// never publish the old account's bootstrap to the new one.
   Future<void> _ensureLoaded({bool suppressCfChallenge = false}) async {
-    if (_loaded) return;
-    if (_loading) {
-      await _waitForActiveLoad();
+    while (!_loaded) {
+      final revision = _dataRevision;
+      final generation = AuthSession().generation;
+      final joinedStaleLoad = _loadingFuture != null &&
+          (_activeLoadRevision != revision ||
+              _activeLoadGeneration != generation);
+
+      try {
+        await _loadPreloadedData(
+          revision: revision,
+          generation: generation,
+          suppressCfChallenge: suppressCfChallenge,
+        );
+      } catch (_) {
+        if (!joinedStaleLoad && _isCurrent(revision, generation)) rethrow;
+      }
+
       if (_loaded) return;
+      if (!joinedStaleLoad && _isCurrent(revision, generation)) {
+        throw StateError('Preload completed without publishing bootstrap data');
+      }
     }
-    await _loadPreloadedData(
-      revision: _dataRevision,
-      generation: AuthSession().generation,
-      suppressCfChallenge: suppressCfChallenge,
-    );
   }
 
-  /// 加载预加载数据。只允许一个加载任务占用关键路径。
+  /// Only one request at a time, including refresh. Assign before the first
+  /// async completion so simultaneous callers always join this request.
   Future<void> _loadPreloadedData({
     required int revision,
     required int generation,
     bool suppressCfChallenge = false,
+  }) {
+    final active = _loadingFuture;
+    if (active != null) return active;
+    _activeLoadRevision = revision;
+    _activeLoadGeneration = generation;
+    return _loadingFuture = _runPreload(
+      revision: revision,
+      generation: generation,
+      suppressCfChallenge: suppressCfChallenge,
+    );
+  }
+
+  Future<void> _runPreload({
+    required int revision,
+    required int generation,
+    required bool suppressCfChallenge,
   }) async {
-    if (_loading) return;
-    _loading = true;
     try {
       await _loadPreloadedDataInternal(
         revision: revision,
@@ -656,7 +694,9 @@ class PreloadedDataService {
         suppressCfChallenge: suppressCfChallenge,
       );
     } finally {
-      _loading = false;
+      _loadingFuture = null;
+      _activeLoadRevision = null;
+      _activeLoadGeneration = null;
     }
   }
 
@@ -668,6 +708,7 @@ class PreloadedDataService {
     try {
       // 发起 HTTP 请求获取数据
       debugPrint('[PreloadedData] 发起 HTTP 请求');
+      final startupTimer = Stopwatch()..start();
       final response = await _dio.get(
         AppConstants.baseUrl,
         options: Options(
@@ -687,6 +728,7 @@ class PreloadedDataService {
         ),
       );
 
+      final probeMs = startupTimer.elapsedMilliseconds;
       final html = response.data as String;
       final loadedFromPersistentCache =
           response.extra['preloadCacheHit'] == true;
@@ -712,7 +754,9 @@ class PreloadedDataService {
       if (!_isCurrent(revision, generation)) return;
       debugPrint(
         '[PreloadedData] 数据加载成功'
-        '${loadedFromPersistentCache ? ' (persistent cache)' : ''}',
+        '${loadedFromPersistentCache ? ' (persistent cache)' : ''}; '
+        'request=${probeMs}ms, parse+validate='
+        '${startupTimer.elapsedMilliseconds - probeMs}ms',
       );
       _loadedFromPersistentCache = loadedFromPersistentCache;
       _loaded = true;
