@@ -400,15 +400,17 @@ def main() -> None:
         out = dest / f"fluxdo-sticker-{args.abi}-{args.mode}.apk"
         shutil.copy2(candidates[0], out)
         report = dest / f"sticker-dependencies-{args.abi}-{args.mode}.md"
-        report.write_text(
-            "# Standalone Sticker dependencies\\n\\n"
-            f"- Dart packages resolved: **{dart_packages}**\\n"
-            f"- Android native Flutter plugins: **{len(native_plugins)}**\\n"
-            f"- Native plugin names: {', '.join(native_plugins)}\\n"
-            f"- APK compressed bytes: **{out.stat().st_size:,}**\\n"
-            "- FluxDO root application dependency: **none**\\n"
-            "- Forum/account/messaging native plugins: **excluded**\\n"
-        )
+        report.write_text(chr(10).join([
+            "# Standalone Sticker dependencies",
+            "",
+            f"- Dart packages resolved: **{dart_packages}**",
+            f"- Android native Flutter plugins: **{len(native_plugins)}**",
+            f"- Native plugin names: {', '.join(native_plugins)}",
+            f"- APK compressed bytes: **{out.stat().st_size:,}**",
+            "- FluxDO root application dependency: **none**",
+            "- Forum/account/messaging native plugins: **excluded**",
+            "",
+        ]))
         print(f"Independent companion APK: {out} ({out.stat().st_size} bytes)")
         print(report.read_text())
 
