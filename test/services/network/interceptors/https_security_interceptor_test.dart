@@ -71,6 +71,41 @@ void main() {
     ]);
     dio.close(force: true);
   });
+
+  test('HSTS upgrade keeps queries with a relative path and HTTP baseUrl',
+      () async {
+    final policy = HttpsSecurityPolicy();
+    policy.observe(
+      Uri.parse('https://example.org'),
+      Headers.fromMap({
+        'strict-transport-security': ['max-age=60'],
+      }),
+    );
+    final adapter = _HstsAdapter();
+    final dio = Dio(BaseOptions(baseUrl: 'http://example.org'))
+      ..httpClientAdapter = adapter;
+    dio.interceptors.add(HttpsSecurityInterceptor(policy: policy));
+
+    await dio.get<void>(
+      '/latest.json?sort=created',
+      queryParameters: {'page': 2},
+    );
+    expect(adapter.urls, ['https://example.org/latest.json?sort=created&page=2']);
+    dio.close(force: true);
+  });
+
+  test('duplicate HSTS age directives do not override an existing policy',
+      () {
+    final policy = HttpsSecurityPolicy();
+    policy.observe(Uri.parse('https://example.org'), st);
+    policy.observe(
+      Uri.parse('https://example.org'),
+      Headers.fromMap({
+        'strict-transport-security': ['max-age=0; max-age=10'],
+      }),
+    );
+    expect(policy.upgrade(Uri.parse('http://example.org/')).scheme, 'https');
+  });
 }
 
 class _HstsAdapter implements HttpClientAdapter {
