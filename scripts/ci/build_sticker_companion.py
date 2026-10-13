@@ -127,8 +127,13 @@ def setup_project(target: Path, mode: str) -> None:
                 java.io.File("PLACEHOLDER_PROPS").inputStream().use { load(it) }
             }
             val keyLocation = java.io.File(props.getProperty("storeFile"))
-            storeFile = if (keyLocation.isAbsolute) keyLocation
-                else java.io.File("PLACEHOLDER_ANDROID", props.getProperty("storeFile"))
+            // Match :app's existing signing resolution order: relative paths
+            // are based on android/app, then the Android project root.
+            storeFile = if (keyLocation.isAbsolute) keyLocation else
+                sequenceOf(
+                    java.io.File("PLACEHOLDER_ANDROID/app", props.getProperty("storeFile")),
+                    java.io.File("PLACEHOLDER_ANDROID", props.getProperty("storeFile")),
+                ).firstOrNull { it.isFile }
             require(storeFile?.isFile == true) { "Release keystore not found" }
             storePassword = props.getProperty("storePassword")
             keyAlias = props.getProperty("keyAlias")
