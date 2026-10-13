@@ -70,6 +70,58 @@ def run(args: list[str], cwd: Path) -> None:
     subprocess.run(args, cwd=cwd, check=True)
 
 
+def strip_host_reward_credentials(source: str) -> str:
+    """Remove only the old account-secret gate from the Android reward action.
+
+    The core uses the API-compatible reward overlay, which launches the
+    separately signed plugin with PUBLIC recipient identity. Credential reads
+    belong neither in Core nor in its plugin Intent payload. We match logical
+    lines rather than brittle exact indentation, and reject ambiguous edits.
+    """
+    lines = source.splitlines(keepends=True)
+    credential_lines = [
+        index for index, line in enumerate(lines)
+        if "ldcRewardCredentialsProvider.future," in line
+    ]
+    call_lines = [
+        index for index, line in enumerate(lines)
+        if line.strip().startswith("showLdcRewardSheet(")
+    ]
+    if len(credential_lines) != 1 or len(call_lines) != 1:
+        raise RuntimeError("LDC reward callsite changed; refusing unsafe Core build")
+    credential_index, call_index = credential_lines[0], call_lines[0]
+    if call_index <= credential_index or call_index - credential_index > 40:
+        raise RuntimeError("LDC reward callsite is ambiguous")
+    final_check = call_index - 1
+    if lines[final_check].strip() != "if (!mounted) return;":
+        raise RuntimeError("LDC reward post-authorization guard changed")
+    indent = len(lines[final_check]) - len(lines[final_check].lstrip())
+    try_candidates = [
+        index for index in range(max(0, credential_index - 6), credential_index)
+        if lines[index].strip() == "try {"
+        and len(lines[index]) - len(lines[index].lstrip()) == indent
+    ]
+    if len(try_candidates) != 1:
+        raise RuntimeError("LDC reward credential try block changed")
+    start = try_candidates[0]
+    removed = "".join(lines[start:final_check])
+    for token in (
+        "final credentials = await ref.read(",
+        "ldcRewardCredentialsProvider.future,",
+        "if (credentials == null)",
+        "} catch (error) {",
+        "toast_rewardNotConfigured",
+    ):
+        if token not in removed:
+            raise RuntimeError(f"LDC reward credential gate changed: {token}")
+    rewritten = "".join(lines[:start] + lines[final_check:])
+    if "ldcRewardCredentialsProvider" in rewritten:
+        # The import in Core must also be replaced by the overlay. A lingering
+        # symbol usage here would compile the removed credential service.
+        raise RuntimeError("LDC reward credential use remained in action")
+    return rewritten
+
+
 def prepare(destination: Path) -> None:
     if destination.exists():
         raise RuntimeError(f"Refusing to overwrite existing directory: {destination}")
@@ -94,17 +146,7 @@ def prepare(destination: Path) -> None:
         "post_footer_section/actions/menu_actions.dart"
     )
     original_menu = menu.read_text()
-    check_start = """                         try {
-                           final credentials = await ref.read(
-                             ldcRewardCredentialsProvider.future,
-                           );"""
-    check_end = """                         if (!mounted) return;
-                         showLdcRewardSheet("""
-    if original_menu.count(check_start) != 1 or original_menu.count(check_end) != 1:
-        raise RuntimeError("LDC reward callsite changed; refusing unsafe Core build")
-    begin = original_menu.index(check_start)
-    finish = original_menu.index(check_end, begin)
-    menu.write_text(original_menu[:begin] + original_menu[finish:])
+    menu.write_text(strip_host_reward_credentials(original_menu))
 
     for rel in EXCLUDED_DART:
         (destination / rel).unlink(missing_ok=True)
