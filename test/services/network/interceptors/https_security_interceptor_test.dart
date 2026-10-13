@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -225,6 +226,33 @@ void main() {
     final next = HttpsSecurityPolicy(persist: true);
     await next.ensureLoaded();
     expect(next.upgrade(Uri.parse('http://example.org')).scheme, 'http');
+  });
+
+  test('corrupt HSTS timestamp does not hide a later valid host',
+      () async {
+    final until = DateTime.now()
+        .add(const Duration(minutes: 10))
+        .millisecondsSinceEpoch;
+    SharedPreferences.setMockInitialValues({
+      'network_hsts_policies_v1': jsonEncode([
+        {
+          'host': 'invalid.example',
+          'until': 9223372036854775807,
+          'includeSubDomains': false,
+        },
+        {
+          'host': 'valid.example',
+          'until': until,
+          'includeSubDomains': true,
+        },
+      ]),
+    });
+    final policy = HttpsSecurityPolicy(persist: true);
+    await policy.ensureLoaded();
+    expect(policy.upgrade(Uri.parse('http://valid.example')).scheme,
+        'https');
+    expect(policy.upgrade(Uri.parse('http://invalid.example')).scheme,
+        'http');
   });
 
   test('invalid, expired or impossible persisted HSTS entries are ignored',
