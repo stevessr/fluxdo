@@ -40,6 +40,13 @@ class AndroidCoreIsolationTest(unittest.TestCase):
     def test_minimal_isolated_core_is_valid(self) -> None:
         modular.verify_sources(self.stage)
 
+    def test_physical_avatar_bytes_are_rejected(self) -> None:
+        leaked = self.stage / "assets/images/avater/stevessr"
+        leaked.mkdir(parents=True)
+        (leaked / "sprite.webp").write_bytes(b"fake")
+        with self.assertRaisesRegex(AssertionError, "assets leaked"):
+            modular.verify_sources(self.stage)
+
     def test_old_avatar_bundle_is_rejected(self) -> None:
         with (self.stage / "pubspec.yaml").open("a") as out:
             out.write("    - assets/images/avater/stevessr/\n")
