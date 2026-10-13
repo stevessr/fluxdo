@@ -91,7 +91,7 @@ def main() -> None:
     # LDC/CDK host account switches must not reuse the previous app's
     # authenticated WebView session. No cookie/token may cross the APK IPC.
     web_session = (ROOT / "android/plugin_api/src/main/kotlin/com/github/"
-                   "lingyan000/fluxdo/plugin/api/PluginWebSession.kt").read_text()
+                   "lingyan000/fluxdo/plugin/web_session/PluginWebSession.kt").read_text()
     account_host = (ROOT / "lib/services/android_optional_plugin_service.dart").read_text()
     metaverse_overlay = (ROOT / "android_modular/core_overlay/lib/pages/metaverse_page.dart").read_text()
     plugin_manager = (ROOT / "lib/pages/android_plugins_page.dart").read_text()
