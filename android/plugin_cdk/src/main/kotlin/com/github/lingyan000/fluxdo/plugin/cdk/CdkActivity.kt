@@ -3,7 +3,7 @@ package com.github.lingyan000.fluxdo.plugin.cdk
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import com.github.lingyan000.fluxdo.plugin.api.PluginWebSession
+import com.github.lingyan000.fluxdo.plugin.web_session.PluginWebSession
 import android.view.Menu
 import android.view.MenuItem
 import android.webkit.WebView
