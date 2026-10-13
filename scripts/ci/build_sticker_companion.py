@@ -150,6 +150,17 @@ def setup_project(target: Path, mode: str) -> None:
     src = target / "android/app/src/main"
     kotlin_path = src / "kotlin/com/github/lingyan000/fluxdo/plugin/sticker"
     kotlin_path.mkdir(parents=True, exist_ok=True)
+    # flutter create generates a placeholder MainActivity, but the companion
+    # hosts only StickerActivity. Delete the placeholder before compilation.
+    for placeholder in (
+        src / "kotlin/com/github/lingyan000/fluxdo/plugin/sticker/MainActivity.kt",
+        src / "java/com/github/lingyan000/fluxdo/plugin/sticker/MainActivity.java",
+    ):
+        if placeholder.exists():
+            original = placeholder.read_text()
+            if "class MainActivity" not in original:
+                raise RuntimeError("Unexpected Flutter-generated MainActivity layout")
+            placeholder.unlink()
     shutil.copy2(SOURCE / "StickerActivity.kt", kotlin_path / "StickerActivity.kt")
     paths_xml = src / "res/xml/companion_file_paths.xml"
     paths_xml.parent.mkdir(parents=True, exist_ok=True)
