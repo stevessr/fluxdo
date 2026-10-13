@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart' show sha256;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -15,6 +17,15 @@ class AndroidOptionalPluginService {
 
   bool get supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// Opaque account partition ID for an independently installed WebView APK.
+  /// Never sends the username, forum cookie, auth token or password via IPC.
+  /// A logged-out invocation uses guest, which plugins treat as ephemeral.
+  static String sessionSlotForUsername(String? username) {
+    final value = username?.trim().toLowerCase();
+    if (value == null || value.isEmpty) return 'guest';
+    return sha256.convert(utf8.encode(value)).toString();
+  }
 
   Future<List<AndroidOptionalPlugin>> list() async {
     if (!supported) return const [];
