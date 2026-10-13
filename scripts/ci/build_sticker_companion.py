@@ -157,13 +157,22 @@ def main() -> None:
     parser.add_argument("--mode", choices=["debug", "release"], default="debug")
     parser.add_argument("--abi", choices=["android-arm", "android-arm64", "android-x64"],
                         default="android-arm64")
+    parser.add_argument("--version-code", type=int)
+    parser.add_argument("--version-name")
     args = parser.parse_args()
+    if args.version_code is not None and not (1 <= args.version_code < 2100000000):
+        parser.error("--version-code must be a positive Android-compatible int")
     with tempfile.TemporaryDirectory(prefix="fluxdo-sticker-companion-") as temp:
         target = Path(temp) / "sticker"
         setup_project(target, args.mode)
         execute("flutter", "pub", "get", cwd=target)
-        execute("flutter", "build", "apk", "--" + args.mode,
-                "--target-platform", args.abi, "--no-pub", cwd=target)
+        command = ["flutter", "build", "apk", "--" + args.mode,
+                   "--target-platform", args.abi, "--no-pub"]
+        if args.version_code is not None:
+            command += ["--build-number", str(args.version_code)]
+        if args.version_name:
+            command += ["--build-name", args.version_name]
+        execute(*command, cwd=target)
         apk_dir = target / "build/app/outputs/flutter-apk"
         candidates = list(apk_dir.glob("*.apk"))
         assert len(candidates) == 1, f"Expected single APK: {candidates}"
