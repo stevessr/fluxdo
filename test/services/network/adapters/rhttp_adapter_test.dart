@@ -57,6 +57,24 @@ void main() {
       }, originPort: 8443), isTrue);
     });
 
+    test('honors advertised H3 max-age without extending its lifetime', () {
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"; ma=7'],
+      }), const Duration(seconds: 7));
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"; ma=86400'],
+      }), const Duration(hours: 1));
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"'],
+      }), const Duration(hours: 1));
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"; ma=0'],
+      }), isNull);
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"; ma=garbage'],
+      }), isNull);
+    });
+
     test('Alt-Svc clear invalidates the cached advertisement', () {
       expect(http3AltSvcCleared({
         'Alt-Svc': ['clear'],
