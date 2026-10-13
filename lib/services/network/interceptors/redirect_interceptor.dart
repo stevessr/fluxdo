@@ -137,7 +137,9 @@ class RedirectInterceptor extends Interceptor {
         // Let each target adapter negotiate an encoding it can decode.
         // An original engine's br/zstd choice may not work after fallback.
         'accept', 'accept-language', 'user-agent',
-        'range', 'if-range', 'cache-control', 'pragma',
+        // If-Range is a validator for the original resource: never send
+        // it to another origin, even when the requested byte range is safe.
+        'range', 'cache-control', 'pragma',
       };
       headers.removeWhere((name, _) => !allowed.contains(name.toLowerCase()));
     }
