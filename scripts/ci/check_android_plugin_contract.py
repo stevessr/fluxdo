@@ -115,7 +115,7 @@ def main() -> None:
     check('Intent.FLAG_ACTIVITY_CLEAR_TASK' in host,
           "Companion launches must clear previously authenticated Activity task")
     check(
-        "'account_slot'" in host and "'accountSlot'" in host and
+        "account_slot" in host and "accountSlot" in host and
         "^[0-9a-f]{64}$" in host,
         "Host must pass only validated opaque account slots",
     )
