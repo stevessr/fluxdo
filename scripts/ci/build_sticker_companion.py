@@ -73,6 +73,16 @@ def setup_project(target: Path, mode: str) -> None:
     assert activity is not None
     activity.set(ANDROID_NS + "name", ".StickerActivity")
     activity.set(ANDROID_NS + "exported", "true")
+    # Host-only launch, including ACTION_GET_CONTENT image handoff.
+    # Third-party apps must not be able to impersonate an export request.
+    activity.set(
+        ANDROID_NS + "permission",
+        "com.github.lingyan000.fluxdo.permission.BIND_PLUGIN",
+    )
+    ET.SubElement(manifest.getroot(), "uses-permission", {
+        ANDROID_NS + "name":
+            "com.github.lingyan000.fluxdo.permission.BIND_PLUGIN",
+    })
     application.set(ANDROID_NS + "label", "FluxDO StevesSR")
     provider = ET.SubElement(application, "provider", {
         ANDROID_NS + "name": "androidx.core.content.FileProvider",
