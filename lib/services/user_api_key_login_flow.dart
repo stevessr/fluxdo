@@ -45,7 +45,6 @@ class UserApiKeyLoginFlow {
   bool _handling = false;
 
   /// A pending OTP from a new login takes precedence over a stale local _t.
-  @visibleForTesting
   static bool isSupplementalAuthorization({
     required String? existingToken,
     required String? otp,
