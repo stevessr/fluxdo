@@ -12,6 +12,7 @@ import 'account_manager.dart';
 import 'local_notification_service.dart' show navigatorKey;
 import 'login_token_redeemer.dart';
 import 'network/cookie/cookie_jar_service.dart';
+import 'network/flux_request_spec.dart';
 import 'network/exceptions/api_exception.dart';
 import 'toast_service.dart';
 import 'user_api_key_service.dart';
@@ -62,6 +63,7 @@ class UserApiKeyLoginFlow {
     Dio dio, {
     required String? authorizedKey,
   }) {
+    if (authorizedKey == null || authorizedKey.isEmpty) return;
     unawaited(
       keys.burnAfterLoginIfUseless(
         dio,
@@ -211,7 +213,12 @@ class UserApiKeyLoginFlow {
           final response = await service.dio.get(
             '/session/current.json',
             options: Options(
-              extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+              extra: const {
+                FluxRequestKeys.skipAuthCheck: true,
+                FluxRequestKeys.skipCsrf: true,
+                FluxRequestKeys.skipSessionStateSync: true,
+                FluxRequestKeys.noRecovery: true,
+              },
             ),
           );
           if (!AuthSession().isValid(requestGeneration)) return;
