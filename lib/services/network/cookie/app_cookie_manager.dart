@@ -78,7 +78,6 @@ class AppCookieManager extends Interceptor {
 
   /// Invalid auth signals are verified by the session probe before deletion.
   /// A delayed response must never roll back a newer session cookie.
-  @visibleForTesting
   static bool shouldIgnoreSessionSetCookie({
     required bool isDeletion,
     required bool isExplicitLogout,
