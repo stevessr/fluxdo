@@ -45,9 +45,15 @@ class UserApiKeyLoginFlow {
 
   /// Revocation is a post-login security cleanup, not a login prerequisite.
   /// The current session and navigation must become ready first.
-  void _burnKeyInBackground(UserApiKeyService keys, Dio dio) {
+  void _burnKeyInBackground(
+    UserApiKeyService keys,
+    Dio dio, {
+    required String? authorizedKey,
+  }) {
     unawaited(
-      keys.burnAfterLoginIfUseless(dio).catchError(
+      keys
+          .burnAfterLoginIfUseless(dio, expectedKey: authorizedKey)
+          .catchError(
         (Object error, StackTrace stackTrace) {
           debugPrint('[UserApiKeyLoginFlow] 授权 key 后台清理失败: $error');
         },
@@ -117,6 +123,9 @@ class UserApiKeyLoginFlow {
         onFlowFinished?.call(false);
         return;
       }
+      // Bind cleanup to this callback's exact key, not any later login.
+      final authorizedKey = await userApiKeyService.readApiKey();
+      if (!AuthSession().isValid(requestGeneration)) return;
 
       // 登录页启动的 User API Key 授权是登录意图。旧代码只凭本地还有
       // _t 就当成"补授权"返回，造成 OTP 不兑换、新账号不会切换。
@@ -134,7 +143,11 @@ class UserApiKeyLoginFlow {
           requestGeneration = AuthSession().generation;
         } else if (otp == null && !guestSession) {
           // 无随行 OTP 的回调只能补授权，不能假装切换了账户。
-          _burnKeyInBackground(userApiKeyService, DiscourseService().dio);
+          _burnKeyInBackground(
+            userApiKeyService,
+            DiscourseService().dio,
+            authorizedKey: authorizedKey,
+          );
           ToastService.showSuccess('授权成功（当前账号未切换）');
           onFlowFinished?.call(false);
           return;
@@ -220,7 +233,11 @@ class UserApiKeyLoginFlow {
               'user',
               notifyBeforePreload: true,
             );
-            _burnKeyInBackground(userApiKeyService, service.dio);
+            _burnKeyInBackground(
+              userApiKeyService,
+              service.dio,
+              authorizedKey: authorizedKey,
+            );
             ToastService.showSuccess('登录成功');
             onFlowFinished?.call(true);
             return;
@@ -239,7 +256,11 @@ class UserApiKeyLoginFlow {
           notifyBeforePreload: true,
         );
         // 认证状态、登录页导航先于耗时的远程 key revoke 完成。
-        _burnKeyInBackground(userApiKeyService, service.dio);
+        _burnKeyInBackground(
+              userApiKeyService,
+              service.dio,
+              authorizedKey: authorizedKey,
+            );
         ToastService.showSuccess('登录成功');
         onFlowFinished?.call(true);
       } finally {
