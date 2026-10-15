@@ -1241,16 +1241,37 @@ mixin _AuthMixin on _DiscourseServiceBase {
   Future<SessionSnapshot> _readSessionStateAfterResponse(
     Response? response,
   ) async {
-    final tTokenFromResponse = _extractTTokenFromSetCookie(response);
-    if (tTokenFromResponse != null || _hasExplicitTDeletion(response)) {
-      final forumSession = await _cookieJar.getCookieValue('_forum_session');
-      return SessionSnapshot.fromValues(
-        tToken: tTokenFromResponse,
-        forumSession: forumSession,
-      );
+    final jarState = await _readSessionCookieState();
+    if (response == null ||
+        response.requestOptions.uri.host.toLowerCase() !=
+            CookieJarService.appBaseHost) {
+      return jarState;
     }
 
-    return _readSessionCookieState();
+    final tTokenFromResponse = _extractTTokenFromSetCookie(response);
+    final isDeletion = _hasExplicitTDeletion(response);
+    if (tTokenFromResponse == null && !isDeletion) return jarState;
+
+    final options = response.requestOptions;
+    final isExplicitLogout =
+        options.method.toUpperCase() == 'DELETE' &&
+        options.uri.path.startsWith('/session/');
+    if (AppCookieManager.shouldIgnoreSessionSetCookie(
+      isDeletion: isDeletion,
+      isExplicitLogout: isExplicitLogout,
+      sentTToken: _sentTTokenFromRequest(options),
+      currentTToken: jarState.tToken,
+    )) {
+      // Mirror AppCookieManager's guard. This interceptor sees the response
+      // before cookies are saved; using a rejected raw Set-Cookie here would
+      // create a false split between in-memory _t and the canonical jar.
+      return jarState;
+    }
+
+    return SessionSnapshot.fromValues(
+      tToken: tTokenFromResponse,
+      forumSession: jarState.forumSession,
+    );
   }
 
   String? _extractTTokenFromSetCookie(Response? response) {
