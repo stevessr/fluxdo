@@ -1598,7 +1598,21 @@ mixin _AuthMixin on _DiscourseServiceBase {
 
     final tToken = await _cookieJar.getTToken();
     if (!isCurrent()) return false;
-    if (tToken == null || tToken.isEmpty) return false;
+    if (tToken == null || tToken.isEmpty) {
+      // A stale error response in a previous app version may have erased the
+      // jar while the in-memory/WebView session is still recoverable.
+      if (_hasTokenValue(_tToken) && logoutOnInvalid) {
+        return recoverAfterInvalidCheck(
+          RequestOptions(
+            path: '/session/current.json',
+            baseUrl: AppConstants.baseUrl,
+            method: 'GET',
+          ),
+          'missing_local_t_cookie',
+        );
+      }
+      return false;
+    }
 
     final storedUsername = await _storage.read(
       key: DiscourseService._usernameKey,
@@ -1619,7 +1633,12 @@ mixin _AuthMixin on _DiscourseServiceBase {
         '/session/current.json',
         queryParameters: {'_': DateTime.now().millisecondsSinceEpoch},
         options: Options(
-          extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+          extra: const {
+            'skipAuthCheck': true,
+            'skipCsrf': true,
+            'skipSessionStateSync': true,
+            FluxRequestKeys.noRecovery: true,
+          },
         ),
       );
       if (!isCurrent()) return false;
@@ -1657,7 +1676,7 @@ mixin _AuthMixin on _DiscourseServiceBase {
         'type': 'auth',
         'event': 'auth_session_check_failed',
         'message': logoutOnInvalid
-            ? '登录态检查返回 200 但无 current_user，执行登出'
+            ? '登录态检查返回 200 但无 current_user，尝试恢复及复检'
             : '登录态检查返回 200 但无 current_user，保留本地会话',
         'statusCode': response.statusCode,
         'memHasToken': _tToken != null && _tToken!.isNotEmpty,
@@ -1683,7 +1702,7 @@ mixin _AuthMixin on _DiscourseServiceBase {
           'type': 'auth',
           'event': 'auth_session_check_failed',
           'message': logoutOnInvalid
-              ? '登录态检查被服务端拒绝，执行登出'
+              ? '登录态检查被服务端拒绝，尝试恢复及复检'
               : '登录态检查被服务端拒绝，保留本地会话',
           'statusCode': status,
           'errorType': e.type.toString(),
