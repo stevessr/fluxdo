@@ -1,3 +1,5 @@
+import 'dart:async';
+
 typedef LoginPreloadedHydrator = Future<bool> Function(String html);
 typedef LoginPreloadedRefresher = Future<void> Function();
 typedef LoginReadyNotifier = void Function(String token);
@@ -20,6 +22,22 @@ class LoginReadyCoordinator {
   final LoginPreloadedHydrator _hydrateFromHtml;
   final LoginPreloadedRefresher _refreshPreloadedData;
   final LoginReadyNotifier _notifyLoginReady;
+
+  /// API Key OTP 已经由服务器确认、CookieJar 已提交时，无需让预加载阻塞
+  /// 认证态广播和 LoginPage 的导航。刷新失败只影响数据预热，不能回滚登录。
+  void finalizeImmediately({
+    required String token,
+    void Function(Object error, StackTrace stackTrace)? onRefreshError,
+  }) {
+    _notifyLoginReady(token);
+    unawaited(
+      Future<void>.sync(_refreshPreloadedData).catchError(
+        (Object error, StackTrace stackTrace) {
+          onRefreshError?.call(error, stackTrace);
+        },
+      ),
+    );
+  }
 
   Future<bool> finalize({required String token, String? pageHtml}) async {
     var reusedPreloaded = false;
