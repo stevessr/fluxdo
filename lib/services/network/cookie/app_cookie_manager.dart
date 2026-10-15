@@ -51,7 +51,9 @@ class AppCookieManager extends Interceptor {
   /// 判定 cookie 的 sweep 意图。
   /// 服务器下发 value=del / 空值 / 已过期时按 [SweepIntent.delete] 处理。
   static SweepIntent _intentForCookie(Cookie cookie) {
-    if (cookie.value == 'del' || cookie.value.isEmpty) {
+    if (cookie.value == 'del' ||
+        cookie.value.isEmpty ||
+        (cookie.maxAge != null && cookie.maxAge! <= 0)) {
       return SweepIntent.delete;
     }
     final expires = cookie.expires;
@@ -583,7 +585,9 @@ class AppCookieManager extends Interceptor {
     ).firstMatch(sentCookieHeader)?.group(1);
     String? currentTToken;
     if (isMainSite &&
-        cookies.any((c) => CookieJarService.sessionCookieNames.contains(c.name))) {
+        cookies.any(
+          (c) => CookieJarService.sessionCookieNames.contains(c.name),
+        )) {
       final siteRoot = requestUri.replace(path: '/', query: '', fragment: '');
       final currentCookies = _selectCookies(
         await cookieJar.loadForRequest(siteRoot),
