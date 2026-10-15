@@ -43,6 +43,18 @@ class UserApiKeyLoginFlow {
 
   bool _handling = false;
 
+  /// A pending OTP from a new login takes precedence over a stale local _t.
+  @visibleForTesting
+  static bool isSupplementalAuthorization({
+    required String? existingToken,
+    required String? otp,
+    required bool guestSession,
+  }) =>
+      existingToken != null &&
+      existingToken.isNotEmpty &&
+      (otp == null || otp.isEmpty) &&
+      !guestSession;
+
   /// Revocation is a post-login security cleanup, not a login prerequisite.
   /// The current session and navigation must become ready first.
   void _burnKeyInBackground(
@@ -51,15 +63,15 @@ class UserApiKeyLoginFlow {
     required String? authorizedKey,
   }) {
     unawaited(
-      keys
-          .burnAfterLoginIfUseless(dio, expectedKey: authorizedKey)
-          .catchError(
-        (Object error, StackTrace stackTrace) {
-          debugPrint('[UserApiKeyLoginFlow] 授权 key 后台清理失败: $error');
-        },
-      ),
+      keys.burnAfterLoginIfUseless(
+        dio,
+        expectedKey: authorizedKey,
+      ).catchError((Object error, StackTrace stackTrace) {
+        debugPrint('[UserApiKeyLoginFlow] 授权 key 后台清理失败: $error');
+      }),
     );
   }
+
   OverlayEntry? _loadingEntry;
 
   /// 深链回到 App 后,兑换+收口这段有网络耗时(可能还含 CF 验证),
@@ -141,7 +153,11 @@ class UserApiKeyLoginFlow {
           // 兼容从旧版本升级或 guest 清理不完全的账户添加过程。
           await DiscourseService().detachSessionLocally();
           requestGeneration = AuthSession().generation;
-        } else if (otp == null && !guestSession) {
+        } else if (isSupplementalAuthorization(
+          existingToken: existingToken,
+          otp: otp,
+          guestSession: guestSession,
+        )) {
           // 无随行 OTP 的回调只能补授权，不能假装切换了账户。
           _burnKeyInBackground(
             userApiKeyService,
