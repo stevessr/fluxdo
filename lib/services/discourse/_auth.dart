@@ -1644,7 +1644,11 @@ mixin _AuthMixin on _DiscourseServiceBase {
       if (!isCurrent()) return false;
       final data = response.data;
       if (data is Map<String, dynamic> && data['current_user'] is Map) {
-        _tToken = tToken;
+        // This response may rotate _t. Use the post-response canonical jar,
+        // never the token captured before the network request.
+        final committedTToken = await _cookieJar.getTToken();
+        if (!isCurrent()) return false;
+        _tToken = committedTToken ?? tToken;
         final liveUsername = (data['current_user'] as Map)['username']
             ?.toString();
         final resolvedUsername =
