@@ -232,7 +232,9 @@ class UserApiKeyLoginFlow {
               try {
                 verifiedUser = User.fromJson(currentUser);
               } catch (e) {
-                debugPrint('[UserApiKeyLoginFlow] 用户资料解析失败，保留已确认用户名: $e');
+                debugPrint(
+                  '[UserApiKeyLoginFlow] 用户资料解析失败，保留已确认用户名: $e',
+                );
               }
             }
           }
@@ -257,10 +259,10 @@ class UserApiKeyLoginFlow {
               notifyBeforePreload: true,
             );
             _burnKeyInBackground(
-              userApiKeyService,
-              service.dio,
-              authorizedKey: authorizedKey,
-            );
+          userApiKeyService,
+          service.dio,
+          authorizedKey: authorizedKey,
+        );
             ToastService.showSuccess('登录成功');
             onFlowFinished?.call(true);
             return;
@@ -280,10 +282,10 @@ class UserApiKeyLoginFlow {
         );
         // 认证状态、登录页导航先于耗时的远程 key revoke 完成。
         _burnKeyInBackground(
-              userApiKeyService,
-              service.dio,
-              authorizedKey: authorizedKey,
-            );
+          userApiKeyService,
+          service.dio,
+          authorizedKey: authorizedKey,
+        );
         ToastService.showSuccess('登录成功');
         onFlowFinished?.call(true);
       } finally {
