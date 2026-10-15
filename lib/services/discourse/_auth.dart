@@ -413,7 +413,12 @@ mixin _AuthMixin on _DiscourseServiceBase {
         '/session/current.json',
         queryParameters: {'_': DateTime.now().millisecondsSinceEpoch},
         options: Options(
-          extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+          extra: const {
+            'skipAuthCheck': true,
+            'skipCsrf': true,
+            'skipSessionStateSync': true,
+            FluxRequestKeys.noRecovery: true,
+          },
         ),
       );
 
@@ -623,25 +628,8 @@ mixin _AuthMixin on _DiscourseServiceBase {
         'errorType': e.type.toString(),
         ..._sentTDiagnostics(e.response?.requestOptions ?? e.requestOptions),
       });
-      // 如果累积 strike 较多，升级为登出
-      if (strikeSnapshot >= 2) {
-        LogWriter.instance.write({
-          'timestamp': DateTime.now().toIso8601String(),
-          'level': 'warning',
-          'type': 'auth',
-          'event': 'auth_inconclusive_escalated',
-          'message': 'probe 不确定但 strike 已累积 $strikeSnapshot 次，升级为登出',
-          'source': source,
-          if (triggerInfo != null) 'trigger': triggerInfo,
-        });
-        await _handleAuthInvalid(
-          S.current.auth_loginExpiredRelogin,
-          source: 'probe_escalated',
-          triggerInfo: triggerInfo,
-          requestGeneration: requestGeneration,
-        );
-        return false;
-      }
+      // 不确定的探测不能升级为登出，即使已有多次 auth strike。
+      // 网络错误/CF 挑战/5xx 需要保留本地 session，等待可确认的结果。
       _lastInconclusiveAt = DateTime.now();
       return null;
     } catch (e) {
@@ -1569,6 +1557,24 @@ mixin _AuthMixin on _DiscourseServiceBase {
       return false;
     }
 
+    // An initial login-state check can race with _t rotation or temporary
+    // server/CF errors. Probe candidate sessions before discarding the login.
+    Future<bool> recoverAfterInvalidCheck(
+      RequestOptions failedOptions,
+      String reason,
+    ) async {
+      if (!logoutOnInvalid || !isCurrent()) return false;
+      final confirmed = await _probeSession(
+        source: 'is_logged_in_check',
+        triggerInfo: reason,
+        signalRequestOptions: failedOptions,
+      );
+      if (!isCurrent()) return false;
+      // null means the probe was inconclusive, not that we are logged out.
+      // The probe handles confirmed logout itself.
+      return confirmed != false;
+    }
+
     final tToken = await _cookieJar.getTToken();
     if (!isCurrent()) return false;
     if (tToken == null || tToken.isEmpty) return false;
@@ -1641,7 +1647,10 @@ mixin _AuthMixin on _DiscourseServiceBase {
         'jarTHash': _safeTokenHash(tToken),
         ..._sentTDiagnostics(response.requestOptions),
       });
-      return await rejectInvalidSession();
+      return await recoverAfterInvalidCheck(
+        response.requestOptions,
+        '200_without_current_user',
+      );
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       if (!isCurrent()) return false;
@@ -1665,7 +1674,10 @@ mixin _AuthMixin on _DiscourseServiceBase {
           'jarTHash': _safeTokenHash(tToken),
           ..._sentTDiagnostics(e.response?.requestOptions ?? e.requestOptions),
         });
-        return await rejectInvalidSession();
+        return await recoverAfterInvalidCheck(
+          e.response?.requestOptions ?? e.requestOptions,
+          'initial_check_http_$status',
+        );
       }
       // 网络异常/CF 验证等 → 保守保留本地状态
       if (!isCurrent()) return false;
