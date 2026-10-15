@@ -4,6 +4,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../auth_session.dart';
 import '../../log/log_writer.dart';
@@ -27,6 +28,11 @@ class AppCookieManager extends Interceptor {
   final bool saveRedirectedCookies;
 
   static final _setCookieReg = RegExp('(?<=)(,)(?=[^;]+?=)');
+  static final Lock _sessionResponseLock = Lock();
+  static final RegExp _sessionSetCookieReg = RegExp(
+    r'(?:^|,)\s*(?:_t|_forum_session)=',
+    caseSensitive: false,
+  );
 
   // v0.4.0 路径分流标记
   // 路径 A (纯 Dio): 默认, jar 是权威源, 写 jar 后 sweep 同步到 WV
@@ -492,7 +498,19 @@ class AppCookieManager extends Interceptor {
   }
 
   /// Save cookies from the response including redirected requests.
-  Future<void> saveCookies(Response response) async {
+  Future<void> saveCookies(Response response) {
+    // Make comparison + write + WebView synchronization atomic for session
+    // responses. Otherwise two parallel replies can both compare against the
+    // same old _t, then commit conflicting newer values out of order.
+    final headers = response.headers[HttpHeaders.setCookieHeader];
+    if (headers != null &&
+        headers.any((value) => _sessionSetCookieReg.hasMatch(value))) {
+      return _sessionResponseLock.synchronized(() => _saveCookies(response));
+    }
+    return _saveCookies(response);
+  }
+
+  Future<void> _saveCookies(Response response) async {
     final setCookies = response.headers[HttpHeaders.setCookieHeader];
     if (setCookies == null || setCookies.isEmpty) {
       return;
