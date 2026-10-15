@@ -199,6 +199,8 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   Future<void> finalizeNativeLoginSuccess(
     String identifier, {
     bool notifyAuthState = true,
+    bool notifyBeforePreload = false,
+    User? confirmedUser,
   }) async {
     final loginGeneration = AuthSession().advance();
 
@@ -212,9 +214,41 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
       debugPrint('[DiscourseLogin] 登录收尾期间会话已切换，丢弃旧收尾: $identifier');
       return;
     }
-    if (token.isNotEmpty) setToken(token);
+    if (token.isEmpty) {
+      // No authenticated state may be published without a committed _t.
+      return;
+    }
+    setToken(token);
+    if (confirmedUser != null &&
+        confirmedUser.username.toLowerCase() == identifier.toLowerCase()) {
+      currentUserNotifier.value = confirmedUser;
+    }
     final forceBrowserSessionSync = !WebViewSessionCookieRefreshService.instance
         .hasFreshSyncForToken(token);
+
+    // API-key OTP already established the session and /session/current.json
+    // verified its identity. Do not hold the UI on network preload (up to 8s).
+    // The new generation is committed before announcing the login.
+    if (notifyBeforePreload) {
+      LoginReadyCoordinator(
+        hydrateFromHtml: PreloadedDataService().hydrateFromHtml,
+        refreshPreloadedData: PreloadedDataService().refresh,
+        notifyLoginReady: (t) {
+          if (!AuthSession().isValid(loginGeneration)) return;
+          onLoginSuccess(
+            t,
+            forceBrowserSessionSync: forceBrowserSessionSync,
+            notifyAuthState: notifyAuthState,
+          );
+        },
+      ).finalizeImmediately(
+        token: token,
+        onRefreshError: (error, _) {
+          debugPrint('[DiscourseLogin] 后台预加载失败(不影响登录): $error');
+        },
+      );
+      return;
+    }
 
     var loginReadyNotified = false;
     try {
