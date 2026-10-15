@@ -413,7 +413,12 @@ mixin _AuthMixin on _DiscourseServiceBase {
         '/session/current.json',
         queryParameters: {'_': DateTime.now().millisecondsSinceEpoch},
         options: Options(
-          extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+          extra: const {
+            'skipAuthCheck': true,
+            'skipCsrf': true,
+            'skipSessionStateSync': true,
+            FluxRequestKeys.noRecovery: true,
+          },
         ),
       );
 
@@ -623,25 +628,8 @@ mixin _AuthMixin on _DiscourseServiceBase {
         'errorType': e.type.toString(),
         ..._sentTDiagnostics(e.response?.requestOptions ?? e.requestOptions),
       });
-      // 如果累积 strike 较多，升级为登出
-      if (strikeSnapshot >= 2) {
-        LogWriter.instance.write({
-          'timestamp': DateTime.now().toIso8601String(),
-          'level': 'warning',
-          'type': 'auth',
-          'event': 'auth_inconclusive_escalated',
-          'message': 'probe 不确定但 strike 已累积 $strikeSnapshot 次，升级为登出',
-          'source': source,
-          if (triggerInfo != null) 'trigger': triggerInfo,
-        });
-        await _handleAuthInvalid(
-          S.current.auth_loginExpiredRelogin,
-          source: 'probe_escalated',
-          triggerInfo: triggerInfo,
-          requestGeneration: requestGeneration,
-        );
-        return false;
-      }
+      // 不确定的探测不能升级为登出，即使已有多次 auth strike。
+      // 网络错误/CF 挑战/5xx 需要保留本地 session，等待可确认的结果。
       _lastInconclusiveAt = DateTime.now();
       return null;
     } catch (e) {
@@ -1253,16 +1241,37 @@ mixin _AuthMixin on _DiscourseServiceBase {
   Future<SessionSnapshot> _readSessionStateAfterResponse(
     Response? response,
   ) async {
-    final tTokenFromResponse = _extractTTokenFromSetCookie(response);
-    if (tTokenFromResponse != null || _hasExplicitTDeletion(response)) {
-      final forumSession = await _cookieJar.getCookieValue('_forum_session');
-      return SessionSnapshot.fromValues(
-        tToken: tTokenFromResponse,
-        forumSession: forumSession,
-      );
+    final jarState = await _readSessionCookieState();
+    if (response == null ||
+        response.requestOptions.uri.host.toLowerCase() !=
+            CookieJarService.appBaseHost) {
+      return jarState;
     }
 
-    return _readSessionCookieState();
+    final tTokenFromResponse = _extractTTokenFromSetCookie(response);
+    final isDeletion = _hasExplicitTDeletion(response);
+    if (tTokenFromResponse == null && !isDeletion) return jarState;
+
+    final options = response.requestOptions;
+    final isExplicitLogout =
+        options.method.toUpperCase() == 'DELETE' &&
+        options.uri.path.startsWith('/session/');
+    if (AppCookieManager.shouldIgnoreSessionSetCookie(
+      isDeletion: isDeletion,
+      isExplicitLogout: isExplicitLogout,
+      sentTToken: _sentTTokenFromRequest(options),
+      currentTToken: jarState.tToken,
+    )) {
+      // Mirror AppCookieManager's guard. This interceptor sees the response
+      // before cookies are saved; using a rejected raw Set-Cookie here would
+      // create a false split between in-memory _t and the canonical jar.
+      return jarState;
+    }
+
+    return SessionSnapshot.fromValues(
+      tToken: tTokenFromResponse,
+      forumSession: jarState.forumSession,
+    );
   }
 
   String? _extractTTokenFromSetCookie(Response? response) {
@@ -1569,9 +1578,41 @@ mixin _AuthMixin on _DiscourseServiceBase {
       return false;
     }
 
+    // An initial login-state check can race with _t rotation or temporary
+    // server/CF errors. Probe candidate sessions before discarding the login.
+    Future<bool> recoverAfterInvalidCheck(
+      RequestOptions failedOptions,
+      String reason,
+    ) async {
+      if (!logoutOnInvalid || !isCurrent()) return false;
+      final confirmed = await _probeSession(
+        source: 'is_logged_in_check',
+        triggerInfo: reason,
+        signalRequestOptions: failedOptions,
+      );
+      if (!isCurrent()) return false;
+      // null means the probe was inconclusive, not that we are logged out.
+      // The probe handles confirmed logout itself.
+      return confirmed != false;
+    }
+
     final tToken = await _cookieJar.getTToken();
     if (!isCurrent()) return false;
-    if (tToken == null || tToken.isEmpty) return false;
+    if (tToken == null || tToken.isEmpty) {
+      // A stale error response in a previous app version may have erased the
+      // jar while the in-memory/WebView session is still recoverable.
+      if (_hasTokenValue(_tToken) && logoutOnInvalid) {
+        return recoverAfterInvalidCheck(
+          RequestOptions(
+            path: '/session/current.json',
+            baseUrl: AppConstants.baseUrl,
+            method: 'GET',
+          ),
+          'missing_local_t_cookie',
+        );
+      }
+      return false;
+    }
 
     final storedUsername = await _storage.read(
       key: DiscourseService._usernameKey,
@@ -1592,13 +1633,22 @@ mixin _AuthMixin on _DiscourseServiceBase {
         '/session/current.json',
         queryParameters: {'_': DateTime.now().millisecondsSinceEpoch},
         options: Options(
-          extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+          extra: const {
+            'skipAuthCheck': true,
+            'skipCsrf': true,
+            'skipSessionStateSync': true,
+            FluxRequestKeys.noRecovery: true,
+          },
         ),
       );
       if (!isCurrent()) return false;
       final data = response.data;
       if (data is Map<String, dynamic> && data['current_user'] is Map) {
-        _tToken = tToken;
+        // This response may rotate _t. Use the post-response canonical jar,
+        // never the token captured before the network request.
+        final committedTToken = await _cookieJar.getTToken();
+        if (!isCurrent()) return false;
+        _tToken = committedTToken ?? tToken;
         final liveUsername = (data['current_user'] as Map)['username']
             ?.toString();
         final resolvedUsername =
@@ -1630,7 +1680,7 @@ mixin _AuthMixin on _DiscourseServiceBase {
         'type': 'auth',
         'event': 'auth_session_check_failed',
         'message': logoutOnInvalid
-            ? '登录态检查返回 200 但无 current_user，执行登出'
+            ? '登录态检查返回 200 但无 current_user，尝试恢复及复检'
             : '登录态检查返回 200 但无 current_user，保留本地会话',
         'statusCode': response.statusCode,
         'memHasToken': _tToken != null && _tToken!.isNotEmpty,
@@ -1641,7 +1691,10 @@ mixin _AuthMixin on _DiscourseServiceBase {
         'jarTHash': _safeTokenHash(tToken),
         ..._sentTDiagnostics(response.requestOptions),
       });
-      return await rejectInvalidSession();
+      return await recoverAfterInvalidCheck(
+        response.requestOptions,
+        '200_without_current_user',
+      );
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       if (!isCurrent()) return false;
@@ -1653,7 +1706,7 @@ mixin _AuthMixin on _DiscourseServiceBase {
           'type': 'auth',
           'event': 'auth_session_check_failed',
           'message': logoutOnInvalid
-              ? '登录态检查被服务端拒绝，执行登出'
+              ? '登录态检查被服务端拒绝，尝试恢复及复检'
               : '登录态检查被服务端拒绝，保留本地会话',
           'statusCode': status,
           'errorType': e.type.toString(),
@@ -1665,7 +1718,10 @@ mixin _AuthMixin on _DiscourseServiceBase {
           'jarTHash': _safeTokenHash(tToken),
           ..._sentTDiagnostics(e.response?.requestOptions ?? e.requestOptions),
         });
-        return await rejectInvalidSession();
+        return await recoverAfterInvalidCheck(
+          e.response?.requestOptions ?? e.requestOptions,
+          'initial_check_http_$status',
+        );
       }
       // 网络异常/CF 验证等 → 保守保留本地状态
       if (!isCurrent()) return false;

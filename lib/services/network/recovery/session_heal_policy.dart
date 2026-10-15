@@ -104,6 +104,14 @@ class SessionSelfHealPolicy implements RecoveryPolicy {
         response.headers.value('discourse-logged-out')?.isNotEmpty == true;
     if (status != 401 && status != 419 && !hasLoggedOutHeader) return false;
 
+    // A successful mutation with a misleading logged-out header may already
+    // have been committed by Discourse. Never replay it automatically.
+    // The auth probe will validate the weak logout signal independently.
+    if (status >= 200 && status < 400 &&
+        !const {'GET', 'HEAD', 'OPTIONS'}.contains(options.method.toUpperCase())) {
+      return false;
+    }
+
     // 真登出不自愈
     final body = response.data;
     if (body is Map && body['error_type'] == 'not_logged_in') return false;

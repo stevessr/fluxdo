@@ -131,6 +131,30 @@ void main() {
     });
   });
 
+  test('200 带 logged-out 的 POST 不应重放已经成功的写操作', () {
+    final policy = SessionSelfHealPolicy(
+      readSessionToken: () async =>
+          CanonicalCookie(name: '_t', value: 'valid'),
+    );
+    final options = RequestOptions(
+      path: '/posts.json',
+      baseUrl: 'https://linux.do',
+      method: 'POST',
+    );
+    final outcome = AttemptOutcome.success(
+      response: Response<dynamic>(
+        requestOptions: options,
+        statusCode: 200,
+        headers: Headers.fromMap({
+          'discourse-logged-out': ['1'],
+        }),
+        data: const {'id': 123},
+      ),
+      attemptIndex: 0,
+    );
+    expect(policy.canHandle(outcome), isFalse);
+  });
+
   group('jar 快照时序(M0 回归护栏)', () {
     test('401 携带清除 _t 的 Set-Cookie 时,自愈仍读到有效快照并重放', () async {
       final jar = CookieJar();
