@@ -132,9 +132,20 @@ class UserApiKeyService {
 
   /// 授权登录收口后的"用完即焚":scopes 无 write(本地无自愈价值)时
   /// 撤销并清除刚拿到的 key,不给服务端留永久零权限凭据。
-  Future<void> burnAfterLoginIfUseless(Dio dio) async {
+  Future<void> burnAfterLoginIfUseless(
+    Dio dio, {
+    String? expectedKey,
+  }) async {
     if (keyWorthKeeping) return;
-    await revokeAndClear(dio);
+    final key = await readApiKey();
+    if (key == null || key.isEmpty) return;
+    // A new browser authorization may have started while an earlier
+    // post-login revoke is pending. Never delete the replacement key.
+    if (expectedKey != null && key != expectedKey) return;
+    // Remove the locally stored key before doing the slow network revoke:
+    // no delayed response should clear a subsequent authorization's key.
+    await clearKey();
+    await revokeKey(dio, key);
   }
 
   Future<String> _ensureClientId() async {
