@@ -219,12 +219,24 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
       return;
     }
     setToken(token);
-    if (confirmedUser != null &&
-        confirmedUser.username.toLowerCase() == identifier.toLowerCase()) {
-      currentUserNotifier.value = confirmedUser;
-    }
     final forceBrowserSessionSync = !WebViewSessionCookieRefreshService.instance
         .hasFreshSyncForToken(token);
+
+    // First clear guest-mode synchronously in onLoginSuccess, then publish
+    // currentUserNotifier. Observers must never see the new user while the
+    // account manager still reports a guest profile.
+    void publishLogin(String committedToken) {
+      if (!AuthSession().isValid(loginGeneration)) return;
+      onLoginSuccess(
+        committedToken,
+        forceBrowserSessionSync: forceBrowserSessionSync,
+        notifyAuthState: notifyAuthState,
+      );
+      if (confirmedUser != null &&
+          confirmedUser.username.toLowerCase() == identifier.toLowerCase()) {
+        currentUserNotifier.value = confirmedUser;
+      }
+    }
 
     // API-key OTP already established the session and /session/current.json
     // verified its identity. Do not hold the UI on network preload (up to 8s).
@@ -233,14 +245,7 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
       LoginReadyCoordinator(
         hydrateFromHtml: PreloadedDataService().hydrateFromHtml,
         refreshPreloadedData: PreloadedDataService().refresh,
-        notifyLoginReady: (t) {
-          if (!AuthSession().isValid(loginGeneration)) return;
-          onLoginSuccess(
-            t,
-            forceBrowserSessionSync: forceBrowserSessionSync,
-            notifyAuthState: notifyAuthState,
-          );
-        },
+        notifyLoginReady: publishLogin,
       ).finalizeImmediately(
         token: token,
         onRefreshError: (error, _) {
@@ -258,11 +263,7 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
             notifyLoginReady: (t) {
               if (!AuthSession().isValid(loginGeneration)) return;
               loginReadyNotified = true;
-              onLoginSuccess(
-                t,
-                forceBrowserSessionSync: forceBrowserSessionSync,
-                notifyAuthState: notifyAuthState,
-              );
+              publishLogin(t);
             },
           )
           .finalize(token: token, pageHtml: null)
@@ -272,11 +273,7 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     } finally {
       // 兜底广播, 避免 UI 卡在"同步登录中"
       if (!loginReadyNotified && AuthSession().isValid(loginGeneration)) {
-        onLoginSuccess(
-          token,
-          forceBrowserSessionSync: forceBrowserSessionSync,
-          notifyAuthState: notifyAuthState,
-        );
+        publishLogin(token);
       }
     }
   }
