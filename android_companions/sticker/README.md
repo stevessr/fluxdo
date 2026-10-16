@@ -17,7 +17,10 @@
 - 角色图像/差分素材、MiSans 字体只打入 Sticker APK，
   正式 Android Core APK 不包含这些资源。
 - Source import 闭包检查、pubspec.lock 检查、Flutter Android 原生插件
-  注册表白名单、APK 素材污染检查和同签名检查均为 CI 门禁。
+  注册表精确白名单、APK 素材污染检查和同签名检查均为 CI 门禁。
+  白名单包括 Flutter 依赖间接引入的 `flutter_plugin_android_lifecycle`、
+  `jni`、`jni_flutter`、`sqflite_android`；全部注册项必须存在于独立
+  Sticker 的 pubspec.lock 中。不会因主 APK 已安装某插件而自动放行。
 
 ### 执行命令
 

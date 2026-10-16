@@ -45,6 +45,31 @@ FORBIDDEN_IMPORTED_PACKAGES = (
     "package:rhttp/",
 )
 
+# Flutter's native registrant includes transitive *platform* implementations,
+# not just the dependencies listed directly in companion/pubspec.yaml.
+# This explicit set was audited from the isolated 2026-10-16 pub resolution.
+# It must never expand to arbitrary packages merely because the full host uses
+# them. The lockfile still has to contain every registered native package.
+ALLOWED_ANDROID_NATIVE_PLUGINS = frozenset({
+    "file_picker",
+    "flutter_avif_android",
+    "flutter_plugin_android_lifecycle",
+    "gal",
+    "jni",
+    "jni_flutter",
+    "path_provider_android",
+    "share_plus",
+    "sqflite_android",
+})
+FORBIDDEN_ANDROID_NATIVE_PLUGINS = frozenset({
+    "flutter_inappwebview_android",
+    "flutter_local_notifications",
+    "firebase_core",
+    "firebase_messaging",
+    "rhttp",
+    "cronet_http",
+})
+
 
 def stage_drawing_sources(target: Path) -> None:
     for relative in DRAWING_SOURCES:
@@ -340,47 +365,73 @@ subprojects {
 
 
 def verify_drawing_dependency_graph(target: Path) -> tuple[int, list[str]]:
-    """Reject accidental Flutter native-plugin dependencies from the host."""
+    """Validate every registered native package against the minimal APK.
+
+    A direct dependency may bring its own Android implementation, lifecycle
+    helpers, JNI or SQLite. They belong in the isolated lock/registrant graph
+    and must be reviewed by exact package ID, not a broad startswith prefix.
+    """
+    import re
+
     lockfile = target / "pubspec.lock"
     if not lockfile.is_file():
         raise RuntimeError("Sticker Flutter pub get did not produce a lockfile")
-    lock = lockfile.read_text()
-    lines = lock.splitlines()
+    lines = lockfile.read_text(encoding="utf-8").splitlines()
     try:
         packages_start = lines.index("packages:")
         packages_end = lines.index("sdks:", packages_start + 1)
     except ValueError as error:
         raise RuntimeError("Unexpected pubspec.lock package structure") from error
-    import re
-    package_count = sum(
-        1 for line in lines[packages_start + 1:packages_end]
-        if re.fullmatch(r"  [a-zA-Z][a-zA-Z0-9_]*:", line)
-    )
-    if package_count < 8:
-        raise RuntimeError("Sticker dependency graph appears incomplete")
-    if "  fluxdo:" in lines:
-        raise RuntimeError("The sticker APK resolved the full FluxDO dependency")
-    plugins: list[str] = []
+    packages = {
+        match.group(1)
+        for line in lines[packages_start + 1:packages_end]
+        if (match := re.fullmatch(r"  ([a-zA-Z][a-zA-Z0-9_]*):", line))
+    }
+    if len(packages) < 8 or "fluxdo" in packages:
+        raise RuntimeError("Sticker resolved incomplete or monolithic dependencies")
+
     registration = target / ".flutter-plugins-dependencies"
-    if registration.is_file():
-        data = json.loads(registration.read_text())
-        plugins = [item["name"] for item in data.get("plugins", {}).get("android", [])]
-        allowed_prefixes = (
-            "file_picker", "flutter_avif", "gal", "path_provider",
-            "share_plus",
+    if not registration.is_file():
+        raise RuntimeError("Sticker Flutter native plugin registry is missing")
+    data = json.loads(registration.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise RuntimeError("Sticker Flutter plugin registry is invalid")
+    entries = data.get("plugins", {}).get("android")
+    if not isinstance(entries, list):
+        raise RuntimeError("Sticker Flutter plugin registry lacks Android plugins")
+    plugins = []
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+            raise RuntimeError("Malformed Android plugin registry entry")
+        name = entry["name"]
+        if name in plugins:
+            raise RuntimeError(f"Duplicate Android native plugin: {name}")
+        plugins.append(name)
+    if not plugins:
+        raise RuntimeError("Sticker APK resolved no Android native plugins")
+
+    unexpected = set(plugins) - ALLOWED_ANDROID_NATIVE_PLUGINS
+    if unexpected:
+        raise RuntimeError(
+            "Unexpected native plugins in Sticker-only APK: "
+            + ", ".join(sorted(unexpected))
         )
-        unexpected = [
-            name for name in plugins
-            if not name.startswith(allowed_prefixes)
-        ]
-        if unexpected:
-            raise RuntimeError(
-                "Unexpected native plugins in Sticker-only APK: "
-                + ", ".join(unexpected)
-            )
-        print(f"Sticker Android native plugin registry: {plugins}")
-    print(f"Sticker resolved Dart packages: {package_count}")
-    return package_count, plugins
+    forbidden = set(plugins) & FORBIDDEN_ANDROID_NATIVE_PLUGINS
+    if forbidden:
+        raise RuntimeError("Host plugins registered in Sticker: " + ", ".join(sorted(forbidden)))
+    missing = set(plugins) - packages
+    if missing:
+        raise RuntimeError(
+            "Android plugin registry references missing lockfile packages: "
+            + ", ".join(sorted(missing))
+        )
+    # These must exist for the generator's own save/share/AVIF paths to work.
+    required = {"file_picker", "flutter_avif_android", "gal", "path_provider_android", "share_plus"}
+    if required - set(plugins):
+        raise RuntimeError("Sticker native plugins missing: " + ", ".join(sorted(required - set(plugins))))
+    print(f"Sticker Android native plugin registry: {plugins}")
+    print(f"Sticker resolved Dart packages: {len(packages)}")
+    return len(packages), plugins
 
 
 def verify_sticker_apk(apk: Path) -> None:
