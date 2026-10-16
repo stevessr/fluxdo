@@ -1,24 +1,7 @@
 name: Shared Image Provider
 
+# Feature-specific regression suite: run on demand, not on every PR/push.
 on:
-  pull_request:
-    paths:
-      - 'lib/services/discourse_cache_manager.dart'
-      - 'lib/widgets/common/cached_image.dart'
-      - 'lib/widgets/common/smart_avatar.dart'
-      - 'lib/widgets/content/discourse_image.dart'
-      - 'test/services/shared_image_provider_test.dart'
-      - '.github/workflows/image-provider-cache-keys.yaml'
-  push:
-    branches:
-      - perf/unify-image-provider-cache-keys
-    paths:
-      - 'lib/services/discourse_cache_manager.dart'
-      - 'lib/widgets/common/cached_image.dart'
-      - 'lib/widgets/common/smart_avatar.dart'
-      - 'lib/widgets/content/discourse_image.dart'
-      - 'test/services/shared_image_provider_test.dart'
-      - '.github/workflows/image-provider-cache-keys.yaml'
   workflow_dispatch:
 
 permissions:

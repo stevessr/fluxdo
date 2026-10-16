@@ -1,21 +1,6 @@
 name: Account Runtime Switch
 
 on:
-  push:
-    branches:
-      - main
-      - feat/account-runtime-switching
-    paths:
-      - 'lib/services/account_runtime_pool.dart'
-      - 'lib/services/account_switch_browser_cookie_cleaner.dart'
-      - 'lib/services/network/cookie/raw_cookie_writer.dart'
-      - 'lib/services/discourse/discourse_service.dart'
-      - 'lib/services/discourse/_account_switch.dart'
-      - 'lib/services/storage/multi_account_registry_normalizer.dart'
-      - 'lib/services/storage/resilient_secure_storage.dart'
-      - 'test/services/account_runtime_pool_test.dart'
-      - 'test/services/storage/multi_account_registry_normalizer_test.dart'
-      - '.github/workflows/account-runtime-switch.yaml'
   pull_request:
     paths:
       - 'lib/services/account_runtime_pool.dart'
