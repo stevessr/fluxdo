@@ -13,20 +13,6 @@ on:
       - 'test/services/credential_store_service_test.dart'
       - 'test/widgets/auth/direct_login_contract_test.dart'
       - '.github/workflows/direct-login.yaml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'lib/pages/login_page.dart'
-      - 'lib/services/account_manager.dart'
-      - 'lib/services/credential_store_service.dart'
-      - 'lib/services/discourse/_login.dart'
-      - 'lib/widgets/auth/login_form.dart'
-      - 'lib/widgets/auth/two_factor_dialog.dart'
-      - 'lib/widgets/auth/webview_login_dialog.dart'
-      - 'test/services/credential_store_service_test.dart'
-      - 'test/widgets/auth/direct_login_contract_test.dart'
-      - '.github/workflows/direct-login.yaml'
   workflow_dispatch:
 
 permissions:
