@@ -150,6 +150,18 @@ jobs:
             --plugin ldc build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk \
             --plugin ldc_reward build/plugin_ldc_reward/outputs/apk/debug/plugin_ldc_reward-debug.apk \
             --plugin sticker build/plugin_sticker/fluxdo-sticker-android-arm64-debug.apk
+      # A modular Core must be delivered alongside its separately signed
+      # companions; otherwise Android users cannot install/test the exact set.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-core-modular-arm64-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-sticker-dependency-audit
+          path: build/plugin_sticker/sticker-dependencies-android-arm64-debug.md
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: fluxdo-deviceinfo-debug-apk

@@ -65,12 +65,18 @@ object PluginWebSession {
 
         // Invalidate the persisted slot BEFORE the async boundary. A process
         // death mid-purge can never cause the next launch to trust old cookies.
-        if (!preferences.edit().remove(LAST_SLOT).commit()) return
+        if (!preferences.edit().remove(LAST_SLOT).commit()) {
+            // If a second launch cannot invalidate the slot, revoke the
+            // previous pending launch as well. Never show stale account data.
+            pending = null
+            return
+        }
         pending = PendingOpen(activity, view, slot, homeUrl, preferences)
         if (clearing) return
 
         clearing = true
-        CookieManager.getInstance().removeAllCookies {
+        try {
+            CookieManager.getInstance().removeAllCookies {
             mainHandler.post {
                 val cleared = try {
                     CookieManager.getInstance().flush()
@@ -87,14 +93,28 @@ object PluginWebSession {
                     // Leave the slot invalidated; the next launch must purge again.
                     return@post
                 }
-                open.view.clearCache(true)
-                open.view.clearHistory()
-                if (!open.preferences.edit().putString(LAST_SLOT, open.slot).commit()) {
+                val cacheCleared = try {
+                    open.view.clearCache(true)
+                    open.view.clearHistory()
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+                if (!cacheCleared || !open.preferences.edit()
+                        .putString(LAST_SLOT, open.slot).commit()) {
+                    // Cookies or view state might be only partially cleared;
+                    // refuse to expose any prior authenticated page.
                     return@post
                 }
                 open.view.visibility = View.VISIBLE
                 open.view.loadUrl(open.homeUrl)
             }
+        }
+        } catch (_: Exception) {
+            pending = null
+            clearing = false
+            // LAST_SLOT has already been invalidated. Retry requires a fresh
+            // purge rather than trusting the old cookie jar.
         }
     }
 }

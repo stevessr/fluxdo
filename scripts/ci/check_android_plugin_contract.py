@@ -113,6 +113,9 @@ def main() -> None:
         'if (clearing) return',
         'preferences.edit().remove(LAST_SLOT).commit()',
         'only the newest pending view',
+        'pending = null',
+        'val cacheCleared = try',
+        'if (!cacheCleared',
     ):
         check(feature in web_session, f"WebView account isolation missing: {feature}")
     check('PluginProtocol.MAX_JSON_BYTES' in host and
