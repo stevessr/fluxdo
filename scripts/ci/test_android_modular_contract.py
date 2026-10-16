@@ -105,6 +105,35 @@ class AndroidCoreIsolationTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "stevessr_render_params.dart"):
             modular.verify_sources(self.stage)
 
+    def test_conditional_import_checks_every_branch(self) -> None:
+        source = self.stage / "lib/pages/more.dart"
+        source.write_text(
+            "import '../pages/metaverse_page.dart'\n"
+            "  if (dart.library.io) '../providers/ldc_providers.dart';\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "ldc_providers.dart"):
+            modular.verify_sources(self.stage)
+
+    def test_multiline_conditional_export_checks_every_branch(self) -> None:
+        source = self.stage / "lib/pages/more.dart"
+        source.write_text(
+            "export '../pages/metaverse_page.dart'\n"
+            "  if (dart.library.html) '../models/cdk_user_info.dart';\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "cdk_user_info.dart"):
+            modular.verify_sources(self.stage)
+
+    def test_relative_import_must_remain_inside_staging(self) -> None:
+        source = self.stage / "lib/pages/more.dart"
+        source.write_text(
+            "import '../../../../outside.dart';\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "escapes stage"):
+            modular.verify_sources(self.stage)
+
     def test_generated_l10n_imports_may_be_pending(self) -> None:
         source = self.stage / "lib/l10n/app_localizations.dart"
         source.parent.mkdir(parents=True, exist_ok=True)

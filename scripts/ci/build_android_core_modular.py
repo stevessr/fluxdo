@@ -218,21 +218,28 @@ def verify_sources(stage: Path) -> None:
     missing = []
     for source in (stage / "lib").rglob("*.dart"):
         body = source.read_text(encoding="utf-8")
+        # A conditional Dart directive can name several alternative sources:
+        #   import 'stub.dart' if (dart.library.io) 'native.dart';
+        # Checking only its first URI misses a removed plugin implementation.
+        # Work on complete, semicolon-terminated directives (also multiline).
         for declaration in re.finditer(
-            r"""(?m)^[ ]*(?:import|export|part)[ ]+['"]([^'"]+[.]dart)['"]""",
+            r"""(?ms)^[ \t]*(?:import|export|part)\b(?![ \t]+of\b)\s+([^;]+);""",
             body,
         ):
-            uri = declaration.group(1)
-            if uri.startswith("dart:") or uri.startswith("package:flutter/"):
-                continue
-            if uri.startswith("package:fluxdo/"):
-                target = stage / "lib" / uri[len("package:fluxdo/"):]
-            elif uri.startswith("package:") or uri.startswith("http"):
-                continue
-            else:
-                target = source.parent / uri
-            if not target.is_file() and target.resolve() not in pending_generated:
-                missing.append(f"{source.relative_to(stage)} -> {uri}")
+            for uri in re.findall(r"""['"]([^'"]+[.]dart)['"]""", declaration.group(1)):
+                if uri.startswith("dart:") or uri.startswith("package:flutter/"):
+                    continue
+                if uri.startswith("package:fluxdo/"):
+                    target = stage / "lib" / uri[len("package:fluxdo/"):]
+                elif uri.startswith("package:") or uri.startswith("http"):
+                    continue
+                else:
+                    target = source.parent / uri
+                resolved = target.resolve()
+                if not resolved.is_relative_to(stage.resolve()):
+                    missing.append(f"{source.relative_to(stage)} -> {uri} (escapes stage)")
+                elif not target.is_file() and resolved not in pending_generated:
+                    missing.append(f"{source.relative_to(stage)} -> {uri}")
     if missing:
         raise RuntimeError(
             "Broken Dart import graph in Android Core:\\n" +
