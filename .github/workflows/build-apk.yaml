@@ -362,3 +362,74 @@ jobs:
           if-no-files-found: error
           # APK 已是压缩格式，artifact 再压缩收益极小且浪费 CPU
           compression-level: 0
+
+  # Wait for every selected ABI to finish before editing the shared nightly release.
+  publish-nightly:
+    name: Publish APKs to nightly
+    needs: build-apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: fluxdo-nightly-release
+      cancel-in-progress: false
+    steps:
+      - name: Download APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fluxdo-apk-*-${{ github.run_number }}
+          path: dist
+          merge-multiple: true
+
+      # Use stable per-ABI asset names so repeat builds overwrite rather than accumulate.
+      - name: Prepare nightly assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(dist/*.apk)
+          if (( ${#apks[@]} == 0 )); then
+            echo 'No APK artifacts to publish' >&2
+            exit 1
+          fi
+          mkdir -p nightly
+          for apk in "${apks[@]}"; do
+            case "${apk##*/}" in
+              *-arm64-v8a.apk) arch=arm64-v8a ;;
+              *-armeabi-v7a.apk) arch=armeabi-v7a ;;
+              *-x86_64.apk) arch=x86_64 ;;
+              *-universal.apk) arch=universal ;;
+              *) echo "Unexpected APK name: $apk" >&2; exit 1 ;;
+            esac
+            cp "$apk" "nightly/fluxdo-nightly-${arch}.apk"
+          done
+          ls -lh nightly/
+
+      - name: Create or update nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          target_commitish: ${{ github.sha }}
+          name: Fluxdo Nightly
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: nightly/*.apk
+          body: |
+            Automatically built Android APKs from the latest successful build-apk workflow.
+
+            Commit: `${{ github.sha }}`
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Individual architectures are updated when they are built.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # target_commitish only creates the tag; move an existing nightly tag too.
+      - name: Point nightly tag to this build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/nightly" \
+            -f sha="${GITHUB_SHA}" -F force=true >/dev/null
