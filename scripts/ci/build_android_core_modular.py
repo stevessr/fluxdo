@@ -122,6 +122,123 @@ def strip_host_reward_credentials(source: str) -> str:
     return rewritten
 
 
+def strip_core_metaverse_dependencies(refresher: str, profile: str) -> tuple[str, str]:
+    """Move Android Core off the old in-process LDC/CDK providers.
+
+    Operates only on temporary Android staging copies. Non-Android Flutter
+    builds still use the original providers and account/balance UI.
+    These tightly scoped edits fail closed if upstream source structure drifts.
+    """
+    for line in (
+        "import 'ldc_providers.dart';",
+        "import 'cdk_providers.dart';",
+        "    await container.read(ldcUserInfoProvider.notifier).disable();",
+        "    await container.read(cdkUserInfoProvider.notifier).disable();",
+        "    (c) => c.invalidate(ldcUserInfoProvider),",
+        "    (c) => c.invalidate(cdkUserInfoProvider),",
+    ):
+        if refresher.count(line) != 1:
+            raise RuntimeError(f"Core account refresher changed: {line}")
+        refresher = refresher.replace(line + "\n", "", 1)
+
+    for line in (
+        "import '../providers/ldc_providers.dart';",
+        "import '../widgets/ldc_balance_card.dart';",
+        "import '../providers/cdk_providers.dart';",
+        "import '../widgets/cdk_balance_card.dart';",
+        "import '../services/ldc_oauth_service.dart';",
+        "import '../services/cdk_oauth_service.dart';",
+    ):
+        if profile.count(line) != 1:
+            raise RuntimeError(f"Core profile imports changed: {line}")
+        profile = profile.replace(line + "\n", "", 1)
+
+    start = profile.find("      // LDC/CDK provider 现在只 watch")
+    end_marker = "      if (!AuthSession().isValid(generation)) return;"
+    # The first guard precedes the balance refresh; the second follows it.
+    end = profile.find(end_marker, profile.find("      await Future.wait([", start))
+    if start < 0 or end < start:
+        raise RuntimeError("Core profile refresh layout changed")
+    old_refresh = profile[start:end]
+    for anchor in (
+        "ldcUserInfoProvider.notifier", "cdkUserInfoProvider.notifier",
+        "AccountManager.accountScopedKey('ldc_enabled'",
+        "AccountManager.accountScopedKey('cdk_enabled'",
+    ):
+        if anchor not in old_refresh:
+            raise RuntimeError(f"Core profile refresh gate changed: {anchor}")
+    profile = profile[:start] + (
+        "      // Android Core refreshes only its own account-scoped state.\n"
+        "      // LDC/CDK sessions belong to independently signed packages.\n"
+        "      await Future.wait([\n"
+        "        ref.read(currentUserProvider.notifier).refreshSilently(force: true),\n"
+        "        ref.read(userSummaryProvider.notifier).refresh(),\n"
+        "      ]);\n"
+    ) + profile[end:]
+
+    first = "  Future<void> _reauthorizeLdc() async {"
+    last = "  Future<void> _openProfileEdit() async {"
+    start, end = profile.find(first), profile.find(last)
+    if start < 0 or end < start or profile.count("_reauthorizeCdk() async") != 1:
+        raise RuntimeError("Core profile OAuth integration changed")
+    profile = profile[:start] + profile[end:]
+
+    first = "  Widget _buildBalanceCards() {"
+    last = "  Widget _buildError(ThemeData theme, String error) {"
+    start, end = profile.find(first), profile.find(last)
+    if start < 0 or end < start:
+        raise RuntimeError("Core profile balance card layout changed")
+    old_cards = profile[start:end]
+    for anchor in ("LdcBalanceCard(", "CdkBalanceCard("):
+        if anchor not in old_cards:
+            raise RuntimeError(f"Core profile balance UI changed: {anchor}")
+    profile = profile[:start] + (
+        "  Widget _buildBalanceCards() {\n"
+        "    if (!_balanceEverActive) return const SizedBox.shrink();\n"
+        "    return Padding(\n"
+        "      padding: const EdgeInsets.only(bottom: 24),\n"
+        "      child: OutlinedButton.icon(\n"
+        "        onPressed: () => Navigator.of(context).push<void>(\n"
+        "          MaterialPageRoute(builder: (_) => const MetaversePage()),\n"
+        "        ),\n"
+        "        icon: const Icon(Icons.extension_rounded),\n"
+        "        label: const Text('在独立插件中查看 LDC / CDK'),\n"
+        "      ),\n"
+        "    );\n"
+        "  }\n\n"
+    ) + profile[end:]
+
+    for source in (refresher, profile):
+        for symbol in (
+            "ldcUserInfoProvider", "cdkUserInfoProvider",
+            "LdcBalanceCard(", "CdkBalanceCard(",
+            "LdcOAuthService(", "CdkOAuthService(",
+        ):
+            if symbol in source:
+                raise RuntimeError(f"Android Core retained removed metaverse implementation: {symbol}")
+    return refresher, profile
+
+
+def normalize_core_localization_imports(stage: Path) -> int:
+    """Correct an existing stale relative path only inside Android staging.
+
+    Some unrelated Flutter widgets import '../../../../../l10n/s.dart'
+    despite being under lib/. This path escapes the workspace and is not
+    a valid package source. Do not loosen the isolation checker to allow it.
+    """
+    legacy = "'../../../../../l10n/s.dart'"
+    replacement = "'package:fluxdo/l10n/s.dart'"
+    fixed = 0
+    for source in (stage / "lib").rglob("*.dart"):
+        body = source.read_text(encoding="utf-8")
+        if legacy not in body:
+            continue
+        count = body.count(legacy)
+        source.write_text(body.replace(legacy, replacement), encoding="utf-8")
+        fixed += count
+    return fixed
+
+
 def prepare(destination: Path) -> None:
     if destination.exists():
         raise RuntimeError(f"Refusing to overwrite existing directory: {destination}")
@@ -147,6 +264,20 @@ def prepare(destination: Path) -> None:
     )
     original_menu = menu.read_text()
     menu.write_text(strip_host_reward_credentials(original_menu))
+
+    # Remove remaining host-level balances, refreshers, and OAuth references
+    # before deleting the implementations. The full desktop/iOS sources are
+    # deliberately untouched.
+    refresher_path = destination / "lib/providers/app_state_refresher.dart"
+    profile_path = destination / "lib/pages/profile_page.dart"
+    refresher, profile = strip_core_metaverse_dependencies(
+        refresher_path.read_text(encoding="utf-8"),
+        profile_path.read_text(encoding="utf-8"),
+    )
+    refresher_path.write_text(refresher, encoding="utf-8")
+    profile_path.write_text(profile, encoding="utf-8")
+    corrected = normalize_core_localization_imports(destination)
+    print(f"Rewrote {corrected} stale localization imports in Android Core stage")
 
     for rel in EXCLUDED_DART:
         (destination / rel).unlink(missing_ok=True)

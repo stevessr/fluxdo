@@ -80,6 +80,36 @@ class AndroidCoreIsolationTest(unittest.TestCase):
         self.assertIn("WidgetsBindingObserver", manager)
         self.assertIn("AppLifecycleState.resumed", manager)
 
+    def test_android_core_profile_and_account_refresh_detach_providers(self) -> None:
+        refresher = (modular.ROOT / "lib/providers/app_state_refresher.dart").read_text()
+        profile = (modular.ROOT / "lib/pages/profile_page.dart").read_text()
+        rewritten_refresher, rewritten_profile = modular.strip_core_metaverse_dependencies(
+            refresher, profile,
+        )
+        self.assertNotIn("ldcUserInfoProvider", rewritten_refresher)
+        self.assertNotIn("cdkUserInfoProvider", rewritten_refresher)
+        self.assertNotIn("LdcOAuthService(", rewritten_profile)
+        self.assertNotIn("CdkBalanceCard(", rewritten_profile)
+        self.assertIn("const MetaversePage()", rewritten_profile)
+        self.assertIn("currentUserProvider.notifier", rewritten_profile)
+
+    def test_android_core_profile_refuses_source_drift(self) -> None:
+        refresher = (modular.ROOT / "lib/providers/app_state_refresher.dart").read_text()
+        profile = (modular.ROOT / "lib/pages/profile_page.dart").read_text()
+        with self.assertRaisesRegex(RuntimeError, "Core account refresher changed"):
+            modular.strip_core_metaverse_dependencies(
+                refresher.replace("import 'ldc_providers.dart';", ""),
+                profile,
+            )
+
+    def test_stage_localization_normalizes_only_known_stale_paths(self) -> None:
+        old = self.stage / "lib/widgets/badge/badge_ui_utils.dart"
+        old.parent.mkdir(parents=True, exist_ok=True)
+        old.write_text("import '../../../../../l10n/s.dart';\n")
+        count = modular.normalize_core_localization_imports(self.stage)
+        self.assertEqual(count, 1)
+        self.assertEqual(old.read_text(), "import 'package:fluxdo/l10n/s.dart';\n")
+
     def test_minimal_isolated_core_is_valid(self) -> None:
         modular.verify_sources(self.stage)
 

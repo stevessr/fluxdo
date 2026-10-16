@@ -980,7 +980,7 @@ extension _UserActions on _TopicDetailPageState {
         postId: post.id,
         postUsername: post.username,
         service: DiscourseService(),
-        onSuccess: () => ToastService.showSuccess(S.current.post_flagSubmitted),
+        onSuccess: (_) => ToastService.showSuccess(S.current.post_flagSubmitted),
       ),
     );
   }
