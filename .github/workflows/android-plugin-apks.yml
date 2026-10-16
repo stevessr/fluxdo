@@ -15,6 +15,7 @@ on:
       - 'android_companions/sticker/shims/**'
       - 'scripts/ci/build_android_core_modular.py'
       - 'scripts/ci/test_android_modular_contract.py'
+      - 'scripts/ci/test_sticker_companion_contract.py'
       - 'scripts/ci/check_android_apk_contract.py'
       - 'android_modular/**'
       - 'scripts/ci/check_android_plugin_contract.py'
@@ -33,6 +34,7 @@ on:
       - 'android_modular/**'
       - 'scripts/ci/build_android_core_modular.py'
       - 'scripts/ci/test_android_modular_contract.py'
+      - 'scripts/ci/test_sticker_companion_contract.py'
       - 'scripts/ci/check_android_apk_contract.py'
       - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
       - 'android/settings.gradle.kts'
@@ -50,6 +52,12 @@ on:
       - 'test/services/android_optional_plugin_service_test.dart'
       - 'android/plugin_api/src/main/kotlin/com/github/lingyan000/fluxdo/plugin/api/PluginWebSession.kt'
       - '.github/workflows/android-plugin-apks.yml'
+
+# Only the newest branch snapshot is useful when iterating on APK
+# compatibility. Avoid installing Rust/NDK/Flutter for obsolete pushes.
+concurrency:
+  group: android-plugin-apks-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
