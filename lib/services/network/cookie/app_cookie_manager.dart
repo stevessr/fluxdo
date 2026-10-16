@@ -607,6 +607,14 @@ class AppCookieManager extends Interceptor {
     final filteredSetCookieHeaders = <String>[];
     for (var i = 0; i < cookies.length; i++) {
       final cookie = cookies[i];
+      if (response.requestOptions.spec.isCrossOriginRedirect &&
+          SessionCookieSentinel.criticalCookieNames.contains(cookie.name)) {
+        // An external redirect target cannot rotate/revoke canonical forum
+        // login, Cloudflare, or LDC cookies. Without this, a foreign
+        // Set-Cookie: _t=del could reach deleteCookie()/WV sweep globally.
+        // Ordinary destination-scoped cookies remain eligible for the jar.
+        continue;
+      }
       if (isCfChallengePlatform && !_isCloudflareCookieName(cookie.name)) {
         debugPrint(
           '[CookieManager] drop non-CF cookie from challenge-platform response: '
@@ -800,7 +808,29 @@ class AppCookieManager extends Interceptor {
       final baseUri = response.realUri;
       await Future.wait(
         locations.map((location) async {
-          final redirectUri = baseUri.resolve(location);
+          Uri redirectUri;
+          try {
+            redirectUri = baseUri.resolve(location);
+          } on FormatException {
+            return;
+          }
+          // Copying a host-only Set-Cookie to a foreign redirect authority
+          // would rebind that credential to the attacker-controlled host.
+          // Only allow explicit redirect-cookie forwarding inside the app's
+          // HTTPS site family (linux.do and its subdomains); ordinary
+          // responses always store cookies under the actual response URI.
+          final appHost = CookieJarService.appBaseHost;
+          bool trustedAppHost(String host) {
+            final lower = host.toLowerCase();
+            return lower == appHost || lower.endsWith('.$appHost');
+          }
+          if (baseUri.scheme != 'https' ||
+              redirectUri.scheme != 'https' ||
+              !trustedAppHost(baseUri.host) ||
+              !trustedAppHost(redirectUri.host) ||
+              redirectUri.userInfo.isNotEmpty) {
+            return;
+          }
           if (hasAuthSessionToken) {
             debugPrint(
               '[CookieManager] auth.session-token redirect save uri: '

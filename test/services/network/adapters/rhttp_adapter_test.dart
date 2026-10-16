@@ -11,6 +11,89 @@ void main() {
     );
   }
 
+  group('rhttp HTTP/3 Alt-Svc discovery', () {
+    test('recognizes valid modern H3 advertisements case-insensitively', () {
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h2=":443"; ma=60, h3=":443"; ma=86400'],
+      }), isTrue);
+      expect(http3AltSvcAdvertised({
+        'ALT-SVC': ['H3=":443"; ma=60'],
+      }), isTrue);
+    });
+
+    test('ignores expired hints, old protocol IDs and unrelated headers', () {
+      expect(http3AltSvcAdvertised({
+        'alt-svc': ['h3=":443"; ma=0'],
+      }), isFalse);
+      expect(http3AltSvcAdvertised({
+        'alt-svc': ['h3-29=":443"; ma=86400'],
+      }), isFalse);
+      expect(http3AltSvcAdvertised({
+        'content-type': ['h3=":443"'],
+      }), isFalse);
+    });
+
+    test('does not probe unsupported alternative host or port', () {
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h3=":8443"; ma=3600'],
+      }), isFalse);
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h3="alt.example.org:443"; ma=3600'],
+      }), isFalse);
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h3=":8443"; ma=3600'],
+      }, originPort: 8443), isTrue);
+      expect(http3AltSvcAdvertised({
+        'Alt-Svc': ['h3=":443"; ma=3600'],
+      }, originPort: 8443), isFalse);
+    });
+
+    test('a different-port revocation cannot clear this origin', () {
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h3=":8443"; ma=0'],
+      }), isFalse);
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h3=":8443"; ma=0'],
+      }, originPort: 8443), isTrue);
+    });
+
+    test('honors advertised H3 max-age without extending its lifetime', () {
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"; ma=7'],
+      }), const Duration(seconds: 7));
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"; ma=86400'],
+      }), const Duration(hours: 1));
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"'],
+      }), const Duration(hours: 1));
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"; ma=0'],
+      }), isNull);
+      expect(http3AltSvcLifetime({
+        'Alt-Svc': ['h3=":443"; ma=garbage'],
+      }), isNull);
+    });
+
+    test('Alt-Svc clear invalidates the cached advertisement', () {
+      expect(http3AltSvcCleared({
+        'Alt-Svc': ['clear'],
+      }), isTrue);
+      expect(http3AltSvcCleared({
+        'Alt-Svc': ['h3=":443"; ma=3600'],
+      }), isFalse);
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h3=":443"; ma=0'],
+      }), isTrue);
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h3=":443"; ma=3600'],
+      }), isFalse);
+      expect(http3AltSvcRevoked({
+        'Alt-Svc': ['h2=":443"; ma=0'],
+      }), isFalse);
+    });
+  });
+
   group('requestCanProbeRhttpHttp3', () {
     test('allows replay-safe HTTPS requests', () {
       expect(requestCanProbeRhttpHttp3(options('https')), isTrue);

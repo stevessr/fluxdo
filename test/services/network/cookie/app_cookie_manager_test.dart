@@ -7,6 +7,119 @@ import 'package:fluxdo/services/network/cookie/app_cookie_manager.dart';
 import 'package:fluxdo/services/network/cookie/cookie_jar_service.dart';
 
 void main() {
+  group('redirect Set-Cookie target restrictions', () {
+    test('explicit redirect cookie forwarding cannot bind a token externally',
+        () async {
+      final jar = CookieJar();
+      final manager = AppCookieManager(jar);
+      final response = Response<void>(
+        requestOptions: RequestOptions(
+          path: 'https://linux.do/oauth/redirect',
+          extra: const {'allowRedirectSetCookie': true},
+        ),
+        statusCode: 302,
+        headers: Headers.fromMap({
+          HttpHeaders.setCookieHeader: ['oauth-ticket=secret; Path=/'],
+          HttpHeaders.locationHeader: [
+            'https://untrusted.example/collect',
+          ],
+        }),
+      );
+
+      await manager.saveCookies(response);
+      final source = await jar.loadForRequest(
+        Uri.parse('https://linux.do/'),
+      );
+      final foreign = await jar.loadForRequest(
+        Uri.parse('https://untrusted.example/'),
+      );
+      expect(source.any((cookie) => cookie.name == 'oauth-ticket'), isTrue);
+      expect(foreign.any((cookie) => cookie.name == 'oauth-ticket'), isFalse);
+    });
+
+    test('explicit redirect cookie forwarding still supports HTTPS app subdomains',
+        () async {
+      final jar = CookieJar();
+      final manager = AppCookieManager(jar);
+      await manager.saveCookies(
+        Response<void>(
+          requestOptions: RequestOptions(
+            path: 'https://linux.do/oauth/redirect',
+            extra: const {'allowRedirectSetCookie': true},
+          ),
+          statusCode: 302,
+          headers: Headers.fromMap({
+            HttpHeaders.setCookieHeader: ['oauth-ticket=for-app; Path=/'],
+            HttpHeaders.locationHeader: [
+              'https://connect.linux.do/authorize',
+            ],
+          }),
+        ),
+      );
+      final trusted = await jar.loadForRequest(
+        Uri.parse('https://connect.linux.do/'),
+      );
+      expect(
+        trusted.any((cookie) =>
+            cookie.name == 'oauth-ticket' && cookie.value == 'for-app'),
+        isTrue,
+      );
+    });
+  });
+
+  group('cross-origin redirected Set-Cookie isolation', () {
+    test('foreign response cannot revoke login or Cloudflare cookies',
+        () async {
+      final jar = CookieJar();
+      final forum = Uri.parse('https://linux.do/');
+      final foreign = Uri.parse('https://untrusted.example/final');
+      await jar.saveFromResponse(forum, [
+        Cookie('_t', 'live-forum-token')..path = '/',
+        Cookie('cf_clearance', 'live-cf-token')..path = '/',
+      ]);
+      final manager = AppCookieManager(jar);
+      await manager.saveCookies(
+        Response<void>(
+          requestOptions: RequestOptions(
+            path: foreign.toString(),
+            extra: const {'_fluxCrossOriginRedirect': true},
+          ),
+          statusCode: 200,
+          headers: Headers.fromMap({
+            HttpHeaders.setCookieHeader: [
+              '_t=del; Path=/',
+              '_forum_session=del; Path=/',
+              'cf_clearance=malicious; Path=/',
+              'linux_do_credit_session_id=malicious; Path=/',
+            ],
+          }),
+        ),
+      );
+
+      final forumCookies = await jar.loadForRequest(forum);
+      expect(
+        forumCookies.where((cookie) => cookie.name == '_t').single.value,
+        'live-forum-token',
+      );
+      expect(
+        forumCookies
+            .where((cookie) => cookie.name == 'cf_clearance')
+            .single
+            .value,
+        'live-cf-token',
+      );
+      final foreignCookies = await jar.loadForRequest(foreign);
+      expect(
+        foreignCookies.where(
+          (cookie) => CookieJarService.criticalCookieNames.contains(
+            cookie.name,
+          ),
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   group('AppCookieManager.loadCookies', () {
     test('忽略 RequestOptions 上残留的旧 Cookie 头，始终使用 CookieJar 最新值', () async {
       final jar = CookieJar();

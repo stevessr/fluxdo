@@ -11,12 +11,21 @@ import '../system_proxy_service.dart';
 
 const _http3FailureBackoff = Duration(minutes: 10);
 const _http3SuccessTtl = Duration(hours: 1);
+const _maxHttp3Origins = 128;
 const _http3ConnectTimeout = Duration(seconds: 3);
 const _normalConnectTimeout = Duration(seconds: 30);
 
+final RegExp _h3AuthorityPattern = RegExp(r'^h3\s*=\s*"(:[0-9]+)"');
+final RegExp _h3MaxAgePattern =
+    RegExp(r'(?:^|;)\s*ma\s*=\s*"?([0-9]+)"?\s*(?:;|$)');
+final RegExp _h3AnyMaxAgePattern = RegExp(r'(?:^|;)\s*ma\s*=');
+final RegExp _h3ZeroMaxAgePattern =
+    RegExp(r'(?:^|;)\s*ma\s*=\s*"?0"?\s*(?:;|$)');
+final RegExp _h3ProtocolPattern = RegExp(r'^h3\s*=');
+
 /// 基于 rhttp (Rust reqwest) 的 Dio 适配器。
 ///
-/// 直连 HTTPS 的可安全重放请求优先探测 HTTP/3/QUIC；成功后按 host 记忆，
+/// 直连 HTTPS 的安全幂等请求基于 Alt-Svc 探测 HTTP/3/QUIC；按 origin 记忆，
 /// 失败则立即回退 HTTP/2/1.1 并短期熔断 H3，避免 UDP 被阻断时反复等待。
 /// 代理/本地中转仍使用普通 HTTP/2/1.1 链路。
 class RhttpAdapter implements HttpClientAdapter {
@@ -53,7 +62,8 @@ class RhttpAdapter implements HttpClientAdapter {
     }
 
     final baseConfig = await _prepareClientConfig(options.uri.host);
-    final shouldTryHttp3 = _shouldTryHttp3(options, requestStream, baseConfig);
+    final shouldTryHttp3 = _shouldTryHttp3(options, requestStream);
+    final http3Origin = _http3OriginKey(options.uri);
 
     if (shouldTryHttp3) {
       final http3Config = baseConfig.withHttpVersion(
@@ -66,8 +76,15 @@ class RhttpAdapter implements HttpClientAdapter {
           cancelFuture,
           http3Config,
         );
-        if (response.version == rhttp.HttpVersion.http3) {
-          _markHttp3Success(baseConfig.host);
+        if (response.version == rhttp.HttpVersion.http3 &&
+            response.responseBody.statusCode >= 200) {
+          _markHttp3Success(http3Origin);
+        } else {
+          // A forced H3 probe might negotiate HTTP/2 or expose Cloudflare's
+          // 103 Early Hints as a premature response. Neither proves a usable
+          // HTTP/3 API connection; back off subsequent H3 probes. The existing
+          // recovery coordinator owns any necessary replay of the 103.
+          _markHttp3Failure(http3Origin);
         }
         _markConfigSuccess(http3Config, response.remoteIp);
         return response.responseBody;
@@ -75,7 +92,7 @@ class RhttpAdapter implements HttpClientAdapter {
         if (!_canFallbackFromHttp3(error)) {
           rethrow;
         }
-        _markHttp3Failure(baseConfig.host);
+        _markHttp3Failure(http3Origin);
         debugPrint(
           '[DIO] RhttpAdapter HTTP/3 failed for ${baseConfig.host}; '
           'falling back to HTTP/2/1.1: $error',
@@ -105,6 +122,9 @@ class RhttpAdapter implements HttpClientAdapter {
         config,
       );
       _markConfigSuccess(config, response.remoteIp);
+      if (response.responseBody.statusCode >= 200) {
+        _observeHttp3Advertisement(options.uri, response.responseBody.headers);
+      }
       return response.responseBody;
     } catch (error) {
       if (!_canRetryWithAlternateIp(options, requestStream, config, error)) {
@@ -134,6 +154,12 @@ class RhttpAdapter implements HttpClientAdapter {
         retryConfig,
       );
       _markConfigSuccess(retryConfig, response.remoteIp);
+      if (response.responseBody.statusCode >= 200) {
+        _observeHttp3Advertisement(
+          options.uri,
+          response.responseBody.headers,
+        );
+      }
       return response.responseBody;
     }
   }
@@ -151,7 +177,6 @@ class RhttpAdapter implements HttpClientAdapter {
   bool _shouldTryHttp3(
     RequestOptions options,
     Stream<Uint8List>? requestStream,
-    _PreparedClientConfig config,
   ) {
     if (!requestCanProbeRhttpHttp3(
       options,
@@ -163,13 +188,15 @@ class RhttpAdapter implements HttpClientAdapter {
       return false;
     }
 
-    final capability = _http3Capabilities[config.host];
-    if (capability == null) {
-      return true;
-    }
-    if (DateTime.now().isAfter(capability.expiresAt)) {
-      _http3Capabilities.remove(config.host);
-      return true;
+    final originKey = _http3OriginKey(options.uri);
+    final capability = _http3Capabilities[originKey];
+    // RFC 7838: wait for a server Alt-Svc advertisement instead of
+    // speculatively attempting QUIC against every new host. A failed H3
+    // connection can otherwise delay the first request by several seconds.
+    if (capability == null) return false;
+    if (!DateTime.now().isBefore(capability.expiresAt)) {
+      _http3Capabilities.remove(originKey);
+      return false;
     }
     return capability.supported;
   }
@@ -207,9 +234,13 @@ class RhttpAdapter implements HttpClientAdapter {
   void _markHttp3Success(String host) {
     if (host.isEmpty) return;
     final previous = _http3Capabilities[host];
-    _http3Capabilities[host] = _Http3Capability(
-      supported: true,
-      expiresAt: DateTime.now().add(_http3SuccessTtl),
+    _storeHttp3Capability(
+      host,
+      _Http3Capability(
+        supported: true,
+        // A successful probe does not extend the server's Alt-Svc lifetime.
+        expiresAt: previous?.expiresAt ?? DateTime.now().add(_http3SuccessTtl),
+      ),
     );
     if (previous?.supported != true) {
       debugPrint('[DIO] RhttpAdapter HTTP/3 available: $host');
@@ -218,11 +249,56 @@ class RhttpAdapter implements HttpClientAdapter {
 
   void _markHttp3Failure(String host) {
     if (host.isEmpty) return;
-    _http3Capabilities[host] = _Http3Capability(
-      supported: false,
-      expiresAt: DateTime.now().add(_http3FailureBackoff),
+    _storeHttp3Capability(
+      host,
+      _Http3Capability(
+        supported: false,
+        expiresAt: DateTime.now().add(_http3FailureBackoff),
+      ),
     );
   }
+
+  void _observeHttp3Advertisement(
+    Uri origin,
+    Map<String, List<String>> headers,
+  ) {
+    // HTTP Alt-Svc is not an authenticated policy source. A probe only makes
+    // sense for the same HTTPS origin/port that served the advertisement.
+    if (origin.scheme != 'https' || origin.host.isEmpty) return;
+    final originKey = _http3OriginKey(origin);
+    if (http3AltSvcCleared(headers) ||
+        http3AltSvcRevoked(headers, originPort: origin.port)) {
+      _http3Capabilities.remove(originKey);
+      return;
+    }
+    final lifetime = http3AltSvcLifetime(headers, originPort: origin.port);
+    if (lifetime == null) return;
+
+    final previous = _http3Capabilities[originKey];
+    // Respect an active failure backoff even if the server keeps advertising H3.
+    if (previous != null &&
+        !previous.supported &&
+        DateTime.now().isBefore(previous.expiresAt)) {
+      return;
+    }
+    _storeHttp3Capability(
+      originKey,
+      _Http3Capability(
+        supported: true,
+        expiresAt: DateTime.now().add(lifetime),
+      ),
+    );
+  }
+
+  void _storeHttp3Capability(String key, _Http3Capability capability) {
+    _http3Capabilities.remove(key);
+    _http3Capabilities[key] = capability;
+    while (_http3Capabilities.length > _maxHttp3Origins) {
+      _http3Capabilities.remove(_http3Capabilities.keys.first);
+    }
+  }
+
+  String _http3OriginKey(Uri uri) => '${uri.host.toLowerCase()}:${uri.port}';
 
   Future<_RhttpDelegate> _ensureDelegate(_PreparedClientConfig config) {
     final settingsVersion = _networkSettings.version;
@@ -507,6 +583,92 @@ bool requestCanProbeRhttpHttp3(
   }
   final method = options.method.toUpperCase();
   return method == 'GET' || method == 'HEAD' || method == 'OPTIONS';
+}
+
+/// Returns the bounded useful lifetime of an authenticated origin's H3
+/// alternative. For compatibility we only support the same host and port;
+/// rhttp's current configuration cannot connect to another authority.
+@visibleForTesting
+Duration? http3AltSvcLifetime(
+  Map<String, List<String>> headers, {
+  int originPort = 443,
+}) {
+  Duration? result;
+  for (final header in headers.entries) {
+    if (header.key.toLowerCase() != 'alt-svc') continue;
+    for (final value in header.value) {
+      for (final item in value.split(',')) {
+        final alternative = item.trim().toLowerCase();
+        final authority = _h3AuthorityPattern.firstMatch(alternative);
+        if (authority == null || authority.group(1) != ':$originPort') {
+          continue;
+        }
+
+        // RFC 7838 defaults ma to 24 hours if omitted; the application
+        // intentionally caps its own probe cache at one hour.
+        final match = _h3MaxAgePattern.firstMatch(alternative);
+        if (match == null && _h3AnyMaxAgePattern.hasMatch(alternative)) {
+          continue; // Malformed advertised max-age is not a valid hint.
+        }
+        final maxAge = match == null ? 86400 : int.tryParse(match.group(1)!);
+        if (maxAge == null || maxAge <= 0) continue;
+        final duration = Duration(
+          seconds: maxAge < 3600 ? maxAge : 3600,
+        );
+        if (result == null || duration < result) result = duration;
+      }
+    }
+  }
+  return result;
+}
+
+/// The presence of an Alt-Svc H3 hint does not prove H3 was negotiated.
+@visibleForTesting
+bool http3AltSvcAdvertised(
+  Map<String, List<String>> headers, {
+  int originPort = 443,
+}) => http3AltSvcLifetime(headers, originPort: originPort) != null;
+
+/// Alt-Svc: clear revokes a previously advertised alternative.
+@visibleForTesting
+bool http3AltSvcCleared(Map<String, List<String>> headers) {
+  for (final header in headers.entries) {
+    if (header.key.toLowerCase() != 'alt-svc') continue;
+    if (header.value.any((value) => value.trim().toLowerCase() == 'clear')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// An H3 alternative with ma=0 withdraws that alternative. Ignore unrelated
+/// alternatives so their expiry cannot revoke a valid H3 advertisement.
+@visibleForTesting
+bool http3AltSvcRevoked(
+  Map<String, List<String>> headers, {
+  int originPort = 443,
+}) {
+  var sawRevocation = false;
+  for (final header in headers.entries) {
+    if (header.key.toLowerCase() != 'alt-svc') continue;
+    for (final value in header.value) {
+      for (final candidate in value.split(',')) {
+        final alternative = candidate.trim().toLowerCase();
+        if (!_h3ProtocolPattern.hasMatch(alternative)) continue;
+        // An alternative for a different port is not this origin's QUIC
+        // endpoint and must not revoke the currently cached capability.
+        final authority = _h3AuthorityPattern.firstMatch(alternative);
+        if (authority == null || authority.group(1) != ':$originPort') {
+          continue;
+        }
+        if (!_h3ZeroMaxAgePattern.hasMatch(alternative)) {
+          return false;
+        }
+        sawRevocation = true;
+      }
+    }
+  }
+  return sawRevocation;
 }
 
 class _Http3Capability {
