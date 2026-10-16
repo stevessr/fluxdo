@@ -71,6 +71,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
+      # This repository deliberately does not check in android/gradlew or its
+      # wrapper JAR. Use the pinned Gradle version from wrapper.properties.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
+          cache-cleanup: never
       # v3 asks sdkmanager for the retired "tools" package and now fails.
       - uses: android-actions/setup-android@v4
         with:
@@ -118,17 +124,14 @@ jobs:
       # APK contract below still fails closed when Sticker is absent.
       - name: Build all five native APKs (debug test-signing only)
         run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew --no-daemon :plugin_deviceinfo:assembleDebug :plugin_network:assembleDebug :plugin_cdk:assembleDebug :plugin_ldc:assembleDebug :plugin_ldc_reward:assembleDebug
+          gradle --no-daemon -p android :plugin_deviceinfo:assembleDebug :plugin_network:assembleDebug :plugin_cdk:assembleDebug :plugin_ldc:assembleDebug :plugin_ldc_reward:assembleDebug
       - name: Compile lean Android Core APK (Dart AOT resources isolated)
         run: |
           python3 scripts/ci/build_android_core_modular.py --mode debug --abi android-arm64
           test -s build/app/outputs/flutter-apk/app-debug.apk
       - name: Compile core host Kotlin integration
         run: |
-          cd android
-          ./gradlew --no-daemon :app:compileDebugKotlin
+          gradle --no-daemon -p android :app:compileDebugKotlin
       - name: Validate produced APKs
         if: ${{ always() && !cancelled() }}
         shell: bash

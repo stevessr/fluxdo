@@ -337,12 +337,10 @@ subprojects {
             compileOptions.javaClass
                 .getMethod("setTargetCompatibility", Any::class.java)
                 .invoke(compileOptions, JavaVersion.VERSION_17)
-            val actual = compileOptions.javaClass
-                .getMethod("getTargetCompatibility").invoke(compileOptions)
-            check(actual == JavaVersion.VERSION_17) {
-                "AVIF Java target drift: expected 17, got $actual ($path)"
-            }
-            println("Sticker JVM alignment: $path android.compileOptions=$actual")
+            // Do not read AGP's targetCompatibility before the model is
+            // finalized: AGP 9 throws "targetCompatibility is not yet finalized"
+            // during :file_picker project evaluation. Log the requested value.
+            println("Sticker JVM alignment requested: $path android.compileOptions=17")
         }
         tasks.withType<JavaCompile>().configureEach {
             sourceCompatibility = "17"
