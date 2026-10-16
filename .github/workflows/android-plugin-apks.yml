@@ -124,6 +124,12 @@ jobs:
       # APK contract below still fails closed when Sticker is absent.
       - name: Build all five native APKs (debug test-signing only)
         run: |
+          set -euo pipefail
+          # The Android local.properties file is untracked. Flutter's Gradle
+          # settings evaluates it eagerly before any plugin task runs.
+          test -d "${FLUTTER_ROOT}/packages/flutter_tools/gradle"
+          test -d "${ANDROID_HOME}/platforms/android-36"
+          printf 'sdk.dir=%s\nflutter.sdk=%s\n' "${ANDROID_HOME}" "${FLUTTER_ROOT}" >> android/local.properties
           gradle --no-daemon -p android :plugin_deviceinfo:assembleDebug :plugin_network:assembleDebug :plugin_cdk:assembleDebug :plugin_ldc:assembleDebug :plugin_ldc_reward:assembleDebug
       - name: Compile lean Android Core APK (Dart AOT resources isolated)
         run: |
