@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/core_providers.dart';
+import 'android_plugins_page.dart';
 
 import '../services/android_optional_plugin_service.dart';
 
@@ -44,7 +45,19 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
                     trailing: Icon(usable
                         ? Icons.open_in_new
                         : Icons.download_outlined),
-                    onTap: !usable ? null : () async {
+                    onTap: () async {
+                      if (!usable) {
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => const AndroidPluginsPage(),
+                          ),
+                        );
+                        if (context.mounted) {
+                          setState(() => _available =
+                              AndroidOptionalPluginService.instance.list());
+                        }
+                        return;
+                      }
                       try {
                         await AndroidOptionalPluginService.instance.launch(
                           id,

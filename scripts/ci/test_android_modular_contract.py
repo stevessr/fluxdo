@@ -70,6 +70,16 @@ class AndroidCoreIsolationTest(unittest.TestCase):
         self.assertIn('"native:prepare"', source)
         self.assertIn('verify_sources(stage)', source)
 
+    def test_missing_companion_routes_to_plugin_manager(self) -> None:
+        metaverse = (modular.OVERLAY / "lib/pages/metaverse_page.dart").read_text()
+        sticker = (modular.OVERLAY / "lib/pages/stevessr_generator_page.dart").read_text()
+        manager = (modular.ROOT / "lib/pages/android_plugins_page.dart").read_text()
+        for source in (metaverse, sticker):
+            self.assertIn("AndroidPluginsPage()", source)
+            self.assertIn("MaterialPageRoute", source)
+        self.assertIn("WidgetsBindingObserver", manager)
+        self.assertIn("AppLifecycleState.resumed", manager)
+
     def test_minimal_isolated_core_is_valid(self) -> None:
         modular.verify_sources(self.stage)
 

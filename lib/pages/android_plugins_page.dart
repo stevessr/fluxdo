@@ -19,11 +19,39 @@ class AndroidPluginsPage extends ConsumerStatefulWidget {
   ConsumerState<AndroidPluginsPage> createState() => _AndroidPluginsPageState();
 }
 
-class _AndroidPluginsPageState extends ConsumerState<AndroidPluginsPage> {
+class _AndroidPluginsPageState extends ConsumerState<AndroidPluginsPage>
+    with WidgetsBindingObserver {
   late Future<List<AndroidOptionalPlugin>> _plugins = _load();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) _refresh();
+  }
 
   bool get _zh => Localizations.localeOf(context).languageCode == 'zh';
   String _t(String cn, String en) => _zh ? cn : en;
+
+  String _reasonText(String reason) => switch (reason) {
+    'ready' => _t('可使用', 'Ready'),
+    'not_installed' => _t('未安装', 'Not installed'),
+    'signature_mismatch' => _t('签名不匹配', 'Signature mismatch'),
+    'incompatible_protocol' => _t('协议版本不兼容', 'Incompatible protocol'),
+    'unprotected_service' => _t('缺少受保护的服务', 'Unprotected service'),
+    'missing_activity' => _t('启动入口不可用', 'Missing activity'),
+    _ => reason,
+  };
 
   Future<List<AndroidOptionalPlugin>> _load() =>
       AndroidOptionalPluginService.instance.list();
@@ -178,7 +206,7 @@ class _AndroidPluginsPageState extends ConsumerState<AndroidPluginsPage> {
                           }),
                           subtitle: Text(
                             '${plugin.packageName}\n'
-                            '${plugin.version ?? "-"} · ${plugin.reason}',
+                            '${plugin.version ?? "-"} · ${_reasonText(plugin.reason)}',
                           ),
                           isThreeLine: true,
                           trailing: Icon(

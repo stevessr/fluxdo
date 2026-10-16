@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/android_sticker_companion_service.dart';
+import 'android_plugins_page.dart';
 import '../services/stevessr_export_service.dart';
 
 /// Thin compatibility view. The actual editor, renderer, and avatar assets
@@ -24,7 +25,11 @@ class _StevessrGeneratorPageState
     setState(() => _busy = true);
     try {
       if (!await AndroidStickerCompanionService.isAvailable()) {
-        throw StateError('需要安装同签名的 StevesSR 独立 APK');
+        if (!mounted) return;
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(builder: (_) => const AndroidPluginsPage()),
+        );
+        return;
       }
       final generated = await AndroidStickerCompanionService.generate();
       if (generated == null) return;
