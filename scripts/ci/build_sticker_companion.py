@@ -322,6 +322,21 @@ def setup_project(target: Path, mode: str) -> None:
 // Flutter eagerly evaluated need the same task changes immediately.
 subprojects {
     val alignCompilerTargets = {
+        // AGP derives javac's target from android.compileOptions, which can
+        // override JavaCompile.targetCompatibility at variant creation time.
+        // Fix the actual Android source-of-truth, not only the Java task.
+        val androidExtension = extensions.findByName("android")
+        if (androidExtension != null) {
+            val compileOptions = androidExtension.javaClass
+                .getMethod("getCompileOptions").invoke(androidExtension)
+            compileOptions.javaClass
+                .getMethod("setSourceCompatibility", JavaVersion::class.java)
+                .invoke(compileOptions, JavaVersion.VERSION_17)
+            compileOptions.javaClass
+                .getMethod("setTargetCompatibility", JavaVersion::class.java)
+                .invoke(compileOptions, JavaVersion.VERSION_17)
+            println("Sticker JVM alignment: $path android.compileOptions=17")
+        }
         tasks.withType<JavaCompile>().configureEach {
             sourceCompatibility = "17"
             targetCompatibility = "17"

@@ -43,7 +43,10 @@ class StickerNativeDependenciesTest(unittest.TestCase):
         source = inspect.getsource(setup_project)
         self.assertIn("if (state.executed)", source)
         self.assertIn("afterEvaluate { alignCompilerTargets() }", source)
+        self.assertIn('getMethod("getCompileOptions")', source)
+        self.assertIn('getMethod("setTargetCompatibility", JavaVersion::class.java)', source)
         self.assertIn("tasks.withType<JavaCompile>().configureEach", source)
+        self.assertNotIn("kotlin.jvm.target.validation.mode=ignore", source)
         self.assertIn('tasks.register("patchStandaloneStickerAvifRedeclaration")', source)
         self.assertIn("dependsOn(patchTask)", source)
 
