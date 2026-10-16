@@ -329,13 +329,20 @@ subprojects {
         if (androidExtension != null) {
             val compileOptions = androidExtension.javaClass
                 .getMethod("getCompileOptions").invoke(androidExtension)
+            // AGP exposes these Kotlin DSL setters as Object/Any, not
+            // JavaVersion. Match the proven FluxDO :app Gradle reflection API.
             compileOptions.javaClass
-                .getMethod("setSourceCompatibility", JavaVersion::class.java)
+                .getMethod("setSourceCompatibility", Any::class.java)
                 .invoke(compileOptions, JavaVersion.VERSION_17)
             compileOptions.javaClass
-                .getMethod("setTargetCompatibility", JavaVersion::class.java)
+                .getMethod("setTargetCompatibility", Any::class.java)
                 .invoke(compileOptions, JavaVersion.VERSION_17)
-            println("Sticker JVM alignment: $path android.compileOptions=17")
+            val actual = compileOptions.javaClass
+                .getMethod("getTargetCompatibility").invoke(compileOptions)
+            check(actual == JavaVersion.VERSION_17) {
+                "AVIF Java target drift: expected 17, got $actual ($path)"
+            }
+            println("Sticker JVM alignment: $path android.compileOptions=$actual")
         }
         tasks.withType<JavaCompile>().configureEach {
             sourceCompatibility = "17"
@@ -488,7 +495,23 @@ def main() -> None:
             command += ["--build-number", str(args.version_code)]
         if args.version_name:
             command += ["--build-name", args.version_name]
-        execute(*command, cwd=target)
+        try:
+            execute(*command, cwd=target)
+        except subprocess.CalledProcessError:
+            # Flutter normally prints only the Gradle task summary. Keep the
+            # ephemeral project alive long enough for a diagnostic rerun with
+            # actual AGP/Kotlin stacktraces before raising the original error.
+            gradle_wrapper = target / "android/gradlew"
+            if gradle_wrapper.is_file():
+                print("Sticker build failed; collecting Gradle stacktrace", flush=True)
+                subprocess.run(
+                    [str(gradle_wrapper), ":app:assembleDebug", "--stacktrace",
+                     "--console=plain", "--no-daemon"],
+                    cwd=target / "android",
+                    check=False,
+                    timeout=180,
+                )
+            raise
         apk_dir = target / "build/app/outputs/flutter-apk"
         candidates = list(apk_dir.glob("*.apk"))
         assert len(candidates) == 1, f"Expected single APK: {candidates}"

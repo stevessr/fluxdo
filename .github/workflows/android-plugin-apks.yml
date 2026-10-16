@@ -111,7 +111,11 @@ jobs:
           flutter test test/services/android_sticker_companion_service_test.dart
           flutter test test/services/android_optional_plugin_service_test.dart
       - name: Build independent Flutter sticker APK
+        id: build_sticker
+        continue-on-error: true
         run: python3 scripts/ci/build_sticker_companion.py --mode debug --abi android-arm64
+      # Continue independent native/Core compilation even if Sticker fails;
+      # APK contract below still fails closed when Sticker is absent.
       - name: Build all five native APKs (debug test-signing only)
         run: |
           cd android
@@ -126,9 +130,13 @@ jobs:
           cd android
           ./gradlew --no-daemon :app:compileDebugKotlin
       - name: Validate produced APKs
+        if: ${{ always() && !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail
+          test "${{ steps.build_sticker.outcome }}" = "success" || {
+            echo "::error::Standalone Sticker APK compile failed"; exit 1;
+          }
           test -s build/plugin_deviceinfo/outputs/apk/debug/plugin_deviceinfo-debug.apk
           test -s build/plugin_network/outputs/apk/debug/plugin_network-debug.apk
           test -s build/plugin_cdk/outputs/apk/debug/plugin_cdk-debug.apk
