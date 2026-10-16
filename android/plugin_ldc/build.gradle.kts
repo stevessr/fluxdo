@@ -1,0 +1,83 @@
+import java.io.File
+import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+val keyFile = rootProject.file("key.properties")
+val keys = Properties().apply {
+    if (keyFile.exists()) keyFile.inputStream().use { load(it) }
+}
+val keyStore = keys.getProperty("storeFile")?.trim()?.takeIf { it.isNotEmpty() }?.let { path ->
+    val raw = File(path)
+    if (raw.isAbsolute) raw else listOf(
+        file(path),
+        rootProject.file(path),
+        rootProject.file("app/$path"),
+    ).firstOrNull { it.isFile } ?: rootProject.file("app/$path")
+}
+val signed = listOf("keyAlias", "keyPassword", "storePassword")
+    .all { !keys.getProperty(it).isNullOrBlank() } && keyStore?.isFile == true
+
+
+android {
+    namespace = "com.github.lingyan000.fluxdo.plugin.ldc"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "com.github.lingyan000.fluxdo.plugin.ldc"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = providers.gradleProperty("pluginVersionCode").orNull?.toIntOrNull() ?: 1
+        versionName = providers.gradleProperty("pluginVersionName").orNull ?: "0.1.0"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    signingConfigs {
+        if (signed) create("pluginRelease") {
+            storeFile = keyStore
+            storePassword = keys.getProperty("storePassword")
+            keyAlias = keys.getProperty("keyAlias")
+            keyPassword = keys.getProperty("keyPassword")
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (signed) signingConfig = signingConfigs.getByName("pluginRelease")
+        }
+        getByName("release") {
+            // An unsigned or debug-signed Release cannot be loaded by the
+            // signed host. Fail explicitly when building this plugin release.
+            val thisPluginRelease = gradle.startParameter.taskNames.any {
+                it.contains("plugin_ldc:assembleRelease", ignoreCase = true) ||
+                it.contains("plugin_ldc:bundleRelease", ignoreCase = true)
+            }
+            if (thisPluginRelease && !signed) {
+                throw GradleException("plugin_ldc Release must use FluxDO host key.properties")
+            }
+            signingConfig = signingConfigs.getByName(if (signed) "pluginRelease" else "debug")
+            isMinifyEnabled = false
+        }
+    }
+}
+
+kotlin {
+    compilerOptions { jvmTarget = JvmTarget.JVM_17 }
+}
+
+dependencies {
+    implementation(project(":plugin_api"))
+    implementation(project(":plugin_web_session"))
+}

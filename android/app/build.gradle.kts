@@ -158,6 +158,7 @@ flutter {
 }
 
 dependencies {
+    implementation(project(":plugin_api"))
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation(platform("com.google.firebase:firebase-bom:33.14.0"))
     implementation("com.google.firebase:firebase-crashlytics-ndk")

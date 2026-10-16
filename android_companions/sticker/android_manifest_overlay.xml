@@ -1,0 +1,15 @@
+<!-- Copy service/provider declarations into the generated Flutter app manifest.
+     A stand-alone app is intentionally built outside the core app Gradle project. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="FluxDO StevesSR">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/companion_file_paths" />
+        </provider>
+    </application>
+</manifest>

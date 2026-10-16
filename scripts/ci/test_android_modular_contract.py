@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""Fast, SDK-free regression checks for Android-only Core feature removal.
+
+These tests run before Gradle/Flutter and ensure deletion/asset exclusions are
+fail-closed. Real APK builds and device tests remain separate required gates.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import build_android_core_modular as modular
+
+
+class AndroidCoreIsolationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.stage = Path(self.temp.name)
+        (self.stage / "pubspec.yaml").write_text(
+            "name: fluxdo\nflutter:\n  assets:\n    - assets/logo.svg\n",
+            encoding="utf-8",
+        )
+        for name in modular.EXCLUDED_REWARD_WIDGETS:
+            target = self.stage / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("class RewardStub {}\n", encoding="utf-8")
+        for name in (
+            "lib/pages/metaverse_page.dart",
+            "lib/pages/stevessr_generator_page.dart",
+            "lib/services/stevessr_export_service.dart",
+        ):
+            target = self.stage / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("class PluginEntry {}\n", encoding="utf-8")
+
+    def test_reward_gate_is_removed_without_stripping_plugin_launcher(self) -> None:
+        source = (modular.ROOT /
+            "lib/widgets/post/post_item/widgets/post_footer_section/"
+            "actions/menu_actions.dart").read_text(encoding="utf-8")
+        rewritten = modular.strip_host_reward_credentials(source)
+        self.assertNotIn("ldcRewardCredentialsProvider", rewritten)
+        self.assertNotIn("toast_rewardNotConfigured", rewritten)
+        self.assertIn("showLdcRewardSheet(", rewritten)
+        self.assertIn("RewardTargetInfo(", rewritten)
+        self.assertIn("Navigator.pop(ctx);", rewritten)
+        self.assertIn("if (!mounted) return;", rewritten)
+        self.assertLess(len(rewritten), len(source))
+
+    def test_reward_gate_refuses_partial_or_unknown_source(self) -> None:
+        source = (modular.ROOT /
+            "lib/widgets/post/post_item/widgets/post_footer_section/"
+            "actions/menu_actions.dart").read_text(encoding="utf-8")
+        invalid = source.replace(
+            "ldcRewardCredentialsProvider.future,",
+            "changedCredentialProvider.future,",
+        )
+        with self.assertRaisesRegex(RuntimeError, "LDC reward callsite changed"):
+            modular.strip_host_reward_credentials(invalid)
+
+    def test_core_builder_does_not_run_full_avatar_project_prep(self) -> None:
+        import inspect
+        source = inspect.getsource(modular.main)
+        self.assertNotIn('"tool/flutterw.dart"', source)
+        self.assertNotIn('"tool/project_prep.dart", "app"', source)
+        self.assertIn('"tool/gen_l10n.dart"', source)
+        self.assertIn('"native:prepare"', source)
+        self.assertIn('verify_sources(stage)', source)
+
+    def test_missing_companion_routes_to_plugin_manager(self) -> None:
+        metaverse = (modular.OVERLAY / "lib/pages/metaverse_page.dart").read_text()
+        sticker = (modular.OVERLAY / "lib/pages/stevessr_generator_page.dart").read_text()
+        manager = (modular.ROOT / "lib/pages/android_plugins_page.dart").read_text()
+        for source in (metaverse, sticker):
+            self.assertIn("AndroidPluginsPage()", source)
+            self.assertIn("MaterialPageRoute", source)
+        self.assertIn("WidgetsBindingObserver", manager)
+        self.assertIn("AppLifecycleState.resumed", manager)
+
+    def test_minimal_isolated_core_is_valid(self) -> None:
+        modular.verify_sources(self.stage)
+
+    def test_physical_avatar_bytes_are_rejected(self) -> None:
+        leaked = self.stage / "assets/images/avater/stevessr"
+        leaked.mkdir(parents=True)
+        (leaked / "sprite.webp").write_bytes(b"fake")
+        with self.assertRaisesRegex(AssertionError, "assets leaked"):
+            modular.verify_sources(self.stage)
+
+    def test_old_avatar_bundle_is_rejected(self) -> None:
+        with (self.stage / "pubspec.yaml").open("a") as out:
+            out.write("    - assets/images/avater/stevessr/\n")
+        with self.assertRaisesRegex(AssertionError, "Avatar assets"):
+            modular.verify_sources(self.stage)
+
+    def test_direct_import_of_removed_module_is_rejected(self) -> None:
+        source = self.stage / "lib/pages/more.dart"
+        source.write_text(
+            "import '../providers/ldc_providers.dart';\n"
+            "class A {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "ldc_providers.dart"):
+            modular.verify_sources(self.stage)
+
+    def test_package_import_of_removed_module_is_rejected(self) -> None:
+        source = self.stage / "lib/pages/more.dart"
+        source.write_text(
+            "export 'package:fluxdo/models/stevessr_render_params.dart';\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "stevessr_render_params.dart"):
+            modular.verify_sources(self.stage)
+
+    def test_conditional_import_checks_every_branch(self) -> None:
+        source = self.stage / "lib/pages/more.dart"
+        source.write_text(
+            "import '../pages/metaverse_page.dart'\n"
+            "  if (dart.library.io) '../providers/ldc_providers.dart';\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "ldc_providers.dart"):
+            modular.verify_sources(self.stage)
+
+    def test_multiline_conditional_export_checks_every_branch(self) -> None:
+        source = self.stage / "lib/pages/more.dart"
+        source.write_text(
+            "export '../pages/metaverse_page.dart'\n"
+            "  if (dart.library.html) '../models/cdk_user_info.dart';\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "cdk_user_info.dart"):
+            modular.verify_sources(self.stage)
+
+    def test_relative_import_must_remain_inside_staging(self) -> None:
+        source = self.stage / "lib/pages/more.dart"
+        source.write_text(
+            "import '../../../../outside.dart';\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "escapes stage"):
+            modular.verify_sources(self.stage)
+
+    def test_generated_l10n_imports_may_be_pending(self) -> None:
+        source = self.stage / "lib/l10n/app_localizations.dart"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(
+            "import 'slang/strings.g.dart';\n"
+            "part 'generated/app_localizations_compat.g.dart';\n",
+            encoding="utf-8",
+        )
+        modular.verify_sources(self.stage)
+
+    def test_deleted_reward_service_cannot_survive(self) -> None:
+        source = self.stage / "lib/modules/ldc_reward/services/ldc_reward_service.dart"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("class LdcRewardService {}\n", encoding="utf-8")
+        with self.assertRaisesRegex(AssertionError, "Feature subtree"):
+            modular.verify_sources(self.stage)
+
+
+if __name__ == "__main__":
+    unittest.main()

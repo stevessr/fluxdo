@@ -120,7 +120,12 @@ subprojects {
     }
 }
 subprojects {
-    project.evaluationDependsOn(":app")
+    // Standalone native APKs do not need to evaluate the Flutter host :app
+    // (its full plugin registry, network dependencies and Rust configuration).
+    // Keep the original ordering for Flutter-generated subprojects.
+    if (!project.name.startsWith("plugin_")) {
+        project.evaluationDependsOn(":app")
+    }
 }
 
 tasks.register<Delete>("clean") {

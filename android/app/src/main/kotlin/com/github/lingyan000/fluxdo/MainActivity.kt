@@ -89,6 +89,8 @@ class MainActivity : FlutterActivity() {
     private var ownsProvidedFlutterEngine = false
     private var interactiveKeyboardChannel: InteractiveKeyboardChannel? = null
     private var vpnBypassChannel: VpnBypassChannel? = null
+    private var optionalPluginChannel: OptionalPluginChannel? = null
+    private var stickerCompanionChannel: StickerCompanionChannel? = null
 
     // Cookie IPC 专用后台线程。CookieManager 的 getCookie / setCookie /
     // getCookieInfo 可从任意线程调用(Chromium cookie store 在自己的 IO
@@ -122,6 +124,7 @@ class MainActivity : FlutterActivity() {
 
     // SAF「另存为」建档结果先给 PublicFileChannel 认领,不是它的再交给插件
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (stickerCompanionChannel?.onActivityResult(requestCode, resultCode, data) == true) return
         if (PublicFileChannel.handleActivityResult(requestCode, resultCode, data)) return
         super.onActivityResult(requestCode, resultCode, data)
     }
@@ -131,6 +134,10 @@ class MainActivity : FlutterActivity() {
         interactiveKeyboardChannel = null
         vpnBypassChannel?.dispose()
         vpnBypassChannel = null
+        optionalPluginChannel?.dispose()
+        optionalPluginChannel = null
+        stickerCompanionChannel?.dispose()
+        stickerCompanionChannel = null
         FairMemoryReceiver.detachEngine(flutterEngine)
         super.cleanUpFlutterEngine(flutterEngine)
     }
@@ -176,6 +183,10 @@ class MainActivity : FlutterActivity() {
         interactiveKeyboardChannel = InteractiveKeyboardChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         vpnBypassChannel?.dispose()
         vpnBypassChannel = VpnBypassChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        optionalPluginChannel?.dispose()
+        optionalPluginChannel = OptionalPluginChannel(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        stickerCompanionChannel?.dispose()
+        stickerCompanionChannel = StickerCompanionChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         // 公平内存预警 → Dart 标准 memoryPressure 的转发依赖 engine 引用
         FairMemoryReceiver.attachEngine(flutterEngine)
         // 媒体转码通道(音视频压缩到 4MB:media3 Transformer 硬编)
