@@ -6,6 +6,9 @@ package com.github.lingyan000.fluxdo.plugin.api
  */
 object PluginProtocol {
     const val VERSION = 1
+    // UTF-8 wire limits prevent a plugin from crashing Binder with a huge reply.
+    const val MAX_JSON_BYTES = 8192
+    const val MAX_ERROR_CHARS = 256
     const val CHANNEL = "com.github.lingyan000.fluxdo/optional_plugins"
     const val BIND_PERMISSION = "com.github.lingyan000.fluxdo.permission.BIND_PLUGIN"
     const val PROTOCOL_METADATA = "com.github.lingyan000.fluxdo.plugin.PROTOCOL"

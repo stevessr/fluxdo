@@ -15,6 +15,7 @@ import android.os.RemoteException
 import com.github.lingyan000.fluxdo.plugin.api.PluginProtocol
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
+import org.json.JSONObject
 
 /**
  * Explicit allowlist + same-signer verification + version negotiation.
@@ -94,7 +95,8 @@ class OptionalPluginChannel(
                         try {
                             val component = ComponentName(spec.packageName, spec.activityClass!!)
                             val info = context.packageManager.getActivityInfo(component, 0)
-                            if (!info.exported || info.permission != PluginProtocol.BIND_PERMISSION) {
+                            if (!info.exported || !info.enabled ||
+                                info.permission != PluginProtocol.BIND_PERMISSION) {
                                 throw SecurityException("Companion activity is not protected")
                             }
                             val launch = Intent().setComponent(component)
@@ -150,7 +152,7 @@ class OptionalPluginChannel(
                         spec == null -> result.error("UNKNOWN_PLUGIN", "Unknown plugin id", null)
                         operation == null || operation !in spec.operations ->
                             result.error("UNKNOWN_OPERATION", "Operation is not allowed", null)
-                        payload.length > 8192 ->
+                        payload.toByteArray(Charsets.UTF_8).size > PluginProtocol.MAX_JSON_BYTES ->
                             result.error("INVALID_ARGS", "Request too large", null)
                         describe(spec)["compatible"] != true ->
                             result.error("PLUGIN_UNAVAILABLE", "Plugin missing, unsigned or incompatible", null)
@@ -189,7 +191,7 @@ class OptionalPluginChannel(
             PluginProtocol.PROTOCOL_METADATA, -1,
         ) ?: -1
         val correctlyProtected = service?.exported == true &&
-            service.permission == PluginProtocol.BIND_PERMISSION
+            service.enabled && service.permission == PluginProtocol.BIND_PERMISSION
         val compatible = signed && correctlyProtected && declaredApi == PluginProtocol.VERSION
         return mapOf(
             "id" to spec.id, "name" to spec.name,
@@ -222,8 +224,22 @@ class OptionalPluginChannel(
                     return
                 }
                 val error = data.getString(PluginProtocol.ERROR_KEY)
-                if (error != null) fail("PLUGIN_ERROR", error)
-                else succeed(data.getString(PluginProtocol.RESULT_KEY) ?: "{}")
+                if (error != null) {
+                    fail("PLUGIN_ERROR", error.take(PluginProtocol.MAX_ERROR_CHARS))
+                    return
+                }
+                val raw = data.getString(PluginProtocol.RESULT_KEY)
+                if (raw == null ||
+                    raw.toByteArray(Charsets.UTF_8).size > PluginProtocol.MAX_JSON_BYTES) {
+                    fail("PROTOCOL", "Plugin response missing or too large")
+                    return
+                }
+                try {
+                    JSONObject(raw) // The v1 protocol requires a JSON object.
+                    succeed(raw)
+                } catch (_: Exception) {
+                    fail("PROTOCOL", "Plugin returned invalid JSON")
+                }
             }
         })
 

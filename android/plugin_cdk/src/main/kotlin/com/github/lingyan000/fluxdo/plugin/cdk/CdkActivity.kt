@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import com.github.lingyan000.fluxdo.plugin.web_session.PluginWebSession
 import android.view.Menu
+import android.view.View
 import android.view.MenuItem
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -64,6 +65,8 @@ class CdkActivity : Activity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        // Never allow the toolbar to navigate while account data is purging.
+        if (item.itemId in 1..3 && browser?.visibility != View.VISIBLE) return true
         when (item.itemId) {
             1 -> browser?.loadUrl("https://cdk.linux.do")
             2 -> browser?.loadUrl("https://cdk.linux.do/api/v1/oauth/user-info")

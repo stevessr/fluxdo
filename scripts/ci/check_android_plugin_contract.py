@@ -110,8 +110,19 @@ def main() -> None:
         'WebStorage.getInstance().deleteAllData()',
         'view.visibility = View.INVISIBLE',
         'slot != "guest"',
+        'if (clearing) return',
+        'preferences.edit().remove(LAST_SLOT).commit()',
+        'only the newest pending view',
     ):
         check(feature in web_session, f"WebView account isolation missing: {feature}")
+    check('PluginProtocol.MAX_JSON_BYTES' in host and
+          'JSONObject(raw)' in host, "Host must bound and parse plugin replies")
+    plugin_service = (ROOT / "android/plugin_api/src/main/kotlin/com/github/"
+                      "lingyan000/fluxdo/plugin/api/PluginService.kt").read_text()
+    check(plugin_service.count("PluginProtocol.MAX_JSON_BYTES") >= 2,
+          "Plugin service must bound both request and response UTF-8 bytes")
+    check('MAX_JSON_BYTES = 8192' in protocol,
+          "Unexpected IPC size limit")
     check('Intent.FLAG_ACTIVITY_CLEAR_TASK' in host,
           "Companion launches must clear previously authenticated Activity task")
     check(

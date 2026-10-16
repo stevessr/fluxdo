@@ -39,13 +39,19 @@ abstract class PluginService : Service() {
                     val operation = request.getString(PluginProtocol.OPERATION_KEY)
                         ?: throw IllegalArgumentException("Missing operation")
                     val raw = request.getString(PluginProtocol.PAYLOAD_KEY) ?: "{}"
-                    require(raw.length <= 8192) { "Request too large" }
-                    out.putString(
-                        PluginProtocol.RESULT_KEY,
-                        execute(operation, JSONObject(raw)).toString(),
-                    )
+                    require(raw.toByteArray(Charsets.UTF_8).size <= PluginProtocol.MAX_JSON_BYTES) {
+                        "Request too large"
+                    }
+                    val responseJson = execute(operation, JSONObject(raw)).toString()
+                    require(responseJson.toByteArray(Charsets.UTF_8).size <= PluginProtocol.MAX_JSON_BYTES) {
+                        "Plugin result too large"
+                    }
+                    out.putString(PluginProtocol.RESULT_KEY, responseJson)
                 } catch (error: Exception) {
-                    out.putString(PluginProtocol.ERROR_KEY, error.message ?: "Plugin failed")
+                    out.putString(
+                        PluginProtocol.ERROR_KEY,
+                        (error.message ?: "Plugin failed").take(PluginProtocol.MAX_ERROR_CHARS),
+                    )
                 }
                 response.data = out
                 try {
