@@ -37,6 +37,15 @@ class StickerNativeDependenciesTest(unittest.TestCase):
             json.dumps({"plugins": {"android": [{"name": n} for n in plugins]}})
         )
 
+    def test_standalone_gradle_configuration_uses_lazy_tasks(self) -> None:
+        import inspect
+        from build_sticker_companion import setup_project
+        source = inspect.getsource(setup_project)
+        self.assertNotIn("afterEvaluate {", source)
+        self.assertIn("tasks.withType<JavaCompile>().configureEach", source)
+        self.assertIn('tasks.register("patchStandaloneStickerAvifRedeclaration")', source)
+        self.assertIn("dependsOn(patchTask)", source)
+
     def test_allows_known_transitive_plugins(self) -> None:
         count, found = verify_drawing_dependency_graph(self.stage)
         self.assertGreaterEqual(count, 8)

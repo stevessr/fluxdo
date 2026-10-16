@@ -316,47 +316,42 @@ def setup_project(target: Path, mode: str) -> None:
     build_script = root_gradle.read_text()
     if "patchStandaloneStickerAvifRedeclaration" not in build_script:
         build_script += """
-// Flutter native plugin Kotlin and Java toolchains must agree on JVM 17;
-// the host build does the same to avoid compile task target mismatches.
+// Flutter/AGP can finish evaluating a plugin project before this block runs.
+// NEVER call afterEvaluate in a late subprojects configuration callback.
+// Configure task collections lazily instead of scheduling evaluation hooks.
 subprojects {
-    afterEvaluate {
-        tasks.withType<JavaCompile>().configureEach {
-            sourceCompatibility = "17"
-            targetCompatibility = "17"
-        }
-        tasks.matching {
-            it.name.startsWith("compile") && it.name.endsWith("Kotlin")
-        }.configureEach {
-            try {
-                val kotlinOptions = javaClass.getMethod("getKotlinOptions")
-                    .invoke(this)
-                kotlinOptions.javaClass.getMethod("setJvmTarget", String::class.java)
-                    .invoke(kotlinOptions, "17")
-            } catch (_: Exception) {
-                // Not all plugins use the legacy Kotlin task interface.
-            }
+    tasks.withType<JavaCompile>().configureEach {
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
+    }
+    tasks.matching {
+        it.name.startsWith("compile") && it.name.endsWith("Kotlin")
+    }.configureEach {
+        try {
+            val kotlinOptions = javaClass.getMethod("getKotlinOptions")
+                .invoke(this)
+            kotlinOptions.javaClass.getMethod("setJvmTarget", String::class.java)
+                .invoke(kotlinOptions, "17")
+        } catch (_: Exception) {
+            // Kotlin 2.x compiler tasks can use the newer compilerOptions API.
+            // AGP/Flutter sets the toolchain; inspect real Gradle CI for drift.
         }
     }
-}
 
-// flutter_avif_android 3.1.0 still contains both Java and Kotlin plugin
-// classes under the same name; use the same fix as FluxDO Core.
-subprojects {
+    // flutter_avif_android 3.1.0 ships both Java and Kotlin classes with the
+    // same FQCN. Preserve the narrowly scoped pre-compile correction while
+    // avoiding late afterEvaluate hooks that Gradle refuses to register.
     if (name == "flutter_avif_android") {
-        afterEvaluate {
-            val patchTask = tasks.register("patchStandaloneStickerAvifRedeclaration") {
-                doFirst {
-                    val duplicate = file(
-                        "src/main/java/com/teknorota/flutter_avif/FlutterAvifPlugin.java"
-                    )
-                    if (duplicate.isFile) duplicate.delete()
-                }
+        val patchTask = tasks.register("patchStandaloneStickerAvifRedeclaration") {
+            doFirst {
+                val duplicate = file(
+                    "src/main/java/com/teknorota/flutter_avif/FlutterAvifPlugin.java"
+                )
+                if (duplicate.isFile) duplicate.delete()
             }
-            tasks.matching {
-                it.name.startsWith("compile")
-            }.configureEach {
-                dependsOn(patchTask)
-            }
+        }
+        tasks.matching { it.name.startsWith("compile") }.configureEach {
+            dependsOn(patchTask)
         }
     }
 }
