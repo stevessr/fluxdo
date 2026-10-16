@@ -71,7 +71,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
-      - uses: android-actions/setup-android@v3
+      # v3 asks sdkmanager for the retired "tools" package and now fails.
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
       - name: Install Android SDK & Rust NDK build requirements
         run: |
           set -euo pipefail

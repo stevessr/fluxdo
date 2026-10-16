@@ -227,11 +227,12 @@ jobs:
 
       # 一次性预装 Gradle 构建会用到的 SDK 组件，避免 assembleRelease 中途 sdkmanager 下载
       - name: Setup Android SDK packages
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           # 日志实测 assembleRelease 会临时装: NDK 28.2 / platform-31 / cmake 3.22.1
           # 有 cache hit 时 sdkmanager 会快速跳过已安装组件
           packages: >-
+            platform-tools
             ndk;${{ env.ANDROID_NDK_VERSION }}
             platforms;android-36
             platforms;android-31
