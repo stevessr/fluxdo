@@ -316,43 +316,46 @@ def setup_project(target: Path, mode: str) -> None:
     build_script = root_gradle.read_text()
     if "patchStandaloneStickerAvifRedeclaration" not in build_script:
         build_script += """
-// Flutter/AGP can finish evaluating a plugin project before this block runs.
-// NEVER call afterEvaluate in a late subprojects configuration callback.
-// Configure task collections lazily instead of scheduling evaluation hooks.
+// Android Gradle Plugin can set compileOptions after the task is registered,
+// overriding early task configuration with Java 11 even when Kotlin targets 17.
+// Run this late ONLY when the project isn't already evaluated. Projects that
+// Flutter eagerly evaluated need the same task changes immediately.
 subprojects {
-    tasks.withType<JavaCompile>().configureEach {
-        sourceCompatibility = "17"
-        targetCompatibility = "17"
-    }
-    tasks.matching {
-        it.name.startsWith("compile") && it.name.endsWith("Kotlin")
-    }.configureEach {
-        try {
-            val kotlinOptions = javaClass.getMethod("getKotlinOptions")
-                .invoke(this)
-            kotlinOptions.javaClass.getMethod("setJvmTarget", String::class.java)
-                .invoke(kotlinOptions, "17")
-        } catch (_: Exception) {
-            // Kotlin 2.x compiler tasks can use the newer compilerOptions API.
-            // AGP/Flutter sets the toolchain; inspect real Gradle CI for drift.
+    val alignCompilerTargets = {
+        tasks.withType<JavaCompile>().configureEach {
+            sourceCompatibility = "17"
+            targetCompatibility = "17"
         }
-    }
-
-    // flutter_avif_android 3.1.0 ships both Java and Kotlin classes with the
-    // same FQCN. Preserve the narrowly scoped pre-compile correction while
-    // avoiding late afterEvaluate hooks that Gradle refuses to register.
-    if (name == "flutter_avif_android") {
-        val patchTask = tasks.register("patchStandaloneStickerAvifRedeclaration") {
-            doFirst {
-                val duplicate = file(
-                    "src/main/java/com/teknorota/flutter_avif/FlutterAvifPlugin.java"
-                )
-                if (duplicate.isFile) duplicate.delete()
+        tasks.matching {
+            it.name.startsWith("compile") && it.name.endsWith("Kotlin")
+        }.configureEach {
+            try {
+                val kotlinOptions = javaClass.getMethod("getKotlinOptions")
+                    .invoke(this)
+                kotlinOptions.javaClass.getMethod("setJvmTarget", String::class.java)
+                    .invoke(kotlinOptions, "17")
+            } catch (_: Exception) {
+                // Flutter/AGP's Kotlin compiler toolchain already uses Java 17.
             }
         }
-        tasks.matching { it.name.startsWith("compile") }.configureEach {
-            dependsOn(patchTask)
+        if (name == "flutter_avif_android") {
+            val patchTask = tasks.register("patchStandaloneStickerAvifRedeclaration") {
+                doFirst {
+                    val duplicate = file(
+                        "src/main/java/com/teknorota/flutter_avif/FlutterAvifPlugin.java"
+                    )
+                    if (duplicate.isFile) duplicate.delete()
+                }
+            }
+            tasks.matching { it.name.startsWith("compile") }.configureEach {
+                dependsOn(patchTask)
+            }
         }
+    }
+    if (state.executed) {
+        alignCompilerTargets()
+    } else {
+        afterEvaluate { alignCompilerTargets() }
     }
 }
 """
