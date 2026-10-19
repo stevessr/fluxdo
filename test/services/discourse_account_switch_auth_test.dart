@@ -112,10 +112,15 @@ class _SessionCurrentAdapter implements HttpClientAdapter {
         break;
       }
     }
+    final body = statusCode == 200
+        ? <String, dynamic>{
+            'current_user': {'username': username},
+          }
+        : <String, dynamic>{
+            'errors': ['You are not permitted to view this resource.'],
+          };
     return ResponseBody.fromString(
-      jsonEncode(statusCode == 200
-          ? {'current_user': {'username': username}}
-          : {'errors': ['You are not permitted to view this resource.']}),
+      jsonEncode(body),
       statusCode,
       headers: {
         Headers.contentTypeHeader: const ['application/json'],
