@@ -74,4 +74,4 @@ assignees: ""
 
 每个迁移单元须标明对应旧 UI、NSH 文件/PR、业务行为差异、平台支持、测试记录（至少基础交互+异常态+恢复）、无障碍、性能回归及安全检查。只有全部迁移范围和正式发行通过才允许关闭本 Issue。
 
-> 本模板被保存在仓库，因为创建时 GitHub API 返回 410：该仓库当前已禁用 Issues。待仓库在 Settings → General → Features 中开启 Issues 后，使用本模板创建主追踪 Issue。
+> 本模板被保存在仓库，因为创建时 GitHub API 返回 410：该仓库当前已禁用 Issues。待仓库在 Settings → General → Features 中开启 Issues 后，从当前分支复制模板正文创建主追踪 Issue；GitHub 模板选择器通常只读取默认分支，若需要在选择器中出现，还须单独将模板合入默认分支。
