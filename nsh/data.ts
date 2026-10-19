@@ -12,7 +12,9 @@ export interface Topic {
   tags: string[];
 }
 export interface Post { id: number; number: number; author: string; text: string; }
-export interface TopicPage { items: Topic[]; hasMore: boolean; }
+export interface TopicPage { items: Topic[]; hasMore: boolean; nextCursor: string | null; }
+export interface TopicDetail { posts: Post[]; remainingIds: number[]; }
+export const POSTS_PER_BATCH = 20;
 
 const ORIGIN = "https://linux.do";
 type JsonRecord = Record<string, unknown>;
@@ -63,6 +65,28 @@ export function parseCategories(payload: unknown): Category[] {
       slug:asString(c.slug),topicCount:asNumber(c.topic_count)};
   }).filter((x: Category) => x.id > 0 && x.name.length > 0 && x.slug.length > 0);
 }
+/**
+ * Discourse more_topics_url is the server's cursor (often without .json).
+ * Strictly restrict it to known read-only feed routes on linux.do.
+ * Never fetch a server-provided absolute URL from an arbitrary host.
+ */
+export function normalizeFeedCursor(value: unknown): string | null {
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048) return null;
+  let candidate = value.trim();
+  if (candidate.startsWith(ORIGIN + "/")) candidate = candidate.slice(ORIGIN.length);
+  if (!candidate.startsWith("/") || candidate.startsWith("//") ||
+      /[\\\r\n#]/.test(candidate) || /%(?:2f|5c|0a|0d|00)/i.test(candidate)) return null;
+  const queryAt = candidate.indexOf("?");
+  if (queryAt <= 0) return null;
+  const pathname = candidate.slice(0, queryAt);
+  const query = candidate.slice(queryAt + 1);
+  if (!query || !/^[a-zA-Z0-9_%.+&=;\-]*$/.test(query) ||
+      !/(?:^|&)(?:page|before)=\d+(?:&|$)/.test(query)) return null;
+  if (!/^\/(?:latest|top)(?:\/weekly)?(?:\.json)?$/.test(pathname) &&
+      !/^\/c\/[^/?#\\]+\/[1-9]\d*(?:\/l\/latest)?(?:\.json)?$/.test(pathname)) return null;
+  return (pathname.endsWith(".json") ? pathname : pathname + ".json") + "?" + query;
+}
+
 export function parseTopics(payload: unknown): TopicPage {
   const root = record(payload, "话题");
   const list = record(root.topic_list, "话题列表");
@@ -76,7 +100,8 @@ export function parseTopics(payload: unknown): TopicPage {
       likeCount:asNumber(t.like_count),
       tags:Array.isArray(t.tags) ? t.tags.filter((x): x is string => typeof x === "string") : []};
   }).filter((t: Topic) => t.id > 0 && t.slug.length > 0 && t.title.length > 0);
-  return {items,hasMore:typeof list.more_topics_url === "string" && list.more_topics_url.length > 0};
+  const nextCursor = normalizeFeedCursor(list.more_topics_url);
+  return {items, hasMore: nextCursor !== null, nextCursor};
 }
 export function parsePosts(payload: unknown): Post[] {
   const root = record(payload, "详情");
@@ -89,6 +114,45 @@ export function parsePosts(payload: unknown): Post[] {
       text:cookedToText(asString(p.cooked)).slice(0, 4000)};
   }).filter((p: Post) => p.id > 0);
 }
+/** The first response embeds some posts; post_stream.stream contains IDs of the rest. */
+export function parseTopicDetail(payload: unknown): TopicDetail {
+  const root = record(payload, "详情");
+  const stream = record(root.post_stream, "帖子流");
+  const posts = parsePosts(payload);
+  const loadedIds = new Set(posts.map((p) => p.id));
+  const queued = new Set<number>();
+  const remainingIds: number[] = [];
+  if (Array.isArray(stream.stream)) {
+    for (const rawId of stream.stream) {
+      const id = positiveId(rawId);
+      if (id && !loadedIds.has(id) && !queued.has(id)) {
+        queued.add(id);
+        remainingIds.push(id);
+      }
+    }
+  }
+  return {posts, remainingIds};
+}
+
+/** Limit each Discourse request to 20 post IDs; keep identifiers out of URL paths. */
+export function postsBatchPath(topic: Topic, ids: number[]): string {
+  if (!Number.isSafeInteger(topic.id) || topic.id <= 0) throw new Error("话题 ID 无效");
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > POSTS_PER_BATCH ||
+      ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new Error("帖子批次 ID 无效");
+  }
+  const unique = [...new Set(ids)];
+  return "/t/" + topic.id + "/posts.json?" +
+    unique.map((id) => "post_ids%5B%5D=" + id).join("&");
+}
+
+/** Deduplicate overlapping post batches and restore Discourse post-number order. */
+export function mergePosts(existing: Post[], incoming: Post[]): Post[] {
+  const merged = new Map(existing.map((post) => [post.id, post]));
+  for (const post of incoming) merged.set(post.id, post);
+  return [...merged.values()].sort((a, b) => a.number - b.number || a.id - b.id);
+}
+
 export function dedupeTopics(existing: Topic[], added: Topic[]): Topic[] {
   const seen = new Set(existing.map((t) => t.id));
   const merged = [...existing];
@@ -117,18 +181,25 @@ export function topicPath(topic: Topic): string {
 }
 export interface PublicReader {
   categories(): Promise<Category[]>;
-  topics(kind: FeedKind, category: Category | null, page: number): Promise<TopicPage>;
+  topics(kind: FeedKind, category: Category | null, pageOrCursor: number | string): Promise<TopicPage>;
   posts(topic: Topic): Promise<Post[]>;
+  detail(topic: Topic): Promise<TopicDetail>;
+  morePosts(topic: Topic, ids: number[]): Promise<Post[]>;
 }
 export function createPublicReader(
   get: (path: string) => Promise<unknown>,
 ): PublicReader {
   return {
     async categories() { return parseCategories(await get("/categories.json")); },
-    async topics(kind, category, page) {
-      return parseTopics(await get(feedPath(kind, category, page)));
+    async topics(kind, category, pageOrCursor) {
+      const path = typeof pageOrCursor === "number"
+        ? feedPath(kind, category, pageOrCursor) : normalizeFeedCursor(pageOrCursor);
+      if (!path) throw new Error("分页游标无效");
+      return parseTopics(await get(path));
     },
     async posts(topic) { return parsePosts(await get(topicPath(topic))); },
+    async detail(topic) { return parseTopicDetail(await get(topicPath(topic))); },
+    async morePosts(topic, ids) { return parsePosts(await get(postsBatchPath(topic, ids))); },
   };
 }
 async function getPublicJson(path: string): Promise<unknown> {

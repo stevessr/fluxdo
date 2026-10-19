@@ -3,7 +3,7 @@ import { colorScheme, Platform, windowSize } from "nsh/device";
 import { List } from "nsh/list";
 import { createNavigator, SafeAreaView, Screen, Stack, StatusBar } from "nsh/ui/mobile";
 import {
-  compactCount, dedupeTopics, publicReader,
+  compactCount, dedupeTopics, mergePosts, POSTS_PER_BATCH, publicReader,
   type Category, type FeedKind, type Post, type Topic,
 } from "./data";
 import { RequestGate } from "./request_gate";
@@ -268,6 +268,10 @@ function DetailPane(props: {
   topic: () => Topic | null;
   posts: () => Post[];
   loading: () => boolean;
+  loadingMore: () => boolean;
+  remaining: () => number;
+  loadMore: () => void;
+  moreError: () => string;
   error: () => string;
   retry: () => void;
   close?: () => void;
@@ -313,11 +317,23 @@ function DetailPane(props: {
             </View>
           }
           ListFooterComponent={
-            <If when={props.posts().length > 0}>
-              <Text style={{ color: palette.muted, fontSize: 12, textAlign: "center", padding: 10 }}>
-                当前仅预览 API 首批帖子中的纯文本；完整详情、图片、视频和回复功能尚待迁移。
-              </Text>
-            </If>
+            <View style={{ alignItems: "center", padding: 12, gap: 9 }}>
+              <If when={props.moreError().length > 0}>
+                <Text style={{ color: palette.danger, fontSize: 13 }}>{props.moreError()}</Text>
+              </If>
+              <If when={props.remaining() > 0}>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>
+                  已读取 {props.posts().length} 帖 · 待加载 {props.remaining()} 帖
+                </Text>
+                <Chip label={props.loadingMore() ? "正在读取楼层…" : "继续加载楼层"}
+                  onPress={props.loadMore} />
+              </If>
+              <If when={props.posts().length > 0 && props.remaining() === 0}>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>
+                  可访问楼层已加载；富文本、图片与互动功能仍待迁移。
+                </Text>
+              </If>
+            </View>
           }
         >
           {(post) => (
@@ -352,12 +368,16 @@ function App() {
   const categoriesError = signal("");
   const selected = signal<Topic | null>(null);
   const posts = signal<Post[]>([]);
+  const pendingPostIds = signal<number[]>([]);
   const detailLoading = signal(false);
+  const detailLoadingMore = signal(false);
+  const detailMoreError = signal("");
   const detailError = signal("");
   const feedGate = new RequestGate();
   const categoryGate = new RequestGate();
   const detailGate = new RequestGate();
-  let pageIndex = 0;
+  let nextFeedCursor: string | null = null;
+  let visitedFeedCursors = new Set<string>();
 
   const readKind = (): FeedKind => tab() === "top" ? "top" : "latest";
 
@@ -367,13 +387,16 @@ function App() {
     const currentCategory = category();
     loading.set(true);
     loadingMore.set(false);
+    nextFeedCursor = null;
+    visitedFeedCursors = new Set<string>();
+    hasMore.set(false);
     feedError.set("");
     try {
       const page = await publicReader.topics(currentKind, currentCategory, 0);
       if (feedGate.isCurrent(ticket)) {
         topics.set(page.items);
+        nextFeedCursor = page.nextCursor;
         hasMore.set(page.hasMore);
-        pageIndex = 0;
       }
     } catch (e) {
       if (feedGate.isCurrent(ticket)) feedError.set(String(e));
@@ -383,17 +406,20 @@ function App() {
   };
 
   const loadMore = async () => {
-    if (loading() || loadingMore() || !hasMore()) return;
+    if (loading() || loadingMore() || !hasMore() || !nextFeedCursor) return;
+    const cursor = nextFeedCursor;
+    if (visitedFeedCursors.has(cursor)) { hasMore.set(false); return; }
     const ticket = feedGate.next();
-    const nextIndex = pageIndex + 1;
     loadingMore.set(true);
     feedError.set("");
     try {
-      const page = await publicReader.topics(readKind(), category(), nextIndex);
+      const page = await publicReader.topics(readKind(), category(), cursor);
       if (feedGate.isCurrent(ticket)) {
+        visitedFeedCursors.add(cursor);
         topics.set(dedupeTopics(topics(), page.items));
-        hasMore.set(page.hasMore && page.items.length > 0);
-        pageIndex = nextIndex;
+        nextFeedCursor = page.nextCursor;
+        hasMore.set(page.items.length > 0 && page.nextCursor !== null &&
+          !visitedFeedCursors.has(page.nextCursor));
       }
     } catch (e) {
       if (feedGate.isCurrent(ticket)) feedError.set(String(e));
@@ -450,15 +476,42 @@ function App() {
   const reloadDetail = async (topic: Topic) => {
     const ticket = detailGate.next();
     posts.set([]);
+    pendingPostIds.set([]);
     detailLoading.set(true);
+    detailLoadingMore.set(false);
+    detailMoreError.set("");
     detailError.set("");
     try {
-      const nextPosts = await publicReader.posts(topic);
-      if (detailGate.isCurrent(ticket)) posts.set(nextPosts);
+      const detail = await publicReader.detail(topic);
+      if (detailGate.isCurrent(ticket)) {
+        posts.set(detail.posts);
+        pendingPostIds.set(detail.remainingIds);
+      }
     } catch (e) {
       if (detailGate.isCurrent(ticket)) detailError.set(String(e));
     } finally {
       if (detailGate.isCurrent(ticket)) detailLoading.set(false);
+    }
+  };
+  const loadMorePosts = async () => {
+    if (!selected() || detailLoading() || detailLoadingMore() || pendingPostIds().length === 0) return;
+    const topic = selected()!;
+    const batch = pendingPostIds().slice(0, POSTS_PER_BATCH);
+    const ticket = detailGate.next();
+    detailLoadingMore.set(true);
+    detailMoreError.set("");
+    try {
+      const result = await publicReader.morePosts(topic, batch);
+      if (detailGate.isCurrent(ticket)) {
+        posts.set(mergePosts(posts(), result));
+        // A deleted/hidden post might not be returned; still advance past attempted IDs.
+        const attempted = new Set(batch);
+        pendingPostIds.set(pendingPostIds().filter((id) => !attempted.has(id)));
+      }
+    } catch (e) {
+      if (detailGate.isCurrent(ticket)) detailMoreError.set(String(e));
+    } finally {
+      if (detailGate.isCurrent(ticket)) detailLoadingMore.set(false);
     }
   };
   const openTopic = (topic: Topic) => {
@@ -470,7 +523,10 @@ function App() {
     detailGate.invalidate();
     selected.set(null);
     posts.set([]);
+    pendingPostIds.set([]);
     detailLoading.set(false);
+    detailLoadingMore.set(false);
+    detailMoreError.set("");
     detailError.set("");
   };
 
@@ -558,6 +614,8 @@ function App() {
                 flex: 1, minWidth: 280, borderLeftWidth: 1, borderLeftColor: palette.border,
               }}>
                 <DetailPane topic={selected} posts={posts} loading={detailLoading}
+                  loadingMore={detailLoadingMore} remaining={() => pendingPostIds().length}
+                  loadMore={() => { void loadMorePosts(); }} moreError={detailMoreError}
                   error={detailError} retry={() => { const t = selected(); if (t) void reloadDetail(t); }}
                   close={closeDetail} />
               </View>
@@ -580,6 +638,8 @@ function App() {
               headerTitleColor={palette.text} headerTintColor={palette.accent}>
               <View style={{ flex: 1, backgroundColor: palette.background }}>
                 <DetailPane topic={selected} posts={posts} loading={detailLoading}
+                  loadingMore={detailLoadingMore} remaining={() => pendingPostIds().length}
+                  loadMore={() => { void loadMorePosts(); }} moreError={detailMoreError}
                   error={detailError}
                   retry={() => { const t = selected(); if (t) void reloadDetail(t); }} />
               </View>

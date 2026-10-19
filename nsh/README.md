@@ -6,10 +6,11 @@
 
 - 原生 NSH TSX 应用入口 App.tsx，使用 NSH createNavigator、Stack、Screen 和 SafeAreaView；窄屏底部 Tab，宽屏固定侧栏和并排帖子预览。
 - 最新话题、本周热门、公开分类列表与分类过滤；论坛真实匿名 GET API、按页加载、列表内搜索、刷新、空态/错误状态。
-- 原生虚拟列表、话题卡片、已加载帖子纯文本预览、请求竞态隔离。
+- 原生虚拟列表、话题卡片、按 post_stream.stream 分批（20 帖）加载后续楼层、请求竞态隔离。
+- 按服务端 more_topics_url 分页（限制为同站公开信息流路由）、游标去重与重试。
 - 跟随系统深浅色，独立数据映射和读请求能力边界，测试不依赖 Flutter。
 
-**已知欠缺**：服务器返回的 more_topics_url 暂未直接用于游标分页，目前以 page 参数分页；需对 Discourse 实际版本确认翻页语义。话题仅展示初始 post_stream.posts，未实现后续楼层请求。HTML 暂只做纯文本预览，不保证与 Flutter 富文本等价。导航还有返回状态与宽窄屏中途切换等待验收问题。
+**已知欠缺**：公开话题虽然已支持按 post_stream.stream 补读后续楼层，但 HTML 仍是纯文本预览，不保证与 Flutter 富文本等价；请求失败需要手动重试。导航返回状态与宽窄屏中途切换仍需真实设备验收。
 
 ## 结构
 
@@ -48,3 +49,10 @@ NSH 具体命令参数应以本机 CLI --help 为准。Linux GTK 4.14+（Wayland
 - [官方 NSH CLI 类型检查及 390×844 / 1200×800 headless trace：通过](https://github.com/stevessr/fluxdo/actions/runs/39201655673)。
 
 本环境仍未安装 NSH CLI；上述为隔离的 GitHub Actions 验证结果。headless trace 并非 Android/iOS 真机、GTK 窗口或安装包权限沙箱测试，运行时操作体验仍待设备验收。
+
+## 增量：只读阅读分页（2026-10-19）
+
+- 话题信息流使用服务端 `more_topics_url`，补全 `.json`，限制在 linux.do 的 latest/top/category 只读路由，拒绝站外和异常游标。
+- 话题详情根据 `post_stream.stream` 与首批帖子的差集获取剩余帖子 ID，每次最多请求 20 帖，按楼层排序合并去重。
+- 对话题切换、刷新与分页并发使用 `RequestGate`，避免旧响应覆盖新页面；批次失败保留待加载 ID。
+- 测试覆盖游标安全、楼层批次、数据顺序和网络适配器；CI 需复验 TypeScript 与 NSH headless trace。

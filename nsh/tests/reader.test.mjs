@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   decodeEntities, cookedToText, parseCategories, parseTopics, parsePosts,
   dedupeTopics, feedPath, topicPath, createPublicReader,
+  normalizeFeedCursor, parseTopicDetail, postsBatchPath, mergePosts, POSTS_PER_BATCH,
 } from "../data.ts";
 import { RequestGate } from "../request_gate.ts";
 
@@ -21,6 +22,7 @@ test("解析公开话题并严格过滤异常 ID", () => {
   assert.equal(result.items[0].title, "Hello & World");
   assert.equal(result.items[0].categoryId, 8);
   assert.equal(result.hasMore, true);
+  assert.equal(result.nextCursor, "/latest.json?page=1");
   assert.equal(parseTopics({ topic_list: { topics: [], more_topics_url: null } }).hasMore, false);
 });
 
@@ -89,4 +91,49 @@ test("网络适配器可注入，且只做读取", async () => {
   assert.deepEqual(paths, [
     "/categories.json","/latest.json?page=0","/t/hello-world/42.json",
   ]);
+});
+
+test("只使用同站白名单分页游标并补齐 JSON 后缀", () => {
+  assert.equal(normalizeFeedCursor("/top/weekly?page=2"), "/top/weekly.json?page=2");
+  assert.equal(normalizeFeedCursor("https://linux.do/c/dev/12/l/latest?page=3"),
+    "/c/dev/12/l/latest.json?page=3");
+  assert.equal(normalizeFeedCursor("/latest.json?page=4"), "/latest.json?page=4");
+  for (const unsafe of [
+    "//evil.test/latest?page=1", "https://evil.test/latest?page=1",
+    "/admin/users?page=2", "/latest?redirect=https://evil.test&page=2",
+    "/latest?\r\npage=2", "/latest/../admin?page=2",
+    "/latest?token=abc", "/latest?page=1#fragment",
+    "/latest%2fadmin?page=2",
+  ]) assert.equal(normalizeFeedCursor(unsafe), null, unsafe);
+});
+
+test("Topic stream 为后续楼层提供顺序去重的 ID", () => {
+  const response = { post_stream: { posts: [
+    {id: 8, post_number: 1, username: "a", cooked: "<p>首帖</p>"},
+  ], stream: [8, 9, 9, -1, 10, "bad", 11] } };
+  assert.deepEqual(parseTopicDetail(response).remainingIds, [9, 10, 11]);
+  const merged = mergePosts(parseTopicDetail(response).posts,
+    [{id:10,number:3,author:"b",text:"3"},
+     {id:9,number:2,author:"b",text:"2"},
+     {id:10,number:3,author:"b",text:"3"}]);
+  assert.deepEqual(merged.map((p)=>p.id), [8, 9, 10]);
+});
+
+test("帖子流分批读取严格限定 20 个正整数 ID", async () => {
+  const item = {id:42,slug:"hello-world",title:"Hi",categoryId:8,views:1,postsCount:41,likeCount:0,tags:[]};
+  assert.equal(POSTS_PER_BATCH, 20);
+  assert.equal(postsBatchPath(item,[8,9]),"/t/42/posts.json?post_ids%5B%5D=8&post_ids%5B%5D=9");
+  assert.throws(()=>postsBatchPath(item,[0]),/无效/);
+  assert.throws(()=>postsBatchPath(item,Array.from({length:21},(_,i)=>i+1)),/无效/);
+  const paths=[];
+  const reader=createPublicReader(async(path)=>{
+    paths.push(path);
+    if (path.includes("/posts.json?")) return {post_stream:{posts:[{id:9,post_number:2,username:"b",cooked:"<p>ok</p>"}]}};
+    if (path.includes(".json")) return {post_stream:{posts:[],stream:[9]}};
+    throw Error("unexpected");
+  });
+  assert.deepEqual((await reader.detail(item)).remainingIds,[9]);
+  assert.deepEqual((await reader.morePosts(item,[9])).map(p=>p.id),[9]);
+  assert.deepEqual(paths,["/t/hello-world/42.json","/t/42/posts.json?post_ids%5B%5D=9"]);
+  await assert.rejects(reader.topics("latest",null,"https://evil.test/latest?page=2"),/游标无效/);
 });
