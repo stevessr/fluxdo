@@ -3,8 +3,8 @@ import { colorScheme, Platform, windowSize } from "nsh/device";
 import { List } from "nsh/list";
 import { createNavigator, SafeAreaView, Screen, Stack, StatusBar } from "nsh/ui/mobile";
 import {
-  compactCount, dedupeTopics, mergePosts, POSTS_PER_BATCH, publicReader,
-  type Category, type FeedKind, type Post, type Topic,
+  compactCount, dedupeTopics, mergePosts, mergeSearchHits, POSTS_PER_BATCH, publicReader,
+  type Category, type FeedKind, type Post, type SearchHit, type Topic,
 } from "./data";
 import { RequestGate } from "./request_gate";
 
@@ -12,7 +12,7 @@ import { RequestGate } from "./request_gate";
  * Native Shell 正式迁移目录的第一个独立入口。
  * 当前只读、匿名，不使用 Flutter Cookie 或 JS 凭据。
  */
-type Tab = "latest" | "top" | "categories" | "about";
+type Tab = "latest" | "top" | "categories" | "search" | "about";
 type Route = { name: "home" } | { name: "topic" };
 const nav = createNavigator<Route>({ name: "home" });
 
@@ -232,6 +232,97 @@ function CategoriesPage(props: {
   );
 }
 
+function SearchPage(props: {
+  query: () => string;
+  changeQuery: (text: string) => void;
+  submit: () => void;
+  hits: () => SearchHit[];
+  submitted: () => boolean;
+  loading: () => boolean;
+  loadingMore: () => boolean;
+  hasMore: () => boolean;
+  error: () => string;
+  retry: () => void;
+  loadMore: () => void;
+  open: (topic: Topic) => void;
+}) {
+  return (
+    <View style={{ flex: 1, gap: 9 }}>
+      <View style={{ paddingHorizontal: 14, paddingTop: 13, gap: 10 }}>
+        <Text style={{ fontSize: 21, fontWeight: "700", color: palette.text }}>全站公开搜索</Text>
+        <Input
+          value={props.query()}
+          onChangeText={props.changeQuery}
+          placeholder="搜索公开话题与帖子"
+          returnKeyType="search"
+          style={{
+            fontSize: 14, color: palette.text, backgroundColor: palette.surface,
+            borderWidth: 1, borderColor: palette.border, borderRadius: 12,
+            paddingHorizontal: 13, paddingVertical: 11,
+          }}
+        />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Chip label={props.loading() ? "搜索中…" : "搜索"} onPress={props.submit} />
+          <Text style={{ color: palette.muted, fontSize: 12, flex: 1 }}>
+            {props.submitted() ? "已找到 " + props.hits().length + " 条匹配结果" :
+              "输入关键字后点击搜索；仅查询公开内容"}
+          </Text>
+        </View>
+      </View>
+      <ErrorView message={props.error} retry={props.retry} />
+      <List
+        each={props.hits()}
+        keyExtractor={(hit) => hit.topic.id + ":" + (hit.postNumber || 0)}
+        estimatedItemSize={155}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 20, gap: 9 }}
+        refreshing={props.loading()}
+        onRefresh={props.submit}
+        ListEmptyComponent={
+          <View style={{ padding: 28, alignItems: "center", gap: 8 }}>
+            <Text style={{ color: palette.text, fontSize: 15 }}>
+              {props.loading() ? "正在搜索…" :
+                props.submitted() ? "没有找到可公开阅读的匹配结果" : "输入关键字开始搜索"}
+            </Text>
+            <Text style={{ color: palette.muted, fontSize: 12, textAlign: "center" }}>
+              仅搜索 Linux.do 的公开内容，不会发送 Cookie 或 API Key
+            </Text>
+          </View>
+        }
+        ListFooterComponent={
+          <If when={props.hasMore() && props.hits().length > 0}>
+            <View style={{ padding: 12, alignItems: "center" }}>
+              <Chip label={props.loadingMore() ? "正在加载…" : "加载更多匹配"}
+                onPress={props.loadMore} />
+            </View>
+          </If>
+        }
+      >
+        {(item) => (
+          <View
+            onPress={() => props.open(item().topic)}
+            accessibilityRole="button"
+            accessibilityLabel={"打开话题：" + item().topic.title}
+            style={cardStyle()}
+          >
+            <Text style={{ fontSize: 16, fontWeight: "600", color: palette.text }}
+              numberOfLines={2}>{item().topic.title}</Text>
+            <If when={item().postNumber !== null}>
+              <Text style={{ color: palette.accent, fontSize: 12 }}>
+                匹配帖子 #{item().postNumber}
+              </Text>
+            </If>
+            <If when={item().excerpt.length > 0}>
+              <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 20 }}
+                numberOfLines={3}>{item().excerpt}</Text>
+            </If>
+          </View>
+        )}
+      </List>
+    </View>
+  );
+}
+
 function InfoPage() {
   return (
     <Scroll style={{ flex: 1 }} contentContainerStyle={{ padding: 18, gap: 15 }}>
@@ -239,7 +330,7 @@ function InfoPage() {
       <View style={cardStyle()}>
         <Text style={{ fontSize: 16, fontWeight: "600", color: palette.text }}>独立原生 UI 开发预览</Text>
         <Text style={{ fontSize: 14, lineHeight: 21, color: palette.muted }}>
-          当前仅支持 Linux.do 公开信息流、分类及前部分话题帖子的匿名阅读。
+          当前支持 Linux.do 公开信息流、分类、搜索及话题纯文本阅读。
           账户登录、回复、附件上传、Chat 与设置尚未迁移，旧 Flutter 正式版继续提供这些功能。
         </Text>
       </View>
@@ -366,6 +457,13 @@ function App() {
   const feedError = signal("");
   const categoriesLoading = signal(false);
   const categoriesError = signal("");
+  const searchQuery = signal("");
+  const searchHits = signal<SearchHit[]>([]);
+  const searchSubmitted = signal(false);
+  const searchLoading = signal(false);
+  const searchLoadingMore = signal(false);
+  const searchHasMore = signal(false);
+  const searchError = signal("");
   const selected = signal<Topic | null>(null);
   const posts = signal<Post[]>([]);
   const pendingPostIds = signal<number[]>([]);
@@ -375,6 +473,7 @@ function App() {
   const detailError = signal("");
   const feedGate = new RequestGate();
   const categoryGate = new RequestGate();
+  const searchGate = new RequestGate();
   const detailGate = new RequestGate();
   let nextFeedCursor: string | null = null;
   let visitedFeedCursors = new Set<string>();
@@ -440,6 +539,72 @@ function App() {
     } finally {
       if (categoryGate.isCurrent(ticket)) categoriesLoading.set(false);
     }
+  };
+
+  let searchedTerm = "";
+  let searchPage = 1;
+
+  const changeSearchQuery = (text: string) => {
+    searchGate.invalidate();
+    searchQuery.set(text);
+    searchHits.set([]);
+    searchSubmitted.set(false);
+    searchLoading.set(false);
+    searchLoadingMore.set(false);
+    searchHasMore.set(false);
+    searchError.set("");
+    searchedTerm = "";
+    searchPage = 1;
+  };
+
+  const submitSearch = async () => {
+    const query = searchQuery().trim();
+    const ticket = searchGate.next();
+    searchHits.set([]);
+    searchSubmitted.set(false);
+    searchLoading.set(true);
+    searchLoadingMore.set(false);
+    searchHasMore.set(false);
+    searchError.set("");
+    searchPage = 1;
+    searchedTerm = query;
+    try {
+      const results = await publicReader.search(query, 1);
+      if (searchGate.isCurrent(ticket)) {
+        searchHits.set(results.items);
+        searchSubmitted.set(true);
+        searchHasMore.set(results.hasMore && results.items.length > 0);
+      }
+    } catch (e) {
+      if (searchGate.isCurrent(ticket)) searchError.set(String(e));
+    } finally {
+      if (searchGate.isCurrent(ticket)) searchLoading.set(false);
+    }
+  };
+
+  const loadMoreSearch = async () => {
+    if (searchLoading() || searchLoadingMore() || !searchHasMore() || !searchedTerm) return;
+    const ticket = searchGate.next();
+    const nextPage = searchPage + 1;
+    searchLoadingMore.set(true);
+    searchError.set("");
+    try {
+      const results = await publicReader.search(searchedTerm, nextPage);
+      if (searchGate.isCurrent(ticket)) {
+        searchHits.set(mergeSearchHits(searchHits(), results.items));
+        searchHasMore.set(results.hasMore && results.items.length > 0);
+        searchPage = nextPage;
+      }
+    } catch (e) {
+      if (searchGate.isCurrent(ticket)) searchError.set(String(e));
+    } finally {
+      if (searchGate.isCurrent(ticket)) searchLoadingMore.set(false);
+    }
+  };
+
+  const retrySearch = () => {
+    if (searchHits().length > 0 && searchHasMore()) void loadMoreSearch();
+    else void submitSearch();
   };
 
   const changeTab = (next: Tab) => {
@@ -535,7 +700,8 @@ function App() {
   const isWide = () => windowSize().width >= 900;
   const tabs: { key: Tab; label: string }[] = [
     { key: "latest", label: "最新" }, { key: "top", label: "热门" },
-    { key: "categories", label: "分类" }, { key: "about", label: "关于" },
+    { key: "categories", label: "分类" }, { key: "search", label: "搜索" },
+    { key: "about", label: "关于" },
   ];
 
   function Tabs(props: { vertical: boolean }) {
@@ -565,10 +731,19 @@ function App() {
       <View style={{ flex: 1 }}>
         <If when={tab() === "categories"} else={
           <If when={tab() === "about"} else={
-            <FeedPage kind={readKind} category={category} clearCategory={closeCategory}
-              topics={topics} loading={loading} loadingMore={loadingMore} hasMore={hasMore}
-              error={feedError} refresh={() => { void refreshFeed(); }}
-              loadMore={() => { void loadMore(); }} open={openTopic} />
+            <If when={tab() === "search"} else={
+              <FeedPage kind={readKind} category={category} clearCategory={closeCategory}
+                topics={topics} loading={loading} loadingMore={loadingMore} hasMore={hasMore}
+                error={feedError} refresh={() => { void refreshFeed(); }}
+                loadMore={() => { void loadMore(); }} open={openTopic} />
+            }>
+              <SearchPage query={searchQuery} changeQuery={changeSearchQuery}
+                submit={() => { void submitSearch(); }}
+                hits={searchHits} submitted={searchSubmitted} loading={searchLoading}
+                loadingMore={searchLoadingMore} hasMore={searchHasMore}
+                error={searchError} retry={retrySearch}
+                loadMore={() => { void loadMoreSearch(); }} open={openTopic} />
+            </If>
           }>
             <InfoPage />
           </If>

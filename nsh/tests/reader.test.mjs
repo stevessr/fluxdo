@@ -4,6 +4,7 @@ import {
   decodeEntities, cookedToText, parseCategories, parseTopics, parsePosts,
   dedupeTopics, feedPath, topicPath, createPublicReader,
   normalizeFeedCursor, parseTopicDetail, postsBatchPath, mergePosts, POSTS_PER_BATCH,
+  searchPath, parseSearchResults, mergeSearchHits,
 } from "../data.ts";
 import { RequestGate } from "../request_gate.ts";
 
@@ -136,4 +137,57 @@ test("帖子流分批读取严格限定 20 个正整数 ID", async () => {
   assert.deepEqual((await reader.morePosts(item,[9])).map(p=>p.id),[9]);
   assert.deepEqual(paths,["/t/hello-world/42.json","/t/42/posts.json?post_ids%5B%5D=9"]);
   await assert.rejects(reader.topics("latest",null,"https://evil.test/latest?page=2"),/游标无效/);
+});
+
+test("公开搜索 URL 编码、控制字符、长度和页码约束", () => {
+  assert.equal(searchPath("  Rust Flutter  ", 1), "/search.json?q=Rust%20Flutter&page=1");
+  assert.equal(searchPath("中文 + #话题", 2),
+    "/search.json?q=%E4%B8%AD%E6%96%87%20%2B%20%23%E8%AF%9D%E9%A2%98&page=2");
+  for (const input of ["", "a", "x".repeat(121), "hello\nworld", "x\u0000y"]) {
+    assert.throws(() => searchPath(input,1), /搜索词/);
+  }
+  for (const page of [0,-1,1.5,51,Infinity]) {
+    assert.throws(() => searchPath("linux",page), /页码/);
+  }
+});
+
+test("搜索匹配帖子、话题及 HTML 摘要安全解析", () => {
+  const data = {
+    topics: [
+      {...topic, id:42, title:"Hello &amp; NSH"},
+      {...topic, id:43, title:"Only title"},
+      {id:-4,title:"bad"},
+    ],
+    posts: [
+      {id:98, topic_id:42, post_number:3, blurb:"<strong>匹配</strong> &amp; <script>bad()</script>安全"},
+      {id:98, topic_id:42, post_number:3, blurb:"duplicate"},
+      {id:99, topic_id:999, post_number:1, blurb:"unknown topic"},
+    ],
+    grouped_search_result: {more_full_page_results:"/search?q=nsh&page=2"},
+  };
+  const page = parseSearchResults(data);
+  assert.equal(page.hasMore, true);
+  assert.deepEqual(page.items.map((h) => [h.topic.id,h.postNumber]), [[42,3],[43,null]]);
+  assert.equal(page.items[0].topic.title,"Hello & NSH");
+  assert.equal(page.items[0].excerpt,"匹配 & 安全");
+  assert.deepEqual(
+    mergeSearchHits(page.items,[page.items[0],{topic:page.items[1].topic,postNumber:2,excerpt:"later"}])
+      .map(h=>[h.topic.id,h.postNumber]),
+    [[42,3],[43,null],[43,2]],
+  );
+  assert.equal(parseSearchResults({topics:[],posts:[],grouped_search_result:{}}).hasMore,false);
+  assert.throws(()=>parseSearchResults({topics:[]}), /字段缺失/);
+});
+
+test("公开搜索只使用编码后的站内路径，不含任何身份凭证", async () => {
+  const paths = [];
+  const reader = createPublicReader(async (path) => {
+    paths.push(path);
+    return {topics:[topic], posts:[], grouped_search_result:{}};
+  });
+  const page = await reader.search("nsh 测试",1);
+  assert.equal(page.items.length,1);
+  assert.deepEqual(paths,["/search.json?q=nsh%20%E6%B5%8B%E8%AF%95&page=1"]);
+  await assert.rejects(reader.search("bad\rquery",1),/搜索词/);
+  assert.equal(paths.length,1);
 });

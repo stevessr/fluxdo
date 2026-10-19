@@ -14,6 +14,8 @@ export interface Topic {
 export interface Post { id: number; number: number; author: string; text: string; }
 export interface TopicPage { items: Topic[]; hasMore: boolean; nextCursor: string | null; }
 export interface TopicDetail { posts: Post[]; remainingIds: number[]; }
+export interface SearchHit { topic: Topic; postNumber: number | null; excerpt: string; }
+export interface SearchPage { items: SearchHit[]; hasMore: boolean; }
 export const POSTS_PER_BATCH = 20;
 
 const ORIGIN = "https://linux.do";
@@ -103,6 +105,79 @@ export function parseTopics(payload: unknown): TopicPage {
   const nextCursor = normalizeFeedCursor(list.more_topics_url);
   return {items, hasMore: nextCursor !== null, nextCursor};
 }
+/** Search terms are explicit user input, never a server-supplied URL. */
+export function searchPath(query: string, page: number): string {
+  const cleaned = query.trim();
+  if (cleaned.length < 2 || cleaned.length > 120 || /[\u0000-\u001f\u007f]/.test(cleaned)) {
+    throw new Error("搜索词需要 2–120 个字符，且不能包含控制字符");
+  }
+  if (!Number.isSafeInteger(page) || page < 1 || page > 50) {
+    throw new Error("搜索页码超出允许范围");
+  }
+  return "/search.json?q=" + encodeURIComponent(cleaned) + "&page=" + page;
+}
+
+/** Discourse search returns distinct topics and matching posts; topic fields are partial. */
+export function parseSearchResults(payload: unknown): SearchPage {
+  const root = record(payload, "搜索");
+  if (!Array.isArray(root.topics) || !Array.isArray(root.posts)) {
+    throw new Error("搜索结果字段缺失");
+  }
+  const topicById = new Map<number, Topic>();
+  for (const value of root.topics) {
+    const t = record(value, "搜索话题");
+    const id = positiveId(t.id);
+    if (!id || !asString(t.title)) continue;
+    topicById.set(id, {
+      id, slug: asString(t.slug) || "topic", title: decodeEntities(asString(t.title)),
+      categoryId: positiveId(t.category_id) || null, views: asNumber(t.views),
+      postsCount: asNumber(t.posts_count), likeCount: asNumber(t.like_count),
+      tags: Array.isArray(t.tags)
+        ? t.tags.filter((tag): tag is string => typeof tag === "string") : [],
+    });
+  }
+  const hits: SearchHit[] = [];
+  const seen = new Set<string>();
+  const referencedTopics = new Set<number>();
+  for (const value of root.posts) {
+    const post = record(value, "搜索帖子");
+    const topic = topicById.get(positiveId(post.topic_id));
+    if (!topic) continue;
+    const postNumber = positiveId(post.post_number) || null;
+    const identity = topic.id + ":" + (positiveId(post.id) || postNumber || 0);
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    referencedTopics.add(topic.id);
+    hits.push({
+      topic, postNumber,
+      excerpt: cookedToText(asString(post.blurb)).slice(0, 300),
+    });
+  }
+  for (const topic of topicById.values()) {
+    if (!referencedTopics.has(topic.id)) hits.push({topic, postNumber: null, excerpt: ""});
+  }
+  const grouped = root.grouped_search_result;
+  const summary = grouped && typeof grouped === "object" && !Array.isArray(grouped)
+    ? grouped as JsonRecord : {};
+  const more = summary.more_full_page_results;
+  return {
+    items: hits,
+    hasMore: more === true || (typeof more === "string" && more.length > 0),
+  };
+}
+
+export function mergeSearchHits(existing: SearchHit[], added: SearchHit[]): SearchHit[] {
+  const seen = new Set(existing.map((hit) => hit.topic.id + ":" + (hit.postNumber || 0)));
+  const result = [...existing];
+  for (const hit of added) {
+    const key = hit.topic.id + ":" + (hit.postNumber || 0);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(hit);
+  }
+  return result;
+}
+
 export function parsePosts(payload: unknown): Post[] {
   const root = record(payload, "详情");
   const stream = record(root.post_stream, "帖子流");
@@ -185,6 +260,7 @@ export interface PublicReader {
   posts(topic: Topic): Promise<Post[]>;
   detail(topic: Topic): Promise<TopicDetail>;
   morePosts(topic: Topic, ids: number[]): Promise<Post[]>;
+  search(query: string, page: number): Promise<SearchPage>;
 }
 export function createPublicReader(
   get: (path: string) => Promise<unknown>,
@@ -200,6 +276,7 @@ export function createPublicReader(
     async posts(topic) { return parsePosts(await get(topicPath(topic))); },
     async detail(topic) { return parseTopicDetail(await get(topicPath(topic))); },
     async morePosts(topic, ids) { return parsePosts(await get(postsBatchPath(topic, ids))); },
+    async search(query, page) { return parseSearchResults(await get(searchPath(query, page))); },
   };
 }
 async function getPublicJson(path: string): Promise<unknown> {
