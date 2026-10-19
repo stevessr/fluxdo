@@ -8,9 +8,13 @@ on:
       - 'lib/services/network/cookie/raw_cookie_writer.dart'
       - 'lib/services/discourse/discourse_service.dart'
       - 'lib/services/discourse/_account_switch.dart'
+      - 'lib/services/discourse/_auth.dart'
+      - 'lib/services/network/session_auth_rejection.dart'
       - 'lib/services/storage/multi_account_registry_normalizer.dart'
       - 'lib/services/storage/resilient_secure_storage.dart'
       - 'test/services/account_runtime_pool_test.dart'
+      - 'test/services/discourse_account_switch_auth_test.dart'
+      - 'test/services/network/session_auth_rejection_test.dart'
       - 'test/services/storage/multi_account_registry_normalizer_test.dart'
       - '.github/workflows/account-runtime-switch.yaml'
   workflow_dispatch:
@@ -49,9 +53,13 @@ jobs:
             lib/services/network/cookie/raw_cookie_writer.dart \
             lib/services/discourse/discourse_service.dart \
             lib/services/discourse/_account_switch.dart \
+            lib/services/discourse/_auth.dart \
+            lib/services/network/session_auth_rejection.dart \
             lib/services/storage/multi_account_registry_normalizer.dart \
             lib/services/storage/resilient_secure_storage.dart \
             test/services/account_runtime_pool_test.dart \
+            test/services/discourse_account_switch_auth_test.dart \
+            test/services/network/session_auth_rejection_test.dart \
             test/services/storage/multi_account_registry_normalizer_test.dart
           git diff --exit-code -- \
             lib/services/account_runtime_pool.dart \
@@ -59,9 +67,13 @@ jobs:
             lib/services/network/cookie/raw_cookie_writer.dart \
             lib/services/discourse/discourse_service.dart \
             lib/services/discourse/_account_switch.dart \
+            lib/services/discourse/_auth.dart \
+            lib/services/network/session_auth_rejection.dart \
             lib/services/storage/multi_account_registry_normalizer.dart \
             lib/services/storage/resilient_secure_storage.dart \
             test/services/account_runtime_pool_test.dart \
+            test/services/discourse_account_switch_auth_test.dart \
+            test/services/network/session_auth_rejection_test.dart \
             test/services/storage/multi_account_registry_normalizer_test.dart
 
       - name: Analyze runtime switching
@@ -71,13 +83,18 @@ jobs:
           lib/services/account_switch_browser_cookie_cleaner.dart
           lib/services/network/cookie/raw_cookie_writer.dart
           lib/services/discourse/discourse_service.dart
+          lib/services/network/session_auth_rejection.dart
           lib/services/storage/multi_account_registry_normalizer.dart
           lib/services/storage/resilient_secure_storage.dart
           test/services/account_runtime_pool_test.dart
+          test/services/discourse_account_switch_auth_test.dart
+          test/services/network/session_auth_rejection_test.dart
           test/services/storage/multi_account_registry_normalizer_test.dart
 
       - name: Test account runtime
         run: >-
           dart tool/flutterw.dart test
           test/services/account_runtime_pool_test.dart
+          test/services/discourse_account_switch_auth_test.dart
+          test/services/network/session_auth_rejection_test.dart
           test/services/storage/multi_account_registry_normalizer_test.dart
