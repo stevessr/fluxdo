@@ -13,6 +13,10 @@ on:
       - '.github/workflows/nsh-reader-tests.yml'
   workflow_dispatch:
 
+concurrency:
+  group: nsh-reader-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

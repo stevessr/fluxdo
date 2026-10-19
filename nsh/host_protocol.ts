@@ -140,9 +140,11 @@ export class HostBridge {
     let result: unknown;
     try {
       result = await this.transport.invoke(frame);
-    } catch {
-      // Do not surface arbitrary native exception strings containing credentials.
+    } catch (error) {
+      // Preserve only a known local "unavailable" error; never surface arbitrary
+      // native exception strings that might contain credentials.
       if (generation !== this.generation) throw new HostProtocolError("superseded");
+      if (error instanceof HostProtocolError && error.code === "unavailable") throw error;
       throw new HostProtocolError("transport_error");
     }
     if (generation !== this.generation) throw new HostProtocolError("superseded");

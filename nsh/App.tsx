@@ -595,6 +595,7 @@ function App() {
 
   const loadMoreSearch = async () => {
     if (searchLoading() || searchLoadingMore() || !searchHasMore() || !searchedTerm) return;
+    if (searchPage >= 50) { searchHasMore.set(false); return; }
     const ticket = searchGate.next();
     const nextPage = searchPage + 1;
     searchLoadingMore.set(true);

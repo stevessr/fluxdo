@@ -73,3 +73,8 @@ NSH 具体命令参数应以本机 CLI --help 为准。Linux GTK 4.14+（Wayland
 - `unavailableHostTransport` 默认拒绝任何请求；**目前没有 Rust/Native Transport 实现**，`App.tsx` 仍沿用限定 linux.do 的匿名 GET 数据层。
 - Native Host 必须独立强制验证账号 epoch、鉴权、权限和会话隔离；TSX 的白名单只是防御性输入约束，不能代替 Host 端权限边界。
 - `tests/bridge.test.mjs` 使用假 Host 验证错误封装、过期响应、非法字段和帧上限。
+
+## CI 调度
+
+- Reader 与 Native Check 工作流添加按来源分支的并发组和 `cancel-in-progress`。同一 NSH 迁移分支的 push / PR 不再重复占用执行槽，后续提交会取消旧版本的排队或执行；最终验收只看最新提交。
+- 搜索翻页最多到第 50 页；Host transport 未安装时报告 `unavailable`，区别于异常传输失败。

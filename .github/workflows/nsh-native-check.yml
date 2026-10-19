@@ -9,6 +9,10 @@ on:
       - '.github/workflows/nsh-native-check.yml'
   workflow_dispatch:
 
+concurrency:
+  group: nsh-native-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

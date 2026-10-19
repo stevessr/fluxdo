@@ -70,5 +70,5 @@ test("native 异常不暴露底层消息；未安装 transport 时关闭操作",
       err.code==="transport_error" && !err.message.includes("secret"));
   const unavailable = new HostBridge(unavailableHostTransport);
   await assert.rejects(unavailable.invoke(feedCommand),
-    (err)=>err instanceof HostProtocolError && err.code==="transport_error");
+    (err)=>err instanceof HostProtocolError && err.code==="unavailable");
 });
