@@ -76,3 +76,13 @@
 - GitHub Issue 在创建此文档时被仓库禁用（API 410）。预填表单位于 `.github/ISSUE_TEMPLATE/nsh-full-ui-migration.md`，开启 Issues 后可从本分支复制模板正文创建 Epic（模板目前不在默认分支中，未必自动显示在 Issue 模板选择器中）。
 - 原型：[#138](https://github.com/stevessr/fluxdo/pull/138)。现存只读预览不等同真实业务迁移。
 - 目录清单：[nsh-ui-inventory.md](./nsh-ui-inventory.md)。勾选必须同时更新迁移 PR/测试链接；不要批量勾选未验收项。
+
+
+## 2026-10-19：新增独立 NSH 应用壳（P0/P1 迭代）
+
+- 新增 nsh/App.tsx：官方 createNavigator + Stack/Screen，手机底部导航、桌面侧栏和双栏话题预览、跟随系统深浅色。
+- 新增 nsh/data.ts：公开话题、分类、帖子只读 API，输入验证、纯文本渲染、页码及路径校验；nsh/request_gate.ts 隔离过期响应。
+- 分类列表/分类筛选、最新/热门列表、刷新、分页按钮、本地过滤、空态与错误态已有源代码。
+- [数据层单元测试及类型检查已通过](https://github.com/stevessr/fluxdo/actions/runs/39201454810)。
+- [官方 nsh check 与手机/桌面双视口 nsh trace 已通过](https://github.com/stevessr/fluxdo/actions/runs/39201655673)。
+- **验收范围**：仅验证匿名只读数据层、TSX 编译和 headless 首帧，不等于设备实测、已登录读写、完整富文本或多平台发布。467 项 Flutter UI 资产仍待逐一核销。
