@@ -176,8 +176,9 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
   /// 校验待切换快照，并把 `/session/current.json` 已经返回的 current_user
   /// 一并交给切换链路复用。
   ///
-  /// 与 [isLoggedIn] 的账户切换用法保持同一语义：401/403/404 或用户名串号
-  /// 才确认失败；网络/CF 异常保守保留本地会话。区别是这里不会把服务端
+  /// 与 [isLoggedIn] 的账户切换用法保持同一语义：401/404、明确的
+  /// Discourse 登出信号或用户名串号才确认失败；普通 403（含可能的 CF/WAF
+  /// 拦截）保守保留本地会话。区别是这里不会把服务端
   /// 已经返回的 current_user 丢掉，因此后续无需再为了首屏身份等待首页 HTML。
   Future<AccountSwitchSessionValidation> validateAccountSwitchSession({
     required String expectedUsername,
@@ -303,7 +304,9 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
         return const AccountSwitchSessionValidation(isValid: false);
       }
       final status = e.response?.statusCode;
-      if (status == 401 || status == 403 || status == 404) {
+      if (status == 401 ||
+          status == 404 ||
+          SessionAuthRejection.isExplicitLogout403(e.response)) {
         LogWriter.instance.write({
           'timestamp': DateTime.now().toIso8601String(),
           'level': 'warning',
@@ -317,7 +320,8 @@ extension AccountSwitchSessionValidationExtension on DiscourseService {
         return const AccountSwitchSessionValidation(isValid: false);
       }
 
-      // 与 isLoggedIn 一致：网络异常/CF 不确定时保守保留快照，后续仍走
+      // 与 isLoggedIn 一致：网络异常/CF/不带 Discourse 登出信号的 403
+      // 视为不确定，保留快照及账号记录；后续仍走
       // 完整 preload 收口；不会因为一次网络抖动把已保存账号删除。
       _tToken = initialToken;
       _username = expected;
