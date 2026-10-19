@@ -50,12 +50,53 @@ void main() {
     // 校验只做预提交验证，用户名仍由 finalizeNativeLoginSuccess 提交。
     expect(await service.getCurrentUsername(), isNull);
   });
+
+  test('普通 403 不会使登录态检查和账户切换判定账号过期', () async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    final cookieJar = CookieJarService();
+    await cookieJar.initialize();
+    await cookieJar.setCookie(
+      '_t',
+      'still-valid-despite-403',
+      httpOnly: true,
+      trusted: true,
+    );
+
+    final service = DiscourseService();
+    final adapter = _SessionCurrentAdapter(
+      username: 'target-user',
+      statusCode: 403,
+    );
+    service.dio.httpClientAdapter = adapter;
+    final generation = AuthSession().advance();
+
+    expect(
+      await service.isLoggedIn(
+        requestGeneration: generation,
+        logoutOnInvalid: false,
+        expectedUsername: 'target-user',
+      ),
+      isTrue,
+    );
+
+    final validation = await service.validateAccountSwitchSession(
+      expectedUsername: 'target-user',
+      requestGeneration: generation,
+    );
+    expect(validation.isValid, isTrue);
+    expect(validation.currentUser, isNull);
+    expect(await cookieJar.getTToken(), 'still-valid-despite-403');
+    expect(adapter.sentCookie, contains('_t=still-valid-despite-403'));
+  });
 }
 
 class _SessionCurrentAdapter implements HttpClientAdapter {
-  _SessionCurrentAdapter({required this.username});
+  _SessionCurrentAdapter({required this.username, this.statusCode = 200});
 
   final String username;
+  final int statusCode;
   String? sentCookie;
 
   @override
@@ -72,10 +113,10 @@ class _SessionCurrentAdapter implements HttpClientAdapter {
       }
     }
     return ResponseBody.fromString(
-      jsonEncode({
-        'current_user': {'username': username},
-      }),
-      200,
+      jsonEncode(statusCode == 200
+          ? {'current_user': {'username': username}}
+          : {'errors': ['You are not permitted to view this resource.']}),
+      statusCode,
       headers: {
         Headers.contentTypeHeader: const ['application/json'],
       },
