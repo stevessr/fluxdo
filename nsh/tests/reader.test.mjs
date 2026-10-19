@@ -191,3 +191,19 @@ test("公开搜索只使用编码后的站内路径，不含任何身份凭证",
   await assert.rejects(reader.search("bad\rquery",1),/搜索词/);
   assert.equal(paths.length,1);
 });
+
+test("搜索命中的楼层从服务端获取相邻帖子，而非按帖子 ID 猜测", async () => {
+  const item = {id:42,slug:"hello-world",title:"Hi",categoryId:8,views:1,postsCount:240,likeCount:0,tags:[]};
+  assert.equal(topicPath(item,120),"/t/hello-world/42/120.json");
+  assert.equal(topicPath(item,null),"/t/hello-world/42.json");
+  for (const n of [0,-1,1.5,Infinity,10000001]) {
+    assert.throws(()=>topicPath(item,n),/楼层号无效/);
+  }
+  const paths=[];
+  const reader=createPublicReader(async(path)=>{
+    paths.push(path);
+    return {post_stream:{posts:[{id:9001,post_number:120,username:"author",cooked:"<p>target</p>"}],stream:[9001]}};
+  });
+  assert.deepEqual((await reader.detail(item,120)).posts.map(p=>p.number),[120]);
+  assert.deepEqual(paths,["/t/hello-world/42/120.json"]);
+});

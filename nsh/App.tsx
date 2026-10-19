@@ -244,7 +244,7 @@ function SearchPage(props: {
   error: () => string;
   retry: () => void;
   loadMore: () => void;
-  open: (topic: Topic) => void;
+  open: (topic: Topic, postNumber: number | null) => void;
 }) {
   return (
     <View style={{ flex: 1, gap: 9 }}>
@@ -300,7 +300,7 @@ function SearchPage(props: {
       >
         {(item) => (
           <View
-            onPress={() => props.open(item().topic)}
+            onPress={() => props.open(item().topic, item().postNumber)}
             accessibilityRole="button"
             accessibilityLabel={"打开话题：" + item().topic.title}
             style={cardStyle()}
@@ -358,6 +358,8 @@ function InfoPage() {
 function DetailPane(props: {
   topic: () => Topic | null;
   posts: () => Post[];
+  targetPostNumber: () => number | null;
+  showBeginning: () => void;
   loading: () => boolean;
   loadingMore: () => boolean;
   remaining: () => number;
@@ -397,6 +399,14 @@ function DetailPane(props: {
                 {props.topic() ? "浏览 " + compactCount(props.topic()!.views) +
                   " · " + props.topic()!.postsCount + " 帖" : ""}
               </Text>
+              <If when={props.targetPostNumber() !== null}>
+                <View style={{ gap: 8 }}>
+                  <Text style={{ color: palette.muted, fontSize: 12 }}>
+                    来自搜索：请求显示 #{props.targetPostNumber()} 附近的楼层
+                  </Text>
+                  <Chip label="从话题开头阅读" onPress={props.showBeginning} />
+                </View>
+              </If>
               <If when={props.loading()}>
                 <Text style={{ color: palette.muted, fontSize: 13 }}>正在加载帖子…</Text>
               </If>
@@ -465,6 +475,7 @@ function App() {
   const searchHasMore = signal(false);
   const searchError = signal("");
   const selected = signal<Topic | null>(null);
+  const targetPostNumber = signal<number | null>(null);
   const posts = signal<Post[]>([]);
   const pendingPostIds = signal<number[]>([]);
   const detailLoading = signal(false);
@@ -638,7 +649,7 @@ function App() {
     void refreshFeed();
   };
 
-  const reloadDetail = async (topic: Topic) => {
+  const reloadDetail = async (topic: Topic, target?: number | null) => {
     const ticket = detailGate.next();
     posts.set([]);
     pendingPostIds.set([]);
@@ -647,7 +658,7 @@ function App() {
     detailMoreError.set("");
     detailError.set("");
     try {
-      const detail = await publicReader.detail(topic);
+      const detail = await publicReader.detail(topic, target);
       if (detailGate.isCurrent(ticket)) {
         posts.set(detail.posts);
         pendingPostIds.set(detail.remainingIds);
@@ -679,14 +690,22 @@ function App() {
       if (detailGate.isCurrent(ticket)) detailLoadingMore.set(false);
     }
   };
-  const openTopic = (topic: Topic) => {
+  const openTopic = (topic: Topic, postNumber?: number | null) => {
     selected.set(topic);
-    void reloadDetail(topic);
+    targetPostNumber.set(postNumber ?? null);
+    void reloadDetail(topic, postNumber);
     if (windowSize().width < 900) nav.push({ name: "topic" });
+  };
+  const showTopicBeginning = () => {
+    const topic = selected();
+    if (!topic) return;
+    targetPostNumber.set(null);
+    void reloadDetail(topic);
   };
   const closeDetail = () => {
     detailGate.invalidate();
     selected.set(null);
+    targetPostNumber.set(null);
     posts.set([]);
     pendingPostIds.set([]);
     detailLoading.set(false);
@@ -789,9 +808,10 @@ function App() {
                 flex: 1, minWidth: 280, borderLeftWidth: 1, borderLeftColor: palette.border,
               }}>
                 <DetailPane topic={selected} posts={posts} loading={detailLoading}
+                  targetPostNumber={targetPostNumber} showBeginning={showTopicBeginning}
                   loadingMore={detailLoadingMore} remaining={() => pendingPostIds().length}
                   loadMore={() => { void loadMorePosts(); }} moreError={detailMoreError}
-                  error={detailError} retry={() => { const t = selected(); if (t) void reloadDetail(t); }}
+                  error={detailError} retry={() => { const t = selected(); if (t) void reloadDetail(t, targetPostNumber()); }}
                   close={closeDetail} />
               </View>
             </If>
@@ -813,10 +833,11 @@ function App() {
               headerTitleColor={palette.text} headerTintColor={palette.accent}>
               <View style={{ flex: 1, backgroundColor: palette.background }}>
                 <DetailPane topic={selected} posts={posts} loading={detailLoading}
+                  targetPostNumber={targetPostNumber} showBeginning={showTopicBeginning}
                   loadingMore={detailLoadingMore} remaining={() => pendingPostIds().length}
                   loadMore={() => { void loadMorePosts(); }} moreError={detailMoreError}
                   error={detailError}
-                  retry={() => { const t = selected(); if (t) void reloadDetail(t); }} />
+                  retry={() => { const t = selected(); if (t) void reloadDetail(t, targetPostNumber()); }} />
               </View>
             </Screen>
           )}

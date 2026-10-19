@@ -250,15 +250,21 @@ export function feedPath(kind: FeedKind, category: Category | null, page: number
   }
   return "/latest.json?page=" + page;
 }
-export function topicPath(topic: Topic): string {
+/** Optional post_number requests Discourse's reading window near that floor. */
+export function topicPath(topic: Topic, postNumber?: number | null): string {
   if (!Number.isSafeInteger(topic.id) || topic.id <= 0) throw new Error("话题 ID 无效");
-  return "/t/" + encodeURIComponent(topic.slug) + "/" + topic.id + ".json";
+  if (postNumber != null &&
+      (!Number.isSafeInteger(postNumber) || postNumber <= 0 || postNumber > 10000000)) {
+    throw new Error("楼层号无效");
+  }
+  return "/t/" + encodeURIComponent(topic.slug) + "/" + topic.id +
+    (postNumber == null ? "" : "/" + postNumber) + ".json";
 }
 export interface PublicReader {
   categories(): Promise<Category[]>;
   topics(kind: FeedKind, category: Category | null, pageOrCursor: number | string): Promise<TopicPage>;
   posts(topic: Topic): Promise<Post[]>;
-  detail(topic: Topic): Promise<TopicDetail>;
+  detail(topic: Topic, postNumber?: number | null): Promise<TopicDetail>;
   morePosts(topic: Topic, ids: number[]): Promise<Post[]>;
   search(query: string, page: number): Promise<SearchPage>;
 }
@@ -274,7 +280,9 @@ export function createPublicReader(
       return parseTopics(await get(path));
     },
     async posts(topic) { return parsePosts(await get(topicPath(topic))); },
-    async detail(topic) { return parseTopicDetail(await get(topicPath(topic))); },
+    async detail(topic, postNumber) {
+      return parseTopicDetail(await get(topicPath(topic, postNumber)));
+    },
     async morePosts(topic, ids) { return parsePosts(await get(postsBatchPath(topic, ids))); },
     async search(query, page) { return parseSearchResults(await get(searchPath(query, page))); },
   };
