@@ -53,6 +53,7 @@ import '../network/adapters/webview_http_adapter.dart';
 import '../network/webview/webview_adapter_settings_service.dart';
 import '../login_ready_coordinator.dart';
 import '../network/discourse_dio.dart';
+import '../network/session_auth_rejection.dart';
 import '../network/flux_request_spec.dart';
 import '../preloaded_data_service.dart';
 import '../pending_review_context_store.dart';
