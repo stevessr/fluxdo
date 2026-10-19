@@ -1065,6 +1065,14 @@ mixin _AuthMixin on _DiscourseServiceBase {
           final data = error.response?.data;
           debugPrint('[DIO] Error: ${error.response?.statusCode}');
 
+          // 先检查 Cloudflare 响应头/挑战页及类型化异常。撞盾不能
+          // 产生 discourse-logged-out / not_logged_in 的 auth strike，
+          // 也不能触发会话 Cookie 同步，更不能导致被动登出。
+          if (error.error is CfChallengeException ||
+              CfChallengeService.isCfChallengeResponse(error.response)) {
+            return handler.next(error);
+          }
+
           // BAD CSRF 处理：对齐 Discourse 官方前端，只清空 token。
           // 下一次非 GET 请求会在 RequestHeaderInterceptor 中先刷新 CSRF。
           if (error.response?.statusCode == 403 && _isBadCsrfResponse(data)) {
@@ -1698,8 +1706,12 @@ mixin _AuthMixin on _DiscourseServiceBase {
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       if (!isCurrent()) return false;
-      // 404 = 无用户 / 401/403 = 明确拒绝
-      if (status == 404 || status == 401 || status == 403) {
+      // 403 本身并非登录失效：CF 盾、WAF 与普通权限拒绝都可能返回
+      // 403。必须有 Discourse-Logged-Out 头或 not_logged_in 错误体；
+      // Cloudflare challenge 特征优先于上述信号。
+      if (status == 404 ||
+          status == 401 ||
+          SessionAuthRejection.isExplicitLogout403(e.response)) {
         LogWriter.instance.write({
           'timestamp': DateTime.now().toIso8601String(),
           'level': 'warning',
@@ -1723,7 +1735,7 @@ mixin _AuthMixin on _DiscourseServiceBase {
           'initial_check_http_$status',
         );
       }
-      // 网络异常/CF 验证等 → 保守保留本地状态
+      // 网络异常/CF 验证/无明确登出信号的 403 → 保守保留本地状态
       if (!isCurrent()) return false;
       _tToken = tToken;
       _username = username;
