@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'auth_session.dart';
 import 'network/discourse_dio.dart';
 import 'network/exceptions/oauth_exception.dart';
+import 'oauth_session_client.dart';
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
 import 'oauth_flow_helper.dart';
@@ -16,9 +17,16 @@ class CdkOAuthService {
 
   late final Dio _dio;
 
-  CdkOAuthService() {
-    _dio = DiscourseDio.create();
+  late final OAuthSessionClient _session;
+
+  CdkOAuthService({Dio? dio, OAuthSessionClient? sessionClient}) {
+    _dio = dio ?? sessionClient?.dio ?? DiscourseDio.create();
+    _session =
+        sessionClient ??
+        OAuthSessionClient(dio: _dio, baseUrl: baseUrl, serviceName: 'CDK');
   }
+
+  void cancelPendingRequests() => _session.cancel();
 
   Future<String> getAuthUrl() async {
     final response = await _dio.get(
@@ -55,29 +63,17 @@ class CdkOAuthService {
   }
 
   Future<void> logout() async {
+    cancelPendingRequests();
     await _dio.get(
       '$baseUrl/api/v1/oauth/logout',
       options: Options(extra: {'skipCsrf': true}),
     );
   }
 
-  /// 重新授权 = logout + 长间隔 + authorize。
-  ///
-  /// 单独抽出, 是因为 logout + authorize 紧贴在一起会在 ~5 个请求内集中打
-  /// 同一个限速窗口。中间插一个相对长的 gap, 让服务端限速窗口完全 reset,
-  /// 也更像真人"先退出再重新登录"的操作节奏。
-  Future<bool> reauthorize(BuildContext context) async {
-    try {
-      await logout();
-    } catch (_) {
-      // 忽略登出错误, 不阻塞后续重新授权
-    }
-    await OAuthFlowHelper.humanGap(minMs: 1000, maxMs: 1800);
-    if (!context.mounted) return false;
-    return authorize(context);
-  }
+  /// 重新签发业务会话，不预先登出；取消授权时仍保留原会话。
+  Future<bool> reauthorize(BuildContext context) => authorize(context);
 
-  Future<CdkUserInfo?> getUserInfo() async {
+  Future<CdkUserInfo?> getUserInfo({String? expectedUsername}) async {
     final generation = AuthSession().generation;
     try {
       final response = await _dio.get(
@@ -86,7 +82,12 @@ class CdkOAuthService {
       );
       final cdkData = response.data['data'];
       if (!AuthSession().isValid(generation)) return null;
-      return CdkUserInfo.fromJson(cdkData);
+      final info = CdkUserInfo.fromJson(cdkData);
+      // 跨账号保护：服务端返回的不是期望账号时按无效数据处理。
+      if (expectedUsername != null && info.username != expectedUsername) {
+        return null;
+      }
+      return info;
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       if (statusCode == 401 || statusCode == 403) {
@@ -97,6 +98,7 @@ class CdkOAuthService {
   }
 
   Future<bool> authorize(BuildContext context) async {
+    cancelPendingRequests();
     final generation = AuthSession().generation;
     final String authUrl;
     try {
