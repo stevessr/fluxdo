@@ -73,6 +73,6 @@
 
 ## 追踪
 
-- GitHub Issue 在创建此文档时被仓库禁用（API 410）。预填表单位于 `.github/ISSUE_TEMPLATE/nsh-full-ui-migration.md`，开启 Issues 后应以此创建 Epic。
+- GitHub Issue 在创建此文档时被仓库禁用（API 410）。预填表单位于 `.github/ISSUE_TEMPLATE/nsh-full-ui-migration.md`，开启 Issues 后可从本分支复制模板正文创建 Epic（模板目前不在默认分支中，未必自动显示在 Issue 模板选择器中）。
 - 原型：[#138](https://github.com/stevessr/fluxdo/pull/138)。现存只读预览不等同真实业务迁移。
 - 目录清单：[nsh-ui-inventory.md](./nsh-ui-inventory.md)。勾选必须同时更新迁移 PR/测试链接；不要批量勾选未验收项。
