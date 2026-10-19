@@ -29,6 +29,6 @@ jobs:
         run: |
           npx --yes --package typescript@5.8.3 tsc \
             --noEmit --strict --module esnext --moduleResolution bundler \
-            --target es2023 --lib es2023,dom nsh/data.ts nsh/request_gate.ts
+            --target es2023 --lib es2023,dom nsh/data.ts nsh/request_gate.ts nsh/host_protocol.ts
       - name: Test public reader and concurrency guard
         run: node --experimental-strip-types --test nsh/tests/*.test.mjs

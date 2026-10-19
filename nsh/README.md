@@ -66,3 +66,10 @@ NSH 具体命令参数应以本机 CLI --help 为准。Linux GTK 4.14+（Wayland
 - 允许在官方返回 `more_full_page_results` 时继续按页读取；同一话题、楼层的重复结果被过滤。
 - 搜索仍然仅使用公开 GET，没有认证、搜索历史持久化或跨账号凭据。
 - 点击带有匹配楼层号的结果时，会请求 `/t/:slug/:id/:post_number.json` 对应的服务端阅读窗口，并提供回到首帖的入口。NSH 列表尚未实现精确滚动锚定，需在真实设备上验证。
+
+## P0 Host Bridge 契约基线（仅协议，不是已连接的 Native Host）
+
+- 新增 `host_protocol.ts`：固定 v1 协议、只读命令白名单、JSON 帧大小限制、请求 ID 与版本校验、无敏感原生异常传播、页面/账号切换时的待决请求废弃。
+- `unavailableHostTransport` 默认拒绝任何请求；**目前没有 Rust/Native Transport 实现**，`App.tsx` 仍沿用限定 linux.do 的匿名 GET 数据层。
+- Native Host 必须独立强制验证账号 epoch、鉴权、权限和会话隔离；TSX 的白名单只是防御性输入约束，不能代替 Host 端权限边界。
+- `tests/bridge.test.mjs` 使用假 Host 验证错误封装、过期响应、非法字段和帧上限。
