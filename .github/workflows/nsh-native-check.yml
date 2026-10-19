@@ -1,0 +1,33 @@
+name: NSH native type check
+
+on:
+  push:
+    branches:
+      - migration/nsh-full-ui
+    paths:
+      - 'nsh/**'
+      - '.github/workflows/nsh-native-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official NSH CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --retry 3 --fail --location --silent --show-error https://nsh.dev/install.sh -o /tmp/nsh-install.sh
+          sh /tmp/nsh-install.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Check NSH TSX types
+        shell: bash
+        run: |
+          set -euo pipefail
+          nsh --version
+          nsh check nsh/App.tsx
