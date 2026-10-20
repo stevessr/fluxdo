@@ -1,3 +1,6 @@
+// Keep the public `sentinel:` injection parameter name without exposing the private field.
+// ignore_for_file: prefer_initializing_formals
+
 import 'package:dio/dio.dart';
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:flutter/foundation.dart';
@@ -5,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import '../cookie/cookie_jar_service.dart';
 import '../cookie/cookie_logger.dart';
 import '../cookie/session_cookie_sentinel.dart';
+import '../session_rejection_classifier.dart';
 import 'recovery_action.dart';
 import 'recovery_policy.dart';
 
@@ -99,6 +103,14 @@ class SessionSelfHealPolicy implements RecoveryPolicy {
     final response = outcome.error?.response ?? outcome.response;
     if (response == null) return false;
 
+    // 撞盾是传输层阻断，不能因为挑战页偶然带有 logged-out 头就 sweep
+    // 会话 Cookie 或重放请求；交由 CF 验证链路处理。
+    if (SessionRejectionClassifier.isCloudflareMitigationResponse(response) ||
+        (outcome.error != null &&
+            SessionRejectionClassifier.isCloudflareBlocked(outcome.error!))) {
+      return false;
+    }
+
     final status = response.statusCode ?? 0;
     final hasLoggedOutHeader =
         response.headers.value('discourse-logged-out')?.isNotEmpty == true;
@@ -107,8 +119,13 @@ class SessionSelfHealPolicy implements RecoveryPolicy {
     // A successful mutation with a misleading logged-out header may already
     // have been committed by Discourse. Never replay it automatically.
     // The auth probe will validate the weak logout signal independently.
-    if (status >= 200 && status < 400 &&
-        !const {'GET', 'HEAD', 'OPTIONS'}.contains(options.method.toUpperCase())) {
+    if (status >= 200 &&
+        status < 400 &&
+        !const {
+          'GET',
+          'HEAD',
+          'OPTIONS',
+        }.contains(options.method.toUpperCase())) {
       return false;
     }
 
