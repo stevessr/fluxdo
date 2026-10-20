@@ -6,7 +6,7 @@ import {
   normalizeFeedCursor, parseTopicDetail, postsBatchPath, mergePosts, POSTS_PER_BATCH,
   searchPath, parseSearchResults, mergeSearchHits, feedCursorForContext, publicReader,
   parseUserProfile, userProfilePath, parseBoards, parseBoardDetail, boardDetailPath,
-  parseTags, tagPath, tagCursorForContext,
+  parseTags, tagPath, tagCursorForContext, categoryTagPath, categoryTagCursorForContext,
 } from "../data.ts";
 import { RequestGate } from "../request_gate.ts";
 
@@ -399,4 +399,61 @@ test("标签分页服务端游标只允许当前标签与安全参数", async ()
   }));
   const last=await wrong.tagTopics(tag,0);
   assert.equal(last.hasMore,false);
+});
+
+test("category + tag routes use the canonical Discourse combination endpoint", () => {
+  const c={id:8,slug:"development",name:"开发",topicCount:20};
+  const tag={id:5,slug:"rust",name:"Rust",topicCount:8,description:""};
+  assert.equal(categoryTagPath(c,tag,0),"/tags/c/development/8/rust/5.json?page=0");
+  assert.equal(categoryTagPath(c,tag,2),"/tags/c/development/8/rust/5.json?page=2");
+  assert.equal(categoryTagCursorForContext("/tags/c/development/8/rust/5?page=3",c,tag),
+    "/tags/c/development/8/rust/5.json?page=3");
+  assert.equal(categoryTagCursorForContext(
+    "https://linux.do/tags/c/development/8/rust/5?page=3",c,tag),
+    "/tags/c/development/8/rust/5.json?page=3");
+  for(const raw of [
+    "/tags/c/development/9/rust/5?page=3",
+    "/tags/c/other/8/rust/5?page=3",
+    "/tags/c/development/8/go/5?page=3",
+    "/tags/c/development/8/rust/6?page=3",
+    "/tags/c/development/8/rust/5?page=3&token=private",
+    "/tags/c/development/8/rust/5?page=3&page=4",
+    "/tags/c/development/8/rust/5?period=weekly",
+    "https://attacker.test/tags/c/development/8/rust/5?page=3",
+  ]) assert.equal(categoryTagCursorForContext(raw,c,tag),null,raw);
+  for (const slug of ["..",".","foo/bar","foo\\bar"]) {
+    assert.throws(() => categoryTagPath({...c,slug},tag,0),/分类 slug 无效/);
+  }
+  assert.throws(() => categoryTagPath({...c,id:-1},tag,0),/分类 ID 无效/);
+  assert.throws(() => categoryTagPath(c,tag,1001),/页码/);
+});
+
+test("category + tag public reader fetches only scoped GET pages before and after parsing", async () => {
+  const c={id:8,slug:"development",name:"开发",topicCount:20};
+  const tag={id:5,slug:"rust",name:"Rust",topicCount:8,description:""};
+  const paths=[];
+  const reader=createPublicReader(async path=>{
+    paths.push(path);
+    return {topic_list:{topics:[topic],
+      more_topics_url:"/tags/c/development/8/rust/5?page=1"}};
+  });
+  const initial=await reader.categoryTagTopics(c,tag,0);
+  assert.equal(initial.items.length,1);
+  assert.equal(initial.nextCursor,"/tags/c/development/8/rust/5.json?page=1");
+  await reader.categoryTagTopics(c,tag,initial.nextCursor);
+  assert.deepEqual(paths,[
+    "/tags/c/development/8/rust/5.json?page=0",
+    "/tags/c/development/8/rust/5.json?page=1",
+  ]);
+  for(const injected of [
+    "/tags/c/development/8/go/5?page=1",
+    "/latest?page=1",
+    "/tags/c/development/8/rust/5?page=1&apikey=secret",
+  ]) await assert.rejects(reader.categoryTagTopics(c,tag,injected),/分类标签分页游标无效/);
+  assert.equal(paths.length,2);
+  const wrong=createPublicReader(async()=>({topic_list:{topics:[topic],
+    more_topics_url:"/tags/c/development/8/other/5?page=2"}}));
+  const last=await wrong.categoryTagTopics(c,tag,0);
+  assert.equal(last.hasMore,false);
+  assert.equal(last.nextCursor,null);
 });

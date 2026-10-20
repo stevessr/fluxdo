@@ -130,6 +130,31 @@ export function tagCursorForContext(value: unknown, tag: Tag): string | null {
   return candidate.slice(0, candidate.indexOf("?")) === expected ? candidate : null;
 }
 
+/**
+ * Official Discourse category + tag route:
+ * GET /tags/c/:category_slug/:category_id/:tag_slug/:tag_id.json
+ * All identifiers come from public index entries and are validated before IO.
+ * Nested category slug paths are not supported by the current flat Category model.
+ */
+export function categoryTagPath(category: Category, tag: Tag, page: number): string {
+  if (!category.slug || category.slug === "." || category.slug === ".." ||
+      category.slug.length > 120 || /[\\/\u0000-\u001f\u007f]/.test(category.slug)) {
+    throw new Error("分类 slug 无效");
+  }
+  const categoryPath = feedPath("latest", category, page).split("?")[0];
+  const tagRoute = tagPath(tag, page).slice("/tag/".length);
+  return "/tags" + categoryPath.slice(0, -".json".length) + "/" + tagRoute;
+}
+
+export function categoryTagCursorForContext(
+  value: unknown, category: Category, tag: Tag,
+): string | null {
+  const cursor = normalizeFeedCursor(value);
+  if (!cursor) return null;
+  const pathname = cursor.slice(0, cursor.indexOf("?"));
+  return pathname === categoryTagPath(category, tag, 0).split("?")[0] ? cursor : null;
+}
+
 export function parseCategories(payload: unknown): Category[] {
   const root = record(payload, "分类");
   const group = record(root.category_list, "分类列表");
@@ -157,7 +182,8 @@ export function normalizeFeedCursor(value: unknown): string | null {
   const query = candidate.slice(queryAt + 1);
   if (!/^(?:\/latest|\/top(?:\/weekly)?)(?:\.json)?$/.test(pathname) &&
       !/^\/c\/[^/?#\\]+\/[1-9]\d*(?:\/l\/latest)?(?:\.json)?$/.test(pathname) &&
-      !/^\/tag\/[^/?#\\]+\/[1-9]\d*(?:\.json)?$/.test(pathname)) return null;
+      !/^\/tag\/[^/?#\\]+\/[1-9]\d*(?:\.json)?$/.test(pathname) &&
+      !/^\/tags\/c\/[^/?#\\]+\/[1-9]\d*\/[^/?#\\]+\/[1-9]\d*(?:\.json)?$/.test(pathname)) return null;
   // Do not forward arbitrary query parameters supplied by the server: they
   // could alter the endpoint or contain opaque session/credential values.
   const seen = new Set<string>();
@@ -498,6 +524,7 @@ export interface PublicReader {
   categories(): Promise<Category[]>;
   tags(): Promise<Tag[]>;
   tagTopics(tag: Tag, pageOrCursor: number | string): Promise<TopicPage>;
+  categoryTagTopics(category: Category, tag: Tag, pageOrCursor: number | string): Promise<TopicPage>;
   topics(kind: FeedKind, category: Category | null, pageOrCursor: number | string): Promise<TopicPage>;
   posts(topic: Topic): Promise<Post[]>;
   detail(topic: Topic, postNumber?: number | null): Promise<TopicDetail>;
@@ -513,6 +540,15 @@ export function createPublicReader(
   return {
     async categories() { return parseCategories(await get("/categories.json")); },
     async tags() { return parseTags(await get("/tags.json")); },
+    async categoryTagTopics(category, tag, pageOrCursor) {
+      const path = typeof pageOrCursor === "number"
+        ? categoryTagPath(category, tag, pageOrCursor)
+        : categoryTagCursorForContext(pageOrCursor, category, tag);
+      if (!path) throw new Error("分类标签分页游标无效");
+      const result = parseTopics(await get(path));
+      const nextCursor = categoryTagCursorForContext(result.nextCursor, category, tag);
+      return {...result, nextCursor, hasMore: nextCursor !== null};
+    },
     async tagTopics(tag, pageOrCursor) {
       const path = typeof pageOrCursor === "number"
         ? tagPath(tag,pageOrCursor) : tagCursorForContext(pageOrCursor,tag);
