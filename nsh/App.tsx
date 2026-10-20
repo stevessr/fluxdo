@@ -8,6 +8,7 @@ import {
   type BoardSummary, type BoardDetail, type Tag,
 } from "./data";
 import { RequestGate } from "./request_gate";
+import { readNativeBootstrapStatus } from "./host_native_transport";
 
 /**
  * Native Shell 正式迁移目录的第一个独立入口。
@@ -654,7 +655,7 @@ function BoardsPage(props: {
   );
 }
 
-function InfoPage() {
+function InfoPage(props: {nativeStatus: () => string; retryNative: () => void}) {
   return (
     <Scroll style={{ flex: 1 }} contentContainerStyle={{ padding: 18, gap: 15 }}>
       <Text style={{ fontSize: 22, fontWeight: "700", color: palette.text }}>Fluxdo · NSH 迁移版</Text>
@@ -673,6 +674,14 @@ function InfoPage() {
         </Text>
         <Text style={{ color: palette.muted, fontSize: 13 }}>
           主题：{colorScheme() === "dark" ? "深色" : "浅色 / 系统"}
+        </Text>
+      </View>
+      <View style={cardStyle()}>
+        <Text style={{ color: palette.text, fontSize: 15, fontWeight: "600" }}>Rust 原生 Host</Text>
+        <Text style={{ color: palette.muted, fontSize: 13 }}>{props.nativeStatus()}</Text>
+        <Chip label="检查 Rust Bridge" onPress={props.retryNative} />
+        <Text style={{ color: palette.muted, fontSize: 12 }}>
+          当前仅版本握手，尚无登录会话、多账户、私有数据或写入能力。
         </Text>
       </View>
       <View style={cardStyle()}>
@@ -788,6 +797,25 @@ function DetailPane(props: {
 }
 
 function App() {
+  const nativeStatus = signal("尚未检查 Rust Host");
+  const nativeGate = new RequestGate();
+  const checkNativeHost = async () => {
+    const ticket = nativeGate.next();
+    nativeStatus.set("正在进行 Rust 原生握手…");
+    try {
+      const connected = await readNativeBootstrapStatus();
+      if (nativeGate.isCurrent(ticket)) {
+        nativeStatus.set(connected
+          ? "Rust 模块已接通 · 仅能力握手，核心服务未连接"
+          : "Rust 模块尚未就绪");
+      }
+    } catch {
+      if (nativeGate.isCurrent(ticket)) {
+        nativeStatus.set("Rust 模块不可用；匿名公开阅读不受影响");
+      }
+    }
+  };
+  void checkNativeHost();
   const tab = signal<Tab>("latest");
   const category = signal<Category | null>(null);
   const selectedTag = signal<Tag | null>(null);
@@ -1278,7 +1306,8 @@ function App() {
                 loadMore={() => { void loadMoreSearch(); }} open={openTopic} />
             </If>
           }>
-            <InfoPage />
+            <InfoPage nativeStatus={nativeStatus}
+              retryNative={() => {void checkNativeHost();}} />
           </If>
         }>
           <If when={directoryMode() === "tags"} else={
