@@ -95,3 +95,13 @@
 - Mock 测试涵盖目录去重/归档过滤、私有看板拒绝、非法 ID、卡片投影、渲染预算。
 - [Reader 单测通过](https://github.com/stevessr/fluxdo/actions/runs/39358465421)；[Native NSH check/双视口 headless trace 通过](https://github.com/stevessr/fluxdo/actions/runs/39358461911)。
 - **不代表 Boards 功能等价**：目前不支持登录后受保护看板、卡片写入与移动、实时更新、栏目拖拽、权限编辑或真实设备 E2E；不得在清单中核销 Flutter 的完整 Boards UI。
+
+
+## 2026-10-20：标签目录与话题阅读（P1）
+
+- 已核对上游 Discourse `tags#index` 返回的 `/tags.json` 元数据及 `/tag/:tag_slug/:tag_id.json` 标签话题路由。
+- NSH 「分类」内提供标签目录、名称筛选、话题计数和描述文本；标签列表保留本地分页边界并过滤重复 ID/同义词。
+- 标签页使用服务端提供的 `more_topics_url` 进行连续读取，但只接受与当前 slug/ID 相同、合法的同源分页游标；禁止动态执行站外链接或混用其他标签响应。
+- 顶层最新/热门导航可清除标签上下文；从分类和标签选项进入同一只读阅读组件。无独立新底栏标签，避免移动端拥挤。
+- [Reader 单元测试通过](https://github.com/stevessr/fluxdo/actions/runs/39359380358)；[NSH Typecheck + 390×844 / 1200×800 headless trace 通过](https://github.com/stevessr/fluxdo/actions/runs/39359376416)。
+- 尚未完成：tag intersection、分类+标签交叉筛选、登录后私人标签、服务端变更、真机返回/滚动状态和逐项 Flutter 功能核销。
