@@ -5,6 +5,7 @@ import { createNavigator, SafeAreaView, Screen, Stack, StatusBar } from "nsh/ui/
 import {
   compactCount, dedupeTopics, mergePosts, mergeSearchHits, POSTS_PER_BATCH, publicReader,
   type Category, type FeedKind, type Post, type SearchHit, type Topic, type PublicUserProfile,
+  type BoardSummary, type BoardDetail,
 } from "./data";
 import { RequestGate } from "./request_gate";
 
@@ -12,7 +13,7 @@ import { RequestGate } from "./request_gate";
  * Native Shell 正式迁移目录的第一个独立入口。
  * 当前只读、匿名，不使用 Flutter Cookie 或 JS 凭据。
  */
-type Tab = "latest" | "top" | "categories" | "search" | "users" | "about";
+type Tab = "latest" | "top" | "categories" | "search" | "boards" | "users" | "about";
 type Route = { name: "home" } | { name: "topic" };
 const nav = createNavigator<Route>({ name: "home" });
 
@@ -383,6 +384,128 @@ function ProfilePage(props: {
   );
 }
 
+function BoardsPage(props: {
+  boards: () => BoardSummary[];
+  loading: () => boolean;
+  error: () => string;
+  refresh: () => void;
+  active: () => BoardSummary | null;
+  detail: () => BoardDetail | null;
+  detailLoading: () => boolean;
+  detailError: () => string;
+  openBoard: (board: BoardSummary) => void;
+  retryDetail: () => void;
+  openTopic: (topic: Topic) => void;
+}) {
+  return (
+    <Scroll style={{ flex: 1 }} contentContainerStyle={{ padding: 14, gap: 12, paddingBottom: 28 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <Text style={{ flex: 1, color: palette.text, fontSize: 21, fontWeight: "700" }}>
+          看板目录
+        </Text>
+        <Chip label={props.loading() ? "加载中…" : "刷新 ↻"} onPress={props.refresh} />
+      </View>
+      <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18 }}>
+        Discourse Boards 只读预览。仅匿名可见的看板可打开；
+        私有看板、卡片移动和编辑需要后续 Host 登录集成。
+      </Text>
+      <ErrorView message={props.error} retry={props.refresh} />
+      <If when={props.loading()}>
+        <Text style={{ color: palette.muted, fontSize: 13 }}>正在读取看板目录…</Text>
+      </If>
+      <If when={!props.loading() && !props.error() && props.boards().length === 0}>
+        <Text style={{ color: palette.muted, fontSize: 13 }}>
+          暂无可公开发现的看板，或当前站点未启用 Boards 插件。
+        </Text>
+      </If>
+      <Each of={props.boards()}>
+        {(entry) => (
+          <View
+            accessibilityRole="button"
+            accessibilityLabel={entry().name}
+            onPress={() => { if (entry().anonymousCanRead) props.openBoard(entry()); }}
+            style={{
+              ...cardStyle(), flexDirection: "row", alignItems: "center",
+              borderColor: props.active()?.id === entry().id ? palette.accent : palette.border,
+            }}
+          >
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={{ color: palette.text, fontSize: 15, fontWeight: "600" }}>
+                {entry().name}
+              </Text>
+              <Text style={{ color: palette.muted, fontSize: 12 }}>
+                {entry().anonymousCanRead ? "公开可读" : "需要登录"} · {entry().columnCount} 栏
+              </Text>
+            </View>
+            <Text style={{ color: palette.accent, fontSize: 17 }}>
+              {entry().anonymousCanRead ? "›" : "锁"}
+            </Text>
+          </View>
+        )}
+      </Each>
+      <If when={props.active() !== null}>
+        <View style={{ paddingTop: 9, gap: 7 }}>
+          <Text style={{ color: palette.text, fontWeight: "700", fontSize: 19 }}>
+            {props.active()?.name ?? "看板详情"}
+          </Text>
+          <If when={props.detailLoading()}>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>正在读取看板栏目与卡片…</Text>
+          </If>
+          <ErrorView message={props.detailError} retry={props.retryDetail} />
+          <If when={props.detail() !== null}>
+            <If when={props.detail()?.truncated ?? false}>
+              <Text style={{ color: palette.danger, fontSize: 12 }}>
+                卡片较多，当前仅显示前 30 栏 / 500 张卡片。
+              </Text>
+            </If>
+            <If when={props.detail()?.columns.length === 0}>
+              <Text style={{ color: palette.muted, fontSize: 13 }}>当前看板没有栏目。</Text>
+            </If>
+            <Each of={props.detail()?.columns ?? []}>
+              {(column) => (
+                <View style={{ ...cardStyle(), gap: 10 }}>
+                  <Text style={{ color: palette.text, fontSize: 16, fontWeight: "700" }}>
+                    {column().title || "未命名栏目"} · {column().cards.length}
+                  </Text>
+                  <If when={column().cards.length === 0}>
+                    <Text style={{ color: palette.muted, fontSize: 12 }}>暂无卡片</Text>
+                  </If>
+                  <Each of={column().cards}>
+                    {(item) => (
+                      <View
+                        accessibilityRole={item().topic ? "button" : "text"}
+                        accessibilityLabel={item().title || "看板卡片"}
+                        onPress={() => { const topic = item().topic; if (topic) props.openTopic(topic); }}
+                        style={{
+                          backgroundColor: palette.raised, borderRadius: 11,
+                          padding: 12, gap: 6,
+                        }}
+                      >
+                        <Text style={{ color: palette.text, fontSize: 14, fontWeight: "600" }}>
+                          {item().title || "无标题卡片"}
+                        </Text>
+                        <If when={item().notes.length > 0}>
+                          <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 19 }}
+                            numberOfLines={5}>{item().notes}</Text>
+                        </If>
+                        <If when={item().topic !== null}>
+                          <Text style={{ color: palette.accent, fontSize: 12 }}>
+                            话题卡片 · {item().topic?.postsCount ?? 0} 帖 · 点击阅读 ›
+                          </Text>
+                        </If>
+                      </View>
+                    )}
+                  </Each>
+                </View>
+              )}
+            </Each>
+          </If>
+        </View>
+      </If>
+    </Scroll>
+  );
+}
+
 function InfoPage() {
   return (
     <Scroll style={{ flex: 1 }} contentContainerStyle={{ padding: 18, gap: 15 }}>
@@ -390,7 +513,7 @@ function InfoPage() {
       <View style={cardStyle()}>
         <Text style={{ fontSize: 16, fontWeight: "600", color: palette.text }}>独立原生 UI 开发预览</Text>
         <Text style={{ fontSize: 14, lineHeight: 21, color: palette.muted }}>
-          当前支持 Linux.do 公开信息流、分类、搜索、用户资料查询及话题纯文本阅读。
+          当前支持 Linux.do 公开信息流、分类、搜索、看板、用户资料查询及话题纯文本阅读。
           账户登录、回复、附件上传、Chat 与设置尚未迁移，旧 Flutter 正式版继续提供这些功能。
         </Text>
       </View>
@@ -539,6 +662,13 @@ function App() {
   const profileLoading = signal(false);
   const profileAttempted = signal(false);
   const profileError = signal("");
+  const boards = signal<BoardSummary[]>([]);
+  const boardsLoading = signal(false);
+  const boardsError = signal("");
+  const activeBoard = signal<BoardSummary | null>(null);
+  const boardDetail = signal<BoardDetail | null>(null);
+  const boardDetailLoading = signal(false);
+  const boardDetailError = signal("");
   const selected = signal<Topic | null>(null);
   const targetPostNumber = signal<number | null>(null);
   const posts = signal<Post[]>([]);
@@ -551,6 +681,8 @@ function App() {
   const categoryGate = new RequestGate();
   const searchGate = new RequestGate();
   const profileGate = new RequestGate();
+  const boardsGate = new RequestGate();
+  const boardDetailGate = new RequestGate();
   const detailGate = new RequestGate();
   let nextFeedCursor: string | null = null;
   let visitedFeedCursors = new Set<string>();
@@ -717,6 +849,45 @@ function App() {
     }
   };
 
+  const refreshBoards = async () => {
+    const ticket = boardsGate.next();
+    boardDetailGate.invalidate();
+    activeBoard.set(null);
+    boardDetail.set(null);
+    boardDetailLoading.set(false);
+    boardDetailError.set("");
+    boardsLoading.set(true);
+    boardsError.set("");
+    boards.set([]);
+    try {
+      const result = await publicReader.boards();
+      if (boardsGate.isCurrent(ticket)) boards.set(result);
+    } catch (e) {
+      if (boardsGate.isCurrent(ticket)) boardsError.set(String(e));
+    } finally {
+      if (boardsGate.isCurrent(ticket)) boardsLoading.set(false);
+    }
+  };
+
+  const openBoard = async (board: BoardSummary) => {
+    // The index is a capability hint only: the server is still authoritative.
+    if (!board.anonymousCanRead ||
+        !boards().some((entry) => entry.id === board.id && entry.anonymousCanRead)) return;
+    const ticket = boardDetailGate.next();
+    activeBoard.set(board);
+    boardDetail.set(null);
+    boardDetailLoading.set(true);
+    boardDetailError.set("");
+    try {
+      const result = await publicReader.board(board);
+      if (boardDetailGate.isCurrent(ticket)) boardDetail.set(result);
+    } catch (e) {
+      if (boardDetailGate.isCurrent(ticket)) boardDetailError.set(String(e));
+    } finally {
+      if (boardDetailGate.isCurrent(ticket)) boardDetailLoading.set(false);
+    }
+  };
+
   const changeTab = (next: Tab) => {
     if (tab() === next && category() === null) return;
     tab.set(next);
@@ -730,6 +901,7 @@ function App() {
       loading.set(false);
       loadingMore.set(false);
       if (next === "categories" && categories().length === 0) void refreshCategories();
+      if (next === "boards" && boards().length === 0 && !boardsLoading()) void refreshBoards();
     }
   };
 
@@ -819,24 +991,39 @@ function App() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "latest", label: "最新" }, { key: "top", label: "热门" },
     { key: "categories", label: "分类" }, { key: "search", label: "搜索" },
-    { key: "users", label: "用户" }, { key: "about", label: "关于" },
+    { key: "boards", label: "看板" }, { key: "users", label: "用户" },
+    { key: "about", label: "关于" },
   ];
 
   function Tabs(props: { vertical: boolean }) {
     return (
       <View style={{
         flexDirection: props.vertical ? "column" : "row",
-        padding: 9, gap: 6,
-        backgroundColor: palette.surface,
-        borderColor: palette.border,
+        padding: props.vertical ? 9 : 4, gap: props.vertical ? 6 : 2,
+        backgroundColor: palette.surface, borderColor: palette.border,
         borderRightWidth: props.vertical ? 1 : 0,
         borderTopWidth: props.vertical ? 0 : 1,
       }}>
         <Each of={tabs}>
           {(item) => (
-            <View style={{ flex: props.vertical ? 0 : 1 }}>
-              <Chip label={item().label} onPress={() => changeTab(item().key)}
-                active={() => tab() === item().key} />
+            <View
+              accessibilityRole="button"
+              accessibilityLabel={item().label}
+              accessibilityState={{ selected: tab() === item().key }}
+              onPress={() => changeTab(item().key)}
+              style={{
+                flex: props.vertical ? 0 : 1,
+                minWidth: 0, minHeight: 44, borderRadius: 10,
+                justifyContent: "center", alignItems: "center",
+                paddingHorizontal: 2, paddingVertical: 7,
+                backgroundColor: tab() === item().key ? palette.accent : palette.raised,
+              }}
+            >
+              <Text style={{
+                fontSize: props.vertical ? 13 : 11, fontWeight: "600",
+                color: tab() === item().key ? palette.onAccent : palette.accent,
+                textAlign: "center",
+              }}>{item().label}</Text>
             </View>
           )}
         </Each>
@@ -847,7 +1034,8 @@ function App() {
   function Content() {
     return (
       <View style={{ flex: 1 }}>
-        <If when={tab() === "users"} else={
+        <If when={tab() === "boards"} else={
+          <If when={tab() === "users"} else={
           <If when={tab() === "categories"} else={
           <If when={tab() === "about"} else={
             <If when={tab() === "search"} else={
@@ -874,6 +1062,15 @@ function App() {
           <ProfilePage username={profileName} changeUsername={changeProfileName}
             lookup={() => { void lookupProfile(); }} loading={profileLoading}
             attempted={profileAttempted} error={profileError} profile={userProfile} />
+          </If>
+        }>
+          <BoardsPage boards={boards} loading={boardsLoading} error={boardsError}
+            refresh={() => { void refreshBoards(); }} active={activeBoard}
+            detail={boardDetail} detailLoading={boardDetailLoading}
+            detailError={boardDetailError}
+            openBoard={(board) => { void openBoard(board); }}
+            retryDetail={() => { const board = activeBoard(); if (board) void openBoard(board); }}
+            openTopic={openTopic} />
         </If>
       </View>
     );
