@@ -16,6 +16,15 @@ export interface TopicPage { items: Topic[]; hasMore: boolean; nextCursor: strin
 export interface TopicDetail { posts: Post[]; remainingIds: number[]; }
 export interface SearchHit { topic: Topic; postNumber: number | null; excerpt: string; }
 export interface SearchPage { items: SearchHit[]; hasMore: boolean; }
+export interface PublicUserProfile {
+  id: number;
+  username: string;
+  name: string;
+  title: string;
+  bio: string;
+  trustLevel: number;
+  postCount: number;
+}
 export const POSTS_PER_BATCH = 20;
 
 const ORIGIN = "https://linux.do";
@@ -218,6 +227,33 @@ export function mergeSearchHits(existing: SearchHit[], added: SearchHit[]): Sear
   return result;
 }
 
+/** Only explicit public fields are exposed to the view layer. */
+export function parseUserProfile(payload: unknown): PublicUserProfile {
+  const root = record(payload, "用户资料");
+  const user = record(root.user, "用户资料");
+  const id = positiveId(user.id);
+  const username = asString(user.username);
+  if (!id || !username) throw new Error("用户资料字段缺失");
+  const trustLevel = asNumber(user.trust_level);
+  return {
+    id, username,
+    name: decodeEntities(asString(user.name)),
+    title: decodeEntities(asString(user.title)),
+    bio: cookedToText(asString(user.bio_cooked) || asString(user.bio_excerpt)).slice(0, 2000),
+    trustLevel: Number.isSafeInteger(trustLevel) && trustLevel >= 0 ? trustLevel : 0,
+    postCount: Math.max(0, asNumber(user.post_count)),
+  };
+}
+/** Restrict public profile lookup to a single username segment. */
+export function userProfilePath(value: string): string {
+  const username = value.trim().replace(/^@/, "");
+  if (!/^[a-zA-Z0-9_.-]{1,60}$/.test(username) ||
+      username === "." || username === "..") {
+    throw new Error("用户名格式无效（仅支持 1–60 位字母、数字、下划线、点或连字符）");
+  }
+  return "/u/" + encodeURIComponent(username) + ".json";
+}
+
 export function parsePosts(payload: unknown): Post[] {
   const root = record(payload, "详情");
   const stream = record(root.post_stream, "帖子流");
@@ -307,6 +343,7 @@ export interface PublicReader {
   detail(topic: Topic, postNumber?: number | null): Promise<TopicDetail>;
   morePosts(topic: Topic, ids: number[]): Promise<Post[]>;
   search(query: string, page: number): Promise<SearchPage>;
+  profile(username: string): Promise<PublicUserProfile>;
 }
 export function createPublicReader(
   get: (path: string) => Promise<unknown>,
@@ -328,6 +365,7 @@ export function createPublicReader(
     },
     async morePosts(topic, ids) { return parsePosts(await get(postsBatchPath(topic, ids))); },
     async search(query, page) { return parseSearchResults(await get(searchPath(query, page))); },
+    async profile(username) { return parseUserProfile(await get(userProfilePath(username))); },
   };
 }
 async function getPublicJson(path: string): Promise<unknown> {
