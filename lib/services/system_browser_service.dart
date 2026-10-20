@@ -156,7 +156,7 @@ class SystemBrowserService {
         (id: 'ios:firefox', name: 'Firefox', scheme: 'firefox'),
         (id: 'ios:edge', name: 'Microsoft Edge', scheme: 'microsoft-edge-https'),
       ]) {
-        if (await canLaunchUrl(Uri.parse(entry.scheme + '://open-url'))) {
+        if (await canLaunchUrl(Uri.parse('${entry.scheme}://open-url'))) {
           browsers.add(LoginBrowser(id: entry.id, name: entry.name));
         }
       }
@@ -184,7 +184,7 @@ class SystemBrowserService {
           }
           if (!seenExecutables.add(identity)) continue;
           browsers.add(LoginBrowser(
-            id: 'linux:' + entry.command,
+            id: 'linux:${entry.command}',
             name: entry.name,
             executable: entry.command,
           ));
@@ -204,8 +204,8 @@ class SystemBrowserService {
             for (final entry in _flatpakBrowsers) {
               if (!installed.contains(entry.appId)) continue;
               browsers.add(LoginBrowser(
-                id: 'flatpak:' + entry.appId,
-                name: entry.name + ' (Flatpak)',
+                id: 'flatpak:${entry.appId}',
+                name: '${entry.name} (Flatpak)',
                 executable: 'flatpak',
                 arguments: ['run', entry.appId],
               ));
@@ -216,17 +216,16 @@ class SystemBrowserService {
         }
       }
     } else if (Platform.isMacOS) {
-
       final home = Platform.environment['HOME'] ?? '';
       for (final name in macBrowserAppNames) {
         for (final root in [
           '/Applications',
-          if (home.isNotEmpty) home + '/Applications',
+          if (home.isNotEmpty) '$home/Applications',
         ]) {
-          final app = root + '/' + name + '.app';
+          final app = '$root/$name.app';
           if (!await Directory(app).exists()) continue;
           browsers.add(LoginBrowser(
-            id: 'mac:' + app,
+            id: 'mac:$app',
             name: name,
             executable: '/usr/bin/open',
             arguments: ['-a', app],
@@ -244,10 +243,10 @@ class SystemBrowserService {
       ].whereType<String>().toSet();
       for (final entry in windowsBrowserInstallPaths) {
         for (final root in programFiles) {
-          final file = root + '\\' + entry.relative;
+          final file = '$root\\${entry.relative}';
           if (!await File(file).exists()) continue;
           browsers.add(LoginBrowser(
-            id: 'win:' + file,
+            id: 'win:$file',
             name: entry.name,
             executable: file,
           ));
@@ -262,10 +261,10 @@ class SystemBrowserService {
     if (!isAuthorizationUrl(authorizationUrl)) return false;
     try {
       if (browser.id == _portalChooser.id && Platform.isLinux && _inFlatpak) {
-        return _openWithPortalChooser(authorizationUrl);
+        return await _openWithPortalChooser(authorizationUrl);
       }
       if (browser.id == 'default') {
-        return launchUrl(
+        return await launchUrl(
           authorizationUrl,
           mode: LaunchMode.externalApplication,
         );
@@ -294,7 +293,7 @@ class SystemBrowserService {
           default:
             return false;
         }
-        return launchUrl(target, mode: LaunchMode.externalApplication);
+        return await launchUrl(target, mode: LaunchMode.externalApplication);
       }
       if (browser.executable == null) return false;
       await Process.start(
