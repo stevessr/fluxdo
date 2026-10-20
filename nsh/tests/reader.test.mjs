@@ -65,7 +65,8 @@ test("按 ID 合并分页而不重复显示", () => {
 test("服务路径严格编码并验证页码", () => {
   assert.equal(feedPath("latest",null,0), "/latest.json?page=0");
   assert.equal(feedPath("top",null,2), "/top.json?period=weekly&page=2");
-  assert.equal(feedPath("latest",{...category,slug:"a/b"},1), "/c/a%2Fb/8.json?page=1");
+  assert.equal(feedPath("latest",{...category,slug:"a b"},1), "/c/a%20b/8.json?page=1");
+  assert.throws(()=>feedPath("latest",{...category,slug:"a/b"},1),/分类 slug 无效/);
   assert.equal(topicPath({...parseTopics({topic_list:{topics:[topic]}}).items[0],slug:"a/b"}),
     "/t/a%2Fb/42.json");
   assert.throws(()=>feedPath("latest",null,-1), /页码/);
