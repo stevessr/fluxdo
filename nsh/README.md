@@ -128,3 +128,11 @@ NSH 具体命令参数应以本机 CLI --help 为准。Linux GTK 4.14+（Wayland
 - 安全回归覆盖三层分类、平面子分类、孤儿/循环父级、路径污染、非法游标、嵌套分类+标签组合路径；修订旧版允许斜杠嵌入分类 slug 的测试期望。
 - [Node Reader tests PASS](https://github.com/stevessr/fluxdo/actions/runs/39364591864)，[官方 NSH check + 双视口初始 trace PASS](https://github.com/stevessr/fluxdo/actions/runs/39364587857)。
 - **未完成**：服务器真实子分类 E2E、返回栈状态/滚动恢复、全量目录分页，复杂标签交集与 Host/登录/写操作。此处依旧为匿名公开阅读预览。
+
+## 2026-10-20：Rust Host 独立模块原型（暂不切换生产 NSH 入口）
+
+- 新建 `nsh/native`（Rust）与 `nsh/host_native_transport.ts`（TSX HostBridge 适配），通过官方 `#[native_module("fluxdo/native")]` / `#[module]` 导出独立的 `capabilities.read` 版本化握手。
+- Rust 模块不含账号凭据、持久化、网络请求与写操作，显式报告 `coreConnected/authenticatedRead/multiAccount/writes/chat = false`；超长请求、未知命令和额外凭据字段将被拒绝。
+- 原生模块编译已进入 GitHub Actions Rust Cargo 阶段；**但 NSH 0.1.1 上游混合构建 CLI 存在未解决的导出/依赖错误**：生成的 `nsh-app-…-cli` 需要 `nsh_cli::main_with`，而上游 `nsh-cli` 只有 binary target。证据：[混合构建失败日志](https://github.com/stevessr/fluxdo/actions/runs/39365665290)。
+- 为防止破坏原本可用的匿名 NSH 预览，`nsh/nsh.json` 不启用 `rust`，`nsh/App.tsx` 也不静态导入 Rust 模块。独立混合验证入口在 `nsh/native-probe`，**当前不能宣称可运行**。
+- 上游修复/支持后，应先在 isolated probe 通过 `nsh check` 和 headless trace，再增加正式 Host 身份隔离、账户 epoch、最小权限命令及真实设备测试。严禁以 TSX 全局对象或假 Transport 冒充已经接通 Native Host。
