@@ -580,16 +580,63 @@ export function createPublicReader(
     },
   };
 }
+export type PublicReadErrorCode =
+  "challenge" | "forbidden" | "not_found" | "http" | "network" | "invalid_content";
+/**
+ * Present only stable, credential-free error codes/messages to NSH TSX.
+ * In particular, a 403 here is NOT evidence that any stored account is invalid.
+ */
+export class PublicReadError extends Error {
+  readonly code: PublicReadErrorCode;
+  readonly status: number | null;
+  constructor(code: PublicReadErrorCode, message: string, status: number | null = null) {
+    super(message);
+    this.name = "PublicReadError";
+    this.code = code;
+    this.status = status;
+  }
+}
 async function getPublicJson(path: string): Promise<unknown> {
-  // 只接受本代码构造出的站内绝对路径；严禁 JS UI 动态转发凭据。
-  if (!path.startsWith("/") || path.startsWith("//")) throw new Error("请求路径无效");
-  // Public-only transport: never attach ambient cookies or follow cross-origin redirects.
-  const response = await fetch(ORIGIN + path, {
-    headers: { Accept: "application/json" },
-    credentials: "omit",
-    redirect: "error",
-  });
-  if (!response.ok) throw new Error("公开接口 HTTP " + response.status);
-  return response.json();
+  // Only code-generated root-relative API URLs may reach the anonymous adapter.
+  if (!path.startsWith("/") || path.startsWith("//") ||
+      /[\\\r\n#]/.test(path)) throw new Error("请求路径无效");
+  let response: Response;
+  try {
+    response = await fetch(ORIGIN + path, {
+      headers: { Accept: "application/json" },
+      credentials: "omit",
+      redirect: "error",
+    });
+  } catch {
+    // Do not leak untrusted native/network exceptions or cookie-bearing URLs to UI.
+    throw new PublicReadError("network", "公开请求网络连接失败或访问受到限制");
+  }
+  const challenge = response.headers?.get("cf-mitigated")?.toLowerCase() === "challenge";
+  const contentType = response.headers?.get("content-type")?.toLowerCase() ?? "";
+  if (challenge || (response.status === 403 && contentType.includes("text/html"))) {
+    throw new PublicReadError(
+      "challenge", "公开接口触发访问验证，请在浏览器完成验证后再重试", response.status,
+    );
+  }
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new PublicReadError(
+        "forbidden", "当前内容需要登录或没有匿名访问权限", response.status,
+      );
+    }
+    if (response.status === 404) {
+      throw new PublicReadError("not_found", "公开接口或内容不存在", response.status);
+    }
+    throw new PublicReadError("http", "公开接口暂时不可用（HTTP " + response.status + "）", response.status);
+  }
+  if (contentType && !contentType.includes("application/json") &&
+      !contentType.includes("+json")) {
+    throw new PublicReadError("invalid_content", "公开接口未返回 JSON 数据");
+  }
+  try {
+    return await response.json();
+  } catch {
+    throw new PublicReadError("invalid_content", "公开接口返回的数据不是有效 JSON");
+  }
 }
 export const publicReader = createPublicReader(getPublicJson);

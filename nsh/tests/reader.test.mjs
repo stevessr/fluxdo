@@ -7,6 +7,7 @@ import {
   searchPath, parseSearchResults, mergeSearchHits, feedCursorForContext, publicReader,
   parseUserProfile, userProfilePath, parseBoards, parseBoardDetail, boardDetailPath,
   parseTags, tagPath, tagCursorForContext, categoryTagPath, categoryTagCursorForContext,
+  PublicReadError,
 } from "../data.ts";
 import { RequestGate } from "../request_gate.ts";
 
@@ -456,4 +457,56 @@ test("category + tag public reader fetches only scoped GET pages before and afte
   const last=await wrong.categoryTagTopics(c,tag,0);
   assert.equal(last.hasMore,false);
   assert.equal(last.nextCursor,null);
+});
+
+test("anonymous transport differentiates CF challenge, private 403 and invalid JSON", async () => {
+  const previous=globalThis.fetch;
+  const categories={category_list:{categories:[category]}};
+  const checks=[
+    {status:403,headers:{"cf-mitigated":"challenge","content-type":"text/html"},
+      code:"challenge"},
+    {status:403,headers:{"content-type":"text/html"},code:"challenge"},
+    {status:403,headers:{"content-type":"application/json"},code:"forbidden"},
+    {status:401,headers:{"content-type":"application/json"},code:"forbidden"},
+    {status:404,headers:{"content-type":"application/json"},code:"not_found"},
+    {status:503,headers:{"content-type":"application/json"},code:"http"},
+    {status:200,headers:{"content-type":"text/html"},code:"invalid_content"},
+  ];
+  try {
+    for(const check of checks) {
+      globalThis.fetch=async(url,options)=>{
+        assert.equal(options.credentials,"omit");
+        assert.equal(options.redirect,"error");
+        return {
+          status:check.status,ok:check.status===200,
+          headers:{get:(name)=>check.headers[name]??null},
+          json:async()=>categories,
+        };
+      };
+      await assert.rejects(publicReader.categories(),(error)=>{
+        assert.ok(error instanceof PublicReadError);
+        assert.equal(error.code,check.code);
+        assert.equal(error.status,check.status===200 ? null : check.status);
+        assert.equal(String(error).includes("api_key"),false);
+        return true;
+      });
+    }
+    globalThis.fetch=async()=>{throw new Error("token=TOP_SECRET");};
+    await assert.rejects(publicReader.categories(),(error)=>{
+      assert.equal(error.code,"network");
+      assert.equal(String(error).includes("TOP_SECRET"),false);
+      return true;
+    });
+    globalThis.fetch=async()=>({
+      ok:true,status:200,headers:{get:()=>"application/json"},
+      json:async()=>{throw new Error("raw payload may include credentials");},
+    });
+    await assert.rejects(publicReader.categories(),(error)=>{
+      assert.equal(error.code,"invalid_content");
+      assert.equal(String(error).includes("credentials"),false);
+      return true;
+    });
+  } finally {
+    globalThis.fetch=previous;
+  }
 });
