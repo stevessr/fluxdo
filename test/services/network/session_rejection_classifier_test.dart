@@ -45,7 +45,12 @@ void main() {
     test('CF block 头即使不叫 challenge 也不能触发账号失效', () {
       expect(
         SessionRejectionClassifier.classify(
-          failure(403, headers: {'cf-mitigated': ['block']}),
+          failure(
+            403,
+            headers: {
+              'cf-mitigated': ['block'],
+            },
+          ),
         ),
         SessionRejectionKind.cloudflareBlocked,
       );
@@ -55,7 +60,9 @@ void main() {
       final error = failure(
         403,
         body: '<html><script>var cf_chl_opt = {};</script></html>',
-        headers: {'content-type': ['text/html']},
+        headers: {
+          'content-type': ['text/html'],
+        },
       );
       expect(
         SessionRejectionClassifier.classify(error),
@@ -66,7 +73,9 @@ void main() {
     test('仅有 403/CF 代理通用响应头，不足以说明账号失效', () {
       final error = failure(
         403,
-        body: {'errors': ['You are not permitted to view this resource.']},
+        body: {
+          'errors': ['You are not permitted to view this resource.'],
+        },
         headers: {
           'content-type': ['application/json'],
           'cf-ray': ['example-edge-ray'],
@@ -90,7 +99,9 @@ void main() {
     test('Discourse 的 discourse-logged-out 头是认证信号', () {
       final error = failure(
         403,
-        headers: {'discourse-logged-out': ['true']},
+        headers: {
+          'discourse-logged-out': ['true'],
+        },
       );
       expect(
         SessionRejectionClassifier.classify(error),
