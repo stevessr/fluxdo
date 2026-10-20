@@ -23,7 +23,7 @@ void main() {
         expect(
           SystemBrowserService.isAuthorizationUrl(Uri.parse(url)),
           isFalse,
-          reason: 'Unexpected authorization URL: ' + url,
+          reason: 'Unexpected authorization URL: $url',
         );
       }
     });
