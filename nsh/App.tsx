@@ -5,7 +5,7 @@ import { createNavigator, SafeAreaView, Screen, Stack, StatusBar } from "nsh/ui/
 import {
   compactCount, dedupeTopics, mergePosts, mergeSearchHits, POSTS_PER_BATCH, publicReader,
   type Category, type FeedKind, type Post, type SearchHit, type Topic, type PublicUserProfile,
-  type BoardSummary, type BoardDetail,
+  type BoardSummary, type BoardDetail, type Tag,
 } from "./data";
 import { RequestGate } from "./request_gate";
 
@@ -102,7 +102,9 @@ function TopicRow(props: { topic: () => Topic; onOpen: (topic: Topic) => void })
 function FeedPage(props: {
   kind: () => FeedKind;
   category: () => Category | null;
+  tag: () => Tag | null;
   clearCategory: () => void;
+  clearTag: () => void;
   topics: () => Topic[];
   loading: () => boolean;
   loadingMore: () => boolean;
@@ -124,7 +126,8 @@ function FeedPage(props: {
       <View style={{ paddingHorizontal: 14, paddingTop: 13, gap: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
           <Text style={{ flex: 1, fontSize: 21, fontWeight: "700", color: palette.text }}>
-            {props.category()?.name ?? (props.kind() === "latest" ? "最新话题" : "本周热门")}
+            {props.tag() ? "#" + props.tag()!.name :
+              props.category()?.name ?? (props.kind() === "latest" ? "最新话题" : "本周热门")}
           </Text>
           <Chip label="刷新 ↻" onPress={props.refresh} />
         </View>
@@ -132,6 +135,12 @@ function FeedPage(props: {
           <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
             <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>当前正在浏览分类话题</Text>
             <Chip label="全部话题 ×" onPress={props.clearCategory} />
+          </View>
+        </If>
+        <If when={props.tag() !== null}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+            <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>正在浏览标签话题</Text>
+            <Chip label="清除标签 ×" onPress={props.clearTag} />
           </View>
         </If>
         <Input
@@ -191,11 +200,13 @@ function CategoriesPage(props: {
   error: () => string;
   refresh: () => void;
   select: (category: Category) => void;
+  showTags: () => void;
 }) {
   return (
     <View style={{ flex: 1, gap: 10 }}>
-      <View style={{ flexDirection: "row", paddingHorizontal: 16, paddingTop: 13, alignItems: "center" }}>
+      <View style={{ flexDirection: "row", paddingHorizontal: 16, paddingTop: 13, alignItems: "center", gap: 7 }}>
         <Text style={{ fontSize: 21, flex: 1, color: palette.text, fontWeight: "700" }}>分类目录</Text>
+        <Chip label="标签 #" onPress={props.showTags} />
         <Chip label="刷新 ↻" onPress={props.refresh} />
       </View>
       <ErrorView message={props.error} retry={props.refresh} />
@@ -221,6 +232,80 @@ function CategoriesPage(props: {
           >
             <View style={{ flex: 1, gap: 5 }}>
               <Text style={{ color: palette.text, fontSize: 16, fontWeight: "600" }}>{item().name}</Text>
+              <Text style={{ color: palette.muted, fontSize: 12 }}>
+                话题 {compactCount(item().topicCount)}
+              </Text>
+            </View>
+            <Text style={{ color: palette.accent, fontSize: 18 }}>›</Text>
+          </View>
+        )}
+      </List>
+    </View>
+  );
+}
+
+function TagsPage(props: {
+  tags: () => Tag[];
+  loading: () => boolean;
+  error: () => string;
+  refresh: () => void;
+  select: (tag: Tag) => void;
+  showCategories: () => void;
+}) {
+  const filter = signal("");
+  const visibleTags = () => {
+    const needle = filter().trim().toLocaleLowerCase();
+    return needle ? props.tags().filter((tag) =>
+      tag.name.toLocaleLowerCase().includes(needle) ||
+      tag.description.toLocaleLowerCase().includes(needle)) : props.tags();
+  };
+  return (
+    <View style={{ flex: 1, gap: 9 }}>
+      <View style={{ paddingHorizontal: 14, paddingTop: 13, gap: 9 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+          <Text style={{ fontSize: 21, flex: 1, color: palette.text, fontWeight: "700" }}>标签目录</Text>
+          <Chip label="分类" onPress={props.showCategories} />
+          <Chip label="刷新 ↻" onPress={props.refresh} />
+        </View>
+        <Input value={filter()} onChangeText={(value) => filter.set(value)}
+          placeholder="筛选已载入的标签"
+          returnKeyType="search"
+          style={{ fontSize: 14, color: palette.text, backgroundColor: palette.surface,
+            borderWidth: 1, borderColor: palette.border, borderRadius: 12,
+            paddingHorizontal: 13, paddingVertical: 10 }} />
+        <Text style={{ color: palette.muted, fontSize: 12 }}>
+          {props.loading() ? "正在读取标签目录…" :
+            "当前加载 " + props.tags().length + " 个公开标签"}
+        </Text>
+      </View>
+      <ErrorView message={props.error} retry={props.refresh} />
+      <List
+        each={visibleTags()}
+        keyExtractor={(tag) => String(tag.id)}
+        estimatedItemSize={83}
+        style={{ flex: 1 }}
+        refreshing={props.loading()}
+        onRefresh={props.refresh}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 20, gap: 8 }}
+        ListEmptyComponent={
+          <Text style={{ color: palette.muted, textAlign: "center", padding: 22 }}>
+            {props.loading() ? "正在加载标签…" : "没有匹配的公开标签"}
+          </Text>
+        }
+      >
+        {(item) => (
+          <View onPress={() => props.select(item())}
+            accessibilityRole="button"
+            accessibilityLabel={"标签：" + item().name}
+            style={{ ...cardStyle(), flexDirection: "row", alignItems: "center" }}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={{ color: palette.accent, fontSize: 15, fontWeight: "600" }}>
+                #{item().name}
+              </Text>
+              <If when={!!item().description}>
+                <Text style={{ color: palette.muted, fontSize: 12 }}
+                  numberOfLines={2}>{item().description}</Text>
+              </If>
               <Text style={{ color: palette.muted, fontSize: 12 }}>
                 话题 {compactCount(item().topicCount)}
               </Text>
@@ -642,6 +727,11 @@ function DetailPane(props: {
 function App() {
   const tab = signal<Tab>("latest");
   const category = signal<Category | null>(null);
+  const selectedTag = signal<Tag | null>(null);
+  const directoryMode = signal<"categories" | "tags">("categories");
+  const tags = signal<Tag[]>([]);
+  const tagsLoading = signal(false);
+  const tagsError = signal("");
   const topics = signal<Topic[]>([]);
   const categories = signal<Category[]>([]);
   const loading = signal(false);
@@ -679,6 +769,7 @@ function App() {
   const detailError = signal("");
   const feedGate = new RequestGate();
   const categoryGate = new RequestGate();
+  const tagGate = new RequestGate();
   const searchGate = new RequestGate();
   const profileGate = new RequestGate();
   const boardsGate = new RequestGate();
@@ -693,6 +784,7 @@ function App() {
     const ticket = feedGate.next();
     const currentKind = readKind();
     const currentCategory = category();
+    const currentTag = selectedTag();
     loading.set(true);
     loadingMore.set(false);
     nextFeedCursor = null;
@@ -700,7 +792,9 @@ function App() {
     hasMore.set(false);
     feedError.set("");
     try {
-      const page = await publicReader.topics(currentKind, currentCategory, 0);
+      const page = currentTag
+        ? await publicReader.tagTopics(currentTag, 0)
+        : await publicReader.topics(currentKind, currentCategory, 0);
       if (feedGate.isCurrent(ticket)) {
         topics.set(page.items);
         nextFeedCursor = page.nextCursor;
@@ -721,7 +815,10 @@ function App() {
     loadingMore.set(true);
     feedError.set("");
     try {
-      const page = await publicReader.topics(readKind(), category(), cursor);
+      const currentTag = selectedTag();
+      const page = currentTag
+        ? await publicReader.tagTopics(currentTag, cursor)
+        : await publicReader.topics(readKind(), category(), cursor);
       if (feedGate.isCurrent(ticket)) {
         visitedFeedCursors.add(cursor);
         topics.set(dedupeTopics(topics(), page.items));
@@ -748,6 +845,28 @@ function App() {
     } finally {
       if (categoryGate.isCurrent(ticket)) categoriesLoading.set(false);
     }
+  };
+
+  const refreshTags = async () => {
+    const ticket = tagGate.next();
+    tagsLoading.set(true);
+    tagsError.set("");
+    try {
+      const result = await publicReader.tags();
+      if (tagGate.isCurrent(ticket)) tags.set(result);
+    } catch (e) {
+      if (tagGate.isCurrent(ticket)) tagsError.set(String(e));
+    } finally {
+      if (tagGate.isCurrent(ticket)) tagsLoading.set(false);
+    }
+  };
+  const showTagDirectory = () => {
+    directoryMode.set("tags");
+    if (tags().length === 0 && !tagsLoading()) void refreshTags();
+  };
+  const showCategoryDirectory = () => {
+    directoryMode.set("categories");
+    if (categories().length === 0 && !categoriesLoading()) void refreshCategories();
   };
 
   let searchedTerm = "";
@@ -889,10 +1008,11 @@ function App() {
   };
 
   const changeTab = (next: Tab) => {
-    if (tab() === next && category() === null) return;
+    if (tab() === next && category() === null && selectedTag() === null) return;
     tab.set(next);
     if (next === "latest" || next === "top") {
       category.set(null);
+      selectedTag.set(null);
       topics.set([]);
       hasMore.set(false);
       void refreshFeed();
@@ -900,13 +1020,19 @@ function App() {
       feedGate.invalidate();
       loading.set(false);
       loadingMore.set(false);
-      if (next === "categories" && categories().length === 0) void refreshCategories();
+      if (next === "categories") {
+        if (directoryMode() === "tags" && tags().length === 0 && !tagsLoading()) void refreshTags();
+        if (directoryMode() === "categories" && categories().length === 0 && !categoriesLoading()) {
+          void refreshCategories();
+        }
+      }
       if (next === "boards" && boards().length === 0 && !boardsLoading()) void refreshBoards();
     }
   };
 
   const openCategory = (next: Category) => {
     tab.set("latest");
+    selectedTag.set(null);
     category.set(next);
     topics.set([]);
     hasMore.set(false);
@@ -915,6 +1041,20 @@ function App() {
 
   const closeCategory = () => {
     category.set(null);
+    topics.set([]);
+    hasMore.set(false);
+    void refreshFeed();
+  };
+  const openTag = (next: Tag) => {
+    tab.set("latest");
+    category.set(null);
+    selectedTag.set(next);
+    topics.set([]);
+    hasMore.set(false);
+    void refreshFeed();
+  };
+  const closeTag = () => {
+    selectedTag.set(null);
     topics.set([]);
     hasMore.set(false);
     void refreshFeed();
@@ -1039,7 +1179,8 @@ function App() {
           <If when={tab() === "categories"} else={
           <If when={tab() === "about"} else={
             <If when={tab() === "search"} else={
-              <FeedPage kind={readKind} category={category} clearCategory={closeCategory}
+              <FeedPage kind={readKind} category={category} tag={selectedTag}
+                clearCategory={closeCategory} clearTag={closeTag}
                 topics={topics} loading={loading} loadingMore={loadingMore} hasMore={hasMore}
                 error={feedError} refresh={() => { void refreshFeed(); }}
                 loadMore={() => { void loadMore(); }} open={openTopic} />
@@ -1055,8 +1196,15 @@ function App() {
             <InfoPage />
           </If>
         }>
-          <CategoriesPage categories={categories} loading={categoriesLoading}
-            error={categoriesError} refresh={() => { void refreshCategories(); }} select={openCategory} />
+          <If when={directoryMode() === "tags"} else={
+            <CategoriesPage categories={categories} loading={categoriesLoading}
+              error={categoriesError} refresh={() => { void refreshCategories(); }}
+              select={openCategory} showTags={showTagDirectory} />
+          }>
+            <TagsPage tags={tags} loading={tagsLoading} error={tagsError}
+              refresh={() => { void refreshTags(); }} select={openTag}
+              showCategories={showCategoryDirectory} />
+          </If>
           </If>
         }>
           <ProfilePage username={profileName} changeUsername={changeProfileName}
