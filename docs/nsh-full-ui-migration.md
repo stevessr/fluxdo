@@ -105,3 +105,15 @@
 - 顶层最新/热门导航可清除标签上下文；从分类和标签选项进入同一只读阅读组件。无独立新底栏标签，避免移动端拥挤。
 - [Reader 单元测试通过](https://github.com/stevessr/fluxdo/actions/runs/39359380358)；[NSH Typecheck + 390×844 / 1200×800 headless trace 通过](https://github.com/stevessr/fluxdo/actions/runs/39359376416)。
 - 尚未完成：tag intersection、分类+标签交叉筛选、登录后私人标签、服务端变更、真机返回/滚动状态和逐项 Flutter 功能核销。
+
+## 2026-10-20：组合筛选与匿名 Cloudflare 失败状态（P1 扩展）
+
+- [x] 原生话题页允许在分类目录、标签目录之间往返并保留已有过滤条件；请求由 Discourse 服务端分类 + 标签交集接口处理，支持同上下文游标分页。
+- [x] 公开列表和服务器分页校验扩展至 `/tags/c/:category_slug/:category_id/:tag_slug/:tag_id.json`。使用不泄露凭据的 Node Mock 证明：跨分类/标签、额外参数/重定向/外域游标均不会发送请求。
+- [x] 公共传输独立错误分类：Cloudflare 验证、权限拒绝、内容缺失、无效 JSON、网络失败。匿名 403 不会触发账户注销或失效标记。
+- [x] Reader test / TS typecheck：[39362677743 成功](https://github.com/stevessr/fluxdo/actions/runs/39362677743)；官方 NSH check + headless trace：[39362673044 成功](https://github.com/stevessr/fluxdo/actions/runs/39362673044)。
+- [ ] 将单层分类 slug 升级为经过父分类链校验的完整 category slug path；独立覆盖嵌套分类组合筛选。
+- [ ] 实机验证过滤导航、返回历史、输入法/无障碍、站点真实数据与 CF 网页验证交互（headless trace 只验证初始屏）。
+- [ ] Native/Rust Host 会话隔离及 read/write、Rich Composer、Chat、Boards、插件与完整 Flutter 对照验收，均未完成。
+
+保持本分支为 Draft，保留 Flutter 正式客户端与现有发布路径。

@@ -108,3 +108,14 @@ NSH 具体命令参数应以本机 CLI --help 为准。Linux GTK 4.14+（Wayland
 - 点击「清除标签」返回最新话题；切换最新/热门将清空既有标签上下文，避免异步请求与列表串流。
 - 标签 synonym 不在初期目录重复显示；最多读取 1000 项。标签复合筛选、标签管理与账号相关标签设置仍待原生 Host 接入。
 - 数据层 Mock 回归和官方 NSH check / 手机桌面 trace 已通过；暂不代表在 Linux Wayland/Android 实机 E2E 验收。
+
+## 2026-10-20：分类 + 标签组合筛选与公开网络异常分类
+
+- 依据 Discourse 上游 `/tags/c/:category_slug_path_with_id/:tag_slug/:tag_id.json` 路由，为当前仅一层 slug 的公开分类与标签新增 **服务端交集读取**，而非客户端仅对单页结果取交集。
+- 在阅读页增加「选/更改分类」「选/更改标签」导航；从当前筛选进入目录时保留另一维度。两项选择同时生效时调用 `categoryTagTopics`，删除一项则退回单维度列表。目录中的「返回筛选结果」会重新拉取当前组合。
+- `more_topics_url` 在发请求前与解析响应后，均要求匹配当前分类 slug/ID + 标签 slug/ID；拒绝站外 URL、额外参数、重复参数、超大页码等。Mock 测试覆盖交集初始加载/翻页/篡改。
+- 匿名 `fetch` 将 CF `cf-mitigated: challenge` 或返回 HTML 的 403 归为 `challenge`，401/403 JSON 归为 `forbidden`，另行区分 `not_found`、无效 JSON 和网络错误；不会因 403 假设账号失效，也不向 TSX 传播底层异常全文或凭据。
+- 保持 `credentials: omit` 和 `redirect: error`，没有登录、写 API 或自动验证绕过；需要登录的内容只能由未来的受控 Host 处理。
+- **局限**：目前分类数据模型只有单级 slug，层级较深的分类尚不能保证组合路由正确；复杂标签相交、标签管理、用户身份和真实设备 E2E 仍在待办。
+
+验证：[Reader tests PASS](https://github.com/stevessr/fluxdo/actions/runs/39362677743) · [NSH check + 390×844 / 1200×800 trace PASS](https://github.com/stevessr/fluxdo/actions/runs/39362673044)。
