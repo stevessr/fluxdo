@@ -1,6 +1,7 @@
 /** Fluxdo NSH 匿名阅读数据层。认证/写操作将由未来的受控 Rust Host 实现。 */
 export type FeedKind = "latest" | "top";
 export interface Category { id: number; name: string; slug: string; topicCount: number; }
+export interface Tag { id: number; name: string; slug: string; topicCount: number; description: string; }
 export interface Topic {
   id: number;
   slug: string;
@@ -86,6 +87,47 @@ export function cookedToText(html: string): string {
       .replace(/<[^>]*>/g, "")
   ).replace(/\n{3,}/g, "\n\n").trim();
 }
+/** Discourse /tags.json returns a flat array with localized tag names and synonyms. */
+export function parseTags(payload: unknown): Tag[] {
+  const root = record(payload, "标签目录");
+  if (!Array.isArray(root.tags)) throw new Error("标签目录字段缺失");
+  const seen = new Set<number>();
+  const tags: Tag[] = [];
+  for (const item of root.tags) {
+    const t = record(item, "标签");
+    const target = t.target_tag && typeof t.target_tag === "object" && !Array.isArray(t.target_tag);
+    if (target) continue; // Do not expose non-canonical synonym links.
+    const id = positiveId(t.id);
+    const name = decodeEntities(asString(t.text) || asString(t.name)).trim();
+    const slug = asString(t.slug);
+    if (!id || !name || !slug || seen.has(id) || slug.length > 120) continue;
+    seen.add(id);
+    tags.push({
+      id, name: name.slice(0, 120), slug,
+      topicCount: Math.max(0, asNumber(t.count)),
+      description: cookedToText(asString(t.description)).slice(0, 300),
+    });
+    if (tags.length >= 1000) break;
+  }
+  return tags.sort((a,b) => b.topicCount - a.topicCount || a.name.localeCompare(b.name));
+}
+
+/** Canonical Discourse /tag/:slug/:id.json, scoped to an explicit tag. */
+export function tagPath(tag: Tag, page: number): string {
+  if (!Number.isSafeInteger(tag.id) || tag.id <= 0 ||
+      !tag.slug || tag.slug.length > 120 || /[\\/\u0000-\u001f\u007f]/.test(tag.slug)) {
+    throw new Error("标签 ID 或 slug 无效");
+  }
+  if (!Number.isSafeInteger(page) || page < 0 || page > 1000) throw new Error("页码超出允许范围");
+  return "/tag/" + encodeURIComponent(tag.slug) + "/" + tag.id + ".json?page=" + page;
+}
+export function tagCursorForContext(value: unknown, tag: Tag): string | null {
+  const candidate = normalizeFeedCursor(value);
+  if (!candidate) return null;
+  const expected = tagPath(tag, 0).split("?")[0];
+  return candidate.slice(0, candidate.indexOf("?")) === expected ? candidate : null;
+}
+
 export function parseCategories(payload: unknown): Category[] {
   const root = record(payload, "分类");
   const group = record(root.category_list, "分类列表");
@@ -112,7 +154,8 @@ export function normalizeFeedCursor(value: unknown): string | null {
   const pathname = candidate.slice(0, queryAt);
   const query = candidate.slice(queryAt + 1);
   if (!/^(?:\/latest|\/top(?:\/weekly)?)(?:\.json)?$/.test(pathname) &&
-      !/^\/c\/[^/?#\\]+\/[1-9]\d*(?:\/l\/latest)?(?:\.json)?$/.test(pathname)) return null;
+      !/^\/c\/[^/?#\\]+\/[1-9]\d*(?:\/l\/latest)?(?:\.json)?$/.test(pathname) &&
+      !/^\/tag\/[^/?#\\]+\/[1-9]\d*(?:\.json)?$/.test(pathname)) return null;
   // Do not forward arbitrary query parameters supplied by the server: they
   // could alter the endpoint or contain opaque session/credential values.
   const seen = new Set<string>();
@@ -451,6 +494,8 @@ export function topicPath(topic: Topic, postNumber?: number | null): string {
 }
 export interface PublicReader {
   categories(): Promise<Category[]>;
+  tags(): Promise<Tag[]>;
+  tagTopics(tag: Tag, pageOrCursor: number | string): Promise<TopicPage>;
   topics(kind: FeedKind, category: Category | null, pageOrCursor: number | string): Promise<TopicPage>;
   posts(topic: Topic): Promise<Post[]>;
   detail(topic: Topic, postNumber?: number | null): Promise<TopicDetail>;
@@ -465,6 +510,15 @@ export function createPublicReader(
 ): PublicReader {
   return {
     async categories() { return parseCategories(await get("/categories.json")); },
+    async tags() { return parseTags(await get("/tags.json")); },
+    async tagTopics(tag, pageOrCursor) {
+      const path = typeof pageOrCursor === "number"
+        ? tagPath(tag,pageOrCursor) : tagCursorForContext(pageOrCursor,tag);
+      if (!path) throw new Error("标签分页游标无效");
+      const result = parseTopics(await get(path));
+      const nextCursor = tagCursorForContext(result.nextCursor,tag);
+      return {...result,nextCursor,hasMore:nextCursor !== null};
+    },
     async topics(kind, category, pageOrCursor) {
       const path = typeof pageOrCursor === "number"
         ? feedPath(kind, category, pageOrCursor)
