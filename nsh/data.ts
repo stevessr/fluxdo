@@ -82,11 +82,51 @@ export function normalizeFeedCursor(value: unknown): string | null {
   if (queryAt <= 0) return null;
   const pathname = candidate.slice(0, queryAt);
   const query = candidate.slice(queryAt + 1);
-  if (!query || !/^[a-zA-Z0-9_%.+&=;\-]*$/.test(query) ||
-      !/(?:^|&)(?:page|before)=\d+(?:&|$)/.test(query)) return null;
-  if (!/^\/(?:latest|top)(?:\/weekly)?(?:\.json)?$/.test(pathname) &&
+  if (!/^(?:\/latest|\/top(?:\/weekly)?)(?:\.json)?$/.test(pathname) &&
       !/^\/c\/[^/?#\\]+\/[1-9]\d*(?:\/l\/latest)?(?:\.json)?$/.test(pathname)) return null;
+  // Do not forward arbitrary query parameters supplied by the server: they
+  // could alter the endpoint or contain opaque session/credential values.
+  const seen = new Set<string>();
+  let hasPagination = false;
+  for (const segment of query.split("&")) {
+    const match = /^(page|before|period)=([a-zA-Z0-9]+)$/.exec(segment);
+    if (!match || seen.has(match[1])) return null;
+    const [, key, raw] = match;
+    seen.add(key);
+    if (key === "period") {
+      if (raw !== "weekly" || !/^\/top(?:\/weekly)?(?:\.json)?$/.test(pathname)) return null;
+    } else {
+      const number = Number(raw);
+      if (!/^\d+$/.test(raw) || !Number.isSafeInteger(number) ||
+          number < (key === "page" ? 0 : 1) ||
+          (key === "page" && number > 1000)) return null;
+      hasPagination = true;
+    }
+  }
+  if (!hasPagination) return null;
   return (pathname.endsWith(".json") ? pathname : pathname + ".json") + "?" + query;
+}
+
+/** A server cursor must stay within the user's current feed and category. */
+export function feedCursorForContext(
+  value: unknown, kind: FeedKind, category: Category | null,
+): string | null {
+  const cursor = normalizeFeedCursor(value);
+  if (!cursor) return null;
+  const path = cursor.slice(0, cursor.indexOf("?"));
+  if (category !== null) {
+    if (!Number.isSafeInteger(category.id) || category.id <= 0 || !category.slug) return null;
+    const prefix = "/c/" + encodeURIComponent(category.slug) + "/" + category.id;
+    return path === prefix + ".json" || path === prefix + "/l/latest.json" ? cursor : null;
+  }
+  if (kind === "latest") return path === "/latest.json" ? cursor : null;
+  if (kind === "top") {
+    if (path === "/top/weekly.json") return cursor;
+    if (path === "/top.json" && /(?:^|&)period=weekly(?:&|$)/.test(cursor.split("?")[1])) {
+      return cursor;
+    }
+  }
+  return null;
 }
 
 export function parseTopics(payload: unknown): TopicPage {
@@ -277,7 +317,9 @@ export function createPublicReader(
       const path = typeof pageOrCursor === "number"
         ? feedPath(kind, category, pageOrCursor) : normalizeFeedCursor(pageOrCursor);
       if (!path) throw new Error("分页游标无效");
-      return parseTopics(await get(path));
+      const result = parseTopics(await get(path));
+      const nextCursor = feedCursorForContext(result.nextCursor, kind, category);
+      return { ...result, nextCursor, hasMore: nextCursor !== null };
     },
     async posts(topic) { return parsePosts(await get(topicPath(topic))); },
     async detail(topic, postNumber) {
@@ -290,7 +332,12 @@ export function createPublicReader(
 async function getPublicJson(path: string): Promise<unknown> {
   // 只接受本代码构造出的站内绝对路径；严禁 JS UI 动态转发凭据。
   if (!path.startsWith("/") || path.startsWith("//")) throw new Error("请求路径无效");
-  const response = await fetch(ORIGIN + path, { headers: { Accept: "application/json" } });
+  // Public-only transport: never attach ambient cookies or follow cross-origin redirects.
+  const response = await fetch(ORIGIN + path, {
+    headers: { Accept: "application/json" },
+    credentials: "omit",
+    redirect: "error",
+  });
   if (!response.ok) throw new Error("公开接口 HTTP " + response.status);
   return response.json();
 }

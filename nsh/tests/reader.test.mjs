@@ -4,7 +4,7 @@ import {
   decodeEntities, cookedToText, parseCategories, parseTopics, parsePosts,
   dedupeTopics, feedPath, topicPath, createPublicReader,
   normalizeFeedCursor, parseTopicDetail, postsBatchPath, mergePosts, POSTS_PER_BATCH,
-  searchPath, parseSearchResults, mergeSearchHits,
+  searchPath, parseSearchResults, mergeSearchHits, feedCursorForContext, publicReader,
 } from "../data.ts";
 import { RequestGate } from "../request_gate.ts";
 
@@ -206,4 +206,46 @@ test("搜索命中的楼层从服务端获取相邻帖子，而非按帖子 ID �
   });
   assert.deepEqual((await reader.detail(item,120)).posts.map(p=>p.number),[120]);
   assert.deepEqual(paths,["/t/hello-world/42/120.json"]);
+});
+
+test("分页游标不能跨信息流、跨分类或携带未知查询字段", async () => {
+  assert.equal(feedCursorForContext("/latest?page=2", "latest", null), "/latest.json?page=2");
+  assert.equal(feedCursorForContext("/top/weekly?before=99", "top", null), "/top/weekly.json?before=99");
+  assert.equal(feedCursorForContext("/top?period=weekly&page=2", "top", null),
+    "/top.json?period=weekly&page=2");
+  assert.equal(feedCursorForContext("/c/development/8/l/latest?page=3", "latest",
+    {id:8,slug:"development",name:"开发",topicCount:8}), "/c/development/8/l/latest.json?page=3");
+  for (const value of [
+    "/latest?page=1&api_key=secret", "/latest?page=1&redirect=evil",
+    "/latest?page=1&page=2", "/latest?before=-1", "/latest?before=9007199254740992",
+    "/latest?page=1001", "/latest/weekly?page=1", "/latest?page=1;token=x",
+    "/latest?page=1&token=abc", "/latest?period=weekly&page=2",
+  ]) assert.equal(normalizeFeedCursor(value), null, value);
+  assert.equal(feedCursorForContext("/top/weekly?page=2", "latest", null), null);
+  assert.equal(feedCursorForContext("/c/other/8?page=2", "latest",
+    {id:8,slug:"development",name:"开发",topicCount:8}), null);
+
+  const reader = createPublicReader(async () => ({
+    topic_list: {topics:[topic],more_topics_url:"/top/weekly?page=2"},
+  }));
+  const page = await reader.topics("latest",null,0);
+  assert.equal(page.hasMore,false);
+  assert.equal(page.nextCursor,null);
+  await assert.rejects(reader.topics("latest",null,"/top/weekly?page=2"),/分页游标无效/);
+});
+
+test("公开请求明确禁用凭据和重定向", async () => {
+  const previous = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, "https://linux.do/categories.json");
+      assert.equal(options.credentials, "omit");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Accept, "application/json");
+      return {ok:true,json:async()=>({category_list:{categories:[category]}})};
+    };
+    assert.equal((await publicReader.categories())[0].id,8);
+  } finally {
+    globalThis.fetch = previous;
+  }
 });

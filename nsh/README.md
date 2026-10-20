@@ -78,3 +78,10 @@ NSH 具体命令参数应以本机 CLI --help 为准。Linux GTK 4.14+（Wayland
 
 - Reader 与 Native Check 工作流添加按来源分支的并发组和 `cancel-in-progress`。同一 NSH 迁移分支的 push / PR 不再重复占用执行槽，后续提交会取消旧版本的排队或执行；最终验收只看最新提交。
 - 搜索翻页最多到第 50 页；Host transport 未安装时报告 `unavailable`，区别于异常传输失败。
+
+## 2026-10-20：分页隔离与公开传输安全回归
+
+- 公共阅读器按信息流类型和选中分类核验服务端分页游标，避免游标跨列表切换；不可信查询仅允许 page / before，热门允许 period=weekly。
+- 同站请求显式使用 `credentials: "omit"` 且 `redirect: "error"`，避免环境附带 Cookie 或通过重定向离开公开源站。
+- Host Bridge 的 `feed.list` 游标与命令根级字段改为运行时严格校验，拒绝身份字段、重复分页参数和跨信息流游标。
+- 回归测试同时覆盖分页上下文、伪造查询、网络 fetch 选项；这是 NSH 匿名数据层加固，不代表真实 Native Host 已接入。

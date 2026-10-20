@@ -31,6 +31,11 @@ test("拒绝未列入只读白名单的命令、意外字段和凭据泄漏", ()
     {method:"search.query",params:{term:"ok",page:51}},
     {method:"capabilities.read",params:{token:"secret"}},
     {method:"feed.list",params:{kind:"latest",cursor:"https://evil.test/a"}},
+    {method:"feed.list",params:{kind:"latest",cursor:"/top/weekly?page=3"}},
+    {method:"feed.list",params:{kind:"latest",cursor:"/latest?page=2&api_key=secret"}},
+    {method:"feed.list",params:{kind:"top",cursor:"/top?page=2"}},
+    {method:"feed.list",params:{kind:"latest",cursor:"/latest?page=2&page=3"}},
+    {method:"feed.list",params:{kind:"latest"},cookie:"secret"},
     {method:"search.query",params:{term:"x\nsecret",page:1}},
   ]) {
     assert.throws(()=>validateHostCommand(value),
@@ -71,4 +76,13 @@ test("native 异常不暴露底层消息；未安装 transport 时关闭操作",
   const unavailable = new HostBridge(unavailableHostTransport);
   await assert.rejects(unavailable.invoke(feedCommand),
     (err)=>err instanceof HostProtocolError && err.code==="unavailable");
+});
+
+test("Host 接受限定信息流的安全分页游标", () => {
+  assert.doesNotThrow(() => validateHostCommand(
+    {method:"feed.list",params:{kind:"latest",cursor:"/latest.json?page=2"}}));
+  assert.doesNotThrow(() => validateHostCommand(
+    {method:"feed.list",params:{kind:"top",cursor:"/top/weekly?before=123"}}));
+  assert.doesNotThrow(() => validateHostCommand(
+    {method:"feed.list",params:{kind:"top",cursor:"/top?period=weekly&page=2"}}));
 });

@@ -47,13 +47,41 @@ function fields(input: Record<string, unknown>, allowed: string[]): boolean {
   return Object.keys(input).every((name) => allowed.includes(name));
 }
 
+/** Reject cross-feed, non-pagination and opaque Host cursor parameters. */
+function validHostCursor(value: unknown, kind: "latest" | "top"): boolean {
+  if (typeof value !== "string" || value.length > 2048) return false;
+  const match = /^(\/latest|\/top(?:\/weekly)?)(?:\.json)?\?(.+)$/.exec(value);
+  if (!match || (kind === "latest" ? match[1] !== "/latest" : !match[1].startsWith("/top"))) {
+    return false;
+  }
+  const seen = new Set<string>();
+  let pagination = false;
+  let weekly = match[1] === "/top/weekly";
+  for (const part of match[2].split("&")) {
+    const pair = /^(page|before|period)=([a-zA-Z0-9]+)$/.exec(part);
+    if (!pair || seen.has(pair[1])) return false;
+    seen.add(pair[1]);
+    if (pair[1] === "period") {
+      if (kind !== "top" || pair[2] !== "weekly") return false;
+      weekly = true;
+    } else {
+      const n = Number(pair[2]);
+      if (!/^\d+$/.test(pair[2]) || !Number.isSafeInteger(n) ||
+          n < (pair[1] === "page" ? 0 : 1) ||
+          (pair[1] === "page" && n > 1000)) return false;
+      pagination = true;
+    }
+  }
+  return pagination && (kind !== "top" || weekly);
+}
+
 /**
  * Validate at runtime, not only at the TS type level. In particular reject
  * surplus keys so an accidental token field cannot be forwarded to Host.
  */
 export function validateHostCommand(command: unknown): asserts command is HostReadCommand {
-  if (!isRecord(command) || !isRecord(command.params) ||
-      typeof command.method !== "string") {
+  if (!isRecord(command) || !fields(command, ["method", "params"]) ||
+      !isRecord(command.params) || typeof command.method !== "string") {
     throw new HostProtocolError("invalid_command");
   }
   const p = command.params;
@@ -64,10 +92,7 @@ export function validateHostCommand(command: unknown): asserts command is HostRe
     case "feed.list":
       if (fields(p, ["kind", "cursor"]) &&
           (p.kind === "latest" || p.kind === "top") &&
-          (p.cursor === undefined ||
-            (typeof p.cursor === "string" && p.cursor.length > 0 &&
-              p.cursor.length <= 2048 && p.cursor.startsWith("/") &&
-              !p.cursor.startsWith("//")))) return;
+          (p.cursor === undefined || validHostCursor(p.cursor, p.kind))) return;
       break;
     case "topic.read":
       if (fields(p, ["topicId", "postNumber"]) &&
