@@ -19,7 +19,7 @@ permissions:
 jobs:
   native-check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Install official NSH CLI
@@ -29,14 +29,7 @@ jobs:
           curl --retry 3 --fail --location --silent --show-error https://nsh.dev/install.sh -o /tmp/nsh-install.sh
           sh /tmp/nsh-install.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Prepare Rust/NSH mixed app toolchain
-        shell: bash
-        run: |
-          set -euo pipefail
-          git clone --depth 1 https://github.com/longbridge/nsh.git /tmp/nsh-source
-          echo "NSH_SOURCE=/tmp/nsh-source" >> "$GITHUB_ENV"
-          cargo --version
-      - name: Check NSH TSX and native Rust exports
+      - name: Check NSH TSX types
         shell: bash
         run: |
           set -euo pipefail

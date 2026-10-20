@@ -128,3 +128,11 @@
 - [ ] 完整 Native Host 会话生命周期/插件服务、登录账户隔离、Composer/Chat/Boards 编辑能力与 Flutter 功能等价核销。
 
 继续保持 Draft 和 Flutter 独立发布路径，不可直接合并。
+
+## 2026-10-20：Rust Host 原生模块进展与上游阻断项
+
+- [x] 实现严格拒绝权限升级的 `nsh/native` Rust module：`#[native_module("fluxdo/native")]` / `FluxdoHost.invoke`，仅响应 `capabilities.read`，版本化 JSON 帧，未实现的账号/网络/写入命令全部拒绝。
+- [x] 实现 `nsh/host_native_transport.ts` typed HostBridge 适配，独立 `nsh/native-probe` 用于混合 UI 工程验证；不注入生产 NSH 默认入口。
+- [x] 官方 NSH 0.1.1 工具链编译进入并完成 `fluxdo-nsh-host` Crate 阶段，但生成混合 Runner 时报 `nsh_cli::main_with` 无法解析（官方 `nsh-cli` 当前仅 bin target）。[失败日志](https://github.com/stevessr/fluxdo/actions/runs/39365665290)。
+- [x] 已恢复 `nsh/nsh.json` 默认纯 TSX 配置，独立保留 Rust 实验入口，杜绝上游构建 bug 阻断现有功能。保留 Flutter 正式发布链路。
+- [ ] 等待或推进上游修复（不可编造 native runner 的成功状态）；恢复验证 `nsh/native-probe` 的官方 check + headless trace，再完成账号隔离和真正的 Host Core。
