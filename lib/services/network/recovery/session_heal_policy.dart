@@ -119,8 +119,13 @@ class SessionSelfHealPolicy implements RecoveryPolicy {
     // A successful mutation with a misleading logged-out header may already
     // have been committed by Discourse. Never replay it automatically.
     // The auth probe will validate the weak logout signal independently.
-    if (status >= 200 && status < 400 &&
-        !const {'GET', 'HEAD', 'OPTIONS'}.contains(options.method.toUpperCase())) {
+    if (status >= 200 &&
+        status < 400 &&
+        !const {
+          'GET',
+          'HEAD',
+          'OPTIONS',
+        }.contains(options.method.toUpperCase())) {
       return false;
     }
 
