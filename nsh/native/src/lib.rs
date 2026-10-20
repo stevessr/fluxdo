@@ -9,7 +9,6 @@ fn native(registry: &mut Registry) {
 }
 
 /// Read-only bootstrap handshake; returns bounded versioned JSON frames.
-#[module]
 pub struct FluxdoHost;
 
 #[module]
