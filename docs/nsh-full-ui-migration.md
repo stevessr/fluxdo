@@ -86,3 +86,12 @@
 - [数据层单元测试及类型检查已通过](https://github.com/stevessr/fluxdo/actions/runs/39201454810)。
 - [官方 nsh check 与手机/桌面双视口 nsh trace 已通过](https://github.com/stevessr/fluxdo/actions/runs/39201655673)。
 - **验收范围**：仅验证匿名只读数据层、TSX 编译和 headless 首帧，不等于设备实测、已登录读写、完整富文本或多平台发布。467 项 Flutter UI 资产仍待逐一核销。
+
+## 2026-10-20：Boards 只读界面迁移（P1 扩展）
+
+- 官方 Boards `GET /boards/api/boards.json` / `GET /boards/api/boards/:id.json` 接入匿名 PublicReader；依据上游 Boards Serializer 解析看板、栏目、Topic/Floater 卡片。
+- NSH 独立「看板」Tab，公开权限标识、栏目和卡片展示、话题卡片直接进入既有话题阅读导航。针对手机七入口改用紧凑原生导航控件。
+- 服务端 `anonymous_can_read` 必须允许公开阅读，否则拒绝详情；详情 ID 绑定用户选中看板，数据最小化投影、竞态作废、条目限制和失败重试。
+- Mock 测试涵盖目录去重/归档过滤、私有看板拒绝、非法 ID、卡片投影、渲染预算。
+- [Reader 单测通过](https://github.com/stevessr/fluxdo/actions/runs/39358465421)；[Native NSH check/双视口 headless trace 通过](https://github.com/stevessr/fluxdo/actions/runs/39358461911)。
+- **不代表 Boards 功能等价**：目前不支持登录后受保护看板、卡片写入与移动、实时更新、栏目拖拽、权限编辑或真实设备 E2E；不得在清单中核销 Flutter 的完整 Boards UI。
