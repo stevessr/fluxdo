@@ -5,6 +5,7 @@ import {
   dedupeTopics, feedPath, topicPath, createPublicReader,
   normalizeFeedCursor, parseTopicDetail, postsBatchPath, mergePosts, POSTS_PER_BATCH,
   searchPath, parseSearchResults, mergeSearchHits, feedCursorForContext, publicReader,
+  parseUserProfile, userProfilePath,
 } from "../data.ts";
 import { RequestGate } from "../request_gate.ts";
 
@@ -248,4 +249,31 @@ test("公开请求明确禁用凭据和重定向", async () => {
   } finally {
     globalThis.fetch = previous;
   }
+});
+
+test("公开个人资料查询只允许单段用户名，不读取隐私属性", async () => {
+  assert.equal(userProfilePath(" @steve.ssr "), "/u/steve.ssr.json");
+  assert.equal(userProfilePath("steve-1"), "/u/steve-1.json");
+  for (const invalid of ["", "@", "..", "../admin", "a/b", "x?api_key=secret",
+    "name#hash", "bad\\name", "a".repeat(61)]) {
+    assert.throws(() => userProfilePath(invalid), /用户名格式无效/, invalid);
+  }
+  const user = {id:12,username:"steve.ssr",name:"Steve &amp; SSR",
+    title:"开发者",trust_level:3,post_count:91,
+    bio_cooked:"<p>Hi &amp; welcome</p><script>alert(1)</script>",
+    email:"private@example.com",api_key:"secret"};
+  assert.deepEqual(parseUserProfile({user}),{
+    id:12,username:"steve.ssr",name:"Steve & SSR",title:"开发者",
+    trustLevel:3,postCount:91,bio:"Hi & welcome",
+  });
+  assert.throws(() => parseUserProfile({user:{username:"invalid"}}),/字段缺失/);
+  const paths=[];
+  const reader=createPublicReader(async path => {
+    paths.push(path);
+    return {user};
+  });
+  assert.equal((await reader.profile("@steve.ssr")).id,12);
+  assert.deepEqual(paths,["/u/steve.ssr.json"]);
+  await assert.rejects(reader.profile("../admin"),/用户名格式无效/);
+  assert.equal(paths.length,1);
 });
