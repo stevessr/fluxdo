@@ -105,6 +105,8 @@ function FeedPage(props: {
   tag: () => Tag | null;
   clearCategory: () => void;
   clearTag: () => void;
+  browseCategories: () => void;
+  browseTags: () => void;
   topics: () => Topic[];
   loading: () => boolean;
   loadingMore: () => boolean;
@@ -126,15 +128,17 @@ function FeedPage(props: {
       <View style={{ paddingHorizontal: 14, paddingTop: 13, gap: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
           <Text style={{ flex: 1, fontSize: 21, fontWeight: "700", color: palette.text }}>
-            {props.tag() ? "#" + props.tag()!.name :
-              props.category()?.name ?? (props.kind() === "latest" ? "最新话题" : "本周热门")}
+            {props.category() && props.tag()
+              ? props.category()!.name + " · #" + props.tag()!.name
+              : props.tag() ? "#" + props.tag()!.name
+              : props.category()?.name ?? (props.kind() === "latest" ? "最新话题" : "本周热门")}
           </Text>
           <Chip label="刷新 ↻" onPress={props.refresh} />
         </View>
         <If when={props.category() !== null}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
-            <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>当前正在浏览分类话题</Text>
-            <Chip label="全部话题 ×" onPress={props.clearCategory} />
+            <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>按分类筛选</Text>
+            <Chip label="清除分类 ×" onPress={props.clearCategory} />
           </View>
         </If>
         <If when={props.tag() !== null}>
@@ -143,6 +147,13 @@ function FeedPage(props: {
             <Chip label="清除标签 ×" onPress={props.clearTag} />
           </View>
         </If>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+          <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>
+            服务器组合筛选（仅当前选中条件）
+          </Text>
+          <Chip label={props.category() ? "更改分类" : "选分类"} onPress={props.browseCategories} />
+          <Chip label={props.tag() ? "更改标签" : "选标签"} onPress={props.browseTags} />
+        </View>
         <Input
           value={search()}
           onChangeText={(text) => search.set(text)}
@@ -201,6 +212,8 @@ function CategoriesPage(props: {
   refresh: () => void;
   select: (category: Category) => void;
   showTags: () => void;
+  filterHint: () => string;
+  backToResults: () => void;
 }) {
   return (
     <View style={{ flex: 1, gap: 10 }}>
@@ -209,6 +222,14 @@ function CategoriesPage(props: {
         <Chip label="标签 #" onPress={props.showTags} />
         <Chip label="刷新 ↻" onPress={props.refresh} />
       </View>
+      <If when={props.filterHint().length > 0}>
+        <View style={{ paddingHorizontal: 15, gap: 7 }}>
+          <Text style={{ color: palette.muted, fontSize: 12 }}>
+            {props.filterHint()} · 选择分类以组合筛选
+          </Text>
+          <Chip label="返回筛选结果" onPress={props.backToResults} />
+        </View>
+      </If>
       <ErrorView message={props.error} retry={props.refresh} />
       <List
         each={props.categories()}
@@ -251,6 +272,8 @@ function TagsPage(props: {
   refresh: () => void;
   select: (tag: Tag) => void;
   showCategories: () => void;
+  filterHint: () => string;
+  backToResults: () => void;
 }) {
   const filter = signal("");
   const visibleTags = () => {
@@ -267,6 +290,12 @@ function TagsPage(props: {
           <Chip label="分类" onPress={props.showCategories} />
           <Chip label="刷新 ↻" onPress={props.refresh} />
         </View>
+        <If when={props.filterHint().length > 0}>
+          <Text style={{ color: palette.muted, fontSize: 12 }}>
+            {props.filterHint()} · 选择标签以组合筛选
+          </Text>
+          <Chip label="返回筛选结果" onPress={props.backToResults} />
+        </If>
         <Input value={filter()} onChangeText={(value) => filter.set(value)}
           placeholder="筛选已载入的标签"
           returnKeyType="search"
@@ -792,8 +821,9 @@ function App() {
     hasMore.set(false);
     feedError.set("");
     try {
-      const page = currentTag
-        ? await publicReader.tagTopics(currentTag, 0)
+      const page = currentCategory && currentTag
+        ? await publicReader.categoryTagTopics(currentCategory, currentTag, 0)
+        : currentTag ? await publicReader.tagTopics(currentTag, 0)
         : await publicReader.topics(currentKind, currentCategory, 0);
       if (feedGate.isCurrent(ticket)) {
         topics.set(page.items);
@@ -816,9 +846,11 @@ function App() {
     feedError.set("");
     try {
       const currentTag = selectedTag();
-      const page = currentTag
-        ? await publicReader.tagTopics(currentTag, cursor)
-        : await publicReader.topics(readKind(), category(), cursor);
+      const currentCategory = category();
+      const page = currentCategory && currentTag
+        ? await publicReader.categoryTagTopics(currentCategory, currentTag, cursor)
+        : currentTag ? await publicReader.tagTopics(currentTag, cursor)
+        : await publicReader.topics(readKind(), currentCategory, cursor);
       if (feedGate.isCurrent(ticket)) {
         visitedFeedCursors.add(cursor);
         topics.set(dedupeTopics(topics(), page.items));
@@ -1030,9 +1062,26 @@ function App() {
     }
   };
 
+  // Retain the other dimension when selecting a filter, enabling true server-side intersection.
+  const browseFilters = (mode: "categories" | "tags") => {
+    directoryMode.set(mode);
+    tab.set("categories");
+    feedGate.invalidate();
+    loading.set(false);
+    loadingMore.set(false);
+    if (mode === "categories" && categories().length === 0 && !categoriesLoading()) {
+      void refreshCategories();
+    }
+    if (mode === "tags" && tags().length === 0 && !tagsLoading()) void refreshTags();
+  };
+  const backToResults = () => {
+    tab.set("latest");
+    topics.set([]);
+    hasMore.set(false);
+    void refreshFeed();
+  };
   const openCategory = (next: Category) => {
     tab.set("latest");
-    selectedTag.set(null);
     category.set(next);
     topics.set([]);
     hasMore.set(false);
@@ -1047,7 +1096,6 @@ function App() {
   };
   const openTag = (next: Tag) => {
     tab.set("latest");
-    category.set(null);
     selectedTag.set(next);
     topics.set([]);
     hasMore.set(false);
@@ -1181,6 +1229,8 @@ function App() {
             <If when={tab() === "search"} else={
               <FeedPage kind={readKind} category={category} tag={selectedTag}
                 clearCategory={closeCategory} clearTag={closeTag}
+                browseCategories={() => browseFilters("categories")}
+                browseTags={() => browseFilters("tags")}
                 topics={topics} loading={loading} loadingMore={loadingMore} hasMore={hasMore}
                 error={feedError} refresh={() => { void refreshFeed(); }}
                 loadMore={() => { void loadMore(); }} open={openTopic} />
@@ -1199,11 +1249,15 @@ function App() {
           <If when={directoryMode() === "tags"} else={
             <CategoriesPage categories={categories} loading={categoriesLoading}
               error={categoriesError} refresh={() => { void refreshCategories(); }}
-              select={openCategory} showTags={showTagDirectory} />
+              select={openCategory} showTags={showTagDirectory}
+              filterHint={() => selectedTag() ? "#" + selectedTag()!.name : ""}
+              backToResults={backToResults} />
           }>
             <TagsPage tags={tags} loading={tagsLoading} error={tagsError}
               refresh={() => { void refreshTags(); }} select={openTag}
-              showCategories={showCategoryDirectory} />
+              showCategories={showCategoryDirectory}
+              filterHint={() => category()?.name ?? ""}
+              backToResults={backToResults} />
           </If>
           </If>
         }>
