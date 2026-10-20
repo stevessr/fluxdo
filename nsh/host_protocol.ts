@@ -31,8 +31,10 @@ export type HostFailureCode =
   | "unavailable" | "rate_limited" | "internal";
 
 export class HostProtocolError extends Error {
-  constructor(readonly code: HostFailureCode) {
+  readonly code: HostFailureCode;
+  constructor(code: HostFailureCode) {
     super("Host Bridge: " + code);
+    this.code = code;
     this.name = "HostProtocolError";
   }
 }
@@ -147,7 +149,8 @@ export class HostBridge {
   private nextId = 0;
   private generation = 0;
 
-  constructor(private readonly transport: HostTransport) {}
+  private readonly transport: HostTransport;
+  constructor(transport: HostTransport) { this.transport = transport; }
 
   invalidatePending(): void { this.generation++; }
 

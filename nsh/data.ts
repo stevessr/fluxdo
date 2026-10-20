@@ -315,7 +315,8 @@ export function createPublicReader(
     async categories() { return parseCategories(await get("/categories.json")); },
     async topics(kind, category, pageOrCursor) {
       const path = typeof pageOrCursor === "number"
-        ? feedPath(kind, category, pageOrCursor) : normalizeFeedCursor(pageOrCursor);
+        ? feedPath(kind, category, pageOrCursor)
+        : feedCursorForContext(pageOrCursor, kind, category);
       if (!path) throw new Error("分页游标无效");
       const result = parseTopics(await get(path));
       const nextCursor = feedCursorForContext(result.nextCursor, kind, category);
