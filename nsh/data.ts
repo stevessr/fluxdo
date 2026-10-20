@@ -100,7 +100,8 @@ export function parseTags(payload: unknown): Tag[] {
     const id = positiveId(t.id);
     const name = decodeEntities(asString(t.text) || asString(t.name)).trim();
     const slug = asString(t.slug);
-    if (!id || !name || !slug || seen.has(id) || slug.length > 120) continue;
+    if (!id || !name || !slug || slug === "." || slug === ".." ||
+        seen.has(id) || slug.length > 120 || /[\\/\u0000-\u001f\u007f]/.test(slug)) continue;
     seen.add(id);
     tags.push({
       id, name: name.slice(0, 120), slug,
@@ -115,7 +116,8 @@ export function parseTags(payload: unknown): Tag[] {
 /** Canonical Discourse /tag/:slug/:id.json, scoped to an explicit tag. */
 export function tagPath(tag: Tag, page: number): string {
   if (!Number.isSafeInteger(tag.id) || tag.id <= 0 ||
-      !tag.slug || tag.slug.length > 120 || /[\\/\u0000-\u001f\u007f]/.test(tag.slug)) {
+      !tag.slug || tag.slug === "." || tag.slug === ".." ||
+      tag.slug.length > 120 || /[\\/\u0000-\u001f\u007f]/.test(tag.slug)) {
     throw new Error("标签 ID 或 slug 无效");
   }
   if (!Number.isSafeInteger(page) || page < 0 || page > 1000) throw new Error("页码超出允许范围");

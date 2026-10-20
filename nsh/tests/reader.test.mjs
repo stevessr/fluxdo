@@ -366,7 +366,9 @@ test("Discourse 标签目录使用官方 tags.json 结构与可见 Canonical tag
   for(const id of [0,-1,1.5,Number.MAX_SAFE_INTEGER+1]){
     assert.throws(()=>tagPath({...tags[0],id},0),/标签 ID/);
   }
-  assert.throws(()=>tagPath({...tags[0],slug:"../foo"},0),/标签 ID/);
+  for (const slug of ["../foo",".","..","foo/bar","foo\\bar"]) {
+    assert.throws(()=>tagPath({...tags[0],slug},0),/标签 ID/);
+  }
   assert.throws(()=>tagPath(tags[0],1001),/页码/);
 });
 
