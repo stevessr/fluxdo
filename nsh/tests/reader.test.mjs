@@ -6,6 +6,7 @@ import {
   normalizeFeedCursor, parseTopicDetail, postsBatchPath, mergePosts, POSTS_PER_BATCH,
   searchPath, parseSearchResults, mergeSearchHits, feedCursorForContext, publicReader,
   parseUserProfile, userProfilePath, parseBoards, parseBoardDetail, boardDetailPath,
+  parseTags, tagPath, tagCursorForContext,
 } from "../data.ts";
 import { RequestGate } from "../request_gate.ts";
 
@@ -345,4 +346,55 @@ test("Boards 巨量卡片限制为 500，避免超量渲染", () => {
   },1);
   assert.equal(detail.columns[0].cards.length,500);
   assert.equal(detail.truncated,true);
+});
+
+test("Discourse 标签目录使用官方 tags.json 结构与可见 Canonical tag", () => {
+  const tags=parseTags({tags:[
+    {id:4,text:"Rust &amp; Go",slug:"rust-go",count:20,description:"<p>工具</p>"},
+    {id:5,name:"Linux",slug:"linux",count:100},
+    {id:6,name:"Synonym",slug:"syn",target_tag:{id:5,name:"Linux"}},
+    {id:5,name:"Duplicate",slug:"dup",count:9},
+    {id:0,name:"Invalid",slug:"bad"},
+  ]});
+  assert.deepEqual(tags,[
+    {id:5,name:"Linux",slug:"linux",topicCount:100,description:""},
+    {id:4,name:"Rust & Go",slug:"rust-go",topicCount:20,description:"工具"},
+  ]);
+  assert.throws(()=>parseTags({tags:null}),/字段缺失/);
+  assert.equal(tagPath(tags[0],0),"/tag/linux/5.json?page=0");
+  assert.equal(tagPath({...tags[0],slug:"a+b"},2),"/tag/a%2Bb/5.json?page=2");
+  for(const id of [0,-1,1.5,Number.MAX_SAFE_INTEGER+1]){
+    assert.throws(()=>tagPath({...tags[0],id},0),/标签 ID/);
+  }
+  assert.throws(()=>tagPath({...tags[0],slug:"../foo"},0),/标签 ID/);
+  assert.throws(()=>tagPath(tags[0],1001),/页码/);
+});
+
+test("标签分页服务端游标只允许当前标签与安全参数", async () => {
+  const tag={id:7,name:"NSH",slug:"nsh",topicCount:12,description:""};
+  assert.equal(tagCursorForContext("/tag/nsh/7?page=2",tag),"/tag/nsh/7.json?page=2");
+  for(const input of [
+    "/tag/other/7?page=2","/tag/nsh/8?page=2",
+    "/tag/nsh/7?page=2&token=secret",
+    "/tag/nsh/7?page=2&page=3",
+    "https://attacker.test/tag/nsh/7?page=2",
+    "/tag/nsh/7/../admin?page=2",
+  ])assert.equal(tagCursorForContext(input,tag),null,input);
+  const paths=[];
+  const reader=createPublicReader(async path=>{
+    paths.push(path);
+    return {topic_list:{topics:[topic],more_topics_url:"/tag/nsh/7?page=3"}};
+  });
+  const result=await reader.tagTopics(tag,0);
+  assert.equal(result.hasMore,true);
+  assert.equal(result.nextCursor,"/tag/nsh/7.json?page=3");
+  assert.equal((await reader.tagTopics(tag,result.nextCursor)).items.length,1);
+  assert.deepEqual(paths,["/tag/nsh/7.json?page=0","/tag/nsh/7.json?page=3"]);
+  await assert.rejects(reader.tagTopics(tag,"/latest?page=1"),/标签分页游标/);
+  assert.equal(paths.length,2);
+  const wrong=createPublicReader(async()=>({
+    topic_list:{topics:[topic],more_topics_url:"/tag/other/9?page=4"},
+  }));
+  const last=await wrong.tagTopics(tag,0);
+  assert.equal(last.hasMore,false);
 });
