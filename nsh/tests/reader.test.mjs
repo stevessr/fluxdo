@@ -7,6 +7,7 @@ import {
   searchPath, parseSearchResults, mergeSearchHits, feedCursorForContext, publicReader,
   parseUserProfile, userProfilePath, parseBoards, parseBoardDetail, boardDetailPath,
   parseTags, tagPath, tagCursorForContext, categoryTagPath, categoryTagCursorForContext,
+  categoryRoutePath, MAX_CATEGORY_DEPTH,
   PublicReadError,
 } from "../data.ts";
 import { RequestGate } from "../request_gate.ts";
@@ -32,7 +33,8 @@ test("解析公开话题并严格过滤异常 ID", () => {
 
 test("解析分类与失败数据", () => {
   assert.deepEqual(parseCategories({category_list:{categories:[category]}}),
-    [{id:8,slug:"development",name:"开发 & 工具",topicCount:99}]);
+    [{id:8,slug:"development",name:"开发 & 工具",topicCount:99,
+      parentCategoryId:null,slugPath:"development",fullName:"开发 & 工具",depth:0}]);
   assert.throws(() => parseCategories({foo:1}), /数据格式不正确/);
   assert.throws(() => parseTopics({topic_list:{}}), /字段缺失/);
 });
@@ -93,7 +95,7 @@ test("网络适配器可注入，且只做读取", async () => {
     id:42,slug:"hello-world",title:"Hi",categoryId:8,views:1,postsCount:2,likeCount:0,tags:[],
   }),[]);
   assert.deepEqual(paths, [
-    "/categories.json","/latest.json?page=0","/t/hello-world/42.json",
+    "/categories.json?include_subcategories=true","/latest.json?page=0","/t/hello-world/42.json",
   ]);
 });
 
@@ -241,7 +243,7 @@ test("公开请求明确禁用凭据和重定向", async () => {
   const previous = globalThis.fetch;
   try {
     globalThis.fetch = async (url, options) => {
-      assert.equal(url, "https://linux.do/categories.json");
+      assert.equal(url, "https://linux.do/categories.json?include_subcategories=true");
       assert.equal(options.credentials, "omit");
       assert.equal(options.redirect, "error");
       assert.equal(options.headers.Accept, "application/json");
@@ -509,4 +511,79 @@ test("anonymous transport differentiates CF challenge, private 403 and invalid J
   } finally {
     globalThis.fetch=previous;
   }
+});
+
+test("Discourse nested subcategory_list preserves 3-level ancestors and canonical paths", async () => {
+  const tree={category_list:{categories:[
+    {id:1,slug:"parent",name:"顶级",topic_count:10,subcategory_list:[
+      {id:2,slug:"child",name:"次级",parent_category_id:1,subcategory_list:[
+        {id:3,slug:"leaf",name:"叶子",parent_category_id:2,topic_count:4},
+      ]},
+    ]},
+    {id:4,slug:"flat-child",name:"平面子分类",parent_category_id:1},
+    {id:5,slug:"missing-parent",name:"孤儿",parent_category_id:9999},
+    {id:6,slug:"wrong-parent",name:"矛盾父级",parent_category_id:999},
+  ]}};
+  const result=parseCategories(tree);
+  assert.deepEqual(result.map(c=>c.id),[1,2,3,4,5,6]);
+  assert.deepEqual(result.map(c=>c.slugPath),[
+    "parent","parent/child","parent/child/leaf",
+    "parent/flat-child",null,null,
+  ]);
+  assert.equal(result[2].fullName,"顶级 › 次级 › 叶子");
+  assert.equal(result[2].depth,2);
+  assert.equal(categoryRoutePath(result[2]),"/c/parent/child/leaf/3");
+  assert.equal(feedPath("latest",result[2],0),"/c/parent/child/leaf/3.json?page=0");
+  assert.equal(categoryTagPath(result[2],{id:7,name:"Rust",slug:"rust",topicCount:3,description:""},2),
+    "/tags/c/parent/child/leaf/3/rust/7.json?page=2");
+  assert.equal(feedCursorForContext("/c/parent/child/leaf/3?page=2","latest",result[2]),
+    "/c/parent/child/leaf/3.json?page=2");
+  assert.equal(feedCursorForContext("/c/child/leaf/3?page=2","latest",result[2]),null);
+  const tag={id:7,name:"Rust",slug:"rust",topicCount:3,description:""};
+  assert.equal(categoryTagCursorForContext(
+    "/tags/c/parent/child/leaf/3/rust/7?page=4",result[2],tag),
+    "/tags/c/parent/child/leaf/3/rust/7.json?page=4");
+  assert.equal(categoryTagCursorForContext(
+    "/tags/c/parent/leaf/3/rust/7?page=4",result[2],tag),null);
+  assert.throws(()=>feedPath("latest",result[4],0),/分类层级尚未解析/);
+  assert.equal(feedCursorForContext("/c/missing-parent/5?page=2","latest",result[4]),null);
+  await assert.rejects(createPublicReader(async()=>{throw new Error("not reached");})
+    .topics("latest",result[4],0),/分类层级尚未解析/);
+  const seen=[];
+  const reader=createPublicReader(async path=>{
+    seen.push(path);
+    return {category_list:tree.category_list};
+  });
+  assert.equal((await reader.categories()).length,6);
+  assert.deepEqual(seen,["/categories.json?include_subcategories=true"]);
+});
+
+test("nested category parser rejects conflicting nesting, cycles, and poisoned cursor paths", () => {
+  const result=parseCategories({category_list:{categories:[
+    {id:11,slug:"top",name:"top",subcategory_list:[
+      {id:12,slug:"inconsistent",name:"bad",parent_category_id:9999},
+      {id:13,slug:"child",name:"ok",parent_category_id:11},
+    ]},
+    {id:21,slug:"a",name:"A",parent_category_id:22},
+    {id:22,slug:"b",name:"B",parent_category_id:21},
+  ]}});
+  assert.deepEqual(result.map(c=>c.id),[11,13,21,22]);
+  assert.equal(result[2].slugPath,null);
+  assert.equal(result[3].slugPath,null);
+  assert.throws(()=>categoryRoutePath(result[2]),/分类层级尚未解析/);
+  assert.equal(MAX_CATEGORY_DEPTH,12);
+  for(const unsafe of [
+    "/c/parent/../leaf/3?page=1",
+    "/c/parent/%2e%2e/leaf/3?page=1",
+    "/tags/c/parent/%2e/leaf/3/rust/7?page=1",
+    "/tags/c/parent//leaf/3/rust/7?page=1",
+  ]) assert.equal(normalizeFeedCursor(unsafe),null,unsafe);
+  assert.throws(()=>categoryRoutePath({id:3,name:"bad",slug:"leaf",topicCount:1,
+    slugPath:"parent/../leaf"}),/分类 slug 无效/);
+  const categories=parseCategories({category_list:{categories:[{
+    id:1,slug:"parent",name:"父",subcategory_list:[{
+      id:2,slug:"child",name:"子",parent_category_id:1
+    }]
+  }]}});
+  assert.deepEqual(categories.map(c=>c.slugPath),["parent","parent/child"]);
 });

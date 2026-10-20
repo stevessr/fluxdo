@@ -1,6 +1,13 @@
 /** Fluxdo NSH 匿名阅读数据层。认证/写操作将由未来的受控 Rust Host 实现。 */
 export type FeedKind = "latest" | "top";
-export interface Category { id: number; name: string; slug: string; topicCount: number; }
+export interface Category {
+  id: number; name: string; slug: string; topicCount: number;
+  /** Canonical ancestry reconstructed from public parent IDs, not server-supplied arbitrary URLs. */
+  slugPath?: string | null;
+  fullName?: string;
+  depth?: number;
+  parentCategoryId?: number | null;
+}
 export interface Tag { id: number; name: string; slug: string; topicCount: number; description: string; }
 export interface Topic {
   id: number;
@@ -137,13 +144,9 @@ export function tagCursorForContext(value: unknown, tag: Tag): string | null {
  * Nested category slug paths are not supported by the current flat Category model.
  */
 export function categoryTagPath(category: Category, tag: Tag, page: number): string {
-  if (!category.slug || category.slug === "." || category.slug === ".." ||
-      category.slug.length > 120 || /[\\/\u0000-\u001f\u007f]/.test(category.slug)) {
-    throw new Error("分类 slug 无效");
-  }
-  const categoryPath = feedPath("latest", category, page).split("?")[0];
+  const categoryPrefix = categoryRoutePath(category);
   const tagRoute = tagPath(tag, page).slice("/tag/".length);
-  return "/tags" + categoryPath.slice(0, -".json".length) + "/" + tagRoute;
+  return "/tags" + categoryPrefix + "/" + tagRoute;
 }
 
 export function categoryTagCursorForContext(
@@ -155,15 +158,85 @@ export function categoryTagCursorForContext(
   return pathname === categoryTagPath(category, tag, 0).split("?")[0] ? cursor : null;
 }
 
+export const MAX_CATEGORY_DEPTH = 12;
+export const MAX_PUBLIC_CATEGORIES = 500;
+
+/** Parse the Discourse category tree while retaining only public display fields.
+ * Orphaned and cyclic ancestry is rendered as unavailable; never guess a shortened route.
+ */
 export function parseCategories(payload: unknown): Category[] {
   const root = record(payload, "分类");
   const group = record(root.category_list, "分类列表");
   if (!Array.isArray(group.categories)) throw new Error("分类列表字段缺失");
-  return group.categories.map((item: unknown) => {
-    const c = record(item, "分类");
-    return {id: positiveId(c.id),name:decodeEntities(asString(c.name)),
-      slug:asString(c.slug),topicCount:asNumber(c.topic_count)};
-  }).filter((x: Category) => x.id > 0 && x.name.length > 0 && x.slug.length > 0);
+  const byId = new Map<number, Category>();
+  const sourceOrder: number[] = [];
+  const visit = (entries: unknown[], enclosing: number | null, depth: number): void => {
+    if (depth > MAX_CATEGORY_DEPTH) return;
+    for (const item of entries) {
+      if (byId.size >= MAX_PUBLIC_CATEGORIES) return;
+      const c = record(item, "分类");
+      const id = positiveId(c.id);
+      const slug = asString(c.slug);
+      const name = decodeEntities(asString(c.name)).slice(0, 160);
+      if (!id || !name || !validCategorySlug(slug) || byId.has(id)) continue;
+      const declaredParent = positiveId(c.parent_category_id) || null;
+      // Nested serializer must not override a different declared parent with a UI hint.
+      if (enclosing !== null && declaredParent !== null && declaredParent !== enclosing) continue;
+      const parentCategoryId = declaredParent ?? enclosing;
+      byId.set(id, {
+        id, name, slug, topicCount: Math.max(0, asNumber(c.topic_count)),
+        parentCategoryId, slugPath: null, depth: 0, fullName: name,
+      });
+      sourceOrder.push(id);
+      if (Array.isArray(c.subcategory_list)) visit(c.subcategory_list, id, depth + 1);
+    }
+  };
+  visit(group.categories, null, 0);
+  const state = new Map<number, "visiting" | "complete">();
+  const resolve = (id: number, depth: number): boolean => {
+    const item = byId.get(id);
+    if (!item || depth > MAX_CATEGORY_DEPTH) return false;
+    if (state.get(id) === "visiting") return false;
+    if (state.get(id) === "complete") return item.slugPath !== null;
+    state.set(id, "visiting");
+    if (item.parentCategoryId === null) {
+      item.slugPath = item.slug;
+      item.fullName = item.name;
+      item.depth = 0;
+    } else {
+      const parent = byId.get(item.parentCategoryId!);
+      if (parent && resolve(parent.id, depth + 1) && parent.slugPath !== null) {
+        item.slugPath = parent.slugPath + "/" + item.slug;
+        item.fullName = parent.fullName + " › " + item.name;
+        item.depth = (parent.depth ?? 0) + 1;
+      }
+    }
+    state.set(id, "complete");
+    return item.slugPath !== null;
+  };
+  for (const id of sourceOrder) resolve(id, 0);
+  return sourceOrder.map(id => byId.get(id)!).filter(Boolean);
+}
+
+/** Accept only structurally safe individual slug segments. */
+function validCategorySlug(value: string): boolean {
+  return value.length > 0 && value.length <= 120 && value !== "." && value !== ".." &&
+    !/[\\/\u0000-\u001f\u007f?#]/.test(value);
+}
+
+/** Each ancestor slug is encoded separately; encoded slashes are not accepted as hierarchy. */
+export function categoryRoutePath(category: Category): string {
+  if (!Number.isSafeInteger(category.id) || category.id <= 0) throw new Error("分类 ID 无效");
+  if (category.slugPath === null) throw new Error("分类层级尚未解析，不能构建请求路径");
+  const segments = category.slugPath === undefined
+    ? [category.slug]
+    : category.slugPath.split("/");
+  if (!segments.length || segments.length > MAX_CATEGORY_DEPTH + 1 ||
+      segments.some(part => !validCategorySlug(part)) ||
+      (category.slugPath !== undefined && segments[segments.length - 1] !== category.slug)) {
+    throw new Error("分类 slug 无效");
+  }
+  return "/c/" + segments.map(x => encodeURIComponent(x)).join("/") + "/" + category.id;
 }
 /**
  * Discourse more_topics_url is the server's cursor (often without .json).
@@ -180,10 +253,12 @@ export function normalizeFeedCursor(value: unknown): string | null {
   if (queryAt <= 0) return null;
   const pathname = candidate.slice(0, queryAt);
   const query = candidate.slice(queryAt + 1);
+  if (pathname.split("/").some(segment =>
+      segment === "." || segment === ".." || /%(?:2e|2f|5c)/i.test(segment))) return null;
   if (!/^(?:\/latest|\/top(?:\/weekly)?)(?:\.json)?$/.test(pathname) &&
-      !/^\/c\/[^/?#\\]+\/[1-9]\d*(?:\/l\/latest)?(?:\.json)?$/.test(pathname) &&
+      !/^\/c\/(?:[^/?#\\]+\/)+[1-9]\d*(?:\/l\/latest)?(?:\.json)?$/.test(pathname) &&
       !/^\/tag\/[^/?#\\]+\/[1-9]\d*(?:\.json)?$/.test(pathname) &&
-      !/^\/tags\/c\/[^/?#\\]+\/[1-9]\d*\/[^/?#\\]+\/[1-9]\d*(?:\.json)?$/.test(pathname)) return null;
+      !/^\/tags\/c\/(?:[^/?#\\]+\/)+[1-9]\d*\/[^/?#\\]+\/[1-9]\d*(?:\.json)?$/.test(pathname)) return null;
   // Do not forward arbitrary query parameters supplied by the server: they
   // could alter the endpoint or contain opaque session/credential values.
   const seen = new Set<string>();
@@ -215,8 +290,8 @@ export function feedCursorForContext(
   if (!cursor) return null;
   const path = cursor.slice(0, cursor.indexOf("?"));
   if (category !== null) {
-    if (!Number.isSafeInteger(category.id) || category.id <= 0 || !category.slug) return null;
-    const prefix = "/c/" + encodeURIComponent(category.slug) + "/" + category.id;
+    let prefix: string;
+    try { prefix = categoryRoutePath(category); } catch { return null; }
     return path === prefix + ".json" || path === prefix + "/l/latest.json" ? cursor : null;
   }
   if (kind === "latest") return path === "/latest.json" ? cursor : null;
@@ -505,8 +580,7 @@ export function feedPath(kind: FeedKind, category: Category | null, page: number
   if (!Number.isSafeInteger(page) || page < 0 || page > 1000) throw new Error("页码超出允许范围");
   if (kind === "top" && category === null) return "/top.json?period=weekly&page=" + page;
   if (category !== null) {
-    if (!Number.isSafeInteger(category.id) || category.id <= 0) throw new Error("分类 ID 无效");
-    return "/c/" + encodeURIComponent(category.slug) + "/" + category.id + ".json?page=" + page;
+    return categoryRoutePath(category) + ".json?page=" + page;
   }
   return "/latest.json?page=" + page;
 }
@@ -538,7 +612,9 @@ export function createPublicReader(
   get: (path: string) => Promise<unknown>,
 ): PublicReader {
   return {
-    async categories() { return parseCategories(await get("/categories.json")); },
+    async categories() {
+      return parseCategories(await get("/categories.json?include_subcategories=true"));
+    },
     async tags() { return parseTags(await get("/tags.json")); },
     async categoryTagTopics(category, tag, pageOrCursor) {
       const path = typeof pageOrCursor === "number"
