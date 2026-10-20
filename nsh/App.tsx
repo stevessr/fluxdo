@@ -129,9 +129,10 @@ function FeedPage(props: {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
           <Text style={{ flex: 1, fontSize: 21, fontWeight: "700", color: palette.text }}>
             {props.category() && props.tag()
-              ? props.category()!.name + " · #" + props.tag()!.name
+              ? (props.category()!.fullName ?? props.category()!.name) + " · #" + props.tag()!.name
               : props.tag() ? "#" + props.tag()!.name
-              : props.category()?.name ?? (props.kind() === "latest" ? "最新话题" : "本周热门")}
+              : props.category()?.fullName ?? props.category()?.name ??
+                (props.kind() === "latest" ? "最新话题" : "本周热门")}
           </Text>
           <Chip label="刷新 ↻" onPress={props.refresh} />
         </View>
@@ -215,6 +216,12 @@ function CategoriesPage(props: {
   filterHint: () => string;
   backToResults: () => void;
 }) {
+  const query = signal("");
+  const displayed = () => {
+    const needle = query().trim().toLocaleLowerCase();
+    return needle ? props.categories().filter(c =>
+      (c.fullName ?? c.name).toLocaleLowerCase().includes(needle)) : props.categories();
+  };
   return (
     <View style={{ flex: 1, gap: 10 }}>
       <View style={{ flexDirection: "row", paddingHorizontal: 16, paddingTop: 13, alignItems: "center", gap: 7 }}>
@@ -230,9 +237,21 @@ function CategoriesPage(props: {
           <Chip label="返回筛选结果" onPress={props.backToResults} />
         </View>
       </If>
+      <View style={{ paddingHorizontal: 14, gap: 7 }}>
+        <Input value={query()} onChangeText={(value) => query.set(value)}
+          placeholder="筛选分类及其父级路径"
+          returnKeyType="search"
+          style={{ fontSize: 14, color: palette.text, backgroundColor: palette.surface,
+            borderWidth: 1, borderColor: palette.border, borderRadius: 12,
+            paddingHorizontal: 13, paddingVertical: 10 }} />
+        <Text style={{ color: palette.muted, fontSize: 12 }}>
+          {props.loading() ? "读取包含子分类的公开目录…" :
+            "已载入 " + props.categories().length + " 个公开分类"}
+        </Text>
+      </View>
       <ErrorView message={props.error} retry={props.refresh} />
       <List
-        each={props.categories()}
+        each={displayed()}
         keyExtractor={(c) => String(c.id)}
         estimatedItemSize={75}
         style={{ flex: 1 }}
@@ -246,18 +265,33 @@ function CategoriesPage(props: {
         }
       >
         {(item) => (
-          <View onPress={() => props.select(item())}
+          <View onPress={() => { if (item().slugPath !== null) props.select(item()); }}
             accessibilityRole="button"
-            accessibilityLabel={"分类：" + item().name}
-            style={{ ...cardStyle(), flexDirection: "row", alignItems: "center" }}
+            accessibilityLabel={"分类：" + (item().fullName ?? item().name)}
+            accessibilityState={{ disabled: item().slugPath === null }}
+            style={{
+              ...cardStyle(), flexDirection: "row", alignItems: "center",
+              marginLeft: Math.min(item().depth ?? 0, 5) * 10,
+            }}
           >
             <View style={{ flex: 1, gap: 5 }}>
-              <Text style={{ color: palette.text, fontSize: 16, fontWeight: "600" }}>{item().name}</Text>
+              <Text style={{ color: palette.text, fontSize: 16, fontWeight: "600" }}>
+                {item().depth ? "↳ " : ""}{item().name}
+              </Text>
+              <If when={(item().depth ?? 0) > 0}>
+                <Text style={{ color: palette.muted, fontSize: 12 }} numberOfLines={2}>
+                  {item().fullName ?? item().name}
+                </Text>
+              </If>
               <Text style={{ color: palette.muted, fontSize: 12 }}>
-                话题 {compactCount(item().topicCount)}
+                {item().slugPath === null
+                  ? "父级缺失或分类层级异常，暂不可打开"
+                  : "话题 " + compactCount(item().topicCount)}
               </Text>
             </View>
-            <Text style={{ color: palette.accent, fontSize: 18 }}>›</Text>
+            <Text style={{ color: palette.accent, fontSize: 18 }}>
+              {item().slugPath === null ? "锁" : "›"}
+            </Text>
           </View>
         )}
       </List>
@@ -1081,6 +1115,7 @@ function App() {
     void refreshFeed();
   };
   const openCategory = (next: Category) => {
+    if (next.slugPath === null) return;
     tab.set("latest");
     category.set(next);
     topics.set([]);
