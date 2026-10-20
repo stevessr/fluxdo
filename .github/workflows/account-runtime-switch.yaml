@@ -90,7 +90,6 @@ jobs:
 
       # 与原有账号运行时测试共用环境，避免再增加一个独立的 PR workflow。
       - name: Check 403 auth guard formatting
-        continue-on-error: true
         run: |
           dart format \
             lib/services/discourse/_auth.dart \
