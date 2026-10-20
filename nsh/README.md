@@ -119,3 +119,12 @@ NSH 具体命令参数应以本机 CLI --help 为准。Linux GTK 4.14+（Wayland
 - **局限**：目前分类数据模型只有单级 slug，层级较深的分类尚不能保证组合路由正确；复杂标签相交、标签管理、用户身份和真实设备 E2E 仍在待办。
 
 验证：[Reader tests PASS](https://github.com/stevessr/fluxdo/actions/runs/39362677743) · [NSH check + 390×844 / 1200×800 trace PASS](https://github.com/stevessr/fluxdo/actions/runs/39362673044)。
+
+## 2026-10-20：多层级分类解析与原生目录导航
+
+- 通过 `GET /categories.json?include_subcategories=true` 请求官方可见的子分类树。解析 `subcategory_list` 和 `parent_category_id`，最多 500 节点/12 级，保留最小化的 `slugPath/fullName/depth` ViewModel。
+- 子分类的消息流与分类+标签交集使用父级到叶子节点的完整 `/c/parent/child/id.json` 与 `/tags/c/parent/child/id/tag/id.json` 路径；不再猜测子分类扁平 slug 的请求 URL。分页游标也必须匹配完整层级路径。
+- 分类目录新增层级缩进、父级面包屑、本地名称筛选、层级缺失提示和禁用状态。缺失父级、循环引用、恶意路径不会降级到错误的同名分类请求。
+- 安全回归覆盖三层分类、平面子分类、孤儿/循环父级、路径污染、非法游标、嵌套分类+标签组合路径；修订旧版允许斜杠嵌入分类 slug 的测试期望。
+- [Node Reader tests PASS](https://github.com/stevessr/fluxdo/actions/runs/39364591864)，[官方 NSH check + 双视口初始 trace PASS](https://github.com/stevessr/fluxdo/actions/runs/39364587857)。
+- **未完成**：服务器真实子分类 E2E、返回栈状态/滚动恢复、全量目录分页，复杂标签交集与 Host/登录/写操作。此处依旧为匿名公开阅读预览。

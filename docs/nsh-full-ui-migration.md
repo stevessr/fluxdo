@@ -117,3 +117,14 @@
 - [ ] Native/Rust Host 会话隔离及 read/write、Rich Composer、Chat、Boards、插件与完整 Flutter 对照验收，均未完成。
 
 保持本分支为 Draft，保留 Flutter 正式客户端与现有发布路径。
+
+## 2026-10-20：多级分类路径安全完成（P1 深化）
+
+- [x] 依据官方 `CategoryDetailedSerializer` 的 `subcategory_list` 与 `parent_category_id`，显式拉取子分类并在本地验证、拼接祖先链和显示层级。
+- [x] 子分类 `/c/:ancestor/:descendant/:id.json` 与分类+标签 `/tags/c/:ancestor/:descendant/:id/:tag_slug/:tag_id.json` 统一使用严格生成的路径，连同服务端 `more_topics_url` 做完整路径白名单验证。
+- [x] 缺失父级/循环/不一致嵌套/不安全 slug 返回不可访问而非猜测祖先；NSH 分类页显示父子缩进、面包屑和本地过滤。
+- [x] Reader + TypeScript 单测：[39364591864 成功](https://github.com/stevessr/fluxdo/actions/runs/39364591864)；NSH native check + 390×844 / 1200×800 initial trace：[39364587857 成功](https://github.com/stevessr/fluxdo/actions/runs/39364587857)。
+- [ ] 真实 Linux.do API 各级权限下的嵌套目录、分页、返回位置与 Wayland/Android 实机 E2E。
+- [ ] 完整 Native Host 会话生命周期/插件服务、登录账户隔离、Composer/Chat/Boards 编辑能力与 Flutter 功能等价核销。
+
+继续保持 Draft 和 Flutter 独立发布路径，不可直接合并。
