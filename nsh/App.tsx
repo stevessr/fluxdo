@@ -4,7 +4,7 @@ import { List } from "nsh/list";
 import { createNavigator, SafeAreaView, Screen, Stack, StatusBar } from "nsh/ui/mobile";
 import {
   compactCount, dedupeTopics, mergePosts, mergeSearchHits, POSTS_PER_BATCH, publicReader,
-  type Category, type FeedKind, type Post, type SearchHit, type Topic,
+  type Category, type FeedKind, type Post, type SearchHit, type Topic, type PublicUserProfile,
 } from "./data";
 import { RequestGate } from "./request_gate";
 
@@ -12,7 +12,7 @@ import { RequestGate } from "./request_gate";
  * Native Shell 正式迁移目录的第一个独立入口。
  * 当前只读、匿名，不使用 Flutter Cookie 或 JS 凭据。
  */
-type Tab = "latest" | "top" | "categories" | "search" | "about";
+type Tab = "latest" | "top" | "categories" | "search" | "users" | "about";
 type Route = { name: "home" } | { name: "topic" };
 const nav = createNavigator<Route>({ name: "home" });
 
@@ -323,6 +323,66 @@ function SearchPage(props: {
   );
 }
 
+function ProfilePage(props: {
+  username: () => string;
+  changeUsername: (name: string) => void;
+  lookup: () => void;
+  loading: () => boolean;
+  attempted: () => boolean;
+  error: () => string;
+  profile: () => PublicUserProfile | null;
+}) {
+  return (
+    <Scroll style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 13 }}>
+      <Text style={{ color: palette.text, fontSize: 21, fontWeight: "700" }}>公开用户资料</Text>
+      <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 19 }}>
+        输入 Linux.do 用户名，仅读取可公开访问的资料；不登录、不获取私人信息。
+      </Text>
+      <Input
+        value={props.username()}
+        onChangeText={props.changeUsername}
+        placeholder="输入用户名，例如 @steve"
+        returnKeyType="search"
+        style={{
+          fontSize: 14, color: palette.text, backgroundColor: palette.surface,
+          borderWidth: 1, borderColor: palette.border, borderRadius: 12,
+          paddingHorizontal: 13, paddingVertical: 11,
+        }}
+      />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <Chip label={props.loading() ? "查询中…" : "查询资料"} onPress={props.lookup} />
+        <Text style={{ color: palette.muted, fontSize: 12, flex: 1 }}>
+          {props.loading() ? "正在读取公开资料…" :
+            props.attempted() ? "查询结束" : "可查询公开资料"}
+        </Text>
+      </View>
+      <ErrorView message={props.error} retry={props.lookup} />
+      <If when={props.profile() !== null}>
+        <View style={cardStyle()}>
+          <Text style={{ fontSize: 20, fontWeight: "700", color: palette.text }}>
+            {props.profile()?.name || props.profile()?.username || ""}
+          </Text>
+          <Text style={{ color: palette.accent, fontSize: 14 }}>
+            @{props.profile()?.username ?? ""}
+          </Text>
+          <If when={!!props.profile()?.title}>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>{props.profile()?.title ?? ""}</Text>
+          </If>
+          <Text style={{ color: palette.muted, fontSize: 13 }}>
+            信任等级 {props.profile()?.trustLevel ?? 0} · 帖子 {compactCount(props.profile()?.postCount ?? 0)}
+          </Text>
+        </View>
+        <View style={cardStyle()}>
+          <Text style={{ fontSize: 15, fontWeight: "600", color: palette.text }}>个人简介</Text>
+          <Text style={{ fontSize: 14, color: palette.text, lineHeight: 22 }}>
+            {props.profile()?.bio || "该用户没有可公开显示的简介"}
+          </Text>
+        </View>
+      </If>
+    </Scroll>
+  );
+}
+
 function InfoPage() {
   return (
     <Scroll style={{ flex: 1 }} contentContainerStyle={{ padding: 18, gap: 15 }}>
@@ -330,7 +390,7 @@ function InfoPage() {
       <View style={cardStyle()}>
         <Text style={{ fontSize: 16, fontWeight: "600", color: palette.text }}>独立原生 UI 开发预览</Text>
         <Text style={{ fontSize: 14, lineHeight: 21, color: palette.muted }}>
-          当前支持 Linux.do 公开信息流、分类、搜索及话题纯文本阅读。
+          当前支持 Linux.do 公开信息流、分类、搜索、用户资料查询及话题纯文本阅读。
           账户登录、回复、附件上传、Chat 与设置尚未迁移，旧 Flutter 正式版继续提供这些功能。
         </Text>
       </View>
@@ -474,6 +534,11 @@ function App() {
   const searchLoadingMore = signal(false);
   const searchHasMore = signal(false);
   const searchError = signal("");
+  const profileName = signal("");
+  const userProfile = signal<PublicUserProfile | null>(null);
+  const profileLoading = signal(false);
+  const profileAttempted = signal(false);
+  const profileError = signal("");
   const selected = signal<Topic | null>(null);
   const targetPostNumber = signal<number | null>(null);
   const posts = signal<Post[]>([]);
@@ -485,6 +550,7 @@ function App() {
   const feedGate = new RequestGate();
   const categoryGate = new RequestGate();
   const searchGate = new RequestGate();
+  const profileGate = new RequestGate();
   const detailGate = new RequestGate();
   let nextFeedCursor: string | null = null;
   let visitedFeedCursors = new Set<string>();
@@ -619,6 +685,38 @@ function App() {
     else void submitSearch();
   };
 
+  const changeProfileName = (name: string) => {
+    profileGate.invalidate();
+    profileName.set(name);
+    userProfile.set(null);
+    profileError.set("");
+    profileLoading.set(false);
+    profileAttempted.set(false);
+  };
+
+  const lookupProfile = async () => {
+    if (profileLoading()) return;
+    const ticket = profileGate.next();
+    profileLoading.set(true);
+    profileAttempted.set(false);
+    profileError.set("");
+    userProfile.set(null);
+    try {
+      const profile = await publicReader.profile(profileName());
+      if (profileGate.isCurrent(ticket)) {
+        userProfile.set(profile);
+        profileAttempted.set(true);
+      }
+    } catch (e) {
+      if (profileGate.isCurrent(ticket)) {
+        profileError.set(String(e));
+        profileAttempted.set(true);
+      }
+    } finally {
+      if (profileGate.isCurrent(ticket)) profileLoading.set(false);
+    }
+  };
+
   const changeTab = (next: Tab) => {
     if (tab() === next && category() === null) return;
     tab.set(next);
@@ -721,7 +819,7 @@ function App() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "latest", label: "最新" }, { key: "top", label: "热门" },
     { key: "categories", label: "分类" }, { key: "search", label: "搜索" },
-    { key: "about", label: "关于" },
+    { key: "users", label: "用户" }, { key: "about", label: "关于" },
   ];
 
   function Tabs(props: { vertical: boolean }) {
@@ -749,7 +847,8 @@ function App() {
   function Content() {
     return (
       <View style={{ flex: 1 }}>
-        <If when={tab() === "categories"} else={
+        <If when={tab() === "users"} else={
+          <If when={tab() === "categories"} else={
           <If when={tab() === "about"} else={
             <If when={tab() === "search"} else={
               <FeedPage kind={readKind} category={category} clearCategory={closeCategory}
@@ -770,6 +869,11 @@ function App() {
         }>
           <CategoriesPage categories={categories} loading={categoriesLoading}
             error={categoriesError} refresh={() => { void refreshCategories(); }} select={openCategory} />
+          </If>
+        }>
+          <ProfilePage username={profileName} changeUsername={changeProfileName}
+            lookup={() => { void lookupProfile(); }} loading={profileLoading}
+            attempted={profileAttempted} error={profileError} profile={userProfile} />
         </If>
       </View>
     );
