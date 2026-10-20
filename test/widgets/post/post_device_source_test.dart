@@ -93,13 +93,54 @@ void main() {
         );
         expect(
           tester.getSize(find.byType(TextButton)).height,
-          greaterThanOrEqualTo(44),
+          greaterThanOrEqualTo(32),
         );
+        final buttonRect = tester.getRect(find.byType(TextButton));
+        final textRect = tester.getRect(find.text('来自 $device'));
+        final sourceRect = tester.getRect(find.byType(PostDeviceSource));
+        expect(textRect.left, closeTo(sourceRect.left, 0.01));
+        if (scale == 1) {
+          expect(buttonRect.height, lessThan(44));
+        }
         expect(find.bySemanticsLabel('来自 $device'), findsOneWidget);
         expect(tester.takeException(), isNull);
       }
     }
     semantics.dispose();
+  });
+
+  testWidgets('按住仅淡化文字，取消后恢复且不改变对齐位置', (tester) async {
+    for (final brightness in Brightness.values) {
+      await tester.pumpWidget(app(brightness: brightness));
+      final button = find.byType(TextButton);
+      final label = find.text('来自 iPhone 17 Pro Max');
+      final before = tester.getRect(label);
+      final opacity = find.descendant(
+        of: find.byType(PostDeviceSource),
+        matching: find.byType(AnimatedOpacity),
+      );
+      expect(tester.widget<AnimatedOpacity>(opacity).opacity, 1);
+      final gesture = await tester.startGesture(tester.getCenter(button));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.widget<AnimatedOpacity>(opacity).opacity, 0.55);
+      expect(tester.getRect(label), before);
+      final style = tester.widget<TextButton>(button).style!;
+      expect(
+        style.overlayColor!.resolve({WidgetState.pressed}),
+        Colors.transparent,
+      );
+      expect(
+        style.backgroundColor!.resolve({WidgetState.pressed}),
+        Colors.transparent,
+      );
+      expect(style.splashFactory, NoSplash.splashFactory);
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedOpacity>(opacity).opacity, 1);
+      expect(tester.getRect(label), before);
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('点击可查看并选择完整型号，关闭后回到帖子', (tester) async {

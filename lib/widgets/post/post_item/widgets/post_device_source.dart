@@ -35,20 +35,30 @@ class PostDeviceSource extends StatelessWidget {
               ],
             ),
           ),
-          style: TextButton.styleFrom(
-            foregroundColor: theme.colorScheme.onSurfaceVariant,
-            textStyle: theme.textTheme.bodySmall?.copyWith(
-              fontSize: 12,
-              height: 1.4,
-            ),
-            alignment: AlignmentDirectional.centerStart,
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(44, 44),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
+          style:
+              TextButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                overlayColor: Colors.transparent,
+                splashFactory: NoSplash.splashFactory,
+                foregroundColor: theme.colorScheme.onSurfaceVariant,
+                textStyle: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 11,
+                  height: 1.4,
+                ),
+                alignment: AlignmentDirectional.centerStart,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                minimumSize: const Size(44, 32),
+                visualDensity: VisualDensity.standard,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ).copyWith(
+                foregroundBuilder: (context, states, child) => AnimatedOpacity(
+                  opacity: states.contains(WidgetState.pressed) ? 0.55 : 1,
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 100),
+                  child: child,
+                ),
+              ),
           child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ),

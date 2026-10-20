@@ -597,9 +597,11 @@ class PreloadedDataService {
   void debugSeed({
     Map<String, dynamic>? currentUser,
     Map<String, dynamic>? siteSettings,
+    bool markLoaded = false,
   }) {
     _currentUser = currentUser;
     _siteSettings = siteSettings;
+    _loaded = markLoaded;
   }
 
   /// 测试用：模拟首屏放行后自定义表情才到达，以及站点切换。
@@ -643,7 +645,8 @@ class PreloadedDataService {
     while (!_loaded) {
       final revision = _dataRevision;
       final generation = AuthSession().generation;
-      final joinedStaleLoad = _loadingFuture != null &&
+      final joinedStaleLoad =
+          _loadingFuture != null &&
           (_activeLoadRevision != revision ||
               _activeLoadGeneration != generation);
 

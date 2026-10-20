@@ -674,7 +674,6 @@ mixin _TopicsMixin on _DiscourseServiceBase {
   }) async* {
     final endpoint = '/discourse-ai/summarization/t/$topicId';
 
-
     final messageBus = MessageBusService();
     final channel = '/discourse-ai/summaries/topic/$topicId';
     final updates = StreamController<Map<String, dynamic>>();

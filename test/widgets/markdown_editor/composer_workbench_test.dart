@@ -34,6 +34,8 @@ import 'package:fluxdo/services/discourse_cook_service.dart';
 import 'package:fluxdo/widgets/markdown_editor/markdown_editor.dart';
 import 'package:fluxdo/widgets/markdown_editor/emoji_sticker_panel.dart';
 import 'package:fluxdo/widgets/markdown_editor/rich_composer/rich_composer_editor.dart';
+import 'package:fluxdo/widgets/markdown_editor/image_upload_dialog.dart';
+import 'package:fluxdo/widgets/markdown_editor/uploads/upload_task_panel.dart';
 import 'package:fluxdo/widgets/topic/topic_editor_helpers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fluxdo_render/editor.dart';
@@ -43,7 +45,7 @@ import 'package:fluxdo/widgets/markdown_editor/rich_composer/composer_import_pip
 import 'package:fluxdo_render/src/editor/widget/editor_caret.dart';
 import 'package:fluxdo_render/src/editor/widget/editor_table_grid.dart';
 import 'package:fluxdo_render/fluxdo_render.dart'
-    show ImageRun, LinkRun, TextRun;
+    show ImageRun, ImageGridNode, LinkRun, TextRun;
 
 Future<void> _pump(
   WidgetTester tester,
@@ -868,6 +870,151 @@ void main() {
     editor.undo();
     key.currentState!.flushToController();
     expect(controller.text, '前后');
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+  });
+
+  for (final name in [
+    '图片.png',
+    '附件.pdf',
+    '视频.mp4.xz',
+    '音频.mp3.xz',
+    '录音.m4a.xz',
+  ]) {
+    testWidgets('富文本上传只在正文展示一张卡片 $name', (tester) async {
+      final controller = TextEditingController();
+      final key = GlobalKey<RichComposerEditorState>();
+      await _pump(tester, RichComposerEditor(key: key, controller: controller));
+      await tester.pump(const Duration(milliseconds: 800));
+      final completion = Completer<UploadResult>();
+      var executions = 0;
+      key.currentState!.queueUpload(
+        '/模拟/$name',
+        name,
+        image: name.endsWith('.png'),
+        execute: (_, _) {
+          executions++;
+          return completion.future;
+        },
+      );
+      await tester.pump();
+      expect(executions, 1);
+      expect(find.byType(UploadTaskCard), findsOneWidget);
+      expect(find.textContaining(S.current.editorUploads_title), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(FluxdoEditor),
+          matching: find.byType(UploadTaskCard),
+        ),
+        findsOneWidget,
+      );
+      completion.completeError(StateError('模拟上传失败'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(UploadTaskCard), findsOneWidget);
+      expect(find.byTooltip(S.current.common_retry), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+    });
+  }
+
+  testWidgets('富文本上传占位撤销后兜底，重做后去重，失败仍可重试取消', (tester) async {
+    final controller = TextEditingController();
+    final key = GlobalKey<RichComposerEditorState>();
+    await _pump(tester, RichComposerEditor(key: key, controller: controller));
+    await tester.pump(const Duration(milliseconds: 800));
+    final editor = tester.widget<FluxdoEditor>(find.byType(FluxdoEditor)).state;
+    editor.insertText('保留正文');
+    var completion = Completer<UploadResult>();
+    var executions = 0;
+    key.currentState!.queueUpload(
+      '/模拟/图片.png',
+      '撤销上传',
+      image: true,
+      execute: (_, _) {
+        executions++;
+        return completion.future;
+      },
+    );
+    await tester.pump();
+    expect(find.byType(UploadTaskCard), findsOneWidget);
+    editor.undo();
+    await tester.pump();
+    expect(find.byType(UploadTaskCard), findsOneWidget);
+    expect(find.textContaining(S.current.editorUploads_title), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(FluxdoEditor),
+        matching: find.byType(UploadTaskCard),
+      ),
+      findsNothing,
+    );
+    completion.completeError(StateError('模拟上传失败'));
+    await tester.pump();
+    await tester.pump();
+    completion = Completer<UploadResult>();
+    await tester.tap(find.byTooltip(S.current.common_retry));
+    await tester.pump();
+    expect(executions, 2);
+    editor.redo();
+    await tester.pump();
+    expect(find.byType(UploadTaskCard), findsOneWidget);
+    expect(find.textContaining(S.current.editorUploads_title), findsNothing);
+    expect(executions, 2);
+    await tester.tap(find.byTooltip(S.current.common_cancel));
+    await tester.pump();
+    expect(key.currentState!.hasPendingUploads, false);
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+  });
+
+  testWidgets('富文本图片组追加失败只展示组内瓦片并可重试', (tester) async {
+    const picker = MethodChannel('plugins.flutter.io/image_picker');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      picker,
+      (_) async => ['/模拟/组内图片.png'],
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        picker,
+        null,
+      ),
+    );
+    final controller = TextEditingController();
+    await _pump(tester, RichComposerEditor(controller: controller));
+    await tester.pump(const Duration(milliseconds: 800));
+    final editor = tester.widget<FluxdoEditor>(find.byType(FluxdoEditor));
+    editor.state.pasteBlocks([
+      const IslandBlock(
+        id: 'group',
+        node: ImageGridNode(
+          id: 'grid-node',
+          images: [ImageRun(src: 'a', width: 120, height: 80)],
+        ),
+      ),
+    ]);
+    await tester.pump();
+    final group = editor.state.blocks.whereType<IslandBlock>().single;
+    editor.onAddGridImages!(group.id);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(ImageUploadDialog), findsOneWidget);
+    Navigator.of(tester.element(find.byType(ImageUploadDialog)))
+        .pop(ImageUploadResult(path: '/模拟/组内图片.png', originalName: '组内图片.png'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    // 文件不存在让真实上传入口在本地失败，无需发送网络请求。
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    expect(find.byType(UploadGridTile), findsOneWidget);
+    expect(find.byType(UploadTaskCard), findsNothing);
+    expect(find.textContaining(S.current.editorUploads_title), findsNothing);
+    expect(find.text(S.current.common_retry), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.refresh_rounded));
+    await tester.pump();
+    expect(find.byTooltip(S.current.common_cancel), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
   });
@@ -1848,14 +1995,8 @@ void main() {
               width: 640,
               height: 700,
               child: rich
-                  ? RichComposerEditor(
-                      controller: controller,
-                      focusNode: focus,
-                    )
-                  : MarkdownEditor(
-                      controller: controller,
-                      focusNode: focus,
-                    ),
+                  ? RichComposerEditor(controller: controller, focusNode: focus)
+                  : MarkdownEditor(controller: controller, focusNode: focus),
             ),
           ),
           width: 1200,
@@ -1892,9 +2033,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         expect(panel, findsNothing);
         expect(
-          tester.getSize(
-            find.byKey(const ValueKey('composer-keyboard-space')),
-          ).height,
+          tester
+              .getSize(find.byKey(const ValueKey('composer-keyboard-space')))
+              .height,
           24,
         );
         await tester.tap(find.byTooltip(S.current.composer_expandToolbar));

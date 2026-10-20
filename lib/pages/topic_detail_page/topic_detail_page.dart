@@ -34,8 +34,9 @@ import 'dart:math' as math;
 
 import '../../models/draft.dart';
 import '../../models/nested_topic.dart';
+import '../../models/nested_reading_position.dart';
+import '../../providers/nested_reading_provider.dart';
 import '../../models/topic.dart';
-import '../../models/user.dart';
 import '../../models/pending_post.dart';
 import '../../utils/blocked_user_filter.dart';
 import '../../utils/responsive.dart';
@@ -43,7 +44,6 @@ import '../../utils/share_utils.dart';
 import '../../providers/preferences_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../reading_settings_page.dart';
-import '../webview_page.dart';
 import '../../providers/selected_topic_provider.dart';
 import '../../providers/discourse_providers.dart';
 import '../../providers/message_bus_providers.dart';
@@ -74,8 +74,10 @@ import '../../providers/nested_topic_provider.dart';
 import 'controllers/topic_detail_controller.dart';
 import 'controllers/topic_toc_controller.dart';
 import 'widgets/nested_post_list.dart';
+import 'widgets/invite_private_message_dialog.dart';
 import 'widgets/topic_detail_overlay.dart';
 import 'widgets/topic_post_list.dart';
+import '../webview_page.dart';
 import 'widgets/topic_toc_panel.dart';
 import 'widgets/topic_detail_header.dart';
 import '../../widgets/layout/master_detail_layout.dart';
@@ -98,11 +100,8 @@ import '../../widgets/common/app_bottom_sheet.dart';
 import '../../utils/platform_utils.dart';
 import '../../models/shortcut_binding.dart';
 import '../../providers/shortcut_provider.dart';
-import '../../widgets/common/smart_avatar.dart';
-import '../../widgets/user/account_switcher_sheet.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
 import '../../widgets/topic/assign_sheet.dart';
-import '../../widgets/topic/add_to_board_sheet.dart';
 
 part 'actions/_scroll_actions.dart';
 part 'actions/_user_actions.dart';
@@ -225,6 +224,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   bool _isCheckTitleVisibilityScheduled = false;
   bool _isRefreshing = false;
   int? _removingPrivateMessageParticipantId;
+  String? _removingPrivateMessageGroupName;
+  bool _isTogglingArchiveMessage = false;
 
   /// 本地屏蔽名单过滤缓存：provider 状态与名单实例都未变时复用同一份
   /// 过滤结果，保证同一帧内多处读取拿到 identical 的 posts 列表
@@ -250,6 +251,16 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   int? _nestedTargetPostNumber; // 树形 context 定位的目标楼层（通知等带楼层进入）
   int _nestedRelocateToken = 0; // 同目标重跳令牌:递增触发 NestedPostList 重新滚动定位+高亮重播
   bool _nestedAutoEnabled = false; // 树形视图是否为默认配置自动开启（失败时静默回落平铺）
+  late NestedReadingStore _nestedReadingStore;
+  late NestedReadingSession _nestedReadingSession;
+  NestedReadingPosition? _nestedResumePosition;
+  NestedReadingPosition? _nestedRestorePosition;
+  NestedReadingPosition? get _nestedBrowsePosition =>
+      _nestedReadingSession.browsePosition;
+  set _nestedBrowsePosition(NestedReadingPosition? value) =>
+      _nestedReadingSession.browsePosition = value;
+  int? _nestedFullTarget;
+  bool _hadNestedSession = false;
   bool _nestedFallbackNotified = false; // 回落提示只弹一次
   // 搜索相关
   final TextEditingController _searchController = TextEditingController();
@@ -322,6 +333,27 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     WidgetsBinding.instance.addObserver(this);
     _isParentActive = widget.parentActive;
     _providerPostNumber = widget.scrollToPostNumber;
+    _nestedReadingStore = ref.read(nestedReadingStoreProvider);
+    _hadNestedSession =
+        _nestedReadingStore.existingSession(_instanceId) != null;
+    _nestedReadingSession = _nestedReadingStore.session(_instanceId);
+    if (!_hadNestedSession) {
+      _nestedReadingSession.sort = _nestedReadingStore.sort;
+    }
+    _nestedResumePosition = _nestedReadingStore.position(widget.topicId);
+    if (_hadNestedSession) {
+      _nestedRestorePosition = _nestedReadingSession.position;
+    }
+    _isNestedView = _hadNestedSession
+        ? _nestedReadingSession.enabled
+        : ref.read(preferencesProvider).defaultNestedView;
+    _nestedReadingSession.enabled = _isNestedView;
+    _nestedAutoEnabled = _isNestedView;
+    _nestedTargetPostNumber = _hadNestedSession
+        ? _nestedReadingSession.contextTarget
+        : (widget.scrollToPostNumber != null && widget.scrollToPostNumber! > 1
+              ? widget.scrollToPostNumber
+              : null);
     _searchFocusNode = FocusNode(onKeyEvent: _handleSearchKeyEvent);
 
     _expandController = AnimationController(
@@ -691,6 +723,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     Navigator.of(context).maybePop();
   }
 
+  /// 刷新三个私信列表（收件箱 / 已发送 / 归档）：成员变动与归档都会挪动
+  /// 私信在这三档里的归属。
   void _invalidatePrivateMessageLists() {
     ref.invalidate(pmInboxProvider);
     ref.invalidate(pmSentProvider);
@@ -703,8 +737,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   /// 仍把这条话题留在屏幕上。
   void _leaveTopicPage() {
     if (!mounted) return;
-    // 被移出后必须直接离开私信，不能复用 Esc 语义：
-    // 后者会在搜索或 AI 页中只退出子模式，仍把无权访问的私信留在屏幕上。
     if (widget.embeddedMode) {
       widget.onEmbeddedBack?.call();
       return;
@@ -853,6 +885,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     _currentPageNotifier.dispose();
     _controller.scrollController.removeListener(_onScroll);
     _screenTrack.stop();
+    unawaited(_nestedReadingStore.flush());
     _controller.dispose();
     _tocController.dispose();
     if (PlatformUtils.isDesktop) {
@@ -868,6 +901,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final hasFocus = state == AppLifecycleState.resumed;
     _screenTrack.setHasFocus(hasFocus);
+    if (!hasFocus) {
+      unawaited(_nestedReadingStore.flush());
+    }
   }
 
   @override
@@ -901,6 +937,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   void _setRouteVisible(bool visible, String reason) {
     if (_isRouteVisible == visible) return;
     _isRouteVisible = visible;
+    if (mounted && _isNestedView) setState(() {});
     _syncScreenTrackState(reason: reason);
   }
 
@@ -1090,20 +1127,63 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     if (route.isActive) navigator.removeRoute(route);
   }
 
+  Future<void> _resumeNestedReading() async {
+    final saved = _nestedResumePosition;
+    if (saved == null) return;
+    await _nestedReadingStore.setSort(saved.sort);
+    if (!mounted) return;
+    _nestedReadingSession.sort = saved.sort;
+    _nestedReadingSession.expanded.addAll(saved.expanded);
+    await _jumpToPostInTopic(saved.postNumber, restorePosition: saved);
+    _nestedBrowsePosition = null;
+    final params = _activeNestedParams;
+    try {
+      final data = await ref.read(nestedTopicProvider(params).future);
+      if (mounted &&
+          _nestedTargetPostNumber == saved.postNumber &&
+          data.sort != saved.sort) {
+        await ref
+            .read(nestedTopicProvider(params).notifier)
+            .changeSort(saved.sort);
+      }
+    } catch (_) {
+      // 定位接口失败由树形视图的错误/平铺回落入口处理。
+    }
+  }
+
+  void _returnToFullNestedTopic() {
+    final position = _nestedBrowsePosition ?? _nestedReadingSession.position;
+    final target = position?.postNumber ?? _nestedTargetPostNumber;
+    setState(() {
+      _nestedRestorePosition = position;
+      _nestedFullTarget = target;
+      _nestedTargetPostNumber = null;
+      _nestedReadingSession.contextTarget = null;
+    });
+  }
+
   /// 话题内跳转统一入口（对齐 Discourse nested 视图的路由层重定向思路：
   /// 网页版所有带楼层 URL 在 nested 话题下由 topic/from-params 统一
   /// replaceWith 到 nestedPost context 路由，各功能对视图模式零感知）。
   ///
   /// 树形视图下平铺滚动定位链路不可用（平铺列表未挂载），带楼层跳转
   /// 一律切 context 定位视图（祖先链+目标+子树）；平铺下走原滚动定位。
-  Future<void> _jumpToPostInTopic(int postNumber) async {
+  Future<void> _jumpToPostInTopic(
+    int postNumber, {
+    NestedReadingPosition? restorePosition,
+  }) async {
     if (_isNestedView) {
       if (postNumber <= 1) {
         // OP 恒在树形视图顶部区域，直接回顶
         await _controller.scrollToTop();
         return;
       }
+      if (_nestedTargetPostNumber == null) {
+        _nestedBrowsePosition = _nestedReadingSession.position;
+      }
       setState(() {
+        _nestedReadingSession.contextTarget = postNumber;
+        _nestedRestorePosition = restorePosition;
         // 同目标重跳也要生效（滚走后想跳回来）：递增令牌触发
         // NestedPostList 重置定位守卫、换 key 重播高亮。
         _nestedRelocateToken++;
@@ -1180,7 +1260,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
 
     // 搜索模式下的 AppBar
     if (searchState.isSearchMode) {
-      final profileAction = _buildProfileSwitcherAction();
       return AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: theme.colorScheme.surface,
@@ -1206,7 +1285,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             icon: const Icon(Symbols.close_rounded),
             onPressed: _exitSearchMode,
           ),
-          if (profileAction != null) profileAction,
         ],
       );
     }
@@ -1367,7 +1445,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     required TopicDetailNotifier notifier,
     required double elevation,
   }) {
-    final profileAction = _buildProfileSwitcherAction();
     return MobileTopicWorkspaceAppBar(
       backButtonKey: const ValueKey('bookmark-workspace-mobile-back'),
       closeButtonKey: const ValueKey('bookmark-workspace-mobile-close'),
@@ -1395,7 +1472,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             notifier: notifier,
             canEditTopic: _canEditTopic(detail),
           ),
-        if (profileAction != null) profileAction,
       ],
     );
   }
@@ -1477,40 +1553,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     );
   }
 
-  Widget? _buildProfileSwitcherAction() {
-    final currentUser = ref.watch(currentUserProvider).value;
-    if (currentUser == null) return null;
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Tooltip(
-        message: context.l10n.accountManage_title,
-        child: Material(
-          type: MaterialType.transparency,
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => unawaited(AccountSwitcherSheet.showClassic(context)),
-            onLongPress: () => unawaited(
-              AccountSwitcherSheet.show(
-                context,
-                placement: AccountQuickSwitcherPlacement.topRight,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: SmartAvatar(
-                imageUrl: currentUser.getAvatarUrl(),
-                radius: 14,
-                fallbackText: currentUser.username,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   /// 构建 AppBar Actions
   List<Widget> _buildAppBarActions({
     required TopicDetail? detail,
@@ -1518,9 +1560,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     required bool shouldShowTitle,
     required double expandProgress,
   }) {
-    final profileAction = _buildProfileSwitcherAction();
     if (detail == null) {
-      return [if (profileAction != null) profileAction];
+      return [];
     }
 
     final canEditTopic = _canEditTopic(detail);
@@ -1550,7 +1591,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         notifier: notifier,
         canEditTopic: canEditTopic,
       ),
-      if (profileAction != null) profileAction,
     ];
   }
 
@@ -1584,6 +1624,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     final isOtherUserFilter = userFilter != null && !isAuthorFilter;
     final bool subscribed =
         detail.notificationLevel.value >= TopicNotificationLevel.tracking.value;
+
     void doBookmark() {
       final traceTarget = _bookmarkEditTarget(detail);
       final traceId = createBookmarkEditTraceId();
@@ -1669,26 +1710,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             icon: Symbols.link_rounded,
             tooltip: context.l10n.topicDetail_shareLink,
             onTap: _shareTopic,
-          ),
-        // 私信：归档/移回收件箱 + 成员管理
-        if (detail.isPrivateMessage)
-          MenuQuickAction(
-            icon: detail.archived
-                ? Symbols.inbox_rounded
-                : Symbols.archive_rounded,
-            tooltip: detail.archived
-                ? context.l10n.topicDetail_moveToInbox
-                : context.l10n.topicDetail_archivePrivateMessage,
-            onTap: detail.archived
-                ? () => _handleMoveToInbox(notifier)
-                : () => _handleArchive(notifier),
-          ),
-        if (detail.isPrivateMessage)
-          MenuQuickAction(
-            icon: Symbols.people_rounded,
-            tooltip: context.l10n.topic_participants,
-            active: detail.allowedUsers.isNotEmpty,
-            onTap: () => _showParticipantsDialog(detail, notifier),
           ),
         MenuQuickAction(
           icon: Symbols.filter_list_rounded,
@@ -1831,16 +1852,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         handleTopicDetailMoreMenuSelection(
           value,
           onEditTopic: () => unawaited(_handleEditTopic()),
-          onAddToBoard: () {
-            // Avoid overlapping the popup's exit transition with a new modal.
-            unawaited(Future<void>.delayed(Duration.zero, () {
-              if (!mounted) return;
-              unawaited(showAddTopicToBoardSheet(
-                context,
-                topicId: widget.topicId,
-              ));
-            }));
-          },
           onBookmark: () => unawaited(
             _handleBookmark(
               notifier,
@@ -1857,10 +1868,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           onShareImage: _shareAsImage,
           onExport: _showExportSheet,
           onOpenInBrowser: _openInBrowser,
-          onOpenInBuiltInBrowser: _openInBuiltInBrowser,
           onFilter: _showFilterSheet,
-          onToggleArchiveMessage: () =>
-              unawaited(_handleToggleArchiveMessage(notifier)),
           onReadingSettings: () {
             Navigator.push(
               context,
@@ -1956,42 +1964,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             ],
           ),
         ),
-        PopupMenuItem(
-          value: 'open_in_built_in_browser',
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Symbols.open_in_browser_rounded,
-                size: 20,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-              const SizedBox(width: 12),
-              Text(context.l10n.topicDetail_openInBuiltInBrowser),
-            ],
-          ),
-        ),
-        if (!detail.isPrivateMessage &&
-            ref.read(currentUserProvider).value != null)
-          PopupMenuItem(
-            value: 'add_to_board',
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.view_kanban_outlined,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  Localizations.localeOf(context).languageCode == 'zh'
-                      ? '添加到看板'
-                      : 'Add to board',
-                ),
-              ],
-            ),
-          ),
         if (canAssignTopic)
           PopupMenuItem(
             value: 'assign',
@@ -2050,117 +2022,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           ),
         ),
       ],
-    );
-  }
-
-  /// 归档当前私信
-  Future<void> _handleArchive(TopicDetailNotifier notifier) async {
-    final detail = ref.read(topicDetailProvider(_params)).value;
-    if (detail == null || !detail.isPrivateMessage) return;
-
-    try {
-      await notifier.archivePrivateMessage();
-      if (!mounted) return;
-      ToastService.showSuccess(context.l10n.topicDetail_archivePrivateMessage);
-      ref.invalidate(pmInboxProvider);
-      ref.invalidate(pmArchiveProvider);
-    } catch (error) {
-      if (mounted) {
-        ToastService.showError(context.l10n.common_operationFailed('$error'));
-      }
-    }
-  }
-
-  /// 将私信移回收件箱（取消归档）
-  Future<void> _handleMoveToInbox(TopicDetailNotifier notifier) async {
-    final detail = ref.read(topicDetailProvider(_params)).value;
-    if (detail == null || !detail.isPrivateMessage) return;
-
-    try {
-      await notifier.movePrivateMessageToInbox();
-      if (!mounted) return;
-      ToastService.showSuccess(context.l10n.topicDetail_moveToInbox);
-      ref.invalidate(pmInboxProvider);
-      ref.invalidate(pmArchiveProvider);
-    } catch (error) {
-      if (mounted) {
-        ToastService.showError(context.l10n.common_operationFailed('$error'));
-      }
-    }
-  }
-
-  /// 在更多菜单中切换当前私信的个人归档状态。
-  Future<void> _handleToggleArchiveMessage(TopicDetailNotifier notifier) async {
-    final detail = ref.read(topicDetailProvider(_params)).value;
-    if (detail == null || !detail.isPrivateMessage) return;
-
-    try {
-      final archived = await notifier.toggleArchivePrivateMessage();
-      if (!mounted) return;
-      ToastService.showSuccess(
-        archived
-            ? context.l10n.topicDetail_messageArchived
-            : context.l10n.topicDetail_messageMovedToInbox,
-      );
-      ref.invalidate(pmInboxProvider);
-      ref.invalidate(pmArchiveProvider);
-    } catch (error) {
-      if (mounted) {
-        ToastService.showError(context.l10n.common_operationFailed('$error'));
-      }
-    }
-  }
-
-  /// 打开添加私信成员对话框
-  Future<void> _handleAddParticipant(
-    TopicDetail detail,
-    TopicDetailNotifier notifier,
-  ) async {
-    final username = await showAppDialog<String>(
-      context: context,
-      builder: (dialogContext) => _AddParticipantDialog(),
-    );
-    if (username == null || username.isEmpty || !mounted) return;
-
-    try {
-      await notifier.inviteToPrivateMessage(username);
-      if (!mounted) return;
-      ToastService.showSuccess(
-        context.l10n.topicDetail_participantAdded(username),
-      );
-    } catch (error) {
-      if (mounted) {
-        ToastService.showError(
-          context.l10n.topicDetail_participantAddFailed('$error'),
-        );
-      }
-    }
-  }
-
-  /// 打开私信参与者管理对话框
-  void _showParticipantsDialog(
-    TopicDetail detail,
-    TopicDetailNotifier notifier,
-  ) {
-    final parentContext = context;
-    showAppDialog(
-      context: parentContext,
-      builder: (dialogContext) => _PrivateMessageParticipantsDialog(
-        participants: detail.allowedUsers,
-        currentUserId: ref.read(currentUserProvider).value?.id,
-        // 服务端已判定房主/管理员权限，客户端无需再叠加 admin 校验。
-        canRemoveOtherParticipants: detail.canRemoveAllowedUsers,
-        removableSelfId: detail.canRemoveSelfId,
-        removingParticipantId: _removingPrivateMessageParticipantId,
-        onRemoveParticipant: (user) {
-          Navigator.pop(dialogContext);
-          _handleRemovePrivateMessageParticipant(user);
-        },
-        onAddParticipant: () {
-          Navigator.pop(dialogContext);
-          _handleAddParticipant(detail, notifier);
-        },
-      ),
     );
   }
 
@@ -2417,9 +2278,19 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final currentUser = ref.watch(currentUserProvider).value;
-    final isLoggedIn = currentUser != null;
+    final isLoggedIn = ref.watch(currentUserProvider).value != null;
     final canShowDetailPane = MasterDetailLayout.canShowBothPanesFor(context);
+
+    ref.listen(nestedReadingStoreProvider, (previous, next) {
+      _nestedReadingStore = next;
+      _nestedReadingSession = next.session(_instanceId);
+      _nestedReadingSession.enabled = _isNestedView;
+      _nestedReadingSession.sort = next.sort;
+      _nestedResumePosition = next.position(widget.topicId);
+      _nestedRestorePosition = null;
+      _nestedBrowsePosition = null;
+      if (mounted) setState(() {});
+    });
 
     ref.listen<AsyncValue<void>>(authStateProvider, (_, _) {
       if (!context.mounted) return;
@@ -2498,8 +2369,22 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
 
         if (next.removedFromPrivateMessage &&
             !(previous?.removedFromPrivateMessage ?? false)) {
+          ref
+              .read(topicChannelProvider(widget.topicId).notifier)
+              .clearRemovedFromPrivateMessage();
           _closeRemovedPrivateMessage();
           return;
+        }
+
+        // 别的端归档/取消归档同一条私信时，把归档态同步进 detail，菜单里的
+        // 双态入口跟着翻。只在 bus 状态真的变过时同步 —— 它初值恒为 false，
+        // 首次回调就同步会把「进来时已归档」的私信错判成未归档。
+        if (previous != null &&
+            next.messageArchived != previous.messageArchived) {
+          ref
+              .read(topicDetailProvider(params).notifier)
+              .applyMessageArchived(next.messageArchived);
+          _invalidatePrivateMessageLists();
         }
 
         // 2. notification_level_change（通知级别变更）
@@ -2588,38 +2473,29 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               .setTopicTitle(detail.title);
         } catch (_) {}
       }
-      // 首次拿到 detail 后再决定是否应用默认嵌套视图：
-      // 私信场景下树形视图 API 拉不到数据，跳过该配置
+      // 默认树形在首屏即进入骨架，详情到达后只做适用性判断，避免先画平铺。
       if (!_defaultNestedViewApplied && detail != null) {
         _defaultNestedViewApplied = true;
-        if (!detail.isPrivateMessage &&
-            ref.read(preferencesProvider).defaultNestedView) {
-          // 预检:一楼被软删时树形接口必 500(服务端 op_post 未处理
-          // default_scope 过滤),已知场景直接跳过,省一次注定失败的请求。
-          // 只有从头加载(无目标楼层)时平铺流的首帖缺失/被删才是可靠信号;
-          // 带楼层进入时流从中间开始,一楼不在首块属正常。
-          final target = widget.scrollToPostNumber;
-          final fromTop = target == null || target <= 1;
-          final streamPosts = detail.postStream.posts;
-          final opMissingOrDeleted =
-              fromTop &&
-              streamPosts.isNotEmpty &&
-              (streamPosts.first.postNumber != 1 ||
-                  streamPosts.first.isDeleted);
-          if (!opMissingOrDeleted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                setState(() {
-                  _isNestedView = true;
-                  _nestedAutoEnabled = true;
-                  // 通知等带楼层进入:树形下走 context 定位视图
-                  _nestedTargetPostNumber = (target != null && target > 1)
-                      ? target
-                      : null;
-                });
-              }
-            });
-          }
+        final target = widget.scrollToPostNumber;
+        final fromTop = target == null || target <= 1;
+        final posts = detail.postStream.posts;
+        final opMissingOrDeleted =
+            fromTop &&
+            posts.isNotEmpty &&
+            (posts.first.postNumber != 1 || posts.first.isDeleted);
+        if (detail.isPrivateMessage || opMissingOrDeleted) {
+          _isNestedView = false;
+          _nestedReadingSession.enabled = false;
+          _nestedAutoEnabled = false;
+          _nestedTargetPostNumber = null;
+        }
+        if (_nestedResumePosition == null &&
+            (detail.lastReadPostNumber ?? 0) > 1) {
+          // 兼容尚未保存本地树形落点的历史话题，仍需用户主动选择续读。
+          _nestedResumePosition = NestedReadingPosition(
+            postNumber: detail.lastReadPostNumber!,
+            rootPostNumber: detail.lastReadPostNumber!,
+          );
         }
       }
       // 与 _buildPostListContent 一致，用过滤后列表判断 1 楼是否存在
@@ -2764,7 +2640,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             detailAsync.value,
             notifier,
             isLoggedIn,
-            currentUser,
           );
         },
       ),
@@ -2939,7 +2814,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     TopicDetail? detail,
     TopicDetailNotifier notifier,
     bool isLoggedIn,
-    User? currentUser,
   ) {
     final params = _params;
     final searchState = ref.watch(topicSearchProvider(widget.topicId));
@@ -2982,7 +2856,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
 
     // 跳转中：等待包含目标帖子的新数据 - 显示骨架屏
     final jumpTarget = _controller.jumpTargetPostNumber;
-    if (jumpTarget != null && detail != null) {
+    if (!_isNestedView && jumpTarget != null && detail != null) {
       final posts = detail.postStream.posts;
       // 检查目标帖子是否在当前加载的范围内
       final hasTarget =
@@ -3008,13 +2882,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       );
     } else if (detail != null) {
       // 正常内容构建 (保持原有逻辑，但简化提取)
-      content = _buildPostListContent(
-        context,
-        detail,
-        notifier,
-        isLoggedIn,
-        currentUser,
-      );
+      content = _buildPostListContent(context, detail, notifier, isLoggedIn);
     }
 
     // Stack 组装
@@ -3140,7 +3008,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     TopicDetail detail,
     TopicDetailNotifier notifier,
     bool isLoggedIn,
-    User? currentUser,
   ) {
     // 本地屏蔽过滤统一在此出口完成：页面内所有 postIndex（centerPostIndex/
     // dividerPostIndex/滚动映射）都基于同一份过滤后列表，语义天然一致。
@@ -3193,7 +3060,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     // 无爬行、无估算。收尾（贴底 anchor + markPositioned）在帧后完成。
     // _viewportAnchor 不在此处重置：残留值由 _finalizeInitialPosition
     // 按真实几何重新评估（避免刷新场景闪一帧顶对齐）。
-    if (!_controller.hasInitialScrolled && posts.isNotEmpty) {
+    if (!_isNestedView && !_controller.hasInitialScrolled && posts.isNotEmpty) {
       final target = _resolveInitialTarget(posts, dividerPostIndex);
       _controller.markInitialScrolled(
         target != null
@@ -3222,6 +3089,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     // 嵌套视图模式
     if (_isNestedView) {
       final nestedParams = NestedTopicParams(
+        instanceId: _instanceId,
         topicId: widget.topicId,
         targetPostNumber: _nestedTargetPostNumber,
       );
@@ -3238,6 +3106,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           final pendingTarget = _nestedTargetPostNumber;
           setState(() {
             _isNestedView = false;
+            _nestedReadingSession.enabled = false;
             _nestedTargetPostNumber = null;
           });
           _scheduleCheckTitleVisibility();
@@ -3264,8 +3133,39 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
                     ref.invalidate(nestedTopicProvider(nestedParams)),
               ),
         data: (nestedState) => NestedPostList(
+          key: ValueKey('nested-$_instanceId-${_nestedReadingStore.sortKey}'),
           nestedState: nestedState,
           params: nestedParams,
+          session: _nestedReadingSession,
+          resumePosition: (_nestedResumePosition?.postNumber ?? 0) > 1
+              ? _nestedResumePosition
+              : null,
+          restorePosition: _nestedRestorePosition,
+          fullTargetPostNumber: _nestedFullTarget,
+          active:
+              _isRouteVisible &&
+              _isParentActive &&
+              !ref.read(topicSearchProvider(widget.topicId)).isSearchMode,
+          onViewportPostChanged: (postNumber) {
+            if (!_controller.isPositioned) _controller.markPositioned();
+            _controller.updateViewportPostNumber(postNumber);
+            ref
+                    .read(
+                      detailScrollPositionProvider((
+                        topicId: widget.topicId,
+                        instanceId: _instanceId,
+                      )).notifier,
+                    )
+                    .state =
+                postNumber;
+          },
+          onPositionChanged: (position) =>
+              _nestedReadingStore.save(widget.topicId, position),
+          onResume: _resumeNestedReading,
+          onFullTargetConsumed: () {
+            _nestedFullTarget = null;
+            _nestedRestorePosition = null;
+          },
           detail: detail,
           blockedUsernames: blockedUsernames,
           topicId: widget.topicId,
@@ -3273,8 +3173,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           headerKey: _headerKey,
           hideHeaderTitle: widget.hideInlineHeaderTitle,
           isLoggedIn: isLoggedIn,
-          currentUserId: currentUser?.id,
-          currentUserIsAdmin: currentUser?.admin ?? false,
+          currentUserId: ref.read(currentUserProvider).value?.id,
+          currentUserIsAdmin:
+              ref.read(currentUserProvider).value?.admin ?? false,
           removingPrivateMessageParticipantId:
               _removingPrivateMessageParticipantId,
           onRemovePrivateMessageParticipant: isLoggedIn
@@ -3294,10 +3195,10 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           onVisiblePostsChanged: _updateVisiblePosts,
           relocateToken: _nestedRelocateToken,
           onViewFullTopic: _nestedTargetPostNumber != null
-              ? () => setState(() => _nestedTargetPostNumber = null)
+              ? _returnToFullNestedTopic
               : null,
           onViewParentContext: (postNumber) =>
-              setState(() => _nestedTargetPostNumber = postNumber),
+              unawaited(_jumpToPostInTopic(postNumber)),
         ),
       );
 
@@ -3330,8 +3231,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               onAnswerSortChanged: (byActivity) =>
                   byActivity ? _handleShowByActivity() : _handleCancelFilter(),
               headingAnchorRegistry: _tocController.registry,
-              currentUserId: currentUser?.id,
-              currentUserIsAdmin: currentUser?.admin ?? false,
               removingPrivateMessageParticipantId:
                   _removingPrivateMessageParticipantId,
               onRemovePrivateMessageParticipant: isLoggedIn
@@ -3460,233 +3359,5 @@ class _KeepAlivePageState extends State<_KeepAlivePage>
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
-  }
-}
-
-/// 添加私信成员对话框
-class _AddParticipantDialog extends StatefulWidget {
-  @override
-  State<_AddParticipantDialog> createState() => _AddParticipantDialogState();
-}
-
-class _AddParticipantDialogState extends State<_AddParticipantDialog> {
-  final _controller = TextEditingController();
-  final _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      title: Text(context.l10n.topicDetail_addParticipantTitle),
-      content: TextField(
-        controller: _controller,
-        focusNode: _focusNode,
-        decoration: InputDecoration(
-          hintText: context.l10n.topicDetail_addParticipantHint,
-          prefixIcon: const Icon(Symbols.search_rounded),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          filled: true,
-          fillColor: theme.colorScheme.surfaceContainerHighest,
-        ),
-        textInputAction: TextInputAction.done,
-        onSubmitted: (_) => Navigator.pop(context, _controller.text.trim()),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(context.l10n.common_cancel),
-        ),
-        FilledButton(
-          onPressed: () {
-            final username = _controller.text.trim();
-            if (username.isNotEmpty) {
-              Navigator.pop(context, username);
-            }
-          },
-          child: Text(context.l10n.topicDetail_addParticipant),
-        ),
-      ],
-    );
-  }
-}
-
-/// 私信参与者管理对话框
-class _PrivateMessageParticipantsDialog extends StatelessWidget {
-  const _PrivateMessageParticipantsDialog({
-    required this.participants,
-    this.currentUserId,
-    required this.canRemoveOtherParticipants,
-    this.removableSelfId,
-    this.removingParticipantId,
-    this.onRemoveParticipant,
-    this.onAddParticipant,
-  });
-
-  final List<TopicUser> participants;
-  final int? currentUserId;
-  final bool canRemoveOtherParticipants;
-  final int? removableSelfId;
-  final int? removingParticipantId;
-  final ValueChanged<TopicUser>? onRemoveParticipant;
-  final VoidCallback? onAddParticipant;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      title: Row(
-        children: [
-          Icon(
-            Icons.lock_outline_rounded,
-            size: 20,
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(width: 8),
-          Text(context.l10n.topic_participants),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              '${participants.length}',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSecondaryContainer,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (onAddParticipant != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Symbols.person_add_rounded, size: 18),
-                    label: Text(context.l10n.topicDetail_addParticipant),
-                    onPressed: onAddParticipant,
-                  ),
-                ),
-              ),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final participant in participants)
-                    _buildParticipantTile(context, participant),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(context.l10n.common_close),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildParticipantTile(BuildContext context, TopicUser participant) {
-    final theme = Theme.of(context);
-    final isSelf =
-        participant.id == currentUserId || participant.id == removableSelfId;
-    final canRemoveSelf = isSelf && participant.id == removableSelfId;
-    final canRemoveOther = !isSelf && canRemoveOtherParticipants;
-    final canRemove =
-        onRemoveParticipant != null && (canRemoveSelf || canRemoveOther);
-    final isRemoving = removingParticipantId == participant.id;
-    final controlsLocked = removingParticipantId != null;
-    final showUsername = participant.displayName != participant.username;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SmartAvatar(
-            imageUrl: participant.getAvatarUrl(size: 48),
-            radius: 18,
-            fallbackText: participant.username,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  participant.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (showUsername)
-                  Text(
-                    '@${participant.username}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (canRemove)
-            SizedBox.square(
-              dimension: 36,
-              child: isRemoving
-                  ? const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : IconButton(
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                      tooltip: isSelf
-                          ? context.l10n.common_exit
-                          : context.l10n.common_remove,
-                      color: theme.colorScheme.error,
-                      onPressed: controlsLocked
-                          ? null
-                          : () => onRemoveParticipant!(participant),
-                      icon: Icon(
-                        isSelf
-                            ? Icons.logout_rounded
-                            : Icons.person_remove_alt_1_rounded,
-                        size: 20,
-                      ),
-                    ),
-            ),
-        ],
-      ),
-    );
   }
 }

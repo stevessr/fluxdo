@@ -1,7 +1,6 @@
 void handleTopicDetailMoreMenuSelection(
   String value, {
   required void Function() onEditTopic,
-  void Function()? onAddToBoard,
   required void Function() onBookmark,
   required void Function() onReadLater,
   required void Function() onSubscribe,
@@ -11,7 +10,6 @@ void handleTopicDetailMoreMenuSelection(
   required void Function() onShareImage,
   required void Function() onExport,
   required void Function() onOpenInBrowser,
-  required void Function() onOpenInBuiltInBrowser,
   required void Function() onFilter,
   required void Function() onReadingSettings,
   void Function()? onToggleArchiveMessage,
@@ -19,9 +17,6 @@ void handleTopicDetailMoreMenuSelection(
   switch (value) {
     case 'edit_topic':
       onEditTopic();
-      return;
-    case 'add_to_board':
-      onAddToBoard?.call();
       return;
     case 'archive_message':
       onToggleArchiveMessage?.call();
@@ -52,9 +47,6 @@ void handleTopicDetailMoreMenuSelection(
       return;
     case 'open_in_browser':
       onOpenInBrowser();
-      return;
-    case 'open_in_built_in_browser':
-      onOpenInBuiltInBrowser();
       return;
     case 'filter':
       onFilter();

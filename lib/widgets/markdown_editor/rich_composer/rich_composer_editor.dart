@@ -565,6 +565,25 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     );
   }
 
+  bool _needsUploadPanel(UploadTask task) {
+    if (task.phase == UploadTaskPhase.succeeded) return false;
+    final editor = _editor;
+    if (editor == null) return true;
+    final blockId = _uploadBlocks[task.id];
+    if (blockId != null &&
+        _placeholderNodes.contains(blockId) &&
+        editor.indexOfBlock(blockId) >= 0) {
+      return false;
+    }
+    final gridId = _uploadGrids[task.id];
+    final gridIndex = gridId == null ? -1 : editor.indexOfBlock(gridId);
+    if (gridIndex >= 0) {
+      final block = editor.blocks[gridIndex];
+      if (block is IslandBlock && block.node is ImageGridNode) return false;
+    }
+    return true;
+  }
+
   void _removeUpload(String id) {
     final block = _uploadBlocks.remove(id);
     _uploadGrids.remove(id);
@@ -3931,9 +3950,6 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                         controller: _scrollController,
                         slivers: [
                           SliverToBoxAdapter(child: _recoveryBanner()),
-                          SliverToBoxAdapter(
-                            child: UploadTaskPanel(controller: _uploads),
-                          ),
                           if (widget.header != null)
                             SliverToBoxAdapter(child: widget.header),
                           if (_isDesktop && widget.metaBar != null)
@@ -3942,6 +3958,17 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                                 child: widget.metaBar!,
                               ),
                             ),
+                          SliverToBoxAdapter(
+                            // 撤销可能暂时移走占位；只兜底展示没有正文卡片的任务。
+                            // 放在头部之后，出现时也不能把标题推离顶部安全区域。
+                            child: ListenableBuilder(
+                              listenable: editor,
+                              builder: (context, _) => UploadTaskPanel(
+                                controller: _uploads,
+                                taskFilter: _needsUploadPanel,
+                              ),
+                            ),
+                          ),
                           SliverLayoutBuilder(
                             builder: (context, sliver) => SliverToBoxAdapter(
                               // Listener:表情面板开着时点编辑区任意处 → 切回键盘态
@@ -4036,19 +4063,18 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                                                       radius: 8,
                                                       child: child,
                                                     ),
-                                            caretViewportInsets:
-                                                EdgeInsets.only(
-                                                  // 创建/编辑页的顶栏覆盖在滚动区上方。
-                                                  top:
-                                                      ComposerChromeScope.topInsetOf(
-                                                        context,
-                                                      ),
-                                                  bottom:
-                                                      bottomInset +
-                                                      _toolsAnchor
-                                                          .contextExtent
-                                                          .value,
-                                                ),
+                                            caretViewportInsets: EdgeInsets.only(
+                                              // 创建/编辑页的顶栏覆盖在滚动区上方。
+                                              top:
+                                                  ComposerChromeScope.topInsetOf(
+                                                    context,
+                                                  ),
+                                              bottom:
+                                                  bottomInset +
+                                                  _toolsAnchor
+                                                      .contextExtent
+                                                      .value,
+                                            ),
                                             showTrailingParagraph: true,
                                             emptyParagraphHint:
                                                 isEmpty &&
@@ -4694,7 +4720,6 @@ class _RichToolbarState extends State<_RichToolbar> {
         _btn(
           FontAwesomeIcons.image,
           richEditorTools.firstWhere((tool) => tool.id == 'image').label,
-          toolId: 'image',
           anchored: anchored,
           onTap: widget.onPickImage,
         ),
@@ -4703,7 +4728,6 @@ class _RichToolbarState extends State<_RichToolbar> {
           _btn(
             t.icon,
             _tip(t.label, t.id),
-            toolId: t.id,
             active: t.isActive?.call(snap) ?? false,
             anchored: anchored,
             onTap: () => t.run(ctx),
@@ -4731,15 +4755,10 @@ class _RichToolbarState extends State<_RichToolbar> {
     );
     final button = IconButton(
       tooltip: action.label,
-      icon: anchored
-          ? widget.toolsAnchor?.icon('insert:${action.searchText}', icon) ??
-                icon
-          : icon,
+      icon: icon,
       onPressed: anchored ? action.run : () => _desktopAction(action.run),
     );
-    return anchored
-        ? widget.toolsAnchor?.compactControl(button) ?? button
-        : button;
+    return button;
   }
 
   /// 标准工具按钮(MarkdownToolbar._ToolbarButton 同参:FaIcon 16 +
@@ -4749,23 +4768,17 @@ class _RichToolbarState extends State<_RichToolbar> {
     String tooltip, {
     bool active = false,
     bool anchored = true,
-    String? toolId,
     required VoidCallback onTap,
   }) {
     final button = IconButton(
       visualDensity: VisualDensity.standard,
       isSelected: active,
-      icon: toolId == null || !anchored
-          ? FaIcon(icon, size: 16)
-          : widget.toolsAnchor?.icon(toolId, FaIcon(icon, size: 16)) ??
-                FaIcon(icon, size: 16),
+      icon: FaIcon(icon, size: 16),
       onPressed: anchored ? onTap : () => _desktopAction(onTap),
       tooltip: tooltip,
       style: composerToolButtonStyle(context, active: active),
     );
-    return anchored
-        ? widget.toolsAnchor?.compactControl(button) ?? button
-        : button;
+    return button;
   }
 }
 

@@ -433,7 +433,11 @@ class DraftController {
   Future<void> _adoptRemote(Draft? remote) async {
     final previous = _latestData;
     final data = remote?.data ?? const DraftData();
-    final changed = previous?.contentFingerprint != data.contentFingerprint;
+    // 空编辑器的 action/category 等元数据不代表远端正文发生变化。
+    // 原生选图器返回触发刷新时，空 -> 空不能重建宿主，丢掉待确认的上传。
+    final changed =
+        (previous?.hasContent == true || data.hasContent) &&
+        previous?.contentFingerprint != data.contentFingerprint;
     _latestData = data;
     _revision++;
     final revision = _revision;
