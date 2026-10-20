@@ -12,6 +12,12 @@ on:
       - 'lib/services/storage/resilient_secure_storage.dart'
       - 'test/services/account_runtime_pool_test.dart'
       - 'test/services/storage/multi_account_registry_normalizer_test.dart'
+      - 'lib/services/discourse/_auth.dart'
+      - 'lib/services/network/session_rejection_classifier.dart'
+      - 'lib/services/network/recovery/session_heal_policy.dart'
+      - 'test/services/discourse_account_switch_auth_test.dart'
+      - 'test/services/network/session_rejection_classifier_test.dart'
+      - 'test/services/network/recovery/session_heal_test.dart'
       - '.github/workflows/account-runtime-switch.yaml'
   workflow_dispatch:
 
@@ -81,3 +87,31 @@ jobs:
           dart tool/flutterw.dart test
           test/services/account_runtime_pool_test.dart
           test/services/storage/multi_account_registry_normalizer_test.dart
+
+      # 与原有账号运行时测试共用环境，避免再增加一个独立的 PR workflow。
+      - name: Check 403 auth guard formatting
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/services/discourse/_auth.dart \
+            lib/services/network/session_rejection_classifier.dart \
+            lib/services/network/recovery/session_heal_policy.dart \
+            test/services/discourse_account_switch_auth_test.dart \
+            test/services/network/session_rejection_classifier_test.dart \
+            test/services/network/recovery/session_heal_test.dart
+
+      - name: Analyze 403 auth guards
+        run: >-
+          flutter analyze
+          lib/services/discourse/discourse_service.dart
+          lib/services/network/session_rejection_classifier.dart
+          lib/services/network/recovery/session_heal_policy.dart
+          test/services/discourse_account_switch_auth_test.dart
+          test/services/network/session_rejection_classifier_test.dart
+          test/services/network/recovery/session_heal_test.dart
+
+      - name: Test 403 auth guards
+        run: >-
+          dart tool/flutterw.dart test
+          test/services/discourse_account_switch_auth_test.dart
+          test/services/network/session_rejection_classifier_test.dart
+          test/services/network/recovery/session_heal_test.dart
