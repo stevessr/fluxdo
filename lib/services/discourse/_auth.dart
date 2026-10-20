@@ -543,8 +543,10 @@ mixin _AuthMixin on _DiscourseServiceBase {
       return false;
     } on DioException catch (e) {
       final status = e.response?.statusCode;
-      // 404 = 无用户（session_controller.rb:676）
-      if (status == 404) {
+      // 404 只在排除了 Cloudflare 拦截后才能确认无用户。
+      if (status == 404 &&
+          SessionRejectionClassifier.classify(e) ==
+              SessionRejectionKind.confirmedInvalid) {
         final recoveredByPrevious = await _recoverPreviousSessionBeforeLogout(
           source: source,
           triggerInfo: triggerInfo,
@@ -1064,6 +1066,22 @@ mixin _AuthMixin on _DiscourseServiceBase {
           final skipAuthCheck = error.requestOptions.spec.skipAuthCheck;
           final data = error.response?.data;
           debugPrint('[DIO] Error: ${error.response?.statusCode}');
+
+          // CF/WAF 拒绝不是 Discourse 的登出信号。优先观察 cf-mitigated，
+          // 不得将伪装成 403 的盾页送进认证失效或 Cookie 状态同步链。
+          if (SessionRejectionClassifier.isCloudflareBlocked(error)) {
+            LogWriter.instance.write({
+              'timestamp': DateTime.now().toIso8601String(),
+              'level': 'info',
+              'type': 'auth',
+              'event': 'auth_signal_suppressed_cf_mitigation',
+              'statusCode': error.response?.statusCode,
+              'cfMitigated': error.response?.headers.value('cf-mitigated'),
+              'hasCfRay':
+                  error.response?.headers.value('cf-ray')?.isNotEmpty == true,
+            });
+            return handler.next(error);
+          }
 
           // BAD CSRF 处理：对齐 Discourse 官方前端，只清空 token。
           // 下一次非 GET 请求会在 RequestHeaderInterceptor 中先刷新 CSRF。
@@ -1698,8 +1716,9 @@ mixin _AuthMixin on _DiscourseServiceBase {
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       if (!isCurrent()) return false;
-      // 404 = 无用户 / 401/403 = 明确拒绝
-      if (status == 404 || status == 401 || status == 403) {
+      // 单独的 403 既可能是权限限制，也可能是 CF/WAF；不能据此登出。
+      final rejection = SessionRejectionClassifier.classify(e);
+      if (rejection == SessionRejectionKind.confirmedInvalid) {
         LogWriter.instance.write({
           'timestamp': DateTime.now().toIso8601String(),
           'level': 'warning',
@@ -1723,6 +1742,17 @@ mixin _AuthMixin on _DiscourseServiceBase {
           'initial_check_http_$status',
         );
       }
+      LogWriter.instance.write({
+        'timestamp': DateTime.now().toIso8601String(),
+        'level': 'info',
+        'type': 'auth',
+        'event': 'auth_session_check_inconclusive',
+        'message': 'HTTP 响应无法确认登录失效，保留本地会话',
+        'statusCode': status,
+        'classification': rejection.name,
+        'cfMitigated': e.response?.headers.value('cf-mitigated'),
+        'hasCfRay': e.response?.headers.value('cf-ray')?.isNotEmpty == true,
+      });
       // 网络异常/CF 验证等 → 保守保留本地状态
       if (!isCurrent()) return false;
       _tToken = tToken;
