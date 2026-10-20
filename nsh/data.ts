@@ -25,6 +25,26 @@ export interface PublicUserProfile {
   trustLevel: number;
   postCount: number;
 }
+export interface BoardSummary {
+  id: number;
+  name: string;
+  slug: string;
+  anonymousCanRead: boolean;
+  columnCount: number;
+}
+export interface BoardCard {
+  id: number;
+  kind: "topic" | "note";
+  title: string;
+  notes: string;
+  topic: Topic | null;
+}
+export interface BoardColumn { id: number; title: string; cards: BoardCard[]; }
+export interface BoardDetail {
+  board: BoardSummary;
+  columns: BoardColumn[];
+  truncated: boolean;
+}
 export const POSTS_PER_BATCH = 20;
 
 const ORIGIN = "https://linux.do";
@@ -254,6 +274,99 @@ export function userProfilePath(value: string): string {
   return "/u/" + encodeURIComponent(username) + ".json";
 }
 
+/** Discourse Boards official index; only public metadata is projected. */
+export function parseBoards(payload: unknown): BoardSummary[] {
+  const root = record(payload, "看板目录");
+  if (!Array.isArray(root.boards)) throw new Error("看板目录字段缺失");
+  const ids = new Set<number>();
+  const boards: BoardSummary[] = [];
+  for (const raw of root.boards) {
+    const b = record(raw, "看板");
+    const id = positiveId(b.id);
+    const name = decodeEntities(asString(b.unicode_name) || asString(b.name));
+    if (!id || !name || b.archived === true || ids.has(id)) continue;
+    ids.add(id);
+    boards.push({
+      id, name: name.slice(0, 160), slug: asString(b.slug),
+      anonymousCanRead: b.anonymous_can_read === true,
+      columnCount: Array.isArray(b.columns) ? b.columns.length : 0,
+    });
+    // Keep a finite in-memory index until the native virtualized directory ships.
+    if (boards.length >= 100) break;
+  }
+  return boards;
+}
+
+/** Parse GET /boards/api/boards/:id.json (columns are a top-level sibling).
+ * Limit untrusted payload size at the view-model boundary. */
+export function parseBoardDetail(payload: unknown, expectedId: number): BoardDetail {
+  if (!Number.isSafeInteger(expectedId) || expectedId <= 0) throw new Error("看板 ID 无效");
+  const root = record(payload, "看板详情");
+  const rawBoard = record(root.board, "看板详情");
+  if (positiveId(rawBoard.id) !== expectedId || rawBoard.anonymous_can_read !== true) {
+    throw new Error("看板不可公开访问");
+  }
+  if (!Array.isArray(root.columns)) throw new Error("看板栏目字段缺失");
+  const board = parseBoards({boards: [rawBoard]})[0];
+  if (!board) throw new Error("看板数据无效");
+  const columns: BoardColumn[] = [];
+  const columnIds = new Set<number>();
+  const cardIds = new Set<number>();
+  let cardBudget = 500;
+  let truncated = root.columns.length > 30;
+  for (const value of root.columns.slice(0, 30)) {
+    const column = record(value, "看板栏目");
+    const id = positiveId(column.id);
+    if (!id || columnIds.has(id)) continue;
+    columnIds.add(id);
+    const rawCards = Array.isArray(column.cards) ? column.cards : [];
+    const cards: BoardCard[] = [];
+    for (const value of rawCards) {
+      if (cardBudget <= 0) { truncated = true; break; }
+      const card = record(value, "看板卡片");
+      const cardId = positiveId(card.id);
+      if (!cardId || cardIds.has(cardId)) continue;
+      const kind = asString(card.card_type);
+      if (kind !== "topic" && kind !== "floater") continue;
+      let topic: Topic | null = null;
+      if (kind === "topic") {
+        if (!card.topic || typeof card.topic !== "object" || Array.isArray(card.topic)) continue;
+        const t = card.topic as JsonRecord;
+        const topicId = positiveId(t.id);
+        const slug = asString(t.slug);
+        if (!topicId || !slug) continue;
+        topic = {
+          id: topicId, slug,
+          title: decodeEntities(asString(t.unicode_title) || asString(t.title)).slice(0, 250),
+          categoryId: positiveId(t.category_id) || null,
+          views: 0, likeCount: 0, postsCount: Math.max(0, asNumber(t.posts_count)),
+          tags: Array.isArray(t.tags)
+            ? t.tags.filter((x): x is string => typeof x === "string").slice(0, 10) : [],
+        };
+      }
+      cardIds.add(cardId);
+      cardBudget--;
+      cards.push({
+        id: cardId, kind: kind === "topic" ? "topic" : "note",
+        title: topic?.title || decodeEntities(asString(card.unicode_title) || asString(card.title)).slice(0, 250),
+        notes: cookedToText(asString(card.notes)).slice(0, 1200),
+        topic,
+      });
+    }
+    columns.push({
+      id, title: decodeEntities(asString(column.unicode_title) || asString(column.title)).slice(0, 160),
+      cards,
+    });
+  }
+  return {board, columns, truncated};
+}
+
+/** Only numeric IDs may be used to build Boards detail paths. */
+export function boardDetailPath(id: number): string {
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error("看板 ID 无效");
+  return "/boards/api/boards/" + id + ".json";
+}
+
 export function parsePosts(payload: unknown): Post[] {
   const root = record(payload, "详情");
   const stream = record(root.post_stream, "帖子流");
@@ -344,6 +457,8 @@ export interface PublicReader {
   morePosts(topic: Topic, ids: number[]): Promise<Post[]>;
   search(query: string, page: number): Promise<SearchPage>;
   profile(username: string): Promise<PublicUserProfile>;
+  boards(): Promise<BoardSummary[]>;
+  board(board: BoardSummary): Promise<BoardDetail>;
 }
 export function createPublicReader(
   get: (path: string) => Promise<unknown>,
@@ -366,6 +481,11 @@ export function createPublicReader(
     async morePosts(topic, ids) { return parsePosts(await get(postsBatchPath(topic, ids))); },
     async search(query, page) { return parseSearchResults(await get(searchPath(query, page))); },
     async profile(username) { return parseUserProfile(await get(userProfilePath(username))); },
+    async boards() { return parseBoards(await get("/boards/api/boards.json")); },
+    async board(board) {
+      if (!board.anonymousCanRead) throw new Error("当前看板需要登录后访问");
+      return parseBoardDetail(await get(boardDetailPath(board.id)), board.id);
+    },
   };
 }
 async function getPublicJson(path: string): Promise<unknown> {

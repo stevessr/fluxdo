@@ -5,7 +5,7 @@ import {
   dedupeTopics, feedPath, topicPath, createPublicReader,
   normalizeFeedCursor, parseTopicDetail, postsBatchPath, mergePosts, POSTS_PER_BATCH,
   searchPath, parseSearchResults, mergeSearchHits, feedCursorForContext, publicReader,
-  parseUserProfile, userProfilePath,
+  parseUserProfile, userProfilePath, parseBoards, parseBoardDetail, boardDetailPath,
 } from "../data.ts";
 import { RequestGate } from "../request_gate.ts";
 
@@ -276,4 +276,73 @@ test("公开个人资料查询只允许单段用户名，不读取隐私属性",
   assert.deepEqual(paths,["/u/steve.ssr.json"]);
   await assert.rejects(reader.profile("../admin"),/用户名格式无效/);
   assert.equal(paths.length,1);
+});
+
+test("Boards 目录去重、忽略归档并保留匿名访问权限", () => {
+  const boards=parseBoards({boards:[
+    {id:1,name:"Sprint &amp; Roadmap",slug:"sprint",anonymous_can_read:true,
+      columns:[{id:1}],archived:false},
+    {id:2,unicode_name:"私有看板",slug:"private",anonymous_can_read:false},
+    {id:1,name:"重复",anonymous_can_read:true},
+    {id:3,name:"Archived",archived:true},
+    {id:-1,name:"Invalid"},
+  ]});
+  assert.deepEqual(boards,[
+    {id:1,name:"Sprint & Roadmap",slug:"sprint",anonymousCanRead:true,columnCount:1},
+    {id:2,name:"私有看板",slug:"private",anonymousCanRead:false,columnCount:0},
+  ]);
+  assert.throws(() => parseBoards({boards:null}),/字段缺失/);
+  assert.equal(boardDetailPath(42),"/boards/api/boards/42.json");
+  for (const id of [0,-2,1.5,NaN,Number.MAX_SAFE_INTEGER+1]) {
+    assert.throws(() => boardDetailPath(id),/看板 ID 无效/);
+  }
+});
+
+test("Boards 列与 Topic/Floater 卡片安全投影，拒绝越权与错配 ID", async () => {
+  const board={id:1,name:"公开",anonymous_can_read:true,slug:"topic"};
+  const payload={board,columns:[
+    {id:10,title:"待办",cards:[
+      {id:100,card_type:"topic",topic:{id:99,slug:"hello-world",title:"Hello &amp; World",
+        category_id:12,posts_count:4,tags:["linux","nsh"]},notes:""},
+      {id:101,card_type:"floater",title:"提示",notes:"<p>安全</p><script>bad()</script>",
+        api_key:"MUST_NOT_LEAK"},
+      {id:101,card_type:"floater",title:"重复卡片"},
+      {id:102,card_type:"unknown",title:"忽略"},
+    ]},
+    {id:11,title:"已完成",cards:[]},
+  ]};
+  const detail=parseBoardDetail(payload,1);
+  assert.deepEqual(detail.columns.map(c=>c.title),["待办","已完成"]);
+  assert.equal(detail.columns[0].cards.length,2);
+  assert.equal(detail.columns[0].cards[0].topic.id,99);
+  assert.equal(detail.columns[0].cards[0].topic.title,"Hello & World");
+  assert.equal(detail.columns[0].cards[1].notes,"安全");
+  assert.equal(JSON.stringify(detail).includes("MUST_NOT_LEAK"),false);
+  assert.equal(detail.truncated,false);
+  assert.throws(()=>parseBoardDetail(payload,2),/不可公开访问/);
+  assert.throws(()=>parseBoardDetail({...payload,board:{...board,anonymous_can_read:false}},1),
+    /不可公开访问/);
+  assert.throws(()=>parseBoardDetail({board,columns:null},1),/栏目字段缺失/);
+  const seen=[];
+  const reader=createPublicReader(async path=>{
+    seen.push(path);
+    if (path==="/boards/api/boards.json") return {boards:[board]};
+    if (path==="/boards/api/boards/1.json") return payload;
+    throw new Error("unexpected URL "+path);
+  });
+  const list=await reader.boards();
+  assert.equal(list.length,1);
+  assert.equal((await reader.board(list[0])).columns.length,2);
+  await assert.rejects(reader.board({...list[0],anonymousCanRead:false}),/需要登录/);
+  assert.deepEqual(seen,["/boards/api/boards.json","/boards/api/boards/1.json"]);
+});
+
+test("Boards 巨量卡片限制为 500，避免超量渲染", () => {
+  const cards=Array.from({length:700},(_,i)=>({id:i+1,card_type:"floater",title:"卡片"+i}));
+  const detail=parseBoardDetail({
+    board:{id:1,name:"Board",anonymous_can_read:true},
+    columns:[{id:1,title:"A",cards}],
+  },1);
+  assert.equal(detail.columns[0].cards.length,500);
+  assert.equal(detail.truncated,true);
 });
