@@ -133,8 +133,7 @@ void main() {
 
   test('200 带 logged-out 的 POST 不应重放已经成功的写操作', () {
     final policy = SessionSelfHealPolicy(
-      readSessionToken: () async =>
-          CanonicalCookie(name: '_t', value: 'valid'),
+      readSessionToken: () async => CanonicalCookie(name: '_t', value: 'valid'),
     );
     final options = RequestOptions(
       path: '/posts.json',
@@ -157,8 +156,7 @@ void main() {
 
   test('CF 403 即使携带 logged-out 头也不能触发 session sweep', () {
     final policy = SessionSelfHealPolicy(
-      readSessionToken: () async =>
-          CanonicalCookie(name: '_t', value: 'valid'),
+      readSessionToken: () async => CanonicalCookie(name: '_t', value: 'valid'),
     );
     final options = RequestOptions(
       baseUrl: 'https://linux.do',
