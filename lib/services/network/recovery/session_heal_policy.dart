@@ -66,6 +66,8 @@ class SessionSweepAction extends RecoveryAction {
 class SessionSelfHealPolicy implements RecoveryPolicy {
   SessionSelfHealPolicy({
     Future<CanonicalCookie?> Function()? readSessionToken,
+    // Preserve the public named parameter for existing policy tests/injection.
+    // ignore: prefer_initializing_formals
     SessionCookieSentinel? sentinel,
   }) : _readSessionToken =
            readSessionToken ??
