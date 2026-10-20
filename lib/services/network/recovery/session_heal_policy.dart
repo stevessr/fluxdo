@@ -1,3 +1,6 @@
+// Keep the public `sentinel:` injection parameter name without exposing the private field.
+// ignore_for_file: prefer_initializing_formals
+
 import 'package:dio/dio.dart';
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:flutter/foundation.dart';
@@ -66,8 +69,6 @@ class SessionSweepAction extends RecoveryAction {
 class SessionSelfHealPolicy implements RecoveryPolicy {
   SessionSelfHealPolicy({
     Future<CanonicalCookie?> Function()? readSessionToken,
-    // Preserve the public named parameter for existing policy tests/injection.
-    // ignore: prefer_initializing_formals
     SessionCookieSentinel? sentinel,
   }) : _readSessionToken =
            readSessionToken ??
