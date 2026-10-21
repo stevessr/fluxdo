@@ -1156,40 +1156,110 @@ class MainActivity : FlutterActivity() {
             )
         } else {
             @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_RESOLVED_FILTER)
+            packageManager.queryIntentActivities(
+                intent, PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_RESOLVED_FILTER
+            )
         }
+
+        // 除正式版之外，枚举 Chrome / Edge / Firefox 的独立安装通道。
+        // 预览通道常不在默认浏览器的解析结果中，因此还要按包名主动探测。
         val knownPackages = setOf(
-            "com.android.chrome", "com.chrome.beta", "com.chrome.dev",
+            "com.android.chrome", "com.chrome.beta", "com.chrome.dev", "com.chrome.canary",
             "org.chromium.chrome", "org.chromium.chrome.stable",
-            "org.mozilla.firefox", "org.mozilla.firefox_beta", "org.mozilla.fenix",
-            "org.mozilla.focus", "org.mozilla.firefox_nightly",
-            "org.mozilla.fennec_fdroid", "com.brave.browser",
-            "com.microsoft.emmx", "com.sec.android.app.sbrowser",
+            "org.mozilla.firefox", "org.mozilla.firefox_beta", "org.mozilla.firefox.beta",
+            "org.mozilla.fenix", "org.mozilla.firefox_nightly", "org.mozilla.fenix.nightly",
+            "org.mozilla.focus", "org.mozilla.focus.beta", "org.mozilla.focus.nightly",
+            "org.mozilla.fennec.aurora", "org.mozilla.fennec_fdroid",
+            "com.brave.browser", "com.brave.browser_beta", "com.brave.browser_nightly",
+            "com.microsoft.emmx", "com.microsoft.emmx.beta",
+            "com.microsoft.emmx.dev", "com.microsoft.emmx.canary",
+            "com.sec.android.app.sbrowser", "com.sec.android.app.sbrowser.beta",
             "com.vivaldi.browser", "com.opera.browser", "com.opera.mini.native",
             "com.duckduckgo.mobile.android", "com.kiwibrowser.browser",
             "org.bromite.bromite", "org.cromite.cromite",
             "org.torproject.torbrowser"
         )
-        return matches.asSequence()
-            .filter { it.activityInfo.packageName != packageName }
-            .filter { it.activityInfo.packageName != "android" }
-            .filter {
-                val filter = it.filter
-                (filter != null &&
-                    filter.hasDataScheme("http") &&
-                    filter.hasDataScheme("https") &&
-                    filter.countDataAuthorities() == 0) ||
-                    it.activityInfo.packageName in knownPackages
-            }
-            .distinctBy { it.activityInfo.packageName }
-            .map {
-                mapOf(
-                    "id" to it.activityInfo.packageName,
-                    "name" to it.loadLabel(packageManager).toString()
+
+        // 预览版的系统应用标签可能没有显示版本后缀；明确标注通道，
+        // 避免用户把 Beta/Canary 与 Stable 混淆并选错 OAuth Profile。
+        val channelLabels = mapOf(
+            "com.android.chrome" to "Google Chrome",
+            "com.chrome.beta" to "Google Chrome Beta",
+            "com.chrome.dev" to "Google Chrome Dev",
+            "com.chrome.canary" to "Google Chrome Canary",
+            "org.mozilla.firefox" to "Firefox",
+            "org.mozilla.firefox_beta" to "Firefox Beta",
+            "org.mozilla.firefox.beta" to "Firefox Beta",
+            "org.mozilla.fenix" to "Firefox Nightly",
+            "org.mozilla.firefox_nightly" to "Firefox Nightly",
+            "org.mozilla.focus.beta" to "Firefox Focus Beta",
+            "org.mozilla.focus.nightly" to "Firefox Focus Nightly",
+            "com.microsoft.emmx" to "Microsoft Edge",
+            "com.microsoft.emmx.beta" to "Microsoft Edge Beta",
+            "com.microsoft.emmx.dev" to "Microsoft Edge Dev",
+            "com.microsoft.emmx.canary" to "Microsoft Edge Canary"
+        )
+        val browsers = linkedMapOf<String, String>()
+        matches.forEach { match ->
+            val pkg = match.activityInfo.packageName
+            if (pkg == packageName || pkg == "android") return@forEach
+            val filter = match.filter
+            // 部分浏览器分别声明 HTTP 与 HTTPS 的 IntentFilter，
+            // 不能要求一次查询返回的同一 Filter 同时包含两种 scheme。
+            // 后续 canOpenGenericWebUrls 会单独验证两种协议。
+            val genericBrowser = filter != null &&
+                (filter.hasDataScheme("http") || filter.hasDataScheme("https")) &&
+                filter.countDataAuthorities() == 0
+            if (!genericBrowser && pkg !in knownPackages) return@forEach
+            if (canOpenGenericWebUrls(pkg)) {
+                browsers.putIfAbsent(
+                    pkg, channelLabels[pkg] ?: match.loadLabel(packageManager).toString()
                 )
             }
-            .sortedBy { it["name"] }
-            .toList()
+        }
+
+        // 对未出现在 queryIntentActivities 列表中的已安装官方通道进行补查。
+        // 必须能处理通用的 http 与 https 链接；单纯包名存在不算浏览器。
+        knownPackages.forEach { pkg ->
+            if (pkg == packageName || pkg in browsers) return@forEach
+            val info = try {
+                getAppInfo(pkg)
+            } catch (_: PackageManager.NameNotFoundException) {
+                return@forEach
+            } catch (_: SecurityException) {
+                return@forEach
+            }
+            if (canOpenGenericWebUrls(pkg)) {
+                browsers[pkg] = channelLabels[pkg]
+                    ?: packageManager.getApplicationLabel(info).toString()
+            }
+        }
+        return browsers.entries
+            .sortedWith(compareBy({ it.value.lowercase() }, { it.key }))
+            .map { mapOf("id" to it.key, "name" to it.value) }
+    }
+
+    private fun canOpenGenericWebUrls(browserPackage: String): Boolean {
+        return listOf("http", "https").all { scheme ->
+            val probe = Intent(
+                Intent.ACTION_VIEW, Uri.parse("$scheme://example.com/")
+            ).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                setPackage(browserPackage)
+            }
+            val resolved = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.queryIntentActivities(
+                    probe,
+                    PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.queryIntentActivities(probe, PackageManager.MATCH_DEFAULT_ONLY)
+            }
+            resolved.any {
+                it.activityInfo.packageName == browserPackage && it.activityInfo.exported
+            }
+        }
     }
 
     private fun launchLoginBrowser(browserPackage: String, rawUrl: String): Boolean {
