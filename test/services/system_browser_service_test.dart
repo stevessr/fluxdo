@@ -94,7 +94,7 @@ void main() {
           .where((entry) => entry.name == 'Firefox Nightly')
           .map((entry) => entry.relative)
           .toList();
-      expect(nightlyPaths, contains(contains('Nightly')));
+      expect(nightlyPaths.any((path) => path.contains('Firefox Nightly')), isTrue);
       expect(nightlyPaths.length, greaterThanOrEqualTo(2));
     });
 
