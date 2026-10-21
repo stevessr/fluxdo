@@ -1204,9 +1204,11 @@ class MainActivity : FlutterActivity() {
             val pkg = match.activityInfo.packageName
             if (pkg == packageName || pkg == "android") return@forEach
             val filter = match.filter
+            // 部分浏览器分别声明 HTTP 与 HTTPS 的 IntentFilter，
+            // 不能要求一次查询返回的同一 Filter 同时包含两种 scheme。
+            // 后续 canOpenGenericWebUrls 会单独验证两种协议。
             val genericBrowser = filter != null &&
-                filter.hasDataScheme("http") &&
-                filter.hasDataScheme("https") &&
+                (filter.hasDataScheme("http") || filter.hasDataScheme("https")) &&
                 filter.countDataAuthorities() == 0
             if (!genericBrowser && pkg !in knownPackages) return@forEach
             if (canOpenGenericWebUrls(pkg)) {
