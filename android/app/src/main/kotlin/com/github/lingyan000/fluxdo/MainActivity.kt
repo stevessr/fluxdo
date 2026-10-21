@@ -1168,7 +1168,8 @@ class MainActivity : FlutterActivity() {
             "org.chromium.chrome", "org.chromium.chrome.stable",
             "org.mozilla.firefox", "org.mozilla.firefox_beta", "org.mozilla.firefox.beta",
             "org.mozilla.fenix", "org.mozilla.firefox_nightly", "org.mozilla.fenix.nightly",
-            "org.mozilla.focus", "org.mozilla.focus.beta", "org.mozilla.fennec_fdroid",
+            "org.mozilla.focus", "org.mozilla.focus.beta", "org.mozilla.focus.nightly",
+            "org.mozilla.fennec.aurora", "org.mozilla.fennec_fdroid",
             "com.brave.browser", "com.brave.browser_beta", "com.brave.browser_nightly",
             "com.microsoft.emmx", "com.microsoft.emmx.beta",
             "com.microsoft.emmx.dev", "com.microsoft.emmx.canary",
@@ -1179,6 +1180,25 @@ class MainActivity : FlutterActivity() {
             "org.torproject.torbrowser"
         )
 
+        // 预览版的系统应用标签可能没有显示版本后缀；明确标注通道，
+        // 避免用户把 Beta/Canary 与 Stable 混淆并选错 OAuth Profile。
+        val channelLabels = mapOf(
+            "com.android.chrome" to "Google Chrome",
+            "com.chrome.beta" to "Google Chrome Beta",
+            "com.chrome.dev" to "Google Chrome Dev",
+            "com.chrome.canary" to "Google Chrome Canary",
+            "org.mozilla.firefox" to "Firefox",
+            "org.mozilla.firefox_beta" to "Firefox Beta",
+            "org.mozilla.firefox.beta" to "Firefox Beta",
+            "org.mozilla.fenix" to "Firefox Nightly",
+            "org.mozilla.firefox_nightly" to "Firefox Nightly",
+            "org.mozilla.focus.beta" to "Firefox Focus Beta",
+            "org.mozilla.focus.nightly" to "Firefox Focus Nightly",
+            "com.microsoft.emmx" to "Microsoft Edge",
+            "com.microsoft.emmx.beta" to "Microsoft Edge Beta",
+            "com.microsoft.emmx.dev" to "Microsoft Edge Dev",
+            "com.microsoft.emmx.canary" to "Microsoft Edge Canary"
+        )
         val browsers = linkedMapOf<String, String>()
         matches.forEach { match ->
             val pkg = match.activityInfo.packageName
@@ -1190,7 +1210,9 @@ class MainActivity : FlutterActivity() {
                 filter.countDataAuthorities() == 0
             if (!genericBrowser && pkg !in knownPackages) return@forEach
             if (canOpenGenericWebUrls(pkg)) {
-                browsers.putIfAbsent(pkg, match.loadLabel(packageManager).toString())
+                browsers.putIfAbsent(
+                    pkg, channelLabels[pkg] ?: match.loadLabel(packageManager).toString()
+                )
             }
         }
 
@@ -1206,7 +1228,8 @@ class MainActivity : FlutterActivity() {
                 return@forEach
             }
             if (canOpenGenericWebUrls(pkg)) {
-                browsers[pkg] = packageManager.getApplicationLabel(info).toString()
+                browsers[pkg] = channelLabels[pkg]
+                    ?: packageManager.getApplicationLabel(info).toString()
             }
         }
         return browsers.entries
