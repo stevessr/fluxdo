@@ -259,7 +259,14 @@ HttpClientAdapter _createNativeAdapter() {
     debugPrint('[DIO] Dynamic adapter -> NativeAdapter (Cronet HTTP/3/QUIC)');
     return NativeAdapter(
       createCronetEngine: () =>
-          CronetEngine.build(enableQuic: true, enableHttp2: true),
+          CronetEngine.build(
+            enableQuic: true,
+            enableHttp2: true,
+            // Cronet advertises Brotli only when its native decoder is enabled.
+            // Do not set Accept-Encoding manually: it must match the active
+            // transport's actual decompression capabilities.
+            enableBrotli: true,
+          ),
     );
   }
   if (kDebugMode && (Platform.isMacOS || Platform.isIOS)) {

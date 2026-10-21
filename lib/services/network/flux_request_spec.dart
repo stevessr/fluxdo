@@ -81,6 +81,11 @@ class FluxRequestKeys {
   /// OAuth 授权跳转链的会话 cookie 依赖此语义;重定向子请求会继承本键。
   static const String allowRedirectSetCookie = 'allowRedirectSetCookie';
 
+  /// A redirect has crossed an origin boundary. Its response must never
+  /// mutate the application's canonical auth/Cloudflare cookies via the
+  /// global cookie synchronization layer. Preserved for the redirect chain.
+  static const String crossOriginRedirect = '_fluxCrossOriginRedirect';
+
   // --- 防环/内部 ---
 
   /// CF 验证成功后的重放不得再次触发验证(防验证死循环)。
@@ -150,6 +155,9 @@ extension type const FluxRequestSpec(Map<String, dynamic> _extra) {
 
   bool get allowRedirectSetCookie =>
       _extra[FluxRequestKeys.allowRedirectSetCookie] == true;
+
+  bool get isCrossOriginRedirect =>
+      _extra[FluxRequestKeys.crossOriginRedirect] == true;
 
   bool get skipCfChallenge => _extra[FluxRequestKeys.skipCfChallenge] == true;
 
