@@ -50,6 +50,7 @@ class SystemBrowserService {
     (name: 'Firefox', command: 'firefox'),
     (name: 'Firefox ESR', command: 'firefox-esr'),
     (name: 'Firefox Beta', command: 'firefox-beta'),
+    (name: 'Firefox Developer Edition', command: 'firefox-aurora'),
     (name: 'Firefox Developer Edition', command: 'firefox-developer-edition'),
     (name: 'Firefox Nightly', command: 'firefox-nightly'),
     (name: 'Firefox Nightly', command: 'firefox-trunk'),
@@ -63,6 +64,7 @@ class SystemBrowserService {
     (name: 'Google Chrome', command: 'google-chrome'),
     (name: 'Google Chrome Beta', command: 'google-chrome-beta'),
     (name: 'Google Chrome Dev', command: 'google-chrome-unstable'),
+    (name: 'Google Chrome Dev', command: 'google-chrome-dev'),
     (name: 'Google Chrome Canary', command: 'google-chrome-canary'),
     (name: 'Brave', command: 'brave-browser'),
     (name: 'Brave Beta', command: 'brave-browser-beta'),
@@ -71,6 +73,7 @@ class SystemBrowserService {
     (name: 'Microsoft Edge', command: 'microsoft-edge'),
     (name: 'Microsoft Edge Beta', command: 'microsoft-edge-beta'),
     (name: 'Microsoft Edge Dev', command: 'microsoft-edge-dev'),
+    (name: 'Microsoft Edge Canary', command: 'microsoft-edge-canary'),
     (name: 'Vivaldi', command: 'vivaldi-stable'),
     (name: 'Vivaldi', command: 'vivaldi'),
     (name: 'Opera', command: 'opera'),
@@ -112,6 +115,7 @@ class SystemBrowserService {
     (name: 'Firefox Beta', relative: r'Firefox Beta\firefox.exe'),
     (name: 'Firefox Developer Edition', relative: r'Firefox Developer Edition\firefox.exe'),
     (name: 'Firefox Nightly', relative: r'Nightly\firefox.exe'),
+    (name: 'Firefox Nightly', relative: r'Firefox Nightly\firefox.exe'),
     (name: 'Firefox ESR', relative: r'Mozilla Firefox ESR\firefox.exe'),
     (name: 'Microsoft Edge', relative: r'Microsoft\Edge\Application\msedge.exe'),
     (name: 'Microsoft Edge Beta', relative: r'Microsoft\Edge Beta\Application\msedge.exe'),
@@ -241,10 +245,13 @@ class SystemBrowserService {
         Platform.environment['PROGRAMW6432'],
         Platform.environment['LOCALAPPDATA'],
       ].whereType<String>().toSet();
+      final seenPaths = <String>{};
       for (final entry in windowsBrowserInstallPaths) {
         for (final root in programFiles) {
           final file = '$root\\${entry.relative}';
           if (!await File(file).exists()) continue;
+          // PROGRAMFILES 与 PROGRAMW6432 经常指向同一目录。
+          if (!seenPaths.add(file.toLowerCase())) continue;
           browsers.add(LoginBrowser(
             id: 'win:$file',
             name: entry.name,
