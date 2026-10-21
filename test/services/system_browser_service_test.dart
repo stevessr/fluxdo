@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/system_browser_service.dart';
 
@@ -75,6 +77,46 @@ void main() {
       expect(paths['Firefox Nightly'], contains('Nightly'));
       expect(paths['Firefox Developer Edition'],
           contains('Developer Edition'));
+    });
+
+    test('Linux 同时覆盖独立的 alpha / beta / nightly 命令别名', () {
+      final commands = {
+        for (final entry in SystemBrowserService.linuxBrowserCommands)
+          entry.command: entry.name,
+      };
+      expect(commands['firefox-aurora'], 'Firefox Developer Edition');
+      expect(commands['google-chrome-dev'], 'Google Chrome Dev');
+      expect(commands['microsoft-edge-canary'], 'Microsoft Edge Canary');
+    });
+
+    test('Windows Nightly 支持独立安装目录别名', () {
+      final nightlyPaths = SystemBrowserService.windowsBrowserInstallPaths
+          .where((entry) => entry.name == 'Firefox Nightly')
+          .map((entry) => entry.relative)
+          .toList();
+      expect(nightlyPaths, contains(contains('Nightly')));
+      expect(nightlyPaths.length, greaterThanOrEqualTo(2));
+    });
+
+    test('Android 原生发现包含预览包并保留 HTTP/HTTPS 校验', () {
+      final nativeSource = File(
+        'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/MainActivity.kt',
+      ).readAsStringSync();
+      for (final packageName in [
+        'com.chrome.beta',
+        'com.chrome.dev',
+        'com.chrome.canary',
+        'com.microsoft.emmx.beta',
+        'com.microsoft.emmx.dev',
+        'com.microsoft.emmx.canary',
+        'org.mozilla.firefox_beta',
+        'org.mozilla.fenix',
+        'org.mozilla.focus.nightly',
+      ]) {
+        expect(nativeSource, contains('"$packageName"'));
+      }
+      expect(nativeSource, contains('canOpenGenericWebUrls(pkg)'));
+      expect(nativeSource, contains('setPackage(browserPackage)'));
     });
 
     test('browser choices preserve explicit identifiers', () {
