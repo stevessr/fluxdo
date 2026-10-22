@@ -1,7 +1,8 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+// ignore: depend_on_referenced_packages
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'preferences_provider.dart';
+import 'theme_provider.dart';
 import '../services/media/post_audio_playback_manager.dart';
 
 /// Local-only media playback preferences, independent of site account settings.
