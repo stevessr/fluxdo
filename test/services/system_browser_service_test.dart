@@ -3,8 +3,12 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/system_browser_service.dart';
 
+import '../../tool/verify_browser_discovery.dart' as browser_verification;
+
 void main() {
   group('SystemBrowserService', () {
+    test('桌面发现行为与当前系统文件验证', browser_verification.main);
+
     test('opens only the LINUX DO User API Key authorization entrypoint', () {
       expect(
         SystemBrowserService.isAuthorizationUrl(
@@ -42,7 +46,10 @@ void main() {
       expect(commands['microsoft-edge-dev'], 'Microsoft Edge Dev');
       expect(commands['firefox-beta'], 'Firefox Beta');
       expect(commands['firefox-nightly'], 'Firefox Nightly');
-      expect(commands['firefox-developer-edition'], 'Firefox Developer Edition');
+      expect(
+        commands['firefox-developer-edition'],
+        'Firefox Developer Edition',
+      );
       expect(commands['firefox'], 'Firefox');
     });
 
@@ -75,8 +82,7 @@ void main() {
       expect(paths['Microsoft Edge Beta'], contains('Edge Beta'));
       expect(paths['Microsoft Edge Dev'], contains('Edge Dev'));
       expect(paths['Firefox Nightly'], contains('Nightly'));
-      expect(paths['Firefox Developer Edition'],
-          contains('Developer Edition'));
+      expect(paths['Firefox Developer Edition'], contains('Developer Edition'));
     });
 
     test('Linux 同时覆盖独立的 alpha / beta / nightly 命令别名', () {
@@ -94,7 +100,10 @@ void main() {
           .where((entry) => entry.name == 'Firefox Nightly')
           .map((entry) => entry.relative)
           .toList();
-      expect(nightlyPaths.any((path) => path.contains('Firefox Nightly')), isTrue);
+      expect(
+        nightlyPaths.any((path) => path.contains('Firefox Nightly')),
+        isTrue,
+      );
       expect(nightlyPaths.length, greaterThanOrEqualTo(2));
     });
 
