@@ -141,6 +141,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher_modern"
             android:targetActivity=".MainActivity">
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
