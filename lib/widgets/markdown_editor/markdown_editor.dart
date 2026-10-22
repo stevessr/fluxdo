@@ -1,4 +1,5 @@
 import 'composer_chrome.dart';
+import 'media_upload_helper.dart';
 
 import 'dart:async';
 import 'dart:math';
@@ -130,6 +131,10 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       _toolbarKey.currentState?.hasPendingUploads ?? false;
 
   bool get canQueueExternalFiles => _toolbarKey.currentState != null;
+
+  void queuePreparedExternalMedia(PreparedMediaUpload media) {
+    _toolbarKey.currentState?.queuePreparedExternalMedia(media);
+  }
 
   void queueExternalFile(String path, String name, {required bool image}) {
     _toolbarKey.currentState?.queueExternalFile(path, name, image: image);
