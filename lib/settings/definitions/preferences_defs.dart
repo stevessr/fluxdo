@@ -94,7 +94,7 @@ List<SettingsGroup> buildPreferencesGroups(BuildContext context) {
             getValue: (ref) => ref.watch(mediaPlaybackPreferencesProvider).pictureInPicture,
             onChanged: (ref, v) => ref.read(mediaPlaybackPreferencesProvider.notifier).setPictureInPicture(v),
           ),
-          platforms: {TargetPlatform.android},
+          condition: () => Platform.isAndroid,
         ),
       ],
     ),
