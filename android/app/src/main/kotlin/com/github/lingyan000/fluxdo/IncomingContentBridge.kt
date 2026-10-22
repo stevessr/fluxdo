@@ -101,9 +101,13 @@ class IncomingContentBridge(private val activity: Activity) {
             clip.getItemAt(index).uri?.let(uris::add)
         }
         val imported = mutableListOf<Map<String, Any>>()
+        var skippedFiles = (uris.distinct().size - MAX_FILES).coerceAtLeast(0)
         for (uri in uris.distinct().take(MAX_FILES)) {
             // Never accept file:// paths from another app.
-            if (uri.scheme != "content") continue
+            if (uri.scheme != "content") {
+                skippedFiles++
+                continue
+            }
             val mime = activity.contentResolver.getType(uri) ?: intent.type.orEmpty()
             val originalName = displayName(uri)
             val fallbackExt = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
@@ -128,7 +132,11 @@ class IncomingContentBridge(private val activity: Activity) {
                             out.write(buffer, 0, count)
                         }
                     }
-                } ?: continue
+                } ?: run {
+                    dest.delete()
+                    skippedFiles++
+                    continue
+                }
                 imported.add(mapOf(
                     "path" to dest.absolutePath,
                     "name" to name,
@@ -136,11 +144,13 @@ class IncomingContentBridge(private val activity: Activity) {
                 ))
             } catch (e: Exception) {
                 dest.delete()
+                skippedFiles++
                 Log.w("IncomingContent", "Skipping unreadable URI", e)
             }
         }
         return mapOf(
             "action" to "share",
+            "skippedFiles" to skippedFiles,
             "title" to (intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: ""),
             "text" to (intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() ?: ""),
             "files" to imported,
