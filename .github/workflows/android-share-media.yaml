@@ -100,6 +100,21 @@ jobs:
           packages: >-
             platforms;android-36
             build-tools;36.0.0
+      - name: Generate debug CA resource for Android linker
+        run: |
+          set -euo pipefail
+          mkdir -p core/doh_proxy/certs assets/certs android/app/src/main/res/raw
+          if [ ! -f core/doh_proxy/certs/ca.der ]; then
+            openssl req -x509 -newkey ec \
+              -pkeyopt ec_paramgen_curve:prime256v1 \
+              -keyout core/doh_proxy/certs/ca.key \
+              -out core/doh_proxy/certs/ca.crt \
+              -days 3650 -nodes -subj "/CN=DOH Proxy CA/O=DOH Proxy/C=CN"
+            openssl x509 -in core/doh_proxy/certs/ca.crt \
+              -outform DER -out core/doh_proxy/certs/ca.der
+          fi
+          cp core/doh_proxy/certs/ca.der android/app/src/main/res/raw/proxy_ca.der
+          cp core/doh_proxy/certs/ca.crt assets/certs/proxy_ca.pem
       - name: Compile Android application Kotlin
         working-directory: android
         run: gradle :app:compileDebugKotlin -x :app:compileFlutterBuildDebug --no-daemon --stacktrace
