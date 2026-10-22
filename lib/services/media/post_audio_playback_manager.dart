@@ -20,8 +20,7 @@ class PostAudioPlaybackManager extends ChangeNotifier with WidgetsBindingObserve
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!backgroundAllowed &&
         (state == AppLifecycleState.paused ||
-            state == AppLifecycleState.hidden ||
-            state == AppLifecycleState.inactive)) {
+            state == AppLifecycleState.hidden)) {
       unawaited(player.pause());
     }
   }
@@ -45,7 +44,7 @@ class PostAudioPlaybackManager extends ChangeNotifier with WidgetsBindingObserve
       await player.setAudioSource(AudioSource.uri(
         Uri.parse(url),
         tag: MediaItem(
-          id: url,
+          id: url.hashCode.toUnsigned(32).toRadixString(16),
           title: 'LINUX DO 音频',
           album: 'LINUX DO',
         ),
