@@ -256,8 +256,9 @@ class DesktopBrowserDiscovery {
               if (!installed.contains(entry.appId) ||
                   browsers.any(
                     (browser) => browser.id == 'xdg:${entry.appId}.desktop',
-                  ))
+                  )) {
                 continue;
+              }
               browsers.add(
                 LoginBrowser(
                   id: 'flatpak:${entry.appId}',

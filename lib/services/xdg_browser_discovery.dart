@@ -52,12 +52,14 @@ class XdgBrowserDiscovery {
                 values['Hidden'] == 'true' ||
                 values['Terminal'] == 'true' ||
                 id == 'fluxdo.desktop' ||
-                id == 'com.github.lingyan000.fluxdo.desktop')
+                id == 'com.github.lingyan000.fluxdo.desktop') {
               continue;
+            }
             final mimeTypes = (values['MimeType'] ?? '').split(';');
             if (!mimeTypes.contains('x-scheme-handler/http') ||
-                !mimeTypes.contains('x-scheme-handler/https'))
+                !mimeTypes.contains('x-scheme-handler/https')) {
               continue;
+            }
             if (!_visible(values)) continue;
             final name = _name(values);
             if (name.isEmpty) continue;
@@ -65,8 +67,9 @@ class XdgBrowserDiscovery {
             if (tryExec != null && await _executable(tryExec) == null) continue;
             final command = _firstCommand(values['Exec'] ?? '');
             if (values['DBusActivatable'] != 'true' &&
-                (command == null || await _executable(command) == null))
+                (command == null || await _executable(command) == null)) {
               continue;
+            }
             result.add((id: id, name: name, path: file.path, command: command));
           } on FileSystemException {
             // 不可读或损坏的单个入口不阻断其他浏览器。
