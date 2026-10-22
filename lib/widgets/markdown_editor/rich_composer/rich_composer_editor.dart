@@ -449,6 +449,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       ) ||
       _uploadingCount > 0;
 
+  bool get canQueueExternalFiles => _editor != null && !_documentReplaced;
+
   /// 外部拖放/平台上传入口，同样使用语义临时节点及任务控制器。
   void queueUpload(
     String path,
