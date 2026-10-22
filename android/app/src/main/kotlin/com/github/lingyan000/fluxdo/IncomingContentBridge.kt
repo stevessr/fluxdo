@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.webkit.MimeTypeMap
 import android.provider.OpenableColumns
 import android.util.Log
 import io.flutter.plugin.common.BinaryMessenger
@@ -103,7 +104,13 @@ class IncomingContentBridge(private val activity: Activity) {
         for (uri in uris.distinct().take(MAX_FILES)) {
             // Never accept file:// paths from another app.
             if (uri.scheme != "content") continue
-            val name = displayName(uri)
+            val mime = activity.contentResolver.getType(uri) ?: intent.type.orEmpty()
+            val originalName = displayName(uri)
+            val fallbackExt = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
+            val name = if (originalName.contains('.')) originalName else {
+                val suffix = fallbackExt?.takeIf { it.matches(Regex("[a-zA-Z0-9]{1,8}")) }
+                if (suffix != null) "$originalName.$suffix" else originalName
+            }
             val ext = name.substringAfterLast('.', "").lowercase()
             val safeExt = if (ext.matches(Regex("[a-z0-9]{1,8}"))) ".$ext" else ""
             val destDir = File(activity.cacheDir, "incoming-shares").apply { mkdirs() }
@@ -122,7 +129,6 @@ class IncomingContentBridge(private val activity: Activity) {
                         }
                     }
                 } ?: continue
-                val mime = activity.contentResolver.getType(uri) ?: intent.type.orEmpty()
                 imported.add(mapOf(
                     "path" to dest.absolutePath,
                     "name" to name,
@@ -152,7 +158,7 @@ class IncomingContentBridge(private val activity: Activity) {
         } finally {
             cursor?.close()
         }
-        return name?.substringAfterLast('/')?.take(120)
+        return name?.substringAfterLast('/')?.substringAfterLast('\\\\')?.take(120)
             ?.takeIf { it.isNotBlank() } ?: "shared-file"
     }
 }
