@@ -29,7 +29,6 @@ class MediaPlaybackPreferencesNotifier extends StateNotifier<MediaPlaybackPrefer
 
   Future<void> setBackgroundAudio(bool value) async {
     PostAudioPlaybackManager.instance.backgroundAllowed = value;
-    if (!value) { await PostAudioPlaybackManager.instance.player.pause(); }
     state = MediaPlaybackPreferences(
       backgroundAudio: value,
       pictureInPicture: state.pictureInPicture,
