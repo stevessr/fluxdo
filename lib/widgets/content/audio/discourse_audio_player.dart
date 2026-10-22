@@ -167,8 +167,8 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                         StreamBuilder<Duration>(
                           stream: _player.positionStream,
                           builder: (context, posSnap) {
-                            final total = _player.duration;
-                            final pos = posSnap.data ?? Duration.zero;
+                            final total = _active ? _player.duration : null;
+                            final pos = _active ? (posSnap.data ?? Duration.zero) : Duration.zero;
                             // 未播显示总长;播放中显示当前进度
                             final show = (playing || pos > Duration.zero)
                                 ? pos
@@ -246,7 +246,7 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                         child: StreamBuilder<Duration>(
                           stream: _player.positionStream,
                           builder: (context, posSnap) {
-                            final pos = posSnap.data ?? Duration.zero;
+                            final pos = _active ? (posSnap.data ?? Duration.zero) : Duration.zero;
                             final total = _active ? (_player.duration ?? Duration.zero) : Duration.zero;
                             final maxMs = total.inMilliseconds == 0
                                 ? 1.0
