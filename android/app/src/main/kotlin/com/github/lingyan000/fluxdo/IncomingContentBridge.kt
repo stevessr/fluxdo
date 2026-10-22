@@ -142,7 +142,10 @@ class IncomingContentBridge(private val activity: Activity) {
                 imported.add(mapOf(
                     "path" to dest.absolutePath,
                     "name" to name,
-                    "image" to mime.startsWith("image/"),
+                    "mimeType" to mime,
+                    "image" to mime.startsWith("image/") || ext in setOf(
+                        "jpg", "jpeg", "png", "gif", "webp", "avif", "heic"
+                    ),
                 ))
             } catch (e: Exception) {
                 dest.delete()
