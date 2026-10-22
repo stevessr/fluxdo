@@ -12,7 +12,8 @@ class PostAudioPlaybackManager extends ChangeNotifier with WidgetsBindingObserve
   }
   static final instance = PostAudioPlaybackManager._();
 
-  final AudioPlayer player = AudioPlayer();
+  // Do not create the native player before plugin initialization.
+  late final AudioPlayer player = AudioPlayer();
   String? activeUrl;
   bool backgroundAllowed = true;
 
