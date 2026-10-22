@@ -96,13 +96,14 @@ class AndroidIncomingContentService {
     }
     switch (content.action) {
       case 'share':
-        if (content.title.isEmpty && content.text.isEmpty && content.attachments.isEmpty) {
+      case 'topic':
+        if (content.action == 'share' &&
+            content.title.isEmpty &&
+            content.text.isEmpty &&
+            content.attachments.isEmpty) {
           ToastService.showError('分享内容为空，请重新选择');
           return;
         }
-        continue openTopic;
-      openTopic:
-      case 'topic':
         final title = content.title.length <= 250
             ? content.title
             : content.title.substring(0, 250);
