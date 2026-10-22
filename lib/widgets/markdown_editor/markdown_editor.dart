@@ -128,6 +128,12 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   /// 包括失败待处理任务，供宿主发布保护使用。
   bool get hasPendingUploads =>
       _toolbarKey.currentState?.hasPendingUploads ?? false;
+
+  bool get canQueueExternalFiles => _toolbarKey.currentState != null;
+
+  void queueExternalFile(String path, String name, {required bool image}) {
+    _toolbarKey.currentState?.queueExternalFile(path, name, image: image);
+  }
   final _scrollController = ScrollController();
 
   /// 正文 TextField 定位锚。_scrollToCursor 的 RenderEditable 搜索必须
