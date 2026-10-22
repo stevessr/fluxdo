@@ -31,6 +31,7 @@ class IncomingContentBridge(private val activity: Activity) {
         const val SEARCH = "com.github.lingyan000.fluxdo.SEARCH"
         private const val MAX_FILES = 10
         private const val MAX_BYTES = 100L * 1024L * 1024L
+        private const val MAX_TOTAL_BYTES = 150L * 1024L * 1024L
     }
 
     private val pending = ArrayDeque<Intent>()
@@ -102,13 +103,18 @@ class IncomingContentBridge(private val activity: Activity) {
         }
         val imported = mutableListOf<Map<String, Any>>()
         var skippedFiles = (uris.distinct().size - MAX_FILES).coerceAtLeast(0)
+        var importedBytes = 0L
         for (uri in uris.distinct().take(MAX_FILES)) {
             // Never accept file:// paths from another app.
             if (uri.scheme != "content") {
                 skippedFiles++
                 continue
             }
-            val mime = activity.contentResolver.getType(uri) ?: intent.type.orEmpty()
+            val mime = try {
+                activity.contentResolver.getType(uri) ?: intent.type.orEmpty()
+            } catch (_: Exception) {
+                intent.type.orEmpty()
+            }
             val originalName = displayName(uri)
             val fallbackExt = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
             val name = if (originalName.contains('.')) originalName else {
@@ -119,6 +125,7 @@ class IncomingContentBridge(private val activity: Activity) {
             val safeExt = if (ext.matches(Regex("[a-z0-9]{1,8}"))) ".$ext" else ""
             val destDir = File(activity.cacheDir, "incoming-shares").apply { mkdirs() }
             val dest = File(destDir, UUID.randomUUID().toString() + safeExt)
+            val previousBytes = importedBytes
             try {
                 val input = activity.contentResolver.openInputStream(uri)
                 if (input == null) {
@@ -134,7 +141,10 @@ class IncomingContentBridge(private val activity: Activity) {
                             val count = source.read(buffer)
                             if (count < 0) break
                             total += count
-                            if (total > MAX_BYTES) throw IllegalArgumentException("Share exceeds 100 MB")
+                            if (total > MAX_BYTES || importedBytes + count > MAX_TOTAL_BYTES) {
+                                throw IllegalArgumentException("Shared files exceed cache import limit")
+                            }
+                            importedBytes += count
                             out.write(buffer, 0, count)
                         }
                     }
@@ -148,6 +158,7 @@ class IncomingContentBridge(private val activity: Activity) {
                     ),
                 ))
             } catch (e: Exception) {
+                importedBytes = previousBytes
                 dest.delete()
                 skippedFiles++
                 Log.w("IncomingContent", "Skipping unreadable URI", e)
