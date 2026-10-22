@@ -22,12 +22,13 @@ class IncomingAttachment {
 }
 
 class IncomingContent {
-  const IncomingContent({required this.action, this.title = '', this.text = '', this.attachments = const []});
+  const IncomingContent({required this.action, this.title = '', this.text = '', this.attachments = const [], this.skippedFiles = 0});
 
   final String action;
   final String title;
   final String text;
   final List<IncomingAttachment> attachments;
+  final int skippedFiles;
 
   static IncomingContent? fromMap(Object? value) {
     if (value is! Map) return null;
@@ -37,6 +38,7 @@ class IncomingContent {
       action: action,
       title: (value['title'] is String ? value['title'] as String : '').trim(),
       text: value['text'] is String ? value['text'] as String : '',
+      skippedFiles: value['skippedFiles'] is int ? (value['skippedFiles'] as int).clamp(0, 1000) : 0,
       attachments: value['files'] is List
           ? (value['files'] as List)
               .map(IncomingAttachment.fromMap)
