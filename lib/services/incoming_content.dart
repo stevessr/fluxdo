@@ -1,10 +1,22 @@
 /// A platform share copied to the app cache while Android's URI grant is valid.
 class IncomingAttachment {
-  const IncomingAttachment({required this.path, required this.name, required this.isImage});
+  const IncomingAttachment({
+    required this.path,
+    required this.name,
+    required this.isImage,
+    this.mimeType = '',
+  });
 
   final String path;
   final String name;
   final bool isImage;
+  final String mimeType;
+
+  String get extension => name.split('.').last.toLowerCase();
+  bool get isAudio => mimeType.startsWith('audio/') ||
+      const {'mp3', 'm4a', 'aac', 'ogg', 'opus', 'flac', 'wav'}.contains(extension);
+  bool get isVideo => mimeType.startsWith('video/') ||
+      const {'mp4', 'mov', 'mkv', 'webm', 'm4v'}.contains(extension);
 
   static IncomingAttachment? fromMap(Object? value) {
     if (value is! Map) return null;
@@ -17,6 +29,7 @@ class IncomingAttachment {
       path: path,
       name: name,
       isImage: value['image'] == true,
+      mimeType: value['mimeType'] is String ? value['mimeType'] as String : '',
     );
   }
 }
