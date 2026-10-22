@@ -41,13 +41,8 @@ jobs:
         run: mkdir -p assets/certs assets/images/llm
       - name: Install dependencies
         run: flutter pub get
-      # Keep the committed Dart dependency graph reproducible. The next
-      # revision will save the resolved graph back to pubspec.lock.
-      - name: Inspect pub lockfile resolution
-        run: |
-          echo '__FLUXDO_LOCK_PATCH_BEGIN__'
-          git diff -- pubspec.lock
-          echo '__FLUXDO_LOCK_PATCH_END__'
+      - name: Verify dependency lockfile
+        run: git diff --exit-code -- pubspec.lock
       - name: Generate localization
         run: dart run tool/gen_l10n.dart
       - name: Analyze share and media changes
@@ -71,7 +66,8 @@ jobs:
         run: |
           dart tool/flutterw.dart test \
             test/services/incoming_content_test.dart \
-            test/pages/create_topic_draft_sync_test.dart
+            test/pages/create_topic_draft_sync_test.dart \
+            test/widgets/markdown_editor/media_upload_helper_test.dart
 
   android-kotlin:
     needs: flutter-share-media
