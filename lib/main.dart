@@ -71,6 +71,7 @@ import 'package:fluxdo_render/fluxdo_render.dart'
 
 import 'services/clipboard_topic_link_service.dart';
 import 'services/deep_link_service.dart';
+import 'services/android_incoming_content_service.dart';
 import 'services/windows_protocol_registrar_stub.dart'
     if (dart.library.ffi) 'services/windows_protocol_registrar_io.dart';
 import 'services/background/background_notification_service.dart';
@@ -994,6 +995,7 @@ class _MainPageState extends ConsumerState<MainPage>
 
       // 初始化 Deep Link 服务
       DeepLinkService.instance.initialize(context);
+      AndroidIncomingContentService.instance.initialize(context);
       unawaited(
         _runStartupUiTasks().catchError((Object e, StackTrace s) {
           debugPrint('[MainPage] 启动 UI 任务失败: $e\n$s');
