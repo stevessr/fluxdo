@@ -54,6 +54,7 @@ import '../utils/dialog_utils.dart';
 import '../utils/discourse_url_parser.dart';
 import 'pending_posts_page.dart';
 import '../services/incoming_content.dart';
+import '../widgets/markdown_editor/media_upload_helper.dart';
 import '../services/discourse/discourse_service.dart';
 
 class CreateTopicPage extends ConsumerStatefulWidget {
@@ -235,31 +236,69 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
 
   Future<void> _queueIncomingAttachments() async {
     try {
+      // Rich documents may need asynchronous import before accepting files.
       for (var retry = 0; retry < 40 && mounted; retry++) {
-      final rich = _richKey.currentState;
-      final source = _editorKey.currentState;
-      if (rich?.canQueueExternalFiles == true) {
-        for (final file in widget.incomingAttachments) {
-          rich!.queueUpload(
-            file.path,
-            file.name,
-            image: file.isImage,
-            execute: (token, progress) => file.isImage
-                ? DiscourseService().uploadImage(file.path, cancelToken: token, onProgress: progress)
-                : DiscourseService().uploadFile(file.path, cancelToken: token, onProgress: progress),
-          );
+        final rich = _richKey.currentState;
+        final source = _editorKey.currentState;
+        if (rich?.canQueueExternalFiles == true ||
+            source?.canQueueExternalFiles == true) {
+          for (final file in widget.incomingAttachments) {
+            if (!mounted) return;
+            // Ordinary media picker routes audio/video through the special
+            // .xz upload and HTML embedding path. Shares must do the same.
+            if (file.isAudio || file.isVideo) {
+              final prepared = await prepareMediaUpload(
+                context,
+                path: file.path,
+                name: file.name,
+                isAudio: file.isAudio,
+              );
+              if (prepared == null || !mounted) continue;
+              final activeRich = _richKey.currentState;
+              final activeSource = _editorKey.currentState;
+              if (activeRich?.canQueueExternalFiles == true) {
+                activeRich!.queuePreparedExternalMedia(prepared);
+              } else if (activeSource?.canQueueExternalFiles == true) {
+                activeSource!.queuePreparedExternalMedia(prepared);
+              } else {
+                ToastService.showError('编辑器已切换，请重新上传媒体文件');
+              }
+            } else if (_richKey.currentState?.canQueueExternalFiles == true) {
+              _richKey.currentState!.queueUpload(
+                file.path,
+                file.name,
+                image: file.isImage,
+                execute: (token, progress) => file.isImage
+                    ? DiscourseService().uploadImage(
+                        file.path,
+                        cancelToken: token,
+                        onProgress: progress,
+                      )
+                    : DiscourseService().uploadFile(
+                        file.path,
+                        cancelToken: token,
+                        onProgress: progress,
+                      ),
+              );
+            } else if (_editorKey.currentState?.canQueueExternalFiles == true) {
+              _editorKey.currentState!.queueExternalFile(
+                file.path,
+                file.name,
+                image: file.isImage,
+              );
+            } else {
+              ToastService.showError('编辑器已切换，请重新上传附件');
+            }
+          }
+          return;
         }
-        return;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
       }
-      if (source?.canQueueExternalFiles == true) {
-        for (final file in widget.incomingAttachments) {
-          source!.queueExternalFile(file.path, file.name, image: file.isImage);
-        }
-        return;
+      if (mounted) {
+        ToastService.showError('分享附件未能导入，请从编辑器重新选择文件');
       }
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-      if (mounted) ToastService.showError('分享附件未能导入，请从编辑器重新选择文件');
+    } catch (error, stack) {
+      AppErrorHandler.handleUnexpected(error, stack);
     } finally {
       if (mounted) setState(() => _incomingImportPending = false);
     }
