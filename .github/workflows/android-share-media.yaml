@@ -1,0 +1,67 @@
+name: Android Share and Media Playback
+
+on:
+  pull_request:
+    paths:
+      - 'android/app/src/main/AndroidManifest.xml'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/IncomingContentBridge.kt'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/MainActivity.kt'
+      - 'android/app/src/main/res/xml/shortcuts.xml'
+      - 'lib/services/incoming_content.dart'
+      - 'lib/services/android_incoming_content_service.dart'
+      - 'lib/services/media/post_audio_playback_manager.dart'
+      - 'lib/services/media/android_picture_in_picture.dart'
+      - 'lib/providers/media_playback_preferences_provider.dart'
+      - 'lib/pages/create_topic_page.dart'
+      - 'lib/widgets/content/audio/discourse_audio_player.dart'
+      - 'lib/widgets/media_player/video/fullscreen_video_page.dart'
+      - 'test/services/incoming_content_test.dart'
+      - 'pubspec.yaml'
+      - '.github/workflows/android-share-media.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-share-media:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs assets/images/llm
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+      - name: Analyze share and media changes
+        run: |
+          flutter analyze \
+            lib/services/incoming_content.dart \
+            lib/services/android_incoming_content_service.dart \
+            lib/services/media/post_audio_playback_manager.dart \
+            lib/services/media/android_picture_in_picture.dart \
+            lib/providers/media_playback_preferences_provider.dart \
+            lib/pages/create_topic_page.dart \
+            lib/widgets/markdown_editor/markdown_editor.dart \
+            lib/widgets/markdown_editor/markdown_toolbar.dart \
+            lib/widgets/markdown_editor/rich_composer/rich_composer_editor.dart \
+            lib/widgets/content/audio/discourse_audio_player.dart \
+            lib/widgets/media_player/video/fullscreen_video_page.dart \
+            lib/settings/definitions/preferences_defs.dart \
+            lib/main.dart \
+            test/services/incoming_content_test.dart
+      - name: Test share payload and editor contracts
+        run: |
+          dart tool/flutterw.dart test \
+            test/services/incoming_content_test.dart \
+            test/pages/create_topic_draft_sync_test.dart
