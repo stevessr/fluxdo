@@ -143,6 +143,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   bool _showPreview = false;
   String? _templateContent;
   bool _isLoadingDraft = false;
+  bool _incomingImportPending = false;
   bool _showEmojiPanel = false;
   bool _createAsPostVoting = false; // post-voting(问答)模式
   Timer? _featuredLinkDebounce;
@@ -213,6 +214,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     }
 
     if (widget.incomingAttachments.isNotEmpty) {
+      _incomingImportPending = true;
       // Rich composer initializes asynchronously; upload only after the active
       // editor can retain task placeholders. Never post file:// URLs as content.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -232,7 +234,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   }
 
   Future<void> _queueIncomingAttachments() async {
-    for (var retry = 0; retry < 40 && mounted; retry++) {
+    try {
+      for (var retry = 0; retry < 40 && mounted; retry++) {
       final rich = _richKey.currentState;
       final source = _editorKey.currentState;
       if (rich?.canQueueExternalFiles == true) {
@@ -256,7 +259,10 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    if (mounted) ToastService.showError('分享附件未能导入，请从编辑器重新选择文件');
+      if (mounted) ToastService.showError('分享附件未能导入，请从编辑器重新选择文件');
+    } finally {
+      if (mounted) setState(() => _incomingImportPending = false);
+    }
   }
 
   @override
@@ -944,8 +950,9 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   }
 
   Future<void> _submitChecked() async {
-    if ((_editorKey.currentState?.hasPendingUploads ?? false) ||
-        (_richKey.currentState?.hasPendingUploads ?? false)) {
+    if (_incomingImportPending ||
+        ((_editorKey.currentState?.hasPendingUploads ?? false) ||
+        (_richKey.currentState?.hasPendingUploads ?? false))) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(UploadTaskLabels.of(context).pendingSubmit)),
       );
