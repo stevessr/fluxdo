@@ -37,7 +37,7 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
   AudioPlayer get _player => _manager.player;
   bool get _active => _manager.activeUrl == widget.url;
   Object? _error;
-  double _speed = 1.0;
+  double get _speed => _active ? _player.speed : 1.0;
 
   @override
   void initState() {
@@ -303,8 +303,7 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                                     current: _speed,
                                   );
                                   if (speed == null || !mounted) return;
-                                  setState(() => _speed = speed);
-                                  await _player.setSpeed(speed);
+                                  await _manager.setSpeed(speed);
                                 },
                           style: TextButton.styleFrom(
                             minimumSize: const Size(40, 32),
