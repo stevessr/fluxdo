@@ -5,20 +5,17 @@
         <intent android:action="com.github.lingyan000.fluxdo.NEW_TOPIC"
             android:targetPackage="com.github.lingyan000.fluxdo"
             android:targetClass="com.github.lingyan000.fluxdo.MainActivity" />
-        <categories android:name="android.shortcut.conversation" />
     </shortcut>
     <shortcut android:shortcutId="new_message" android:enabled="true"
         android:shortcutShortLabel="@string/shortcut_new_message" android:shortcutLongLabel="@string/shortcut_new_message">
         <intent android:action="com.github.lingyan000.fluxdo.NEW_MESSAGE"
             android:targetPackage="com.github.lingyan000.fluxdo"
             android:targetClass="com.github.lingyan000.fluxdo.MainActivity" />
-        <categories android:name="android.shortcut.conversation" />
     </shortcut>
     <shortcut android:shortcutId="search" android:enabled="true"
         android:shortcutShortLabel="@string/shortcut_search" android:shortcutLongLabel="@string/shortcut_search">
         <intent android:action="com.github.lingyan000.fluxdo.SEARCH"
             android:targetPackage="com.github.lingyan000.fluxdo"
             android:targetClass="com.github.lingyan000.fluxdo.MainActivity" />
-        <categories android:name="android.shortcut.conversation" />
     </shortcut>
 </shortcuts>
