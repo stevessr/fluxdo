@@ -459,6 +459,12 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     required UploadExecutor execute,
   }) => _queueUpload(path, name, image: image, execute: execute);
 
+  /// Preserve the existing media transcoding and HTML <audio>/<video> syntax
+  /// when the input comes from an Android share rather than the local picker.
+  void queuePreparedExternalMedia(PreparedMediaUpload media) {
+    _queueUpload(media.path, media.name, media: media);
+  }
+
   void _queueUpload(
     String path,
     String name, {
