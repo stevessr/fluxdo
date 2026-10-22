@@ -32,6 +32,7 @@ class IncomingContentBridge(private val activity: Activity) {
         private const val MAX_FILES = 10
         private const val MAX_BYTES = 100L * 1024L * 1024L
         private const val MAX_TOTAL_BYTES = 150L * 1024L * 1024L
+        private const val CACHE_TTL_MS = 48L * 60 * 60 * 1000
     }
 
     private val pending = ArrayDeque<Intent>()
@@ -48,6 +49,20 @@ class IncomingContentBridge(private val activity: Activity) {
     }
 
     fun attach(messenger: BinaryMessenger) {
+        // Clean up stale imported files after process restart, not on every
+        // share: a live editor may still be uploading files from this cache.
+        Thread({
+            try {
+                val now = System.currentTimeMillis()
+                File(activity.cacheDir, "incoming-shares").listFiles()?.forEach { file ->
+                    if (file.isFile && now - file.lastModified() > CACHE_TTL_MS) {
+                        file.delete()
+                    }
+                }
+            } catch (error: Exception) {
+                Log.w("IncomingContent", "Could not clean stale share cache", error)
+            }
+        }, "fluxdo-share-cache-clean").start()
         channel = MethodChannel(messenger, CHANNEL).also { bridge ->
             bridge.setMethodCallHandler { call, result ->
                 if (call.method != "consume") {
