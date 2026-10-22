@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'preferences_provider.dart';
+import '../services/media/post_audio_playback_manager.dart';
 
 /// Local-only media playback preferences, independent of site account settings.
 class MediaPlaybackPreferences {
@@ -27,6 +28,8 @@ class MediaPlaybackPreferencesNotifier extends StateNotifier<MediaPlaybackPrefer
   final SharedPreferences _prefs;
 
   Future<void> setBackgroundAudio(bool value) async {
+    PostAudioPlaybackManager.instance.backgroundAllowed = value;
+    if (!value) { await PostAudioPlaybackManager.instance.player.pause(); }
     state = MediaPlaybackPreferences(
       backgroundAudio: value,
       pictureInPicture: state.pictureInPicture,
