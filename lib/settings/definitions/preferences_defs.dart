@@ -79,7 +79,7 @@ List<SettingsGroup> buildPreferencesGroups(BuildContext context) {
           subtitle: Localizations.localeOf(context).languageCode == 'zh'
               ? '离开帖子后继续播放音频，可从系统通知控制'
               : 'Continue listening outside the post with system media controls',
-          icon: Symbols.headphones_rounded,
+          icon: Icons.headphones_rounded,
           getValue: (ref) => ref.watch(mediaPlaybackPreferencesProvider).backgroundAudio,
           onChanged: (ref, v) => ref.read(mediaPlaybackPreferencesProvider.notifier).setBackgroundAudio(v),
         ),
@@ -90,7 +90,7 @@ List<SettingsGroup> buildPreferencesGroups(BuildContext context) {
             subtitle: Localizations.localeOf(context).languageCode == 'zh'
                 ? '全屏播放时切到后台可进入画中画（Android）'
                 : 'Enter picture-in-picture when leaving fullscreen playback (Android)',
-            icon: Symbols.picture_in_picture_alt_rounded,
+            icon: Icons.picture_in_picture_alt_rounded,
             getValue: (ref) => ref.watch(mediaPlaybackPreferencesProvider).pictureInPicture,
             onChanged: (ref, v) => ref.read(mediaPlaybackPreferencesProvider.notifier).setPictureInPicture(v),
           ),
