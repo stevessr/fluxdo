@@ -120,7 +120,13 @@ class IncomingContentBridge(private val activity: Activity) {
             val destDir = File(activity.cacheDir, "incoming-shares").apply { mkdirs() }
             val dest = File(destDir, UUID.randomUUID().toString() + safeExt)
             try {
-                activity.contentResolver.openInputStream(uri)?.use { source ->
+                val input = activity.contentResolver.openInputStream(uri)
+                if (input == null) {
+                    dest.delete()
+                    skippedFiles++
+                    continue
+                }
+                input.use { source ->
                     FileOutputStream(dest).use { out ->
                         val buffer = ByteArray(64 * 1024)
                         var total = 0L
@@ -132,10 +138,6 @@ class IncomingContentBridge(private val activity: Activity) {
                             out.write(buffer, 0, count)
                         }
                     }
-                } ?: run {
-                    dest.delete()
-                    skippedFiles++
-                    continue
                 }
                 imported.add(mapOf(
                     "path" to dest.absolutePath,
