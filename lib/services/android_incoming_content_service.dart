@@ -73,10 +73,13 @@ class AndroidIncomingContentService {
             incomingAttachments: content.attachments,
           ),
         ));
+        return;
       case 'message':
         await showReplySheet(context: ctx, composePrivateMessage: true);
+        return;
       case 'search':
         await navigator.push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
+        return;
     }
   }
 }
