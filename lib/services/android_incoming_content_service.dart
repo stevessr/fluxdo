@@ -101,7 +101,9 @@ class AndroidIncomingContentService {
             content.title.isEmpty &&
             content.text.isEmpty &&
             content.attachments.isEmpty) {
-          ToastService.showError('分享内容为空，请重新选择');
+          if (content.skippedFiles == 0) {
+            ToastService.showError('分享内容为空，请重新选择');
+          }
           return;
         }
         final title = content.title.length <= 250
