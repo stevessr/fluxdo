@@ -9,6 +9,41 @@ void main() {
   group('SystemBrowserService', () {
     test('桌面发现行为与当前系统文件验证', browser_verification.main);
 
+    test('XDG 启动检查退出码并拒绝非法授权 URL', () async {
+      if (!Platform.isLinux) return;
+      final service = SystemBrowserService.instance;
+      const success = LoginBrowser(
+        id: 'xdg:test.desktop',
+        name: '测试入口',
+        executable: '/bin/sh',
+        arguments: ['-c', 'exit 0'],
+      );
+      const failure = LoginBrowser(
+        id: 'xdg:test.desktop',
+        name: '失败入口',
+        executable: '/bin/sh',
+        arguments: ['-c', 'exit 7'],
+      );
+      final url = Uri.parse('https://linux.do/user-api-key/new?nonce=test');
+      expect(await service.open(success, url), isTrue);
+      expect(await service.open(failure, url), isFalse);
+      expect(
+        await service.open(success, Uri.parse('https://example.com/')),
+        isFalse,
+      );
+      expect(
+        await service.open(
+          const LoginBrowser(
+            id: 'xdg:missing.desktop',
+            name: '失效入口',
+            executable: '/nonexistent/fluxdo-test-gio',
+          ),
+          url,
+        ),
+        isFalse,
+      );
+    });
+
     test('opens only the LINUX DO User API Key authorization entrypoint', () {
       expect(
         SystemBrowserService.isAuthorizationUrl(

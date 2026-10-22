@@ -122,6 +122,14 @@ class SystemBrowserService {
         return await launchUrl(target, mode: LaunchMode.externalApplication);
       }
       if (browser.executable == null) return false;
+      if (browser.id.startsWith('xdg:')) {
+        // GIO 提交启动请求后返回；检查退出码，避免把拒绝启动当作成功。
+        return (await Process.run(browser.executable!, [
+              ...browser.arguments,
+              authorizationUrl.toString(),
+            ])).exitCode ==
+            0;
+      }
       await Process.start(browser.executable!, [
         ...browser.arguments,
         authorizationUrl.toString(),

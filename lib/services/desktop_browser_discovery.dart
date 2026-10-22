@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'xdg_browser_discovery.dart';
+
 /// A browser chosen explicitly by the user. Never reads or copies its cookies.
 class LoginBrowser {
   const LoginBrowser({
@@ -187,6 +189,37 @@ class DesktopBrowserDiscovery {
     final browsers = <LoginBrowser>[_default];
     if (platform == 'linux') {
       final seenExecutables = <String>{};
+      final gio = await findCommand('gio');
+      if (gio != null) {
+        final entries = await XdgBrowserDiscovery(
+          environment: environment,
+          findCommand: findCommand,
+        ).discover();
+        for (final entry in entries) {
+          browsers.add(
+            LoginBrowser(
+              id: 'xdg:${entry.id}',
+              name: entry.name,
+              executable: gio,
+              arguments: ['launch', entry.path],
+            ),
+          );
+          // 不合并不同 desktop ID 的 Profile；只抑制同入口的 PATH 回退项。
+          final command = entry.command;
+          if (command != null) {
+            final path = command.startsWith('/')
+                ? command
+                : await findCommand(command);
+            if (path != null) {
+              try {
+                seenExecutables.add(await resolveExecutable(path));
+              } on FileSystemException {
+                seenExecutables.add(path);
+              }
+            }
+          }
+        }
+      }
       for (final entry in linuxBrowserCommands) {
         final commandPath = await findCommand(entry.command);
         if (commandPath != null) {
@@ -220,7 +253,11 @@ class DesktopBrowserDiscovery {
                 .map((s) => s.trim())
                 .toSet();
             for (final entry in _flatpakBrowsers) {
-              if (!installed.contains(entry.appId)) continue;
+              if (!installed.contains(entry.appId) ||
+                  browsers.any(
+                    (browser) => browser.id == 'xdg:${entry.appId}.desktop',
+                  ))
+                continue;
               browsers.add(
                 LoginBrowser(
                   id: 'flatpak:${entry.appId}',

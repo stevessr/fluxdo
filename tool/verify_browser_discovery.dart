@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'verify_xdg_browser_discovery.dart' as xdg;
+
 import '../lib/services/desktop_browser_discovery.dart';
 
 int checks = 0;
@@ -9,6 +11,7 @@ void check(bool condition, String message) {
 }
 
 Future<void> main() async {
+  await xdg.main();
   // 这些是实际发现函数的行为测试，不要求宿主系统安装浏览器。
   final calls = <String>[];
   DesktopBrowserDiscovery fixture(
