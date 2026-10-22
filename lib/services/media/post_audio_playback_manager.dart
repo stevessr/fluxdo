@@ -16,6 +16,9 @@ class PostAudioPlaybackManager extends ChangeNotifier with WidgetsBindingObserve
   String? activeUrl;
   bool backgroundAllowed = true;
 
+  // Serialize source changes so a second tap cannot race an unfinished load.
+  Future<void> _pending = Future<void>.value();
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!backgroundAllowed &&
@@ -25,18 +28,34 @@ class PostAudioPlaybackManager extends ChangeNotifier with WidgetsBindingObserve
     }
   }
 
-  Future<void> toggle(String url) async {
+  Future<void> toggle(String url) {
+    final request = _pending.then((_) => _toggleNow(url));
+    // An unsuccessful source must not poison all subsequent playback actions.
+    _pending = request.catchError((Object error, StackTrace stack) {
+      debugPrint('[Audio] Playback transition failed: $error');
+    });
+    return request;
+  }
+
+  Future<void> setSpeed(double speed) async {
+    await player.setSpeed(speed);
+    notifyListeners();
+  }
+
+  Future<void> _toggleNow(String url) async {
     if (activeUrl == url) {
       if (player.playing) {
         await player.pause();
       } else {
+        if (player.processingState == ProcessingState.completed) {
+          await player.seek(Duration.zero);
+        }
         unawaited(player.play());
       }
       notifyListeners();
       return;
     }
 
-    // Stop previous audio before switching the shared player.
     await player.stop();
     activeUrl = url;
     notifyListeners();
@@ -56,4 +75,5 @@ class PostAudioPlaybackManager extends ChangeNotifier with WidgetsBindingObserve
       rethrow;
     }
   }
+
 }
