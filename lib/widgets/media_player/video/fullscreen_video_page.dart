@@ -140,7 +140,7 @@ class _FullscreenVideoPageState extends ConsumerState<FullscreenVideoPage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(mediaPlaybackPreferencesProvider, (_, __) => _syncPictureInPicture());
+    ref.listen(mediaPlaybackPreferencesProvider, (previous, next) => _syncPictureInPicture());
     return Focus(
       autofocus: true,
       onKeyEvent: _handleKey,
