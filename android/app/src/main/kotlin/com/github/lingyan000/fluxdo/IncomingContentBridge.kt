@@ -168,9 +168,9 @@ class IncomingContentBridge(private val activity: Activity) {
                     "path" to dest.absolutePath,
                     "name" to name,
                     "mimeType" to mime,
-                    "image" to mime.startsWith("image/") || ext in setOf(
+                    "image" to (mime.startsWith("image/") || ext in setOf(
                         "jpg", "jpeg", "png", "gif", "webp", "avif", "heic"
-                    ),
+                    )),
                 ))
             } catch (e: Exception) {
                 importedBytes = previousBytes
