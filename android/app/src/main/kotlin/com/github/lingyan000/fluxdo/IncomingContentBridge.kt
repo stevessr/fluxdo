@@ -158,7 +158,7 @@ class IncomingContentBridge(private val activity: Activity) {
         } finally {
             cursor?.close()
         }
-        return name?.substringAfterLast('/')?.substringAfterLast('\\\\')?.take(120)
+        return name?.substringAfterLast('/')?.substringAfterLast('\\')?.take(120)
             ?.takeIf { it.isNotBlank() } ?: "shared-file"
     }
 }
