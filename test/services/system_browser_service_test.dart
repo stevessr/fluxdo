@@ -3,8 +3,47 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/system_browser_service.dart';
 
+import '../../tool/verify_browser_discovery.dart' as browser_verification;
+
 void main() {
   group('SystemBrowserService', () {
+    test('桌面发现行为与当前系统文件验证', browser_verification.main);
+
+    test('XDG 启动检查退出码并拒绝非法授权 URL', () async {
+      if (!Platform.isLinux) return;
+      final service = SystemBrowserService.instance;
+      const success = LoginBrowser(
+        id: 'xdg:test.desktop',
+        name: '测试入口',
+        executable: '/bin/sh',
+        arguments: ['-c', 'exit 0'],
+      );
+      const failure = LoginBrowser(
+        id: 'xdg:test.desktop',
+        name: '失败入口',
+        executable: '/bin/sh',
+        arguments: ['-c', 'exit 7'],
+      );
+      final url = Uri.parse('https://linux.do/user-api-key/new?nonce=test');
+      expect(await service.open(success, url), isTrue);
+      expect(await service.open(failure, url), isFalse);
+      expect(
+        await service.open(success, Uri.parse('https://example.com/')),
+        isFalse,
+      );
+      expect(
+        await service.open(
+          const LoginBrowser(
+            id: 'xdg:missing.desktop',
+            name: '失效入口',
+            executable: '/nonexistent/fluxdo-test-gio',
+          ),
+          url,
+        ),
+        isFalse,
+      );
+    });
+
     test('opens only the LINUX DO User API Key authorization entrypoint', () {
       expect(
         SystemBrowserService.isAuthorizationUrl(
@@ -42,7 +81,10 @@ void main() {
       expect(commands['microsoft-edge-dev'], 'Microsoft Edge Dev');
       expect(commands['firefox-beta'], 'Firefox Beta');
       expect(commands['firefox-nightly'], 'Firefox Nightly');
-      expect(commands['firefox-developer-edition'], 'Firefox Developer Edition');
+      expect(
+        commands['firefox-developer-edition'],
+        'Firefox Developer Edition',
+      );
       expect(commands['firefox'], 'Firefox');
     });
 
@@ -75,8 +117,7 @@ void main() {
       expect(paths['Microsoft Edge Beta'], contains('Edge Beta'));
       expect(paths['Microsoft Edge Dev'], contains('Edge Dev'));
       expect(paths['Firefox Nightly'], contains('Nightly'));
-      expect(paths['Firefox Developer Edition'],
-          contains('Developer Edition'));
+      expect(paths['Firefox Developer Edition'], contains('Developer Edition'));
     });
 
     test('Linux 同时覆盖独立的 alpha / beta / nightly 命令别名', () {
@@ -94,7 +135,10 @@ void main() {
           .where((entry) => entry.name == 'Firefox Nightly')
           .map((entry) => entry.relative)
           .toList();
-      expect(nightlyPaths.any((path) => path.contains('Firefox Nightly')), isTrue);
+      expect(
+        nightlyPaths.any((path) => path.contains('Firefox Nightly')),
+        isTrue,
+      );
       expect(nightlyPaths.length, greaterThanOrEqualTo(2));
     });
 
