@@ -1367,6 +1367,7 @@ class _MainPageState extends ConsumerState<MainPage>
     _siteChangesSub?.close();
 
     _connectivitySub?.close();
+    AndroidIncomingContentService.instance.dispose();
     super.dispose();
   }
 
