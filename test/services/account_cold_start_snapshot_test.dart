@@ -46,7 +46,10 @@ void main() {
         httpOnly: true,
         trusted: true,
       );
-      expect(await AccountManager().restoreColdStartSessionIfMissing(), isFalse);
+      expect(
+        await AccountManager().restoreColdStartSessionIfMissing(),
+        isFalse,
+      );
       expect(await jar.getTToken(), 'rotated-session-token');
     },
   );
