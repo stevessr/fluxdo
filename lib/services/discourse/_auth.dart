@@ -1586,8 +1586,8 @@ mixin _AuthMixin on _DiscourseServiceBase {
     bool logoutOnInvalid = true,
     String? expectedUsername,
   }) async {
-    bool isCurrent() =>
-        requestGeneration == null || AuthSession().isValid(requestGeneration);
+    final generation = requestGeneration ?? AuthSession().generation;
+    bool isCurrent() => AuthSession().isValid(generation);
 
     Future<bool> rejectInvalidSession() async {
       if (logoutOnInvalid && isCurrent()) {
@@ -1643,7 +1643,10 @@ mixin _AuthMixin on _DiscourseServiceBase {
     final username = expected != null && expected.isNotEmpty
         ? expected
         : storedUsername;
-    if (username == null || username.isEmpty) return false;
+    // A valid persisted _t can outlive the username write (process killed
+    // during login) or a temporarily unavailable secure-storage read.
+    // Ask /session/current.json for the authoritative identity instead of
+    // prematurely classifying the cold start as a guest session.
 
     // 服务端验证
     try {
@@ -1673,6 +1676,12 @@ mixin _AuthMixin on _DiscourseServiceBase {
             (liveUsername != null && liveUsername.isNotEmpty)
             ? liveUsername
             : username;
+        if (resolvedUsername == null || resolvedUsername.isEmpty) {
+          return await recoverAfterInvalidCheck(
+            response.requestOptions,
+            '200_without_username',
+          );
+        }
         if (expected != null &&
             expected.isNotEmpty &&
             resolvedUsername.toLowerCase() != expected.toLowerCase()) {
@@ -1686,6 +1695,15 @@ mixin _AuthMixin on _DiscourseServiceBase {
             'actualUsername': resolvedUsername,
           });
           return await rejectInvalidSession();
+        }
+        // Only a confirmed server identity may repair the persisted username.
+        // Explicit account-switch validation must remain a pre-commit check.
+        if (expected == null && storedUsername != resolvedUsername) {
+          await saveUsername(
+            resolvedUsername,
+            requestGeneration: generation,
+          );
+          if (!isCurrent()) return false;
         }
         _username = resolvedUsername;
         _resetStrikes();
