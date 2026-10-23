@@ -1594,6 +1594,26 @@ class _MainPageState extends ConsumerState<MainPage>
     final currentUserAsync = ref.watch(currentUserProvider);
     final user = currentUserAsync.value;
 
+    // While the persisted identity is being resolved, null is not evidence
+    // of a guest session. Rendering guest navigation here can remove private
+    // tabs, reset the selected destination and flash anonymous account UI.
+    if (user == null && currentUserAsync.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (user == null && currentUserAsync.hasError) {
+      return Scaffold(
+        body: Center(
+          child: FilledButton.icon(
+            onPressed: () => ref.invalidate(currentUserProvider),
+            icon: const Icon(Icons.refresh),
+            label: Text(S.current.preheat_retryConnection),
+          ),
+        ),
+      );
+    }
+
     // 从偏好读取底栏布局，按注册表解析为 entry 列表（含所有 kind）
     final bottomNavIds = ref.watch(
       preferencesProvider.select((p) => p.bottomNavIds),
