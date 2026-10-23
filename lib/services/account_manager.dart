@@ -180,6 +180,38 @@ class AccountManager {
 
   // ====== 快照 ======
 
+  /// The canonical CookieJar intentionally does not persist RFC session
+  /// cookies. An authenticated _t may therefore vanish on process restart
+  /// even though the account's encrypted snapshot still contains it.
+  ///
+  /// Rehydrate only when the active username is known and the jar has no
+  /// session token. The ordinary current-user provider will verify the
+  /// recovered token with /session/current.json before trusting the identity.
+  /// Do not restore WebView/external-site cookies during cold start.
+  Future<bool> restoreColdStartSessionIfMissing() async {
+    return _exclusive(() async {
+      if (_guestModeOverride == true) return false;
+      final username = await getCurrentUsername();
+      if (username == null || username.isEmpty || username == guestAccountId) {
+        return false;
+      }
+      final existing = await CookieJarService().getTToken();
+      if (existing != null && existing.isNotEmpty) return false;
+
+      final snapshot = await _readSnapshot(username);
+      final cookies = snapshot?['cookies'];
+      if (cookies is! List || !_snapshotHasSessionCookie(cookies)) {
+        return false;
+      }
+
+      await _restoreSessionCookies(cookies, username);
+      final restored = await CookieJarService().getTToken();
+      if (restored == null || restored.isEmpty) return false;
+      debugPrint('[AccountManager] 冷启动已从安全快照恢复 $username 的原生会话');
+      return true;
+    });
+  }
+
   Future<Map<String, dynamic>?> _readSnapshot(String username) async {
     final raw = await _storage.read(key: '$_snapshotPrefix$username');
     if (raw == null || raw.isEmpty) return null;
