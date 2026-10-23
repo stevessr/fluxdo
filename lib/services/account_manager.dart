@@ -139,7 +139,24 @@ class AccountManager {
     final override = _guestModeOverride;
     if (override != null) return override;
     final value = await _storage.read(key: _guestModeKey);
-    return value == '1';
+    if (value != '1') return false;
+
+    // A process can be killed after login has committed the username and _t
+    // but before markLoginSucceeded() has removed the persisted guest marker.
+    // Do not let that stale marker hide an otherwise restored account forever.
+    // During an active add-account flow _guestModeOverride is true, so this
+    // recovery can never expose the previous account mid-transition.
+    final username = await getCurrentUsername();
+    if (username == null ||
+        username.isEmpty ||
+        username == guestAccountId) {
+      return true;
+    }
+    final token = await CookieJarService().getTToken();
+    if (token == null || token.isEmpty) return true;
+
+    await markLoginSucceeded();
+    return false;
   }
 
   /// 登录成功后清掉 guest 标记。幂等，冷启动 API key 回调也可以调用。
