@@ -49,7 +49,10 @@ void main() {
         return true;
       }).timeout(const Duration(seconds: 3));
       expect(await storage.read(key: 'multi_account_guest_mode'), isNull);
-      expect(await storage.read(key: 'multi_account_pending_new_login'), isNull);
+      expect(
+        await storage.read(key: 'multi_account_pending_new_login'),
+        isNull,
+      );
       expect(await storage.read(key: 'linux_do_username'), 'alice');
       expect(await jar.getTToken(), 'persisted-session-token');
     },
