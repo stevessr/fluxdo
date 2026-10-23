@@ -51,6 +51,37 @@ void main() {
     expect(await service.getCurrentUsername(), isNull);
   });
 
+  test('冷启动有 _t 但用户名尚未持久化时从服务端恢复身份', () async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    final cookieJar = CookieJarService();
+    await cookieJar.initialize();
+    await cookieJar.setCookie(
+      '_t',
+      'cold-start-recovery-token',
+      httpOnly: true,
+      trusted: true,
+    );
+    WebViewSessionCookieRefreshService.instance.markSynced(
+      reason: 'cold-start-identity-recovery-test',
+      tToken: 'cold-start-recovery-token',
+    );
+
+    final service = DiscourseService();
+    final adapter = _SessionCurrentAdapter(username: 'recovered-user');
+    service.dio.httpClientAdapter = adapter;
+    final generation = AuthSession().advance();
+
+    expect(await service.getCurrentUsername(), isNull);
+    expect(
+      await service.isLoggedIn(requestGeneration: generation),
+      isTrue,
+    );
+    expect(adapter.sentCookie, contains('_t=cold-start-recovery-token'));
+    expect(await service.getCurrentUsername(), 'recovered-user');
+  });
+
   test('账号切换和登录态检查遇到普通 403 时保留已保存的会话', () async {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
