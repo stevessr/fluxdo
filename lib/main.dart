@@ -349,6 +349,17 @@ Future<void> main() async {
   // 数据迁移：在所有依赖 prefs 的网络相关服务启动之前执行
   await MigrationService.runAll(prefs);
 
+  // CookieJar 不会将无 Expires/Max-Age 的 _t session cookie 持久化。
+  // 账号快照存放于系统安全存储；网络预热之前先尝试从快照恢复缺失的
+  // 原生会话，随后由 currentUserProvider 完成服务端身份确认。
+  if (!MigrationService.requiresRelogin) {
+    try {
+      await AccountManager().restoreColdStartSessionIfMissing();
+    } catch (e) {
+      debugPrint('[Main] 冷启动会话快照恢复失败(继续): $e');
+    }
+  }
+
   // 阶段 2：依赖 prefs 的步骤并行
   final crashlyticsEnabled = prefs.getBool('pref_crashlytics') ?? true;
   final developerMode = prefs.getBool('developer_mode') ?? false;
