@@ -349,6 +349,17 @@ Future<void> main() async {
   // 数据迁移：在所有依赖 prefs 的网络相关服务启动之前执行
   await MigrationService.runAll(prefs);
 
+  // CookieJar 不会将无 Expires/Max-Age 的 _t session cookie 持久化。
+  // 账号快照存放于系统安全存储；网络预热之前先尝试从快照恢复缺失的
+  // 原生会话，随后由 currentUserProvider 完成服务端身份确认。
+  if (!MigrationService.requiresRelogin) {
+    try {
+      await AccountManager().restoreColdStartSessionIfMissing();
+    } catch (e) {
+      debugPrint('[Main] 冷启动会话快照恢复失败(继续): $e');
+    }
+  }
+
   // 阶段 2：依赖 prefs 的步骤并行
   final crashlyticsEnabled = prefs.getBool('pref_crashlytics') ?? true;
   final developerMode = prefs.getBool('developer_mode') ?? false;
@@ -1593,6 +1604,26 @@ class _MainPageState extends ConsumerState<MainPage>
     // 监听当前用户状态
     final currentUserAsync = ref.watch(currentUserProvider);
     final user = currentUserAsync.value;
+
+    // While the persisted identity is being resolved, null is not evidence
+    // of a guest session. Rendering guest navigation here can remove private
+    // tabs, reset the selected destination and flash anonymous account UI.
+    if (user == null && currentUserAsync.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (user == null && currentUserAsync.hasError) {
+      return Scaffold(
+        body: Center(
+          child: FilledButton.icon(
+            onPressed: () => ref.invalidate(currentUserProvider),
+            icon: const Icon(Icons.refresh),
+            label: Text(S.current.preheat_retryConnection),
+          ),
+        ),
+      );
+    }
 
     // 从偏好读取底栏布局，按注册表解析为 entry 列表（含所有 kind）
     final bottomNavIds = ref.watch(

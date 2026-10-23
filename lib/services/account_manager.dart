@@ -139,7 +139,29 @@ class AccountManager {
     final override = _guestModeOverride;
     if (override != null) return override;
     final value = await _storage.read(key: _guestModeKey);
-    return value == '1';
+    if (value != '1') return false;
+
+    // A process can be killed after login has committed the username and _t
+    // but before markLoginSucceeded() has removed the persisted guest marker.
+    // Do not let that stale marker hide an otherwise restored account forever.
+    // During an active add-account flow _guestModeOverride is true, so this
+    // recovery can never expose the previous account mid-transition.
+    final username = await getCurrentUsername();
+    if (username == null || username.isEmpty || username == guestAccountId) {
+      return true;
+    }
+    final token = await CookieJarService().getTToken();
+    if (token == null || token.isEmpty) return true;
+
+    // Cleanup stays on the exclusive queue, but must not block this read:
+    // isGuestSession() can be called by a request inside an account switch
+    // transaction which already owns that queue.
+    unawaited(
+      markLoginSucceeded().catchError((Object error, StackTrace stackTrace) {
+        debugPrint('[AccountManager] 清理冷启动遗留 guest 标记失败: $error');
+      }),
+    );
+    return false;
   }
 
   /// 登录成功后清掉 guest 标记。幂等，冷启动 API key 回调也可以调用。
@@ -157,6 +179,38 @@ class AccountManager {
   }
 
   // ====== 快照 ======
+
+  /// The canonical CookieJar intentionally does not persist RFC session
+  /// cookies. An authenticated _t may therefore vanish on process restart
+  /// even though the account's encrypted snapshot still contains it.
+  ///
+  /// Rehydrate only when the active username is known and the jar has no
+  /// session token. The ordinary current-user provider will verify the
+  /// recovered token with /session/current.json before trusting the identity.
+  /// Do not restore WebView/external-site cookies during cold start.
+  Future<bool> restoreColdStartSessionIfMissing() async {
+    return _exclusive(() async {
+      if (_guestModeOverride == true) return false;
+      final username = await getCurrentUsername();
+      if (username == null || username.isEmpty || username == guestAccountId) {
+        return false;
+      }
+      final existing = await CookieJarService().getTToken();
+      if (existing != null && existing.isNotEmpty) return false;
+
+      final snapshot = await _readSnapshot(username);
+      final cookies = snapshot?['cookies'];
+      if (cookies is! List || !_snapshotHasSessionCookie(cookies)) {
+        return false;
+      }
+
+      await _restoreSessionCookies(cookies, username);
+      final restored = await CookieJarService().getTToken();
+      if (restored == null || restored.isEmpty) return false;
+      debugPrint('[AccountManager] 冷启动已从安全快照恢复 $username 的原生会话');
+      return true;
+    });
+  }
 
   Future<Map<String, dynamic>?> _readSnapshot(String username) async {
     final raw = await _storage.read(key: '$_snapshotPrefix$username');
