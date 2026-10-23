@@ -153,7 +153,14 @@ class AccountManager {
     final token = await CookieJarService().getTToken();
     if (token == null || token.isEmpty) return true;
 
-    await markLoginSucceeded();
+    // Cleanup stays on the exclusive queue, but must not block this read:
+    // isGuestSession() can be called by a request inside an account switch
+    // transaction which already owns that queue.
+    unawaited(
+      markLoginSucceeded().catchError((Object error, StackTrace stackTrace) {
+        debugPrint('[AccountManager] 清理冷启动遗留 guest 标记失败: $error');
+      }),
+    );
     return false;
   }
 
