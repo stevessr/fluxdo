@@ -1699,10 +1699,7 @@ mixin _AuthMixin on _DiscourseServiceBase {
         // Only a confirmed server identity may repair the persisted username.
         // Explicit account-switch validation must remain a pre-commit check.
         if (expected == null && storedUsername != resolvedUsername) {
-          await saveUsername(
-            resolvedUsername,
-            requestGeneration: generation,
-          );
+          await saveUsername(resolvedUsername, requestGeneration: generation);
           if (!isCurrent()) return false;
         }
         _username = resolvedUsername;
