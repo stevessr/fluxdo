@@ -147,9 +147,7 @@ class AccountManager {
     // During an active add-account flow _guestModeOverride is true, so this
     // recovery can never expose the previous account mid-transition.
     final username = await getCurrentUsername();
-    if (username == null ||
-        username.isEmpty ||
-        username == guestAccountId) {
+    if (username == null || username.isEmpty || username == guestAccountId) {
       return true;
     }
     final token = await CookieJarService().getTToken();
