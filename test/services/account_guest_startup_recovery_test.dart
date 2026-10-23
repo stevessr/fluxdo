@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/account_manager.dart';
@@ -36,6 +38,15 @@ void main() {
 
     expect(await AccountManager().isGuestSession(), isFalse);
     final storage = ResilientSecureStorage();
+    // Recovery cleanup is queued behind other account operations. Wait for
+    // the automatic deletion rather than assuming it finished synchronously.
+    await Future.doWhile(() async {
+      if (await storage.read(key: 'multi_account_guest_mode') == null) {
+        return false;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      return true;
+    }).timeout(const Duration(seconds: 3));
     expect(await storage.read(key: 'multi_account_guest_mode'), isNull);
     expect(await storage.read(key: 'multi_account_pending_new_login'), isNull);
     expect(await storage.read(key: 'linux_do_username'), 'alice');
