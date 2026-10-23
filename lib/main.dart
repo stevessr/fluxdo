@@ -71,6 +71,7 @@ import 'package:fluxdo_render/fluxdo_render.dart'
 
 import 'services/clipboard_topic_link_service.dart';
 import 'services/deep_link_service.dart';
+import 'services/android_incoming_content_service.dart';
 import 'services/windows_protocol_registrar_stub.dart'
     if (dart.library.ffi) 'services/windows_protocol_registrar_io.dart';
 import 'services/background/background_notification_service.dart';
@@ -108,6 +109,9 @@ import 'providers/theme_provider.dart';
 
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+import 'package:just_audio_background/just_audio_background.dart';
+import 'services/media/post_audio_playback_manager.dart';
+import 'providers/media_playback_preferences_provider.dart';
 import 'package:video_player_media_kit/video_player_media_kit.dart';
 
 import 'services/audio/just_audio_gst.dart';
@@ -180,6 +184,14 @@ Future<void> main() async {
     JustAudioGst.registerWith();
   } else {
     JustAudioMediaKit.ensureInitialized(linux: false);
+  }
+
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.github.lingyan000.fluxdo.audio',
+      androidNotificationChannelName: 'LINUX DO Audio',
+      androidNotificationOngoing: true,
+    );
   }
 
   // video_player 官方无 Windows/Linux 后端,两平台桥接到 media_kit(libmpv),
@@ -291,6 +303,8 @@ Future<void> main() async {
   }
   final results = await Future.wait(futures);
   final prefs = results[0] as SharedPreferences;
+  PostAudioPlaybackManager.instance.backgroundAllowed =
+      prefs.getBool(MediaPlaybackPreferencesNotifier.backgroundAudioKey) ?? true;
   await VpnBypassService.instance.initialize(prefs);
   await AuthIssueNoticeService.instance.initialize(prefs);
 
@@ -1005,6 +1019,7 @@ class _MainPageState extends ConsumerState<MainPage>
 
       // 初始化 Deep Link 服务
       DeepLinkService.instance.initialize(context);
+      AndroidIncomingContentService.instance.initialize(context);
       unawaited(
         _runStartupUiTasks().catchError((Object e, StackTrace s) {
           debugPrint('[MainPage] 启动 UI 任务失败: $e\n$s');
@@ -1363,6 +1378,7 @@ class _MainPageState extends ConsumerState<MainPage>
     _siteChangesSub?.close();
 
     _connectivitySub?.close();
+    AndroidIncomingContentService.instance.dispose();
     super.dispose();
   }
 

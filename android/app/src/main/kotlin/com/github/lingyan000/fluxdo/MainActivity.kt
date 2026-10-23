@@ -3,6 +3,8 @@ package com.github.lingyan000.fluxdo
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
+import android.app.PictureInPictureParams
+import android.util.Rational
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
@@ -24,13 +26,13 @@ import android.webkit.WebView
 import androidx.webkit.CookieManagerCompat
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicInteger
 
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
 
     companion object {
         private const val TAG = "AppLink"
@@ -79,6 +81,44 @@ class MainActivity : FlutterActivity() {
             Log.w(TAG, "cancelBackGesture on stop failed: ${e.message}")
         }
         super.onStop()
+    }
+
+    private val incomingContentBridge by lazy { IncomingContentBridge(this) }
+    private val mediaChannelName = "com.github.lingyan000.fluxdo/picture_in_picture"
+    private var mediaChannel: MethodChannel? = null
+    private var pipEligible = false
+    private var pipRatio = Rational(16, 9)
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        incomingContentBridge.capture(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        incomingContentBridge.capture(intent)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (pipEligible) enterVideoPip()
+    }
+
+    private fun enterVideoPip(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || isInPictureInPictureMode) return false
+        return try {
+            val params = PictureInPictureParams.Builder().setAspectRatio(pipRatio).build()
+            enterPictureInPictureMode(params)
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot enter picture-in-picture", e)
+            false
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(inPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(inPictureInPictureMode, newConfig)
+        mediaChannel?.invokeMethod("pipChanged", inPictureInPictureMode)
     }
 
     private val CHANNEL = "com.github.lingyan000.fluxdo/browser"
@@ -131,6 +171,9 @@ class MainActivity : FlutterActivity() {
         interactiveKeyboardChannel = null
         vpnBypassChannel?.dispose()
         vpnBypassChannel = null
+        incomingContentBridge.detach()
+        mediaChannel?.setMethodCallHandler(null)
+        mediaChannel = null
         FairMemoryReceiver.detachEngine(flutterEngine)
         super.cleanUpFlutterEngine(flutterEngine)
     }
@@ -172,6 +215,22 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        incomingContentBridge.attach(flutterEngine.dartExecutor.binaryMessenger)
+        mediaChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, mediaChannelName).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setEligible" -> {
+                        pipEligible = call.argument<Boolean>("enabled") ?: false
+                        val width = (call.argument<Number>("width")?.toInt() ?: 16).coerceIn(1, 1000)
+                        val height = (call.argument<Number>("height")?.toInt() ?: 9).coerceIn(1, 1000)
+                        pipRatio = Rational(width, height)
+                        result.success(true)
+                    }
+                    "enter" -> result.success(if (pipEligible) enterVideoPip() else false)
+                    else -> result.notImplemented()
+                }
+            }
+        }
         interactiveKeyboardChannel?.dispose()
         interactiveKeyboardChannel = InteractiveKeyboardChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         vpnBypassChannel?.dispose()

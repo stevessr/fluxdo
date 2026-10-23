@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import '../../../services/media/post_audio_playback_manager.dart';
 
 import '../../../l10n/s.dart';
 import '../../media_player/controls/playback_speed_menu.dart';
@@ -32,45 +33,41 @@ class DiscourseAudioPlayer extends StatefulWidget {
 }
 
 class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
-  final AudioPlayer _player = AudioPlayer();
-  bool _ready = false;
+  final PostAudioPlaybackManager _manager = PostAudioPlaybackManager.instance;
+  AudioPlayer get _player => _manager.player;
+  bool get _active => _manager.activeUrl == widget.url;
   Object? _error;
-
-  /// 当前倍速(just_audio 三后端 —— 官方/media_kit/JustAudioGst 均实现
-  /// setSpeed)。换 url 重载后 just_audio 保持 speed,不需要重设。
-  double _speed = 1.0;
+  double get _speed => _active ? _player.speed : 1.0;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_init());
+    _manager.addListener(_onSharedPlaybackChanged);
   }
 
-  Future<void> _init() async {
+  void _onSharedPlaybackChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggle() async {
     try {
-      await _player.setUrl(widget.url);
-      if (mounted) setState(() => _ready = true);
-    } catch (e) {
-      // 平台差异排查的关键线索:AVFoundation 对容器/扩展名远比
-      // ExoPlayer 挑剔,失败原因只在这里可见(对齐 DiscourseVideoPlayer)
-      debugPrint('[Audio] 加载失败 url=${widget.url} error=$e');
-      if (mounted) setState(() => _error = e);
+      await _manager.toggle(widget.url);
+    } catch (error) {
+      debugPrint('[Audio] 无法播放 ${widget.url}: $error');
+      if (mounted) setState(() => _error = error);
     }
   }
 
   @override
   void didUpdateWidget(covariant DiscourseAudioPlayer old) {
     super.didUpdateWidget(old);
-    if (old.url != widget.url) {
-      _ready = false;
-      _error = null;
-      unawaited(_init());
-    }
+    if (old.url != widget.url) _error = null;
   }
 
   @override
   void dispose() {
-    _player.dispose();
+    _manager.removeListener(_onSharedPlaybackChanged);
+    // The shared player is owned by the session, not by the scrolling post.
     super.dispose();
   }
 
@@ -122,15 +119,13 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
             borderRadius: BorderRadius.circular(22),
             child: InkWell(
               borderRadius: BorderRadius.circular(22),
-              onTap: !_ready
-                  ? null
-                  : () => _player.playing ? _player.pause() : _player.play(),
+              onTap: _toggle,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
                 child: StreamBuilder<PlayerState>(
                   stream: _player.playerStateStream,
                   builder: (context, stateSnap) {
-                    final playing = stateSnap.data?.playing ?? false;
+                    final playing = _active && (stateSnap.data?.playing ?? false);
                     return Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -148,8 +143,8 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                           child: StreamBuilder<Duration>(
                             stream: _player.positionStream,
                             builder: (context, posSnap) {
-                              final pos = posSnap.data ?? Duration.zero;
-                              final total = _player.duration;
+                              final pos = _active ? (posSnap.data ?? Duration.zero) : Duration.zero;
+                              final total = _active ? _player.duration : null;
                               final progress =
                                   (total == null || total.inMilliseconds == 0)
                                   ? 0.0
@@ -172,8 +167,8 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                         StreamBuilder<Duration>(
                           stream: _player.positionStream,
                           builder: (context, posSnap) {
-                            final total = _player.duration;
-                            final pos = posSnap.data ?? Duration.zero;
+                            final total = _active ? _player.duration : null;
+                            final pos = _active ? (posSnap.data ?? Duration.zero) : Duration.zero;
                             // 未播显示总长;播放中显示当前进度
                             final show = (playing || pos > Duration.zero)
                                 ? pos
@@ -235,7 +230,7 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
             : StreamBuilder<PlayerState>(
                 stream: _player.playerStateStream,
                 builder: (context, snap) {
-                  final playing = snap.data?.playing ?? false;
+                  final playing = _active && (snap.data?.playing ?? false);
                   return Row(
                     children: [
                       IconButton(
@@ -245,16 +240,14 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                               : Icons.play_arrow_rounded,
                         ),
                         color: scheme.primary,
-                        onPressed: !_ready
-                            ? null
-                            : () => playing ? _player.pause() : _player.play(),
+                        onPressed: _toggle,
                       ),
                       Expanded(
                         child: StreamBuilder<Duration>(
                           stream: _player.positionStream,
                           builder: (context, posSnap) {
-                            final pos = posSnap.data ?? Duration.zero;
-                            final total = _player.duration ?? Duration.zero;
+                            final pos = _active ? (posSnap.data ?? Duration.zero) : Duration.zero;
+                            final total = _active ? (_player.duration ?? Duration.zero) : Duration.zero;
                             final maxMs = total.inMilliseconds == 0
                                 ? 1.0
                                 : total.inMilliseconds.toDouble();
@@ -269,7 +262,7 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                                 Slider(
                                   value: value,
                                   max: maxMs,
-                                  onChanged: !_ready
+                                  onChanged: !_active
                                       ? null
                                       : (v) => _player.seek(
                                           Duration(milliseconds: v.round()),
@@ -288,7 +281,7 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                                         style: theme.textTheme.bodySmall,
                                       ),
                                       Text(
-                                        _fmt(_player.duration),
+                                        _fmt(_active ? _player.duration : null),
                                         style: theme.textTheme.bodySmall,
                                       ),
                                     ],
@@ -302,7 +295,7 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                       // 倍速按钮:弹共用倍速菜单(Builder 提供锚定 context)
                       Builder(
                         builder: (buttonContext) => TextButton(
-                          onPressed: !_ready
+                          onPressed: !_active
                               ? null
                               : () async {
                                   final speed = await showPlaybackSpeedMenu(
@@ -310,8 +303,7 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                                     current: _speed,
                                   );
                                   if (speed == null || !mounted) return;
-                                  setState(() => _speed = speed);
-                                  await _player.setSpeed(speed);
+                                  await _manager.setSpeed(speed);
                                 },
                           style: TextButton.styleFrom(
                             minimumSize: const Size(40, 32),

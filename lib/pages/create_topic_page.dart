@@ -53,6 +53,9 @@ import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/discourse_url_parser.dart';
 import 'pending_posts_page.dart';
+import '../services/incoming_content.dart';
+import '../widgets/markdown_editor/media_upload_helper.dart';
+import '../services/discourse/discourse_service.dart';
 
 class CreateTopicPage extends ConsumerStatefulWidget {
   final int? initialCategoryId;
@@ -63,6 +66,7 @@ class CreateTopicPage extends ConsumerStatefulWidget {
   final String? initialTitle;
   final String? initialContent;
   final String draftKey;
+  final List<IncomingAttachment> incomingAttachments;
 
   const CreateTopicPage({
     super.key,
@@ -71,6 +75,7 @@ class CreateTopicPage extends ConsumerStatefulWidget {
     this.initialTitle,
     this.initialContent,
     this.draftKey = Draft.newTopicKey,
+    this.incomingAttachments = const [],
   });
 
   @override
@@ -139,6 +144,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   bool _showPreview = false;
   String? _templateContent;
   bool _isLoadingDraft = false;
+  bool _incomingImportPending = false;
   bool _showEmojiPanel = false;
   bool _createAsPostVoting = false; // post-voting(问答)模式
   Timer? _featuredLinkDebounce;
@@ -194,7 +200,8 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     // 并跳过草稿恢复弹窗,避免旧草稿覆盖预填内容
     final hasInitialPrefill =
         (widget.initialTitle?.isNotEmpty ?? false) ||
-        (widget.initialContent?.isNotEmpty ?? false);
+        (widget.initialContent?.isNotEmpty ?? false) ||
+        widget.incomingAttachments.isNotEmpty;
     if (hasInitialPrefill) {
       if (widget.initialTitle != null) {
         _titleController.text = widget.initialTitle!;
@@ -207,6 +214,15 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       _loadExistingDraft();
     }
 
+    if (widget.incomingAttachments.isNotEmpty) {
+      _incomingImportPending = true;
+      // Rich composer initializes asynchronously; upload only after the active
+      // editor can retain task placeholders. Never post file:// URLs as content.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_queueIncomingAttachments());
+      });
+    }
+
     // 从当前筛选条件自动填入分类和标签
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyCurrentFilter());
     // 先按站点默认算一版下限，_applyCurrentFilter 选中分类后会再刷新
@@ -216,6 +232,76 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       onPause: _flushDraftForLifecycle,
       onResume: () => _flushDraftForLifecycle(refresh: true),
     );
+  }
+
+  Future<void> _queueIncomingAttachments() async {
+    try {
+      // Rich documents may need asynchronous import before accepting files.
+      for (var retry = 0; retry < 40 && mounted; retry++) {
+        final rich = _richKey.currentState;
+        final source = _editorKey.currentState;
+        if (rich?.canQueueExternalFiles == true ||
+            source?.canQueueExternalFiles == true) {
+          for (final file in widget.incomingAttachments) {
+            if (!mounted) return;
+            // Ordinary media picker routes audio/video through the special
+            // .xz upload and HTML embedding path. Shares must do the same.
+            if (file.isAudio || file.isVideo) {
+              final prepared = await prepareMediaUpload(
+                context,
+                path: file.path,
+                name: file.name,
+                isAudio: file.isAudio,
+              );
+              if (prepared == null || !mounted) continue;
+              final activeRich = _richKey.currentState;
+              final activeSource = _editorKey.currentState;
+              if (activeRich?.canQueueExternalFiles == true) {
+                activeRich!.queuePreparedExternalMedia(prepared);
+              } else if (activeSource?.canQueueExternalFiles == true) {
+                activeSource!.queuePreparedExternalMedia(prepared);
+              } else {
+                ToastService.showError('编辑器已切换，请重新上传媒体文件');
+              }
+            } else if (_richKey.currentState?.canQueueExternalFiles == true) {
+              _richKey.currentState!.queueUpload(
+                file.path,
+                file.name,
+                image: file.isImage,
+                execute: (token, progress) => file.isImage
+                    ? DiscourseService().uploadImage(
+                        file.path,
+                        cancelToken: token,
+                        onProgress: progress,
+                      )
+                    : DiscourseService().uploadFile(
+                        file.path,
+                        cancelToken: token,
+                        onProgress: progress,
+                      ),
+              );
+            } else if (_editorKey.currentState?.canQueueExternalFiles == true) {
+              _editorKey.currentState!.queueExternalFile(
+                file.path,
+                file.name,
+                image: file.isImage,
+              );
+            } else {
+              ToastService.showError('编辑器已切换，请重新上传附件');
+            }
+          }
+          return;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      if (mounted) {
+        ToastService.showError('分享附件未能导入，请从编辑器重新选择文件');
+      }
+    } catch (error, stack) {
+      AppErrorHandler.handleUnexpected(error, stack);
+    } finally {
+      if (mounted) setState(() => _incomingImportPending = false);
+    }
   }
 
   @override
@@ -903,8 +989,9 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
   }
 
   Future<void> _submitChecked() async {
-    if ((_editorKey.currentState?.hasPendingUploads ?? false) ||
-        (_richKey.currentState?.hasPendingUploads ?? false)) {
+    if (_incomingImportPending ||
+        ((_editorKey.currentState?.hasPendingUploads ?? false) ||
+        (_richKey.currentState?.hasPendingUploads ?? false))) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(UploadTaskLabels.of(context).pendingSubmit)),
       );

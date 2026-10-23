@@ -449,6 +449,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       ) ||
       _uploadingCount > 0;
 
+  bool get canQueueExternalFiles => _editor != null && !_documentReplaced;
+
   /// 外部拖放/平台上传入口，同样使用语义临时节点及任务控制器。
   void queueUpload(
     String path,
@@ -456,6 +458,12 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     bool image = false,
     required UploadExecutor execute,
   }) => _queueUpload(path, name, image: image, execute: execute);
+
+  /// Preserve the existing media transcoding and HTML <audio>/<video> syntax
+  /// when the input comes from an Android share rather than the local picker.
+  void queuePreparedExternalMedia(PreparedMediaUpload media) {
+    _queueUpload(media.path, media.name, media: media);
+  }
 
   void _queueUpload(
     String path,

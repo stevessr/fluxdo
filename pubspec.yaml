@@ -181,6 +181,7 @@ dependencies:
   wakelock_plus: ^1.3.3
   volume_controller: ^3.6.0 # 播放器竖滑手势调系统音量 (仅移动端调用)
   screen_brightness: ^2.1.11 # 播放器竖滑手势调 app 亮度 (仅移动端调用)
+  just_audio_background: ^0.0.1-beta.17
   just_audio: ^0.10.6 # 原生上传音频播放 (FluxdoRender audioBuilder)
   # just_audio 本身不包含 Windows/Linux 实现。
   # - Windows: media_kit 后端 (libmpv-2.dll 随 media_kit_libs_windows_video

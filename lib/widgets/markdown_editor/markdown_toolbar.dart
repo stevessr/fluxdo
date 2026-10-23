@@ -1091,6 +1091,29 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
+  void queuePreparedExternalMedia(PreparedMediaUpload media) {
+    final anchor = _uploadAnchors.capture();
+    _uploads.add(UploadTaskRequest(
+      path: media.path,
+      name: media.name,
+      execute: media.execute,
+      onCompleted: (task, result) {
+        if (!mounted) return;
+        _uploadAnchors.insertBlock(anchor, media.markdown(result));
+      },
+    ));
+  }
+
+  /// Queue an attachment received from Android Sharesheet; do not reopen a picker.
+  void queueExternalFile(String path, String name, {required bool image}) {
+    _enqueueUpload(
+      path: path,
+      name: name,
+      image: image,
+      anchor: _uploadAnchors.capture(),
+    );
+  }
+
   Future<void> pickAndUploadFile() async {
     final anchor = _uploadAnchors.capture();
     var registered = false;

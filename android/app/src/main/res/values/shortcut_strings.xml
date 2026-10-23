@@ -1,0 +1,5 @@
+<resources>
+    <string name="shortcut_new_topic">新主题</string>
+    <string name="shortcut_new_message">新私信</string>
+    <string name="shortcut_search">搜索</string>
+</resources>

@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../providers/media_playback_preferences_provider.dart';
+import '../../../services/media/android_picture_in_picture.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
@@ -13,7 +18,7 @@ import 'video_playback_surface.dart';
 /// retain,pop 完成后 release。全屏期间 inline 宿主被 cacheExtent 回收
 /// 也不影响本页(旧 chewie 方案的 use-after-dispose 问题类在此结构下
 /// 不存在)。
-class FullscreenVideoPage extends StatefulWidget {
+class FullscreenVideoPage extends ConsumerStatefulWidget {
   const FullscreenVideoPage({super.key, required this.session});
 
   final VideoPlayerSession session;
@@ -59,10 +64,43 @@ class FullscreenVideoPage extends StatefulWidget {
   }
 
   @override
-  State<FullscreenVideoPage> createState() => _FullscreenVideoPageState();
+  ConsumerState<FullscreenVideoPage> createState() => _FullscreenVideoPageState();
 }
 
-class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
+class _FullscreenVideoPageState extends ConsumerState<FullscreenVideoPage> {
+  final _pip = AndroidPictureInPicture.instance;
+  bool? _previousEligibility;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_syncPictureInPicture);
+    _pip.addListener(_refreshPictureInPicture);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncPictureInPicture());
+  }
+
+  void _refreshPictureInPicture() {
+    if (mounted) setState(() {});
+  }
+
+  void _syncPictureInPicture() {
+    if (!mounted) return;
+    final allowed = ref.read(mediaPlaybackPreferencesProvider).pictureInPicture;
+    final value = _controller.value;
+    final eligible = allowed && value.isInitialized && value.isPlaying;
+    if (eligible == _previousEligibility) return;
+    _previousEligibility = eligible;
+    unawaited(_pip.setEligible(eligible, aspectRatio: value.aspectRatio));
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_syncPictureInPicture);
+    _pip.removeListener(_refreshPictureInPicture);
+    unawaited(_pip.setEligible(false));
+    super.dispose();
+  }
+
   VideoPlayerController get _controller => widget.session.controller;
 
   static const _seekStep = Duration(seconds: 10);
@@ -102,6 +140,7 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(mediaPlaybackPreferencesProvider, (previous, next) => _syncPictureInPicture());
     return Focus(
       autofocus: true,
       onKeyEvent: _handleKey,
@@ -116,7 +155,7 @@ class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
                 child: VideoPlaybackSurface(controller: _controller),
               ),
             ),
-            MediaControlsOverlay(
+            if (!_pip.inPictureInPicture) MediaControlsOverlay(
               session: widget.session,
               isFullscreen: true,
               onFullscreenToggle: () => Navigator.of(context).maybePop(),
