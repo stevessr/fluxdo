@@ -74,10 +74,7 @@ void main() {
     final generation = AuthSession().advance();
 
     expect(await service.getCurrentUsername(), isNull);
-    expect(
-      await service.isLoggedIn(requestGeneration: generation),
-      isTrue,
-    );
+    expect(await service.isLoggedIn(requestGeneration: generation), isTrue);
     expect(adapter.sentCookie, contains('_t=cold-start-recovery-token'));
     expect(await service.getCurrentUsername(), 'recovered-user');
   });
