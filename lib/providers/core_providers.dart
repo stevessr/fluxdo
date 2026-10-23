@@ -93,7 +93,7 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
     // 缓存必须校验用户名:多账号切换后这里可能还留着上一个账号的用户,
     // 直接 emit 会让"手动刷新仍显示上一个账号"。缓存用户与当前登录
     // 用户名不一致时视为脏缓存,清掉并走接口取新账号数据。
-    final currentUsername = await service.getCurrentUsername();
+    var currentUsername = await service.getCurrentUsername();
     final cachedUsername = prefs.getString(_cacheUserKey);
     final cached = (cachedUsername != null && cachedUsername == currentUsername)
         ? prefs.getString(_cacheKey)
@@ -123,6 +123,25 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       await prefs.remove(_cacheKey);
       await prefs.remove(_cacheUserKey);
       return null;
+    }
+
+    // isLoggedIn() can recover a missing/stale persisted username from an
+    // authenticated /session/current.json response. Keep the provider's
+    // identity guard aligned with that freshly verified session, otherwise
+    // every subsequent comparison to the old null/username returns null and
+    // the app remains stuck in its guest layout.
+    final verifiedUsername = await service.getCurrentUsername();
+    if (!AuthSession().isValid(generation)) return null;
+    if (verifiedUsername == null || verifiedUsername.isEmpty) {
+      if (cachedUser != null) return cachedUser;
+      throw StateError('Authenticated session identity is not available yet');
+    }
+    if (verifiedUsername != currentUsername) {
+      currentUsername = verifiedUsername;
+      // The cached user may belong to the former session. Keep the UI in
+      // loading rather than briefly showing a different account's profile.
+      cachedUser = null;
+      state = const AsyncValue.loading();
     }
 
     try {
@@ -156,7 +175,9 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       // 避免短暂鉴权抖动把 UI 误判成已登出。
       // 只有在已确认没有 token 的分支（第 48-53 行）才清理缓存。
       if (cachedUser != null) return cachedUser;
-      return null;
+      // A locally identified session is not an anonymous session merely
+      // because the profile endpoint is temporarily unavailable.
+      throw StateError('Authenticated session profile is not available yet');
     } catch (e) {
       if (!AuthSession().isValid(generation)) return null;
       // 网络失败，返回缓存
