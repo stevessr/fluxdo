@@ -5,7 +5,7 @@
   "notification_filterUnread": "未讀",
   "notification_categoryAll": "全部",
   "notification_categoryMentions": "@我",
-  "notification_categoryReplies": "回覆與提及",
+  "notification_categoryReplies": "回覆",
   "notification_categoryLikes": "讚",
   "notification_categoryMessages": "私訊",
   "notification_categoryBookmarks": "書籤",
