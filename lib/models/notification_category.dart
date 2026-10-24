@@ -2,7 +2,7 @@ import 'notification.dart';
 
 /// Notification groupings used by Discourse's user menu.
 ///
-/// Replies / likes / messages are fetched with Discourse's native
+/// Mentions / replies / likes / messages are fetched with Discourse's native
 /// `recent=true&filter_by_types=...` user-menu API. Bookmarks are a special
 /// case in Discourse: that tab contains real bookmark records as well as
 /// bookmark-reminder notifications, so the full notifications page routes it
@@ -10,11 +10,17 @@ import 'notification.dart';
 /// the bookmark list.
 enum NotificationCategory {
   all,
+  mentions,
   replies,
   likes,
   messages,
   bookmarks,
   other;
+
+  /// Standalone @mentions without changing the existing replies aggregate.
+  static const Set<NotificationType> _mentionTypes = {
+    NotificationType.mentioned,
+  };
 
   static const Set<NotificationType> _replyTypes = {
     NotificationType.mentioned,
@@ -48,6 +54,7 @@ enum NotificationCategory {
   /// it never walks the historical pagination to fill the category.
   List<String>? get serverFilterTypeNames => switch (this) {
     NotificationCategory.all => null,
+    NotificationCategory.mentions => const ['mentioned'],
     NotificationCategory.replies => const [
       'mentioned',
       'group_mentioned',
@@ -72,6 +79,7 @@ enum NotificationCategory {
     final type = notification.notificationType;
     return switch (this) {
       NotificationCategory.all => true,
+      NotificationCategory.mentions => _mentionTypes.contains(type),
       NotificationCategory.replies => _replyTypes.contains(type),
       NotificationCategory.likes => _likeTypes.contains(type),
       NotificationCategory.messages => _messageTypes.contains(type),

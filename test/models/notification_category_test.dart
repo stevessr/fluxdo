@@ -14,6 +14,35 @@ DiscourseNotification notificationOf(NotificationType type, {int id = 1}) {
 }
 
 void main() {
+  test('mentions uses exactly the Discourse mentioned server filter', () {
+    expect(NotificationCategory.mentions.serverFilterTypeNames, ['mentioned']);
+    expect(
+      NotificationCategory.mentions.matches(
+        notificationOf(NotificationType.mentioned),
+      ),
+      isTrue,
+    );
+    for (final type in [
+      NotificationType.groupMentioned,
+      NotificationType.replied,
+      NotificationType.quoted,
+      NotificationType.chatMention,
+    ]) {
+      expect(
+        NotificationCategory.mentions.matches(notificationOf(type)),
+        isFalse,
+        reason: '$type should not leak into the mentioned-only tab',
+      );
+    }
+    // Preserve the existing combined Discourse replies & mentions category.
+    expect(
+      NotificationCategory.replies.matches(
+        notificationOf(NotificationType.mentioned),
+      ),
+      isTrue,
+    );
+  });
+
   test('replies matches Discourse replies and mentions grouping', () {
     for (final type in [
       NotificationType.mentioned,

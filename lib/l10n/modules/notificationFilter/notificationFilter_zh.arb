@@ -4,6 +4,7 @@
   "notification_filterRead": "已读",
   "notification_filterUnread": "未读",
   "notification_categoryAll": "全部",
+  "notification_categoryMentions": "@我",
   "notification_categoryReplies": "回复与提及",
   "notification_categoryLikes": "赞",
   "notification_categoryMessages": "私信",
