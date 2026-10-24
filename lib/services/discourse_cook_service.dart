@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'assets/static_asset_packs.dart';
 
 import 'preloaded_data_service.dart';
 import 'discourse/discourse_service.dart';
@@ -69,7 +69,7 @@ class DiscourseCookService {
 
     // 2. eval bundle（一次性大开销，放 warmUp 阶段做）
     try {
-      final bundleJs = await rootBundle.loadString(
+      final bundleJs = await StaticAssetPacks.loadString(
         'assets/cook/discourse-cook.js',
       );
       final engine = CookJsEngine();
