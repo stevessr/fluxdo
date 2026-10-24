@@ -1,0 +1,66 @@
+name: Notification Category Compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'lib/models/notification_category.dart'
+      - 'lib/pages/notifications_page.dart'
+      - 'lib/providers/notification_list_provider.dart'
+      - 'lib/services/discourse/_notifications.dart'
+      - 'lib/l10n/modules/notificationFilter/**'
+      - 'test/models/notification_category_test.dart'
+      - 'test/services/discourse_notification_categories_test.dart'
+      - '.github/workflows/notification-category-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notification-category-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate translations
+        run: dart run tool/gen_l10n.dart
+
+      - name: Verify Dart formatting
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/models/notification_category.dart \
+            lib/pages/notifications_page.dart \
+            test/models/notification_category_test.dart \
+            test/services/discourse_notification_categories_test.dart
+
+      - name: Analyze category integration
+        run: >-
+          flutter analyze
+          lib/models/notification_category.dart
+          lib/pages/notifications_page.dart
+          test/models/notification_category_test.dart
+          test/services/discourse_notification_categories_test.dart
+
+      - name: Test separate mentions and replies
+        run: >-
+          flutter test
+          test/models/notification_category_test.dart
+          test/services/discourse_notification_categories_test.dart
