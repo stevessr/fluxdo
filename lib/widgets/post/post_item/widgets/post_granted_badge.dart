@@ -89,7 +89,8 @@ class PostGrantedBadgeIcon extends StatelessWidget {
           image: discourseImageProvider(url),
           width: 14,
           height: 14,
-          errorBuilder: (_, _, _) => const Icon(Icons.workspace_premium, size: 14),
+          errorBuilder: (_, _, _) =>
+              const Icon(Icons.workspace_premium, size: 14),
         ),
         tooltip,
       );
