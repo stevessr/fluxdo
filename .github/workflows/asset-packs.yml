@@ -1,0 +1,40 @@
+name: Versioned static asset packs
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'assets/**'
+      - 'scripts/ci/asset_packs.py'
+      - 'scripts/ci/tests/test_asset_packs.py'
+      - '.github/workflows/asset-packs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/**'
+      - 'scripts/ci/asset_packs.py'
+      - 'scripts/ci/tests/test_asset_packs.py'
+
+permissions:
+  contents: read
+
+jobs:
+  packs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: python3 -m unittest discover -s scripts/ci/tests -p 'test_asset_packs.py' -v
+      - name: Build pack artifacts
+        run: python3 scripts/ci/asset_packs.py build --root . --out build/asset-packs
+      - name: Verify pack hashes
+        run: python3 scripts/ci/asset_packs.py verify --catalog build/asset-packs/catalog.json
+      - name: Export resource packs
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-static-asset-packs
+          path: build/asset-packs/
+          if-no-files-found: error
+          retention-days: 14
