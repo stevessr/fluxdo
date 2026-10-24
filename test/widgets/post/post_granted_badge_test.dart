@@ -38,7 +38,7 @@ void main() {
     );
 
     final icon = tester.widget<FaIcon>(find.byType(FaIcon));
-    expect(icon.icon, FontAwesomeIcons.apple);
+    expect(icon.icon?.codePoint, FontAwesomeIcons.apple.codePoint);
     expect(icon.color, const Color(0xFF9A9A9A));
     expect(
       tester.widget<Tooltip>(find.byType(Tooltip)).message,
