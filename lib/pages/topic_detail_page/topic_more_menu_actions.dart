@@ -10,6 +10,8 @@ void handleTopicDetailMoreMenuSelection(
   required void Function() onShareImage,
   required void Function() onExport,
   required void Function() onOpenInBrowser,
+  void Function()? onOpenInBuiltInBrowser,
+  void Function()? onAddToBoard,
   required void Function() onFilter,
   required void Function() onReadingSettings,
   void Function()? onToggleArchiveMessage,
@@ -47,6 +49,12 @@ void handleTopicDetailMoreMenuSelection(
       return;
     case 'open_in_browser':
       onOpenInBrowser();
+      return;
+    case 'open_in_built_in_browser':
+      onOpenInBuiltInBrowser?.call();
+      return;
+    case 'add_to_board':
+      onAddToBoard?.call();
       return;
     case 'filter':
       onFilter();
