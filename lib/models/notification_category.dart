@@ -77,6 +77,7 @@ enum NotificationCategory {
       NotificationCategory.messages => _messageTypes.contains(type),
       NotificationCategory.bookmarks => _bookmarkTypes.contains(type),
       NotificationCategory.other =>
+        !_mentionTypes.contains(type) &&
         !_replyTypes.contains(type) &&
             !_likeTypes.contains(type) &&
             !_messageTypes.contains(type) &&
