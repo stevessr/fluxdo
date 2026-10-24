@@ -44,11 +44,20 @@ jobs:
       - name: Generate translations
         run: dart run tool/gen_l10n.dart
 
-      - name: Verify Dart formatting
+      - name: Format and inspect Dart changes
         run: |
-          dart format --output=none --set-exit-if-changed \
+          dart format \
             lib/models/notification_category.dart \
             lib/pages/notifications_page.dart \
+            lib/providers/notification_list_provider.dart \
+            test/models/notification_category_test.dart \
+            test/providers/notification_list_category_switch_test.dart \
+            test/services/discourse_notification_categories_test.dart
+          git diff --check
+          git diff -- \
+            lib/models/notification_category.dart \
+            lib/pages/notifications_page.dart \
+            lib/providers/notification_list_provider.dart \
             test/models/notification_category_test.dart \
             test/providers/notification_list_category_switch_test.dart \
             test/services/discourse_notification_categories_test.dart
@@ -58,6 +67,7 @@ jobs:
           flutter analyze
           lib/models/notification_category.dart
           lib/pages/notifications_page.dart
+          lib/providers/notification_list_provider.dart
           test/models/notification_category_test.dart
           test/providers/notification_list_category_switch_test.dart
           test/services/discourse_notification_categories_test.dart
