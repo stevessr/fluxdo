@@ -62,7 +62,8 @@ class NotificationListNotifier
       return (
         page: PagedPage(
           items: response.notifications,
-          hasMore: response.notifications.length < response.totalRowsNotifications,
+          hasMore:
+              response.notifications.length < response.totalRowsNotifications,
         ),
         totalRows: response.totalRowsNotifications,
       );
@@ -81,7 +82,10 @@ class NotificationListNotifier
         .where(category.matches)
         .where((notification) => _matchesReadFilter(notification, filter))
         .toList(growable: false);
-    return (page: PagedPage(items: items, hasMore: false), totalRows: items.length);
+    return (
+      page: PagedPage(items: items, hasMore: false),
+      totalRows: items.length,
+    );
   }
 
   @override
