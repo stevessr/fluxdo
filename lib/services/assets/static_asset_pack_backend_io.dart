@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 
 /// 与构建器 PACKS 对齐，不能信任 ZIP 自己声明的路径白名单。
 const _roots = <String, String>{
@@ -47,7 +48,14 @@ String? _owner(String path) {
   return null;
 }
 
+@visibleForTesting
+Directory? testAssetPackStoreRoot;
+
 Future<Directory> _base() async {
+  if (testAssetPackStoreRoot != null) {
+    await testAssetPackStoreRoot!.create(recursive: true);
+    return testAssetPackStoreRoot!;
+  }
   final support = await getApplicationSupportDirectory();
   final dir = Directory(support.path + '/static_asset_packs/v1');
   await dir.create(recursive: true);
