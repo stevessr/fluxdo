@@ -2,7 +2,7 @@ import 'notification.dart';
 
 /// Notification groupings used by Discourse's user menu.
 ///
-/// Replies / likes / messages are fetched with Discourse's native
+/// Separate mentions / replies / likes / messages are fetched with Discourse's native
 /// `recent=true&filter_by_types=...` user-menu API. Bookmarks are a special
 /// case in Discourse: that tab contains real bookmark records as well as
 /// bookmark-reminder notifications, so the full notifications page routes it
@@ -10,15 +10,19 @@ import 'notification.dart';
 /// the bookmark list.
 enum NotificationCategory {
   all,
+  mentions,
   replies,
   likes,
   messages,
   bookmarks,
   other;
 
-  static const Set<NotificationType> _replyTypes = {
+  /// Standalone @mentions without changing the existing replies aggregate.
+  static const Set<NotificationType> _mentionTypes = {
     NotificationType.mentioned,
-    NotificationType.groupMentioned,
+  };
+
+  static const Set<NotificationType> _replyTypes = {
     NotificationType.posted,
     NotificationType.quoted,
     NotificationType.replied,
@@ -48,13 +52,8 @@ enum NotificationCategory {
   /// it never walks the historical pagination to fill the category.
   List<String>? get serverFilterTypeNames => switch (this) {
     NotificationCategory.all => null,
-    NotificationCategory.replies => const [
-      'mentioned',
-      'group_mentioned',
-      'posted',
-      'quoted',
-      'replied',
-    ],
+    NotificationCategory.mentions => const ['mentioned'],
+    NotificationCategory.replies => const ['posted', 'quoted', 'replied'],
     NotificationCategory.likes => const [
       'liked',
       'liked_consolidated',
@@ -72,12 +71,14 @@ enum NotificationCategory {
     final type = notification.notificationType;
     return switch (this) {
       NotificationCategory.all => true,
+      NotificationCategory.mentions => _mentionTypes.contains(type),
       NotificationCategory.replies => _replyTypes.contains(type),
       NotificationCategory.likes => _likeTypes.contains(type),
       NotificationCategory.messages => _messageTypes.contains(type),
       NotificationCategory.bookmarks => _bookmarkTypes.contains(type),
       NotificationCategory.other =>
-        !_replyTypes.contains(type) &&
+        !_mentionTypes.contains(type) &&
+            !_replyTypes.contains(type) &&
             !_likeTypes.contains(type) &&
             !_messageTypes.contains(type) &&
             !_bookmarkTypes.contains(type),

@@ -26,6 +26,7 @@ class NotificationListNotifier
     extends AsyncNotifier<List<DiscourseNotification>>
     with PagedAsyncNotifierMixin<DiscourseNotification> {
   int _totalRows = 0;
+  int _refreshGeneration = 0;
   NotificationReadFilter _filter = NotificationReadFilter.all;
   NotificationCategory _category = NotificationCategory.all;
 
@@ -38,49 +39,66 @@ class NotificationListNotifier
         keyExtractor: (n) => n.id,
       );
 
-  bool _matchesReadFilter(DiscourseNotification notification) {
-    return switch (_filter) {
+  bool _matchesReadFilter(
+    DiscourseNotification notification,
+    NotificationReadFilter filter,
+  ) {
+    return switch (filter) {
       NotificationReadFilter.all => true,
       NotificationReadFilter.read => notification.read,
       NotificationReadFilter.unread => !notification.read,
     };
   }
 
-  Future<PagedPage<DiscourseNotification>> _fetchFirstPage() async {
+  Future<({PagedPage<DiscourseNotification> page, int totalRows})>
+  _fetchFirstPage({
+    required NotificationCategory category,
+    required NotificationReadFilter filter,
+  }) async {
     final service = ref.read(discourseServiceProvider);
 
-    if (_category == NotificationCategory.all) {
-      final response = await service.getNotifications(filter: _filter.apiValue);
-      _totalRows = response.totalRowsNotifications;
-      return PagedPage(
-        items: response.notifications,
-        hasMore: response.notifications.length < _totalRows,
+    if (category == NotificationCategory.all) {
+      final response = await service.getNotifications(filter: filter.apiValue);
+      return (
+        page: PagedPage(
+          items: response.notifications,
+          hasMore:
+              response.notifications.length < response.totalRowsNotifications,
+        ),
+        totalRows: response.totalRowsNotifications,
       );
     }
 
-    // `filter_by_types` is only applied by Discourse in the recent branch.
-    // Keep this request bounded to one server page. `other` has no static type
-    // list because plugins can add notification types; it fetches the same
-    // bounded recent page and applies the complement locally.
+    // Discourse applies `filter_by_types` only to the recent endpoint.
+    // Capture category/filter before awaiting: a quick tab switch must never
+    // process an older response using the newly selected category.
     final response = await service.getRecentNotifications(
-      filterByTypes: _category.serverFilterTypeNames,
+      filterByTypes: category.serverFilterTypeNames,
       limit: 60,
       silent: true,
       bumpLastSeenReviewable: false,
     );
     final items = response.notifications
-        .where(_category.matches)
-        .where(_matchesReadFilter)
+        .where(category.matches)
+        .where((notification) => _matchesReadFilter(notification, filter))
         .toList(growable: false);
-    _totalRows = items.length;
-    return PagedPage(items: items, hasMore: false);
+    return (
+      page: PagedPage(items: items, hasMore: false),
+      totalRows: items.length,
+    );
   }
 
   @override
   Future<List<DiscourseNotification>> build() async {
+    final generation = ++_refreshGeneration;
     resetPagingState();
-    final page = await _fetchFirstPage();
-    return completePagedRefresh(page);
+    final result = await _fetchFirstPage(category: _category, filter: _filter);
+    if (generation != _refreshGeneration) {
+      // A selection change already started a newer refresh. Keep its result.
+      return state.value ?? const <DiscourseNotification>[];
+    }
+    _totalRows = result.totalRows;
+    return completePagedRefresh(result.page);
   }
 
   /// 切换全部 / 已读 / 未读筛选。
@@ -100,9 +118,22 @@ class NotificationListNotifier
     await refresh();
   }
 
-  /// 刷新列表
+  /// 刷新列表。过期的分类请求不可覆盖最后一次用户选择。
   Future<void> refresh() async {
-    await runPagedRefresh(_fetchFirstPage);
+    final generation = ++_refreshGeneration;
+    final category = _category;
+    final filter = _filter;
+    resetPagingState();
+    state = const AsyncLoading<List<DiscourseNotification>>();
+    try {
+      final result = await _fetchFirstPage(category: category, filter: filter);
+      if (generation != _refreshGeneration) return;
+      _totalRows = result.totalRows;
+      state = AsyncValue.data(completePagedRefresh(result.page));
+    } catch (error, stackTrace) {
+      if (generation != _refreshGeneration) return;
+      state = AsyncValue.error(error, stackTrace);
+    }
   }
 
   /// 加载更多。只有“全部”历史通知支持分页；子分类是 bounded recent。

@@ -14,10 +14,42 @@ DiscourseNotification notificationOf(NotificationType type, {int id = 1}) {
 }
 
 void main() {
-  test('replies matches Discourse replies and mentions grouping', () {
+  test('mentions uses exactly the Discourse mentioned server filter', () {
+    expect(NotificationCategory.mentions.serverFilterTypeNames, ['mentioned']);
+    expect(
+      NotificationCategory.mentions.matches(
+        notificationOf(NotificationType.mentioned),
+      ),
+      isTrue,
+    );
     for (final type in [
-      NotificationType.mentioned,
       NotificationType.groupMentioned,
+      NotificationType.replied,
+      NotificationType.quoted,
+      NotificationType.chatMention,
+    ]) {
+      expect(
+        NotificationCategory.mentions.matches(notificationOf(type)),
+        isFalse,
+        reason: '$type should not leak into the mentioned-only tab',
+      );
+    }
+    // Mentions and replies are separate (the former combined tab is gone).
+    expect(
+      NotificationCategory.replies.matches(
+        notificationOf(NotificationType.mentioned),
+      ),
+      isFalse,
+    );
+  });
+
+  test('replies excludes mentions and matches reply-type notifications', () {
+    expect(NotificationCategory.replies.serverFilterTypeNames, [
+      'posted',
+      'quoted',
+      'replied',
+    ]);
+    for (final type in [
       NotificationType.posted,
       NotificationType.quoted,
       NotificationType.replied,
@@ -26,6 +58,21 @@ void main() {
         NotificationCategory.replies.matches(notificationOf(type)),
         isTrue,
         reason: '$type must be in replies',
+      );
+      expect(
+        NotificationCategory.mentions.matches(notificationOf(type)),
+        isFalse,
+      );
+    }
+    for (final type in [
+      NotificationType.mentioned,
+      NotificationType.groupMentioned,
+      NotificationType.chatMention,
+    ]) {
+      expect(
+        NotificationCategory.replies.matches(notificationOf(type)),
+        isFalse,
+        reason: '$type is not a reply',
       );
     }
   });
@@ -73,6 +120,19 @@ void main() {
         notificationOf(NotificationType.replied),
       ),
       isFalse,
+    );
+    expect(
+      NotificationCategory.other.matches(
+        notificationOf(NotificationType.mentioned),
+      ),
+      isFalse,
+    );
+    // Group mentions are still accessible through Other rather than lost.
+    expect(
+      NotificationCategory.other.matches(
+        notificationOf(NotificationType.groupMentioned),
+      ),
+      isTrue,
     );
   });
 

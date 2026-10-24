@@ -111,6 +111,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   String _categoryLabel(BuildContext context, NotificationCategory category) {
     return switch (category) {
       NotificationCategory.all => context.l10n.notification_categoryAll,
+      NotificationCategory.mentions =>
+        context.l10n.notification_categoryMentions,
       NotificationCategory.replies => context.l10n.notification_categoryReplies,
       NotificationCategory.likes => context.l10n.notification_categoryLikes,
       NotificationCategory.messages =>
@@ -124,6 +126,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   IconData _categoryIcon(NotificationCategory category) {
     return switch (category) {
       NotificationCategory.all => Symbols.notifications_rounded,
+      NotificationCategory.mentions => Symbols.alternate_email_rounded,
       NotificationCategory.replies => Symbols.reply_rounded,
       NotificationCategory.likes => Symbols.favorite_rounded,
       NotificationCategory.messages => Symbols.mail_rounded,
