@@ -86,7 +86,9 @@ Future<void> installTrustedZip({
   if (manifestEntry == null || manifestEntry.size > 1024 * 1024) {
     throw FormatException('缺少合法资源 manifest');
   }
-  final manifest = jsonDecode(utf8.decode(manifestEntry.readBytes()));
+  final manifestBytes = manifestEntry.readBytes();
+  if (manifestBytes == null) throw FormatException('manifest 内容为空');
+  final manifest = jsonDecode(utf8.decode(manifestBytes));
   if (manifest is! Map<String, dynamic> ||
       manifest['schema'] != 1 || manifest['id'] != packId ||
       manifest['files'] is! List) {
@@ -119,6 +121,7 @@ Future<void> installTrustedZip({
         throw FormatException('ZIP 文件与资源清单不符');
       }
       final content = file.readBytes();
+      if (content == null) throw FormatException('资源文件内容为空');
       if (content.length != declaredLength || _sha(content) != hash) {
         throw FormatException('资源内容校验失败');
       }
