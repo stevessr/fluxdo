@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../../models/topic.dart';
+import '../../../../pages/badge_page.dart';
 import '../../../../services/discourse_cache_manager.dart';
 import '../../../../utils/font_awesome_helper.dart';
 import '../../../../utils/url_helper.dart';
@@ -9,8 +10,36 @@ import '../../../../utils/url_helper.dart';
 /// 帖子头部徽章图标
 class PostGrantedBadgeIcon extends StatelessWidget {
   final GrantedBadge badge;
+  final String username;
 
-  const PostGrantedBadgeIcon({super.key, required this.badge});
+  const PostGrantedBadgeIcon({
+    super.key,
+    required this.badge,
+    required this.username,
+  });
+
+  Widget _link(BuildContext context, Widget icon, String tooltip) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        key: ValueKey('post-granted-badge-${badge.id}'),
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => BadgePage(
+              badgeId: badge.id,
+              badgeSlug: badge.slug,
+              username: username,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+          child: icon,
+        ),
+      ),
+    );
+  }
 
   /// 徽章 description 是站点富文本(部分徽章带 <a> 链接、HTML 实体),
   /// Tooltip 只能显示纯文本,去标签 + 反转义常见实体。
@@ -54,17 +83,15 @@ class PostGrantedBadgeIcon extends StatelessWidget {
     // 优先使用图片
     if (badge.imageUrl != null && badge.imageUrl!.isNotEmpty) {
       final url = UrlHelper.resolveUrlWithCdn(badge.imageUrl!);
-      return Tooltip(
-        message: tooltip,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 2),
-          child: Image(
-            image: discourseImageProvider(url),
-            width: 14,
-            height: 14,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
+      return _link(
+        context,
+        Image(
+          image: discourseImageProvider(url),
+          width: 14,
+          height: 14,
+          errorBuilder: (_, _, _) => const Icon(Icons.workspace_premium, size: 14),
         ),
+        tooltip,
       );
     }
 
@@ -72,12 +99,10 @@ class PostGrantedBadgeIcon extends StatelessWidget {
     if (badge.icon != null && badge.icon!.isNotEmpty) {
       final iconData = FontAwesomeHelper.getIcon(badge.icon!);
       if (iconData != null) {
-        return Tooltip(
-          message: tooltip,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 2),
-            child: FaIcon(iconData, size: 12, color: color),
-          ),
+        return _link(
+          context,
+          FaIcon(iconData, size: 12, color: color),
+          tooltip,
         );
       }
     }
