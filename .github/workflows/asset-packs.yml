@@ -5,6 +5,9 @@ on:
   pull_request:
     paths:
       - 'assets/**'
+      - 'lib/services/assets/**'
+      - 'lib/services/discourse_cook_service.dart'
+      - 'test/services/static_asset_packs_test.dart'
       - 'scripts/ci/asset_packs.py'
       - 'scripts/ci/tests/test_asset_packs.py'
       - '.github/workflows/asset-packs.yml'
@@ -38,3 +41,29 @@ jobs:
           path: build/asset-packs/
           if-no-files-found: error
           retention-days: 14
+
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Prepare generated asset directory
+        run: mkdir -p assets/certs
+      - name: Install Flutter dependencies
+        run: flutter pub get
+      - name: Analyze optional asset runtime
+        run: >-
+          flutter analyze
+          lib/services/assets/static_asset_packs.dart
+          lib/services/assets/static_asset_pack_backend_stub.dart
+          lib/services/assets/static_asset_pack_backend_io.dart
+          lib/services/discourse_cook_service.dart
+          test/services/static_asset_packs_test.dart
+      - name: Test missing-pack fallback
+        run: flutter test test/services/static_asset_packs_test.dart
