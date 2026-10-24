@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'static_asset_pack_backend_stub.dart'
@@ -15,7 +16,11 @@ abstract final class StaticAssetPacks {
   }
 
   static Future<String> loadString(String assetPath) async {
-    return utf8.decode(await loadBytes(assetPath));
+    final installed = await backend.readVerifiedAsset(assetPath);
+    if (installed == null) return rootBundle.loadString(assetPath);
+    // 大型 JS 在 isolate 中解码，保留 rootBundle.loadString 的性能特征。
+    if (installed.length > 50 * 1024) return compute(_decodeUtf8, installed);
+    return utf8.decode(installed);
   }
 
   /// expectedSha256 必须来自可信发布渠道，不得从待安装 ZIP 自身读取。
@@ -29,3 +34,5 @@ abstract final class StaticAssetPacks {
     expectedSha256: expectedSha256,
   );
 }
+
+String _decodeUtf8(Uint8List bytes) => utf8.decode(bytes);

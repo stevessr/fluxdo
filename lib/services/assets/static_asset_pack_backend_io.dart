@@ -107,7 +107,7 @@ Future<void> installTrustedZip({
   }
 
   final base = await _base();
-  final stage = await Directory('${base.path}/.stage-').createTemp();
+  final stage = await base.createTemp('.stage-');
   final hashes = <String, String>{};
   try {
     for (final entry in entries) {
