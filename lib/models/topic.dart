@@ -1888,8 +1888,8 @@ class PostStream {
 
     for (int i = 0; i < posts.length; i++) {
       final post = posts[i];
-      // 帖子自身的 badges_granted 更精确，不能被话题级用户徽章覆盖。
-      if (post.badgesGranted?.isNotEmpty == true) continue;
+      // 帖子自身的 badges_granted 更精确，包含显式空列表；不能由话题级数据覆盖。
+      if (post.rawJson.containsKey('badges_granted')) continue;
       final userId = postUserIdMap[post.id];
       if (userId != null) {
         final badgeIds = userBadgeIdsMap[userId];
