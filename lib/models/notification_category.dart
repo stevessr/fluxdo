@@ -53,11 +53,7 @@ enum NotificationCategory {
   List<String>? get serverFilterTypeNames => switch (this) {
     NotificationCategory.all => null,
     NotificationCategory.mentions => const ['mentioned'],
-    NotificationCategory.replies => const [
-      'posted',
-      'quoted',
-      'replied',
-    ],
+    NotificationCategory.replies => const ['posted', 'quoted', 'replied'],
     NotificationCategory.likes => const [
       'liked',
       'liked_consolidated',
