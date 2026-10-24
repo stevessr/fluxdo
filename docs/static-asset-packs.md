@@ -40,3 +40,12 @@ ZIP 内含 manifest.json，为每个资源保留逻辑路径、SHA-256 及字节
 - 为 20 MB MiSans 提供动态 FontLoader 和平台字体回退，在加载前不得从 pubspec 删除字体。
 - 逐步迁移角色素材及 AI 品牌 SVG 的固定资源路径，之后才从 Android Core staging 排除它们；与 Draft PR #131 的独立 APK 安装及生命周期联测。
 - 使用真实构建的 APK/AAB 对比 Core 体积、资源解码、离线行为和 Android 安装升级；不能用 ZIP 未压缩大小充当 APK 节约量。
+
+
+## 运行时验证读取（第二阶段）
+
+StaticAssetPacks.loadBytes/loadString 已提供安装资源优先、校验失败时 rootBundle 回退的统一入口。首个消费者是 DiscourseCookService；原始 JS 资源仍内置，零配置时行为保持不变。Web 平台使用本地资源包的空实现，不接触文件系统。
+
+installTrustedZip 对调用方提供的外部可信 SHA-256、ZIP 内每项散列、大小和资源路径白名单进行验证；只在全部通过后切换激活指针。安装服务不负责下载及发布者身份认证，调用方必须通过可信发布源或签名确定 expectedSha256，不能让 ZIP 自行决定可执行 JS 的信任级别。
+
+尚未实现插件管理页面下载/安装 UI、FontLoader 自动激活、完整角色渲染调用点迁移及 APK 真正减重，因此维持兼容的内置资源。
