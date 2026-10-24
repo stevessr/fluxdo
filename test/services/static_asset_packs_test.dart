@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
@@ -62,7 +61,7 @@ void main() {
     expect(await StaticAssetPacks.loadString(_path), utf8.decode(contents));
 
     final file = File(
-      temp.path + '/render-cook-' + hash + '/' + _path,
+      '${temp.path}/render-cook-$hash/$_path',
     );
     await file.writeAsString('tampered');
     expect(await StaticAssetPacks.loadString(_path), original);
