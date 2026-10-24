@@ -121,6 +121,12 @@ void main() {
       ),
       isFalse,
     );
+    expect(
+      NotificationCategory.other.matches(
+        notificationOf(NotificationType.mentioned),
+      ),
+      isFalse,
+    );
     // Group mentions are still accessible through Other rather than lost.
     expect(
       NotificationCategory.other.matches(
