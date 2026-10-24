@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import '../models/stevessr_render_params.dart';
 import 'avatar_delta_codec.dart';
+import 'assets/static_asset_packs.dart';
 
 /// 预览和导出共享同一份还原结果，按角色目录区分主图和清单，缓存最近使用的表情。
 abstract final class StevessrCharacterAssets {
@@ -42,10 +42,8 @@ abstract final class StevessrCharacterAssets {
     }
   }
 
-  static Future<Uint8List> _loadAsset(String path) async {
-    final data = await rootBundle.load(path);
-    return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-  }
+  static Future<Uint8List> _loadAsset(String path) =>
+      StaticAssetPacks.loadBytes(path);
 
   static Future<Uint8List> _restore(
     StevessrCharacter character,
@@ -55,7 +53,7 @@ abstract final class StevessrCharacterAssets {
     final directory = character.type.directory;
     final manifestFuture = _manifests.putIfAbsent(
       directory,
-      () => rootBundle
+      () => StaticAssetPacks
           .loadString('$root$directory/manifest.json')
           .then((value) => jsonDecode(value) as Map<String, dynamic>),
     );

@@ -49,3 +49,5 @@ StaticAssetPacks.loadBytes/loadString 已提供安装资源优先、校验失败
 installTrustedZip 对调用方提供的外部可信 SHA-256、ZIP 内每项散列、大小和资源路径白名单进行验证；只在全部通过后切换激活指针。安装服务不负责下载及发布者身份认证，调用方必须通过可信发布源或签名确定 expectedSha256，不能让 ZIP 自行决定可执行 JS 的信任级别。
 
 尚未实现插件管理页面下载/安装 UI、FontLoader 自动激活、完整角色渲染调用点迁移及 APK 真正减重，因此维持兼容的内置资源。
+
+角色素材加载器 StevessrCharacterAssets 已迁移到统一资源接口，覆盖主图、差分和清单。未安装时继续从内置 rootBundle 读取。角色渲染结果的进程内缓存暂时需要重启以切换新的资源版本；后续应与包更新事件集成缓存失效通知。
