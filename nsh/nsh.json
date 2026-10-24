@@ -1,0 +1,23 @@
+{
+  "name": "Fluxdo NSH Preview",
+  "id": "dev.fluxdo.nsh.preview",
+  "version": "0.2.0",
+  "build": 2,
+  "appearance": "system",
+  "capabilities": {
+    "network": {
+      "http": [
+        {
+          "host": "linux.do",
+          "schemes": [
+            "https"
+          ],
+          "methods": [
+            "GET"
+          ],
+          "pathPrefix": "/"
+        }
+      ]
+    }
+  }
+}

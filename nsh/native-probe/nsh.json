@@ -1,0 +1,13 @@
+{
+  "name": "Fluxdo Host Probe",
+  "id": "dev.fluxdo.nsh.hostprobe",
+  "version": "0.1.0",
+  "build": 1,
+  "appearance": "system",
+  "rust": "../native",
+  "capabilities": {
+    "network": {
+      "hosts": []
+    }
+  }
+}
