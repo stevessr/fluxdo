@@ -25,10 +25,7 @@ void main() {
           'badge_types': [
             {'id': 2, 'name': 'Silver', 'sort_order': 8},
           ],
-          'basic_user_badge': {
-            'id': 2382186,
-            'badge_id': 164,
-          },
+          'basic_user_badge': {'id': 2382186, 'badge_id': 164},
         },
       ],
     });
@@ -58,15 +55,15 @@ void main() {
             {...appleBadge, 'id': 167, 'icon': 'seedling'},
           ],
         },
-        {'badge_types': [], 'basic_user_badge': {'badge_id': 44}},
+        {
+          'badge_types': [],
+          'basic_user_badge': {'badge_id': 44},
+        },
         null,
       ],
     });
 
-    expect(post.badgesGranted!.map((badge) => badge.id).toList(), [
-      164,
-      167,
-    ]);
+    expect(post.badgesGranted!.map((badge) => badge.id).toList(), [164, 167]);
   });
 
   test('missing badges_granted and empty nested groups remain empty', () {
@@ -88,7 +85,9 @@ void main() {
       'username': 'ccy',
       'user_id': 5451,
       'badges_granted': [
-        {'badges': [appleBadge]},
+        {
+          'badges': [appleBadge],
+        },
       ],
     });
     final emptyPost = Post.fromJson({
