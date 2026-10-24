@@ -57,7 +57,7 @@ Future<Directory> _base() async {
     return testAssetPackStoreRoot!;
   }
   final support = await getApplicationSupportDirectory();
-  final dir = Directory(support.path + '/static_asset_packs/v1');
+  final dir = Directory('${support.path}/static_asset_packs/v1');
   await dir.create(recursive: true);
   return dir;
 }
@@ -108,7 +108,7 @@ Future<void> installTrustedZip({
   }
 
   final base = await _base();
-  final stage = await Directory(base.path + '/.stage-').createTemp();
+  final stage = await Directory('${base.path}/.stage-').createTemp();
   final hashes = <String, String>{};
   try {
     for (final entry in entries) {
@@ -133,19 +133,19 @@ Future<void> installTrustedZip({
       if (content.length != declaredLength || _sha(content) != hash) {
         throw FormatException('资源内容校验失败');
       }
-      final out = File(stage.path + '/' + name);
+      final out = File('${stage.path}/$name');
       await out.parent.create(recursive: true);
       await out.writeAsBytes(content, flush: true);
       hashes[name] = hash;
     }
     if (hashes.length != files.length) throw FormatException('存在清单外文件');
 
-    final target = Directory(base.path + '/' + packId + '-' + expectedSha256);
+    final target = Directory('${base.path}/$packId-$expectedSha256');
     if (await target.exists()) await target.delete(recursive: true);
     await stage.rename(target.path);
 
-    final pointer = File(base.path + '/' + packId + '.current.json');
-    final temp = File(base.path + '/' + packId + '.current.tmp');
+    final pointer = File('${base.path}/$packId.current.json');
+    final temp = File('${base.path}/$packId.current.tmp');
     await temp.writeAsString(jsonEncode({
       'schema': 1, 'id': packId, 'digest': expectedSha256, 'files': hashes,
     }), flush: true);
@@ -162,7 +162,7 @@ Future<Uint8List?> readVerifiedAsset(String assetPath) async {
   if (packId == null) return null;
   try {
     final base = await _base();
-    final pointer = File(base.path + '/' + packId + '.current.json');
+    final pointer = File('${base.path}/$packId.current.json');
     if (!await pointer.exists()) return null;
     final current = jsonDecode(await pointer.readAsString());
     if (current is! Map<String, dynamic> ||
@@ -174,8 +174,7 @@ Future<Uint8List?> readVerifiedAsset(String assetPath) async {
     }
     final hash = (current['files'] as Map)[assetPath];
     if (hash is! String || !_digestPattern.hasMatch(hash)) return null;
-    final path = base.path + '/' + packId + '-' +
-        (current['digest'] as String) + '/' + assetPath;
+    final path = '${base.path}/$packId-${current['digest']}/$assetPath';
     final file = File(path);
     if (!await file.exists() || await file.length() > _maxFile) return null;
     final content = await file.readAsBytes();
