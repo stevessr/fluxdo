@@ -154,12 +154,12 @@ class _AddTopicToBoardSheetState extends ConsumerState<_AddTopicToBoardSheet> {
 
   Future<bool> _confirm(DiscourseBoard board, BoardColumn column) async {
     if (!board.requireConfirmation) return true;
-    final destination = board.displayName + ' / ' + column.displayTitle;
+    final destination = '${board.displayName} / ${column.displayTitle}';
     return await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(_zh ? '确认添加到看板' : 'Confirm board action'),
-        content: Text((_zh ? '将话题添加或移动到 ' : 'Add or move this topic to ') + destination + '?'),
+        content: Text('${_zh ? '将话题添加或移动到 ' : 'Add or move this topic to '}$destination?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false),
             child: Text(_zh ? '取消' : 'Cancel')),

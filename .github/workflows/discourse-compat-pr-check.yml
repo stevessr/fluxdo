@@ -9,6 +9,10 @@ on:
       - 'lib/models/invite_link.dart'
       - 'lib/models/user.dart'
       - 'lib/models/topic.dart'
+      - 'lib/widgets/post/post_item/widgets/post_granted_badge.dart'
+      - 'lib/widgets/post/post_item/widgets/post_header.dart'
+      - 'test/models/post_granted_badges_test.dart'
+      - 'test/widgets/post/post_granted_badge_test.dart'
       - 'lib/pages/boards_page.dart'
       - 'lib/pages/topic_detail_page/topic_detail_page.dart'
       - 'lib/pages/topic_detail_page/topic_more_menu_actions.dart'
@@ -74,6 +78,10 @@ jobs:
             lib/models/invite_link.dart \
             lib/models/user.dart \
             lib/models/topic.dart \
+            lib/widgets/post/post_item/widgets/post_granted_badge.dart \
+            lib/widgets/post/post_item/widgets/post_header.dart \
+            test/models/post_granted_badges_test.dart \
+            test/widgets/post/post_granted_badge_test.dart \
             lib/pages/boards_page.dart \
             lib/pages/chat/chat_channel_members_sheet.dart \
             lib/pages/chat/chat_channel_settings_sheet.dart \
@@ -101,6 +109,10 @@ jobs:
               lib/models/invite_link.dart \
               lib/models/user.dart \
               lib/models/topic.dart \
+              lib/widgets/post/post_item/widgets/post_granted_badge.dart \
+              lib/widgets/post/post_item/widgets/post_header.dart \
+              test/models/post_granted_badges_test.dart \
+              test/widgets/post/post_granted_badge_test.dart \
               lib/pages/boards_page.dart \
               lib/pages/chat/chat_channel_members_sheet.dart \
               lib/pages/chat/chat_channel_settings_sheet.dart \
@@ -129,6 +141,10 @@ jobs:
           lib/models/invite_link.dart
           lib/models/user.dart
           lib/models/topic.dart
+          lib/widgets/post/post_item/widgets/post_granted_badge.dart
+          lib/widgets/post/post_item/widgets/post_header.dart
+          test/models/post_granted_badges_test.dart
+          test/widgets/post/post_granted_badge_test.dart
           lib/pages/boards_page.dart
           lib/pages/chat/chat_channel_members_sheet.dart
           lib/pages/chat/chat_channel_settings_sheet.dart
@@ -142,6 +158,9 @@ jobs:
 
       - name: Run management compatibility tests
         run: flutter test test/models/discourse_management_compat_test.dart
+
+      - name: Run post granted badge tests
+        run: flutter test test/models/post_granted_badges_test.dart test/widgets/post/post_granted_badge_test.dart
 
       - name: Analyze topic board picker
         run: flutter analyze lib/widgets/topic/add_to_board_sheet.dart lib/pages/topic_detail_page/topic_more_menu_actions.dart
