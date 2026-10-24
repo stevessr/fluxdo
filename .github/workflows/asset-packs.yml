@@ -25,15 +25,29 @@ permissions:
 jobs:
   packs:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Flutter for generated character assets on manual export
+        if: github.event_name == 'workflow_dispatch'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Generate optional character assets for complete export
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          flutter pub get
+          dart run tool/gen_avatar_deltas.dart
       - name: Unit tests
         run: python3 -m unittest discover -s scripts/ci/tests -p 'test_asset_packs.py' -v
       - name: Build pack artifacts
         run: python3 scripts/ci/asset_packs.py build --root . --out build/asset-packs
       - name: Verify pack hashes
         run: python3 scripts/ci/asset_packs.py verify --catalog build/asset-packs/catalog.json
+      - name: Require all character packs in manual export
+        if: github.event_name == 'workflow_dispatch'
+        run: python3 -c "import json; p=json.load(open('build/asset-packs/catalog.json')); assert not p['skippedGenerated'], p['skippedGenerated']"
       - name: Export resource packs
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
