@@ -5,7 +5,7 @@
   "notification_filterUnread": "Unread",
   "notification_categoryAll": "All",
   "notification_categoryMentions": "Mentions",
-  "notification_categoryReplies": "Replies & mentions",
+  "notification_categoryReplies": "Replies",
   "notification_categoryLikes": "Likes",
   "notification_categoryMessages": "Messages",
   "notification_categoryBookmarks": "Bookmarks",
