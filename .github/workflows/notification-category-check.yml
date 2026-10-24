@@ -9,6 +9,7 @@ on:
       - 'lib/services/discourse/_notifications.dart'
       - 'lib/l10n/modules/notificationFilter/**'
       - 'test/models/notification_category_test.dart'
+      - 'test/providers/notification_list_category_switch_test.dart'
       - 'test/services/discourse_notification_categories_test.dart'
       - '.github/workflows/notification-category-check.yml'
   workflow_dispatch:
@@ -49,6 +50,7 @@ jobs:
             lib/models/notification_category.dart \
             lib/pages/notifications_page.dart \
             test/models/notification_category_test.dart \
+            test/providers/notification_list_category_switch_test.dart \
             test/services/discourse_notification_categories_test.dart
 
       - name: Analyze category integration
@@ -57,6 +59,7 @@ jobs:
           lib/models/notification_category.dart
           lib/pages/notifications_page.dart
           test/models/notification_category_test.dart
+          test/providers/notification_list_category_switch_test.dart
           test/services/discourse_notification_categories_test.dart
 
       - name: Test separate mentions and replies
