@@ -412,11 +412,12 @@ class _PeriodSelector extends StatelessWidget {
               ),
             );
           }).toList(),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _periodLabel(context, selected),
+          child: SizedBox(
+            width: MediaQuery.sizeOf(context).width - 40,
+            child: Row(
+              children: [
+                Text(
+                  _periodLabel(context, selected),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -428,7 +429,7 @@ class _PeriodSelector extends StatelessWidget {
               ),
               if (range.isNotEmpty) ...[
                 const SizedBox(width: 12),
-                Flexible(
+                Expanded(
                   child: Text(
                     range,
                     maxLines: 1,
@@ -439,7 +440,9 @@ class _PeriodSelector extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
             ],
+            ),
           ),
         ),
       ),
