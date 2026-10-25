@@ -42,6 +42,7 @@ void main() {
       final device = DeviceAuthorizationService(
         dio,
         publicKeyProvider: () async => 'RSA-TEST-KEY',
+        clientIdProvider: () async => 'DEVICE-CLIENT-ID',
       );
       final request = await device.create();
       final status = await device.poll(request);
@@ -56,6 +57,7 @@ void main() {
       }
       final create = sent[0].data as Map;
       expect(create['scopes'], 'write');
+      expect(create['client_id'], 'DEVICE-CLIENT-ID');
       expect(create['public_key'], 'RSA-TEST-KEY');
       expect(create['expires_in_seconds'], '600');
       expect(create['nonce'], request.nonce);
@@ -91,6 +93,7 @@ void main() {
         final service = DeviceAuthorizationService(
           dio,
           publicKeyProvider: () async => 'RSA-TEST-KEY',
+        clientIdProvider: () async => 'DEVICE-CLIENT-ID',
         );
         await expectLater(service.create(), throwsFormatException);
       }
@@ -120,6 +123,7 @@ void main() {
       final service = DeviceAuthorizationService(
         dio,
         publicKeyProvider: () async => 'RSA-TEST-KEY',
+        clientIdProvider: () async => 'DEVICE-CLIENT-ID',
       );
       final request = await service.create();
       expect(request.pollInterval, const Duration(seconds: 95));
