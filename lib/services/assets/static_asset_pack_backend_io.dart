@@ -21,7 +21,61 @@ const _roots = <String, String>{
 };
 const _maxFile = 128 * 1024 * 1024;
 const _maxPack = 512 * 1024 * 1024;
-final _digestPattern = RegExp(r'^[a-f0-9]{64}
+final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
+
+/// 在 ZIP 解码前检查中央目录，提前拒绝超限声明和 ZIP64。
+void _preflightZip(Uint8List bytes) {
+  final view = ByteData.sublistView(bytes);
+  if (bytes.length < 22) throw FormatException('ZIP 尾部不完整');
+  int? eocd;
+  final limit = bytes.length > 65557 ? bytes.length - 65557 : 0;
+  for (var i = bytes.length - 22; i >= limit; i--) {
+    if (view.getUint32(i, Endian.little) == 0x06054b50 &&
+        i + 22 + view.getUint16(i + 20, Endian.little) == bytes.length) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd == null ||
+      view.getUint16(eocd + 4, Endian.little) != 0 ||
+      view.getUint16(eocd + 6, Endian.little) != 0) {
+    throw FormatException('ZIP 尾部不存在或为跨磁盘压缩包');
+  }
+  final count = view.getUint16(eocd + 10, Endian.little);
+  final directorySize = view.getUint32(eocd + 12, Endian.little);
+  final directoryOffset = view.getUint32(eocd + 16, Endian.little);
+  if (count == 0 || count > 1024 ||
+      directoryOffset + directorySize > eocd) {
+    throw FormatException('ZIP 中央目录非法');
+  }
+  var position = directoryOffset;
+  var totalSize = 0;
+  for (var index = 0; index < count; index++) {
+    if (position + 46 > eocd ||
+        view.getUint32(position, Endian.little) != 0x02014b50) {
+      throw FormatException('ZIP 中央目录条目不完整');
+    }
+    final flags = view.getUint16(position + 8, Endian.little);
+    final method = view.getUint16(position + 10, Endian.little);
+    final size = view.getUint32(position + 24, Endian.little);
+    if ((flags & 1) != 0 || (method != 0 && method != 8) ||
+        size == 0xffffffff || size > _maxFile) {
+      throw FormatException('ZIP 加密/压缩方法或单文件大小不受支持');
+    }
+    totalSize += size;
+    if (totalSize > _maxPack) {
+      throw FormatException('ZIP 展开大小超过允许值');
+    }
+    position += 46 +
+        view.getUint16(position + 28, Endian.little) +
+        view.getUint16(position + 30, Endian.little) +
+        view.getUint16(position + 32, Endian.little);
+  }
+  if (position != directoryOffset + directorySize) {
+    throw FormatException('ZIP 中央目录长度不匹配');
+  }
+}
+
 String _sha(List<int> bytes) => sha256.convert(bytes).toString();
 
 bool _safePath(String path) =>
