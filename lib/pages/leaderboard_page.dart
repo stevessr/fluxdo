@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../providers/discourse_providers.dart';
 import '../utils/url_helper.dart';
+import '../utils/leaderboard_period_range.dart';
 import '../widgets/common/smart_avatar.dart';
 import 'user_profile_page.dart';
 
@@ -94,11 +95,35 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
           .where((entry) => entry.username.isNotEmpty)
           .toList(growable: false);
 
+      // 官方 personal 字段由同一个响应返回，包含当前用户的全榜位置。
+      // 不依赖前 100 名，也不需要额外查询或翻页。
+      final personalJson = data['personal'];
+      _LeaderboardEntry? personal;
+      if (personalJson is Map && personalJson['user'] is Map) {
+        final user = _LeaderboardEntry.fromJson(
+          Map<String, dynamic>.from(personalJson['user'] as Map),
+        );
+        final rank = _LeaderboardEntry.asInt(personalJson['position']);
+        if (user.username.isNotEmpty && rank > 0) {
+          personal = user.withPosition(rank);
+        }
+      }
+      final leaderboardJson = data['leaderboard'];
+      final leaderboard = leaderboardJson is Map
+          ? Map<String, dynamic>.from(leaderboardJson)
+          : const <String, dynamic>{};
+      final name = leaderboard['name']?.toString();
+
       final merged = reset
           ? entries
           : _mergeEntries(previous?.entries ?? const [], entries);
       final snapshot = _LeaderboardSnapshot(
         entries: merged,
+        personal: reset ? personal : personal ?? previous?.personal,
+        name: name?.isNotEmpty == true ? name : previous?.name,
+        periodFilterDisabled:
+            leaderboard['period_filter_disabled'] == true ||
+            (!reset && (previous?.periodFilterDisabled ?? false)),
         nextPage: page + 1,
         hasMore: rawUsers.length >= _serverPageSize,
         updatedAt: DateTime.now(),
@@ -162,6 +187,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     final snapshot = _cache[_period];
     final error = _errors[_period];
     final currentUsername = ref.watch(currentUserProvider).value?.username;
+    final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -175,10 +201,43 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
         ],
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    snapshot?.name ?? _copy(context).globalTitle,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: _copy(context).about,
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: Text(_copy(context).globalTitle),
+                      content: Text(_copy(context).aboutBody),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: Text(MaterialLocalizations.of(context).closeButtonTooltip),
+                        ),
+                      ],
+                    ),
+                  ),
+                  icon: Icon(Symbols.info_outline_rounded, color: colors.primary),
+                ),
+              ],
+            ),
+          ),
           _PeriodSelector(
             selected: _period,
-            enabled: !_loading,
+            enabled: !_loading && snapshot?.periodFilterDisabled != true,
             onSelected: _selectPeriod,
           ),
           const Divider(height: 1),
@@ -232,30 +291,56 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       );
     }
 
+    // 领奖台 + 当前用户卡片 + 第四名起的常规列表。
+    final visiblePersonal = snapshot?.personal;
+    final showPersonal = currentUsername != null &&
+        visiblePersonal != null &&
+        visiblePersonal.username.toLowerCase() == currentUsername.toLowerCase();
+    final ranked = entries.skip(3).toList(growable: false);
+    final initialRows = 2 + (showPersonal ? 1 : 0);
+
     return RefreshIndicator(
       onRefresh: () => _load(reset: true),
-      child: ListView.separated(
+      child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
-        itemCount: entries.length + 1,
-        separatorBuilder: (_, index) => index < entries.length - 1
-            ? const Divider(height: 1, indent: 72)
-            : const SizedBox.shrink(),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+        itemCount: initialRows + ranked.length + 1,
         itemBuilder: (context, index) {
-          if (index == entries.length) {
-            return _LeaderboardFooter(
-              snapshot: snapshot!,
-              loading: _loading,
-              error: error,
-              onLoadMore: () => _load(reset: false),
+          if (index == 0) {
+            return _LeaderboardPodium(
+              winners: entries.take(3).toList(growable: false),
+              onTap: _openUser,
             );
           }
-          final entry = entries[index];
-          return _LeaderboardTile(
-            entry: entry,
-            isCurrentUser:
-                currentUsername != null && entry.username == currentUsername,
-            onTap: () => _openUser(entry),
+          if (index == 1) {
+            return _LeaderboardRankingHeading(copy: _copy(context));
+          }
+          if (showPersonal && index == 2) {
+            return _PersonalLeaderboardRank(
+              entry: visiblePersonal,
+              onTap: () => _openUser(visiblePersonal),
+            );
+          }
+          final rankIndex = index - initialRows;
+          if (rankIndex < ranked.length) {
+            final entry = ranked[rankIndex];
+            return Column(
+              children: [
+                _LeaderboardTile(
+                  entry: entry,
+                  isCurrentUser: currentUsername != null &&
+                      entry.username.toLowerCase() == currentUsername.toLowerCase(),
+                  onTap: () => _openUser(entry),
+                ),
+                const Divider(height: 1, indent: 60),
+              ],
+            );
+          }
+          return _LeaderboardFooter(
+            snapshot: snapshot!,
+            loading: _loading,
+            error: error,
+            onLoadMore: () => _load(reset: false),
           );
         },
       ),
@@ -512,12 +597,18 @@ class _LeaderboardError extends StatelessWidget {
 class _LeaderboardSnapshot {
   const _LeaderboardSnapshot({
     required this.entries,
+    required this.personal,
+    required this.name,
+    required this.periodFilterDisabled,
     required this.nextPage,
     required this.hasMore,
     required this.updatedAt,
   });
 
   final List<_LeaderboardEntry> entries;
+  final _LeaderboardEntry? personal;
+  final String? name;
+  final bool periodFilterDisabled;
   final int nextPage;
   final bool hasMore;
   final DateTime updatedAt;
@@ -540,13 +631,22 @@ class _LeaderboardEntry {
   final int totalScore;
   final int position;
 
-  factory _LeaderboardEntry.fromJson(Map<String, dynamic> json) {
-    int asInt(dynamic value) {
-      if (value is int) return value;
-      if (value is num) return value.toInt();
-      return int.tryParse(value?.toString() ?? '') ?? 0;
-    }
+  static int asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
 
+  _LeaderboardEntry withPosition(int rank) => _LeaderboardEntry(
+    id: id,
+    username: username,
+    name: name,
+    avatarTemplate: avatarTemplate,
+    totalScore: totalScore,
+    position: rank,
+  );
+
+  factory _LeaderboardEntry.fromJson(Map<String, dynamic> json) {
     return _LeaderboardEntry(
       id: asInt(json['id'] ?? json['user_id']),
       username: json['username']?.toString() ?? '',
