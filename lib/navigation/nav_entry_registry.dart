@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/s.dart';
 import '../models/user.dart';
 import '../pages/ai_bot_conversations_page.dart';
+import '../pages/site_about_page.dart';
+import '../pages/site_policy_page.dart';
+import '../models/site_policy_document.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/boards_page.dart';
 import '../pages/browsing_history_page.dart';
@@ -195,6 +198,51 @@ class NavEntryRegistry {
         onPanelTap: (ctx, ref) => NotificationQuickPanel.show(ctx),
         requiresLogin: true,
       ),
+      NavEntry(
+        id: 'site_guidelines',
+        kind: NavEntryKind.page,
+        iconData: Symbols.rule_rounded,
+        selectedIconData: Symbols.rule_rounded,
+        label: _siteGuidelinesLabel,
+        pageBuilder: (ctx, isActive) => SitePolicyPage(
+          kind: SitePolicyKind.guidelines,
+          isActive: isActive,
+        ),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'site_terms',
+        kind: NavEntryKind.page,
+        iconData: Symbols.description_rounded,
+        selectedIconData: Symbols.description_rounded,
+        label: _siteTermsLabel,
+        pageBuilder: (ctx, isActive) => SitePolicyPage(
+          kind: SitePolicyKind.terms,
+          isActive: isActive,
+        ),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'site_privacy',
+        kind: NavEntryKind.page,
+        iconData: Symbols.privacy_tip_rounded,
+        selectedIconData: Symbols.privacy_tip_rounded,
+        label: _sitePrivacyLabel,
+        pageBuilder: (ctx, isActive) => SitePolicyPage(
+          kind: SitePolicyKind.privacy,
+          isActive: isActive,
+        ),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'site_about',
+        kind: NavEntryKind.page,
+        iconData: Symbols.info_rounded,
+        selectedIconData: Symbols.info_rounded,
+        label: _siteAboutLabel,
+        pageBuilder: (ctx, isActive) => SiteAboutPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
     ];
   }
 
@@ -234,6 +282,29 @@ String _boardsLabel(BuildContext context) {
 String _leaderboardLabel(BuildContext context) {
   final locale = Localizations.localeOf(context);
   return locale.languageCode == 'zh' ? '排行榜' : 'Leaderboard';
+}
+
+String _siteGuidelinesLabel(BuildContext context) {
+  return Localizations.localeOf(context).languageCode == 'zh'
+      ? '准则'
+      : 'Guidelines';
+}
+
+String _siteTermsLabel(BuildContext context) {
+  return Localizations.localeOf(context).languageCode == 'zh'
+      ? '服务条款'
+      : 'Terms of Service';
+}
+
+String _sitePrivacyLabel(BuildContext context) {
+  return Localizations.localeOf(context).languageCode == 'zh'
+      ? '隐私'
+      : 'Privacy';
+}
+
+String _siteAboutLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '关于' : 'About';
 }
 
 String _groupsLabel(BuildContext context) {
