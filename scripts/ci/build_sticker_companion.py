@@ -109,6 +109,103 @@ def execute(*args: str, cwd: Path) -> None:
     subprocess.run(args, cwd=cwd, check=True)
 
 
+def kotlin_path(path: Path) -> str:
+    return json.dumps(path.as_posix()).replace("$", r"\$")
+
+
+def configure_android_app_gradle(gradle: str, root: Path, mode: str) -> str:
+    """Configure a generated Flutter app without depending on Gradle or assets."""
+    # flutter create derives "<org>.sticker" as the exact expected package.
+    # Explicitly verify rather than allowing a non-upgradable package ID.
+    if f'applicationId = "{PACKAGE}"' not in gradle:
+        raise RuntimeError(
+            f"Unexpected Sticker applicationId; expected {PACKAGE}"
+        )
+    if f'namespace = "{PACKAGE}"' not in gradle:
+        raise RuntimeError(
+            f"Unexpected Sticker Android namespace; expected {PACKAGE}"
+        )
+    # Flutter currently emits a Kotlin DSL Android project. Preserve generated
+    # Flutter Gradle wiring; only inject the APK's native bridge requirements.
+    assert "flutter.compileSdkVersion" in gradle
+    if gradle.count("\nandroid {") != 1:
+        raise RuntimeError("Expected one Flutter Android extension block")
+    # Use AGP's public DSL explicitly; signing must not select a deprecated
+    # legacy android() overload or a Gradle java extension named `java`.
+    gradle = (
+        "import com.android.build.api.dsl.ApplicationExtension\n"
+        "import java.io.File as StickerSigningFile\n"
+        "import java.util.Properties as StickerSigningProperties\n\n" + gradle
+    ).replace("\nandroid {", "\nextensions.configure<ApplicationExtension> {", 1)
+    gradle = gradle.replace('        release {', '        getByName("release") {', 1)
+    gradle = gradle.replace(
+        "ndkVersion = flutter.ndkVersion",
+        'ndkVersion = "28.2.13676358"',
+    )
+    if "dependencies {" not in gradle:
+        gradle += '\n\ndependencies {\n    implementation("androidx.core:core:1.16.0")\n}\n'
+    else:
+        gradle = gradle.replace(
+            "dependencies {",
+            'dependencies {\n    implementation("androidx.core:core:1.16.0")',
+            1,
+        )
+    original_props = root / "android/key.properties"
+    if mode == "release" and not original_props.is_file():
+        raise RuntimeError("Release requires the same android/key.properties as FluxDO")
+    # Core :app signs *all* build variants with the release key when present.
+    # Apply the identical rule here so debug Core and debug Sticker match.
+    if original_props.is_file():
+        anchor = 'signingConfig = signingConfigs.getByName("debug")'
+        if anchor not in gradle:
+            raise RuntimeError("Generated Flutter release signing layout changed")
+        signing_block = '''
+    signingConfigs {
+        create("fluxdoSharedRelease") {
+            val props = StickerSigningProperties().apply {
+                StickerSigningFile(PLACEHOLDER_PROPS).inputStream().use { load(it) }
+            }
+            val keyLocation = StickerSigningFile(props.getProperty("storeFile"))
+            // Match :app's existing signing resolution order: relative paths
+            // are based on android/app, then the Android project root.
+            storeFile = if (keyLocation.isAbsolute) keyLocation else
+                sequenceOf(
+                    StickerSigningFile(PLACEHOLDER_APP, props.getProperty("storeFile")),
+                    StickerSigningFile(PLACEHOLDER_ANDROID, props.getProperty("storeFile")),
+                ).firstOrNull { it.isFile }
+            require(storeFile?.isFile == true) { "Release keystore not found" }
+            storePassword = props.getProperty("storePassword")
+            keyAlias = props.getProperty("keyAlias")
+            keyPassword = props.getProperty("keyPassword")
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
+'''
+        signing_block = signing_block.replace(
+            "PLACEHOLDER_PROPS", kotlin_path(original_props)
+        ).replace("PLACEHOLDER_APP", kotlin_path(root / "android/app"))
+        signing_block = signing_block.replace("PLACEHOLDER_ANDROID", kotlin_path(root / "android"))
+        if "    buildTypes {" not in gradle:
+            raise RuntimeError("Expected Flutter Android buildTypes block")
+        gradle = gradle.replace("    buildTypes {", signing_block + "    buildTypes {", 1)
+        gradle = gradle.replace(
+            anchor, 'signingConfig = signingConfigs.getByName("fluxdoSharedRelease")', 1
+        )
+        # Flutter's template declares release only; add an explicit debug
+        # signer in the generated app. Same-signer check must pass locally.
+        gradle = gradle.replace(
+            "    buildTypes {",
+            '    buildTypes {\n        getByName("debug") {\n'
+            '            signingConfig = signingConfigs.getByName("fluxdoSharedRelease")\n'
+            '        }',
+            1,
+        )
+    return gradle
+
+
 def setup_project(target: Path, mode: str) -> None:
     execute(
         "flutter", "create", "--platforms=android", "--org=com.github.lingyan000.fluxdo.plugin",
@@ -196,85 +293,7 @@ def setup_project(target: Path, mode: str) -> None:
     manifest.write(manifest_path, encoding="utf-8", xml_declaration=True)
 
     build_file = target / "android/app/build.gradle.kts"
-    gradle = build_file.read_text()
-    # flutter create derives "<org>.sticker" as the exact expected package.
-    # Explicitly verify rather than allowing a non-upgradable package ID.
-    if f'applicationId = "{PACKAGE}"' not in gradle:
-        raise RuntimeError(
-            f"Unexpected Sticker applicationId; expected {PACKAGE}"
-        )
-    if f'namespace = "{PACKAGE}"' not in gradle:
-        raise RuntimeError(
-            f"Unexpected Sticker Android namespace; expected {PACKAGE}"
-        )
-    # Flutter currently emits a Kotlin DSL Android project. Preserve generated
-    # Flutter Gradle wiring; only inject the APK's native bridge requirements.
-    assert "flutter.compileSdkVersion" in gradle
-    gradle = gradle.replace(
-        "ndkVersion = flutter.ndkVersion",
-        'ndkVersion = "28.2.13676358"',
-    )
-    if "dependencies {" not in gradle:
-        gradle += '\n\ndependencies {\n    implementation("androidx.core:core:1.16.0")\n}\n'
-    else:
-        gradle = gradle.replace(
-            "dependencies {",
-            'dependencies {\n    implementation("androidx.core:core:1.16.0")',
-            1,
-        )
-    original_props = ROOT / "android/key.properties"
-    if mode == "release" and not original_props.is_file():
-        raise RuntimeError("Release requires the same android/key.properties as FluxDO")
-    # Core :app signs *all* build variants with the release key when present.
-    # Apply the identical rule here so debug Core and debug Sticker match.
-    if original_props.is_file():
-        anchor = 'signingConfig = signingConfigs.getByName("debug")'
-        if anchor not in gradle:
-            raise RuntimeError("Generated Flutter release signing layout changed")
-        signing_block = '''
-    signingConfigs {
-        create("fluxdoSharedRelease") {
-            val props = java.util.Properties().apply {
-                java.io.File("PLACEHOLDER_PROPS").inputStream().use { load(it) }
-            }
-            val keyLocation = java.io.File(props.getProperty("storeFile"))
-            // Match :app's existing signing resolution order: relative paths
-            // are based on android/app, then the Android project root.
-            storeFile = if (keyLocation.isAbsolute) keyLocation else
-                sequenceOf(
-                    java.io.File("PLACEHOLDER_ANDROID/app", props.getProperty("storeFile")),
-                    java.io.File("PLACEHOLDER_ANDROID", props.getProperty("storeFile")),
-                ).firstOrNull { it.isFile }
-            require(storeFile?.isFile == true) { "Release keystore not found" }
-            storePassword = props.getProperty("storePassword")
-            keyAlias = props.getProperty("keyAlias")
-            keyPassword = props.getProperty("keyPassword")
-            enableV1Signing = true
-            enableV2Signing = true
-            enableV3Signing = true
-        }
-    }
-
-'''
-        signing_block = signing_block.replace(
-            "PLACEHOLDER_PROPS", original_props.as_posix()
-        ).replace("PLACEHOLDER_ANDROID", (ROOT / "android").as_posix())
-        if "    buildTypes {" not in gradle:
-            raise RuntimeError("Expected Flutter Android buildTypes block")
-        gradle = gradle.replace("    buildTypes {", signing_block + "    buildTypes {", 1)
-        gradle = gradle.replace(
-            anchor, 'signingConfig = signingConfigs.getByName("fluxdoSharedRelease")', 1
-        )
-        # Flutter's template declares release only; add an explicit debug
-        # signer in the generated app. Same-signer check must pass locally.
-        gradle = gradle.replace(
-            "    buildTypes {",
-            '    buildTypes {\n        getByName("debug") {\n'
-            '            signingConfig = signingConfigs.getByName("fluxdoSharedRelease")\n'
-            '        }',
-            1,
-        )
-    build_file.write_text(gradle)
+    build_file.write_text(configure_android_app_gradle(build_file.read_text(), ROOT, mode))
 
     # The original FluxDO Android Gradle setup patches a duplicate Java/Kotlin
     # FlutterAvifPlugin class. A standalone Sticker app cannot inherit the

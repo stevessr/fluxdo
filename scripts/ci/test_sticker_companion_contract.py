@@ -7,7 +7,65 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from build_sticker_companion import verify_drawing_dependency_graph
+from build_sticker_companion import PACKAGE, configure_android_app_gradle, verify_drawing_dependency_graph
+
+
+class StickerGradleSigningTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / 'repo $with "quotes"'
+        (self.root / "android").mkdir(parents=True)
+        self.template = f'''plugins {{
+    id("com.android.application")
+    id("dev.flutter.flutter-gradle-plugin")
+}}
+
+android {{
+    namespace = "{PACKAGE}"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+    defaultConfig {{ applicationId = "{PACKAGE}" }}
+    buildTypes {{
+        release {{
+            signingConfig = signingConfigs.getByName("debug")
+        }}
+    }}
+}}
+'''
+
+    def test_signed_variants_use_public_dsl_and_unshadowed_types(self):
+        (self.root / "android/key.properties").write_text("storeFile=fixture.jks")
+        for mode in ("debug", "release"):
+            with self.subTest(mode=mode):
+                generated = configure_android_app_gradle(self.template, self.root, mode)
+                self.assertIn("extensions.configure<ApplicationExtension>", generated)
+                self.assertNotIn("\nandroid {", generated)
+                self.assertIn("import java.util.Properties as StickerSigningProperties", generated)
+                self.assertIn("import java.io.File as StickerSigningFile", generated)
+                self.assertNotIn("java.io.File(", generated)
+                self.assertNotIn("java.util.Properties()", generated)
+                self.assertIn('getByName("release")', generated)
+                self.assertIn('getByName("debug")', generated)
+                self.assertEqual(generated.count('signingConfig = signingConfigs.getByName("fluxdoSharedRelease")'), 2)
+                self.assertNotIn('signingConfigs.getByName("debug")', generated)
+                self.assertIn(r'\$with \"quotes\"', generated)
+
+    def test_release_cannot_use_template_debug_signer(self):
+        with self.assertRaisesRegex(RuntimeError, "Release requires"):
+            configure_android_app_gradle(self.template, self.root, "release")
+        generated = configure_android_app_gradle(self.template, self.root, "debug")
+        self.assertNotIn("create(\"fluxdoSharedRelease\")", generated)
+
+    def test_template_identity_and_signing_drift_are_rejected(self):
+        (self.root / "android/key.properties").write_text("storeFile=fixture.jks")
+        for template in (
+            self.template.replace(PACKAGE, "com.other.app"),
+            self.template.replace('getByName("debug")', 'getByName("other")'),
+            self.template.replace("\nandroid {", "\nchangedAndroid {"),
+        ):
+            with self.subTest(template=template), self.assertRaises(RuntimeError):
+                configure_android_app_gradle(template, self.root, "release")
 
 
 class StickerNativeDependenciesTest(unittest.TestCase):

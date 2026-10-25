@@ -124,11 +124,22 @@ Android 插件 CI 将 Python 契约、独立 Dart 协议和 Flutter 桥接回归
 Sticker 的独立 Gradle 工程自行对齐 Android SDK 36 和 JVM 17，满足 AVIF
 插件所引用 AndroidX 的编译要求。
 
+Sticker 的签名脚本生成独立为可测试函数，使用 AGP 公共
+`ApplicationExtension` 和显式导入的 Java 类型，避免 Gradle DSL 中的
+`java` 扩展遮蔽文件/属性类。存在宿主签名配置时，Debug 和 Release 均使用
+同一签名；缺少配置时 Release 拒绝构建。Release 流水线先构建伴随 APK，
+使其独立配置失败在 Core 的重型构建之前暴露。
+
 `check_android_apk_contract.py --build-mode debug|release` 使用真实
 `aapt` / `apksigner` 检查 Core 与六个 APK 的包名、版本、可调试标志和同签名
 身份。配合 `--report PATH`，只在全部检查通过后输出每个 APK 的字节数、
 文件 SHA-256、签名 SHA-256 和实际 `versionCode`。报告是构建证据，
 不是经认证的在线更新目录，不能作为自动安装的信任根。
+
+Release 交付文件使用模块和架构后缀，矩阵产物合并不会覆盖其他架构的插件。
+`prepare_android_nightly.py` 只接受每个架构的完整七包集合，保留 Core 的
+`fluxdo-nightly-<ABI>.apk` 名称以及各插件的稳定名称；缺失、重复、未知或空包
+会在复制前失败。PR 仅构建审查产物，Nightly 更新限定为 main 分支的非 PR 事件。
 
 Python 测试与源码闭包检查不能替代完整 Gradle/Flutter 构建。正式合并前
 仍须取得当前提交整套 APK 的成功构建，并验证 Android 安装升级、
