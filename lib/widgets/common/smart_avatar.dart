@@ -351,12 +351,19 @@ class _SvgFallbackBuilderState extends State<_SvgFallbackBuilder> {
   Future<void> _checkForSvg() async {
     final imageUrl = widget.imageUrl;
     try {
-      final bytes = await BlobImageCache.fetch(
+      // This is a decoder fallback: BlobImageProvider has already attempted
+      // the download. Read only the shared object instead of immediately
+      // retrying a failed network request (e.g. during a Cloudflare challenge).
+      final bytes = await BlobImageCache.read(
         BlobImageCache.avatarBucket,
         imageUrl,
       );
-      // Old network completions must never paint a different account's URL.
-      if (bytes.isEmpty || !mounted || imageUrl != widget.imageUrl) return;
+      // Old async completions must never paint a different account's URL.
+      if (!mounted || imageUrl != widget.imageUrl) return;
+      if (bytes == null || bytes.isEmpty) {
+        setState(() => _checked = true);
+        return;
+      }
 
       if (SvgUtils.isSvgBytes(bytes)) {
         final svgString = SvgUtils.sanitize(SvgUtils.decodeSvgBytes(bytes));
