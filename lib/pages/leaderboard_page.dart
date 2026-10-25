@@ -569,6 +569,13 @@ class _LeaderboardWinner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          _buildWinner(context, constraints.maxWidth),
+    );
+  }
+
+  Widget _buildWinner(BuildContext context, double maxWidth) {
     final scheme = Theme.of(context).colorScheme;
     final first = rank == 1;
     final medal = switch (rank) {
@@ -576,7 +583,10 @@ class _LeaderboardWinner extends StatelessWidget {
       2 => const Color(0xFFC8C9CD),
       _ => const Color(0xFFCA8643),
     };
-    final avatarRadius = first ? 42.0 : 34.0;
+    // 三列在窄屏上会缩小头像，避免固定直径导致 RenderFlex 溢出。
+    final avatarRadius = (maxWidth / 2 - 6)
+        .clamp(22.0, first ? 42.0 : 34.0)
+        .toDouble();
     final squareAvatar = isSquareAvatarUrl(entry.avatarUrl);
     final score = NumberFormat.decimalPattern(
       Localizations.localeOf(context).toString(),
