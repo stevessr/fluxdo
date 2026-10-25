@@ -170,7 +170,7 @@ Categories=Network;
       findCommand: find,
     ).availableBrowsers();
     check(
-      browsers.where((b) => b.id.startsWith('xdg:')).length == 4,
+      browsers.where((b) => b.id.startsWith('xdg:')).length == 5,
       'XDG 完全相同的启动指令去重，不合并不同 Profile',
     );
     check(
