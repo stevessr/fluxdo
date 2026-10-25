@@ -88,7 +88,12 @@ class DeviceAuthorizationService {
         uri.fragment.isEmpty &&
         uri.path == '/user-api-key/activate';
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(deviceCode) ||
-        !RegExp(r'^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}
+        !RegExp(r'^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$').hasMatch(userCode) ||
+        !safe(verification) ||
+        !safe(verificationWithRequest) ||
+        !RegExp(r'^[-_A-Za-z0-9]{8}$').hasMatch(
+          verificationWithRequest?.queryParameters['request'] ?? '',
+        )) {
       throw const FormatException('服务端设备授权响应格式无效');
     }
     final expiresIn = int.tryParse(body['expires_in']?.toString() ?? '') ?? 0;
