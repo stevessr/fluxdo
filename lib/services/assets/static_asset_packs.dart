@@ -75,9 +75,11 @@ abstract final class StaticAssetPacks {
     if (zipBytes.length != item.bytes) {
       throw const FormatException('ZIP 大小与签名目录不匹配');
     }
-    await installTrustedZip(
+    await backend.installAuthenticatedZip(
       packId: packId, zipBytes: zipBytes, expectedSha256: item.sha256,
+      releaseSequence: item.releaseSequence,
     );
+    _changes.add(packId);
   }
 
   /// expectedSha256 必须来自可信发布渠道，不得从待安装 ZIP 自身读取。

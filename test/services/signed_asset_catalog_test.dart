@@ -30,6 +30,7 @@ void main() {
     expect(packs, hasLength(1));
     final pack = packs.single;
     expect(pack.id, 'render-cook');
+    expect(pack.releaseSequence, 1);
     final actualZip = await File('$fixture/${pack.filename}').readAsBytes();
     expect(actualZip.length, pack.bytes);
 

@@ -79,3 +79,10 @@ DiscourseCookService 订阅 render-cook 包切换通知：安装、禁用和回�
 ## Android MiSans 独立资源试验
 
 可在已经复制的临时 Android Core Flutter 工程里运行 scripts/ci/prepare_android_static_resources.py --stage /tmp/fluxdo-core-stage，删除临时工程 pubspec.yaml 的唯一 MiSans 字体声明和字体文件；随后必须使用 --dart-define=FLUXDO_EXTERNAL_MISANS=true 构建。脚本拒绝修改源仓库、缺失系统字体回退、额外字体声明或路径变更。Android Core 的真实 APK 体积对比与离线测试仍需在 PR #131 整合后完成，不得把此脚本的字节数视作实测 APK 缩减。
+
+
+## 签名目录反重放：schema 2
+
+已升级 catalog.json：与 ZIP 内容一起签名的 releaseSequence 必须为 1 至 2^31-1 的整数。正式 GitHub Actions 手动发布使用 github.run_number，不允许更换工作流后重置发布序号。经 Ed25519 验证后，installFromPinnedCatalog 将此序号和可信摘要交给单包锁下的后端事务，拒绝旧序号和同序号不同摘要。防回滚水位独立于 current/previous 激活指针，带备用副本。用户可显式回滚到旧版本，但此操作不允许旧签名目录重新作为自动更新安装。校验状态损坏时拒绝自动安装。
+
+此设计是应用沙箱内的防重放，不是硬件可信计数器：攻击者若能清除整个应用数据，软件文件不能提供不可重置的可信水位。

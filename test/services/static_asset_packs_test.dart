@@ -249,6 +249,52 @@ void main() {
         isTrue);
   });
 
+  test('签名资源序号不可降级，回滚/禁用后仍记录最高序号', () async {
+    Future<void> signed(String value, int sequence) async {
+      final zip = _makePack(_path, Uint8List.fromList(utf8.encode(value)));
+      await backend.installAuthenticatedZip(
+        packId: 'render-cook', zipBytes: zip,
+        expectedSha256: sha256.convert(zip).toString(),
+        releaseSequence: sequence,
+      );
+    }
+    await signed('v10', 10);
+    await signed('v11', 11);
+    await expectLater(signed('v10', 10), throwsStateError);
+    await expectLater(signed('other-v11', 11), throwsStateError);
+    expect(await StaticAssetPacks.rollback('render-cook'), isTrue);
+    expect(await StaticAssetPacks.loadString(_path), 'v10');
+    await expectLater(signed('v10', 10), throwsStateError);
+    expect(await StaticAssetPacks.disable('render-cook'), isTrue);
+    await expectLater(signed('v10', 10), throwsStateError);
+    await signed('v11', 11);
+    final current = File('${temp.path}/render-cook.release.json');
+    final backup = File('${temp.path}/render-cook.release.previous.json');
+    if (await backup.exists()) await backup.delete();
+    await current.rename(backup.path);
+    await expectLater(signed('v10', 10), throwsStateError);
+    await signed('v12', 12);
+    expect(await StaticAssetPacks.loadString(_path), 'v12');
+  });
+
+  test('防回滚状态损坏时拒绝自动安装，保留已安装版本', () async {
+    final zip = _makePack(_path, Uint8List.fromList(utf8.encode('v20')));
+    final hash = sha256.convert(zip).toString();
+    await backend.installAuthenticatedZip(
+      packId: 'render-cook', zipBytes: zip,
+      expectedSha256: hash, releaseSequence: 20,
+    );
+    await File('${temp.path}/render-cook.release.json').writeAsString('{bad');
+    await expectLater(
+      backend.installAuthenticatedZip(
+        packId: 'render-cook', zipBytes: zip,
+        expectedSha256: hash, releaseSequence: 21,
+      ),
+      throwsFormatException,
+    );
+    expect(await StaticAssetPacks.loadString(_path), 'v20');
+  });
+
   test('Cook 外置脚本安装/禁用/回滚后使已缓存引擎版本失效', () async {
     final service = DiscourseCookService();
     final before = service.debugAssetGeneration;

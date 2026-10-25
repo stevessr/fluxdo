@@ -55,7 +55,7 @@ jobs:
       - name: Unit tests
         run: python3 -m unittest discover -s scripts/ci/tests -p 'test_asset_*.py' -v
       - name: Build pack artifacts
-        run: python3 scripts/ci/asset_packs.py build --root . --out build/asset-packs
+        run: python3 scripts/ci/asset_packs.py build --root . --out build/asset-packs --release-sequence ${{ github.run_number }}
       - name: Verify pack hashes
         run: python3 scripts/ci/asset_packs.py verify --catalog build/asset-packs/catalog.json
       - name: Require all character packs in manual export

@@ -57,9 +57,14 @@ abstract final class SignedAssetCatalog {
 
     final raw = jsonDecode(utf8.decode(catalogBytes));
     if (raw is! Map<String, dynamic> ||
-        raw['schema'] != 1 || raw['packs'] is! List) {
+        raw['schema'] != 2 ||
+        raw['releaseSequence'] is! int ||
+        (raw['releaseSequence'] as int) <= 0 ||
+        (raw['releaseSequence'] as int) > 0x7fffffff ||
+        raw['packs'] is! List) {
       throw const FormatException('资源目录协议不兼容');
     }
+    final releaseSequence = raw['releaseSequence'] as int;
     final result = <VerifiedAssetPack>[];
     final seen = <String>{};
     for (final entry in raw['packs'] as List) {
@@ -79,6 +84,7 @@ abstract final class SignedAssetCatalog {
       }
       result.add(VerifiedAssetPack(
         id: id, filename: filename, sha256: hash, bytes: length,
+        releaseSequence: releaseSequence,
       ));
     }
     if (result.isEmpty) {
@@ -93,11 +99,13 @@ class VerifiedAssetPack {
   final String filename;
   final String sha256;
   final int bytes;
+  final int releaseSequence;
 
   const VerifiedAssetPack({
     required this.id,
     required this.filename,
     required this.sha256,
     required this.bytes,
+    required this.releaseSequence,
   });
 }

@@ -132,13 +132,36 @@ Future<void> installTrustedZip({
   return _lock(packId).synchronized(() => _installZip(packId, zipBytes, expectedSha256));
 }
 
+/// A pinned signature and the monotonic sequence are checked under the same
+/// lock as installation to prevent concurrent installation races.
+Future<void> installAuthenticatedZip({
+  required String packId,
+  required Uint8List zipBytes,
+  required String expectedSha256,
+  required int releaseSequence,
+}) {
+  if (!_roots.containsKey(packId) || !_digestPattern.hasMatch(expectedSha256) ||
+      releaseSequence <= 0 || releaseSequence > 0x7fffffff) {
+    throw ArgumentError('非法签名资源包参数或发布序号');
+  }
+  return _lock(packId).synchronized(() => _installZip(
+    packId, zipBytes, expectedSha256,
+    signedReleaseSequence: releaseSequence,
+  ));
+}
+
 Future<void> _installZip(
   String packId,
   Uint8List zipBytes,
-  String expectedSha256,
-) async {
+  String expectedSha256, {
+  int? signedReleaseSequence,
+}) async {
   if (zipBytes.length > _maxPack || _sha(zipBytes) != expectedSha256) {
     throw FormatException('ZIP 大小或整体 SHA-256 校验失败');
+  }
+  final base = await _base();
+  if (signedReleaseSequence != null) {
+    await _verifyFreshRelease(base, packId, expectedSha256, signedReleaseSequence);
   }
   _preflightZip(zipBytes);
   final archive = ZipDecoder().decodeBytes(zipBytes, verify: true);
@@ -175,7 +198,6 @@ Future<void> _installZip(
     throw FormatException('资源数目不匹配');
   }
 
-  final base = await _base();
   final stage = await base.createTemp('.stage-');
   final hashes = <String, String>{};
   try {
@@ -222,7 +244,11 @@ Future<void> _installZip(
       'id': packId,
       'digest': expectedSha256,
       'files': hashes,
+      if (signedReleaseSequence != null) 'releaseSequence': signedReleaseSequence,
     });
+    if (signedReleaseSequence != null) {
+      await _commitReleaseWatermark(base, packId, expectedSha256, signedReleaseSequence);
+    }
   } finally {
     if (await stage.exists()) await stage.delete(recursive: true);
   }
@@ -281,6 +307,11 @@ Future<Map<String, dynamic>?> _readPointerFile(File file, String id) async {
         value['schema'] != 1 || value['id'] != id) {
       return null;
     }
+    final sequence = value['releaseSequence'];
+    if (sequence != null && (sequence is! int || sequence <= 0)) return null;
+    final sequence = value['releaseSequence'];
+    if (sequence != null &&
+        (sequence is! int || sequence <= 0 || sequence > 0x7fffffff)) return null;
     if (value['disabled'] == true) return value;
     final digest = value['digest'];
     final hashes = value['files'];
@@ -436,4 +467,85 @@ Future<int?> _safeDirectorySize(Directory directory) async {
     }
   }
   return total;
+}
+
+
+/// The high water mark persists after manual rollback, disable and pruning.
+/// A previous generation remains readable after an interrupted rename.
+Future<({int sequence, String digest})?> _readReleaseWatermark(
+  File file, String packId,
+) async {
+  if (!await file.exists()) return null;
+  try {
+    final value = jsonDecode(await file.readAsString());
+    if (value is! Map<String, dynamic> || value['schema'] != 1 ||
+        value['id'] != packId || value['releaseSequence'] is! int ||
+        (value['releaseSequence'] as int) <= 0 ||
+        (value['releaseSequence'] as int) > 0x7fffffff ||
+        value['digest'] is! String ||
+        !_digestPattern.hasMatch(value['digest'] as String)) {
+      throw const FormatException('签名防回滚记录不合法');
+    }
+    return (
+      sequence: value['releaseSequence'] as int,
+      digest: value['digest'] as String,
+    );
+  } catch (_) {
+    throw FormatException('资源包 $packId 防回滚状态无法验证；拒绝自动安装');
+  }
+}
+
+Future<void> _verifyFreshRelease(
+  Directory base, String id, String digest, int sequence,
+) async {
+  if (sequence <= 0 || sequence > 0x7fffffff) {
+    throw const FormatException('无效签名发布序号');
+  }
+  final accepted = <({int sequence, String digest})>[];
+  for (final suffix in ['release.json', 'release.previous.json']) {
+    final value = await _readReleaseWatermark(
+      File('${base.path}/$id.$suffix'), id,
+    );
+    if (value != null) accepted.add(value);
+  }
+  for (final suffix in ['current.json', 'previous.json']) {
+    final file = File('${base.path}/$id.$suffix');
+    final pointer = await _readPointerFile(file, id);
+    if (pointer == null) {
+      if (await file.exists()) {
+        throw const FormatException('资源包指针损坏，拒绝自动安装');
+      }
+      continue;
+    }
+    if (pointer['releaseSequence'] is int &&
+        pointer['digest'] is String) {
+      accepted.add((
+        sequence: pointer['releaseSequence'] as int,
+        digest: pointer['digest'] as String,
+      ));
+    }
+  }
+  for (final prior in accepted) {
+    if (sequence < prior.sequence ||
+        (sequence == prior.sequence && digest != prior.digest)) {
+      throw StateError('拒绝旧版或相同序号不同摘要的签名资源包：$id');
+    }
+  }
+}
+
+Future<void> _commitReleaseWatermark(
+  Directory base, String id, String digest, int sequence,
+) async {
+  final current = File('${base.path}/$id.release.json');
+  final previous = File('${base.path}/$id.release.previous.json');
+  final pending = File('${base.path}/$id.release.pending.json');
+  await pending.writeAsString(jsonEncode({
+    'schema': 1, 'id': id, 'releaseSequence': sequence, 'digest': digest,
+  }), flush: true);
+  if (await current.exists()) {
+    if (await previous.exists()) await previous.delete();
+    await current.rename(previous.path);
+  }
+  // A crash between renames is recoverable from previous or the signed pointer.
+  await pending.rename(current.path);
 }

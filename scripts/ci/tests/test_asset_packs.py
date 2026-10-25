@@ -27,10 +27,24 @@ class AssetPacksTest(unittest.TestCase):
         a = asset_packs.build(self.root, out1)
         b = asset_packs.build(self.root, out2)
         self.assertEqual(a, b)
+        self.assertEqual(a['schema'], 2)
+        self.assertEqual(a['releaseSequence'], 1)
         self.assertEqual(asset_packs.verify(out1 / "catalog.json"), a)
         for pack in a["packs"]:
             self.assertEqual((out1 / pack["filename"]).read_bytes(), (out2 / pack["filename"]).read_bytes())
         self.assertEqual(set(a["skippedGenerated"]), {"avatar-llm", "avatar-stevessr"})
+
+    def test_publication_sequence_is_signed_and_validated(self):
+        out = self.root / 'sequenced'
+        catalog = asset_packs.build(self.root, out, {'render-cook'}, release_sequence=121)
+        self.assertEqual(catalog['releaseSequence'], 121)
+        self.assertEqual(asset_packs.verify(out / 'catalog.json'), catalog)
+        with self.assertRaisesRegex(ValueError, 'releaseSequence'):
+            asset_packs.build(self.root, out, {'render-cook'}, release_sequence=0)
+        changed = dict(catalog, releaseSequence=0)
+        (out / 'catalog.json').write_bytes(asset_packs.json_bytes(changed))
+        with self.assertRaisesRegex(ValueError, 'catalog'):
+            asset_packs.verify(out / 'catalog.json')
 
     def test_selected_pack_build(self):
         output = self.root / "selected"

@@ -85,12 +85,14 @@ def add(archive, path, data):
     archive.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
 
-def build(root, out, only=None):
+def build(root, out, only=None, release_sequence=1):
+    if type(release_sequence) is not int or release_sequence <= 0 or release_sequence > 0x7fffffff:
+        raise ValueError('releaseSequence 必须是严格递增的正整数，且不超过 2^31-1')
     if only is not None and not set(only).issubset(PACKS):
         raise ValueError('未知资源包 ID')
     root = root.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    catalog = {"schema": 1, "packs": [], "skippedGenerated": []}
+    catalog = {"schema": 2, "releaseSequence": release_sequence, "packs": [], "skippedGenerated": []}
     for pack_id, (path, generated) in PACKS.items():
         if only is not None and pack_id not in only:
             continue
@@ -119,7 +121,10 @@ def build(root, out, only=None):
 
 def verify(catalog_path):
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    if catalog.get("schema") != 1 or not isinstance(catalog.get("packs"), list):
+    if (catalog.get("schema") != 2 or
+            type(catalog.get("releaseSequence")) is not int or
+            not 0 < catalog["releaseSequence"] <= 0x7fffffff or
+            not isinstance(catalog.get("packs"), list)):
         raise ValueError("catalog 版本不支持")
     seen = set()
     for pack in catalog["packs"]:
@@ -169,11 +174,13 @@ def main():
     b.add_argument("--root", type=Path, default=Path("."))
     b.add_argument("--out", type=Path, default=Path("build/asset-packs"))
     b.add_argument("--only", action="append", choices=sorted(PACKS))
+    b.add_argument("--release-sequence", type=int, default=1,
+                   help="Monotonically increasing signed publication sequence")
     v = sub.add_parser("verify")
     v.add_argument("--catalog", type=Path, default=Path("build/asset-packs/catalog.json"))
     args = parser.parse_args()
     try:
-        cat = build(args.root, args.out, args.only) if args.cmd == "build" else verify(args.catalog)
+        cat = build(args.root, args.out, args.only, args.release_sequence) if args.cmd == "build" else verify(args.catalog)
         if args.cmd == "build":
             verify(args.out / "catalog.json")
         for item in cat["packs"]:
