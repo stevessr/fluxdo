@@ -19,9 +19,9 @@ void main() {
                   data: {
                     'device_code': List.filled(64, 'a').join(),
                     'user_code': 'ABCD-EFGH',
-                    'verification_uri': 'https://linux.do/user-api-key/activate',
-                    'verification_uri_with_request':
-                        'https://linux.do/user-api-key/activate?request=abc123_-',
+                    'verification_uri':
+                        'https://linux.do/user-api-key/activate',
+                    'verification_uri_with_request': 'https://linux.do/user-api-key/activate?request=abc123_-',
                     'expires_in': 600,
                     'interval': 5,
                   },
