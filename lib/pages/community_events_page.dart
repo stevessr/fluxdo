@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../services/discourse/discourse_service.dart';
+import '../services/auth_session.dart';
+import 'community_events_calendar.dart';
 import '../utils/link_launcher.dart';
 import '../utils/url_helper.dart';
 import '../widgets/common/smart_avatar.dart';
@@ -50,6 +52,11 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   String? _loadMorePath;
   bool _loadingMore = false;
 
+  DateTime _calendarDate = calendarDay(DateTime.now());
+  EventCalendarScale _calendarScale = EventCalendarScale.month;
+  bool _myEvents = false;
+  int _eventRequestId = 0;
+
   bool get _isCakeday => widget.view != CommunityEventsView.upcoming;
 
   @override
@@ -70,6 +77,10 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   }
 
   Future<void> _load({bool append = false}) async {
+    if (widget.view == CommunityEventsView.upcoming) {
+      await _loadCalendarEvents();
+      return;
+    }
     if (!append) {
       setState(() {
         _loading = true;
@@ -82,37 +93,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     }
 
     try {
-      if (widget.view == CommunityEventsView.upcoming) {
-        final now = DateTime.now();
-        final response = await _service.dio.get<dynamic>(
-          '/discourse-post-event/events',
-          queryParameters: {
-            // 官方 upcoming-events-list 默认向后看 180 天；原生页提高上限，
-            // 仍让服务端按权限过滤可见事件。
-            'limit': 100,
-            'after': now.toUtc().toIso8601String(),
-            'before': now
-                .add(const Duration(days: 180))
-                .toUtc()
-                .toIso8601String(),
-            'include_ongoing': true,
-          },
-        );
-        final data = _asMap(response.data);
-        final events = _asMapList(data['events']);
-        events.sort((a, b) {
-          final da = _parseEventDate(a['starts_at']) ?? DateTime(9999);
-          final db = _parseEventDate(b['starts_at']) ?? DateTime(9999);
-          return da.compareTo(db);
-        });
-        if (!mounted) return;
-        setState(() {
-          _items = events;
-          _loading = false;
-        });
-        return;
-      }
-
       final segment = widget.view == CommunityEventsView.birthdays
           ? 'birthdays'
           : 'anniversaries';
@@ -155,6 +135,197 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     }
   }
 
+
+  Future<void> _loadCalendarEvents() async {
+    final request = ++_eventRequestId;
+    final generation = AuthSession().generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      String? username;
+      if (_myEvents) {
+        username = await _service.getUsername();
+        if (username == null || username.isEmpty) {
+          throw StateError('请先登录以查看我的活动');
+        }
+      }
+
+      final visible = calendarRange(_calendarDate, _calendarScale);
+      // A full year can exceed the endpoint's 200-event limit.
+      // Fetch quarters independently to avoid truncating the year view.
+      final periods = <EventCalendarRange>[];
+      if (_calendarScale == EventCalendarScale.year) {
+        for (var month = 1; month <= 12; month += 3) {
+          periods.add(EventCalendarRange(
+            DateTime(_calendarDate.year, month),
+            DateTime(_calendarDate.year, month + 3),
+          ));
+        }
+      } else {
+        periods.add(visible);
+      }
+
+      final responses = await Future.wait(periods.map((period) =>
+        _service.dio.get<dynamic>(
+          '/discourse-post-event/events',
+          queryParameters: {
+            'limit': 200,
+            // Include events starting at exactly the first instant.
+            'after': period.start.subtract(const Duration(seconds: 1))
+                .toUtc().toIso8601String(),
+            'before': period.end.toUtc().toIso8601String(),
+            'include_ongoing': true,
+            if (username != null) 'attending_user': username,
+          },
+        ),
+      ));
+      final found = <String, Map<String, dynamic>>{};
+      for (final response in responses) {
+        final entries = _asMapList(_asMap(response.data)['events']);
+        for (final event in entries) {
+          final key = '${event['id']}:${event['starts_at']}';
+          found[key] = event;
+        }
+      }
+      final ordered = found.values.toList()
+        ..sort((a, b) {
+          final first = _parseEventDate(a['starts_at']) ?? DateTime(9999);
+          final second = _parseEventDate(b['starts_at']) ?? DateTime(9999);
+          return first.compareTo(second);
+        });
+      if (!mounted || request != _eventRequestId ||
+          !AuthSession().isValid(generation)) return;
+      setState(() {
+        _items = ordered;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted || request != _eventRequestId ||
+          !AuthSession().isValid(generation)) return;
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+    }
+  }
+
+  void _setCalendarDate(DateTime date, {EventCalendarScale? scale}) {
+    final nextScale = scale ?? _calendarScale;
+    final oldRange = calendarRange(_calendarDate, _calendarScale);
+    final newRange = calendarRange(date, nextScale);
+    setState(() {
+      _calendarDate = calendarDay(date);
+      _calendarScale = nextScale;
+    });
+    if (oldRange.start != newRange.start ||
+        oldRange.end != newRange.end) {
+      _loadCalendarEvents();
+    }
+  }
+
+  void _moveCalendar(int direction) {
+    final day = _calendarDate;
+    final next = switch (_calendarScale) {
+      EventCalendarScale.day => DateTime(day.year, day.month, day.day + direction),
+      EventCalendarScale.week => DateTime(day.year, day.month, day.day + direction * 7),
+      EventCalendarScale.month => DateTime(day.year, day.month + direction, 1),
+      EventCalendarScale.year => DateTime(day.year + direction, day.month, 1),
+    };
+    _setCalendarDate(next);
+  }
+
+  String _calendarPeriodLabel(BuildContext context) {
+    final date = _calendarDate;
+    final localizations = MaterialLocalizations.of(context);
+    return switch (_calendarScale) {
+      EventCalendarScale.day => localizations.formatMediumDate(date),
+      EventCalendarScale.week =>
+        localizations.formatMediumDate(calendarWeekStart(date)) +
+        ' – ' +
+        localizations.formatMediumDate(
+          DateTime(date.year, date.month,
+            date.day - date.weekday + 7)),
+      EventCalendarScale.month => localizations.formatMonthYear(date),
+      EventCalendarScale.year => date.year.toString(),
+    };
+  }
+
+  Widget _buildCalendarControls(BuildContext context) {
+    final zh = _zh(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            ChoiceChip(
+              label: Text(zh ? '所有活动' : 'All events'),
+              selected: !_myEvents,
+              onSelected: (value) {
+                if (!value || !_myEvents) return;
+                setState(() => _myEvents = false);
+                _loadCalendarEvents();
+              },
+            ),
+            ChoiceChip(
+              label: Text(zh ? '我的活动' : 'My events'),
+              selected: _myEvents,
+              onSelected: (value) {
+                if (!value || _myEvents) return;
+                setState(() => _myEvents = true);
+                _loadCalendarEvents();
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(children: [
+          IconButton(
+            tooltip: zh ? '上一时间段' : 'Previous period',
+            onPressed: () => _moveCalendar(-1),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          Expanded(child: Text(_calendarPeriodLabel(context),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium)),
+          IconButton(
+            tooltip: zh ? '下一时间段' : 'Next period',
+            onPressed: () => _moveCalendar(1),
+            icon: const Icon(Icons.chevron_right),
+          ),
+          TextButton(
+            onPressed: () => _setCalendarDate(DateTime.now()),
+            child: Text(zh ? '今天' : 'Today'),
+          ),
+        ]),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final scale in EventCalendarScale.values)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text(switch (scale) {
+                    EventCalendarScale.day => zh ? '天' : 'Day',
+                    EventCalendarScale.week => zh ? '周' : 'Week',
+                    EventCalendarScale.month => zh ? '月' : 'Month',
+                    EventCalendarScale.year => zh ? '年' : 'Year',
+                  }),
+                  selected: _calendarScale == scale,
+                  onSelected: (selected) {
+                    if (!selected || _calendarScale == scale) return;
+                    _setCalendarDate(_calendarDate, scale: scale);
+                  },
+                ),
+              ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -171,6 +342,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       body: Column(
         children: [
           if (_isCakeday) _buildCakedayFilter(context),
+          if (!_isCakeday) _buildCalendarControls(context),
           Expanded(child: _buildBody(context)),
         ],
       ),
@@ -217,7 +389,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
               const Icon(Symbols.error_outline_rounded, size: 40),
               const SizedBox(height: 12),
               Text(
-                _zh(context) ? '加载失败' : 'Failed to load',
+                _error is StateError ? _error.toString().replaceFirst('Bad state: ', '') :
+                (_zh(context) ? '加载失败' : 'Failed to load'),
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 12),
@@ -230,6 +403,21 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         ),
       );
     }
+    if (widget.view == CommunityEventsView.upcoming) {
+      return CommunityEventsCalendar(
+        date: _calendarDate,
+        scale: _calendarScale,
+        events: _items,
+        onSelectDate: _setCalendarDate,
+        onSelectMonth: (month) => _setCalendarDate(
+          month, scale: EventCalendarScale.month),
+        onTapEvent: (event) {
+          final post = _asMap(event['post']);
+          final url = _string(post['url']) ?? _string(event['url']);
+          if (url != null) launchContentLink(context, url);
+        },
+      );
+    }
     if (_items.isEmpty) {
       return Center(
         child: Text(
@@ -240,18 +428,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       );
     }
 
-    if (widget.view == CommunityEventsView.upcoming) {
-      return RefreshIndicator(
-        onRefresh: _load,
-        child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-          itemCount: _items.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 4),
-          itemBuilder: (context, index) =>
-              _buildEventTile(context, _items[index]),
-        ),
-      );
-    }
 
     return RefreshIndicator(
       onRefresh: _load,
