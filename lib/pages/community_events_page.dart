@@ -221,10 +221,12 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       final periods = <EventCalendarRange>[];
       if (_calendarScale == EventCalendarScale.year) {
         for (var month = 1; month <= 12; month += 3) {
-          periods.add(EventCalendarRange(
-            DateTime(_calendarDate.year, month),
-            DateTime(_calendarDate.year, month + 3),
-          ));
+          periods.add(
+            EventCalendarRange(
+              DateTime(_calendarDate.year, month),
+              DateTime(_calendarDate.year, month + 3),
+            ),
+          );
         }
       } else {
         periods.add(visible);
@@ -246,7 +248,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           final second = _parseEventDate(b['starts_at']) ?? DateTime(9999);
           return first.compareTo(second);
         });
-      if (!mounted || request != _eventRequestId ||
+      if (!mounted ||
+          request != _eventRequestId ||
           !AuthSession().isValid(generation)) {
         return;
       }
@@ -255,7 +258,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         _loading = false;
       });
     } catch (error) {
-      if (!mounted || request != _eventRequestId ||
+      if (!mounted ||
+          request != _eventRequestId ||
           !AuthSession().isValid(generation)) {
         return;
       }
@@ -277,29 +281,35 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       '/discourse-post-event/events',
       queryParameters: {
         'limit': 200,
-        'after': period.start.subtract(const Duration(seconds: 1))
-            .toUtc().toIso8601String(),
+        'after': period.start
+            .subtract(const Duration(seconds: 1))
+            .toUtc()
+            .toIso8601String(),
         'before': period.end.toUtc().toIso8601String(),
         'include_ongoing': true,
         if (username != null) 'include_interested': true,
-        if (username != null && username.isNotEmpty)
-          'attending_user': username,
+        if (username != null && username.isNotEmpty) 'attending_user': username,
       },
     );
     final events = _asMapList(_asMap(response.data)['events']);
     final days = DateTime.utc(period.end.year, period.end.month, period.end.day)
-        .difference(DateTime.utc(
-          period.start.year, period.start.month, period.start.day,
-        ))
+        .difference(
+          DateTime.utc(period.start.year, period.start.month, period.start.day),
+        )
         .inDays;
     if (events.length < 200 || days <= 1) {
       return expandCalendarEventOccurrences(events);
     }
     final midpoint = DateTime(
-      period.start.year, period.start.month, period.start.day + days ~/ 2,
+      period.start.year,
+      period.start.month,
+      period.start.day + days ~/ 2,
     );
     final halves = await Future.wait([
-      _fetchCalendarPeriod(EventCalendarRange(period.start, midpoint), username),
+      _fetchCalendarPeriod(
+        EventCalendarRange(period.start, midpoint),
+        username,
+      ),
       _fetchCalendarPeriod(EventCalendarRange(midpoint, period.end), username),
     ]);
     return [...halves[0], ...halves[1]];
@@ -313,8 +323,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       _calendarDate = calendarDay(date);
       _calendarScale = nextScale;
     });
-    if (oldRange.start != newRange.start ||
-        oldRange.end != newRange.end) {
+    if (oldRange.start != newRange.start || oldRange.end != newRange.end) {
       _loadCalendarEvents();
     }
   }
@@ -322,8 +331,16 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   void _moveCalendar(int direction) {
     final day = _calendarDate;
     final next = switch (_calendarScale) {
-      EventCalendarScale.day => DateTime(day.year, day.month, day.day + direction),
-      EventCalendarScale.week => DateTime(day.year, day.month, day.day + direction * 7),
+      EventCalendarScale.day => DateTime(
+        day.year,
+        day.month,
+        day.day + direction,
+      ),
+      EventCalendarScale.week => DateTime(
+        day.year,
+        day.month,
+        day.day + direction * 7,
+      ),
       EventCalendarScale.month => DateTime(day.year, day.month + direction, 1),
       EventCalendarScale.year => DateTime(day.year + direction, day.month, 1),
     };
@@ -336,8 +353,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     return switch (_calendarScale) {
       EventCalendarScale.day => localizations.formatMediumDate(date),
       EventCalendarScale.week =>
-          '${localizations.formatMediumDate(calendarWeekStart(date))} – '
-          '${localizations.formatMediumDate(DateTime(date.year, date.month, date.day - date.weekday + 7))}',
+        '${localizations.formatMediumDate(calendarWeekStart(date))} – '
+            '${localizations.formatMediumDate(DateTime(date.year, date.month, date.day - date.weekday + 7))}',
       EventCalendarScale.month => localizations.formatMonthYear(date),
       EventCalendarScale.year => date.year.toString(),
     };
@@ -347,72 +364,86 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     final zh = _zh(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            ChoiceChip(
-              label: Text(zh ? '所有活动' : 'All events'),
-              selected: !_myEvents,
-              onSelected: (value) {
-                if (!value || !_myEvents) return;
-                setState(() => _myEvents = false);
-                _loadCalendarEvents();
-              },
-            ),
-            ChoiceChip(
-              label: Text(zh ? '我的活动' : 'My events'),
-              selected: _myEvents,
-              onSelected: (value) {
-                if (!value || _myEvents) return;
-                setState(() => _myEvents = true);
-                _loadCalendarEvents();
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Row(children: [
-          IconButton(
-            tooltip: zh ? '上一时间段' : 'Previous period',
-            onPressed: () => _moveCalendar(-1),
-            icon: const Icon(Icons.chevron_left),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ChoiceChip(
+                label: Text(zh ? '所有活动' : 'All events'),
+                selected: !_myEvents,
+                onSelected: (value) {
+                  if (!value || !_myEvents) return;
+                  setState(() => _myEvents = false);
+                  _loadCalendarEvents();
+                },
+              ),
+              ChoiceChip(
+                label: Text(zh ? '我的活动' : 'My events'),
+                selected: _myEvents,
+                onSelected: (value) {
+                  if (!value || _myEvents) return;
+                  setState(() => _myEvents = true);
+                  _loadCalendarEvents();
+                },
+              ),
+            ],
           ),
-          Expanded(child: Text(_calendarPeriodLabel(context),
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium)),
-          IconButton(
-            tooltip: zh ? '下一时间段' : 'Next period',
-            onPressed: () => _moveCalendar(1),
-            icon: const Icon(Icons.chevron_right),
-          ),
-          TextButton(
-            onPressed: () => _setCalendarDate(DateTime.now()),
-            child: Text(zh ? '今天' : 'Today'),
-          ),
-        ]),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            for (final scale in EventCalendarScale.values)
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: ChoiceChip(
-                  label: Text(switch (scale) {
-                    EventCalendarScale.day => zh ? '天' : 'Day',
-                    EventCalendarScale.week => zh ? '周' : 'Week',
-                    EventCalendarScale.month => zh ? '月' : 'Month',
-                    EventCalendarScale.year => zh ? '年' : 'Year',
-                  }),
-                  selected: _calendarScale == scale,
-                  onSelected: (selected) {
-                    if (!selected || _calendarScale == scale) return;
-                    _setCalendarDate(_calendarDate, scale: scale);
-                  },
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              IconButton(
+                tooltip: zh ? '上一时间段' : 'Previous period',
+                onPressed: () => _moveCalendar(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Text(
+                  _calendarPeriodLabel(context),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-          ]),
-        ),
-      ]),
+              IconButton(
+                tooltip: zh ? '下一时间段' : 'Next period',
+                onPressed: () => _moveCalendar(1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+              TextButton(
+                onPressed: () => _setCalendarDate(DateTime.now()),
+                child: Text(zh ? '今天' : 'Today'),
+              ),
+            ],
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final scale in EventCalendarScale.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label: Text(switch (scale) {
+                        EventCalendarScale.day => zh ? '天' : 'Day',
+                        EventCalendarScale.week => zh ? '周' : 'Week',
+                        EventCalendarScale.month => zh ? '月' : 'Month',
+                        EventCalendarScale.year => zh ? '年' : 'Year',
+                      }),
+                      selected: _calendarScale == scale,
+                      onSelected: (selected) {
+                        if (!selected || _calendarScale == scale) return;
+                        _setCalendarDate(_calendarDate, scale: scale);
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -566,8 +597,9 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
               const Icon(Symbols.error_outline_rounded, size: 40),
               const SizedBox(height: 12),
               Text(
-                _error is StateError ? _error.toString().replaceFirst('Bad state: ', '') :
-                (_zh(context) ? '加载失败' : 'Failed to load'),
+                _error is StateError
+                    ? _error.toString().replaceFirst('Bad state: ', '')
+                    : (_zh(context) ? '加载失败' : 'Failed to load'),
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 12),
@@ -584,17 +616,17 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       return RefreshIndicator(
         onRefresh: _loadCalendarEvents,
         child: CommunityEventsCalendar(
-        date: _calendarDate,
-        scale: _calendarScale,
-        events: _items,
-        onSelectDate: _setCalendarDate,
-        onSelectMonth: (month) => _setCalendarDate(
-          month, scale: EventCalendarScale.month),
-        onTapEvent: (event) {
-          final post = _asMap(event['post']);
-          final url = _string(post['url']) ?? _string(event['url']);
-          if (url != null) launchContentLink(context, url);
-        },
+          date: _calendarDate,
+          scale: _calendarScale,
+          events: _items,
+          onSelectDate: _setCalendarDate,
+          onSelectMonth: (month) =>
+              _setCalendarDate(month, scale: EventCalendarScale.month),
+          onTapEvent: (event) {
+            final post = _asMap(event['post']);
+            final url = _string(post['url']) ?? _string(event['url']);
+            if (url != null) launchContentLink(context, url);
+          },
         ),
       );
     }
