@@ -17,7 +17,7 @@ void main() {
                   requestOptions: options,
                   statusCode: 200,
                   data: {
-                    'device_code': 'a' * 64,
+                    'device_code': List.filled(64, 'a').join(),
                     'user_code': 'ABCD-EFGH',
                     'verification_uri': 'https://linux.do/user-api-key/activate',
                     'verification_uri_with_request':
@@ -79,7 +79,7 @@ void main() {
                 requestOptions: options,
                 statusCode: 200,
                 data: {
-                  'device_code': 'a' * 64,
+                  'device_code': List.filled(64, 'a').join(),
                   'user_code': 'ABCD-EFGH',
                   'verification_uri': 'https://linux.do/user-api-key/activate',
                   'verification_uri_with_request': activation,
@@ -108,7 +108,7 @@ void main() {
               requestOptions: options,
               statusCode: 200,
               data: {
-                'device_code': 'a' * 64,
+                'device_code': List.filled(64, 'a').join(),
                 'user_code': 'ABCD-EFGH',
                 'verification_uri': 'https://linux.do/user-api-key/activate',
                 'verification_uri_with_request':
