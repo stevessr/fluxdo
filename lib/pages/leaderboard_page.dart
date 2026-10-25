@@ -150,15 +150,15 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       if (!mounted || accountVersion != _accountVersion) return;
       setState(() => _errors[requestedPeriod] = error);
     } finally {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
 
-      // 周期切换在请求进行时被禁用；这里仍做兜底，确保外部状态变化后
-      // 当前周期不会停留在未加载状态。
-      if (widget.isActive &&
-          !_cache.containsKey(_period) &&
-          !_errors.containsKey(_period)) {
-        scheduleMicrotask(_ensureLoaded);
+        // 若中途切换账号，新账号尚无缓存，则由当前页面按需补一次请求。
+        if (widget.isActive &&
+            !_cache.containsKey(_period) &&
+            !_errors.containsKey(_period)) {
+          scheduleMicrotask(_ensureLoaded);
+        }
       }
     }
   }
@@ -237,9 +237,8 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                 Expanded(
                   child: Text(
                     snapshot?.name ?? _copy(context).globalTitle,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
                 IconButton(
@@ -252,7 +251,10 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.of(dialogContext).pop(),
-                          child: Text(MaterialLocalizations.of(context).closeButtonTooltip),
+                          child: Text(
+                            MaterialLocalizations.of(context)
+                                .closeButtonTooltip,
+                          ),
                         ),
                       ],
                     ),
@@ -320,7 +322,8 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
 
     // 领奖台 + 当前用户卡片 + 第四名起的常规列表。
     final visiblePersonal = snapshot?.personal;
-    final showPersonal = currentUsername != null &&
+    final showPersonal =
+        currentUsername != null &&
         visiblePersonal != null &&
         visiblePersonal.username.toLowerCase() == currentUsername.toLowerCase();
     final ranked = entries.skip(3).toList(growable: false);
@@ -344,8 +347,8 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
           }
           if (showPersonal && index == 2) {
             return _PersonalLeaderboardRank(
-              entry: visiblePersonal!,
-              onTap: () => _openUser(visiblePersonal!),
+              entry: visiblePersonal,
+              onTap: () => _openUser(visiblePersonal),
             );
           }
           final rankIndex = index - initialRows;
@@ -355,8 +358,10 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
               children: [
                 _LeaderboardTile(
                   entry: entry,
-                  isCurrentUser: currentUsername != null &&
-                      entry.username.toLowerCase() == currentUsername.toLowerCase(),
+                  isCurrentUser:
+                      currentUsername != null &&
+                      entry.username.toLowerCase() ==
+                          currentUsername.toLowerCase(),
                   onTap: () => _openUser(entry),
                 ),
                 const Divider(height: 1, indent: 60),
@@ -416,7 +421,7 @@ class _PeriodSelector extends StatelessWidget {
     final withYear = !sameYear;
     final first = format(range.start, withYear: withYear);
     if (isSingleDay) return first;
-    return '$first – ' + format(range.end, withYear: withYear);
+    return '$first – ${format(range.end, withYear: withYear)}';
   }
 
   @override
@@ -424,6 +429,9 @@ class _PeriodSelector extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final span = _span(context, selected);
+    final menuWidth = (MediaQuery.sizeOf(context).width - 32)
+        .clamp(0.0, double.infinity)
+        .toDouble();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
@@ -435,8 +443,8 @@ class _PeriodSelector extends StatelessWidget {
             position: PopupMenuPosition.under,
             tooltip: selected.label(context),
             constraints: BoxConstraints(
-              minWidth: 220,
-              maxWidth: MediaQuery.sizeOf(context).width - 32,
+              minWidth: menuWidth < 220 ? menuWidth : 220,
+              maxWidth: menuWidth,
             ),
             onSelected: onSelected,
             itemBuilder: (popupContext) => _periods.map((period) {
@@ -506,10 +514,7 @@ class _PeriodSelector extends StatelessWidget {
 }
 
 class _LeaderboardPodium extends StatelessWidget {
-  const _LeaderboardPodium({
-    required this.winners,
-    required this.onTap,
-  });
+  const _LeaderboardPodium({required this.winners, required this.onTap});
 
   final List<_LeaderboardEntry> winners;
   final ValueChanged<_LeaderboardEntry> onTap;
@@ -571,6 +576,7 @@ class _LeaderboardWinner extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
     final first = entry.position == 1;
+    final squareAvatar = isSquareAvatarUrl(entry.avatarUrl);
     final medal = switch (entry.position) {
       1 => const Color(0xffffce35),
       2 => const Color(0xffb9bdc7),
@@ -604,7 +610,10 @@ class _LeaderboardWinner extends StatelessWidget {
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
                     border: Border.all(color: medal, width: 2),
-                    shape: BoxShape.circle,
+                    shape: squareAvatar ? BoxShape.rectangle : BoxShape.circle,
+                    borderRadius: squareAvatar
+                        ? BorderRadius.circular(radius * 0.2)
+                        : null,
                   ),
                   child: SmartAvatar(
                     imageUrl: entry.avatarUrl,
@@ -652,14 +661,15 @@ class _LeaderboardWinner extends StatelessWidget {
                 score,
                 textAlign: TextAlign.center,
                 maxLines: 1,
-                style: (first
-                        ? theme.textTheme.titleLarge
-                        : theme.textTheme.titleMedium)
-                    ?.copyWith(
-                  color: colors.onSurface,
-                  fontWeight: FontWeight.w800,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+                style:
+                    (first
+                            ? theme.textTheme.titleLarge
+                            : theme.textTheme.titleMedium)
+                        ?.copyWith(
+                          color: colors.onSurface,
+                          fontWeight: FontWeight.w800,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
               ),
             ),
           ],
@@ -698,10 +708,7 @@ class _LeaderboardRankingHeading extends StatelessWidget {
 }
 
 class _PersonalLeaderboardRank extends StatelessWidget {
-  const _PersonalLeaderboardRank({
-    required this.entry,
-    required this.onTap,
-  });
+  const _PersonalLeaderboardRank({required this.entry, required this.onTap});
 
   final _LeaderboardEntry entry;
   final VoidCallback onTap;
@@ -710,9 +717,9 @@ class _PersonalLeaderboardRank extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
-    final score = NumberFormat.compact(
-      locale: 'en_US',
-    ).format(entry.totalScore).toLowerCase();
+    final score = NumberFormat.compact(locale: 'en_US')
+        .format(entry.totalScore)
+        .toLowerCase();
 
     return Material(
       color: colors.primary,
