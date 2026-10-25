@@ -99,9 +99,10 @@ void main() {
       packId: 'render-cook', zipBytes: zip, expectedSha256: hash,
     );
     expect(await StaticAssetPacks.loadString(_path), 'external');
-    expect(await StaticAssetPacks.listInstalled(), contains(<String, String>{
-      'id': 'render-cook', 'digest': hash,
-    }));
+    final installed = await StaticAssetPacks.listInstalled();
+    expect(installed, hasLength(1));
+    expect(installed.single['id'], 'render-cook');
+    expect(installed.single['digest'], hash);
     expect(await StaticAssetPacks.disable('render-cook'), isTrue);
     expect(await StaticAssetPacks.loadString(_path), bundled);
     expect(await StaticAssetPacks.listInstalled(), isEmpty);
@@ -169,12 +170,12 @@ void main() {
 
   test('Python 生成的真实 Cook ZIP 与 Dart 安装器协议兼容', () async {
     final catalog = jsonDecode(
-      await File('build/test-asset-packs/catalog.json').readAsString(),
+      await File('test/fixtures/generated_asset_packs/catalog.json').readAsString(),
     ) as Map<String, dynamic>;
     final pack = (catalog['packs'] as List).single as Map<String, dynamic>;
     expect(pack['id'], 'render-cook');
     final content = await File(
-      'build/test-asset-packs/${pack['filename']}',
+      'test/fixtures/generated_asset_packs/${pack['filename']}',
     ).readAsBytes();
     await StaticAssetPacks.installTrustedZip(
       packId: 'render-cook',
@@ -182,6 +183,30 @@ void main() {
       expectedSha256: pack['sha256'] as String,
     );
     expect(await StaticAssetPacks.loadString(_path), await rootBundle.loadString(_path));
+  }, skip: !File('test/fixtures/generated_asset_packs/catalog.json').existsSync());
+
+  test('篡改 ZIP 中央目录为超大文件会在解压前拒绝', () async {
+    final zip = _makePack(_path, Uint8List.fromList(utf8.encode('small')));
+    var entry = -1;
+    for (var i = 0; i < zip.length - 46; i++) {
+      if (zip[i] == 0x50 && zip[i + 1] == 0x4b &&
+          zip[i + 2] == 0x01 && zip[i + 3] == 0x02) {
+        entry = i;
+        break;
+      }
+    }
+    expect(entry, greaterThanOrEqualTo(0));
+    for (var i = 0; i < 4; i++) {
+      zip[entry + 24 + i] = 0xff;
+    }
+    await expectLater(
+      StaticAssetPacks.installTrustedZip(
+        packId: 'render-cook',
+        zipBytes: zip,
+        expectedSha256: sha256.convert(zip).toString(),
+      ),
+      throwsFormatException,
+    );
   });
 
   test('路径逃逸即使具有匹配的 ZIP 散列仍会拒绝安装', () async {

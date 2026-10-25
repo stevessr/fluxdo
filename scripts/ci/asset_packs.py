@@ -51,7 +51,10 @@ def sources(root, path, generated):
         raise ValueError("禁止符号链接: " + path)
     files = sorted(source.rglob("*")) if source.is_dir() else [source]
     result = []
+    folded = set()
     for file in files:
+        if file.is_symlink():
+            raise ValueError('禁止符号链接: ' + str(file))
         if file.is_dir():
             continue
         rel = file.relative_to(root).as_posix()
@@ -61,6 +64,9 @@ def sources(root, path, generated):
             continue
         if not safe_path(rel) or file.suffix.lower() not in EXTENSIONS:
             raise ValueError("不支持的资源: " + rel)
+        if rel.casefold() in folded:
+            raise ValueError("大小写折叠后资源文件名冲突: " + rel)
+        folded.add(rel.casefold())
         if file.stat().st_size > MAX_FILE:
             raise ValueError("单文件过大: " + rel)
         result.append((rel, file.read_bytes()))

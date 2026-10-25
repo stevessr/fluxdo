@@ -61,6 +61,13 @@ class AssetPacksTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "缺少必需资源"):
             asset_packs.build(self.root, self.root / "out")
 
+    def test_case_insensitive_path_collision_rejected(self):
+        directory = self.root / "assets/ai_brands"
+        (directory / "Logo.svg").write_text("A")
+        (directory / "logo.svg").write_text("B")
+        with self.assertRaisesRegex(ValueError, "冲突"):
+            asset_packs.build(self.root, self.root / "out")
+
     def test_symlink_rejected(self):
         file = self.root / "assets/ai_brands/link.svg"
         try:
