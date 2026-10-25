@@ -44,12 +44,11 @@ jobs:
 
       - name: Check formatting
         run: |
-          dart format \
+          dart format --output=none --set-exit-if-changed \
             lib/pages/leaderboard_page.dart \
             lib/utils/leaderboard_period_range.dart \
             test/pages/leaderboard_period_range_test.dart
           git diff --check
-          git diff -- lib/pages/leaderboard_page.dart lib/utils/leaderboard_period_range.dart test/pages/leaderboard_period_range_test.dart
 
       - name: Analyze leaderboard integration
         run: >-
