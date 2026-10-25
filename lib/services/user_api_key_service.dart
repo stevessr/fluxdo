@@ -594,6 +594,7 @@ class UserApiKeyService {
     Dio dio, {
     int? requestGeneration,
     String? overrideApiKey,
+    String? overrideClientId,
   }) async {
     final generation = requestGeneration ?? AuthSession().generation;
     bool isCurrent() => AuthSession().isValid(generation);
@@ -613,14 +614,24 @@ class UserApiKeyService {
           'application_name': applicationName,
         },
         options: Options(
-          headers: {'User-Api-Key': apiKey},
+          headers: {
+            'User-Api-Key': apiKey,
+            if (overrideClientId != null) 'User-Api-Client-Id': overrideClientId,
+            if (overrideApiKey != null) 'Cookie': '',
+          },
           contentType: Headers.formUrlEncodedContentType,
           followRedirects: false,
           validateStatus: (status) =>
               status != null && (status < 400 || status == 302),
           // 带 User-Api-Key 的请求服务端豁免 CSRF;且此请求发生在会话
           // 疑似失效期间,必须跳过 auth 信号上报避免自我干扰
-          extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+          extra: {
+            'skipAuthCheck': true,
+            'skipCsrf': true,
+            'skipSessionStateSync': true,
+            'noRecovery': true,
+            if (overrideApiKey != null) 'skipCookieManager': true,
+          },
         ),
       );
 
