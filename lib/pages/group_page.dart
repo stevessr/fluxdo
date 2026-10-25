@@ -584,8 +584,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
           SliverToBoxAdapter(
             child: _GroupHeader(
               group: group,
-              membershipChanging:
-                  _membershipChanging || _membershipConfirmationPending,
+              membershipChanging: _membershipChanging,
+              membershipConfirmationPending: _membershipConfirmationPending,
               onJoin: () => _changeMembership(join: true),
               onLeave: () => _changeMembership(join: false),
               onRequestMembership: _requestMembership,
@@ -797,6 +797,7 @@ class _GroupHeader extends StatelessWidget {
   const _GroupHeader({
     required this.group,
     required this.membershipChanging,
+    required this.membershipConfirmationPending,
     required this.onJoin,
     required this.onLeave,
     required this.onRequestMembership,
@@ -805,6 +806,7 @@ class _GroupHeader extends StatelessWidget {
 
   final DiscourseGroup group;
   final bool membershipChanging;
+  final bool membershipConfirmationPending;
   final VoidCallback onJoin;
   final VoidCallback onLeave;
   final VoidCallback onRequestMembership;
@@ -872,7 +874,10 @@ class _GroupHeader extends StatelessWidget {
                       const SizedBox(height: 12),
                       if (group.canJoin)
                         FilledButton.tonal(
-                          onPressed: membershipChanging ? null : onJoin,
+                          onPressed:
+                              membershipChanging || membershipConfirmationPending
+                              ? null
+                              : onJoin,
                           child: membershipChanging
                               ? const SizedBox.square(
                                   dimension: 18,
@@ -887,7 +892,10 @@ class _GroupHeader extends StatelessWidget {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: scheme.error,
                           ),
-                          onPressed: membershipChanging ? null : onLeave,
+                          onPressed:
+                              membershipChanging || membershipConfirmationPending
+                              ? null
+                              : onLeave,
                           icon: membershipChanging
                               ? const SizedBox.square(
                                   dimension: 18,
