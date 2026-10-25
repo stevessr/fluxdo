@@ -62,6 +62,22 @@ jobs:
         run: flutter pub get
       - name: Generate localization
         run: dart run tool/gen_l10n.dart
+      - name: Check browser picker formatting
+        run: |
+          dart format \
+            lib/services/system_browser_service.dart \
+            lib/services/desktop_browser_discovery.dart \
+            lib/pages/login_page.dart \
+            lib/widgets/auth/login_browser_picker_sheet.dart \
+            test/services/system_browser_service_test.dart \
+            test/widgets/auth/login_browser_picker_sheet_test.dart
+          git diff --exit-code -- \
+            lib/services/system_browser_service.dart \
+            lib/services/desktop_browser_discovery.dart \
+            lib/pages/login_page.dart \
+            lib/widgets/auth/login_browser_picker_sheet.dart \
+            test/services/system_browser_service_test.dart \
+            test/widgets/auth/login_browser_picker_sheet_test.dart
       - name: Analyze browser discovery and picker
         run: >-
           flutter analyze
