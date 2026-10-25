@@ -34,7 +34,8 @@ void main() {
         NotificationCategory.mentions: 'mentioned',
         NotificationCategory.assigned: 'assigned',
         NotificationCategory.chat:
-            'chat_mention,chat_message,chat_invitation,chat_quoted,chat_watched_thread',
+            'chat_mention,chat_message,chat_invitation,'
+            'chat_quoted,chat_watched_thread',
       };
 
       for (final entry in expectedTypes.entries) {
