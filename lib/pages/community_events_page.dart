@@ -21,6 +21,7 @@ class CommunityEventsPage extends StatefulWidget {
     super.key,
     required this.view,
     this.initialFilter,
+    this.initialMonth,
   });
 
   final CommunityEventsView view;
@@ -28,6 +29,9 @@ class CommunityEventsPage extends StatefulWidget {
   /// 来自 `/cakeday/.../:filter` 的初始过滤器。
   /// 只接受 today / tomorrow / upcoming；其它值按 today 处理。
   final String? initialFilter;
+
+  /// Discourse `/cakeday/{type}/all?month=N` 的月份参数。
+  final int? initialMonth;
 
   @override
   State<CommunityEventsPage> createState() => _CommunityEventsPageState();
@@ -38,7 +42,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     'today',
     'tomorrow',
     'upcoming',
-    'month',
+    'all',
   ];
 
   final _service = DiscourseService();
@@ -47,6 +51,9 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   Object? _error;
   List<Map<String, dynamic>> _items = const [];
   String _filter = 'today';
+  late CommunityEventsView _activeCakedayView;
+  late int _month;
+  int _loadGeneration = 0;
   String? _loadMorePath;
   bool _loadingMore = false;
 
@@ -55,7 +62,11 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   @override
   void initState() {
     super.initState();
+    _activeCakedayView = widget.view == CommunityEventsView.birthdays
+        ? CommunityEventsView.birthdays
+        : CommunityEventsView.anniversaries;
     _filter = _normalizeFilter(widget.initialFilter);
+    _month = _normalizeMonth(widget.initialMonth);
     _load();
   }
 
@@ -63,21 +74,42 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   void didUpdateWidget(covariant CommunityEventsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.view != widget.view ||
-        oldWidget.initialFilter != widget.initialFilter) {
+        oldWidget.initialFilter != widget.initialFilter ||
+        oldWidget.initialMonth != widget.initialMonth) {
+      _activeCakedayView = widget.view == CommunityEventsView.birthdays
+          ? CommunityEventsView.birthdays
+          : CommunityEventsView.anniversaries;
       _filter = _normalizeFilter(widget.initialFilter);
+      _month = _normalizeMonth(widget.initialMonth);
       _load();
     }
   }
 
+  void _selectCakedayView(CommunityEventsView view) {
+    if (_activeCakedayView == view) return;
+    setState(() {
+      _activeCakedayView = view;
+      // 官方切换周年 / 生日时进入该分类的「今天」。
+      _filter = 'today';
+    });
+    _load();
+  }
+
   Future<void> _load({bool append = false}) async {
+    if (append && (_loadingMore || _loadMorePath == null || _loading)) {
+      return;
+    }
+    // 用户在请求中切换分类 / 筛选时，忽略过期结果。
+    final generation = append ? _loadGeneration : ++_loadGeneration;
     if (!append) {
       setState(() {
         _loading = true;
         _error = null;
         _loadMorePath = null;
+        _loadingMore = false;
+        _items = const [];
       });
     } else {
-      if (_loadingMore || _loadMorePath == null) return;
       setState(() => _loadingMore = true);
     }
 
@@ -105,7 +137,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           final db = _parseEventDate(b['starts_at']) ?? DateTime(9999);
           return da.compareTo(db);
         });
-        if (!mounted) return;
+        if (!mounted || generation != _loadGeneration) return;
         setState(() {
           _items = events;
           _loading = false;
@@ -113,13 +145,13 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         return;
       }
 
-      final segment = widget.view == CommunityEventsView.birthdays
+      final segment = _activeCakedayView == CommunityEventsView.birthdays
           ? 'birthdays'
           : 'anniversaries';
       final path = append
           ? _loadMorePath!
-          : _filter == 'month'
-          ? '/cakeday/$segment'
+          : _filter == 'all'
+          ? '/cakeday/$segment/all'
           : '/cakeday/$segment/$_filter';
       final response = await _service.dio.get<dynamic>(
         path,
@@ -127,18 +159,18 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
             ? null
             : {
                 'page': 0,
-                if (_filter == 'month') 'month': DateTime.now().month,
+                if (_filter == 'all') 'month': _month,
               },
       );
       final data = _asMap(response.data);
-      final listKey = widget.view == CommunityEventsView.birthdays
+      final listKey = _activeCakedayView == CommunityEventsView.birthdays
           ? 'birthdays'
           : 'anniversaries';
-      final moreKey = widget.view == CommunityEventsView.birthdays
+      final moreKey = _activeCakedayView == CommunityEventsView.birthdays
           ? 'load_more_birthdays'
           : 'load_more_anniversaries';
       final loaded = _asMapList(data[listKey]);
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _items = append ? [..._items, ...loaded] : loaded;
         _loadMorePath = data[moreKey] as String?;
@@ -146,7 +178,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         _loadingMore = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e;
         _loading = false;
@@ -170,34 +202,117 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       ),
       body: Column(
         children: [
+          if (_isCakeday) _buildCakedayTypeTabs(context),
           if (_isCakeday) _buildCakedayFilter(context),
+          if (_isCakeday && _filter == 'all') _buildMonthSelector(context),
           Expanded(child: _buildBody(context)),
         ],
       ),
     );
   }
 
+  /// 和 Discourse 官方一样：事件类型是第一层，时间是第二层。
+  Widget _buildCakedayTypeTabs(BuildContext context) {
+    final zh = _zh(context);
+    return Row(
+      children: [
+        for (final view in const [
+          CommunityEventsView.anniversaries,
+          CommunityEventsView.birthdays,
+        ])
+          _cakedayTab(
+            context,
+            label: view == CommunityEventsView.anniversaries
+                ? (zh ? '周年纪念日' : 'Anniversaries')
+                : (zh ? '生日' : 'Birthdays'),
+            selected: _activeCakedayView == view,
+            onTap: () => _selectCakedayView(view),
+          ),
+      ],
+    );
+  }
+
   Widget _buildCakedayFilter(BuildContext context) {
     final labels = _zh(context)
-        ? const ['今天', '明天', '即将到来', '本月']
-        : const ['Today', 'Tomorrow', 'Upcoming', 'This month'];
+        ? const ['今天', '明天', '即将到来', '所有']
+        : const ['Today', 'Tomorrow', 'Upcoming', 'All'];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Row(
         children: [
-          for (var i = 0; i < _cakedayFilters.length; i++) ...[
-            ChoiceChip(
-              label: Text(labels[i]),
+          for (var i = 0; i < _cakedayFilters.length; i++)
+            _cakedayTab(
+              context,
+              label: labels[i],
               selected: _filter == _cakedayFilters[i],
-              onSelected: (selected) {
-                if (!selected || _filter == _cakedayFilters[i]) return;
+              onTap: () {
+                if (_filter == _cakedayFilters[i]) return;
                 setState(() => _filter = _cakedayFilters[i]);
                 _load();
               },
             ),
-            if (i != _cakedayFilters.length - 1) const SizedBox(width: 8),
-          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _cakedayTab(
+    BuildContext context, {
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? colorScheme.primary : Colors.transparent,
+              width: 3,
+            ),
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: selected ? colorScheme.primary : colorScheme.onSurface,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthSelector(BuildContext context) {
+    final zh = _zh(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
+      child: Row(
+        children: [
+          Text(zh ? '选择月份' : 'Month'),
+          const SizedBox(width: 16),
+          DropdownButton<int>(
+            value: _month,
+            items: [
+              for (var month = 1; month <= 12; month++)
+                DropdownMenuItem(
+                  value: month,
+                  child: Text(
+                    MaterialLocalizations.of(context).formatMonthYear(
+                      DateTime(DateTime.now().year, month),
+                    ),
+                  ),
+                ),
+            ],
+            onChanged: (month) {
+              if (month == null || month == _month) return;
+              setState(() => _month = month);
+              _load();
+            },
+          ),
         ],
       ),
     );
@@ -362,7 +477,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: Icon(
-        widget.view == CommunityEventsView.birthdays
+        _activeCakedayView == CommunityEventsView.birthdays
             ? Symbols.cake_rounded
             : Symbols.celebration_rounded,
       ),
@@ -417,8 +532,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     final zh = _zh(context);
     return switch (widget.view) {
       CommunityEventsView.upcoming => zh ? '近期活动' : 'Upcoming events',
-      CommunityEventsView.anniversaries => zh ? '周年纪念日' : 'Anniversaries',
-      CommunityEventsView.birthdays => zh ? '生日' : 'Birthdays',
+      CommunityEventsView.anniversaries || CommunityEventsView.birthdays =>
+        zh ? '纪念日与生日' : 'Anniversaries & Birthdays',
     };
   }
 
@@ -475,11 +590,18 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   }
 
   static String _normalizeFilter(String? value) {
-    if (value == 'today' || value == 'tomorrow' || value == 'upcoming') {
+    if (value == 'today' || value == 'tomorrow' ||
+        value == 'upcoming' || value == 'all') {
       return value!;
     }
+    if (value == 'month') return 'all';
     return 'today';
   }
+
+  static int _normalizeMonth(int? value) =>
+      value != null && value >= 1 && value <= 12
+          ? value
+          : DateTime.now().month;
 
   static bool _zh(BuildContext context) =>
       Localizations.localeOf(context).languageCode == 'zh';
