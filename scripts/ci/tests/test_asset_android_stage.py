@@ -36,6 +36,10 @@ class AndroidStaticResourceStageTests(unittest.TestCase):
         self.assertNotIn("  fonts:", result)
         self.assertFalse((self.stage / "assets/fonts/MiSansVF.ttf").exists())
 
+    def test_refuses_any_folder_nested_in_source_repository(self):
+        with self.assertRaisesRegex(ValueError, "source repository"):
+            modular.prepare(self.stage, self.stage.parent)
+
     def test_refuses_source_root_and_unknown_font(self):
         with self.assertRaisesRegex(ValueError, "source repository"):
             modular.prepare(self.stage, self.stage)

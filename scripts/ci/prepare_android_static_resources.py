@@ -24,7 +24,8 @@ def strip_font(pubspec: str) -> str:
 
 def prepare(stage: Path, repo: Path) -> None:
     stage, repo = stage.resolve(), repo.resolve()
-    if stage == repo or repo.is_relative_to(stage) or (stage / ".git").exists():
+    if (stage == repo or stage.is_relative_to(repo) or
+            repo.is_relative_to(stage) or (stage / ".git").exists()):
         raise ValueError("Refusing to modify the source repository")
     pubspec = stage / "pubspec.yaml"
     font = stage / "assets/fonts/MiSansVF.ttf"
