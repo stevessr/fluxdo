@@ -75,6 +75,8 @@ jobs:
         run: mkdir -p assets/certs
       - name: Install Flutter dependencies
         run: flutter pub get
+      - name: Generate Flutter translations
+        run: dart run tool/gen_l10n.dart
       - name: Analyze optional asset runtime
         run: >-
           flutter analyze

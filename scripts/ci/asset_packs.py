@@ -79,11 +79,15 @@ def add(archive, path, data):
     archive.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
 
-def build(root, out):
+def build(root, out, only=None):
+    if only is not None and not set(only).issubset(PACKS):
+        raise ValueError('未知资源包 ID')
     root = root.resolve()
     out.mkdir(parents=True, exist_ok=True)
     catalog = {"schema": 1, "packs": [], "skippedGenerated": []}
     for pack_id, (path, generated) in PACKS.items():
+        if only is not None and pack_id not in only:
+            continue
         files = sources(root, path, generated)
         if not files:
             catalog["skippedGenerated"].append(pack_id)
@@ -158,11 +162,12 @@ def main():
     b = sub.add_parser("build")
     b.add_argument("--root", type=Path, default=Path("."))
     b.add_argument("--out", type=Path, default=Path("build/asset-packs"))
+    b.add_argument("--only", action="append", choices=sorted(PACKS))
     v = sub.add_parser("verify")
     v.add_argument("--catalog", type=Path, default=Path("build/asset-packs/catalog.json"))
     args = parser.parse_args()
     try:
-        cat = build(args.root, args.out) if args.cmd == "build" else verify(args.catalog)
+        cat = build(args.root, args.out, args.only) if args.cmd == "build" else verify(args.catalog)
         if args.cmd == "build":
             verify(args.out / "catalog.json")
         for item in cat["packs"]:

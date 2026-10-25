@@ -32,6 +32,15 @@ class AssetPacksTest(unittest.TestCase):
             self.assertEqual((out1 / pack["filename"]).read_bytes(), (out2 / pack["filename"]).read_bytes())
         self.assertEqual(set(a["skippedGenerated"]), {"avatar-llm", "avatar-stevessr"})
 
+    def test_selected_pack_build(self):
+        output = self.root / "selected"
+        catalog = asset_packs.build(self.root, output, {"render-cook"})
+        self.assertEqual([pack["id"] for pack in catalog["packs"]], ["render-cook"])
+        self.assertEqual(catalog["skippedGenerated"], [])
+        self.assertEqual(asset_packs.verify(output / "catalog.json"), catalog)
+        with self.assertRaisesRegex(ValueError, "未知资源包"):
+            asset_packs.build(self.root, output, {"unknown"})
+
     def test_tampered_zip_fails(self):
         out = self.root / "out"
         catalog = asset_packs.build(self.root, out)

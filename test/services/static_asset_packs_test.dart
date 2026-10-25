@@ -167,6 +167,23 @@ void main() {
     expect(await StaticAssetPacks.loadString(_path), 'beta');
   });
 
+  test('Python 生成的真实 Cook ZIP 与 Dart 安装器协议兼容', () async {
+    final catalog = jsonDecode(
+      await File('build/test-asset-packs/catalog.json').readAsString(),
+    ) as Map<String, dynamic>;
+    final pack = (catalog['packs'] as List).single as Map<String, dynamic>;
+    expect(pack['id'], 'render-cook');
+    final content = await File(
+      'build/test-asset-packs/${pack['filename']}',
+    ).readAsBytes();
+    await StaticAssetPacks.installTrustedZip(
+      packId: 'render-cook',
+      zipBytes: content,
+      expectedSha256: pack['sha256'] as String,
+    );
+    expect(await StaticAssetPacks.loadString(_path), await rootBundle.loadString(_path));
+  });
+
   test('路径逃逸即使具有匹配的 ZIP 散列仍会拒绝安装', () async {
     final zip = _makePack(
       'assets/cook/../evil.js',
