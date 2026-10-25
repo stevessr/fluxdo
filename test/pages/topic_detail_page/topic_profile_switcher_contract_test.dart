@@ -3,9 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final source = File(
-    'lib/pages/topic_detail_page/topic_detail_page.dart',
-  ).readAsStringSync();
+  final source = File('lib/pages/topic_detail_page/topic_detail_page.dart')
+      .readAsStringSync();
 
   String section(String start, String end) {
     final begin = source.indexOf(start);
