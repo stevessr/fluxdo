@@ -458,7 +458,7 @@ String _periodLabel(BuildContext context, LeaderboardPeriod period) {
     LeaderboardPeriod.yearly => zh ? '年' : 'Year',
     LeaderboardPeriod.quarterly => zh ? '季度' : 'Quarter',
     LeaderboardPeriod.monthly => zh ? '月' : 'Month',
-    LeaderboardPeriod.weekly => zh ? '周' : 'Week',
+    LeaderboardPeriod.weekly => zh ? (hant ? '週' : '周') : 'Week',
     LeaderboardPeriod.daily => zh ? '今天' : 'Today',
   };
 }
