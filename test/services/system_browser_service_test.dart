@@ -172,15 +172,23 @@ void main() {
         'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/MainActivity.kt',
       ).readAsStringSync();
       expect(nativeSource, contains('"launchLoginBrowserChooser"'));
-      expect(nativeSource, contains('Intent.createChooser(viewIntent, "选择打开方式")'));
-      expect(nativeSource, contains('if (!isLoginAuthorizationUri(uri)) return false'));
+      expect(
+        nativeSource,
+        contains('Intent.createChooser(viewIntent, "选择打开方式")'),
+      );
+      expect(
+        nativeSource,
+        contains('if (!isLoginAuthorizationUri(uri)) return false'),
+      );
       expect(nativeSource, contains('(uri.port == -1 || uri.port == 443)'));
-      expect(nativeSource, contains('packageManager.getApplicationIcon(entry.key)'));
+      expect(
+        nativeSource,
+        contains('packageManager.getApplicationIcon(entry.key)'),
+      );
       expect(nativeSource, contains('requestedSize = 64'));
       expect(nativeSource, contains('listLoginBrowsers(includeIcons = false)'));
-      final sheet = File(
-        'lib/widgets/auth/login_browser_picker_sheet.dart',
-      ).readAsStringSync();
+      final sheet = File('lib/widgets/auth/login_browser_picker_sheet.dart')
+          .readAsStringSync();
       expect(sheet, contains('Image.memory('));
       expect(sheet, contains('if (chooser.isNotEmpty)'));
       expect(sheet, contains('ListView.builder('));
