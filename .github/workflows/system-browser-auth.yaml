@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'lib/services/system_browser_service.dart'
+      - 'lib/pages/login_page.dart'
       - 'lib/services/desktop_browser_discovery.dart'
       - 'lib/services/xdg_browser_discovery.dart'
       - 'tool/verify_browser_discovery.dart'
@@ -60,6 +61,6 @@ jobs:
       - name: Generate localization
         run: dart run tool/gen_l10n.dart
       - name: Analyze browser discovery
-        run: flutter analyze lib/services/xdg_browser_discovery.dart lib/services/desktop_browser_discovery.dart lib/services/system_browser_service.dart test/services/system_browser_service_test.dart
+        run: flutter analyze lib/services/xdg_browser_discovery.dart lib/services/desktop_browser_discovery.dart lib/services/system_browser_service.dart lib/pages/login_page.dart test/services/system_browser_service_test.dart
       - name: Test browser discovery and authorization URL guard
         run: dart tool/flutterw.dart test test/services/system_browser_service_test.dart
