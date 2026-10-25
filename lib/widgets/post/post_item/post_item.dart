@@ -20,7 +20,7 @@ import '../small_action_item.dart';
 import '../../crypto/crypto_decrypt_sheet.dart';
 import '../../topic/assign_sheet.dart';
 import 'quote_selection_helper.dart';
-import '../../../../services/crypto/crypto_cipher_format.dart';
+import '../../../services/crypto/crypto_cipher_format.dart';
 import 'render_parse_cache.dart';
 import 'widgets/post_footer_section/post_footer_section.dart';
 import 'widgets/post_header_section.dart';

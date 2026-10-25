@@ -97,6 +97,8 @@ jobs:
           if ! command -v cargo-ndk >/dev/null 2>&1; then
             cargo install cargo-ndk --locked
           fi
+      - name: Prepare required Flutter asset directories
+        run: mkdir -p assets/certs
       - name: Resolve Flutter dependencies
         run: flutter pub get
       - name: Validate standalone APK build scripts

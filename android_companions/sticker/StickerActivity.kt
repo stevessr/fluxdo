@@ -56,9 +56,11 @@ class StickerActivity : FlutterActivity() {
                     Activity.RESULT_OK,
                     Intent().setDataAndType(uri, mime)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        .setClipData(android.content.ClipData.newUri(
-                            contentResolver, "StevesSR", uri,
-                        )),
+                        .apply {
+                            clipData = android.content.ClipData.newUri(
+                                contentResolver, "StevesSR", uri,
+                            )
+                        },
                 )
                 result.success(null)
                 finish()

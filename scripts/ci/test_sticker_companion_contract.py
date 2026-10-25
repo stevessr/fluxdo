@@ -37,6 +37,14 @@ class StickerNativeDependenciesTest(unittest.TestCase):
             json.dumps({"plugins": {"android": [{"name": n} for n in plugins]}})
         )
 
+    def test_sticker_intent_remains_an_intent_after_clip_data(self) -> None:
+        source = (Path(__file__).resolve().parents[2] /
+                  "android_companions/sticker/StickerActivity.kt").read_text()
+        self.assertIn(".apply {", source)
+        self.assertIn("clipData = android.content.ClipData.newUri(", source)
+        self.assertNotIn(".setClipData(", source)
+        self.assertIn("Intent.FLAG_GRANT_READ_URI_PERMISSION", source)
+
     def test_standalone_gradle_configuration_uses_late_safe_tasks(self) -> None:
         import inspect
         from build_sticker_companion import setup_project

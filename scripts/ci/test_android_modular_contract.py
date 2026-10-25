@@ -61,6 +61,15 @@ class AndroidCoreIsolationTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "LDC reward callsite changed"):
             modular.strip_host_reward_credentials(invalid)
 
+    def test_crypto_cipher_source_import_is_inside_lib(self) -> None:
+        source = (modular.ROOT /
+                  "lib/widgets/post/post_item/post_item.dart")
+        destination = (source.parent /
+                       "../../../services/crypto/crypto_cipher_format.dart").resolve()
+        self.assertTrue(destination.is_file())
+        self.assertIn("import '../../../services/crypto/crypto_cipher_format.dart';",
+                      source.read_text())
+
     def test_core_builder_does_not_run_full_avatar_project_prep(self) -> None:
         import inspect
         source = inspect.getsource(modular.main)
