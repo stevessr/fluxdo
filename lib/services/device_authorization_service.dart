@@ -22,8 +22,10 @@ class DeviceAuthorizationService {
   final Dio dio;
   final Future<String> Function()? publicKeyProvider;
   final Future<String> Function()? clientIdProvider;
-  final Future<Map<String, dynamic>?> Function(String, String)? payloadDecryptor;
-  final Future<void> Function(String, String, String, DateTime?)? credentialSaver;
+  final Future<Map<String, dynamic>?> Function(String, String)?
+  payloadDecryptor;
+  final Future<void> Function(String, String, String, DateTime?)?
+  credentialSaver;
   final UserApiKeyService _keys = UserApiKeyService();
 
   static const String _deviceEndpoint = '/user-api-key/device.json';
@@ -145,14 +147,12 @@ class DeviceAuthorizationService {
   ) async {
     bool isCurrent() => AuthSession().isValid(request.generation);
     if (!isCurrent()) throw StateError('登录会话已变化');
-    final decrypted = await (payloadDecryptor?.call(
-          encryptedPayload,
-          request.nonce,
-        ) ??
-        _keys.decryptDeviceAuthorizationPayload(
-          encryptedPayload,
-          expectedNonce: request.nonce,
-        ));
+    final decrypted =
+        await (payloadDecryptor?.call(encryptedPayload, request.nonce) ??
+            _keys.decryptDeviceAuthorizationPayload(
+              encryptedPayload,
+              expectedNonce: request.nonce,
+            ));
     if (!isCurrent()) throw StateError('登录会话已变化');
     final apiKey = decrypted?['key']?.toString() ?? '';
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(apiKey)) {
@@ -168,15 +168,13 @@ class DeviceAuthorizationService {
           'User-Api-Client-Id': request.clientId,
           'Cookie': '',
         },
-        extra: {
-          ..._options,
-          'skipCookieManager': true,
-        },
+        extra: {..._options, 'skipCookieManager': true},
       ),
     );
     if (!isCurrent()) throw StateError('登录会话已变化');
     final user = responseMap(response.data)['current_user'];
-    if (user is! Map || user['username'] is! String ||
+    if (user is! Map ||
+        user['username'] is! String ||
         (user['username'] as String).isEmpty) {
       throw const FormatException('站点没有确认设备 API Key 的用户身份');
     }
