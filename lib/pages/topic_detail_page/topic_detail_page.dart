@@ -1288,7 +1288,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             icon: const Icon(Symbols.close_rounded),
             onPressed: _exitSearchMode,
           ),
-          if (profileAction != null) profileAction,
+          ?profileAction,
         ],
       );
     }
@@ -1477,7 +1477,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             notifier: notifier,
             canEditTopic: _canEditTopic(detail),
           ),
-        if (profileAction != null) profileAction,
+        ?profileAction,
       ],
     );
   }
@@ -1603,7 +1603,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   }) {
     final profileAction = _buildProfileSwitcherAction();
     if (detail == null) {
-      return [if (profileAction != null) profileAction];
+      return [?profileAction];
     }
 
     final canEditTopic = _canEditTopic(detail);
@@ -1633,7 +1633,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         notifier: notifier,
         canEditTopic: canEditTopic,
       ),
-      if (profileAction != null) profileAction,
+      ?profileAction,
     ];
   }
 
