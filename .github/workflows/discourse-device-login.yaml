@@ -1,0 +1,46 @@
+name: Discourse Device Login
+
+on:
+  pull_request:
+    paths:
+      - 'lib/pages/device_login_page.dart'
+      - 'lib/pages/login_page.dart'
+      - 'lib/services/device_authorization_service.dart'
+      - 'lib/services/user_api_key_service.dart'
+      - 'lib/services/user_api_key_login_flow.dart'
+      - 'test/services/device_authorization_service_test.dart'
+      - '.github/workflows/discourse-device-login.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - run: mkdir -p assets/certs assets/images/llm
+      - run: flutter pub get
+      - run: dart run tool/gen_l10n.dart
+      - name: Analyze device login changes
+        run: >-
+          flutter analyze
+          lib/pages/device_login_page.dart
+          lib/pages/login_page.dart
+          lib/services/device_authorization_service.dart
+          lib/services/user_api_key_service.dart
+          lib/services/user_api_key_login_flow.dart
+          test/services/device_authorization_service_test.dart
+      - name: Test device grant status handling and existing browser login
+        run: >-
+          dart tool/flutterw.dart test
+          test/services/device_authorization_service_test.dart
+          test/services/user_api_key_login_flow_test.dart
