@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'xdg_browser_discovery.dart';
+import 'xdg_browser_icon_loader.dart';
 
 /// A browser chosen explicitly by the user. Never reads or copies its cookies.
 class LoginBrowser {
@@ -11,6 +12,7 @@ class LoginBrowser {
     this.executable,
     this.arguments = const [],
     this.iconBytes,
+    this.iconIsSvg = false,
   });
 
   final String id;
@@ -20,6 +22,9 @@ class LoginBrowser {
 
   /// Android 系统安装的真实应用图标（PNG）；桌面/iOS 可为空。
   final Uint8List? iconBytes;
+
+  /// The icon bytes came from a local XDG SVG icon file.
+  final bool iconIsSvg;
 }
 
 /// 桌面发现逻辑独立于 Flutter，可在三个系统运行文件与进程行为测试。
@@ -194,6 +199,7 @@ class DesktopBrowserDiscovery {
     final browsers = <LoginBrowser>[_default];
     if (platform == 'linux') {
       final seenExecutables = <String>{};
+      final icons = XdgBrowserIconLoader(environment: environment);
       final gio = await findCommand('gio');
       if (gio != null) {
         final entries = await XdgBrowserDiscovery(
@@ -201,12 +207,15 @@ class DesktopBrowserDiscovery {
           findCommand: findCommand,
         ).discover();
         for (final entry in entries) {
+          final icon = await icons.load(entry.icon);
           browsers.add(
             LoginBrowser(
               id: 'xdg:${entry.id}',
               name: entry.name,
               executable: gio,
               arguments: ['launch', entry.path],
+              iconBytes: icon?.bytes,
+              iconIsSvg: icon?.isSvg ?? false,
             ),
           );
           // 不合并不同 desktop ID 的 Profile；只抑制同入口的 PATH 回退项。
@@ -235,11 +244,14 @@ class DesktopBrowserDiscovery {
             identity = commandPath;
           }
           if (!seenExecutables.add(identity)) continue;
+          final icon = await icons.load(entry.command);
           browsers.add(
             LoginBrowser(
               id: 'linux:${entry.command}',
               name: entry.name,
               executable: commandPath,
+              iconBytes: icon?.bytes,
+              iconIsSvg: icon?.isSvg ?? false,
             ),
           );
         }
@@ -264,12 +276,15 @@ class DesktopBrowserDiscovery {
                   )) {
                 continue;
               }
+              final icon = await icons.load(entry.appId);
               browsers.add(
                 LoginBrowser(
                   id: 'flatpak:${entry.appId}',
                   name: '${entry.name} (Flatpak)',
                   executable: flatpakPath,
                   arguments: ['run', entry.appId],
+                  iconBytes: icon?.bytes,
+                  iconIsSvg: icon?.isSvg ?? false,
                 ),
               );
             }
