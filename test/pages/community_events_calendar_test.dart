@@ -61,6 +61,56 @@ void main() {
       expect(eventOnCalendarDay(event, DateTime(2026, 10, 25)), isFalse);
     });
 
+    test('recurring events expose all server-provided occurrence dates', () {
+      final master = <String, dynamic>{
+        'id': 17,
+        'name': 'Weekly standup',
+        'starts_at': '2026-09-01T10:00:00Z',
+        'ends_at': '2026-09-01T11:00:00Z',
+        'recurrence': 'every_week',
+        'post': {'url': '/t/standup/4'},
+        'occurrences': [
+          {
+            'starts_at': '2026-10-20T10:00:00',
+            'ends_at': '2026-10-20T11:00:00',
+          },
+          {
+            'starts_at': '2026-10-27T10:00:00',
+            'ends_at': '2026-10-27T11:00:00',
+          },
+        ],
+      };
+      final occurrences = expandCalendarEventOccurrences([master]);
+      expect(occurrences, hasLength(2));
+      expect(occurrences[0]['post'], master['post']);
+      expect(occurrences[1]['id'], 17);
+      expect(calendarEventsForDay(occurrences, DateTime(2026, 10, 27)),
+          hasLength(1));
+      expect(calendarEventsForDay(occurrences, DateTime(2026, 9, 1)),
+          isEmpty);
+    });
+
+    test('empty recurring occurrence list does not restore obsolete date', () {
+      final events = expandCalendarEventOccurrences([
+        <String, dynamic>{
+          'id': 23,
+          'starts_at': '2026-01-01',
+          'recurrence': 'every_month',
+          'occurrences': <Map<String, dynamic>>[],
+        }
+      ]);
+      expect(events, isEmpty);
+    });
+
+    test('non-recurring legacy responses without occurrences still display', () {
+      final original = <String, dynamic>{
+        'id': 24,
+        'starts_at': '2026-10-25',
+        'all_day': true,
+      };
+      expect(expandCalendarEventOccurrences([original]), [original]);
+    });
+
     test('events without a valid start date are ignored', () {
       final event = <String, dynamic>{'name': 'Undated'};
       expect(eventOnCalendarDay(event, DateTime(2026, 10, 25)), isFalse);
