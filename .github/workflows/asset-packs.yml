@@ -18,6 +18,7 @@ on:
       - 'scripts/ci/asset_packs.py'
       - 'scripts/ci/prepare_android_static_resources.py'
       - 'scripts/ci/tests/test_asset_android_stage.py'
+      - 'scripts/ci/tests/test_asset_manifest_contract.py'
       - 'scripts/ci/sign_asset_catalog.py'
       - 'scripts/ci/tests/test_asset_catalog_signature.py'
       - 'lib/services/assets/signed_asset_catalog.dart'
