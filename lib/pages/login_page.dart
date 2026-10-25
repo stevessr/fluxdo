@@ -134,10 +134,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       }
 
       final chooserChoices = browsers
-          .where((browser) => browser.id == SystemBrowserService.androidChooserId)
+          .where(
+            (browser) => browser.id == SystemBrowserService.androidChooserId,
+          )
           .toList();
       final regularBrowsers = browsers
-          .where((browser) => browser.id != SystemBrowserService.androidChooserId)
+          .where(
+            (browser) => browser.id != SystemBrowserService.androidChooserId,
+          )
           .toList();
 
       // 选择完成后才生成 nonce 和 RSA 授权 URL。用户取消选择时
@@ -200,8 +204,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       ),
                       title: Text(chooserChoices.first.name),
                       subtitle: const Text('唤起 Android 系统的“打开方式”菜单'),
-                      onTap: () => Navigator.of(sheetContext)
-                          .pop(chooserChoices.first),
+                      onTap: () =>
+                          Navigator.of(sheetContext).pop(chooserChoices.first),
                     ),
                   ],
                   const SizedBox(height: 8),
