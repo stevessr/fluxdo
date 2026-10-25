@@ -27,11 +27,18 @@ class AvatarCachePool {
 
   static const int _maxSvgEntries = 1500;
   static const int _maxMemoizedSvgCharacters = 64 * 1024;
+  // SVG metadata is held in Dart heap (not governed by Flutter ImageCache).
+  // Keep its total footprint bounded even when many profiles are visited.
+  static const int _maxSvgMemoCharacters = 4 * 1024 * 1024;
   static const List<int> _decodeSides = [64, 96, 128, 192, 256, 384, 512];
 
   final AvatarSvgLoader _svgLoader;
   final Map<String, String?> _svgMemo = {};
   final Map<String, Future<String?>> _svgInFlight = {};
+  int _svgMemoCharacters = 0;
+
+  @visibleForTesting
+  int get svgMemoCharactersForTest => _svgMemoCharacters;
 
   /// Normalize nearby layout sizes to a small set of decoded texture sizes.
   /// This prevents every avatar radius from creating another ImageCache key
@@ -119,10 +126,12 @@ class AvatarCachePool {
   }
 
   void _putSvg(String url, String? content) {
-    _svgMemo.remove(url);
+    _svgMemoCharacters -= _svgMemo.remove(url)?.length ?? 0;
     _svgMemo[url] = content;
-    if (_svgMemo.length > _maxSvgEntries) {
-      _svgMemo.remove(_svgMemo.keys.first);
+    _svgMemoCharacters += content?.length ?? 0;
+    while (_svgMemo.length > _maxSvgEntries ||
+        _svgMemoCharacters > _maxSvgMemoCharacters) {
+      _svgMemoCharacters -= _svgMemo.remove(_svgMemo.keys.first)?.length ?? 0;
     }
   }
 
