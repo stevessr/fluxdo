@@ -1024,7 +1024,12 @@ class _LeaderboardPersonal {
 DateTime? _leaderboardDate(dynamic raw) {
   final text = raw?.toString();
   if (text == null || text.isEmpty) return null;
-  final normalized = RegExp(r'^\\d{4}-\\d{2}-\\d{2}  if (parsed == null) return null;
+  // 纯日期必须明确标记 UTC，否则解析器在非 UTC 时区可能错开一天。
+  final normalized = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)
+      ? '${text}T00:00:00Z'
+      : text;
+  final parsed = TimeUtils.parseUtcTime(normalized);
+  if (parsed == null) return null;
   final utc = parsed.toUtc();
   return DateTime.utc(utc.year, utc.month, utc.day);
 }
