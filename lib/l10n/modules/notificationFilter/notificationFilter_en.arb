@@ -9,6 +9,8 @@
   "notification_categoryLikes": "Likes",
   "notification_categoryMessages": "Messages",
   "notification_categoryBookmarks": "Bookmarks",
+  "notification_categoryAssigned": "Assigned",
+  "notification_categoryChat": "Chat Notifications",
   "notification_categoryOther": "Other",
   "notification_solvedAccepted": "Your post was marked as solution"
 }

@@ -14,6 +14,67 @@ DiscourseNotification notificationOf(NotificationType type, {int id = 1}) {
 }
 
 void main() {
+  test('notification tabs use the updated Discourse user-menu order', () {
+    expect(NotificationCategory.values, [
+      NotificationCategory.all,
+      NotificationCategory.replies,
+      NotificationCategory.mentions,
+      NotificationCategory.likes,
+      NotificationCategory.messages,
+      NotificationCategory.bookmarks,
+      NotificationCategory.assigned,
+      NotificationCategory.chat,
+      NotificationCategory.other,
+    ]);
+  });
+
+  test('assigned tab maps to the native assigned notification type', () {
+    expect(NotificationCategory.assigned.serverFilterTypeNames, ['assigned']);
+    expect(
+      NotificationCategory.assigned.matches(
+        notificationOf(NotificationType.assignedTopic),
+      ),
+      isTrue,
+    );
+    expect(
+      NotificationCategory.other.matches(
+        notificationOf(NotificationType.assignedTopic),
+      ),
+      isFalse,
+    );
+  });
+
+  test('chat tab follows the official Discourse chat type grouping', () {
+    expect(NotificationCategory.chat.serverFilterTypeNames, [
+      'chat_mention',
+      'chat_message',
+      'chat_invitation',
+      'chat_quoted',
+      'chat_watched_thread',
+    ]);
+    for (final type in [
+      NotificationType.chatMention,
+      NotificationType.chatMessage,
+      NotificationType.chatInvitation,
+      NotificationType.chatQuotedPost,
+      NotificationType.chatWatchedThread,
+    ]) {
+      expect(NotificationCategory.chat.matches(notificationOf(type)), isTrue);
+      expect(NotificationCategory.other.matches(notificationOf(type)), isFalse);
+      expect(
+        NotificationCategory.mentions.matches(notificationOf(type)),
+        isFalse,
+      );
+    }
+    // Legacy chat_group_mention is obsolete upstream, not in their chat tab.
+    expect(
+      NotificationCategory.chat.matches(
+        notificationOf(NotificationType.chatGroupMention),
+      ),
+      isFalse,
+    );
+  });
+
   test('mentions uses exactly the Discourse mentioned server filter', () {
     expect(NotificationCategory.mentions.serverFilterTypeNames, ['mentioned']);
     expect(
