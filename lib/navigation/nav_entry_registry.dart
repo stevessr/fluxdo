@@ -240,7 +240,8 @@ String _communityEventLabel(BuildContext context, CommunityEventsView view) {
   final zh = Localizations.localeOf(context).languageCode == 'zh';
   return switch (view) {
     CommunityEventsView.upcoming => zh ? '近期活动' : 'Upcoming events',
-    CommunityEventsView.anniversaries => zh ? '纪念日与生日' : 'Anniversaries & Birthdays',
+    CommunityEventsView.anniversaries =>
+      zh ? '纪念日与生日' : 'Anniversaries & Birthdays',
     CommunityEventsView.birthdays => zh ? '生日' : 'Birthdays',
   };
 }
