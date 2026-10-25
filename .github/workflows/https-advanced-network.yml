@@ -1,0 +1,135 @@
+name: HTTPS Advanced Network
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    paths:
+      - 'lib/services/network/adapters/**'
+      - 'lib/services/network/interceptors/**'
+      - 'lib/services/network/discourse_dio.dart'
+      - 'lib/services/network/flux_request_spec.dart'
+      - 'lib/services/network/cookie/app_cookie_manager.dart'
+      - 'test/services/network/**'
+      - '.github/workflows/https-advanced-network.yml'
+  # Keep this suite available when repository PR checks are delayed.
+  push:
+    branches:
+      - 'feat/https-advanced-security-*'
+    paths:
+      - 'lib/services/network/adapters/**'
+      - 'lib/services/network/interceptors/**'
+      - 'lib/services/network/discourse_dio.dart'
+      - 'lib/services/network/flux_request_spec.dart'
+      - 'lib/services/network/cookie/app_cookie_manager.dart'
+      - 'test/services/network/**'
+      - '.github/workflows/https-advanced-network.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: https-advanced-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Dart formatter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4' # Match .fvmrc
+          cache: true
+      - name: Verify Dart formatting
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/adapters/platform_adapter.dart \
+            lib/services/network/adapters/rhttp_adapter.dart \
+            lib/services/network/interceptors/https_security_interceptor.dart \
+            lib/services/network/interceptors/redirect_interceptor.dart \
+            lib/services/network/flux_request_spec.dart \
+            lib/services/network/cookie/app_cookie_manager.dart \
+            lib/services/network/interceptors/network_log_interceptor.dart \
+            test/services/network/interceptors/https_security_interceptor_test.dart \
+            test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/cookie/app_cookie_manager_test.dart \
+            test/services/network/request_tag_logging_test.dart
+          git diff --check
+
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4' # Match .fvmrc (keep in sync)
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs assets/images/llm
+
+      - name: Restore locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+
+      - name: Static analysis of HTTPS changes
+        run: |
+          flutter analyze \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/adapters/platform_adapter.dart \
+            lib/services/network/adapters/rhttp_adapter.dart \
+            lib/services/network/interceptors/https_security_interceptor.dart \
+            lib/services/network/interceptors/redirect_interceptor.dart \
+            lib/services/network/flux_request_spec.dart \
+            lib/services/network/cookie/app_cookie_manager.dart \
+            lib/services/network/interceptors/network_log_interceptor.dart \
+            test/services/network/interceptors/https_security_interceptor_test.dart \
+            test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/cookie/app_cookie_manager_test.dart \
+            test/services/network/request_tag_logging_test.dart
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          cache: true
+
+      - name: Prepare test environment
+        run: mkdir -p assets/certs assets/images/llm
+
+      - name: Restore locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+
+      - name: HTTPS security and transport diagnostics tests
+        run: |
+          dart tool/flutterw.dart test \
+            test/services/network/interceptors/https_security_interceptor_test.dart \
+            test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/cookie/app_cookie_manager_test.dart \
+            test/services/network/request_tag_logging_test.dart \
+            test/services/network/adapters/rhttp_adapter_test.dart
+
+      - name: Network regression tests
+        run: dart tool/flutterw.dart test test/services/network

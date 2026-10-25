@@ -10,6 +10,7 @@ import 'interceptors/cf_challenge_interceptor.dart';
 import 'interceptors/cf_challenge_terminal_interceptor.dart';
 import 'interceptors/error_interceptor.dart';
 import 'interceptors/http_revalidation_interceptor.dart';
+import 'interceptors/https_security_interceptor.dart';
 import 'interceptors/network_log_interceptor.dart';
 import 'interceptors/preload_cache_interceptor.dart';
 import 'interceptors/redirect_interceptor.dart';
@@ -64,7 +65,11 @@ class DiscourseDio {
     // 由请求侧的 FluxRequestKeys.skipRhttpAdapter 逐请求声明,不在这里分档。
     configurePlatformAdapter(dio);
 
-    // 2. 会话代守卫（最先执行，确保过期请求不进入后续拦截器）
+    // HTTPS origin 策略：先完成 HSTS 升级，再让调度器、Cookie 和缓存读 URI。
+    // 网关到 127.0.0.1 的 HTTP 只是传输层细节，不参加 HSTS 学习。
+    dio.interceptors.add(HttpsSecurityInterceptor());
+
+    // 2. 会话代守卫（尽早执行，确保过期请求不进入业务拦截器）
     dio.interceptors.add(SessionGuardInterceptor());
 
     // 3. 实验性首页 preload cache。
