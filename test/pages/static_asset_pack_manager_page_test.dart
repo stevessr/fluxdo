@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fluxdo/pages/static_asset_pack_manager_page.dart';
 import 'package:fluxdo/services/assets/static_asset_pack_backend_io.dart'
     as backend;
@@ -22,6 +23,11 @@ void main() {
     await tester.pumpWidget(const MaterialApp(
       locale: Locale('zh'),
       supportedLocales: [Locale('zh'), Locale('en')],
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
       home: StaticAssetPackManagerPage(),
     ));
     await tester.pumpAndSettle();
