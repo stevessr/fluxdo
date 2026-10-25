@@ -96,7 +96,10 @@ void main() {
         holdRefresh = true;
         await tester.tap(find.byTooltip('刷新'));
         await tester.pump();
-        expect(refreshStarted.isCompleted, isTrue);
+        // Dio dispatches the interceptor asynchronously after a widget frame.
+        await tester.runAsync(
+          () => refreshStarted.future.timeout(const Duration(seconds: 5)),
+        );
 
         await tester.tap(find.widgetWithText(OutlinedButton, '退出'));
         await tester.pumpAndSettle();
