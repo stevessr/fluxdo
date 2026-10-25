@@ -136,10 +136,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       setState(() => _membershipConfirmationPending.add(group.id));
       bool confirmed;
       try {
-        confirmed = await confirmLeaveGroup(
-          context,
-          groupLabel: group.label,
-        );
+        confirmed = await confirmLeaveGroup(context, groupLabel: group.label);
       } finally {
         if (mounted) {
           setState(() => _membershipConfirmationPending.remove(group.id));
@@ -396,7 +393,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                                     const SizedBox(width: 4),
                                     Text(
                                       copy.memberCount(group.userCount!),
-                                      style: Theme.of(context).textTheme.bodySmall,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall,
                                     ),
                                   ],
                                 ),
