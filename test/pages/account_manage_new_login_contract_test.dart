@@ -40,5 +40,4 @@ void main() {
     expect(section, contains('return SmartAvatar('));
     expect(section, isNot(contains('NetworkImage(')));
   });
-
 }
