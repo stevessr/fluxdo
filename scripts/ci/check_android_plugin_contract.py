@@ -115,13 +115,13 @@ def main() -> None:
     payload_policy = (ROOT / "android/plugin_api/src/main/kotlin/com/github/"
                       "lingyan000/fluxdo/plugin/api/PluginPayloadContract.kt").read_text()
     policy_match = re.search(
-        r"private val emptyOperations\\s*=\\s*setOf\\((.*?)\\)",
+        r"private val emptyOperations\s*=\s*setOf\((.*?)\)",
         payload_policy, re.S,
     )
     check(policy_match is not None, "Missing native empty-payload allowlist")
-    empty_operations = set(re.findall(r'"([a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)"',
+    empty_operations = set(re.findall(r'"([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)"',
                                       policy_match.group(1)))
-    special_operations = set(re.findall(r'operation\\s*==\\s*"([^"]+)"',
+    special_operations = set(re.findall(r'operation\s*==\s*"([^"]+)"',
                                         payload_policy))
     declared_operations = {op for spec in CATALOG.native for op in spec.operations}
     check(empty_operations | special_operations == declared_operations and
