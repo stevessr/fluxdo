@@ -116,8 +116,41 @@ jobs:
           dart analyze --fatal-infos
           dart run test/contract_test.dart
 
+  flutter-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Prepare required asset directories
+        run: mkdir -p assets/certs
+      - name: Resolve host dependencies
+        run: flutter pub get
+      - name: Prepare generated locale and avatar assets
+        run: dart tool/project_prep.dart test
+      - name: Analyze Flutter plugin manager
+        run: |
+          dart analyze lib/services/android_optional_plugin_service.dart
+          dart analyze lib/pages/android_plugins_page.dart
+      - name: Analyze new companion callsites
+        run: |
+          dart analyze lib/services/android_sticker_companion_service.dart
+          dart analyze lib/services/stevessr_composer_service.dart
+          dart analyze lib/pages/metaverse_page.dart
+          dart analyze android_companions/sticker/shims/lib/services/assets/static_asset_packs.dart
+      - name: Test companion result protocol and account partition
+        run: |
+          flutter test test/services/android_sticker_companion_service_test.dart
+          flutter test test/services/android_optional_plugin_service_test.dart
+
   build:
-    needs: [contracts, dart-contracts]
+    needs: [contracts, dart-contracts, flutter-contracts]
     runs-on: ubuntu-latest
     timeout-minutes: 70
     steps:
@@ -167,20 +200,6 @@ jobs:
         run: dart tool/project_prep.dart test
       - name: Check standalone Sticker source closure (no FluxDO import)
         run: python3 scripts/ci/check_sticker_isolation.py
-      - name: Analyze Flutter plugin manager
-        run: |
-          dart analyze lib/services/android_optional_plugin_service.dart
-          dart analyze lib/pages/android_plugins_page.dart
-      - name: Analyze new companion callsites
-        run: |
-          dart analyze lib/services/android_sticker_companion_service.dart
-          dart analyze lib/services/stevessr_composer_service.dart
-          dart analyze lib/pages/metaverse_page.dart
-          dart analyze android_companions/sticker/shims/lib/services/assets/static_asset_packs.dart
-      - name: Test companion result protocol and account partition
-        run: |
-          flutter test test/services/android_sticker_companion_service_test.dart
-          flutter test test/services/android_optional_plugin_service_test.dart
       - name: Build independent Flutter sticker APK
         id: build_sticker
         continue-on-error: true

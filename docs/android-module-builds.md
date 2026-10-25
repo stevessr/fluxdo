@@ -117,8 +117,9 @@ python3 -m unittest discover -s scripts/ci -p 'test_dart_source_boundary.py' -v
 python3 scripts/ci/build_android_core_modular.py --prepare-only
 ```
 
-Android 插件 CI 先执行 Python 契约检查和独立 Dart 协议测试，再在设置 Flutter 之前构建原生
-插件。之后构建 Sticker 与隔离 Core。Core 构建已经包含宿主 Kotlin 编译，
+Android 插件 CI 将 Python 契约、独立 Dart 协议和 Flutter 桥接回归拆成三个门禁。
+三者通过后，APK 任务在安装 Flutter 之前先编译原生插件，之后构建 Sticker 与
+隔离 Core。Core 构建已经包含宿主 Kotlin 编译，
 不得再次用未准备的根工程编译 `:app`，以免缺少 CA 或覆盖隔离产物。
 Sticker 的独立 Gradle 工程自行对齐 Android SDK 36 和 JVM 17，满足 AVIF
 插件所引用 AndroidX 的编译要求。

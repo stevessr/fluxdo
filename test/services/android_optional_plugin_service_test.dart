@@ -168,18 +168,23 @@ void main() {
     testWidgets(
       'lost platform completion times out and late reply stays harmless',
       (tester) async {
-        final reply = Completer<Object?>();
-        messenger.setMockMethodCallHandler(channel, (_) => reply.future);
-        final expectation = expectLater(
-          service.invoke('network', 'network.state'),
-          throwsA(isA<TimeoutException>()),
-        );
-        await tester.pump(
-          pluginTransportTimeout + const Duration(milliseconds: 1),
-        );
-        await expectation;
-        reply.complete('{"late":true}');
-        await tester.pump();
+        try {
+          final reply = Completer<Object?>();
+          messenger.setMockMethodCallHandler(channel, (_) => reply.future);
+          final expectation = expectLater(
+            service.invoke('network', 'network.state'),
+            throwsA(isA<TimeoutException>()),
+          );
+          await tester.pump(
+            pluginTransportTimeout + const Duration(milliseconds: 1),
+          );
+          await expectation;
+          reply.complete('{"late":true}');
+          await tester.pump();
+        } finally {
+          // testWidgets checks foundation globals before the outer tearDown.
+          debugDefaultTargetPlatformOverride = null;
+        }
       },
     );
   });
