@@ -53,7 +53,6 @@ enum NotificationCategory {
     NotificationType.chatMention,
     NotificationType.chatMessage,
     NotificationType.chatInvitation,
-    NotificationType.chatGroupMention,
     NotificationType.chatQuotedPost,
     NotificationType.chatWatchedThread,
   };
@@ -84,7 +83,6 @@ enum NotificationCategory {
       'chat_mention',
       'chat_message',
       'chat_invitation',
-      'chat_group_mention',
       'chat_quoted',
       'chat_watched_thread',
     ],
