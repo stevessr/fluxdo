@@ -168,6 +168,7 @@ class CommunityEventsCalendar extends StatelessWidget {
   Widget _monthView(BuildContext context) {
     final first = calendarRange(date, EventCalendarScale.month).start;
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       children: [
         _weekdays(context),
@@ -266,6 +267,7 @@ class CommunityEventsCalendar extends StatelessWidget {
   Widget _weekView(BuildContext context) {
     final first = calendarWeekStart(date);
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       children: [
         _weekdays(context),
@@ -303,6 +305,7 @@ class CommunityEventsCalendar extends StatelessWidget {
   }
 
   Widget _dayView(BuildContext context) => ListView(
+    physics: const AlwaysScrollableScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(12, 20, 12, 24),
     children: [_agenda(context, date)],
   );
@@ -312,6 +315,7 @@ class CommunityEventsCalendar extends StatelessWidget {
       final columns = constraints.maxWidth > 800 ? 4
           : constraints.maxWidth > 520 ? 3 : 2;
       return GridView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         itemCount: 12,
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
