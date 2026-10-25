@@ -107,6 +107,8 @@ jobs:
           lib/services/assets/static_asset_pack_backend_stub.dart
           lib/services/assets/static_asset_pack_backend_io.dart
           lib/services/discourse_cook_service.dart
+          lib/services/cook/cook_js_engine_io.dart
+          lib/services/cook/cook_js_engine_stub.dart
           lib/services/stevessr_character_assets.dart
           lib/services/assets/optional_font_loader.dart
           lib/services/webview_settings.dart
@@ -128,4 +130,4 @@ jobs:
           openssl pkey -in "$out/ci-test-private.pem" -pubout -outform DER -out "$out/ci-test-public.der"
           python3 scripts/ci/sign_asset_catalog.py sign --catalog "$out/catalog.json" --key "$out/ci-test-private.pem" --signature "$out/catalog.sig"
       - name: Test lifecycle and Python-Dart ZIP interoperability
-        run: flutter test test/services/static_asset_packs_test.dart test/services/signed_asset_catalog_test.dart test/pages/static_asset_pack_manager_page_test.dart
+        run: flutter test test/services/static_asset_packs_test.dart test/services/signed_asset_catalog_test.dart test/services/discourse_cook_service_test.dart test/pages/static_asset_pack_manager_page_test.dart

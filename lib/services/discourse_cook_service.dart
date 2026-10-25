@@ -20,13 +20,28 @@ import 'cook/cook_js_engine_stub.dart'
 /// 返回 null，由调用方降级到旧的 Dart 近似预览管线。
 class DiscourseCookService {
   static final DiscourseCookService _instance =
-      DiscourseCookService._internal();
+      DiscourseCookService._internal() {
+    StaticAssetPacks.changes.listen((packId) {
+      if (packId != 'render-cook') return;
+      _generation++;
+      _engine?.dispose();
+      _engine = null;
+      _initFuture = null;
+      _unavailable = false;
+      _oneboxAttempted.clear();
+      _inlineOneboxAttempted.clear();
+    });
+  }
   factory DiscourseCookService() => _instance;
   DiscourseCookService._internal();
 
   CookJsEngine? _engine;
   Future<bool>? _initFuture;
   bool _unavailable = false;
+  int _generation = 0;
+
+  @visibleForTesting
+  int get debugAssetGeneration => _generation;
 
   /// 预热：编辑器打开时 fire-and-forget 调用，把「读 551K bundle + eval +
   /// init 站点数据」的开销挪到用户切预览之前。
@@ -38,13 +53,20 @@ class DiscourseCookService {
   /// 站点数据缺失导致的失败除外——那种情况保留重试机会）。
   Future<bool> ensureInitialized() {
     if (_unavailable) return Future.value(false);
-    return _initFuture ??= _initialize().then((ok) {
-      if (!ok) _initFuture = null; // 允许下次重试（如站点数据晚到）
+    final existing = _initFuture;
+    if (existing != null) return existing;
+    final generation = _generation;
+    late final Future<bool> pending;
+    pending = _initialize(generation).then((ok) {
+      if (generation != _generation) return false;
+      if (!ok && identical(_initFuture, pending)) _initFuture = null;
       return ok;
     });
+    _initFuture = pending;
+    return pending;
   }
 
-  Future<bool> _initialize() async {
+  Future<bool> _initialize(int generation) async {
     if (!cookJsSupported) {
       _unavailable = true;
       return false;
@@ -67,17 +89,21 @@ class DiscourseCookService {
       return false;
     }
 
+    if (generation != _generation) return false;
+
     // 2. eval bundle（一次性大开销，放 warmUp 阶段做）
     try {
       final bundleJs = await StaticAssetPacks.loadString(
         'assets/cook/discourse-cook.js',
       );
+      if (generation != _generation) return false;
       final engine = CookJsEngine();
       String? evalError;
       engine.evaluate(bundleJs, onError: (e) => evalError = e);
       if (evalError != null) {
         debugPrint('[DiscourseCook] bundle eval 失败: $evalError');
-        _unavailable = true;
+        engine.dispose();
+        if (generation == _generation) _unavailable = true;
         return false;
       }
 
@@ -106,16 +132,20 @@ class DiscourseCookService {
       );
       if (initResult != 'ok') {
         debugPrint('[DiscourseCook] init 失败: ${initError ?? initResult}');
-        _unavailable = true;
+        engine.dispose();
+        if (generation == _generation) _unavailable = true;
         return false;
       }
-
+      if (generation != _generation) {
+        engine.dispose();
+        return false;
+      }
       _engine = engine;
       debugPrint('[DiscourseCook] 初始化完成');
       return true;
     } catch (e) {
       debugPrint('[DiscourseCook] 初始化异常: $e');
-      _unavailable = true;
+      if (generation == _generation) _unavailable = true;
       return false;
     }
   }
@@ -269,6 +299,7 @@ class DiscourseCookService {
   Future<bool> resolveOneboxes(String cooked) async {
     final engine = _engine;
     if (engine == null) return false;
+    final generation = _generation;
 
     final targets = extractOneboxTargets(cooked);
     var seeded = false;
@@ -278,6 +309,7 @@ class DiscourseCookService {
     for (final url in targets.blockUrls) {
       if (!_oneboxAttempted.add(url)) continue;
       final html = await service.fetchOneboxPreview(url);
+      if (generation != _generation) return false;
       if (html == null) continue;
       String? err;
       engine.evaluate(
@@ -301,6 +333,7 @@ class DiscourseCookService {
         i + 10 > pendingInline.length ? pendingInline.length : i + 10,
       );
       final boxes = await service.fetchInlineOneboxes(batch);
+      if (generation != _generation) return false;
       for (final entry in boxes.entries) {
         String? err;
         engine.evaluate(

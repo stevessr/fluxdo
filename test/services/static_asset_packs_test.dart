@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/assets/static_asset_pack_backend_io.dart'
     as backend;
 import 'package:fluxdo/services/assets/static_asset_packs.dart';
+import 'package:fluxdo/services/discourse_cook_service.dart';
 
 const _path = 'assets/cook/discourse-cook.js';
 
@@ -246,6 +247,22 @@ void main() {
     expect(await backend.pruneUnusedPacks(minAge: Duration.zero), 0);
     expect(await Directory('${temp.path}/render-cook-$hash').exists(),
         isTrue);
+  });
+
+  test('Cook 外置脚本安装/禁用/回滚后使已缓存引擎版本失效', () async {
+    final service = DiscourseCookService();
+    final before = service.debugAssetGeneration;
+    final zip = _makePack(_path, Uint8List.fromList(utf8.encode('version 1')));
+    await StaticAssetPacks.installTrustedZip(
+      packId: 'render-cook',
+      zipBytes: zip,
+      expectedSha256: sha256.convert(zip).toString(),
+    );
+    expect(service.debugAssetGeneration, before + 1);
+    expect(await StaticAssetPacks.disable('render-cook'), isTrue);
+    expect(service.debugAssetGeneration, before + 2);
+    expect(await StaticAssetPacks.rollback('render-cook'), isTrue);
+    expect(service.debugAssetGeneration, before + 3);
   });
 
   test('路径逃逸即使具有匹配的 ZIP 散列仍会拒绝安装', () async {

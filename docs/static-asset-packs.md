@@ -71,3 +71,6 @@ installTrustedZip 对调用方提供的外部可信 SHA-256、ZIP 内每项散�
 发布目录 catalog.json 的原始字节需使用仓库之外的 Ed25519 PEM 私钥签名，产生 catalog.sig。签名覆盖原始字节，不是对 ZIP 自带哈希的自我认证。使用 scripts/ci/sign_asset_catalog.py sign/verify。手动导出 Actions 要求 Secret FLUXDO_ASSET_CATALOG_ED25519_PRIVATE_KEY_PEM；无密钥则拒绝将目录发布为可信版本。客户端仅在构建时通过 --dart-define=FLUXDO_ASSET_CATALOG_ED25519_PUBKEY_B64=<独立核验的32字节公钥Base64> 提供发行公钥，未配置则拒绝签名目录安装。禁止将私钥提交到仓库。
 
 本阶段尚未配置正式发布公钥、目录抗回滚计数或自动下载策略；普通手动导入仍要求用户独立核验 SHA-256。
+
+
+DiscourseCookService 订阅 render-cook 包切换通知：安装、禁用和回滚都会丢弃旧的 JS runtime、清理 onebox 缓存并重新初始化；如果更新发生在一次异步初始化或 onebox 网络查询中，会阻止旧版结果覆盖新引擎。原始根内置 Cook 保留作为回退资源。
