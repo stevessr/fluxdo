@@ -616,7 +616,8 @@ class UserApiKeyService {
         options: Options(
           headers: {
             'User-Api-Key': apiKey,
-            if (overrideClientId != null) 'User-Api-Client-Id': overrideClientId,
+            if (overrideClientId != null)
+              'User-Api-Client-Id': overrideClientId,
             if (overrideApiKey != null) 'Cookie': '',
           },
           contentType: Headers.formUrlEncodedContentType,
