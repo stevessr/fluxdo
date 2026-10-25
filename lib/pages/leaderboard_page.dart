@@ -200,7 +200,8 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     // 由 _accountVersion 拒绝写入，避免展示前一账号的私有排名。
     ref.listen(currentUserProvider, (previous, next) {
       final username = next.value?.username;
-      if (_cachedAccountUsername == username) return;
+      // 登录恢复中的临时 Guest 状态不额外触发排行榜网络请求。
+      if (username == null || _cachedAccountUsername == username) return;
       _cachedAccountUsername = username;
       _accountVersion++;
       setState(() {
@@ -792,7 +793,7 @@ class _LeaderboardTile extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: SizedBox(
-          width: 52,
+          width: 68,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
