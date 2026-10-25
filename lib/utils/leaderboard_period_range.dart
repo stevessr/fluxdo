@@ -31,28 +31,23 @@ class LeaderboardDateRange {
   }) {
     final instant = (now ?? DateTime.now()).toUtc();
     final today = DateTime.utc(instant.year, instant.month, instant.day);
-    DateTime? start;
-
-    switch (period) {
-      case LeaderboardPeriod.allTime:
-        start = fromDate;
-      case LeaderboardPeriod.yearly:
-        start = _shiftMonths(today, 12);
-      case LeaderboardPeriod.quarterly:
-        start = _shiftMonths(today, 3);
-      case LeaderboardPeriod.monthly:
-        start = _shiftMonths(today, 1);
-      case LeaderboardPeriod.weekly:
-        start = today.subtract(Duration(days: today.weekday - DateTime.monday));
-      case LeaderboardPeriod.daily:
-        start = today;
-    }
+    DateTime? start = switch (period) {
+      LeaderboardPeriod.allTime => fromDate,
+      LeaderboardPeriod.yearly => _shiftMonths(today, 12),
+      LeaderboardPeriod.quarterly => _shiftMonths(today, 3),
+      LeaderboardPeriod.monthly => _shiftMonths(today, 1),
+      LeaderboardPeriod.weekly =>
+        today.subtract(Duration(days: today.weekday - DateTime.monday)),
+      LeaderboardPeriod.daily => today,
+    };
 
     if (fromDate != null && start != null && fromDate.isAfter(start)) {
       start = fromDate;
     }
 
-    DateTime? end = period == LeaderboardPeriod.allTime ? toDate : today;
+    DateTime? end = period == LeaderboardPeriod.allTime
+        ? (fromDate == null && toDate == null ? null : toDate ?? today)
+        : today;
     if (end != null && toDate != null && toDate.isBefore(end)) {
       end = toDate;
     }
