@@ -327,6 +327,17 @@ subprojects {
         // Fix the actual Android source-of-truth, not only the Java task.
         val androidExtension = extensions.findByName("android")
         if (androidExtension != null) {
+            // flutter_avif_android still declares compileSdk 31. The isolated
+            // project must satisfy its AndroidX AAR requirements itself.
+            // Support AGP's modern and legacy DSLs, failing closed when no
+            // integer SDK setter is available.
+            val sdkSetter = androidExtension.javaClass.methods.firstOrNull {
+                it.name in setOf("setCompileSdk", "setCompileSdkVersion") &&
+                    it.parameterCount == 1 && it.parameterTypes[0] in setOf(
+                        Int::class.javaObjectType, Int::class.javaPrimitiveType
+                    )
+            } ?: error("Unsupported Android compileSdk DSL: $path")
+            sdkSetter.invoke(androidExtension, 36)
             val compileOptions = androidExtension.javaClass
                 .getMethod("getCompileOptions").invoke(androidExtension)
             // AGP exposes these Kotlin DSL setters as Object/Any, not

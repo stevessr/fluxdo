@@ -145,9 +145,9 @@ jobs:
         run: |
           python3 scripts/ci/build_android_core_modular.py --mode debug --abi android-arm64
           test -s build/app/outputs/flutter-apk/app-debug.apk
-      - name: Compile core host Kotlin integration
-        run: |
-          gradle --no-daemon -p android :app:compileDebugKotlin
+      # build_android_core_modular already compiles the host Kotlin bridge in
+      # its prepared, isolated project. Rebuilding :app here would compile the
+      # monolith without its generated CA and overwrite the verified Core APK.
       - name: Validate produced APKs
         if: ${{ always() && !cancelled() }}
         shell: bash
