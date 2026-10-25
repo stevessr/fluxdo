@@ -179,6 +179,42 @@ class UserApiKeyLoginFlow {
         return;
       }
 
+      final completed = await _finishOtpLogin(
+        otp: otp,
+        requestGeneration: requestGeneration,
+        userApiKeyService: userApiKeyService,
+        authorizedKey: authorizedKey,
+      );
+      if (completed != null) onFlowFinished?.call(completed);
+    } finally {
+      _handling = false;
+    }
+  }
+
+  /// Device authorization returns an API key, not a one-time password.
+  /// After DeviceAuthorizationService exchanges that key, reuse precisely
+  /// the browser flow's cookie redemption and account initialization.
+  Future<bool> completeDeviceOtp(String otp) async {
+    if (_handling) return false;
+    _handling = true;
+    try {
+      return await _finishOtpLogin(
+            otp: otp,
+            requestGeneration: AuthSession().generation,
+            userApiKeyService: UserApiKeyService(),
+          ) ==
+          true;
+    } finally {
+      _handling = false;
+    }
+  }
+
+  Future<bool?> _finishOtpLogin({
+    required String otp,
+    required int requestGeneration,
+    required UserApiKeyService userApiKeyService,
+    String? authorizedKey,
+  }) async {
       // 兑换 + 收口有网络耗时,显示全局 loading 反馈
       _showLoading('正在完成登录…');
       try {
@@ -188,20 +224,18 @@ class UserApiKeyLoginFlow {
           otp,
           requestGeneration: requestGeneration,
         );
-        if (!AuthSession().isValid(requestGeneration)) return;
+        if (!AuthSession().isValid(requestGeneration)) return null;
         final token = redeemResult.token;
         if (token == null) {
           if (redeemResult.challengeBlocked) {
             // 盾不是 OTP/Key 失效。不要在这里焚毁刚拿到的 key，也不要把
             // 用户误导成“令牌兑换失败”；重新授权时同 client_id 会自然替换旧 key。
             ToastService.showError('安全验证未完成,登录凭证未按失效处理,请重新尝试授权');
-            onFlowFinished?.call(false);
-            return;
+            return false;
           }
           await userApiKeyService.burnAfterLoginIfUseless(service.dio);
           ToastService.showError('登录令牌兑换失败,请重试');
-          onFlowFinished?.call(false);
-          return;
+          return false;
         }
 
         // 新 _t 已落 jar;取 username 后走与密码登录同一套收口
@@ -220,7 +254,7 @@ class UserApiKeyLoginFlow {
               },
             ),
           );
-          if (!AuthSession().isValid(requestGeneration)) return;
+          if (!AuthSession().isValid(requestGeneration)) return null;
           final data = response.data;
           final currentUser = data is Map<String, dynamic>
               ? data['current_user']
@@ -252,7 +286,7 @@ class UserApiKeyLoginFlow {
           // 扫码登录已有同样的保守兜底：先用占位 identifier 收口，后续正常
           // 会话请求/预加载会刷新真实用户信息。
           if (currentUserBlockedByChallenge) {
-            if (!AuthSession().isValid(requestGeneration)) return;
+            if (!AuthSession().isValid(requestGeneration)) return null;
             await service.finalizeNativeLoginSuccess(
               'user',
               notifyBeforePreload: true,
@@ -263,17 +297,15 @@ class UserApiKeyLoginFlow {
           authorizedKey: authorizedKey,
         );
             ToastService.showSuccess('登录成功');
-            onFlowFinished?.call(true);
-            return;
+            return true;
           }
           // _t 已落 jar 但确认请求失败;不带空用户名走收口(会写坏本地状态)
           await userApiKeyService.burnAfterLoginIfUseless(service.dio);
           ToastService.showError('登录状态确认失败,请重试');
-          onFlowFinished?.call(false);
-          return;
+          return false;
         }
 
-        if (!AuthSession().isValid(requestGeneration)) return;
+        if (!AuthSession().isValid(requestGeneration)) return null;
         await service.finalizeNativeLoginSuccess(
           username,
           confirmedUser: verifiedUser,
@@ -286,13 +318,10 @@ class UserApiKeyLoginFlow {
           authorizedKey: authorizedKey,
         );
         ToastService.showSuccess('登录成功');
-        onFlowFinished?.call(true);
+        return true;
       } finally {
         _hideLoading();
       }
-    } finally {
-      _handling = false;
-    }
   }
 }
 
