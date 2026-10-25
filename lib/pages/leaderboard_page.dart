@@ -35,6 +35,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
   _LeaderboardPeriod _period = _LeaderboardPeriod.allTime;
   bool _loading = false;
   int _accountVersion = 0;
+  String? _cachedAccountUsername;
 
   @override
   void initState() {
@@ -53,7 +54,16 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
   }
 
   Future<void> _ensureLoaded() async {
-    if (!mounted || !widget.isActive || _cache.containsKey(_period)) return;
+    if (!mounted || !widget.isActive) return;
+    // 非激活页面不会订阅 provider；再次显示时也必须核对账号身份。
+    final username = ref.read(currentUserProvider).value?.username;
+    if (_cachedAccountUsername != username) {
+      _cachedAccountUsername = username;
+      _accountVersion++;
+      _cache.clear();
+      _errors.clear();
+    }
+    if (_cache.containsKey(_period)) return;
     await _load(reset: true);
   }
 
@@ -189,7 +199,9 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     // 切换账号后丢弃含有旧 personal 字段的快照；请求跨账号返回时
     // 由 _accountVersion 拒绝写入，避免展示前一账号的私有排名。
     ref.listen(currentUserProvider, (previous, next) {
-      if (previous?.value?.username == next.value?.username) return;
+      final username = next.value?.username;
+      if (_cachedAccountUsername == username) return;
+      _cachedAccountUsername = username;
       _accountVersion++;
       setState(() {
         _cache.clear();
@@ -581,7 +593,7 @@ class _LeaderboardWinner extends StatelessWidget {
             if (first)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Icon(Symbols.crown_rounded, color: medal, size: 28),
+                child: Icon(AppIcons.crown, color: medal, size: 28),
               ),
             Stack(
               clipBehavior: Clip.none,
@@ -698,8 +710,8 @@ class _PersonalLeaderboardRank extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
     final score = NumberFormat.compact(
-      locale: Localizations.localeOf(context).toString(),
-    ).format(entry.totalScore);
+      locale: 'en_US',
+    ).format(entry.totalScore).toLowerCase();
 
     return Material(
       color: colors.primary,
