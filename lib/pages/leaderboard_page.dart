@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../providers/discourse_providers.dart';
+import '../utils/leaderboard_period_range.dart';
+import '../utils/time_utils.dart';
 import '../utils/url_helper.dart';
 import '../widgets/common/smart_avatar.dart';
 import 'user_profile_page.dart';
@@ -28,10 +30,10 @@ class LeaderboardPage extends ConsumerStatefulWidget {
 class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
   static const int _serverPageSize = 100;
 
-  final Map<_LeaderboardPeriod, _LeaderboardSnapshot> _cache = {};
-  final Map<_LeaderboardPeriod, Object> _errors = {};
+  final Map<LeaderboardPeriod, _LeaderboardSnapshot> _cache = {};
+  final Map<LeaderboardPeriod, Object> _errors = {};
 
-  _LeaderboardPeriod _period = _LeaderboardPeriod.allTime;
+  LeaderboardPeriod _period = LeaderboardPeriod.allTime;
   bool _loading = false;
 
   @override
@@ -51,7 +53,9 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
   }
 
   Future<void> _ensureLoaded() async {
-    if (!mounted || !widget.isActive || _cache.containsKey(_period)) return;
+    if (!mounted || !widget.isActive) return;
+    final viewer = ref.read(currentUserProvider).value?.username;
+    if (_cache[_period]?.viewerUsername == viewer) return;
     await _load(reset: true);
   }
 
@@ -60,6 +64,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
 
     final requestedPeriod = _period;
     final previous = _cache[requestedPeriod];
+    final viewer = ref.read(currentUserProvider).value?.username;
     if (!reset && previous != null && !previous.hasMore) return;
 
     final page = reset ? 0 : (previous?.nextPage ?? 0);
@@ -97,8 +102,31 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       final merged = reset
           ? entries
           : _mergeEntries(previous?.entries ?? const [], entries);
+
+      // 个人名次由官方 personal 字段独立返回，不依赖已加载的榜单页数。
+      // 翻页响应不覆盖首页的个人信息，账号切换时也不能展示旧账号的缓存。
+      final rawPersonal = data['personal'];
+      final personal = reset
+          ? rawPersonal is Map
+              ? _LeaderboardPersonal.fromJson(
+                  Map<String, dynamic>.from(rawPersonal),
+                )
+              : null
+          : previous?.personal;
+
+      final rawLeaderboard = data['leaderboard'];
+      final leaderboard = rawLeaderboard is Map
+          ? Map<String, dynamic>.from(rawLeaderboard)
+          : const <String, dynamic>{};
       final snapshot = _LeaderboardSnapshot(
         entries: merged,
+        personal: personal,
+        viewerUsername: viewer,
+        fromDate: _leaderboardDate(leaderboard['from_date']) ?? previous?.fromDate,
+        toDate: _leaderboardDate(leaderboard['to_date']) ?? previous?.toDate,
+        periodFilterDisabled:
+            leaderboard['period_filter_disabled'] == true ||
+            (previous?.periodFilterDisabled ?? false),
         nextPage: page + 1,
         hasMore: rawUsers.length >= _serverPageSize,
         updatedAt: DateTime.now(),
@@ -119,8 +147,9 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       // 周期切换在请求进行时被禁用；这里仍做兜底，确保外部状态变化后
       // 当前周期不会停留在未加载状态。
       if (widget.isActive &&
-          !_cache.containsKey(_period) &&
-          !_errors.containsKey(_period)) {
+          _errors[_period] == null &&
+          _cache[_period]?.viewerUsername !=
+              ref.read(currentUserProvider).value?.username) {
         scheduleMicrotask(_ensureLoaded);
       }
     }
@@ -139,7 +168,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     return merged;
   }
 
-  void _selectPeriod(_LeaderboardPeriod period) {
+  void _selectPeriod(LeaderboardPeriod period) {
     if (_loading || period == _period) return;
     setState(() => _period = period);
     scheduleMicrotask(_ensureLoaded);
@@ -162,6 +191,9 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     final snapshot = _cache[_period];
     final error = _errors[_period];
     final currentUsername = ref.watch(currentUserProvider).value?.username;
+    if (!_loading && snapshot != null && snapshot.viewerUsername != currentUsername) {
+      scheduleMicrotask(_ensureLoaded);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -178,7 +210,9 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
         children: [
           _PeriodSelector(
             selected: _period,
-            enabled: !_loading,
+            enabled: !_loading && !(snapshot?.periodFilterDisabled ?? false),
+            fromDate: snapshot?.fromDate,
+            toDate: snapshot?.toDate,
             onSelected: _selectPeriod,
           ),
           const Divider(height: 1),
@@ -270,9 +304,9 @@ class _PeriodSelector extends StatelessWidget {
     required this.onSelected,
   });
 
-  final _LeaderboardPeriod selected;
+  final LeaderboardPeriod selected;
   final bool enabled;
-  final ValueChanged<_LeaderboardPeriod> onSelected;
+  final ValueChanged<LeaderboardPeriod> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -281,10 +315,10 @@ class _PeriodSelector extends StatelessWidget {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         scrollDirection: Axis.horizontal,
-        itemCount: _LeaderboardPeriod.values.length,
+        itemCount: LeaderboardPeriod.values.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
-          final period = _LeaderboardPeriod.values[index];
+          final period = LeaderboardPeriod.values[index];
           return FilterChip(
             selected: selected == period,
             label: Text(period.label(context)),
@@ -512,15 +546,51 @@ class _LeaderboardError extends StatelessWidget {
 class _LeaderboardSnapshot {
   const _LeaderboardSnapshot({
     required this.entries,
+    required this.personal,
+    required this.viewerUsername,
+    required this.fromDate,
+    required this.toDate,
+    required this.periodFilterDisabled,
     required this.nextPage,
     required this.hasMore,
     required this.updatedAt,
   });
 
   final List<_LeaderboardEntry> entries;
+  final _LeaderboardPersonal? personal;
+  final String? viewerUsername;
+  final DateTime? fromDate;
+  final DateTime? toDate;
+  final bool periodFilterDisabled;
   final int nextPage;
   final bool hasMore;
   final DateTime updatedAt;
+}
+
+class _LeaderboardPersonal {
+  const _LeaderboardPersonal({required this.position, required this.totalScore});
+
+  final int position;
+  final int totalScore;
+
+  static _LeaderboardPersonal? fromJson(Map<String, dynamic> json) {
+    final user = json['user'];
+    if (user is! Map) return null;
+    final position = int.tryParse('${json['position'] ?? user['position'] ?? ''}');
+    final score = int.tryParse('${user['total_score'] ?? ''}');
+    if (position == null || position < 1 || score == null) return null;
+    return _LeaderboardPersonal(position: position, totalScore: score);
+  }
+}
+
+/// Date 类型的 API 值先交由项目统一时间解析器转换，再取回 UTC 日期。
+DateTime? _leaderboardDate(dynamic raw) {
+  final text = raw?.toString();
+  if (text == null || text.isEmpty) return null;
+  final parsed = TimeUtils.parseUtcTime(text);
+  if (parsed == null) return null;
+  final utc = parsed.toUtc();
+  return DateTime.utc(utc.year, utc.month, utc.day);
 }
 
 class _LeaderboardEntry {
@@ -568,42 +638,17 @@ class _LeaderboardNotReadyException implements Exception {
   const _LeaderboardNotReadyException();
 }
 
-enum _LeaderboardPeriod { allTime, daily, weekly, monthly, quarterly, yearly }
-
-extension on _LeaderboardPeriod {
-  String get apiValue {
-    switch (this) {
-      case _LeaderboardPeriod.allTime:
-        return 'all_time';
-      case _LeaderboardPeriod.daily:
-        return 'daily';
-      case _LeaderboardPeriod.weekly:
-        return 'weekly';
-      case _LeaderboardPeriod.monthly:
-        return 'monthly';
-      case _LeaderboardPeriod.quarterly:
-        return 'quarterly';
-      case _LeaderboardPeriod.yearly:
-        return 'yearly';
-    }
-  }
-
+extension _LeaderboardPeriodUi on LeaderboardPeriod {
   String label(BuildContext context) {
     final copy = _copy(context);
-    switch (this) {
-      case _LeaderboardPeriod.allTime:
-        return copy.allTime;
-      case _LeaderboardPeriod.daily:
-        return copy.daily;
-      case _LeaderboardPeriod.weekly:
-        return copy.weekly;
-      case _LeaderboardPeriod.monthly:
-        return copy.monthly;
-      case _LeaderboardPeriod.quarterly:
-        return copy.quarterly;
-      case _LeaderboardPeriod.yearly:
-        return copy.yearly;
-    }
+    return switch (this) {
+      LeaderboardPeriod.allTime => copy.allTime,
+      LeaderboardPeriod.daily => copy.daily,
+      LeaderboardPeriod.weekly => copy.weekly,
+      LeaderboardPeriod.monthly => copy.monthly,
+      LeaderboardPeriod.quarterly => copy.quarterly,
+      LeaderboardPeriod.yearly => copy.yearly,
+    };
   }
 }
 
