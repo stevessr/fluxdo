@@ -49,7 +49,7 @@ class BrowserDiscoveryCache<T> {
       (_) {
         if (identical(_inFlight, future)) _inFlight = null;
       },
-      onError: (Object _, StackTrace __) {
+      onError: (Object _, StackTrace _) {
         if (identical(_inFlight, future)) _inFlight = null;
       },
     );
