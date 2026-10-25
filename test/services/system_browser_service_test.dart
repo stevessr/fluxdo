@@ -175,9 +175,15 @@ void main() {
       expect(nativeSource, contains('packageManager.getApplicationIcon(entry.key)'));
       expect(nativeSource, contains('requestedSize = 64'));
       expect(nativeSource, contains('listLoginBrowsers(includeIcons = false)'));
+      final sheet = File(
+        'lib/widgets/auth/login_browser_picker_sheet.dart',
+      ).readAsStringSync();
+      expect(sheet, contains('Image.memory('));
+      expect(sheet, contains('if (chooser.isNotEmpty)'));
+      expect(sheet, contains('ListView.builder('));
       final page = File('lib/pages/login_page.dart').readAsStringSync();
-      expect(page, contains('Image.memory('));
-      expect(page, contains('if (chooserChoices.isNotEmpty)'));
+      expect(page, contains('LoginBrowserPickerSheet(browsers: browsers)'));
+      expect(nativeSource, contains('"fluxdo-browser-discovery"'));
     });
 
     test('Android 原生发现包含预览包并保留 HTTP/HTTPS 校验', () {
