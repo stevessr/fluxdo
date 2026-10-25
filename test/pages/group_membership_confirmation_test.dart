@@ -28,32 +28,35 @@ void main() {
               'can_see_members': false,
             };
             if (options.method == 'GET' && options.path == '/groups.json') {
-              handler.resolve(Response(
-                requestOptions: options,
-                data: {
-                  'groups': [group],
-                  'total_rows_groups': 1,
-                },
-              ));
+              handler.resolve(
+                Response(
+                  requestOptions: options,
+                  data: {
+                    'groups': [group],
+                    'total_rows_groups': 1,
+                  },
+                ),
+              );
             } else if (options.method == 'GET' &&
                 options.path == '/groups/test_group.json') {
-              handler.resolve(Response(
-                requestOptions: options,
-                data: {'group': group},
-              ));
+              handler.resolve(
+                Response(requestOptions: options, data: {'group': group}),
+              );
             } else if (options.method == 'DELETE' &&
                 options.path == '/groups/7/leave.json') {
               leaveRequests++;
               isMember = false;
-              handler.resolve(Response(
-                requestOptions: options,
-                data: {'success': 'OK'},
-              ));
+              handler.resolve(
+                Response(requestOptions: options, data: {'success': 'OK'}),
+              );
             } else {
-              handler.reject(DioException(
-                requestOptions: options,
-                message: 'Unexpected request: ${options.method} ${options.path}',
-              ));
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  message:
+                      'Unexpected request: ${options.method} ${options.path}',
+                ),
+              );
             }
           },
         );
