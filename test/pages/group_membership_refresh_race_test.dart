@@ -17,6 +17,7 @@ void main() {
       (tester) async {
         var isMember = true;
         var leaveRequests = 0;
+        final leaveStarted = Completer<void>();
         var holdRefresh = false;
         final refreshStarted = Completer<void>();
         final releaseRefresh = Completer<void>();
@@ -57,6 +58,7 @@ void main() {
             if (options.method == 'DELETE' &&
                 options.path == '/groups/7/leave.json') {
               leaveRequests++;
+              if (!leaveStarted.isCompleted) leaveStarted.complete();
               isMember = false;
               handler.resolve(
                 Response(requestOptions: options, data: {'success': 'OK'}),
@@ -108,6 +110,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         await tester.tap(find.byKey(const ValueKey('leave-group-confirm')));
         await tester.pump();
+        await tester.runAsync(
+          () => leaveStarted.future.timeout(const Duration(seconds: 5)),
+        );
         expect(leaveRequests, 1);
 
         // The in-flight GET contains a membership snapshot from before DELETE.
