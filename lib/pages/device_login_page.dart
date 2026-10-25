@@ -131,8 +131,9 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                 request,
                 poll.encryptedPayload!,
               );
-              if (!mounted || _cancelled || !identical(_request, request))
+              if (!mounted || _cancelled || !identical(_request, request)) {
                 return;
+              }
               _ticker?.cancel();
               setState(() {
                 _request = null;
