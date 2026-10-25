@@ -191,12 +191,12 @@ class UserApiKeyLoginFlow {
     }
   }
 
-  /// Device authorization returns an API key, not a one-time password.
-  /// After DeviceAuthorizationService exchanges that key, reuse precisely
-  /// the browser flow's cookie redemption and account initialization.
+  /// The device flow must explicitly mint an OTP using its short-lived write
+  /// Key before reaching here. Reuse browser auth's session finalization.
   Future<bool> completeDeviceOtp(
     String otp, {
     required int requestGeneration,
+    required String expectedUsername,
   }) async {
     if (_handling || !AuthSession().isValid(requestGeneration)) return false;
     _handling = true;
@@ -205,6 +205,7 @@ class UserApiKeyLoginFlow {
             otp: otp,
             requestGeneration: requestGeneration,
             userApiKeyService: UserApiKeyService(),
+            expectedUsername: expectedUsername,
           ) ==
           true;
     } finally {
@@ -217,6 +218,7 @@ class UserApiKeyLoginFlow {
     required int requestGeneration,
     required UserApiKeyService userApiKeyService,
     String? authorizedKey,
+    String? expectedUsername,
   }) async {
     // 兑换 + 收口有网络耗时,显示全局 loading 反馈
     _showLoading('正在完成登录…');
@@ -294,7 +296,7 @@ class UserApiKeyLoginFlow {
         if (currentUserBlockedByChallenge) {
           if (!AuthSession().isValid(requestGeneration)) return null;
           await service.finalizeNativeLoginSuccess(
-            'user',
+            expectedUsername ?? 'user',
             notifyBeforePreload: true,
           );
           _burnKeyInBackground(
@@ -316,6 +318,11 @@ class UserApiKeyLoginFlow {
         return false;
       }
 
+      if (expectedUsername != null &&
+          username.toLowerCase() != expectedUsername.toLowerCase()) {
+        ToastService.showError('设备授权用户与 OTP 会话用户不一致，已终止登录');
+        return false;
+      }
       if (!AuthSession().isValid(requestGeneration)) return null;
       await service.finalizeNativeLoginSuccess(
         username,
