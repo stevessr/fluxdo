@@ -361,89 +361,82 @@ class _PeriodSelector extends StatelessWidget {
     final range = _formatLeaderboardRange(context, selected, fromDate, toDate);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: PopupMenuButton<LeaderboardPeriod>(
-          enabled: enabled,
-          tooltip: _periodLabel(context, selected),
-          initialValue: selected,
-          position: PopupMenuPosition.under,
-          constraints: const BoxConstraints(minWidth: 280, maxWidth: 400),
-          onSelected: onSelected,
-          itemBuilder: (menuContext) => LeaderboardPeriod.values.map((period) {
-            final description =
-                _formatLeaderboardRange(menuContext, period, fromDate, toDate);
-            return PopupMenuItem<LeaderboardPeriod>(
-              value: period,
-              height: 62,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _periodLabel(menuContext, period),
-                          style: Theme.of(menuContext).textTheme.titleSmall
-                              ?.copyWith(
-                                fontWeight: period == selected
-                                    ? FontWeight.bold
-                                    : null,
-                              ),
-                        ),
-                        if (description.isNotEmpty)
-                          Text(
-                            description,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(menuContext).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(menuContext)
-                                      .colorScheme.onSurfaceVariant,
-                                ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  if (period == selected)
-                    Icon(Symbols.check_rounded, color: scheme.primary, size: 20),
-                ],
-              ),
-            );
-          }).toList(),
-          child: SizedBox(
-            width: MediaQuery.sizeOf(context).width - 40,
+      child: PopupMenuButton<LeaderboardPeriod>(
+        enabled: enabled,
+        tooltip: _periodLabel(context, selected),
+        initialValue: selected,
+        position: PopupMenuPosition.under,
+        constraints: const BoxConstraints(minWidth: 280, maxWidth: 400),
+        onSelected: onSelected,
+        itemBuilder: (menuContext) => LeaderboardPeriod.values.map((period) {
+          final description =
+              _formatLeaderboardRange(menuContext, period, fromDate, toDate);
+          return PopupMenuItem<LeaderboardPeriod>(
+            value: period,
+            height: 62,
             child: Row(
               children: [
-                Text(
-                  _periodLabel(context, selected),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Icon(
-                Symbols.expand_more_rounded,
-                color: enabled ? scheme.onSurface : scheme.onSurfaceVariant,
-              ),
-              if (range.isNotEmpty) ...[
-                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    range,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _periodLabel(menuContext, period),
+                        style: Theme.of(menuContext).textTheme.titleSmall
+                            ?.copyWith(
+                              fontWeight: period == selected
+                                  ? FontWeight.bold
+                                  : null,
+                            ),
+                      ),
+                      if (description.isNotEmpty)
+                        Text(
+                          description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(menuContext).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(menuContext)
+                                    .colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                    ],
                   ),
                 ),
+                if (period == selected)
+                  Icon(Symbols.check_rounded, color: scheme.primary, size: 20),
               ],
             ),
-            ],
+          );
+        }).toList(),
+        child: Row(
+          children: [
+            Text(
+              _periodLabel(context, selected),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
+            const SizedBox(width: 6),
+            Icon(
+              Symbols.expand_more_rounded,
+              color: enabled ? scheme.onSurface : scheme.onSurfaceVariant,
+            ),
+            if (range.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  range,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
