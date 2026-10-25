@@ -94,9 +94,11 @@ class AvatarCachePool {
 
     final future = _performProbe(url);
     _svgInFlight[url] = future;
-    unawaited(future.then((_) {
-      if (identical(_svgInFlight[url], future)) _svgInFlight.remove(url);
-    }));
+    unawaited(
+      future.then((_) {
+        if (identical(_svgInFlight[url], future)) _svgInFlight.remove(url);
+      }),
+    );
     return future;
   }
 
