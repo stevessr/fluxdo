@@ -199,6 +199,7 @@ class DesktopBrowserDiscovery {
     final browsers = <LoginBrowser>[_default];
     if (platform == 'linux') {
       final seenExecutables = <String>{};
+      final seenXdgLaunches = <String>{};
       final icons = XdgBrowserIconLoader(environment: environment);
       final gio = await findCommand('gio');
       if (gio != null) {
@@ -207,6 +208,13 @@ class DesktopBrowserDiscovery {
           findCommand: findCommand,
         ).discover();
         for (final entry in entries) {
+          // Multiple desktop IDs may point at exactly the same browser and
+          // launch arguments. Preserve distinct --profile/channel arguments.
+          final signature = entry.exec?.trim();
+          if (signature != null && signature.isNotEmpty &&
+              !seenXdgLaunches.add('${entry.name}\u0000$signature')) {
+            continue;
+          }
           final icon = await icons.load(entry.icon);
           browsers.add(
             LoginBrowser(
