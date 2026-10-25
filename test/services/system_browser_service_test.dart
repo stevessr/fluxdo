@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/system_browser_service.dart';
@@ -59,6 +60,8 @@ void main() {
         'https://linux.do/auth/github/callback',
         'https://linux.do/user-api-key/activate',
         'https://linux.do/user-api-key/new/extra',
+        'https://linux.do:8443/user-api-key/new',
+        'https://user:pass@linux.do/user-api-key/new',
         'fluxdo://auth_redirect?payload=test',
       ]) {
         expect(
@@ -140,6 +143,58 @@ void main() {
         isTrue,
       );
       expect(nightlyPaths.length, greaterThanOrEqualTo(2));
+    });
+
+    test('Android 枚举结果携带真实应用图标且系统选择器固定置底', () {
+      final icon = Uint8List.fromList([137, 80, 78, 71]);
+      final browsers = SystemBrowserService.decodeAndroidBrowsers([
+        {'id': 'com.android.chrome', 'name': 'Google Chrome', 'icon': icon},
+        {'id': 'com.microsoft.emmx', 'name': 'Microsoft Edge'},
+        {'id': 'bad', 'name': 123},
+        {'id': SystemBrowserService.androidChooserId, 'name': '伪造'},
+      ]);
+      expect(browsers.map((entry) => entry.id), [
+        'com.android.chrome',
+        'com.microsoft.emmx',
+        SystemBrowserService.androidChooserId,
+      ]);
+      expect(identical(browsers.first.iconBytes, icon), isTrue);
+      expect(browsers[1].iconBytes, isNull);
+      expect(browsers.last.name, '使用系统方式打开');
+      expect(
+        SystemBrowserService.decodeAndroidBrowsers(null).single.id,
+        SystemBrowserService.androidChooserId,
+      );
+    });
+
+    test('Android 原生系统打开方式使用 ACTION_CHOOSER 且复用授权链接校验', () {
+      final nativeSource = File(
+        'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/MainActivity.kt',
+      ).readAsStringSync();
+      expect(nativeSource, contains('"launchLoginBrowserChooser"'));
+      expect(
+        nativeSource,
+        contains('Intent.createChooser(viewIntent, "选择打开方式")'),
+      );
+      expect(
+        nativeSource,
+        contains('if (!isLoginAuthorizationUri(uri)) return false'),
+      );
+      expect(nativeSource, contains('(uri.port == -1 || uri.port == 443)'));
+      expect(
+        nativeSource,
+        contains('packageManager.getApplicationIcon(entry.key)'),
+      );
+      expect(nativeSource, contains('requestedSize = 64'));
+      expect(nativeSource, contains('listLoginBrowsers(includeIcons = false)'));
+      final sheet = File('lib/widgets/auth/login_browser_picker_sheet.dart')
+          .readAsStringSync();
+      expect(sheet, contains('Image.memory('));
+      expect(sheet, contains('if (chooser.isNotEmpty)'));
+      expect(sheet, contains('ListView.builder('));
+      final page = File('lib/pages/login_page.dart').readAsStringSync();
+      expect(page, contains('LoginBrowserPickerSheet(browsers: browsers)'));
+      expect(nativeSource, contains('"fluxdo-browser-discovery"'));
     });
 
     test('Android 原生发现包含预览包并保留 HTTP/HTTPS 校验', () {

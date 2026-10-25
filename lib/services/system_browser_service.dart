@@ -18,6 +18,11 @@ class SystemBrowserService {
 
   static const _channel = MethodChannel('com.github.lingyan000.fluxdo/browser');
   static const _default = LoginBrowser(id: 'default', name: '系统默认浏览器');
+  static const androidChooserId = 'android:chooser';
+  static const _androidChooser = LoginBrowser(
+    id: androidChooserId,
+    name: '使用系统方式打开',
+  );
 
   // Flatpak must not inspect or execute binaries on the host. The portal's
   // OpenURI ask option displays the host's browser/application chooser.
@@ -40,23 +45,40 @@ class SystemBrowserService {
   static bool isAuthorizationUrl(Uri uri) =>
       uri.scheme == 'https' &&
       uri.host == 'linux.do' &&
+      (!uri.hasPort || uri.port == 443) &&
+      uri.userInfo.isEmpty &&
       uri.path == '/user-api-key/new';
+
+  /// 把 Android PackageManager 枚举结果转换为可渲染的条目。
+  /// 系统选择器始终置底，即便包名发现受系统限制也仍可使用。
+  static List<LoginBrowser> decodeAndroidBrowsers(List<dynamic>? raw) {
+    final browsers = <LoginBrowser>[];
+    for (final entry in raw ?? const <dynamic>[]) {
+      if (entry is! Map) continue;
+      final id = entry['id'];
+      final name = entry['name'];
+      if (id is! String ||
+          name is! String ||
+          id.isEmpty ||
+          id == androidChooserId) {
+        continue;
+      }
+      final icon = entry['icon'];
+      browsers.add(
+        LoginBrowser(
+          id: id,
+          name: name,
+          iconBytes: icon is Uint8List && icon.isNotEmpty ? icon : null,
+        ),
+      );
+    }
+    return [...browsers, _androidChooser];
+  }
 
   Future<List<LoginBrowser>> availableBrowsers() async {
     if (Platform.isAndroid) {
       final raw = await _channel.invokeListMethod<dynamic>('listLoginBrowsers');
-      return (raw ?? const [])
-          .whereType<Map>()
-          .map((entry) {
-            final id = entry['id'];
-            final name = entry['name'];
-            if (id is! String || name is! String || id.isEmpty) {
-              return null;
-            }
-            return LoginBrowser(id: id, name: name);
-          })
-          .whereType<LoginBrowser>()
-          .toList();
+      return decodeAndroidBrowsers(raw);
     }
 
     if (Platform.isIOS) {
@@ -89,6 +111,13 @@ class SystemBrowserService {
     try {
       if (browser.id == _portalChooser.id && Platform.isLinux && _inFlatpak) {
         return await _openWithPortalChooser(authorizationUrl);
+      }
+      if (browser.id == androidChooserId && Platform.isAndroid) {
+        // Android ACTION_CHOOSER: 强制显示系统原生打开方式，而非直接使用默认浏览器。
+        return await _channel.invokeMethod<bool>('launchLoginBrowserChooser', {
+              'url': authorizationUrl.toString(),
+            }) ??
+            false;
       }
       if (browser.id == 'default') {
         return await launchUrl(
