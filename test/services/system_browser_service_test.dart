@@ -60,6 +60,8 @@ void main() {
         'https://linux.do/auth/github/callback',
         'https://linux.do/user-api-key/activate',
         'https://linux.do/user-api-key/new/extra',
+        'https://linux.do:8443/user-api-key/new',
+        'https://user:pass@linux.do/user-api-key/new',
         'fluxdo://auth_redirect?payload=test',
       ]) {
         expect(
@@ -172,6 +174,7 @@ void main() {
       expect(nativeSource, contains('"launchLoginBrowserChooser"'));
       expect(nativeSource, contains('Intent.createChooser(viewIntent, "选择打开方式")'));
       expect(nativeSource, contains('if (!isLoginAuthorizationUri(uri)) return false'));
+      expect(nativeSource, contains('(uri.port == -1 || uri.port == 443)'));
       expect(nativeSource, contains('packageManager.getApplicationIcon(entry.key)'));
       expect(nativeSource, contains('requestedSize = 64'));
       expect(nativeSource, contains('listLoginBrowsers(includeIcons = false)'));
