@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/assets/static_asset_packs.dart';
+import '../services/assets/asset_pack_import.dart';
 
 /// 管理手动从可信发行渠道取得的可选静态资源包。
 ///
@@ -102,20 +103,24 @@ class _StaticAssetPackManagerPageState
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['zip'],
-      withData: true,
+      withData: false,
+      withReadStream: true,
     );
     if (picked == null || !mounted) return;
     final file = picked.files.single;
-    if (file.size > _maximumZipBytes) {
-      _message(_tr('资源包超过 128 MiB 的导入上限', 'Pack exceeds 128 MiB import limit'));
+    if (file.size > _maximumZipBytes || file.size <= 0) {
+      _message(_tr('资源包超过 128 MiB 上限或为空', 'Pack exceeds 128 MiB or is empty'));
       return;
     }
-    final bytes = file.bytes;
-    if (bytes == null) {
-      _message(_tr('无法读取所选 ZIP', 'Unable to read selected ZIP'));
+    final stream = file.readStream;
+    if (stream == null) {
+      _message(_tr('无法流式读取所选 ZIP', 'Unable to stream selected ZIP'));
       return;
     }
     await _run(() async {
+      final bytes = await readBoundedPackStream(
+        stream, expectedBytes: file.size, maxBytes: _maximumZipBytes,
+      );
       await StaticAssetPacks.installTrustedZip(
         packId: id,
         zipBytes: bytes,

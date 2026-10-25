@@ -12,6 +12,8 @@ on:
       - 'lib/providers/theme_provider.dart'
       - 'lib/main.dart'
       - 'lib/pages/static_asset_pack_manager_page.dart'
+      - 'lib/services/assets/asset_pack_import.dart'
+      - 'test/services/asset_pack_import_test.dart'
       - 'lib/pages/settings_page.dart'
       - 'test/pages/static_asset_pack_manager_page_test.dart'
       - 'test/services/static_asset_packs_test.dart'
@@ -105,6 +107,8 @@ jobs:
         run: >-
           flutter analyze
           lib/services/assets/static_asset_packs.dart
+          lib/services/assets/asset_pack_import.dart
+          test/services/asset_pack_import_test.dart
           lib/services/assets/signed_asset_catalog.dart
           test/services/signed_asset_catalog_test.dart
           lib/services/assets/static_asset_pack_backend_stub.dart
@@ -135,4 +139,4 @@ jobs:
       - name: Test lifecycle and Python-Dart ZIP interoperability
         run: |
           key=$(tail -c 32 test/fixtures/generated_asset_packs/ci-test-public.der | base64 -w0)
-          flutter test --dart-define=FLUXDO_ASSET_CATALOG_ED25519_PUBKEY_B64="$key" test/services/static_asset_packs_test.dart test/services/signed_asset_catalog_test.dart test/services/discourse_cook_service_test.dart test/pages/static_asset_pack_manager_page_test.dart
+          flutter test --dart-define=FLUXDO_ASSET_CATALOG_ED25519_PUBKEY_B64="$key" test/services/static_asset_packs_test.dart test/services/asset_pack_import_test.dart test/services/signed_asset_catalog_test.dart test/services/discourse_cook_service_test.dart test/pages/static_asset_pack_manager_page_test.dart
