@@ -80,6 +80,10 @@ class _MyTopicsPageState extends ConsumerState<MyTopicsPage> {
   }
 
   void _onItemTap(Topic topic) {
+    // 树形视图从完整话题开始，续读楼层只用于平铺视图。
+    final scrollToPostNumber = ref.read(preferencesProvider).defaultNestedView
+        ? null
+        : topic.lastReadPostNumber;
     // 宽屏进右栏,窄屏全屏 push——与草稿页同一套形态
     if (_canShowBothPanes) {
       ref
@@ -87,7 +91,7 @@ class _MyTopicsPageState extends ConsumerState<MyTopicsPage> {
           .select(
             topicId: topic.id,
             initialTitle: topic.title,
-            scrollToPostNumber: topic.lastReadPostNumber,
+            scrollToPostNumber: scrollToPostNumber,
           );
       return;
     }
@@ -96,7 +100,7 @@ class _MyTopicsPageState extends ConsumerState<MyTopicsPage> {
       MaterialPageRoute(
         builder: (_) => TopicDetailPage(
           topicId: topic.id,
-          scrollToPostNumber: topic.lastReadPostNumber,
+          scrollToPostNumber: scrollToPostNumber,
         ),
       ),
     );

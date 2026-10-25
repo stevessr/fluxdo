@@ -1,25 +1,15 @@
 name: Shared Image Provider
 
+# Feature-specific regression suite: run on avatar changes or on demand.
 on:
+  workflow_dispatch:
   pull_request:
     paths:
-      - 'lib/services/discourse_cache_manager.dart'
-      - 'lib/widgets/common/cached_image.dart'
+      - 'lib/pages/account_manage_page.dart'
+      - 'lib/services/avatar_cache_pool.dart'
       - 'lib/widgets/common/smart_avatar.dart'
-      - 'lib/widgets/content/discourse_image.dart'
-      - 'test/services/shared_image_provider_test.dart'
-      - '.github/workflows/image-provider-cache-keys.yaml'
-  push:
-    branches:
-      - perf/unify-image-provider-cache-keys
-    paths:
-      - 'lib/services/discourse_cache_manager.dart'
-      - 'lib/widgets/common/cached_image.dart'
-      - 'lib/widgets/common/smart_avatar.dart'
-      - 'lib/widgets/content/discourse_image.dart'
-      - 'test/services/shared_image_provider_test.dart'
-      - '.github/workflows/image-provider-cache-keys.yaml'
-  workflow_dispatch:
+      - 'test/pages/account_manage_new_login_contract_test.dart'
+      - 'test/services/avatar_cache_pool_test.dart'
 
 permissions:
   contents: read
@@ -50,28 +40,42 @@ jobs:
       - name: Check image provider formatting
         run: |
           dart format \
+            lib/pages/account_manage_page.dart \
+            lib/services/avatar_cache_pool.dart \
             lib/services/discourse_cache_manager.dart \
             lib/widgets/common/cached_image.dart \
             lib/widgets/common/smart_avatar.dart \
             lib/widgets/content/discourse_image.dart \
+            test/pages/account_manage_new_login_contract_test.dart \
+            test/services/avatar_cache_pool_test.dart \
             test/services/shared_image_provider_test.dart
           git diff --exit-code -- \
+            lib/pages/account_manage_page.dart \
+            lib/services/avatar_cache_pool.dart \
             lib/services/discourse_cache_manager.dart \
             lib/widgets/common/cached_image.dart \
             lib/widgets/common/smart_avatar.dart \
             lib/widgets/content/discourse_image.dart \
+            test/pages/account_manage_new_login_contract_test.dart \
+            test/services/avatar_cache_pool_test.dart \
             test/services/shared_image_provider_test.dart
 
       - name: Analyze image providers
         run: |
           flutter analyze \
+            lib/pages/account_manage_page.dart \
+            lib/services/avatar_cache_pool.dart \
             lib/services/discourse_cache_manager.dart \
             lib/widgets/common/cached_image.dart \
             lib/widgets/common/smart_avatar.dart \
             lib/widgets/content/discourse_image.dart \
+            test/pages/account_manage_new_login_contract_test.dart \
+            test/services/avatar_cache_pool_test.dart \
             test/services/shared_image_provider_test.dart
 
       - name: Test shared cache identities
         run: |
+          dart tool/flutterw.dart test test/pages/account_manage_new_login_contract_test.dart
+          dart tool/flutterw.dart test test/services/avatar_cache_pool_test.dart
           dart tool/flutterw.dart test test/services/shared_image_provider_test.dart
           dart tool/flutterw.dart test test/services/blob_image_cache_test.dart

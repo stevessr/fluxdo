@@ -119,6 +119,11 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   LoginResult _parseLoginError(String reason, Map<String, dynamic> body) {
     switch (reason) {
       case 'invalid_second_factor':
+      // Discourse 3.1 重构二步验证后移除了旧挑战契约:已启用 2FA 的账号
+      // 在登录请求未带 second_factor_method 时不再返回挑战包
+      // (reason=second_factor),而是直接拒绝并返回该 reason。
+      // 语义等同"需要二步验证"——由 caller 弹验证码框后带全参数重发
+      // (second_factor_token + second_factor_method=1)。
       case 'invalid_second_factor_method':
       case 'not_enabled_second_factor_method':
       case 'second_factor':
@@ -199,6 +204,8 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   Future<void> finalizeNativeLoginSuccess(
     String identifier, {
     bool notifyAuthState = true,
+    bool notifyBeforePreload = false,
+    User? confirmedUser,
   }) async {
     final loginGeneration = AuthSession().advance();
 
@@ -212,9 +219,46 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
       debugPrint('[DiscourseLogin] 登录收尾期间会话已切换，丢弃旧收尾: $identifier');
       return;
     }
-    if (token.isNotEmpty) setToken(token);
+    if (token.isEmpty) {
+      // No authenticated state may be published without a committed _t.
+      return;
+    }
+    setToken(token);
     final forceBrowserSessionSync = !WebViewSessionCookieRefreshService.instance
         .hasFreshSyncForToken(token);
+
+    // First clear guest-mode synchronously in onLoginSuccess, then publish
+    // currentUserNotifier. Observers must never see the new user while the
+    // account manager still reports a guest profile.
+    void publishLogin(String committedToken) {
+      if (!AuthSession().isValid(loginGeneration)) return;
+      onLoginSuccess(
+        committedToken,
+        forceBrowserSessionSync: forceBrowserSessionSync,
+        notifyAuthState: notifyAuthState,
+      );
+      if (confirmedUser != null &&
+          confirmedUser.username.toLowerCase() == identifier.toLowerCase()) {
+        currentUserNotifier.value = confirmedUser;
+      }
+    }
+
+    // API-key OTP already established the session and /session/current.json
+    // verified its identity. Do not hold the UI on network preload (up to 8s).
+    // The new generation is committed before announcing the login.
+    if (notifyBeforePreload) {
+      LoginReadyCoordinator(
+        hydrateFromHtml: PreloadedDataService().hydrateFromHtml,
+        refreshPreloadedData: PreloadedDataService().refresh,
+        notifyLoginReady: publishLogin,
+      ).finalizeImmediately(
+        token: token,
+        onRefreshError: (error, _) {
+          debugPrint('[DiscourseLogin] 后台预加载失败(不影响登录): $error');
+        },
+      );
+      return;
+    }
 
     var loginReadyNotified = false;
     try {
@@ -224,11 +268,7 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
             notifyLoginReady: (t) {
               if (!AuthSession().isValid(loginGeneration)) return;
               loginReadyNotified = true;
-              onLoginSuccess(
-                t,
-                forceBrowserSessionSync: forceBrowserSessionSync,
-                notifyAuthState: notifyAuthState,
-              );
+              publishLogin(t);
             },
           )
           .finalize(token: token, pageHtml: null)
@@ -238,11 +278,7 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     } finally {
       // 兜底广播, 避免 UI 卡在"同步登录中"
       if (!loginReadyNotified && AuthSession().isValid(loginGeneration)) {
-        onLoginSuccess(
-          token,
-          forceBrowserSessionSync: forceBrowserSessionSync,
-          notifyAuthState: notifyAuthState,
-        );
+        publishLogin(token);
       }
     }
   }

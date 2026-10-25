@@ -341,6 +341,9 @@ class Topic {
   final int views;
   final int likeCount;
   final String? excerpt;
+
+  /// 列表接口自带的首图，无需额外请求首楼。
+  final String? imageUrl;
   final DateTime? createdAt;
   final DateTime? lastPostedAt;
   final String? lastPosterUsername;
@@ -388,6 +391,7 @@ class Topic {
     required this.views,
     required this.likeCount,
     this.excerpt,
+    this.imageUrl,
     this.createdAt,
     this.lastPostedAt,
     this.lastPosterUsername,
@@ -431,6 +435,7 @@ class Topic {
       views: views,
       likeCount: likeCount,
       excerpt: excerpt,
+      imageUrl: imageUrl,
       createdAt: createdAt,
       lastPostedAt: lastPostedAt,
       lastPosterUsername: lastPosterUsername,
@@ -473,6 +478,7 @@ class Topic {
       views: json['views'] as int? ?? 0,
       likeCount: json['like_count'] as int? ?? 0,
       excerpt: json['excerpt'] as String?,
+      imageUrl: json['image_url'] as String?,
       createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
       lastPostedAt: TimeUtils.parseUtcTime(json['last_posted_at'] as String?),
       lastPosterUsername: json['last_poster_username'] as String?,
@@ -625,6 +631,7 @@ class GrantedBadge {
   final String? imageUrl; // 图片 URL（与 icon 二选一）
   final String slug;
   final int badgeTypeId; // 1=Gold, 2=Silver, 3=Bronze
+  final bool showInPostHeader;
 
   const GrantedBadge({
     required this.id,
@@ -634,6 +641,7 @@ class GrantedBadge {
     this.imageUrl,
     required this.slug,
     this.badgeTypeId = 0,
+    this.showInPostHeader = true,
   });
 
   factory GrantedBadge.fromJson(Map<String, dynamic> json) {
@@ -646,7 +654,32 @@ class GrantedBadge {
       imageUrl: badge['image_url'] as String?,
       slug: badge['slug'] as String? ?? '',
       badgeTypeId: badge['badge_type_id'] as int? ?? 0,
+      showInPostHeader:
+          (badge['show_in_post_header'] as bool? ?? true) &&
+          (badge['enabled'] as bool? ?? true),
     );
+  }
+
+  /// 兼容 Discourse 传统平铺数据，以及 Linux.do 新版的分组结构：
+  /// badges_granted: [{badges: [{...}], badge_types: [...], basic_user_badge: {...}}]。
+  /// badge_types / basic_user_badge 是元数据，不应被当成实际徽章。
+  static List<GrantedBadge> fromPostJson(dynamic raw) {
+    if (raw is! List || raw.isEmpty) return const [];
+
+    final result = <GrantedBadge>[];
+    final seenIds = <int>{};
+    for (final entry in raw) {
+      if (entry is! Map<String, dynamic>) continue;
+      final nestedBadges = entry['badges'];
+      final items = nestedBadges is List ? nestedBadges : [entry];
+      for (final item in items) {
+        if (item is! Map<String, dynamic>) continue;
+        final badge = GrantedBadge.fromJson(item);
+        if (badge.id <= 0 || !badge.showInPostHeader) continue;
+        if (seenIds.add(badge.id)) result.add(badge);
+      }
+    }
+    return result;
   }
 }
 
@@ -894,7 +927,6 @@ class Post {
   final String? mobileSourcePlatform;
   final String? mobileSourceBrand;
   final String? mobileSourceModel;
-
   // 用户 ID（用于打赏等功能）
   final int? userId;
 
@@ -1164,9 +1196,7 @@ class Post {
       userStatus: json['user_status'] != null
           ? UserStatus.fromJson(json['user_status'] as Map<String, dynamic>)
           : null,
-      badgesGranted: (json['badges_granted'] as List<dynamic>?)
-          ?.map((e) => GrantedBadge.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      badgesGranted: GrantedBadge.fromPostJson(json['badges_granted']),
       userCakedate: json['user_cakedate'] as String?,
       userBirthdate: json['user_birthdate'] as String?,
       viaIosApp: json['via_ios_app'] as bool? ?? false,
@@ -1858,6 +1888,8 @@ class PostStream {
 
     for (int i = 0; i < posts.length; i++) {
       final post = posts[i];
+      // 帖子自身的 badges_granted 更精确，包含显式空列表；不能由话题级数据覆盖。
+      if (post.rawJson.containsKey('badges_granted')) continue;
       final userId = postUserIdMap[post.id];
       if (userId != null) {
         final badgeIds = userBadgeIdsMap[userId];
@@ -1865,6 +1897,7 @@ class PostStream {
           final badges = badgeIds
               .map((id) => badgesMap[id])
               .whereType<GrantedBadge>()
+              .where((badge) => badge.showInPostHeader)
               .toList();
           if (badges.isNotEmpty) {
             posts[i] = post.copyWith(badgesGranted: badges);

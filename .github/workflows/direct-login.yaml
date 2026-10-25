@@ -11,20 +11,8 @@ on:
       - 'lib/widgets/auth/two_factor_dialog.dart'
       - 'lib/widgets/auth/webview_login_dialog.dart'
       - 'test/services/credential_store_service_test.dart'
-      - 'test/widgets/auth/direct_login_contract_test.dart'
-      - '.github/workflows/direct-login.yaml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'lib/pages/login_page.dart'
-      - 'lib/services/account_manager.dart'
-      - 'lib/services/credential_store_service.dart'
-      - 'lib/services/discourse/_login.dart'
-      - 'lib/widgets/auth/login_form.dart'
-      - 'lib/widgets/auth/two_factor_dialog.dart'
-      - 'lib/widgets/auth/webview_login_dialog.dart'
-      - 'test/services/credential_store_service_test.dart'
+      - 'test/services/account_guest_startup_recovery_test.dart'
+      - 'test/services/account_cold_start_snapshot_test.dart'
       - 'test/widgets/auth/direct_login_contract_test.dart'
       - '.github/workflows/direct-login.yaml'
   workflow_dispatch:
@@ -69,6 +57,8 @@ jobs:
             lib/widgets/auth/two_factor_dialog.dart \
             lib/widgets/auth/webview_login_dialog.dart \
             test/services/credential_store_service_test.dart \
+            test/services/account_guest_startup_recovery_test.dart \
+            test/services/account_cold_start_snapshot_test.dart \
             test/widgets/auth/direct_login_contract_test.dart
           git diff --exit-code -- \
             lib/pages/login_page.dart \
@@ -79,6 +69,8 @@ jobs:
             lib/widgets/auth/two_factor_dialog.dart \
             lib/widgets/auth/webview_login_dialog.dart \
             test/services/credential_store_service_test.dart \
+            test/services/account_guest_startup_recovery_test.dart \
+            test/services/account_cold_start_snapshot_test.dart \
             test/widgets/auth/direct_login_contract_test.dart
 
       - name: Analyze direct login changes
@@ -92,10 +84,14 @@ jobs:
           lib/widgets/auth/two_factor_dialog.dart
           lib/widgets/auth/webview_login_dialog.dart
           test/services/credential_store_service_test.dart
+          test/services/account_guest_startup_recovery_test.dart
+          test/services/account_cold_start_snapshot_test.dart
           test/widgets/auth/direct_login_contract_test.dart
 
       - name: Test direct login and credential storage
         run: >-
           dart tool/flutterw.dart test
           test/services/credential_store_service_test.dart
+          test/services/account_guest_startup_recovery_test.dart
+          test/services/account_cold_start_snapshot_test.dart
           test/widgets/auth/direct_login_contract_test.dart

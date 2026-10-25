@@ -111,12 +111,17 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   String _categoryLabel(BuildContext context, NotificationCategory category) {
     return switch (category) {
       NotificationCategory.all => context.l10n.notification_categoryAll,
+      NotificationCategory.mentions =>
+        context.l10n.notification_categoryMentions,
       NotificationCategory.replies => context.l10n.notification_categoryReplies,
       NotificationCategory.likes => context.l10n.notification_categoryLikes,
       NotificationCategory.messages =>
         context.l10n.notification_categoryMessages,
       NotificationCategory.bookmarks =>
         context.l10n.notification_categoryBookmarks,
+      NotificationCategory.assigned =>
+        context.l10n.notification_categoryAssigned,
+      NotificationCategory.chat => context.l10n.notification_categoryChat,
       NotificationCategory.other => context.l10n.notification_categoryOther,
     };
   }
@@ -124,10 +129,13 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   IconData _categoryIcon(NotificationCategory category) {
     return switch (category) {
       NotificationCategory.all => Symbols.notifications_rounded,
+      NotificationCategory.mentions => Symbols.alternate_email_rounded,
       NotificationCategory.replies => Symbols.reply_rounded,
       NotificationCategory.likes => Symbols.favorite_rounded,
       NotificationCategory.messages => Symbols.mail_rounded,
       NotificationCategory.bookmarks => Symbols.bookmark_rounded,
+      NotificationCategory.assigned => Symbols.person_add_rounded,
+      NotificationCategory.chat => Symbols.chat_bubble_rounded,
       NotificationCategory.other => Symbols.more_horiz_rounded,
     };
   }

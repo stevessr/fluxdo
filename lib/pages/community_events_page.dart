@@ -1,7 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../services/discourse/discourse_service.dart';
+import '../services/auth_session.dart';
+import 'community_events_calendar.dart';
 import '../utils/link_launcher.dart';
 import '../utils/url_helper.dart';
 import '../widgets/common/smart_avatar.dart';
@@ -21,13 +25,21 @@ class CommunityEventsPage extends StatefulWidget {
     super.key,
     required this.view,
     this.initialFilter,
+    this.initialMonth,
+    this.client,
   });
 
   final CommunityEventsView view;
 
   /// 来自 `/cakeday/.../:filter` 的初始过滤器。
-  /// 只接受 today / tomorrow / upcoming；其它值按 today 处理。
+  /// 支持 today / tomorrow / upcoming / all（兼容旧 month）。
   final String? initialFilter;
+
+  /// 官方 all 路由使用的月筛选参数。
+  final int? initialMonth;
+
+  /// 测试注入客户端；线上默认复用已有 Discourse 网络链。
+  final Dio? client;
 
   @override
   State<CommunityEventsPage> createState() => _CommunityEventsPageState();
@@ -38,24 +50,38 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     'today',
     'tomorrow',
     'upcoming',
-    'month',
+    'all',
   ];
 
   final _service = DiscourseService();
+  Dio get _dio => widget.client ?? _service.dio;
 
   bool _loading = true;
   Object? _error;
+  Object? _loadMoreError;
   List<Map<String, dynamic>> _items = const [];
   String _filter = 'today';
+  late CommunityEventsView _activeCakedayView;
+  late int _month;
+  int _loadGeneration = 0;
   String? _loadMorePath;
   bool _loadingMore = false;
+
+  DateTime _calendarDate = calendarDay(DateTime.now());
+  EventCalendarScale _calendarScale = EventCalendarScale.month;
+  bool _myEvents = false;
+  int _eventRequestId = 0;
 
   bool get _isCakeday => widget.view != CommunityEventsView.upcoming;
 
   @override
   void initState() {
     super.initState();
+    _activeCakedayView = widget.view == CommunityEventsView.birthdays
+        ? CommunityEventsView.birthdays
+        : CommunityEventsView.anniversaries;
     _filter = _normalizeFilter(widget.initialFilter);
+    _month = _normalizeMonth(widget.initialMonth);
     _load();
   }
 
@@ -63,96 +89,362 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   void didUpdateWidget(covariant CommunityEventsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.view != widget.view ||
-        oldWidget.initialFilter != widget.initialFilter) {
+        oldWidget.initialFilter != widget.initialFilter ||
+        oldWidget.initialMonth != widget.initialMonth ||
+        oldWidget.client != widget.client) {
+      _activeCakedayView = widget.view == CommunityEventsView.birthdays
+          ? CommunityEventsView.birthdays
+          : CommunityEventsView.anniversaries;
       _filter = _normalizeFilter(widget.initialFilter);
+      _month = _normalizeMonth(widget.initialMonth);
       _load();
     }
   }
 
+  void _selectCakedayView(CommunityEventsView view) {
+    if (_activeCakedayView == view) return;
+    setState(() {
+      _activeCakedayView = view;
+      // 官方切换周年 / 生日时进入该分类的「今天」。
+      _filter = 'today';
+    });
+    _load();
+  }
+
   Future<void> _load({bool append = false}) async {
+    if (widget.view == CommunityEventsView.upcoming) {
+      // Prevent in-flight cakeday requests from replacing calendar results.
+      ++_loadGeneration;
+      await _loadCalendarEvents();
+      return;
+    }
+    // The new cakeday view also invalidates outstanding calendar requests.
+    ++_eventRequestId;
+    if (append && (_loadingMore || _loadMorePath == null || _loading)) {
+      return;
+    }
+    // 用户在请求中切换分类 / 筛选时，忽略过期结果。
+    final generation = append ? _loadGeneration : ++_loadGeneration;
     if (!append) {
       setState(() {
         _loading = true;
         _error = null;
+        _loadMoreError = null;
         _loadMorePath = null;
+        _loadingMore = false;
+        _items = const [];
       });
     } else {
-      if (_loadingMore || _loadMorePath == null) return;
-      setState(() => _loadingMore = true);
+      setState(() {
+        _loadingMore = true;
+        _loadMoreError = null;
+      });
     }
 
     try {
-      if (widget.view == CommunityEventsView.upcoming) {
-        final now = DateTime.now();
-        final response = await _service.dio.get<dynamic>(
-          '/discourse-post-event/events',
-          queryParameters: {
-            // 官方 upcoming-events-list 默认向后看 180 天；原生页提高上限，
-            // 仍让服务端按权限过滤可见事件。
-            'limit': 100,
-            'after': now.toUtc().toIso8601String(),
-            'before': now
-                .add(const Duration(days: 180))
-                .toUtc()
-                .toIso8601String(),
-            'include_ongoing': true,
-          },
-        );
-        final data = _asMap(response.data);
-        final events = _asMapList(data['events']);
-        events.sort((a, b) {
-          final da = _parseEventDate(a['starts_at']) ?? DateTime(9999);
-          final db = _parseEventDate(b['starts_at']) ?? DateTime(9999);
-          return da.compareTo(db);
-        });
-        if (!mounted) return;
-        setState(() {
-          _items = events;
-          _loading = false;
-        });
-        return;
-      }
-
-      final segment = widget.view == CommunityEventsView.birthdays
+      final segment = _activeCakedayView == CommunityEventsView.birthdays
           ? 'birthdays'
           : 'anniversaries';
       final path = append
           ? _loadMorePath!
-          : _filter == 'month'
-          ? '/cakeday/$segment'
+          : _filter == 'all'
+          ? '/cakeday/$segment/all'
           : '/cakeday/$segment/$_filter';
-      final response = await _service.dio.get<dynamic>(
+      final response = await _dio.get<dynamic>(
         path,
         queryParameters: append
             ? null
-            : {
-                'page': 0,
-                if (_filter == 'month') 'month': DateTime.now().month,
-              },
+            : {'page': 0, if (_filter == 'all') 'month': _month},
       );
       final data = _asMap(response.data);
-      final listKey = widget.view == CommunityEventsView.birthdays
+      final listKey = _activeCakedayView == CommunityEventsView.birthdays
           ? 'birthdays'
           : 'anniversaries';
-      final moreKey = widget.view == CommunityEventsView.birthdays
+      final moreKey = _activeCakedayView == CommunityEventsView.birthdays
           ? 'load_more_birthdays'
           : 'load_more_anniversaries';
       final loaded = _asMapList(data[listKey]);
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
+      final combined = append ? [..._items, ...loaded] : loaded;
+      // 官方接口即使到了最后一页也可能返回下一页 URL；
+      // 应根据 total_rows 判断是否继续展示「加载更多」。
+      final totalValue = data['total_rows_$segment'];
+      final total = totalValue is num
+          ? totalValue.toInt()
+          : int.tryParse(totalValue?.toString() ?? '');
+      final morePath = _string(data[moreKey]);
+      final hasMore = total != null
+          ? combined.length < total
+          : loaded.isNotEmpty && morePath != null;
       setState(() {
-        _items = append ? [..._items, ...loaded] : loaded;
-        _loadMorePath = data[moreKey] as String?;
+        _items = combined;
+        _loadMoreError = null;
+        _loadMorePath = hasMore ? morePath : null;
         _loading = false;
         _loadingMore = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _error = e;
+        if (append) {
+          // 下一页失败保留已加载的用户及重试入口。
+          _loadMoreError = e;
+        } else {
+          _error = e;
+        }
         _loading = false;
         _loadingMore = false;
       });
     }
+  }
+
+  Future<void> _loadCalendarEvents() async {
+    final request = ++_eventRequestId;
+    final generation = AuthSession().generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      String? username;
+      if (_myEvents) {
+        username = await _service.getUsername();
+        if (username == null || username.isEmpty) {
+          throw StateError('请先登录以查看我的活动');
+        }
+      }
+
+      final visible = calendarRange(_calendarDate, _calendarScale);
+      // A full year can exceed the endpoint's 200-event limit.
+      // Fetch quarters independently to avoid truncating the year view.
+      final periods = <EventCalendarRange>[];
+      if (_calendarScale == EventCalendarScale.year) {
+        for (var month = 1; month <= 12; month += 3) {
+          periods.add(
+            EventCalendarRange(
+              DateTime(_calendarDate.year, month),
+              DateTime(_calendarDate.year, month + 3),
+            ),
+          );
+        }
+      } else {
+        periods.add(visible);
+      }
+
+      final batches = await Future.wait(
+        periods.map((period) => _fetchCalendarPeriod(period, username)),
+      );
+      final found = <String, Map<String, dynamic>>{};
+      for (final entries in batches) {
+        for (final event in entries) {
+          final key = '${event['id']}:${event['starts_at']}';
+          found[key] = event;
+        }
+      }
+      final ordered = found.values.toList()
+        ..sort((a, b) {
+          final first = _parseEventDate(a['starts_at']) ?? DateTime(9999);
+          final second = _parseEventDate(b['starts_at']) ?? DateTime(9999);
+          return first.compareTo(second);
+        });
+      if (!mounted ||
+          request != _eventRequestId ||
+          !AuthSession().isValid(generation)) {
+        return;
+      }
+      setState(() {
+        _items = ordered;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted ||
+          request != _eventRequestId ||
+          !AuthSession().isValid(generation)) {
+        return;
+      }
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+    }
+  }
+
+  /// Discourse limits one response to 200 event series. Split saturated
+  /// windows so a busy site doesn't silently lose events in month/year view.
+  /// A one-day window is the smallest useful partition.
+  Future<List<Map<String, dynamic>>> _fetchCalendarPeriod(
+    EventCalendarRange period,
+    String? username,
+  ) async {
+    final response = await _service.dio.get<dynamic>(
+      '/discourse-post-event/events',
+      queryParameters: {
+        'limit': 200,
+        'after': period.start
+            .subtract(const Duration(seconds: 1))
+            .toUtc()
+            .toIso8601String(),
+        'before': period.end.toUtc().toIso8601String(),
+        'include_ongoing': true,
+        if (username != null) 'include_interested': true,
+        if (username != null && username.isNotEmpty) 'attending_user': username,
+      },
+    );
+    final events = _asMapList(_asMap(response.data)['events']);
+    final days = DateTime.utc(period.end.year, period.end.month, period.end.day)
+        .difference(
+          DateTime.utc(period.start.year, period.start.month, period.start.day),
+        )
+        .inDays;
+    if (events.length < 200 || days <= 1) {
+      return expandCalendarEventOccurrences(events);
+    }
+    final midpoint = DateTime(
+      period.start.year,
+      period.start.month,
+      period.start.day + days ~/ 2,
+    );
+    final halves = await Future.wait([
+      _fetchCalendarPeriod(
+        EventCalendarRange(period.start, midpoint),
+        username,
+      ),
+      _fetchCalendarPeriod(EventCalendarRange(midpoint, period.end), username),
+    ]);
+    return [...halves[0], ...halves[1]];
+  }
+
+  void _setCalendarDate(DateTime date, {EventCalendarScale? scale}) {
+    final nextScale = scale ?? _calendarScale;
+    final oldRange = calendarRange(_calendarDate, _calendarScale);
+    final newRange = calendarRange(date, nextScale);
+    setState(() {
+      _calendarDate = calendarDay(date);
+      _calendarScale = nextScale;
+    });
+    if (oldRange.start != newRange.start || oldRange.end != newRange.end) {
+      _loadCalendarEvents();
+    }
+  }
+
+  void _moveCalendar(int direction) {
+    final day = _calendarDate;
+    final next = switch (_calendarScale) {
+      EventCalendarScale.day => DateTime(
+        day.year,
+        day.month,
+        day.day + direction,
+      ),
+      EventCalendarScale.week => DateTime(
+        day.year,
+        day.month,
+        day.day + direction * 7,
+      ),
+      EventCalendarScale.month => DateTime(day.year, day.month + direction, 1),
+      EventCalendarScale.year => DateTime(day.year + direction, day.month, 1),
+    };
+    _setCalendarDate(next);
+  }
+
+  String _calendarPeriodLabel(BuildContext context) {
+    final date = _calendarDate;
+    final localizations = MaterialLocalizations.of(context);
+    return switch (_calendarScale) {
+      EventCalendarScale.day => localizations.formatMediumDate(date),
+      EventCalendarScale.week =>
+        '${localizations.formatMediumDate(calendarWeekStart(date))} – '
+            '${localizations.formatMediumDate(DateTime(date.year, date.month, date.day - date.weekday + 7))}',
+      EventCalendarScale.month => localizations.formatMonthYear(date),
+      EventCalendarScale.year => date.year.toString(),
+    };
+  }
+
+  Widget _buildCalendarControls(BuildContext context) {
+    final zh = _zh(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ChoiceChip(
+                label: Text(zh ? '所有活动' : 'All events'),
+                selected: !_myEvents,
+                onSelected: (value) {
+                  if (!value || !_myEvents) return;
+                  setState(() => _myEvents = false);
+                  _loadCalendarEvents();
+                },
+              ),
+              ChoiceChip(
+                label: Text(zh ? '我的活动' : 'My events'),
+                selected: _myEvents,
+                onSelected: (value) {
+                  if (!value || _myEvents) return;
+                  setState(() => _myEvents = true);
+                  _loadCalendarEvents();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              IconButton(
+                tooltip: zh ? '上一时间段' : 'Previous period',
+                onPressed: () => _moveCalendar(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Text(
+                  _calendarPeriodLabel(context),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                tooltip: zh ? '下一时间段' : 'Next period',
+                onPressed: () => _moveCalendar(1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+              TextButton(
+                onPressed: () => _setCalendarDate(DateTime.now()),
+                child: Text(zh ? '今天' : 'Today'),
+              ),
+            ],
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final scale in EventCalendarScale.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label: Text(switch (scale) {
+                        EventCalendarScale.day => zh ? '天' : 'Day',
+                        EventCalendarScale.week => zh ? '周' : 'Week',
+                        EventCalendarScale.month => zh ? '月' : 'Month',
+                        EventCalendarScale.year => zh ? '年' : 'Year',
+                      }),
+                      selected: _calendarScale == scale,
+                      onSelected: (selected) {
+                        if (!selected || _calendarScale == scale) return;
+                        _setCalendarDate(_calendarDate, scale: scale);
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -170,34 +462,122 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       ),
       body: Column(
         children: [
+          if (_isCakeday) _buildCakedayTypeTabs(context),
           if (_isCakeday) _buildCakedayFilter(context),
+          if (_isCakeday && _filter == 'all') _buildMonthSelector(context),
+          if (!_isCakeday) _buildCalendarControls(context),
           Expanded(child: _buildBody(context)),
         ],
       ),
     );
   }
 
+  Widget _buildCakedayTypeTabs(BuildContext context) {
+    final zh = _zh(context);
+    return Row(
+      children: [
+        for (final view in const [
+          CommunityEventsView.anniversaries,
+          CommunityEventsView.birthdays,
+        ])
+          _cakedayTab(
+            context,
+            label: view == CommunityEventsView.anniversaries
+                ? (zh ? '周年纪念日' : 'Anniversaries')
+                : (zh ? '生日' : 'Birthdays'),
+            selected: _activeCakedayView == view,
+            onTap: () => _selectCakedayView(view),
+          ),
+      ],
+    );
+  }
+
   Widget _buildCakedayFilter(BuildContext context) {
     final labels = _zh(context)
-        ? const ['今天', '明天', '即将到来', '本月']
-        : const ['Today', 'Tomorrow', 'Upcoming', 'This month'];
+        ? const ['今天', '明天', '即将到来', '所有']
+        : const ['Today', 'Tomorrow', 'Upcoming', 'All'];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Row(
         children: [
-          for (var i = 0; i < _cakedayFilters.length; i++) ...[
-            ChoiceChip(
-              label: Text(labels[i]),
+          for (var i = 0; i < _cakedayFilters.length; i++)
+            _cakedayTab(
+              context,
+              label: labels[i],
               selected: _filter == _cakedayFilters[i],
-              onSelected: (selected) {
-                if (!selected || _filter == _cakedayFilters[i]) return;
+              onTap: () {
+                if (_filter == _cakedayFilters[i]) return;
                 setState(() => _filter = _cakedayFilters[i]);
                 _load();
               },
             ),
-            if (i != _cakedayFilters.length - 1) const SizedBox(width: 8),
-          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _cakedayTab(
+    BuildContext context, {
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? colorScheme.primary : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: selected ? colorScheme.primary : colorScheme.onSurface,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthSelector(BuildContext context) {
+    final zh = _zh(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
+      child: Row(
+        children: [
+          Text(zh ? '选择月份' : 'Month'),
+          const SizedBox(width: 16),
+          DropdownButton<int>(
+            value: _month,
+            items: [
+              for (var month = 1; month <= 12; month++)
+                DropdownMenuItem(
+                  value: month,
+                  child: Text(
+                    // 此处按每年的「月份」筛选，不能显示某个特定年份。
+                    DateFormat.MMMM(Localizations.localeOf(context).toString())
+                        .format(DateTime(2000, month)),
+                  ),
+                ),
+            ],
+            onChanged: (month) {
+              if (month == null || month == _month) return;
+              setState(() => _month = month);
+              _load();
+            },
+          ),
         ],
       ),
     );
@@ -217,7 +597,9 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
               const Icon(Symbols.error_outline_rounded, size: 40),
               const SizedBox(height: 12),
               Text(
-                _zh(context) ? '加载失败' : 'Failed to load',
+                _error is StateError
+                    ? _error.toString().replaceFirst('Bad state: ', '')
+                    : (_zh(context) ? '加载失败' : 'Failed to load'),
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 12),
@@ -230,25 +612,30 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         ),
       );
     }
+    if (widget.view == CommunityEventsView.upcoming) {
+      return RefreshIndicator(
+        onRefresh: _loadCalendarEvents,
+        child: CommunityEventsCalendar(
+          date: _calendarDate,
+          scale: _calendarScale,
+          events: _items,
+          onSelectDate: _setCalendarDate,
+          onSelectMonth: (month) =>
+              _setCalendarDate(month, scale: EventCalendarScale.month),
+          onTapEvent: (event) {
+            final post = _asMap(event['post']);
+            final url = _string(post['url']) ?? _string(event['url']);
+            if (url != null) launchContentLink(context, url);
+          },
+        ),
+      );
+    }
     if (_items.isEmpty) {
       return Center(
         child: Text(
           _emptyLabel(context),
           style: Theme.of(context).textTheme.bodyLarge
               ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-      );
-    }
-
-    if (widget.view == CommunityEventsView.upcoming) {
-      return RefreshIndicator(
-        onRefresh: _load,
-        child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-          itemCount: _items.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 4),
-          itemBuilder: (context, index) =>
-              _buildEventTile(context, _items[index]),
         ),
       );
     }
@@ -267,61 +654,17 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
                     ? const CircularProgressIndicator()
                     : FilledButton.tonal(
                         onPressed: () => _load(append: true),
-                        child: Text(_zh(context) ? '加载更多' : 'Load more'),
+                        child: Text(
+                          _loadMoreError != null
+                              ? (_zh(context) ? '加载失败，重试' : 'Retry loading')
+                              : (_zh(context) ? '加载更多' : 'Load more'),
+                        ),
                       ),
               ),
             );
           }
           return _buildCakedayUserTile(context, _items[index]);
         },
-      ),
-    );
-  }
-
-  Widget _buildEventTile(BuildContext context, Map<String, dynamic> event) {
-    final post = _asMap(event['post']);
-    final topic = _asMap(post['topic']);
-    final name =
-        _string(event['name']) ??
-        _string(topic['title']) ??
-        (_zh(context) ? '未命名活动' : 'Untitled event');
-    final url = _string(post['url']);
-    final startsAt = _parseEventDate(event['starts_at']);
-    final endsAt = _parseEventDate(event['ends_at']);
-    final allDay = event['all_day'] == true;
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: ListTile(
-        leading: _eventDateBadge(context, startsAt),
-        title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Text(_eventTimeLabel(context, startsAt, endsAt, allDay)),
-        trailing: const Icon(Symbols.chevron_right_rounded),
-        onTap: url == null ? null : () => launchContentLink(context, url),
-      ),
-    );
-  }
-
-  Widget _eventDateBadge(BuildContext context, DateTime? date) {
-    if (date == null) return const Icon(Symbols.calendar_today_rounded);
-    final local = date.toLocal();
-    return Container(
-      width: 48,
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('${local.month}', style: Theme.of(context).textTheme.labelSmall),
-          Text(
-            '${local.day}',
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ],
       ),
     );
   }
@@ -362,7 +705,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: Icon(
-        widget.view == CommunityEventsView.birthdays
+        _activeCakedayView == CommunityEventsView.birthdays
             ? Symbols.cake_rounded
             : Symbols.celebration_rounded,
       ),
@@ -374,32 +717,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
             ),
     );
   }
-
-  String _eventTimeLabel(
-    BuildContext context,
-    DateTime? start,
-    DateTime? end,
-    bool allDay,
-  ) {
-    if (start == null) return _zh(context) ? '时间待定' : 'Time TBD';
-    if (allDay) {
-      if (end != null && !_sameLocalDay(start, end)) {
-        return '${_dateLabel(context, start)} – ${_dateLabel(context, end)}';
-      }
-      return '${_dateLabel(context, start)} · ${_zh(context) ? '全天' : 'All day'}';
-    }
-    final localStart = start.toLocal();
-    final startTime = TimeOfDay.fromDateTime(localStart).format(context);
-    if (end == null) return '${_dateLabel(context, start)} · $startTime';
-    final localEnd = end.toLocal();
-    if (_sameLocalDay(start, end)) {
-      return '${_dateLabel(context, start)} · $startTime – ${TimeOfDay.fromDateTime(localEnd).format(context)}';
-    }
-    return '${_dateLabel(context, start)} $startTime – ${_dateLabel(context, end)} ${TimeOfDay.fromDateTime(localEnd).format(context)}';
-  }
-
-  String _dateLabel(BuildContext context, DateTime value) =>
-      MaterialLocalizations.of(context).formatMediumDate(value.toLocal());
 
   String _formatCakedate(BuildContext context, String value) {
     // anniversaries 的 cakedate 来自 users.created_at，序列化时可能是
@@ -417,8 +734,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     final zh = _zh(context);
     return switch (widget.view) {
       CommunityEventsView.upcoming => zh ? '近期活动' : 'Upcoming events',
-      CommunityEventsView.anniversaries => zh ? '周年纪念日' : 'Anniversaries',
-      CommunityEventsView.birthdays => zh ? '生日' : 'Birthdays',
+      CommunityEventsView.anniversaries || CommunityEventsView.birthdays =>
+        zh ? '纪念日与生日' : 'Anniversaries & Birthdays',
     };
   }
 
@@ -468,18 +785,19 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     return DateTime.tryParse(value);
   }
 
-  static bool _sameLocalDay(DateTime a, DateTime b) {
-    final x = a.toLocal();
-    final y = b.toLocal();
-    return x.year == y.year && x.month == y.month && x.day == y.day;
-  }
-
   static String _normalizeFilter(String? value) {
-    if (value == 'today' || value == 'tomorrow' || value == 'upcoming') {
+    if (value == 'today' ||
+        value == 'tomorrow' ||
+        value == 'upcoming' ||
+        value == 'all') {
       return value!;
     }
+    if (value == 'month') return 'all';
     return 'today';
   }
+
+  static int _normalizeMonth(int? value) =>
+      value != null && value >= 1 && value <= 12 ? value : DateTime.now().month;
 
   static bool _zh(BuildContext context) =>
       Localizations.localeOf(context).languageCode == 'zh';

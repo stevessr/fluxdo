@@ -54,6 +54,7 @@ import '../network/webview/webview_adapter_settings_service.dart';
 import '../login_ready_coordinator.dart';
 import '../network/discourse_dio.dart';
 import '../network/flux_request_spec.dart';
+import '../network/session_rejection_classifier.dart';
 import '../preloaded_data_service.dart';
 import '../pending_review_context_store.dart';
 import '../uploads/s3_multipart_upload.dart';
@@ -141,6 +142,8 @@ abstract class _DiscourseServiceBase {
   Future<void> finalizeNativeLoginSuccess(
     String identifier, {
     bool notifyAuthState = true,
+    bool notifyBeforePreload = false,
+    User? confirmedUser,
   });
   Future<void> saveUsername(String username, {int? requestGeneration});
 }

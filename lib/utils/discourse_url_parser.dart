@@ -42,8 +42,9 @@ class BadgeLinkInfo {
 class CakedayLinkInfo {
   final bool birthdays;
   final String? filter;
+  final int? month;
 
-  const CakedayLinkInfo({required this.birthdays, this.filter});
+  const CakedayLinkInfo({required this.birthdays, this.filter, this.month});
 }
 
 /// 分类链接解析结果。
@@ -119,11 +120,9 @@ class DiscourseUrlParser {
     caseSensitive: false,
   );
 
-  /// discourse-cakeday：原生支持 root / today / tomorrow / upcoming。
-  /// 官方 `all` 还带 month query/月份切换，本页尚未完整复刻该路由，因此
-  /// 不在这里误拦截，继续让 WebView 处理。
+  /// discourse-cakeday：所有分类 / 时间维度均走原生页，含 all?month=N。
   static final _cakedayRegex = RegExp(
-    r'/cakeday/(birthdays|anniversaries)(?:/(today|tomorrow|upcoming))?(?:[/?#]|$)',
+    r'/cakeday/(birthdays|anniversaries)(?:/(today|tomorrow|upcoming|all))?(?:[/?#]|$)',
     caseSensitive: false,
   );
 
@@ -233,11 +232,15 @@ class DiscourseUrlParser {
 
   /// 解析生日/周年纪念日页面链接。
   static CakedayLinkInfo? parseCakeday(String url) {
-    final match = _cakedayRegex.firstMatch(url);
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    final match = _cakedayRegex.firstMatch(uri.path);
     if (match == null) return null;
+    final month = int.tryParse(uri.queryParameters['month'] ?? '');
     return CakedayLinkInfo(
       birthdays: match.group(1)!.toLowerCase() == 'birthdays',
       filter: match.group(2)?.toLowerCase(),
+      month: month != null && month >= 1 && month <= 12 ? month : null,
     );
   }
 

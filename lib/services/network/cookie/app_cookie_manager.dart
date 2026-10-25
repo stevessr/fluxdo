@@ -4,6 +4,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../auth_session.dart';
 import '../../log/log_writer.dart';
@@ -27,6 +28,11 @@ class AppCookieManager extends Interceptor {
   final bool saveRedirectedCookies;
 
   static final _setCookieReg = RegExp('(?<=)(,)(?=[^;]+?=)');
+  static final Lock _sessionResponseLock = Lock();
+  static final RegExp _sessionSetCookieReg = RegExp(
+    r'(?:^|,)\s*(?:_t|_forum_session)=',
+    caseSensitive: false,
+  );
 
   // v0.4.0 路径分流标记
   // 路径 A (纯 Dio): 默认, jar 是权威源, 写 jar 后 sweep 同步到 WV
@@ -45,7 +51,9 @@ class AppCookieManager extends Interceptor {
   /// 判定 cookie 的 sweep 意图。
   /// 服务器下发 value=del / 空值 / 已过期时按 [SweepIntent.delete] 处理。
   static SweepIntent _intentForCookie(Cookie cookie) {
-    if (cookie.value == 'del' || cookie.value.isEmpty) {
+    if (cookie.value == 'del' ||
+        cookie.value.isEmpty ||
+        (cookie.maxAge != null && cookie.maxAge! <= 0)) {
       return SweepIntent.delete;
     }
     final expires = cookie.expires;
@@ -66,6 +74,22 @@ class AppCookieManager extends Interceptor {
       result[cookie.name] = _intentForCookie(cookie);
     }
     return result;
+  }
+
+  /// Invalid auth signals are verified by the session probe before deletion.
+  /// A delayed response must never roll back a newer session cookie.
+  static bool shouldIgnoreSessionSetCookie({
+    required bool isDeletion,
+    required bool isExplicitLogout,
+    required String? sentTToken,
+    required String? currentTToken,
+  }) {
+    if (isExplicitLogout) return false;
+    if (isDeletion) return true;
+    // A request without _t may still establish a new login session.
+    return currentTToken != null &&
+        currentTToken.isNotEmpty &&
+        sentTToken != currentTToken;
   }
 
   Future<void> _deleteAuthCookieVariantsIfManaged({
@@ -475,7 +499,19 @@ class AppCookieManager extends Interceptor {
   }
 
   /// Save cookies from the response including redirected requests.
-  Future<void> saveCookies(Response response) async {
+  Future<void> saveCookies(Response response) {
+    // Make comparison + write + WebView synchronization atomic for session
+    // responses. Otherwise two parallel replies can both compare against the
+    // same old _t, then commit conflicting newer values out of order.
+    final headers = response.headers[HttpHeaders.setCookieHeader];
+    if (headers != null &&
+        headers.any((value) => _sessionSetCookieReg.hasMatch(value))) {
+      return _sessionResponseLock.synchronized(() => _saveCookies(response));
+    }
+    return _saveCookies(response);
+  }
+
+  Future<void> _saveCookies(Response response) async {
     final setCookies = response.headers[HttpHeaders.setCookieHeader];
     if (setCookies == null || setCookies.isEmpty) {
       return;
@@ -532,6 +568,38 @@ class AppCookieManager extends Interceptor {
         .map((str) => Cookie.fromSetCookieValue(str))
         .toList();
 
+    // Capture the token actually sent on the wire; an earlier interceptor's
+    // fingerprint can differ when cookie loading races with token rotation.
+    final isMainSite =
+        requestUri.host.toLowerCase() == CookieJarService.appBaseHost;
+    final isExplicitLogout =
+        response.requestOptions.method.toUpperCase() == 'DELETE' &&
+        requestUri.path.startsWith('/session/');
+    final sentCookieHeader =
+        response.requestOptions.headers[HttpHeaders.cookieHeader]?.toString() ??
+        response.requestOptions.headers['Cookie']?.toString() ??
+        '';
+    final sentTToken = RegExp(
+      r'(?:^|;\s*)_t=([^;]*)',
+    ).firstMatch(sentCookieHeader)?.group(1);
+    String? currentTToken;
+    if (isMainSite &&
+        cookies.any(
+          (c) => CookieJarService.sessionCookieNames.contains(c.name),
+        )) {
+      final siteRoot = requestUri.replace(path: '/', query: '', fragment: '');
+      final currentCookies = _selectCookies(
+        await cookieJar.loadForRequest(siteRoot),
+        siteRoot,
+      );
+      for (final c in currentCookies) {
+        if (c.name == '_t') {
+          currentTToken = c.value;
+          break;
+        }
+      }
+    }
+
     final isCfChallengePlatform = _isCfChallengePlatformRequest(
       response.requestOptions,
     );
@@ -553,43 +621,37 @@ class AppCookieManager extends Interceptor {
         final isExpired =
             cookie.expires != null && cookie.expires!.isBefore(DateTime.now());
         final isDeletion =
-            cookie.value == 'del' || cookie.value.isEmpty || isExpired;
+            cookie.value == 'del' ||
+            cookie.value.isEmpty ||
+            isExpired ||
+            (cookie.maxAge != null && cookie.maxAge! <= 0);
         final uri = response.requestOptions.uri;
 
-        // Mixed signal 保护：2xx/3xx + discourse-logged-out 但非 not_logged_in
-        // 时，拦截 session cookie 的删除指令。
-        // 这种矛盾信号（请求成功但 header 要求登出）不应直接删除 cookie，
-        // 由 _auth.dart 的 probe 机制决定是否真正登出。
-        if (isDeletion) {
-          final statusCode = response.statusCode ?? 0;
-          final hasLoggedOutHeader =
-              response.headers.value('discourse-logged-out')?.isNotEmpty ==
-              true;
-          final responseBody = response.data;
-          final hasNotLoggedInError =
-              responseBody is Map &&
-              responseBody['error_type'] == 'not_logged_in';
-
-          if (statusCode < 400 && hasLoggedOutHeader && !hasNotLoggedInError) {
-            debugPrint(
-              '[CookieManager] ${cookie.name} DEL(blocked/mixed-signal) '
-              'from ${response.requestOptions.method} ${uri.host}${uri.path} '
-              '(status=$statusCode)',
-            );
-            LogWriter.instance.write({
-              'timestamp': DateTime.now().toIso8601String(),
-              'level': 'warning',
-              'type': 'cookie_change',
-              'event': 'token_cookie_delete_blocked_mixed_signal',
-              'message':
-                  '${cookie.name} 删除被拦截（$statusCode + discourse-logged-out 矛盾信号）',
-              'statusCode': statusCode,
-              'method': response.requestOptions.method,
-              'url': uri.path,
-              'fullUrl': uri.toString(),
-            });
-            continue;
-          }
+        // An error response is not proof of logout. Likewise, Set-Cookie from
+        // an older in-flight request must not overwrite a rotated session.
+        if (isMainSite &&
+            shouldIgnoreSessionSetCookie(
+              isDeletion: isDeletion,
+              isExplicitLogout: isExplicitLogout,
+              sentTToken: sentTToken,
+              currentTToken: currentTToken,
+            )) {
+          LogWriter.instance.write({
+            'timestamp': DateTime.now().toIso8601String(),
+            'level': 'warning',
+            'type': 'cookie_change',
+            'event': isDeletion
+                ? 'token_cookie_delete_deferred_to_probe'
+                : 'stale_response_session_cookie_ignored',
+            'message': '已忽略未确认登出或过期请求的会话 Set-Cookie',
+            'method': response.requestOptions.method,
+            'url': uri.path,
+            'statusCode': response.statusCode,
+            'cookieName': cookie.name,
+            'isDeletion': isDeletion,
+            'sentTokenMatchesCurrent': sentTToken == currentTToken,
+          });
+          continue;
         }
 
         debugPrint(

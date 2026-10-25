@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../../network_logger.dart';
 import 'bootstrap_doh_client.dart';
+import 'ech_dns_policy.dart';
 
 class DohResolver {
   DohResolver({
@@ -10,10 +11,20 @@ class DohResolver {
     List<String> bootstrapIps = const [],
     this.enableFallback = true,
     bool preferIPv6 = false,
+    EchDnsPolicy echDnsPolicy = const EchDnsPolicy(),
   }) : _serverUrl = serverUrl,
        _bootstrapIps = bootstrapIps,
-       _preferIPv6 = preferIPv6 {
+       _preferIPv6 = preferIPv6,
+       _echDnsPolicy = echDnsPolicy {
     _initClient();
+  }
+
+  EchDnsPolicy _echDnsPolicy;
+
+  set echDnsPolicy(EchDnsPolicy policy) {
+    _echDnsPolicy = policy;
+    _cacheAll.clear();
+    _inflight.clear();
   }
 
   String _serverUrl;
@@ -113,15 +124,17 @@ class DohResolver {
     try {
       return await future;
     } finally {
-      _inflight.remove(host);
+      if (identical(_inflight[host], future)) _inflight.remove(host);
     }
   }
 
   /// 实际执行解析
   Future<List<InternetAddress>> _doResolveAll(String host) async {
+    final policy = _echDnsPolicy;
     final stopwatch = Stopwatch()..start();
     try {
-      final result = await _client.lookupAllWithTtl(host);
+      final result = await _client.lookupAllWithTtl(policy.queryName(host));
+      if (!identical(policy, _echDnsPolicy)) return await resolveAll(host);
       stopwatch.stop();
 
       if (result.addresses.isEmpty) {
@@ -154,6 +167,7 @@ class DohResolver {
       return sorted;
     } catch (e) {
       stopwatch.stop();
+      if (!identical(policy, _echDnsPolicy)) return await resolveAll(host);
       NetworkLogger.logDoh(
         host: host,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -166,9 +180,11 @@ class DohResolver {
   /// 系统 DNS 回退解析（全部）
   Future<List<InternetAddress>> _fallbackResolveAll(String host) async {
     if (!enableFallback) return [];
+    final policy = _echDnsPolicy;
 
     try {
-      final addresses = await InternetAddress.lookup(host);
+      final addresses = await InternetAddress.lookup(policy.queryName(host));
+      if (!identical(policy, _echDnsPolicy)) return await resolveAll(host);
       if (addresses.isEmpty) return [];
 
       final sorted = _sortAddresses(addresses);

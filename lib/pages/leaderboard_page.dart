@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../providers/discourse_providers.dart';
 import '../utils/url_helper.dart';
+import '../utils/leaderboard_period_range.dart';
 import '../widgets/common/smart_avatar.dart';
 import 'user_profile_page.dart';
 
@@ -33,6 +34,8 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
 
   _LeaderboardPeriod _period = _LeaderboardPeriod.allTime;
   bool _loading = false;
+  int _accountVersion = 0;
+  String? _cachedAccountUsername;
 
   @override
   void initState() {
@@ -51,7 +54,16 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
   }
 
   Future<void> _ensureLoaded() async {
-    if (!mounted || !widget.isActive || _cache.containsKey(_period)) return;
+    if (!mounted || !widget.isActive) return;
+    // 非激活页面不会订阅 provider；再次显示时也必须核对账号身份。
+    final username = ref.read(currentUserProvider).value?.username;
+    if (_cachedAccountUsername != username) {
+      _cachedAccountUsername = username;
+      _accountVersion++;
+      _cache.clear();
+      _errors.clear();
+    }
+    if (_cache.containsKey(_period)) return;
     await _load(reset: true);
   }
 
@@ -59,6 +71,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     if (_loading || !mounted) return;
 
     final requestedPeriod = _period;
+    final accountVersion = _accountVersion;
     final previous = _cache[requestedPeriod];
     if (!reset && previous != null && !previous.hasMore) return;
 
@@ -94,34 +107,58 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
           .where((entry) => entry.username.isNotEmpty)
           .toList(growable: false);
 
+      // 官方 personal 字段由同一个响应返回，包含当前用户的全榜位置。
+      // 不依赖前 100 名，也不需要额外查询或翻页。
+      final personalJson = data['personal'];
+      _LeaderboardEntry? personal;
+      if (personalJson is Map && personalJson['user'] is Map) {
+        final user = _LeaderboardEntry.fromJson(
+          Map<String, dynamic>.from(personalJson['user'] as Map),
+        );
+        final rank = _LeaderboardEntry.asInt(personalJson['position']);
+        if (user.username.isNotEmpty && rank > 0) {
+          personal = user.withPosition(rank);
+        }
+      }
+      final leaderboardJson = data['leaderboard'];
+      final leaderboard = leaderboardJson is Map
+          ? Map<String, dynamic>.from(leaderboardJson)
+          : const <String, dynamic>{};
+      final name = leaderboard['name']?.toString();
+
       final merged = reset
           ? entries
           : _mergeEntries(previous?.entries ?? const [], entries);
       final snapshot = _LeaderboardSnapshot(
         entries: merged,
+        personal: reset ? personal : personal ?? previous?.personal,
+        name: name?.isNotEmpty == true ? name : previous?.name,
+        periodFilterDisabled:
+            leaderboard['period_filter_disabled'] == true ||
+            (!reset && (previous?.periodFilterDisabled ?? false)),
         nextPage: page + 1,
         hasMore: rawUsers.length >= _serverPageSize,
         updatedAt: DateTime.now(),
       );
 
-      if (!mounted) return;
+      if (!mounted || accountVersion != _accountVersion) return;
       setState(() {
         _cache[requestedPeriod] = snapshot;
         _errors.remove(requestedPeriod);
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || accountVersion != _accountVersion) return;
       setState(() => _errors[requestedPeriod] = error);
     } finally {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
 
-      // 周期切换在请求进行时被禁用；这里仍做兜底，确保外部状态变化后
-      // 当前周期不会停留在未加载状态。
-      if (widget.isActive &&
-          !_cache.containsKey(_period) &&
-          !_errors.containsKey(_period)) {
-        scheduleMicrotask(_ensureLoaded);
+        // 若中途切换账号，新账号尚无缓存，则由当前页面按需补一次请求。
+        if (widget.isActive &&
+            !_cache.containsKey(_period) &&
+            !_errors.containsKey(_period)) {
+          scheduleMicrotask(_ensureLoaded);
+        }
       }
     }
   }
@@ -159,9 +196,25 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     // 触发网络请求；切回来后复用本 State 中的周期缓存。
     if (!widget.isActive) return const SizedBox.shrink();
 
+    // 切换账号后丢弃含有旧 personal 字段的快照；请求跨账号返回时
+    // 由 _accountVersion 拒绝写入，避免展示前一账号的私有排名。
+    ref.listen(currentUserProvider, (previous, next) {
+      final username = next.value?.username;
+      // 登录恢复中的临时 Guest 状态不额外触发排行榜网络请求。
+      if (username == null || _cachedAccountUsername == username) return;
+      _cachedAccountUsername = username;
+      _accountVersion++;
+      setState(() {
+        _cache.clear();
+        _errors.clear();
+      });
+      if (!_loading) scheduleMicrotask(_ensureLoaded);
+    });
+
     final snapshot = _cache[_period];
     final error = _errors[_period];
     final currentUsername = ref.watch(currentUserProvider).value?.username;
+    final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -175,10 +228,45 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
         ],
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    snapshot?.name ?? _copy(context).globalTitle,
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                IconButton(
+                  tooltip: _copy(context).about,
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: Text(_copy(context).globalTitle),
+                      content: Text(_copy(context).aboutBody),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: Text(
+                            MaterialLocalizations.of(context)
+                                .closeButtonTooltip,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  icon: Icon(AppIcons.info, color: colors.primary),
+                ),
+              ],
+            ),
+          ),
           _PeriodSelector(
             selected: _period,
-            enabled: !_loading,
+            enabled: !_loading && snapshot?.periodFilterDisabled != true,
             onSelected: _selectPeriod,
           ),
           const Divider(height: 1),
@@ -232,30 +320,59 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       );
     }
 
+    // 领奖台 + 当前用户卡片 + 第四名起的常规列表。
+    final visiblePersonal = snapshot?.personal;
+    final showPersonal =
+        currentUsername != null &&
+        visiblePersonal != null &&
+        visiblePersonal.username.toLowerCase() == currentUsername.toLowerCase();
+    final ranked = entries.skip(3).toList(growable: false);
+    final initialRows = 2 + (showPersonal ? 1 : 0);
+
     return RefreshIndicator(
       onRefresh: () => _load(reset: true),
-      child: ListView.separated(
+      child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
-        itemCount: entries.length + 1,
-        separatorBuilder: (_, index) => index < entries.length - 1
-            ? const Divider(height: 1, indent: 72)
-            : const SizedBox.shrink(),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+        itemCount: initialRows + ranked.length + 1,
         itemBuilder: (context, index) {
-          if (index == entries.length) {
-            return _LeaderboardFooter(
-              snapshot: snapshot!,
-              loading: _loading,
-              error: error,
-              onLoadMore: () => _load(reset: false),
+          if (index == 0) {
+            return _LeaderboardPodium(
+              winners: entries.take(3).toList(growable: false),
+              onTap: _openUser,
             );
           }
-          final entry = entries[index];
-          return _LeaderboardTile(
-            entry: entry,
-            isCurrentUser:
-                currentUsername != null && entry.username == currentUsername,
-            onTap: () => _openUser(entry),
+          if (index == 1) {
+            return _LeaderboardRankingHeading(copy: _copy(context));
+          }
+          if (showPersonal && index == 2) {
+            return _PersonalLeaderboardRank(
+              entry: visiblePersonal,
+              onTap: () => _openUser(visiblePersonal),
+            );
+          }
+          final rankIndex = index - initialRows;
+          if (rankIndex < ranked.length) {
+            final entry = ranked[rankIndex];
+            return Column(
+              children: [
+                _LeaderboardTile(
+                  entry: entry,
+                  isCurrentUser:
+                      currentUsername != null &&
+                      entry.username.toLowerCase() ==
+                          currentUsername.toLowerCase(),
+                  onTap: () => _openUser(entry),
+                ),
+                const Divider(height: 1, indent: 60),
+              ],
+            );
+          }
+          return _LeaderboardFooter(
+            snapshot: snapshot!,
+            loading: _loading,
+            error: error,
+            onLoadMore: () => _load(reset: false),
           );
         },
       ),
@@ -270,28 +387,386 @@ class _PeriodSelector extends StatelessWidget {
     required this.onSelected,
   });
 
+  static const _periods = [
+    _LeaderboardPeriod.allTime,
+    _LeaderboardPeriod.yearly,
+    _LeaderboardPeriod.quarterly,
+    _LeaderboardPeriod.monthly,
+    _LeaderboardPeriod.weekly,
+    _LeaderboardPeriod.daily,
+  ];
+
   final _LeaderboardPeriod selected;
   final bool enabled;
   final ValueChanged<_LeaderboardPeriod> onSelected;
 
+  String _span(BuildContext context, _LeaderboardPeriod period) {
+    final range = leaderboardPeriodRange(period.apiValue, DateTime.now());
+    if (range == null) return '';
+    final locale = Localizations.localeOf(context);
+    final isChinese = locale.languageCode == 'zh';
+    String format(DateTime date, {required bool withYear}) {
+      if (isChinese) {
+        return withYear
+            ? DateFormat('yyyy年M月d日').format(date)
+            : DateFormat('M月d日').format(date);
+      }
+      return withYear
+          ? DateFormat.yMMMd(locale.toString()).format(date)
+          : DateFormat.MMMd(locale.toString()).format(date);
+    }
+
+    final sameYear = range.start.year == range.end.year;
+    final isSingleDay = range.start == range.end;
+    final withYear = !sameYear;
+    final first = format(range.start, withYear: withYear);
+    if (isSingleDay) return first;
+    return '$first – ${format(range.end, withYear: withYear)}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 52,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        scrollDirection: Axis.horizontal,
-        itemCount: _LeaderboardPeriod.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final period = _LeaderboardPeriod.values[index];
-          return FilterChip(
-            selected: selected == period,
-            label: Text(period.label(context)),
-            onSelected: enabled ? (_) => onSelected(period) : null,
-            showCheckmark: false,
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final span = _span(context, selected);
+    final menuWidth = (MediaQuery.sizeOf(context).width - 32)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          PopupMenuButton<_LeaderboardPeriod>(
+            initialValue: selected,
+            enabled: enabled,
+            position: PopupMenuPosition.under,
+            tooltip: selected.label(context),
+            constraints: BoxConstraints(
+              minWidth: menuWidth < 220 ? menuWidth : 220,
+              maxWidth: menuWidth,
+            ),
+            onSelected: onSelected,
+            itemBuilder: (popupContext) => _periods.map((period) {
+              final periodSpan = _span(popupContext, period);
+              return PopupMenuItem<_LeaderboardPeriod>(
+                value: period,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            period.label(popupContext),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: period == selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          if (periodSpan.isNotEmpty)
+                            Text(
+                              periodSpan,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (period == selected)
+                      Icon(AppIcons.check, size: 18, color: colors.primary),
+                  ],
+                ),
+              );
+            }).toList(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  selected.label(context),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(AppIcons.expandMore),
+              ],
+            ),
+          ),
+          if (span.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              span,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LeaderboardPodium extends StatelessWidget {
+  const _LeaderboardPodium({required this.winners, required this.onTap});
+
+  final List<_LeaderboardEntry> winners;
+  final ValueChanged<_LeaderboardEntry> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    // 与官方一致：视觉顺序为第二、第一、第三。
+    final ordered = <_LeaderboardEntry?>[
+      winners.length > 1 ? winners[1] : null,
+      winners.first,
+      winners.length > 2 ? winners[2] : null,
+    ];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 28),
+      padding: const EdgeInsets.fromLTRB(8, 20, 8, 22),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer.withValues(alpha: 0.30),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth / 3;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var index = 0; index < ordered.length; index++)
+                Expanded(
+                  child: ordered[index] == null
+                      ? const SizedBox.shrink()
+                      : _LeaderboardWinner(
+                          entry: ordered[index]!,
+                          slotWidth: width,
+                          onTap: () => onTap(ordered[index]!),
+                        ),
+                ),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _LeaderboardWinner extends StatelessWidget {
+  const _LeaderboardWinner({
+    required this.entry,
+    required this.slotWidth,
+    required this.onTap,
+  });
+
+  final _LeaderboardEntry entry;
+  final double slotWidth;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final first = entry.position == 1;
+    final squareAvatar = isSquareAvatarUrl(entry.avatarUrl);
+    final medal = switch (entry.position) {
+      1 => const Color(0xffffce35),
+      2 => const Color(0xffb9bdc7),
+      _ => const Color(0xffcd8b4a),
+    };
+    final radius = (slotWidth * (first ? 0.43 : 0.39))
+        .clamp(24.0, 56.0)
+        .toDouble();
+    final score = NumberFormat.decimalPattern(
+      Localizations.localeOf(context).toString(),
+    ).format(entry.totalScore);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (first)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Icon(AppIcons.crown, color: medal, size: 28),
+              ),
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: medal, width: 2),
+                    shape: squareAvatar ? BoxShape.rectangle : BoxShape.circle,
+                    borderRadius: squareAvatar
+                        ? BorderRadius.circular(radius * 0.2)
+                        : null,
+                  ),
+                  child: SmartAvatar(
+                    imageUrl: entry.avatarUrl,
+                    radius: radius,
+                    fallbackText: entry.username,
+                  ),
+                ),
+                Positioned(
+                  bottom: -13,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: medal,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colors.surface, width: 2),
+                    ),
+                    child: Text(
+                      '${entry.position}',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: const Color(0xff1c1c1c),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 19),
+            Text(
+              entry.name?.isNotEmpty == true ? entry.name! : entry.username,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onSurface,
+                fontWeight: first ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                score,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                style:
+                    (first
+                            ? theme.textTheme.titleLarge
+                            : theme.textTheme.titleMedium)
+                        ?.copyWith(
+                          color: colors.onSurface,
+                          fontWeight: FontWeight.w800,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LeaderboardRankingHeading extends StatelessWidget {
+  const _LeaderboardRankingHeading({required this.copy});
+
+  final _LeaderboardCopy copy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(copy.rank, style: theme.textTheme.titleSmall),
+          Row(
+            children: [
+              Icon(AppIcons.medal, size: 18, color: colors.primary),
+              const SizedBox(width: 6),
+              Text(copy.points, style: theme.textTheme.titleSmall),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PersonalLeaderboardRank extends StatelessWidget {
+  const _PersonalLeaderboardRank({required this.entry, required this.onTap});
+
+  final _LeaderboardEntry entry;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final score = NumberFormat.compact(locale: 'en_US')
+        .format(entry.totalScore)
+        .toLowerCase();
+
+    return Material(
+      color: colors.primary,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 74,
+                child: Text(
+                  '${entry.position}',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: colors.onPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  _copy(context).you,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colors.onPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 90,
+                child: Text(
+                  score,
+                  textAlign: TextAlign.end,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: colors.onPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -325,7 +800,7 @@ class _LeaderboardTile extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: SizedBox(
-          width: 52,
+          width: 68,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -512,12 +987,18 @@ class _LeaderboardError extends StatelessWidget {
 class _LeaderboardSnapshot {
   const _LeaderboardSnapshot({
     required this.entries,
+    required this.personal,
+    required this.name,
+    required this.periodFilterDisabled,
     required this.nextPage,
     required this.hasMore,
     required this.updatedAt,
   });
 
   final List<_LeaderboardEntry> entries;
+  final _LeaderboardEntry? personal;
+  final String? name;
+  final bool periodFilterDisabled;
   final int nextPage;
   final bool hasMore;
   final DateTime updatedAt;
@@ -540,13 +1021,22 @@ class _LeaderboardEntry {
   final int totalScore;
   final int position;
 
-  factory _LeaderboardEntry.fromJson(Map<String, dynamic> json) {
-    int asInt(dynamic value) {
-      if (value is int) return value;
-      if (value is num) return value.toInt();
-      return int.tryParse(value?.toString() ?? '') ?? 0;
-    }
+  static int asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
 
+  _LeaderboardEntry withPosition(int rank) => _LeaderboardEntry(
+    id: id,
+    username: username,
+    name: name,
+    avatarTemplate: avatarTemplate,
+    totalScore: totalScore,
+    position: rank,
+  );
+
+  factory _LeaderboardEntry.fromJson(Map<String, dynamic> json) {
     return _LeaderboardEntry(
       id: asInt(json['id'] ?? json['user_id']),
       username: json['username']?.toString() ?? '',
@@ -610,6 +1100,10 @@ extension on _LeaderboardPeriod {
 class _LeaderboardCopy {
   const _LeaderboardCopy({
     required this.title,
+    required this.globalTitle,
+    required this.rank,
+    required this.about,
+    required this.aboutBody,
     required this.refresh,
     required this.empty,
     required this.points,
@@ -630,6 +1124,10 @@ class _LeaderboardCopy {
   });
 
   final String title;
+  final String globalTitle;
+  final String rank;
+  final String about;
+  final String aboutBody;
   final String refresh;
   final String empty;
   final String points;
@@ -654,6 +1152,10 @@ _LeaderboardCopy _copy(BuildContext context) {
   if (locale.languageCode != 'zh') {
     return const _LeaderboardCopy(
       title: 'Leaderboard',
+      globalTitle: 'Global leaderboard',
+      rank: 'Rank',
+      about: 'About the leaderboard',
+      aboutBody: 'Community points are calculated by the Discourse gamification plugin. Each time period has its own ranking.',
       refresh: 'Refresh',
       empty: 'No leaderboard data',
       points: 'points',
@@ -666,11 +1168,11 @@ _LeaderboardCopy _copy(BuildContext context) {
       notReady: 'The leaderboard is being generated. Please refresh later.',
       retry: 'Retry',
       allTime: 'All time',
-      daily: 'Daily',
-      weekly: 'Weekly',
-      monthly: 'Monthly',
-      quarterly: 'Quarterly',
-      yearly: 'Yearly',
+      daily: 'Today',
+      weekly: 'Week',
+      monthly: 'Month',
+      quarterly: 'Quarter',
+      yearly: 'Year',
     );
   }
 
@@ -681,6 +1183,10 @@ _LeaderboardCopy _copy(BuildContext context) {
   if (traditional) {
     return const _LeaderboardCopy(
       title: '排行榜',
+      globalTitle: '全域排行榜',
+      rank: '排名',
+      about: '關於排行榜',
+      aboutBody: '社群點數由 Discourse 積分外掛計算，不同時間範圍的排名各自獨立。',
       refresh: '重新整理',
       empty: '暫無排行榜資料',
       points: '點數',
@@ -692,17 +1198,21 @@ _LeaderboardCopy _copy(BuildContext context) {
       rateLimited: '排行榜請求過於頻繁，請稍後再試。',
       notReady: '排行榜正在產生，請稍後重新整理。',
       retry: '重試',
-      allTime: '總榜',
-      daily: '日榜',
-      weekly: '週榜',
-      monthly: '月榜',
-      quarterly: '季榜',
-      yearly: '年榜',
+      allTime: '所有時間',
+      daily: '今天',
+      weekly: '週',
+      monthly: '月',
+      quarterly: '季度',
+      yearly: '年',
     );
   }
 
   return const _LeaderboardCopy(
     title: '排行榜',
+    globalTitle: '全局排行榜',
+    rank: '排名',
+    about: '关于排行榜',
+    aboutBody: '社区点数由 Discourse 积分插件计算，各个时间范围采用独立的排名。',
     refresh: '刷新',
     empty: '暂无排行榜数据',
     points: '点数',
@@ -714,11 +1224,11 @@ _LeaderboardCopy _copy(BuildContext context) {
     rateLimited: '排行榜请求过于频繁，请稍后再试。',
     notReady: '排行榜正在生成，请稍后刷新。',
     retry: '重试',
-    allTime: '总榜',
-    daily: '日榜',
-    weekly: '周榜',
-    monthly: '月榜',
-    quarterly: '季榜',
-    yearly: '年榜',
+    allTime: '所有时间',
+    daily: '今天',
+    weekly: '周',
+    monthly: '月',
+    quarterly: '季度',
+    yearly: '年',
   );
 }

@@ -1,34 +1,7 @@
 name: Emoji Reaction Rendering
 
+# Feature-specific regression suite: run on demand, not on every PR/push.
 on:
-  pull_request:
-    paths:
-      - 'lib/services/emoji_handler.dart'
-      - 'lib/providers/emoji_provider.dart'
-      - 'lib/services/discourse_cache_manager.dart'
-      - 'lib/models/emoji.dart'
-      - 'lib/widgets/markdown_editor/emoji_picker.dart'
-      - 'lib/widgets/post/post_item/widgets/post_action_bar.dart'
-      - 'lib/widgets/post/post_item/widgets/post_reaction_picker.dart'
-      - 'lib/widgets/post/post_item/widgets/post_reaction_users_sheet.dart'
-      - 'test/services/emoji_handler_late_preload_test.dart'
-      - 'test/widgets/post/post_reaction_picker_test.dart'
-      - '.github/workflows/emoji-reaction-rendering.yaml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'lib/services/emoji_handler.dart'
-      - 'lib/providers/emoji_provider.dart'
-      - 'lib/services/discourse_cache_manager.dart'
-      - 'lib/models/emoji.dart'
-      - 'lib/widgets/markdown_editor/emoji_picker.dart'
-      - 'lib/widgets/post/post_item/widgets/post_action_bar.dart'
-      - 'lib/widgets/post/post_item/widgets/post_reaction_picker.dart'
-      - 'lib/widgets/post/post_item/widgets/post_reaction_users_sheet.dart'
-      - 'test/services/emoji_handler_late_preload_test.dart'
-      - 'test/widgets/post/post_reaction_picker_test.dart'
-      - '.github/workflows/emoji-reaction-rendering.yaml'
   workflow_dispatch:
 
 permissions:

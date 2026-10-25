@@ -389,7 +389,10 @@ class PostHeader extends StatelessWidget {
                         post.badgesGranted!.isNotEmpty) ...[
                       const SizedBox(width: 4),
                       ...post.badgesGranted!.map(
-                        (badge) => PostGrantedBadgeIcon(badge: badge),
+                        (badge) => PostGrantedBadgeIcon(
+                          badge: badge,
+                          username: post.username,
+                        ),
                       ),
                     ],
                   ],

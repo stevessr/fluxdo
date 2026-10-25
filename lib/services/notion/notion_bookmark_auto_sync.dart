@@ -103,15 +103,18 @@ class NotionBookmarkAutoSync {
         pageUrl: result.pageUrl,
         postCount: result.postCount,
       );
-      handle.dismiss();
-      ToastService.showSuccess(S.current.notion_syncSucceed);
+      handle.complete(S.current.notion_syncSucceed);
     } on NotionApiException catch (e) {
-      handle.dismiss();
-      ToastService.showError(S.current.notion_syncFailed(e.message));
+      handle.complete(
+        S.current.notion_syncFailed(e.message),
+        type: ToastType.error,
+      );
     } catch (e, st) {
       debugPrint('[NotionAutoSync] topic unexpected: $e\n$st');
-      handle.dismiss();
-      ToastService.showError(S.current.notion_syncFailed(e.toString()));
+      handle.complete(
+        S.current.notion_syncFailed(e.toString()),
+        type: ToastType.error,
+      );
     }
   }
 
@@ -155,15 +158,18 @@ class NotionBookmarkAutoSync {
         pageUrl: result.pageUrl,
         postCount: 1,
       );
-      handle.dismiss();
-      ToastService.showSuccess(S.current.notion_syncSucceed);
+      handle.complete(S.current.notion_syncSucceed);
     } on NotionApiException catch (e) {
-      handle.dismiss();
-      ToastService.showError(S.current.notion_syncFailed(e.message));
+      handle.complete(
+        S.current.notion_syncFailed(e.message),
+        type: ToastType.error,
+      );
     } catch (e, st) {
       debugPrint('[NotionAutoSync] post unexpected: $e\n$st');
-      handle.dismiss();
-      ToastService.showError(S.current.notion_syncFailed(e.toString()));
+      handle.complete(
+        S.current.notion_syncFailed(e.toString()),
+        type: ToastType.error,
+      );
     }
   }
 

@@ -82,10 +82,12 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
   Future<void> _refreshEnabledServices() async {
     if (_ldcEnabled) {
       await ref.read(ldcUserInfoProvider.future).catchError((_) => null);
+      if (!mounted) return;
       ref.read(ldcUserInfoProvider.notifier).refresh();
     }
     if (_cdkEnabled) {
       await ref.read(cdkUserInfoProvider.future).catchError((_) => null);
+      if (!mounted) return;
       ref.read(cdkUserInfoProvider.notifier).refresh();
     }
   }
@@ -130,7 +132,7 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
         );
         if (!mounted || !AuthSession().isValid(generation)) return;
         setState(() => _ldcEnabled = true);
-        ref.read(ldcUserInfoProvider.notifier).refresh();
+        await ref.read(ldcUserInfoProvider.notifier).refresh();
         if (mounted) {
           ToastService.showSuccess(S.current.metaverse_ldcAuthSuccess);
         }
@@ -210,7 +212,7 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
         );
         if (!mounted || !AuthSession().isValid(generation)) return;
         setState(() => _cdkEnabled = true);
-        ref.read(cdkUserInfoProvider.notifier).refresh();
+        await ref.read(cdkUserInfoProvider.notifier).refresh();
         if (mounted) {
           ToastService.showSuccess(S.current.metaverse_cdkAuthSuccess);
         }
@@ -364,8 +366,10 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
       if (!mounted) return;
       final result = await service.reauthorize(context);
       if (result && mounted && AuthSession().isValid(generation)) {
-        ref.read(ldcUserInfoProvider.notifier).refresh();
-        ToastService.showSuccess(S.current.metaverse_ldcReauthSuccess);
+        await ref.read(ldcUserInfoProvider.notifier).refresh();
+        if (mounted) {
+          ToastService.showSuccess(S.current.metaverse_ldcReauthSuccess);
+        }
       }
     } catch (e) {
       if (mounted && AuthSession().isValid(generation)) {
@@ -387,8 +391,10 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
       if (!mounted) return;
       final result = await service.reauthorize(context);
       if (result && mounted && AuthSession().isValid(generation)) {
-        ref.read(cdkUserInfoProvider.notifier).refresh();
-        ToastService.showSuccess(S.current.metaverse_cdkReauthSuccess);
+        await ref.read(cdkUserInfoProvider.notifier).refresh();
+        if (mounted) {
+          ToastService.showSuccess(S.current.metaverse_cdkReauthSuccess);
+        }
       }
     } catch (e) {
       if (mounted && AuthSession().isValid(generation)) {
@@ -404,8 +410,9 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
   Widget _buildLdcServiceItem(ThemeData theme) {
     if (_ldcEnabled) {
       return LdcBalanceCard(
-        onDisable: _ldcProcessing ? null : () => _toggleLdc(false),
-        onReauthorize: _ldcProcessing ? null : _reauthorizeLdc,
+        isProcessing: _ldcProcessing,
+        onDisable: () => _toggleLdc(false),
+        onReauthorize: _reauthorizeLdc,
       );
     }
 
@@ -476,8 +483,9 @@ class _MetaversePageState extends ConsumerState<MetaversePage> {
   Widget _buildCdkServiceItem(ThemeData theme) {
     if (_cdkEnabled) {
       return CdkBalanceCard(
-        onDisable: _cdkProcessing ? null : () => _toggleCdk(false),
-        onReauthorize: _cdkProcessing ? null : _reauthorizeCdk,
+        isProcessing: _cdkProcessing,
+        onDisable: () => _toggleCdk(false),
+        onReauthorize: _reauthorizeCdk,
       );
     }
 

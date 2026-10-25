@@ -145,6 +145,67 @@ void main() {
     });
   });
 
+  group('Session Set-Cookie divergence guard', () {
+    test('401/403/2xx error signals cannot erase a live _t', () {
+      for (final sentToken in ['session-A', 'session-B', null]) {
+        expect(
+          AppCookieManager.shouldIgnoreSessionSetCookie(
+            isDeletion: true,
+            isExplicitLogout: false,
+            sentTToken: sentToken,
+            currentTToken: 'session-B',
+          ),
+          isTrue,
+        );
+      }
+    });
+
+    test('out-of-order responses cannot roll back a rotated _t', () {
+      expect(
+        AppCookieManager.shouldIgnoreSessionSetCookie(
+          isDeletion: false,
+          isExplicitLogout: false,
+          sentTToken: 'session-A',
+          currentTToken: 'session-B',
+        ),
+        isTrue,
+      );
+      expect(
+        AppCookieManager.shouldIgnoreSessionSetCookie(
+          isDeletion: false,
+          isExplicitLogout: false,
+          sentTToken: 'session-B',
+          currentTToken: 'session-B',
+        ),
+        isFalse,
+      );
+    });
+
+    test('first login may establish _t when no session exists yet', () {
+      expect(
+        AppCookieManager.shouldIgnoreSessionSetCookie(
+          isDeletion: false,
+          isExplicitLogout: false,
+          sentTToken: null,
+          currentTToken: null,
+        ),
+        isFalse,
+      );
+    });
+
+    test('explicit user logout still accepts Set-Cookie deletion', () {
+      expect(
+        AppCookieManager.shouldIgnoreSessionSetCookie(
+          isDeletion: true,
+          isExplicitLogout: true,
+          sentTToken: 'session-B',
+          currentTToken: 'session-B',
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('CookieJarService.buildCookieHeaderForRequest', () {
     test('CDK retry header 保留业务 domain cookie 且不带主站登录 cookie', () {
       final header = CookieJarService.buildCookieHeaderForRequest([

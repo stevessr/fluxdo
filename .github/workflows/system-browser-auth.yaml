@@ -1,0 +1,95 @@
+name: System Browser Auth
+
+on:
+  pull_request:
+    paths:
+      - 'lib/services/system_browser_service.dart'
+      - 'lib/pages/login_page.dart'
+      - 'lib/widgets/auth/login_browser_picker_sheet.dart'
+      - 'test/widgets/auth/login_browser_picker_sheet_test.dart'
+      - 'lib/services/desktop_browser_discovery.dart'
+      - 'lib/services/xdg_browser_discovery.dart'
+      - 'tool/verify_browser_discovery.dart'
+      - 'tool/verify_xdg_browser_discovery.dart'
+      - 'android/app/src/main/AndroidManifest.xml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/MainActivity.kt'
+      - 'test/services/system_browser_service_test.dart'
+      - '.github/workflows/system-browser-auth.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-discovery:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.13.1'
+      - name: Require GIO integration on Linux
+        if: runner.os == 'Linux'
+        run: gio version
+      - name: Verify desktop discovery behavior and native filesystem
+        run: dart tool/verify_browser_discovery.dart
+      - name: Analyze standalone discovery
+        run: dart analyze lib/services/desktop_browser_discovery.dart lib/services/xdg_browser_discovery.dart tool/verify_browser_discovery.dart tool/verify_xdg_browser_discovery.dart
+
+  dart-browser-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Prepare generated directories
+        run: mkdir -p assets/certs assets/images/llm
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+      - name: Check browser picker formatting
+        run: |
+          dart format \
+            lib/services/system_browser_service.dart \
+            lib/services/desktop_browser_discovery.dart \
+            lib/pages/login_page.dart \
+            lib/widgets/auth/login_browser_picker_sheet.dart \
+            test/services/system_browser_service_test.dart \
+            test/widgets/auth/login_browser_picker_sheet_test.dart
+          git diff --exit-code -- \
+            lib/services/system_browser_service.dart \
+            lib/services/desktop_browser_discovery.dart \
+            lib/pages/login_page.dart \
+            lib/widgets/auth/login_browser_picker_sheet.dart \
+            test/services/system_browser_service_test.dart \
+            test/widgets/auth/login_browser_picker_sheet_test.dart
+      - name: Analyze browser discovery and picker
+        run: >-
+          flutter analyze
+          lib/services/xdg_browser_discovery.dart
+          lib/services/desktop_browser_discovery.dart
+          lib/services/system_browser_service.dart
+          lib/pages/login_page.dart
+          lib/widgets/auth/login_browser_picker_sheet.dart
+          test/services/system_browser_service_test.dart
+          test/widgets/auth/login_browser_picker_sheet_test.dart
+      - name: Test browser discovery, picker and authorization URL guard
+        run: >-
+          dart tool/flutterw.dart test
+          test/services/system_browser_service_test.dart
+          test/widgets/auth/login_browser_picker_sheet_test.dart

@@ -358,6 +358,10 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage>
       selectedTagPaneProvider(widget.tagName);
 
   Future<void> _openTopic(Topic topic) async {
+    // 树形视图从完整话题开始，续读楼层只用于平铺视图。
+    final scrollToPostNumber = ref.read(preferencesProvider).defaultNestedView
+        ? null
+        : topic.lastReadPostNumber;
     // 宽屏进右栏(本页自己是平行视界宿主),窄屏全屏 push。
     if (MasterDetailLayout.canShowBothPanesFor(context)) {
       ref
@@ -365,7 +369,7 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage>
           .select(
             topicId: topic.id,
             initialTitle: topic.title,
-            scrollToPostNumber: topic.lastReadPostNumber,
+            scrollToPostNumber: scrollToPostNumber,
           );
       return;
     }
@@ -374,7 +378,7 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage>
         builder: (_) => TopicDetailPage(
           topicId: topic.id,
           initialTitle: topic.title,
-          scrollToPostNumber: topic.lastReadPostNumber,
+          scrollToPostNumber: scrollToPostNumber,
         ),
       ),
     );

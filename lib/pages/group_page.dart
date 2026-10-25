@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/group.dart';
 import '../providers/discourse_providers.dart';
+import '../widgets/common/group_leave_confirmation_dialog.dart';
 import '../widgets/common/smart_avatar.dart';
 import 'user_profile_page.dart';
 
@@ -28,9 +29,12 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   int _nextOffset = 0;
   bool _hasMore = false;
   bool _loading = false;
+  bool _reloadQueued = false;
+  int _membershipRevision = 0;
   bool _loadingMore = false;
   bool _adding = false;
   bool _membershipChanging = false;
+  bool _membershipConfirmationPending = false;
   bool _requestingMembership = false;
   final Set<int> _removingMemberIds = <int>{};
   Object? _error;
@@ -48,8 +52,13 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   }
 
   Future<void> _reload() async {
-    if (_loading || !mounted) return;
+    if (!mounted) return;
+    if (_loading) {
+      _reloadQueued = true;
+      return;
+    }
     final requestedFilter = _memberFilter;
+    final requestedRevision = _membershipRevision;
     setState(() {
       _loading = true;
       _error = null;
@@ -65,7 +74,11 @@ class _GroupPageState extends ConsumerState<GroupPage> {
           filter: requestedFilter.isEmpty ? null : requestedFilter,
         );
       }
-      if (!mounted || requestedFilter != _memberFilter) return;
+      if (!mounted ||
+          requestedFilter != _memberFilter ||
+          requestedRevision != _membershipRevision) {
+        return;
+      }
       setState(() {
         _group = group;
         _members = members?.members ?? const [];
@@ -73,11 +86,19 @@ class _GroupPageState extends ConsumerState<GroupPage> {
         _hasMore = members?.hasMore ?? false;
       });
     } catch (error) {
-      if (mounted && requestedFilter == _memberFilter) {
+      if (mounted &&
+          requestedFilter == _memberFilter &&
+          requestedRevision == _membershipRevision) {
         setState(() => _error = error);
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        if (_reloadQueued) {
+          _reloadQueued = false;
+          Future.microtask(_reload);
+        }
+      }
     }
   }
 
@@ -135,16 +156,16 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     required bool join,
     required DiscourseGroup group,
   }) async {
+    if (!join) {
+      return confirmLeaveGroup(context, groupLabel: group.label);
+    }
+
     final copy = _copy(context);
     return await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: Text(join ? copy.confirmJoinTitle : copy.confirmLeaveTitle),
-            content: Text(
-              join
-                  ? copy.confirmJoin(group.label)
-                  : copy.confirmLeave(group.label),
-            ),
+            title: Text(copy.confirmJoinTitle),
+            content: Text(copy.confirmJoin(group.label)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -152,7 +173,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(join ? copy.join : copy.leave),
+                child: Text(copy.join),
               ),
             ],
           ),
@@ -162,10 +183,20 @@ class _GroupPageState extends ConsumerState<GroupPage> {
 
   Future<void> _changeMembership({required bool join}) async {
     final group = _group;
-    if (group == null || _membershipChanging) return;
+    if (group == null ||
+        _membershipChanging ||
+        _membershipConfirmationPending) {
+      return;
+    }
     if (join ? !group.canJoin : !group.canLeave) return;
 
-    final confirmed = await _confirmMembershipChange(join: join, group: group);
+    setState(() => _membershipConfirmationPending = true);
+    bool confirmed;
+    try {
+      confirmed = await _confirmMembershipChange(join: join, group: group);
+    } finally {
+      if (mounted) setState(() => _membershipConfirmationPending = false);
+    }
     if (!confirmed || !mounted) return;
 
     // 确认框打开期间群组状态可能已刷新，因此执行前再使用最新状态校验一次。
@@ -190,6 +221,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
           ? currentCount + 1
           : (currentCount > 0 ? currentCount - 1 : 0);
       setState(() {
+        _membershipRevision++;
         _group = latest.copyWith(
           userCount: nextCount,
           isGroupUser: join,
@@ -573,6 +605,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
             child: _GroupHeader(
               group: group,
               membershipChanging: _membershipChanging,
+              membershipConfirmationPending: _membershipConfirmationPending,
               onJoin: () => _changeMembership(join: true),
               onLeave: () => _changeMembership(join: false),
               onRequestMembership: _requestMembership,
@@ -784,6 +817,7 @@ class _GroupHeader extends StatelessWidget {
   const _GroupHeader({
     required this.group,
     required this.membershipChanging,
+    required this.membershipConfirmationPending,
     required this.onJoin,
     required this.onLeave,
     required this.onRequestMembership,
@@ -792,6 +826,10 @@ class _GroupHeader extends StatelessWidget {
 
   final DiscourseGroup group;
   final bool membershipChanging;
+  final bool membershipConfirmationPending;
+  bool get _membershipBusy =>
+      membershipChanging || membershipConfirmationPending;
+
   final VoidCallback onJoin;
   final VoidCallback onLeave;
   final VoidCallback onRequestMembership;
@@ -846,6 +884,7 @@ class _GroupHeader extends StatelessWidget {
                           _SmallBadge(
                             label: copy.memberCount(group.userCount!),
                           ),
+                        if (group.isGroupUser) _SmallBadge(label: copy.member),
                         if (group.automatic) _SmallBadge(label: copy.automatic),
                         if (group.isGroupOwner)
                           _SmallBadge(label: copy.youAreOwner),
@@ -858,7 +897,7 @@ class _GroupHeader extends StatelessWidget {
                       const SizedBox(height: 12),
                       if (group.canJoin)
                         FilledButton.tonal(
-                          onPressed: membershipChanging ? null : onJoin,
+                          onPressed: _membershipBusy ? null : onJoin,
                           child: membershipChanging
                               ? const SizedBox.square(
                                   dimension: 18,
@@ -869,16 +908,20 @@ class _GroupHeader extends StatelessWidget {
                               : Text(copy.join),
                         )
                       else if (group.canLeave)
-                        OutlinedButton(
-                          onPressed: membershipChanging ? null : onLeave,
-                          child: membershipChanging
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: scheme.error,
+                          ),
+                          onPressed: _membershipBusy ? null : onLeave,
+                          icon: membershipChanging
                               ? const SizedBox.square(
                                   dimension: 18,
                                   child: CircularProgressIndicator.adaptive(
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : Text(copy.leave),
+                              : const Icon(Icons.logout_rounded, size: 18),
+                          label: Text(copy.leave),
                         )
                       else
                         FilledButton.tonalIcon(
@@ -1255,17 +1298,15 @@ class _GroupCopy {
   String get accept => zh ? '接受' : 'Accept';
   String get deny => zh ? '拒绝' : 'Deny';
   String get automatic => zh ? '自动群组' : 'Automatic group';
+  String get member => zh ? '已加入' : 'Joined';
   String get youAreOwner => zh ? '你是所有者' : 'You are an owner';
-  String get join => zh ? '进入' : 'Join';
+  String get join => zh ? '加入' : 'Join';
   String get leave => zh ? '退出' : 'Leave';
-  String get joined => zh ? '已进入群组' : 'Joined group';
+  String get joined => zh ? '已加入群组' : 'Joined group';
   String get left => zh ? '已退出群组' : 'Left group';
   String get confirmJoinTitle => zh ? '确认进入群组' : 'Join group?';
-  String get confirmLeaveTitle => zh ? '确认退出群组' : 'Leave group?';
   String confirmJoin(String group) =>
       zh ? '确定要进入“$group”吗？' : 'Are you sure you want to join “$group”?';
-  String confirmLeave(String group) =>
-      zh ? '确定要退出“$group”吗？' : 'Are you sure you want to leave “$group”?';
   String memberCount(int value) => zh ? '$value 位成员' : '$value members';
   String addMembersTo(String group) =>
       zh ? '添加成员到 $group' : 'Add members to $group';

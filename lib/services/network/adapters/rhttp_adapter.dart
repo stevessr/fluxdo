@@ -301,7 +301,7 @@ class RhttpAdapter implements HttpClientAdapter {
       '(HTTP: ${config.httpVersionPref.name}, '
       'DNS: ${config.dnsOverrides.isEmpty ? "system" : config.dnsOverrides.join(", ")}'
       '${config.stickyIp != null ? " [sticky]" : ""}, '
-      'ECH: ${config.echConfig == null ? "off" : "on"})',
+      'ECH config: ${config.echConfig == null ? "absent" : "present"})',
     );
     return delegate;
   }

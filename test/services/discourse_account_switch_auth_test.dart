@@ -50,12 +50,89 @@ void main() {
     // 校验只做预提交验证，用户名仍由 finalizeNativeLoginSuccess 提交。
     expect(await service.getCurrentUsername(), isNull);
   });
+
+  test('冷启动有 _t 但用户名尚未持久化时从服务端恢复身份', () async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    final cookieJar = CookieJarService();
+    await cookieJar.initialize();
+    await cookieJar.setCookie(
+      '_t',
+      'cold-start-recovery-token',
+      httpOnly: true,
+      trusted: true,
+    );
+    WebViewSessionCookieRefreshService.instance.markSynced(
+      reason: 'cold-start-identity-recovery-test',
+      tToken: 'cold-start-recovery-token',
+    );
+
+    final service = DiscourseService();
+    final adapter = _SessionCurrentAdapter(username: 'recovered-user');
+    service.dio.httpClientAdapter = adapter;
+    final generation = AuthSession().advance();
+
+    expect(await service.getCurrentUsername(), isNull);
+    expect(await service.isLoggedIn(requestGeneration: generation), isTrue);
+    expect(adapter.sentCookie, contains('_t=cold-start-recovery-token'));
+    expect(await service.getCurrentUsername(), 'recovered-user');
+  });
+
+  test('账号切换和登录态检查遇到普通 403 时保留已保存的会话', () async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    final cookieJar = CookieJarService();
+    await cookieJar.initialize();
+    await cookieJar.setCookie(
+      '_t',
+      'blocked-but-not-expired-token',
+      httpOnly: true,
+      trusted: true,
+    );
+    WebViewSessionCookieRefreshService.instance.markSynced(
+      reason: 'account-switch-403-test',
+      tToken: 'blocked-but-not-expired-token',
+    );
+
+    final service = DiscourseService();
+    final adapter = _SessionCurrentAdapter(
+      username: 'target-user',
+      statusCode: 403,
+      responseBody: '{"errors":["Forbidden"]}',
+    );
+    service.dio.httpClientAdapter = adapter;
+    final generation = AuthSession().advance();
+
+    final validation = await service.validateAccountSwitchSession(
+      expectedUsername: 'target-user',
+      requestGeneration: generation,
+    );
+    expect(validation.isValid, isTrue);
+    expect(validation.currentUser, isNull);
+    expect(await cookieJar.getTToken(), 'blocked-but-not-expired-token');
+
+    final loggedIn = await service.isLoggedIn(
+      requestGeneration: generation,
+      expectedUsername: 'target-user',
+      logoutOnInvalid: true,
+    );
+    expect(loggedIn, isTrue);
+    expect(await cookieJar.getTToken(), 'blocked-but-not-expired-token');
+  });
 }
 
 class _SessionCurrentAdapter implements HttpClientAdapter {
-  _SessionCurrentAdapter({required this.username});
+  _SessionCurrentAdapter({
+    required this.username,
+    this.statusCode = 200,
+    this.responseBody,
+  });
 
   final String username;
+  final int statusCode;
+  final String? responseBody;
   String? sentCookie;
 
   @override
@@ -72,10 +149,11 @@ class _SessionCurrentAdapter implements HttpClientAdapter {
       }
     }
     return ResponseBody.fromString(
-      jsonEncode({
-        'current_user': {'username': username},
-      }),
-      200,
+      responseBody ??
+          jsonEncode({
+            'current_user': {'username': username},
+          }),
+      statusCode,
       headers: {
         Headers.contentTypeHeader: const ['application/json'],
       },

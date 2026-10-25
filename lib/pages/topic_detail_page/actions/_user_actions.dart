@@ -980,7 +980,13 @@ extension _UserActions on _TopicDetailPageState {
         postId: post.id,
         postUsername: post.username,
         service: DiscourseService(),
-        onSuccess: (_) => ToastService.showSuccess(S.current.post_flagSubmitted),
+        onSuccess: (flagType) {
+          if (!mounted) return;
+          ref
+              .read(topicDetailProvider(_params).notifier)
+              .applyLocalPostFlagged(post.id, flagType.id);
+          ToastService.showSuccess(S.current.post_flagSubmitted);
+        },
       ),
     );
   }
