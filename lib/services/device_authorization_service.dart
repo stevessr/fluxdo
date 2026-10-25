@@ -8,10 +8,8 @@ import 'user_api_key_service.dart';
 
 /// Discourse User API Key device authorization (NOT OAuth device code).
 ///
-/// A device grant never contains an OTP. Discourse explicitly rejects the
-/// one_time_password scope for this endpoint. We request a short-lived write
-/// key, use it exactly once to request an OTP, then revoke it. Sites which do
-/// not allow write cannot provide cookie-based FluxDO login via this flow.
+/// A device grant yields an encrypted User API Key, not a Cookie or OTP.
+/// Native read-only API authorization must never be reported as a _t login.
 class DeviceAuthorizationService {
   DeviceAuthorizationService(
     this.dio, {
@@ -50,14 +48,14 @@ class DeviceAuthorizationService {
     final response = await dio.post<dynamic>(
       _deviceEndpoint,
       data: {
-        'application_name': 'FluxDO Device Login',
+        'application_name': 'FluxDO Device API',
         'client_id': clientId,
-        'scopes': 'write',
+        'scopes': 'read',
         'nonce': nonce,
         'public_key': publicKey,
         'padding': 'pkcs1',
-        // Do not leave a long-lived write key if the app exits after approval.
-        'expires_in_seconds': '600',
+        // Request a renewable, bounded native API credential rather than OTP.
+        'expires_in_seconds': '86400',
       },
       options: Options(
         contentType: Headers.jsonContentType,
@@ -110,6 +108,7 @@ class DeviceAuthorizationService {
       expiresAt: DateTime.now().add(Duration(seconds: expiresIn)),
       pollInterval: Duration(seconds: interval < 5 ? 5 : interval),
       generation: generation,
+      clientId: clientId,
     );
   }
 
@@ -134,40 +133,59 @@ class DeviceAuthorizationService {
     return DeviceAuthorizationPoll.parse(responseMap(response.data));
   }
 
-  /// Returns an OTP ready for LoginTokenRedeemer, without persisting the
-  /// temporary write key or overwriting a different account's API key.
-  Future<String> exchangeForOtp(
+  /// Complete native DeviceAuth by decrypting and verifying a User API Key.
+  /// No OTP exchange or _t session is attempted here.
+  Future<DeviceAuthorizedIdentity> authorize(
     DeviceAuthorizationRequest request,
     String encryptedPayload,
   ) async {
-    if (!AuthSession().isValid(request.generation)) {
-      throw StateError('登录会话已变化');
-    }
+    bool isCurrent() => AuthSession().isValid(request.generation);
+    if (!isCurrent()) throw StateError('登录会话已变化');
     final decrypted = await _keys.decryptDeviceAuthorizationPayload(
       encryptedPayload,
       expectedNonce: request.nonce,
     );
-    if (!AuthSession().isValid(request.generation)) {
-      throw StateError('登录会话已变化');
-    }
+    if (!isCurrent()) throw StateError('登录会话已变化');
     final apiKey = decrypted?['key']?.toString() ?? '';
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(apiKey)) {
       throw const FormatException('设备授权内容无效或 nonce 不匹配');
     }
-    try {
-      final otp = await _keys.requestOtp(
-        dio,
-        requestGeneration: request.generation,
-        overrideApiKey: apiKey,
-      );
-      if (otp == null || otp.isEmpty) {
-        throw StateError('站点未允许此设备 API Key 签发登录 OTP');
-      }
-      return otp;
-    } finally {
-      // The short expiry also bounds exposure if revocation fails.
-      await _keys.revokeKey(dio, apiKey);
+    // Do not let an already logged-in browser Cookie authenticate this call:
+    // this request must prove that the freshly issued User API Key works.
+    final response = await dio.get<dynamic>(
+      '/session/current.json',
+      options: Options(
+        headers: {
+          'User-Api-Key': apiKey,
+          'User-Api-Client-Id': request.clientId,
+          'Cookie': '',
+        },
+        extra: {
+          ..._options,
+          'skipCookieManager': true,
+        },
+      ),
+    );
+    if (!isCurrent()) throw StateError('登录会话已变化');
+    final user = responseMap(response.data)['current_user'];
+    if (user is! Map || user['username'] is! String ||
+        (user['username'] as String).isEmpty) {
+      throw const FormatException('站点没有确认设备 API Key 的用户身份');
     }
+    final username = user['username'] as String;
+    // Device credentials are stored in an isolated slot, not the browser
+    // OTP/self-heal key slot. This does not publish a Cookie-based login.
+    await _keys.persistDeviceAuthorization(
+      apiKey: apiKey,
+      clientId: request.clientId,
+      username: username,
+      expiresAt: DateTime.tryParse(decrypted?['expires_at']?.toString() ?? ''),
+    );
+    if (!isCurrent()) {
+      await _keys.clearDeviceAuthorization(expectedKey: apiKey);
+      throw StateError('登录会话已变化');
+    }
+    return DeviceAuthorizedIdentity(username: username);
   }
 
   static Map<String, dynamic> responseMap(dynamic body) {
@@ -190,6 +208,7 @@ class DeviceAuthorizationRequest {
     required this.expiresAt,
     required this.pollInterval,
     required this.generation,
+    required this.clientId,
   });
 
   final String deviceCode;
@@ -200,6 +219,12 @@ class DeviceAuthorizationRequest {
   final DateTime expiresAt;
   final Duration pollInterval;
   final int generation;
+  final String clientId;
+}
+
+class DeviceAuthorizedIdentity {
+  const DeviceAuthorizedIdentity({required this.username});
+  final String username;
 }
 
 enum DeviceAuthorizationStatus { pending, authorized, denied, expired }
