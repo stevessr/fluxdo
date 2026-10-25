@@ -165,10 +165,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
 
   Future<void> _openApprovalPage(Uri url) async {
     try {
-      final opened = await launchUrl(
-        url,
-        mode: LaunchMode.externalApplication,
-      );
+      final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!opened) _fail('无法打开授权页面，请复制地址到浏览器');
     } catch (_) {
       _fail('无法打开授权页面，请复制地址到浏览器');
@@ -209,8 +206,10 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        Text('在 LINUX DO 中输入此授权码',
-                            style: Theme.of(context).textTheme.bodyMedium),
+                        Text(
+                          '在 LINUX DO 中输入此授权码',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
                         const SizedBox(height: 12),
                         SelectableText(
                           request.userCode,
@@ -230,8 +229,8 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                           onPressed: _completing
                               ? null
                               : () => _openApprovalPage(
-                                    request.verificationUriWithRequest,
-                                  ),
+                                  request.verificationUriWithRequest,
+                                ),
                           icon: const Icon(Icons.open_in_browser),
                           label: const Text('在浏览器确认授权'),
                         ),
@@ -239,7 +238,8 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                           onPressed: () async {
                             await Clipboard.setData(
                               ClipboardData(
-                                text: '${request.verificationUri}\n${request.userCode}',
+                                text:
+                                    '${request.verificationUri}\n${request.userCode}',
                               ),
                             );
                           },
