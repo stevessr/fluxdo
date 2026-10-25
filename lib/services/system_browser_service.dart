@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 
+import 'browser_discovery_cache.dart';
 import 'desktop_browser_discovery.dart';
 export 'desktop_browser_discovery.dart' show LoginBrowser;
 
@@ -15,6 +16,13 @@ export 'desktop_browser_discovery.dart' show LoginBrowser;
 class SystemBrowserService {
   SystemBrowserService._();
   static final instance = SystemBrowserService._();
+
+  // Process-only cache: coalesces concurrent discovery and releases installed
+  // browser entries (including icon bytes) after one hour or app exit.
+  late final BrowserDiscoveryCache<List<LoginBrowser>> _discoveryCache =
+      BrowserDiscoveryCache<List<LoginBrowser>>(load: _discoverBrowsers);
+
+  void clearBrowserCache() => _discoveryCache.invalidate();
 
   static const _channel = MethodChannel('com.github.lingyan000.fluxdo/browser');
   static const _default = LoginBrowser(id: 'default', name: '系统默认浏览器');
@@ -75,7 +83,10 @@ class SystemBrowserService {
     return [...browsers, _androidChooser];
   }
 
-  Future<List<LoginBrowser>> availableBrowsers() async {
+  Future<List<LoginBrowser>> availableBrowsers({bool forceRefresh = false}) =>
+      _discoveryCache.get(forceRefresh: forceRefresh);
+
+  Future<List<LoginBrowser>> _discoverBrowsers() async {
     if (Platform.isAndroid) {
       final raw = await _channel.invokeListMethod<dynamic>('listLoginBrowsers');
       return decodeAndroidBrowsers(raw);

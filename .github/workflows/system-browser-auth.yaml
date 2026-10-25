@@ -9,6 +9,9 @@ on:
       - 'test/widgets/auth/login_browser_picker_sheet_test.dart'
       - 'lib/services/desktop_browser_discovery.dart'
       - 'lib/services/xdg_browser_discovery.dart'
+      - 'lib/services/xdg_browser_icon_loader.dart'
+      - 'lib/services/browser_discovery_cache.dart'
+      - 'tool/verify_browser_discovery_cache.dart'
       - 'tool/verify_browser_discovery.dart'
       - 'tool/verify_xdg_browser_discovery.dart'
       - 'android/app/src/main/AndroidManifest.xml'
@@ -40,8 +43,10 @@ jobs:
         run: gio version
       - name: Verify desktop discovery behavior and native filesystem
         run: dart tool/verify_browser_discovery.dart
-      - name: Analyze standalone discovery
-        run: dart analyze lib/services/desktop_browser_discovery.dart lib/services/xdg_browser_discovery.dart tool/verify_browser_discovery.dart tool/verify_xdg_browser_discovery.dart
+      - name: Verify expiring browser cache
+        run: dart tool/verify_browser_discovery_cache.dart
+      - name: Analyze standalone discovery and cache
+        run: dart analyze lib/services/desktop_browser_discovery.dart lib/services/xdg_browser_discovery.dart lib/services/xdg_browser_icon_loader.dart lib/services/browser_discovery_cache.dart tool/verify_browser_discovery.dart tool/verify_xdg_browser_discovery.dart tool/verify_browser_discovery_cache.dart
 
   dart-browser-auth:
     runs-on: ubuntu-latest
@@ -67,6 +72,11 @@ jobs:
           dart format \
             lib/services/system_browser_service.dart \
             lib/services/desktop_browser_discovery.dart \
+            lib/services/xdg_browser_discovery.dart \
+            lib/services/xdg_browser_icon_loader.dart \
+            lib/services/browser_discovery_cache.dart \
+            tool/verify_xdg_browser_discovery.dart \
+            tool/verify_browser_discovery_cache.dart \
             lib/pages/login_page.dart \
             lib/widgets/auth/login_browser_picker_sheet.dart \
             test/services/system_browser_service_test.dart \
@@ -82,6 +92,8 @@ jobs:
         run: >-
           flutter analyze
           lib/services/xdg_browser_discovery.dart
+          lib/services/xdg_browser_icon_loader.dart
+          lib/services/browser_discovery_cache.dart
           lib/services/desktop_browser_discovery.dart
           lib/services/system_browser_service.dart
           lib/pages/login_page.dart
