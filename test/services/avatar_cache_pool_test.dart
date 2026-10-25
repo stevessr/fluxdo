@@ -54,18 +54,18 @@ void main() {
 
     test('full URLs (host, revision, query and signature) remain isolated', () {
       final pool = AvatarCachePool.instance;
-      ImageProvider avatar(String path) => pool.imageProvider(
-        path,
-        logicalDiameter: 32,
-        devicePixelRatio: 2,
-      );
+      ImageProvider avatar(String path) =>
+          pool.imageProvider(path, logicalDiameter: 32, devicePixelRatio: 2);
       final original = avatar(url);
-      expect(avatar(url.replaceFirst('linux.do/', 'other.do/')),
-          isNot(equals(original)));
-      expect(avatar(url.replaceFirst('123_2', '124_2')),
-          isNot(equals(original)));
-      expect(avatar(url.replaceFirst('v=4', 'v=5')),
-          isNot(equals(original)));
+      expect(
+        avatar(url.replaceFirst('linux.do/', 'other.do/')),
+        isNot(equals(original)),
+      );
+      expect(
+        avatar(url.replaceFirst('123_2', '124_2')),
+        isNot(equals(original)),
+      );
+      expect(avatar(url.replaceFirst('v=4', 'v=5')), isNot(equals(original)));
       expect(avatar('$url&token=account-b'), isNot(equals(original)));
     });
 
@@ -89,27 +89,32 @@ void main() {
   });
 
   group('avatar SVG probe memory', () {
-    test('in-flight disk checks are coalesced across widget instances', () async {
-      final completer = Completer<String?>();
-      var calls = 0;
-      final pool = AvatarCachePool.forTesting(svgLoader: (_) {
-        calls++;
-        return completer.future;
-      });
+    test(
+      'in-flight disk checks are coalesced across widget instances',
+      () async {
+        final completer = Completer<String?>();
+        var calls = 0;
+        final pool = AvatarCachePool.forTesting(
+          svgLoader: (_) {
+            calls++;
+            return completer.future;
+          },
+        );
 
-      const url = 'https://a.test/profile.svg';
-      final first = pool.probeCachedSvg(url);
-      final second = pool.probeCachedSvg(url);
-      expect(identical(first, second), isTrue);
-      expect(calls, 1);
-      completer.complete('<svg>cached</svg>');
-      expect(await first, '<svg>cached</svg>');
-      expect(await second, '<svg>cached</svg>');
-      expect(pool.hasSvgResult(url), isTrue);
-      expect(pool.cachedSvg(url), '<svg>cached</svg>');
-      expect(await pool.probeCachedSvg(url), '<svg>cached</svg>');
-      expect(calls, 1);
-    });
+        const url = 'https://a.test/profile.svg';
+        final first = pool.probeCachedSvg(url);
+        final second = pool.probeCachedSvg(url);
+        expect(identical(first, second), isTrue);
+        expect(calls, 1);
+        completer.complete('<svg>cached</svg>');
+        expect(await first, '<svg>cached</svg>');
+        expect(await second, '<svg>cached</svg>');
+        expect(pool.hasSvgResult(url), isTrue);
+        expect(pool.cachedSvg(url), '<svg>cached</svg>');
+        expect(await pool.probeCachedSvg(url), '<svg>cached</svg>');
+        expect(calls, 1);
+      },
+    );
 
     test('fallback discovered SVG supersedes an in-flight disk miss', () async {
       final completer = Completer<String?>();
@@ -124,21 +129,25 @@ void main() {
       expect(pool.cachedSvg(url), '<svg>real</svg>');
     });
 
-    test('negative disk probes are memoized but valid SVG can replace them',
-        () async {
-      var calls = 0;
-      final pool = AvatarCachePool.forTesting(svgLoader: (_) async {
-        calls++;
-        return null;
-      });
-      const url = 'https://a.test/asset.svg';
-      expect(await pool.probeCachedSvg(url), isNull);
-      expect(pool.hasSvgResult(url), isTrue);
-      expect(await pool.probeCachedSvg(url), isNull);
-      expect(calls, 1);
-      pool.rememberSvg(url, '<svg>updated</svg>');
-      expect(pool.cachedSvg(url), '<svg>updated</svg>');
-    });
+    test(
+      'negative disk probes are memoized but valid SVG can replace them',
+      () async {
+        var calls = 0;
+        final pool = AvatarCachePool.forTesting(
+          svgLoader: (_) async {
+            calls++;
+            return null;
+          },
+        );
+        const url = 'https://a.test/asset.svg';
+        expect(await pool.probeCachedSvg(url), isNull);
+        expect(pool.hasSvgResult(url), isTrue);
+        expect(await pool.probeCachedSvg(url), isNull);
+        expect(calls, 1);
+        pool.rememberSvg(url, '<svg>updated</svg>');
+        expect(pool.cachedSvg(url), '<svg>updated</svg>');
+      },
+    );
 
     test('SVG metadata is bounded independently from active accounts', () {
       final pool = AvatarCachePool.forTesting(svgLoader: (_) async => null);
