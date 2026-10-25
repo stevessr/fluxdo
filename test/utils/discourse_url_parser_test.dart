@@ -128,7 +128,10 @@ void main() {
       );
       expect(invalidMonth?.filter, 'all');
       expect(invalidMonth?.month, isNull);
-      expect(DiscourseUrlParser.parseCakeday('/cakeday/birthdays')?.filter, isNull);
+      expect(
+        DiscourseUrlParser.parseCakeday('/cakeday/birthdays')?.filter,
+        isNull,
+      );
       expect(DiscourseUrlParser.parseCakeday('/cakeday/nope/today'), isNull);
     });
 
