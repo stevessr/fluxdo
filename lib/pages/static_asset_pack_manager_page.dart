@@ -31,7 +31,6 @@ class _StaticAssetPackManagerPageState
     'avatar-llm': 'LLM 角色差分素材',
     'avatar-stevessr': 'Stevessr 角色差分素材',
   };
-  static final _digest = RegExp(r'^[a-f0-9]{64}$');
   static const _maximumZipBytes = 128 * 1024 * 1024;
 
   StreamSubscription<String>? _subscription;
@@ -88,60 +87,10 @@ class _StaticAssetPackManagerPageState
     }
   }
 
-  Future<String?> _requestDigest(String packName) async {
-    final controller = TextEditingController();
-    try {
-      return await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(_tr('安装 $packName', 'Install $packName')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_tr(
-                '先从可信发行页面独立复制 ZIP 文件的完整 SHA-256，再选择对应 ZIP。'
-                '应用只校验一致性，不会仅凭 ZIP 自己提供的清单判断发布者身份。',
-                'Copy the complete ZIP SHA-256 independently from a trusted '
-                'release page before selecting the ZIP. The ZIP manifest '
-                'cannot authenticate its publisher.',
-              )),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                maxLength: 64,
-                decoration: InputDecoration(
-                  labelText: 'SHA-256',
-                  border: const OutlineInputBorder(),
-                  hintText: _tr('完整 64 位小写十六进制', '64 lowercase hex digits'),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(_tr('取消', 'Cancel')),
-            ),
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: controller,
-              builder: (_, value, _) => FilledButton(
-                onPressed: _digest.hasMatch(value.text.trim().toLowerCase())
-                    ? () => Navigator.pop(
-                        dialogContext, value.text.trim().toLowerCase(),
-                      )
-                    : null,
-                child: Text(_tr('选择 ZIP', 'Choose ZIP')),
-              ),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      // 等对话框退出后再释放其 TextField 持有的控制器。
-      WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
-    }
-  }
+  Future<String?> _requestDigest(String packName) => showDialog<String>(
+    context: context,
+    builder: (_) => _TrustedDigestDialog(packName: packName),
+  );
 
   Future<void> _install(String id) async {
     if (kIsWeb) {
@@ -299,6 +248,74 @@ class _StaticAssetPackManagerPageState
           ),
         ],
       ),
+    );
+  }
+}
+
+
+/// 对话框自己持有并释放控制器；避免路由退出动画期间提前释放 TextField。
+class _TrustedDigestDialog extends StatefulWidget {
+  const _TrustedDigestDialog({required this.packName});
+  final String packName;
+
+  @override
+  State<_TrustedDigestDialog> createState() => _TrustedDigestDialogState();
+}
+
+class _TrustedDigestDialogState extends State<_TrustedDigestDialog> {
+  final _controller = TextEditingController();
+  static final _digest = RegExp(r'^[a-f0-9]{64}$');
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    String tr(String zh, String en) => isZh ? zh : en;
+    return AlertDialog(
+      title: Text(tr('安装 ${widget.packName}', 'Install ${widget.packName}')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(tr(
+            '先从可信发行页面独立复制 ZIP 文件的完整 SHA-256，再选择对应 ZIP。'
+            '应用只校验一致性，不会仅凭 ZIP 自己提供的清单判断发布者身份。',
+            'Copy the complete ZIP SHA-256 independently from a trusted '
+            'release page before selecting the ZIP. The ZIP manifest '
+            'cannot authenticate its publisher.',
+          )),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            maxLength: 64,
+            decoration: InputDecoration(
+              labelText: 'SHA-256',
+              border: const OutlineInputBorder(),
+              hintText: tr('完整 64 位小写十六进制', '64 lowercase hex digits'),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(tr('取消', 'Cancel')),
+        ),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _controller,
+          builder: (_, value, _) => FilledButton(
+            onPressed: _digest.hasMatch(value.text.trim().toLowerCase())
+                ? () => Navigator.pop(context, value.text.trim().toLowerCase())
+                : null,
+            child: Text(tr('选择 ZIP', 'Choose ZIP')),
+          ),
+        ),
+      ],
     );
   }
 }

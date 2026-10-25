@@ -37,5 +37,23 @@ void main() {
     // 未接入可信发行身份前只有用户手动输入可信哈希的导入按钮。
     expect(find.text('导入 / 更新'), findsWidgets);
     expect(find.text('使用内置资源或未安装'), findsWidgets);
+    await tester.tap(find.text('导入 / 更新').first);
+    await tester.pumpAndSettle();
+    expect(find.text('选择 ZIP'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(find.widgetWithText(FilledButton, '选择 ZIP'))
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(find.byType(TextField).last, 'a' * 64);
+    await tester.pump();
+    expect(
+      tester.widget<FilledButton>(find.widgetWithText(FilledButton, '选择 ZIP'))
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
   });
 }
