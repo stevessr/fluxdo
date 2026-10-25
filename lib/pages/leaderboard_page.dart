@@ -317,8 +317,8 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
           }
           if (showPersonal && index == 2) {
             return _PersonalLeaderboardRank(
-              entry: visiblePersonal,
-              onTap: () => _openUser(visiblePersonal),
+              entry: visiblePersonal!,
+              onTap: () => _openUser(visiblePersonal!),
             );
           }
           final rankIndex = index - initialRows;
@@ -355,28 +355,382 @@ class _PeriodSelector extends StatelessWidget {
     required this.onSelected,
   });
 
+  static const _periods = [
+    _LeaderboardPeriod.allTime,
+    _LeaderboardPeriod.yearly,
+    _LeaderboardPeriod.quarterly,
+    _LeaderboardPeriod.monthly,
+    _LeaderboardPeriod.weekly,
+    _LeaderboardPeriod.daily,
+  ];
+
   final _LeaderboardPeriod selected;
   final bool enabled;
   final ValueChanged<_LeaderboardPeriod> onSelected;
 
+  String _span(BuildContext context, _LeaderboardPeriod period) {
+    final range = leaderboardPeriodRange(period.apiValue, DateTime.now());
+    if (range == null) return '';
+    final locale = Localizations.localeOf(context);
+    final isChinese = locale.languageCode == 'zh';
+    String format(DateTime date, {required bool withYear}) {
+      if (isChinese) {
+        return withYear
+            ? DateFormat('yyyy年M月d日').format(date)
+            : DateFormat('M月d日').format(date);
+      }
+      return withYear
+          ? DateFormat.yMMMd(locale.toString()).format(date)
+          : DateFormat.MMMd(locale.toString()).format(date);
+    }
+
+    final sameYear = range.start.year == range.end.year;
+    final isSingleDay = range.start == range.end;
+    final withYear = !sameYear;
+    final first = format(range.start, withYear: withYear);
+    if (isSingleDay) return first;
+    return '$first – ' + format(range.end, withYear: withYear);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 52,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        scrollDirection: Axis.horizontal,
-        itemCount: _LeaderboardPeriod.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final period = _LeaderboardPeriod.values[index];
-          return FilterChip(
-            selected: selected == period,
-            label: Text(period.label(context)),
-            onSelected: enabled ? (_) => onSelected(period) : null,
-            showCheckmark: false,
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final span = _span(context, selected);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          PopupMenuButton<_LeaderboardPeriod>(
+            initialValue: selected,
+            enabled: enabled,
+            position: PopupMenuPosition.under,
+            tooltip: selected.label(context),
+            constraints: BoxConstraints(
+              minWidth: 220,
+              maxWidth: MediaQuery.sizeOf(context).width - 32,
+            ),
+            onSelected: onSelected,
+            itemBuilder: (popupContext) => _periods.map((period) {
+              final periodSpan = _span(popupContext, period);
+              return PopupMenuItem<_LeaderboardPeriod>(
+                value: period,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            period.label(popupContext),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: period == selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          if (periodSpan.isNotEmpty)
+                            Text(
+                              periodSpan,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (period == selected)
+                      Icon(Symbols.check_rounded, size: 18, color: colors.primary),
+                  ],
+                ),
+              );
+            }).toList(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  selected.label(context),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Symbols.expand_more_rounded),
+              ],
+            ),
+          ),
+          if (span.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              span,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LeaderboardPodium extends StatelessWidget {
+  const _LeaderboardPodium({
+    required this.winners,
+    required this.onTap,
+  });
+
+  final List<_LeaderboardEntry> winners;
+  final ValueChanged<_LeaderboardEntry> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    // 与官方一致：视觉顺序为第二、第一、第三。
+    final ordered = <_LeaderboardEntry?>[
+      winners.length > 1 ? winners[1] : null,
+      winners.first,
+      winners.length > 2 ? winners[2] : null,
+    ];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 28),
+      padding: const EdgeInsets.fromLTRB(8, 20, 8, 22),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer.withValues(alpha: 0.30),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth / 3;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var index = 0; index < ordered.length; index++)
+                Expanded(
+                  child: ordered[index] == null
+                      ? const SizedBox.shrink()
+                      : _LeaderboardWinner(
+                          entry: ordered[index]!,
+                          slotWidth: width,
+                          onTap: () => onTap(ordered[index]!),
+                        ),
+                ),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _LeaderboardWinner extends StatelessWidget {
+  const _LeaderboardWinner({
+    required this.entry,
+    required this.slotWidth,
+    required this.onTap,
+  });
+
+  final _LeaderboardEntry entry;
+  final double slotWidth;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final first = entry.position == 1;
+    final medal = switch (entry.position) {
+      1 => const Color(0xffffce35),
+      2 => const Color(0xffb9bdc7),
+      _ => const Color(0xffcd8b4a),
+    };
+    final radius = (slotWidth * (first ? 0.43 : 0.39)).clamp(24.0, 56.0);
+    final score = NumberFormat.decimalPattern(
+      Localizations.localeOf(context).toString(),
+    ).format(entry.totalScore);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (first)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Icon(Symbols.crown_rounded, color: medal, size: 28),
+              ),
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: medal, width: 2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: SmartAvatar(
+                    imageUrl: entry.avatarUrl,
+                    radius: radius,
+                    fallbackText: entry.username,
+                  ),
+                ),
+                Positioned(
+                  bottom: -13,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: medal,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colors.surface, width: 2),
+                    ),
+                    child: Text(
+                      '${entry.position}',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: const Color(0xff1c1c1c),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 19),
+            Text(
+              entry.name?.isNotEmpty == true ? entry.name! : entry.username,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onSurface,
+                fontWeight: first ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                score,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                style: (first
+                        ? theme.textTheme.titleLarge
+                        : theme.textTheme.titleMedium)
+                    ?.copyWith(
+                  color: colors.onSurface,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LeaderboardRankingHeading extends StatelessWidget {
+  const _LeaderboardRankingHeading({required this.copy});
+
+  final _LeaderboardCopy copy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(copy.rank, style: theme.textTheme.titleSmall),
+          Row(
+            children: [
+              Icon(Symbols.workspace_premium_rounded, size: 18, color: colors.primary),
+              const SizedBox(width: 6),
+              Text(copy.points, style: theme.textTheme.titleSmall),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PersonalLeaderboardRank extends StatelessWidget {
+  const _PersonalLeaderboardRank({
+    required this.entry,
+    required this.onTap,
+  });
+
+  final _LeaderboardEntry entry;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final score = NumberFormat.compact(
+      locale: Localizations.localeOf(context).toString(),
+    ).format(entry.totalScore);
+
+    return Material(
+      color: colors.primary,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 74,
+                child: Text(
+                  '${entry.position}',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: colors.onPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  _copy(context).you,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colors.onPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 90,
+                child: Text(
+                  score,
+                  textAlign: TextAlign.end,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: colors.onPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
