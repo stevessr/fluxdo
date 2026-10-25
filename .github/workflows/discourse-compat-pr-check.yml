@@ -18,6 +18,7 @@ on:
       - 'lib/pages/topic_detail_page/topic_more_menu_actions.dart'
       - 'lib/widgets/topic/add_to_board_sheet.dart'
       - 'test/pages/topic_detail_page/topic_more_menu_actions_test.dart'
+      - 'test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart'
       - 'test/widgets/topic/add_to_board_sheet_test.dart'
       - 'lib/pages/chat/chat_channel_members_sheet.dart'
       - 'lib/pages/chat/chat_channel_settings_sheet.dart'
@@ -26,6 +27,7 @@ on:
       - 'lib/pages/groups_page.dart'
       - 'lib/widgets/common/group_leave_confirmation_dialog.dart'
       - 'test/pages/group_membership_confirmation_test.dart'
+      - 'test/pages/group_membership_refresh_race_test.dart'
       - 'lib/pages/invite_links_page.dart'
       - 'lib/providers/chat_providers.dart'
       - 'lib/services/discourse/_boards.dart'
@@ -93,6 +95,7 @@ jobs:
             lib/pages/groups_page.dart \
             lib/widgets/common/group_leave_confirmation_dialog.dart \
             test/pages/group_membership_confirmation_test.dart \
+            test/pages/group_membership_refresh_race_test.dart \
             lib/pages/invite_links_page.dart \
             lib/providers/chat_providers.dart \
             lib/services/discourse/_boards.dart \
@@ -127,6 +130,7 @@ jobs:
               lib/pages/groups_page.dart \
               lib/widgets/common/group_leave_confirmation_dialog.dart \
               test/pages/group_membership_confirmation_test.dart \
+              test/pages/group_membership_refresh_race_test.dart \
               lib/pages/invite_links_page.dart \
               lib/providers/chat_providers.dart \
               lib/services/discourse/_boards.dart \
@@ -162,6 +166,7 @@ jobs:
           lib/pages/groups_page.dart
           lib/widgets/common/group_leave_confirmation_dialog.dart
           test/pages/group_membership_confirmation_test.dart
+          test/pages/group_membership_refresh_race_test.dart
           lib/pages/invite_links_page.dart
           lib/providers/chat_providers.dart
           lib/services/discourse/discourse_service.dart
@@ -172,7 +177,7 @@ jobs:
         run: flutter test test/models/discourse_management_compat_test.dart
 
       - name: Verify group membership confirmation
-        run: flutter test test/pages/group_membership_confirmation_test.dart
+        run: flutter test test/pages/group_membership_confirmation_test.dart test/pages/group_membership_refresh_race_test.dart
 
       - name: Run post granted badge tests
         run: flutter test test/models/post_granted_badges_test.dart test/widgets/post/post_granted_badge_test.dart
@@ -183,3 +188,20 @@ jobs:
       - name: Run topic board picker tests
         run: flutter test test/pages/topic_detail_page/topic_more_menu_actions_test.dart test/widgets/topic/add_to_board_sheet_test.dart
 
+      - name: Check topic account switcher formatting
+        run: |
+          dart format lib/pages/topic_detail_page/topic_detail_page.dart test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+          git diff -- lib/pages/topic_detail_page/topic_detail_page.dart test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+          git diff --exit-code -- lib/pages/topic_detail_page/topic_detail_page.dart test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+
+      - name: Analyze topic account switcher
+        run: >-
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          lib/pages/topic_detail_page/topic_detail_page.dart
+          test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+
+      - name: Run topic account switcher regression tests
+        run: >-
+          flutter test
+          test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+          test/widgets/user/account_switcher_sheet_test.dart
