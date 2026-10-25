@@ -56,11 +56,12 @@ void main() {
         expect(options.data, isA<Map>());
       }
       final create = sent[0].data as Map;
-      expect(create['scopes'], 'read');
+      expect(create['scopes'], 'write');
       expect(create['client_id'], 'DEVICE-CLIENT-ID');
       expect(create['public_key'], 'RSA-TEST-KEY');
-      expect(create['expires_in_seconds'], '86400');
+      expect(create['expires_in_seconds'], '600');
       expect(create['nonce'], request.nonce);
+      expect(request.mode, DeviceAuthorizationMode.cookieLogin);
       expect((sent[1].data as Map)['device_code'], request.deviceCode);
       expect(
         request.verificationUriWithRequest.queryParameters['request'],
@@ -126,7 +127,9 @@ void main() {
             persistedClientId = clientId;
           },
         );
-        final request = await service.create();
+        final request = await service.create(
+          mode: DeviceAuthorizationMode.readOnly,
+        );
         final identity = await service.authorize(request, 'ENCRYPTED-KEY');
         expect(identity.username, 'alice');
         expect(persistedUsername, 'alice');
@@ -189,12 +192,182 @@ void main() {
           stored = true;
         },
       );
-      final request = await service.create();
+      final request = await service.create(
+        mode: DeviceAuthorizationMode.readOnly,
+      );
       await expectLater(
         service.authorize(request, 'ENCRYPTED-KEY'),
         throwsFormatException,
       );
       expect(stored, false);
+    });
+
+
+    test('native write grant mints OTP and revokes temporary key', () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
+      final key = List.filled(64, 'b').join();
+      final sent = <RequestOptions>[];
+      var revoked = false;
+      var persisted = false;
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            sent.add(options);
+            if (options.path == '/user-api-key/device.json') {
+              return handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'device_code': List.filled(64, 'a').join(),
+                  'user_code': 'ABCD-EFGH',
+                  'verification_uri': 'https://linux.do/user-api-key/activate',
+                  'verification_uri_with_request':
+                      'https://linux.do/user-api-key/activate?request=abc123_-',
+                  'expires_in': 600,
+                  'interval': 5,
+                },
+              ));
+            }
+            if (options.path == '/session/current.json') {
+              return handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {'current_user': {'username': 'alice'}},
+              ));
+            }
+            throw StateError('unexpected endpoint: ${options.path}');
+          },
+        ),
+      );
+      final service = DeviceAuthorizationService(
+        dio,
+        publicKeyProvider: () async => 'RSA-TEST-KEY',
+        clientIdProvider: () async => 'DEVICE-CLIENT-ID',
+        payloadDecryptor: (payload, nonce) async =>
+            {'key': key, 'nonce': nonce},
+        credentialSaver: (key, clientId, username, expires) async {
+          persisted = true;
+        },
+        otpRequester: (authorizedKey, clientId, generation) async {
+          expect(authorizedKey, key);
+          expect(clientId, 'DEVICE-CLIENT-ID');
+          return 'f00d1234';
+        },
+        keyRevoker: (authorizedKey) async {
+          expect(authorizedKey, key);
+          revoked = true;
+          return true;
+        },
+      );
+      final request = await service.create();
+      final identity = await service.authorize(request, 'ENCRYPTED-KEY');
+      expect(identity.username, 'alice');
+      expect(identity.otp, 'f00d1234');
+      expect(persisted, false);
+      expect(revoked, true);
+      expect((sent.first.data as Map)['scopes'], 'write');
+      expect((sent.first.data as Map)['expires_in_seconds'], '600');
+      expect(sent.last.headers['Cookie'], '');
+      expect(sent.last.headers['User-Api-Client-Id'], 'DEVICE-CLIENT-ID');
+    });
+
+    test('write device grant does not fabricate OTP on server denial', () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
+      final key = List.filled(64, 'b').join();
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.path == '/user-api-key/device.json') {
+            return handler.resolve(Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'device_code': List.filled(64, 'a').join(),
+                'user_code': 'ABCD-EFGH',
+                'verification_uri': 'https://linux.do/user-api-key/activate',
+                'verification_uri_with_request':
+                    'https://linux.do/user-api-key/activate?request=abc123_-',
+                'expires_in': 600,
+                'interval': 5,
+              },
+            ));
+          }
+          return handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {'current_user': {'username': 'alice'}},
+          ));
+        },
+      ));
+      var revoked = false;
+      final service = DeviceAuthorizationService(
+        dio,
+        publicKeyProvider: () async => 'RSA-TEST-KEY',
+        clientIdProvider: () async => 'DEVICE-CLIENT-ID',
+        payloadDecryptor: (payload, nonce) async =>
+            {'key': key, 'nonce': nonce},
+        otpRequester: (key, clientId, generation) async => null,
+        keyRevoker: (key) async {
+          revoked = true;
+          return true;
+        },
+      );
+      final request = await service.create();
+      await expectLater(
+        service.authorize(request, 'ENCRYPTED-KEY'),
+        throwsA(isA<DeviceOtpUnavailableException>()),
+      );
+      expect(revoked, true);
+    });
+
+    test('explicit read-only mode never mints OTP', () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
+      final sent = <RequestOptions>[];
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          sent.add(options);
+          if (options.path == '/user-api-key/device.json') {
+            return handler.resolve(Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'device_code': List.filled(64, 'a').join(),
+                'user_code': 'ABCD-EFGH',
+                'verification_uri': 'https://linux.do/user-api-key/activate',
+                'verification_uri_with_request':
+                    'https://linux.do/user-api-key/activate?request=abc123_-',
+                'expires_in': 600,
+                'interval': 5,
+              },
+            ));
+          }
+          return handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {'current_user': {'username': 'alice'}},
+          ));
+        },
+      ));
+      var saved = false;
+      final service = DeviceAuthorizationService(
+        dio,
+        publicKeyProvider: () async => 'RSA-TEST-KEY',
+        clientIdProvider: () async => 'DEVICE-CLIENT-ID',
+        payloadDecryptor: (payload, nonce) async =>
+            {'key': List.filled(64, 'b').join(), 'nonce': nonce},
+        credentialSaver: (key, clientId, username, expires) async {
+          saved = true;
+        },
+        otpRequester: (key, clientId, generation) async =>
+            throw StateError('Read-only grants must not request OTP'),
+      );
+      final request = await service.create(
+        mode: DeviceAuthorizationMode.readOnly,
+      );
+      final identity = await service.authorize(request, 'ENCRYPTED-KEY');
+      expect(identity.otp, isNull);
+      expect(saved, true);
+      expect((sent.first.data as Map)['scopes'], 'read');
+      expect((sent.first.data as Map)['expires_in_seconds'], '86400');
     });
 
     test('rejects altered activation origin and nonstandard ports', () async {
