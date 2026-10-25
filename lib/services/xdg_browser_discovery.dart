@@ -102,7 +102,7 @@ class XdgBrowserDiscovery {
     final label = '${values['Name'] ?? ''} ${values['GenericName'] ?? ''} $id'
         .toLowerCase();
     return RegExp(
-      r'browser|firefox|chromium|chrome|librewolf|waterfox|floorp|brave|vivaldi|opera|falkon|epiphany|midori|qutebrowser|mullvad|cromite|thorium',
+      r'browser|firefox|chromium|chrome|librewolf|waterfox|floorp|brave|vivaldi|opera|falkon|epiphany|midori|qutebrowser|mullvad|cromite|thorium|(?:^|[^a-z])edge(?:[^a-z]|$)',
     ).hasMatch(label);
   }
 
