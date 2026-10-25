@@ -45,10 +45,7 @@ class LoginBrowserPickerSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              '选择浏览器',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+            Text('选择浏览器', style: Theme.of(context).textTheme.titleLarge),
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 10, 20, 12),
               child: Text(
