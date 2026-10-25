@@ -151,16 +151,17 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       if (!mounted) return;
       setState(() => _errors[requestedPeriod] = error);
     } finally {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
 
-      // 周期切换在请求进行时被禁用；这里仍做兜底，确保外部状态变化后
-      // 当前周期不会停留在未加载状态。
-      if (widget.isActive &&
-          _errors[_period] == null &&
-          _cache[_period]?.viewerUsername !=
-              ref.read(currentUserProvider).value?.username) {
-        scheduleMicrotask(_ensureLoaded);
+        // 周期切换在请求进行时被禁用；这里仍做兜底，确保外部状态变化后
+        // 当前周期不会停留在未加载状态。
+        if (widget.isActive &&
+            _errors[_period] == null &&
+            _cache[_period]?.viewerUsername !=
+                ref.read(currentUserProvider).value?.username) {
+          scheduleMicrotask(_ensureLoaded);
+        }
       }
     }
   }
@@ -302,10 +303,10 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
           }
           if (showPersonal && index == 2) {
             return _LeaderboardSelfRank(
-              personal: personal!,
+              personal: personal,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => UserProfilePage(username: currentUsername!),
+                  builder: (_) => UserProfilePage(username: currentUsername),
                 ),
               ),
             );
@@ -313,7 +314,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
           final entryIndex = index - listStart;
           if (entryIndex >= rankings.length) {
             return _LeaderboardFooter(
-              snapshot: snapshot!,
+              snapshot: snapshot,
               loading: _loading,
               error: error,
               onLoadMore: () => _load(reset: false),
