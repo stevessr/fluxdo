@@ -1,7 +1,131 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/device_authorization_service.dart';
 
 void main() {
+  group('Discourse device authorization HTTP contract', () {
+    test('create and poll use JSON payloads required by Discourse', () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
+      final sent = <RequestOptions>[];
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            sent.add(options);
+            if (options.path == '/user-api-key/device.json') {
+              return handler.resolve(
+                Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'device_code': 'a' * 64,
+                    'user_code': 'ABCD-EFGH',
+                    'verification_uri': 'https://linux.do/user-api-key/activate',
+                    'verification_uri_with_request':
+                        'https://linux.do/user-api-key/activate?request=abc123_-',
+                    'expires_in': 600,
+                    'interval': 5,
+                  },
+                ),
+              );
+            }
+            return handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {'status': 'authorization_pending'},
+              ),
+            );
+          },
+        ),
+      );
+
+      final device = DeviceAuthorizationService(
+        dio,
+        publicKeyProvider: () async => 'RSA-TEST-KEY',
+      );
+      final request = await device.create();
+      final status = await device.poll(request);
+      expect(status.status, DeviceAuthorizationStatus.pending);
+      expect(sent, hasLength(2));
+      expect(sent[0].path, '/user-api-key/device.json');
+      expect(sent[1].path, '/user-api-key/device/poll.json');
+      for (final options in sent) {
+        expect(options.method, 'POST');
+        expect(options.contentType, Headers.jsonContentType);
+        expect(options.data, isA<Map>());
+      }
+      final create = sent[0].data as Map;
+      expect(create['scopes'], 'write');
+      expect(create['public_key'], 'RSA-TEST-KEY');
+      expect(create['expires_in_seconds'], '600');
+      expect(create['nonce'], request.nonce);
+      expect((sent[1].data as Map)['device_code'], request.deviceCode);
+      expect(request.verificationUriWithRequest.queryParameters['request'], 'abc123_-');
+    });
+
+    test('rejects altered activation origin and nonstandard ports', () async {
+      for (final activation in [
+        'https://evil.example/user-api-key/activate?request=abc123_-',
+        'https://linux.do:8443/user-api-key/activate?request=abc123_-',
+        'https://linux.do/user-api-key/activate?request=invalid!',
+      ]) {
+        final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) => handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'device_code': 'a' * 64,
+                  'user_code': 'ABCD-EFGH',
+                  'verification_uri': 'https://linux.do/user-api-key/activate',
+                  'verification_uri_with_request': activation,
+                  'expires_in': 600,
+                  'interval': 5,
+                },
+              ),
+            ),
+          ),
+        );
+        final service = DeviceAuthorizationService(
+          dio,
+          publicKeyProvider: () async => 'RSA-TEST-KEY',
+        );
+        await expectLater(service.create(), throwsFormatException);
+      }
+    });
+
+    test('does not poll faster than server interval', () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) => handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'device_code': 'a' * 64,
+                'user_code': 'ABCD-EFGH',
+                'verification_uri': 'https://linux.do/user-api-key/activate',
+                'verification_uri_with_request':
+                    'https://linux.do/user-api-key/activate?request=abc123_-',
+                'expires_in': 600,
+                'interval': 95,
+              },
+            ),
+          ),
+        ),
+      );
+      final service = DeviceAuthorizationService(
+        dio,
+        publicKeyProvider: () async => 'RSA-TEST-KEY',
+      );
+      final request = await service.create();
+      expect(request.pollInterval, const Duration(seconds: 95));
+    });
+  });
+
   group('Discourse device authorization contract', () {
     test('pending approval does not expose credentials', () {
       final response = DeviceAuthorizationPoll.parse({
