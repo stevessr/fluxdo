@@ -20,22 +20,34 @@ void main() {
       'if (searchState.isSearchMode) {',
       '// 正常模式下的 AppBar',
     );
-    expect(search, contains('final profileAction = _buildProfileSwitcherAction();'));
+    expect(
+      search,
+      contains('final profileAction = _buildProfileSwitcherAction();'),
+    );
     expect(search, contains('if (profileAction != null) profileAction'));
 
     final workspace = section(
       'PreferredSizeWidget _buildEmbeddedMobileWorkspaceAppBar({',
       'Widget _buildEmbeddedMobileWorkspaceTitle(',
     );
-    expect(workspace, contains('final profileAction = _buildProfileSwitcherAction();'));
+    expect(
+      workspace,
+      contains('final profileAction = _buildProfileSwitcherAction();'),
+    );
     expect(workspace, contains('if (profileAction != null) profileAction'));
 
     final normal = section(
       'List<Widget> _buildAppBarActions({',
       'Widget _buildMoreMenuAction({',
     );
-    expect(normal, contains('final profileAction = _buildProfileSwitcherAction();'));
-    expect(normal, contains('return [if (profileAction != null) profileAction];'));
+    expect(
+      normal,
+      contains('final profileAction = _buildProfileSwitcherAction();'),
+    );
+    expect(
+      normal,
+      contains('return [if (profileAction != null) profileAction];'),
+    );
     expect(normal, contains('if (profileAction != null) profileAction'));
   });
 
