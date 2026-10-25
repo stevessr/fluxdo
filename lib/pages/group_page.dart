@@ -164,7 +164,9 @@ class _GroupPageState extends ConsumerState<GroupPage> {
 
   Future<void> _changeMembership({required bool join}) async {
     final group = _group;
-    if (group == null || _membershipChanging || _membershipConfirmationPending) {
+    if (group == null ||
+        _membershipChanging ||
+        _membershipConfirmationPending) {
       return;
     }
     if (join ? !group.canJoin : !group.canLeave) return;
@@ -857,8 +859,7 @@ class _GroupHeader extends StatelessWidget {
                           _SmallBadge(
                             label: copy.memberCount(group.userCount!),
                           ),
-                        if (group.isGroupUser)
-                          _SmallBadge(label: copy.member),
+                        if (group.isGroupUser) _SmallBadge(label: copy.member),
                         if (group.automatic) _SmallBadge(label: copy.automatic),
                         if (group.isGroupOwner)
                           _SmallBadge(label: copy.youAreOwner),
