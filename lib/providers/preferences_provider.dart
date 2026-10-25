@@ -700,9 +700,13 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
             _prefs.getString(_bottomDoubleTapActionKey),
             fallback: NavTapAction.refresh,
           ),
+          // 将旧版独立生日入口迁入统一的纪念日页面；去重且保留原顺序。
           bottomNavIds:
-              _prefs.getStringList(_bottomNavIdsKey) ??
-              const [NavEntryIds.home, NavEntryIds.profile],
+              (_prefs.getStringList(_bottomNavIdsKey) ??
+                      const [NavEntryIds.home, NavEntryIds.profile])
+                  .map((id) => id == 'birthdays' ? 'anniversaries' : id)
+                  .toSet()
+                  .toList(),
           bottomNavLabelless: _prefs.getBool(_bottomNavLabellessKey) ?? false,
           bottomNavFloating: _prefs.getBool(_bottomNavFloatingKey) ?? false,
           // 新全局策略默认自动开启；不继承废弃的底栏局部开关。

@@ -260,6 +260,7 @@ Future<void> launchContentLink(
               ? CommunityEventsView.birthdays
               : CommunityEventsView.anniversaries,
           initialFilter: cakedayInfo.filter,
+          initialMonth: cakedayInfo.month,
         ),
       ),
     );

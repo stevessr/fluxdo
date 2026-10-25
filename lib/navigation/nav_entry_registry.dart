@@ -142,18 +142,6 @@ class NavEntryRegistry {
         requiresLogin: true,
       ),
       NavEntry(
-        id: 'birthdays',
-        kind: NavEntryKind.page,
-        iconData: Symbols.cake_rounded,
-        selectedIconData: Symbols.cake_rounded,
-        label: (ctx) =>
-            _communityEventLabel(ctx, CommunityEventsView.birthdays),
-        pageBuilder: (ctx, isActive) =>
-            const CommunityEventsPage(view: CommunityEventsView.birthdays),
-        defaultInBottomNav: false,
-        requiresLogin: true,
-      ),
-      NavEntry(
         id: NavEntryIds.bookmarks,
         kind: NavEntryKind.page,
         iconData: Symbols.bookmark_rounded,
@@ -204,10 +192,8 @@ class NavEntryRegistry {
         iconData: Symbols.rule_rounded,
         selectedIconData: Symbols.rule_rounded,
         label: _siteGuidelinesLabel,
-        pageBuilder: (ctx, isActive) => SitePolicyPage(
-          kind: SitePolicyKind.guidelines,
-          isActive: isActive,
-        ),
+        pageBuilder: (ctx, isActive) =>
+            SitePolicyPage(kind: SitePolicyKind.guidelines, isActive: isActive),
         defaultInBottomNav: false,
       ),
       NavEntry(
@@ -216,10 +202,8 @@ class NavEntryRegistry {
         iconData: Symbols.description_rounded,
         selectedIconData: Symbols.description_rounded,
         label: _siteTermsLabel,
-        pageBuilder: (ctx, isActive) => SitePolicyPage(
-          kind: SitePolicyKind.terms,
-          isActive: isActive,
-        ),
+        pageBuilder: (ctx, isActive) =>
+            SitePolicyPage(kind: SitePolicyKind.terms, isActive: isActive),
         defaultInBottomNav: false,
       ),
       NavEntry(
@@ -228,10 +212,8 @@ class NavEntryRegistry {
         iconData: Symbols.privacy_tip_rounded,
         selectedIconData: Symbols.privacy_tip_rounded,
         label: _sitePrivacyLabel,
-        pageBuilder: (ctx, isActive) => SitePolicyPage(
-          kind: SitePolicyKind.privacy,
-          isActive: isActive,
-        ),
+        pageBuilder: (ctx, isActive) =>
+            SitePolicyPage(kind: SitePolicyKind.privacy, isActive: isActive),
         defaultInBottomNav: false,
       ),
       NavEntry(
@@ -248,8 +230,10 @@ class NavEntryRegistry {
 
   /// 按 id 查找 entry
   static NavEntry? byId(String id) {
+    // 旧版独立生日导航入口的配置仍然可以解析。
+    final resolved = id == 'birthdays' ? 'anniversaries' : id;
     for (final e in buildAll()) {
-      if (e.id == id) return e;
+      if (e.id == resolved) return e;
     }
     return null;
   }
@@ -321,7 +305,8 @@ String _communityEventLabel(BuildContext context, CommunityEventsView view) {
   final zh = Localizations.localeOf(context).languageCode == 'zh';
   return switch (view) {
     CommunityEventsView.upcoming => zh ? '近期活动' : 'Upcoming events',
-    CommunityEventsView.anniversaries => zh ? '周年纪念日' : 'Anniversaries',
+    CommunityEventsView.anniversaries =>
+      zh ? '纪念日与生日' : 'Anniversaries & Birthdays',
     CommunityEventsView.birthdays => zh ? '生日' : 'Birthdays',
   };
 }

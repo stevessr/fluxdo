@@ -108,9 +108,28 @@ void main() {
       expect(anniversary?.birthdays, isFalse);
       expect(anniversary?.filter, 'upcoming');
 
-      // 官方 all 路由还包含 month query/月切换；未完整原生化前不误拦截。
+      // 官方两个大类处于同一页面层，四个时间维度均可原生打开。
+      final all = DiscourseUrlParser.parseCakeday(
+        '/cakeday/anniversaries/all?month=7',
+      );
+      expect(all?.birthdays, isFalse);
+      expect(all?.filter, 'all');
+      expect(all?.month, 7);
+
+      final birthdayAll = DiscourseUrlParser.parseCakeday(
+        'https://linux.do/cakeday/birthdays/all?month=12',
+      );
+      expect(birthdayAll?.birthdays, isTrue);
+      expect(birthdayAll?.filter, 'all');
+      expect(birthdayAll?.month, 12);
+
+      final invalidMonth = DiscourseUrlParser.parseCakeday(
+        '/cakeday/birthdays/all?month=13',
+      );
+      expect(invalidMonth?.filter, 'all');
+      expect(invalidMonth?.month, isNull);
       expect(
-        DiscourseUrlParser.parseCakeday('/cakeday/anniversaries/all'),
+        DiscourseUrlParser.parseCakeday('/cakeday/birthdays')?.filter,
         isNull,
       );
       expect(DiscourseUrlParser.parseCakeday('/cakeday/nope/today'), isNull);
