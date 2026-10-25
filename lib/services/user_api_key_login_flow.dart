@@ -194,13 +194,16 @@ class UserApiKeyLoginFlow {
   /// Device authorization returns an API key, not a one-time password.
   /// After DeviceAuthorizationService exchanges that key, reuse precisely
   /// the browser flow's cookie redemption and account initialization.
-  Future<bool> completeDeviceOtp(String otp) async {
-    if (_handling) return false;
+  Future<bool> completeDeviceOtp(
+    String otp, {
+    required int requestGeneration,
+  }) async {
+    if (_handling || !AuthSession().isValid(requestGeneration)) return false;
     _handling = true;
     try {
       return await _finishOtpLogin(
             otp: otp,
-            requestGeneration: AuthSession().generation,
+            requestGeneration: requestGeneration,
             userApiKeyService: UserApiKeyService(),
           ) ==
           true;
