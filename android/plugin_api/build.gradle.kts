@@ -22,3 +22,10 @@ android {
 kotlin {
     compilerOptions { jvmTarget = JvmTarget.JVM_17 }
 }
+
+ // Executed by the standalone native Gradle root, without loading Flutter.
+ // The JVM org.json implementation is used instead of android.jar mock stubs.
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+}

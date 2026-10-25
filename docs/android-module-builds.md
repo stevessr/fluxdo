@@ -79,6 +79,8 @@ JSON 或凭据转交给伴随进程。CI 会比较该校验器的操作集合与
 ```sh
 # 不执行构建，可在没有 Android SDK 的环境检查依赖和参数。
 python3 scripts/ci/build_native_plugins.py --plan --plugin network
+# 不启动 Flutter：单独运行共享 Kotlin IPC 契约的 JVM 单测。
+gradle -p android/native_plugins :plugin_api:testDebugUnitTest --no-daemon
 
 # 仅构建 Network；使用清单内该模块的版本。
 python3 scripts/ci/build_native_plugins.py --mode debug --plugin network

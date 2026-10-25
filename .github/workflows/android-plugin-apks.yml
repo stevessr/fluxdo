@@ -177,6 +177,8 @@ jobs:
           packages: 'platform-tools'
       - name: Install native Android SDK
         run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Unit test native cross-APK payload validation (no Flutter)
+        run: gradle -p android/native_plugins :plugin_api:testDebugUnitTest --no-daemon
       - name: Build native companions before Flutter setup (debug test-signing)
         id: build_native
         run: python3 scripts/ci/build_native_plugins.py --mode debug
