@@ -68,72 +68,81 @@ void main() {
       );
     });
 
-    test('native grant verifies User API Key without OTP or old cookies', () async {
-      final sent = <RequestOptions>[];
-      final key = List.filled(64, 'b').join();
-      String? persistedUsername;
-      String? persistedClientId;
-      final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
-      dio.interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            sent.add(options);
-            if (options.path == '/user-api-key/device.json') {
-              return handler.resolve(Response(
-                requestOptions: options,
-                statusCode: 200,
-                data: {
-                  'device_code': List.filled(64, 'a').join(),
-                  'user_code': 'ABCD-EFGH',
-                  'verification_uri': 'https://linux.do/user-api-key/activate',
-                  'verification_uri_with_request':
-                      'https://linux.do/user-api-key/activate?request=abc123_-',
-                  'expires_in': 600,
-                  'interval': 5,
-                },
-              ));
-            }
-            if (options.path == '/session/current.json') {
-              return handler.resolve(Response(
-                requestOptions: options,
-                statusCode: 200,
-                data: {'current_user': {'username': 'alice'}},
-              ));
-            }
-            throw StateError('unexpected endpoint: ${options.path}');
+    test(
+      'native grant verifies User API Key without OTP or old cookies',
+      () async {
+        final sent = <RequestOptions>[];
+        final key = List.filled(64, 'b').join();
+        String? persistedUsername;
+        String? persistedClientId;
+        final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              sent.add(options);
+              if (options.path == '/user-api-key/device.json') {
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'device_code': List.filled(64, 'a').join(),
+                      'user_code': 'ABCD-EFGH',
+                      'verification_uri':
+                          'https://linux.do/user-api-key/activate',
+                      'verification_uri_with_request': 'https://linux.do/user-api-key/activate?request=abc123_-',
+                      'expires_in': 600,
+                      'interval': 5,
+                    },
+                  ),
+                );
+              }
+              if (options.path == '/session/current.json') {
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'current_user': {'username': 'alice'},
+                    },
+                  ),
+                );
+              }
+              throw StateError('unexpected endpoint: ${options.path}');
+            },
+          ),
+        );
+        final service = DeviceAuthorizationService(
+          dio,
+          publicKeyProvider: () async => 'RSA-TEST-KEY',
+          clientIdProvider: () async => 'DEVICE-CLIENT-ID',
+          payloadDecryptor: (payload, nonce) async {
+            expect(payload, 'ENCRYPTED-KEY');
+            return {'key': key, 'nonce': nonce};
           },
-        ),
-      );
-      final service = DeviceAuthorizationService(
-        dio,
-        publicKeyProvider: () async => 'RSA-TEST-KEY',
-        clientIdProvider: () async => 'DEVICE-CLIENT-ID',
-        payloadDecryptor: (payload, nonce) async {
-          expect(payload, 'ENCRYPTED-KEY');
-          return {'key': key, 'nonce': nonce};
-        },
-        credentialSaver: (apiKey, clientId, username, expires) async {
-          expect(apiKey, key);
-          persistedUsername = username;
-          persistedClientId = clientId;
-        },
-      );
-      final request = await service.create();
-      final identity = await service.authorize(request, 'ENCRYPTED-KEY');
-      expect(identity.username, 'alice');
-      expect(persistedUsername, 'alice');
-      expect(persistedClientId, 'DEVICE-CLIENT-ID');
-      expect(sent.map((r) => r.path), [
-        '/user-api-key/device.json',
-        '/session/current.json',
-      ]);
-      final verification = sent.last;
-      expect(verification.method, 'GET');
-      expect(verification.headers['User-Api-Key'], key);
-      expect(verification.headers['User-Api-Client-Id'], 'DEVICE-CLIENT-ID');
-      expect(verification.headers['Cookie'], '');
-      expect(verification.extra['skipCookieManager'], true);
-    });
+          credentialSaver: (apiKey, clientId, username, expires) async {
+            expect(apiKey, key);
+            persistedUsername = username;
+            persistedClientId = clientId;
+          },
+        );
+        final request = await service.create();
+        final identity = await service.authorize(request, 'ENCRYPTED-KEY');
+        expect(identity.username, 'alice');
+        expect(persistedUsername, 'alice');
+        expect(persistedClientId, 'DEVICE-CLIENT-ID');
+        expect(sent.map((r) => r.path), [
+          '/user-api-key/device.json',
+          '/session/current.json',
+        ]);
+        final verification = sent.last;
+        expect(verification.method, 'GET');
+        expect(verification.headers['User-Api-Key'], key);
+        expect(verification.headers['User-Api-Client-Id'], 'DEVICE-CLIENT-ID');
+        expect(verification.headers['Cookie'], '');
+        expect(verification.extra['skipCookieManager'], true);
+      },
+    );
 
     test('native grant rejects unverified API identity', () async {
       final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
@@ -141,25 +150,29 @@ void main() {
         InterceptorsWrapper(
           onRequest: (options, handler) {
             if (options.path == '/user-api-key/device.json') {
-              return handler.resolve(Response(
+              return handler.resolve(
+                Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'device_code': List.filled(64, 'a').join(),
+                    'user_code': 'ABCD-EFGH',
+                    'verification_uri':
+                        'https://linux.do/user-api-key/activate',
+                    'verification_uri_with_request': 'https://linux.do/user-api-key/activate?request=abc123_-',
+                    'expires_in': 600,
+                    'interval': 5,
+                  },
+                ),
+              );
+            }
+            return handler.resolve(
+              Response(
                 requestOptions: options,
                 statusCode: 200,
-                data: {
-                  'device_code': List.filled(64, 'a').join(),
-                  'user_code': 'ABCD-EFGH',
-                  'verification_uri': 'https://linux.do/user-api-key/activate',
-                  'verification_uri_with_request':
-                      'https://linux.do/user-api-key/activate?request=abc123_-',
-                  'expires_in': 600,
-                  'interval': 5,
-                },
-              ));
-            }
-            return handler.resolve(Response(
-              requestOptions: options,
-              statusCode: 200,
-              data: {'current_user': null},
-            ));
+                data: {'current_user': null},
+              ),
+            );
           },
         ),
       );
