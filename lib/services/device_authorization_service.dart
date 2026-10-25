@@ -13,11 +13,16 @@ import 'user_api_key_service.dart';
 /// key, use it exactly once to request an OTP, then revoke it. Sites which do
 /// not allow write cannot provide cookie-based FluxDO login via this flow.
 class DeviceAuthorizationService {
-  DeviceAuthorizationService(this.dio, {Future<String> Function()? publicKeyProvider})
-    : _publicKeyProvider = publicKeyProvider;
+  DeviceAuthorizationService(
+    this.dio, {
+    Future<String> Function()? publicKeyProvider,
+    Future<String> Function()? clientIdProvider,
+  }) : _publicKeyProvider = publicKeyProvider,
+       _clientIdProvider = clientIdProvider;
 
   final Dio dio;
   final Future<String> Function()? _publicKeyProvider;
+  final Future<String> Function()? _clientIdProvider;
   final UserApiKeyService _keys = UserApiKeyService();
 
   static const String _deviceEndpoint = '/user-api-key/device.json';
@@ -34,17 +39,19 @@ class DeviceAuthorizationService {
     final generation = AuthSession().generation;
     final nonce = const Uuid().v4();
     final publicKey = await (_publicKeyProvider?.call() ?? _keys.ensurePublicKeyPem());
+    final clientId =
+        await (_clientIdProvider?.call() ?? _keys.ensureDeviceClientId());
     if (!AuthSession().isValid(generation)) {
       throw StateError('登录会话已变化，请重新开始');
     }
 
-    // Each request uses a distinct client_id. Authorization cannot revoke
-    // the client key used by the existing system-browser login.
+    // The device client_id is stable but isolated from browser/QR authorization.
+    // Approving another device request replaces only the previous device key.
     final response = await dio.post<dynamic>(
       _deviceEndpoint,
       data: {
         'application_name': 'FluxDO Device Login',
-        'client_id': const Uuid().v4(),
+        'client_id': clientId,
         'scopes': 'write',
         'nonce': nonce,
         'public_key': publicKey,
