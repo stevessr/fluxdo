@@ -209,6 +209,45 @@ void main() {
     );
   });
 
+
+  test('空间回收仅删除第三旧版本，保留当前和上一版', () async {
+    final hashes = <String>[];
+    for (final value in ['one', 'two', 'three']) {
+      final zip = _makePack(
+        _path, Uint8List.fromList(utf8.encode(value)),
+      );
+      final hash = sha256.convert(zip).toString();
+      hashes.add(hash);
+      await StaticAssetPacks.installTrustedZip(
+        packId: 'render-cook', zipBytes: zip, expectedSha256: hash,
+      );
+    }
+    final first = Directory('${temp.path}/render-cook-${hashes[0]}');
+    final second = Directory('${temp.path}/render-cook-${hashes[1]}');
+    final third = Directory('${temp.path}/render-cook-${hashes[2]}');
+    expect(await first.exists(), isTrue);
+    expect(await backend.pruneUnusedPacks(minAge: Duration.zero),
+        greaterThan(0));
+    expect(await first.exists(), isFalse);
+    expect(await second.exists(), isTrue);
+    expect(await third.exists(), isTrue);
+    expect(await StaticAssetPacks.loadString(_path), 'three');
+    expect(await StaticAssetPacks.rollback('render-cook'), isTrue);
+    expect(await StaticAssetPacks.loadString(_path), 'two');
+  });
+
+  test('无有效激活指针时不会主动删除孤立资源目录', () async {
+    final zip = _makePack(_path, Uint8List.fromList(utf8.encode('stable')));
+    final hash = sha256.convert(zip).toString();
+    await StaticAssetPacks.installTrustedZip(
+      packId: 'render-cook', zipBytes: zip, expectedSha256: hash,
+    );
+    await File('${temp.path}/render-cook.current.json').delete();
+    expect(await backend.pruneUnusedPacks(minAge: Duration.zero), 0);
+    expect(await Directory('${temp.path}/render-cook-$hash').exists(),
+        isTrue);
+  });
+
   test('路径逃逸即使具有匹配的 ZIP 散列仍会拒绝安装', () async {
     final zip = _makePack(
       'assets/cook/../evil.js',

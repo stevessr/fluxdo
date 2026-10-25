@@ -222,6 +222,23 @@ class _StaticAssetPackManagerPageState
               padding: const EdgeInsets.only(top: 8),
               child: Text(_error!, style: TextStyle(color: color.error)),
             ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _busy || kIsWeb
+                  ? null
+                  : () => _run(() async {
+                      final bytes = await StaticAssetPacks.pruneUnused();
+                      _message(_tr(
+                        '已安全回收 $bytes 字节旧资源',
+                        'Reclaimed $bytes bytes of obsolete resources',
+                      ));
+                    }),
+              icon: const Icon(Icons.cleaning_services_outlined),
+              label: Text(_tr('清理无用历史版本', 'Clean obsolete versions')),
+            ),
+          ),
           const SizedBox(height: 16),
           for (final entry in _labels.entries)
             Card(

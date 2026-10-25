@@ -360,6 +360,7 @@ Future<List<Map<String, String>>> listInstalledPacks() async {
 Future<Uint8List?> readVerifiedAsset(String assetPath) async {
   final packId = _owner(assetPath);
   if (packId == null) return null;
+  return _lock(packId).synchronized(() async {
   try {
     final base = await _base();
     final current = await _currentPointer(base, packId);
@@ -374,4 +375,65 @@ Future<Uint8List?> readVerifiedAsset(String assetPath) async {
   } catch (_) {
     return null;
   }
+  });
+}
+
+/// 显式清理非 current/previous 的历史内容目录。每个包独立加锁，
+/// 防止读取与回滚被删除中的旧目录打断；绝不删除未知文件或符号链接。
+/// 默认只清理至少一天前的版本，避免对刚更新的版本进行反复 IO。
+Future<int> pruneUnusedPacks({
+  Duration minAge = const Duration(days: 1),
+}) async {
+  if (minAge.isNegative) throw ArgumentError.value(minAge, 'minAge');
+  final base = await _base();
+  var reclaimed = 0;
+  for (final id in _roots.keys) {
+    reclaimed += await _lock(id).synchronized(() async {
+      final current = await _readPointerFile(
+        File('${base.path}/$id.current.json'), id,
+      );
+      final previous = await _readPointerFile(
+        File('${base.path}/$id.previous.json'), id,
+      );
+      // 不能确定可靠的激活指针时停止回收，优先保护离线数据。
+      if (current == null && previous == null) return 0;
+      final protected = <String>{
+        if (current?['digest'] is String) current!['digest'] as String,
+        if (previous?['digest'] is String) previous!['digest'] as String,
+      };
+      var freed = 0;
+      await for (final entity in base.list(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final name = entity.uri.pathSegments
+            .where((segment) => segment.isNotEmpty)
+            .last;
+        if (!name.startsWith('$id-')) continue;
+        final digest = name.substring(id.length + 1);
+        if (!_digestPattern.hasMatch(digest) || protected.contains(digest)) {
+          continue;
+        }
+        final age = DateTime.now().difference((await entity.stat()).modified);
+        if (age < minAge) continue;
+        final bytes = await _safeDirectorySize(entity);
+        if (bytes == null) continue;
+        await entity.delete(recursive: true);
+        freed += bytes;
+      }
+      return freed;
+    });
+  }
+  return reclaimed;
+}
+
+/// 对清理目标做递归确认：文件与目录允许，任何软链接均拒绝清理。
+Future<int?> _safeDirectorySize(Directory directory) async {
+  var total = 0;
+  await for (final file in directory.list(recursive: true, followLinks: false)) {
+    final kind = await FileSystemEntity.type(file.path, followLinks: false);
+    if (kind == FileSystemEntityType.link) return null;
+    if (kind == FileSystemEntityType.file) {
+      total += await File(file.path).length();
+    }
+  }
+  return total;
 }

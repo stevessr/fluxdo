@@ -21,6 +21,9 @@ abstract final class StaticAssetPacks {
   static Future<List<Map<String, String>>> listInstalled() =>
       backend.listInstalledPacks();
 
+  /// 只回收无效历史目录；当前/上一版不会删除，Web 上返回 0。
+  static Future<int> pruneUnused() => backend.pruneUnusedPacks();
+
   static Future<bool> rollback(String packId) async {
     final changed = await backend.rollbackPack(packId);
     if (changed) _changes.add(packId);

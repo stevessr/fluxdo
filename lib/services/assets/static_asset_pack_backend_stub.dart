@@ -16,3 +16,5 @@ Future<List<Map<String, String>>> listInstalledPacks() async => [];
 Future<bool> rollbackPack(String packId) async => false;
 
 Future<bool> disablePack(String packId) async => false;
+
+Future<int> pruneUnusedPacks({Duration minAge = const Duration(days: 1)}) async => 0;
