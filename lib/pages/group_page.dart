@@ -807,7 +807,8 @@ class _GroupHeader extends StatelessWidget {
   final DiscourseGroup group;
   final bool membershipChanging;
   final bool membershipConfirmationPending;
-  bool get _membershipBusy => membershipChanging || membershipConfirmationPending;
+  bool get _membershipBusy =>
+      membershipChanging || membershipConfirmationPending;
 
   final VoidCallback onJoin;
   final VoidCallback onLeave;
