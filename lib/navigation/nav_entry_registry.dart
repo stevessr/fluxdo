@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/s.dart';
 import '../models/user.dart';
 import '../pages/ai_bot_conversations_page.dart';
+import '../pages/site_about_page.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/boards_page.dart';
 import '../pages/browsing_history_page.dart';
@@ -195,6 +196,15 @@ class NavEntryRegistry {
         onPanelTap: (ctx, ref) => NotificationQuickPanel.show(ctx),
         requiresLogin: true,
       ),
+      NavEntry(
+        id: 'site_about',
+        kind: NavEntryKind.page,
+        iconData: Symbols.info_rounded,
+        selectedIconData: Symbols.info_rounded,
+        label: _siteAboutLabel,
+        pageBuilder: (ctx, isActive) => SiteAboutPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
     ];
   }
 
@@ -234,6 +244,11 @@ String _boardsLabel(BuildContext context) {
 String _leaderboardLabel(BuildContext context) {
   final locale = Localizations.localeOf(context);
   return locale.languageCode == 'zh' ? '排行榜' : 'Leaderboard';
+}
+
+String _siteAboutLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '关于' : 'About';
 }
 
 String _groupsLabel(BuildContext context) {
