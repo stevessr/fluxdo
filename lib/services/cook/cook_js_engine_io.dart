@@ -21,6 +21,8 @@ class CookJsEngine {
 
   final JavascriptRuntime _runtime;
 
+  void dispose() => _runtime.dispose();
+
   /// eval 一段 JS，返回其字符串结果；JS 抛错/引擎错误返回 null 并携带错误。
   ///
   /// [onError] 收到错误描述（用于日志），返回 null 表示失败。

@@ -102,6 +102,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_model_manager/ai_model_manager.dart';
 
 import 'services/app_logger.dart';
+import 'services/assets/optional_font_loader.dart';
 import 'services/network/adapters/platform_adapter.dart';
 import 'providers/preferences_provider.dart';
 import 'providers/theme_provider.dart';
@@ -291,6 +292,12 @@ Future<void> main() async {
   }
   final results = await Future.wait(futures);
   final prefs = results[0] as SharedPreferences;
+  // 仅精简 Core 的可选构建启用外置 MiSans；普通构建仍使用内置字体。
+  if (const bool.fromEnvironment('FLUXDO_EXTERNAL_MISANS')) {
+    if (prefs.getString('font_family') == 'miSans') {
+      await OptionalFontLoader.ensureMiSansFromPack();
+    }
+  }
   await VpnBypassService.instance.initialize(prefs);
   await AuthIssueNoticeService.instance.initialize(prefs);
 

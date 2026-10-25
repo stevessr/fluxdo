@@ -27,6 +27,7 @@ import 'preferences_page.dart';
 import 'reading_settings_page.dart';
 import 'shortcut_settings_page.dart';
 import 'stevessr_generator_page.dart';
+import 'static_asset_pack_manager_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   static const double parallelMasterWidth = PaneBreakpoints.settingsMasterWidth;
@@ -388,6 +389,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: l10n.settings_bottomNav,
               onTap: () =>
                   _openSettingsPage((_) => const BottomNavSettingsPage()),
+            ),
+            _buildOptionTile(
+              icon: Symbols.extension_rounded,
+              iconColor: Colors.blue,
+              title: Localizations.localeOf(context).languageCode == 'zh'
+                  ? '静态资源包'
+                  : 'Static resource packs',
+              onTap: () => _openSettingsPage(
+                (_) => const StaticAssetPackManagerPage(),
+              ),
             ),
             _buildOptionTile(
               icon: Symbols.storage_rounded,
