@@ -30,7 +30,11 @@ class DeviceAuthorizationService {
   payloadDecryptor;
   final Future<void> Function(String, String, String, DateTime?)?
   credentialSaver;
-  final Future<String?> Function(String apiKey, String clientId, int generation)?
+  final Future<String?> Function(
+    String apiKey,
+    String clientId,
+    int generation,
+  )?
   otpRequester;
   final Future<bool> Function(String apiKey)? keyRevoker;
   final UserApiKeyService _keys = UserApiKeyService();
@@ -65,7 +69,9 @@ class DeviceAuthorizationService {
       data: {
         'application_name': 'FluxDO Device Login',
         'client_id': clientId,
-        'scopes': mode == DeviceAuthorizationMode.cookieLogin ? 'write' : 'read',
+        'scopes': mode == DeviceAuthorizationMode.cookieLogin
+            ? 'write'
+            : 'read',
         'nonce': nonce,
         'public_key': publicKey,
         'padding': 'pkcs1',
@@ -193,17 +199,18 @@ class DeviceAuthorizationService {
     final username = user['username'] as String;
     if (request.mode == DeviceAuthorizationMode.cookieLogin) {
       try {
-        final otp = await (otpRequester?.call(
-              apiKey,
-              request.clientId,
-              request.generation,
-            ) ??
-            _keys.requestOtp(
-              dio,
-              requestGeneration: request.generation,
-              overrideApiKey: apiKey,
-              overrideClientId: request.clientId,
-            ));
+        final otp =
+            await (otpRequester?.call(
+                  apiKey,
+                  request.clientId,
+                  request.generation,
+                ) ??
+                _keys.requestOtp(
+                  dio,
+                  requestGeneration: request.generation,
+                  overrideApiKey: apiKey,
+                  overrideClientId: request.clientId,
+                ));
         if (!isCurrent()) throw StateError('登录会话已变化');
         if (otp == null || !RegExp(r'^[0-9a-f]+$').hasMatch(otp)) {
           throw const DeviceOtpUnavailableException();
@@ -280,13 +287,13 @@ enum DeviceAuthorizationMode { cookieLogin, readOnly }
 class DeviceOtpUnavailableException implements Exception {
   const DeviceOtpUnavailableException();
   @override
-  String toString() =>
-      '站点未允许临时设备 API Key 签发 OTP，无法直接创建 Cookie 会话';
+  String toString() => '站点未允许临时设备 API Key 签发 OTP，无法直接创建 Cookie 会话';
 }
 
 class DeviceAuthorizedIdentity {
   const DeviceAuthorizedIdentity({required this.username, this.otp});
   final String username;
+
   /// Non-null only if the server granted write and successfully issued OTP.
   final String? otp;
 }
