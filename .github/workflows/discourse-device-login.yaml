@@ -30,6 +30,22 @@ jobs:
       - run: mkdir -p assets/certs assets/images/llm
       - run: flutter pub get
       - run: dart run tool/gen_l10n.dart
+      - name: Check device login formatting
+        run: |
+          dart format \
+            lib/pages/device_login_page.dart \
+            lib/pages/login_page.dart \
+            lib/services/device_authorization_service.dart \
+            lib/services/user_api_key_service.dart \
+            lib/services/user_api_key_login_flow.dart \
+            test/services/device_authorization_service_test.dart
+          git diff --exit-code -- \
+            lib/pages/device_login_page.dart \
+            lib/pages/login_page.dart \
+            lib/services/device_authorization_service.dart \
+            lib/services/user_api_key_service.dart \
+            lib/services/user_api_key_login_flow.dart \
+            test/services/device_authorization_service_test.dart
       - name: Analyze device login changes
         run: >-
           flutter analyze
