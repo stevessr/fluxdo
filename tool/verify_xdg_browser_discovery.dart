@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../lib/services/desktop_browser_discovery.dart';
 import '../lib/services/xdg_browser_discovery.dart';
+import '../lib/services/xdg_browser_icon_loader.dart';
 
 Future<void> main() async {
   if (!Platform.isLinux) return;
@@ -46,7 +47,12 @@ Name[zh_CN]=自定义浏览器
 Name[zh]=浏览器
 Exec=custom-browser %U
 MimeType=x-scheme-handler/http;x-scheme-handler/https;
+Categories=Network;WebBrowser;
+Icon=custom-icon
 ''';
+    final iconFile = File('$user/icons/hicolor/64x64/apps/custom-icon.png');
+    await iconFile.parent.create(recursive: true);
+    await iconFile.writeAsBytes([137, 80, 78, 71, 13, 10, 26, 10]);
     await entry(system, 'browser.desktop', common);
     await entry(
       user,
@@ -54,6 +60,13 @@ MimeType=x-scheme-handler/http;x-scheme-handler/https;
       common.replaceFirst('自定义浏览器', '用户浏览器'),
     );
     await entry(system, 'hidden.desktop', common);
+    await entry(system, 'chatgpt.desktop', '''[Desktop Entry]
+Type=Application
+Name=ChatGPT
+Exec=custom-browser %U
+MimeType=x-scheme-handler/http;x-scheme-handler/https;
+Categories=Network;
+''');
     await entry(user, 'hidden.desktop', '[Desktop Entry]\nHidden=true\n');
     await entry(system, 'override.desktop', common);
     await entry(
@@ -117,6 +130,8 @@ MimeType=x-scheme-handler/http;x-scheme-handler/https;
     final browser = entries.singleWhere((e) => e.id == 'browser.desktop');
     check(browser.path == '$user/applications/browser.desktop', '用户覆盖系统同 ID');
     check(browser.name == '用户浏览器', '优先 LC_MESSAGES 本地化名称');
+    check(browser.icon == 'custom-icon', '从 XDG 入口读取 Icon 字段');
+    check(!ids.contains('chatgpt.desktop'), 'URL 处理器不等同于浏览器');
     check(!ids.contains('hidden.desktop'), '用户 Hidden 墓碑屏蔽系统入口');
     check(!ids.contains('override.desktop'), '无效用户覆盖不回退系统');
     check(!ids.contains('https-only.desktop'), '要求 HTTP 与 HTTPS');
@@ -155,8 +170,12 @@ MimeType=x-scheme-handler/http;x-scheme-handler/https;
       findCommand: find,
     ).availableBrowsers();
     check(
-      browsers.where((b) => b.id.startsWith('xdg:')).length == 7,
-      '服务发现接入 XDG',
+      browsers.where((b) => b.id.startsWith('xdg:')).length == 4,
+      'XDG 完全相同的启动指令去重，不合并不同 Profile',
+    );
+    check(
+      browsers.firstWhere((b) => b.id == 'xdg:browser.desktop').iconBytes?.length == 8,
+      '获取 XDG 图标 PNG 并随浏览器结果返回',
     );
     check(
       !browsers.any((b) => b.id == 'linux:google-chrome-stable'),
@@ -185,6 +204,13 @@ MimeType=x-scheme-handler/http;x-scheme-handler/https;
       '没有 GIO 时 PATH 回退仍可用',
     );
     check(!noGio.any((b) => b.id.startsWith('xdg:')), '没有 GIO 不展示不可启动 XDG 项');
+
+    final svgFile = File('$user/browser.svg');
+    await svgFile.writeAsString('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    final icons = XdgBrowserIconLoader(environment: env);
+    final svgIcon = await icons.load(svgFile.path);
+    check(svgIcon?.isSvg == true, '支持 Icon 绝对 SVG 路径');
+    check((await icons.load('../private')) == null, '拒绝相对路径穿越');
 
     final localized = await XdgBrowserDiscovery(
       environment: {...env, 'LC_ALL': 'zh_TW.UTF-8'},
