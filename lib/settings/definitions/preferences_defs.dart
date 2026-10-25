@@ -9,6 +9,7 @@ import '../../l10n/s.dart';
 import '../../providers/ai_post_review_provider.dart';
 import '../../providers/ai_translation_provider.dart';
 import '../../providers/preferences_provider.dart';
+import '../../providers/media_playback_preferences_provider.dart';
 import '../../providers/render_crash_provider.dart';
 import '../../providers/secret_store_provider.dart';
 import '../../services/crypto/crypto_key_store.dart';
@@ -65,6 +66,35 @@ List<SettingsGroup> buildPreferencesGroups(BuildContext context) {
           onChanged: (ref, v) => ref
               .read(preferencesProvider.notifier)
               .setClipboardTopicLinkDetection(v),
+        ),
+      ],
+    ),
+    SettingsGroup(
+      title: Localizations.localeOf(context).languageCode == 'zh' ? '媒体播放' : 'Media playback',
+      icon: Symbols.play_circle_rounded,
+      items: [
+        SwitchModel(
+          id: 'backgroundAudio',
+          title: Localizations.localeOf(context).languageCode == 'zh' ? '音频后台播放' : 'Background audio',
+          subtitle: Localizations.localeOf(context).languageCode == 'zh'
+              ? '离开帖子后继续播放音频，可从系统通知控制'
+              : 'Continue listening outside the post with system media controls',
+          icon: Icons.headphones_rounded,
+          getValue: (ref) => ref.watch(mediaPlaybackPreferencesProvider).backgroundAudio,
+          onChanged: (ref, v) => ref.read(mediaPlaybackPreferencesProvider.notifier).setBackgroundAudio(v),
+        ),
+        PlatformConditionalModel(
+          inner: SwitchModel(
+            id: 'pictureInPicture',
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '视频画中画' : 'Video picture-in-picture',
+            subtitle: Localizations.localeOf(context).languageCode == 'zh'
+                ? '全屏播放时切到后台可进入画中画（Android）'
+                : 'Enter picture-in-picture when leaving fullscreen playback (Android)',
+            icon: Icons.picture_in_picture_alt_rounded,
+            getValue: (ref) => ref.watch(mediaPlaybackPreferencesProvider).pictureInPicture,
+            onChanged: (ref, v) => ref.read(mediaPlaybackPreferencesProvider.notifier).setPictureInPicture(v),
+          ),
+          condition: () => Platform.isAndroid,
         ),
       ],
     ),
