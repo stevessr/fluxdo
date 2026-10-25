@@ -17,9 +17,13 @@ import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 
+from android_plugin_catalog import load_catalog
+from dart_source_boundary import verify_dart_sources
+
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "android_companions/sticker"
-PACKAGE = "com.github.lingyan000.fluxdo.plugin.sticker"
+STICKER = load_catalog().plugin("sticker")
+PACKAGE = STICKER.package
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 
 # Copy only the editor's Dart import closure. No entire FluxDO package, no
@@ -37,13 +41,7 @@ DRAWING_SOURCES = (
 )
 DRAWING_TREES = ("lib/widgets/stevessr", "lib/l10n/slang", "lib/l10n/generated")
 SHIM_TREE = SOURCE / "shims/lib"
-FORBIDDEN_IMPORTED_PACKAGES = (
-    "package:fluxdo/",
-    "package:dio/",
-    "package:flutter_riverpod/",
-    "package:flutter_local_notifications/",
-    "package:rhttp/",
-)
+
 
 # Flutter's native registrant includes transitive *platform* implementations,
 # not just the dependencies listed directly in companion/pubspec.yaml.
@@ -95,44 +93,13 @@ def stage_drawing_sources(target: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
 
-    # The temporary companion app must own every imported source.
-    # Reject accidental references to the full app or unknown external code.
-    import re
-    external_packages = set()
-    for source in (target / "lib").rglob("*.dart"):
-        contents = source.read_text(encoding="utf-8")
-        for forbidden in FORBIDDEN_IMPORTED_PACKAGES:
-            if forbidden in contents:
-                raise RuntimeError(
-                    f"Heavy host dependency leaked into companion: "
-                    f"{source.relative_to(target)}: {forbidden}"
-                )
-        for match in re.finditer(
-            r"""(?m)^[ ]*(?:import|export|part)[ ]+['"]([^'"]+[.]dart)['"]""",
-            contents,
-        ):
-            uri = match.group(1)
-            if uri.startswith("dart:"):
-                continue
-            if uri.startswith("package:"):
-                package = uri[len("package:"):].split("/", 1)[0]
-                external_packages.add(package)
-                continue
-            if not (source.parent / uri).is_file():
-                raise RuntimeError(
-                    f"Missing local drawing dependency: "
-                    f"{source.relative_to(target)} imports {uri}"
-                )
-    allowed = {
-        "flutter", "flutter_localizations", "intl",
-        "slang", "slang_flutter", "file_picker", "flutter_avif",
-        "image", "cross_file", "path_provider", "share_plus", "gal",
-    }
-    if external_packages - allowed:
-        raise RuntimeError(
-            f"Unexpected external drawing dependencies: "
-            f"{sorted(external_packages - allowed)}"
-        )
+    # Use the same complete directive parser as Core. Conditional imports,
+    # exports and parts cannot reach host sources or escape the staged tree.
+    verify_dart_sources(target, own_package="fluxdo_sticker_companion", allowed_packages={
+        "flutter", "flutter_localizations", "intl", "slang", "slang_flutter",
+        "file_picker", "flutter_avif", "image", "cross_file", "path_provider",
+        "share_plus", "gal",
+    })
     print("Sticker source isolation: OK; no FluxDO root dependency")
 
 
@@ -484,8 +451,8 @@ def main() -> None:
     parser.add_argument("--mode", choices=["debug", "release"], default="debug")
     parser.add_argument("--abi", choices=["android-arm", "android-arm64", "android-x64", "universal"],
                         default="android-arm64")
-    parser.add_argument("--version-code", type=int)
-    parser.add_argument("--version-name")
+    parser.add_argument("--version-code", type=int, default=STICKER.version_code)
+    parser.add_argument("--version-name", default=STICKER.version_name)
     args = parser.parse_args()
     if args.version_code is not None and not (1 <= args.version_code < 2100000000):
         parser.error("--version-code must be a positive Android-compatible int")

@@ -8,6 +8,8 @@ This complements Dart source exclusions with verifiable APK outputs.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -15,15 +17,10 @@ import shutil
 import subprocess
 import sys
 
-PREFIX = "com.github.lingyan000.fluxdo"
-PLUGINS = {
-    "deviceinfo": PREFIX + ".plugin.deviceinfo",
-    "network": PREFIX + ".plugin.network",
-    "cdk": PREFIX + ".plugin.cdk",
-    "ldc": PREFIX + ".plugin.ldc",
-    "ldc_reward": PREFIX + ".plugin.ldc_reward",
-    "sticker": PREFIX + ".plugin.sticker",
-}
+from android_plugin_catalog import HOST_PACKAGE, load_catalog
+
+PREFIX = HOST_PACKAGE
+PLUGINS = {spec.id: spec.package for spec in load_catalog().plugins}
 
 
 def sdk_tool(name: str) -> str:
@@ -49,10 +46,13 @@ def output(*args: str) -> str:
     return result.stdout
 
 
-def details(apk: Path, aapt: str, signer: str) -> tuple[str, int, str]:
+def details(apk: Path, aapt: str, signer: str, build_mode: str | None = None) -> tuple[str, int, str]:
     if not apk.is_file() or apk.stat().st_size == 0:
         raise FileNotFoundError(apk)
     badging = output(aapt, "dump", "badging", str(apk))
+    debuggable = "application-debuggable" in badging.splitlines()
+    if build_mode is not None and debuggable != (build_mode == "debug"):
+        raise RuntimeError(f"{apk.name}: debuggable flag does not match {build_mode}")
     first_line = badging.splitlines()[0] if badging else ""
     package_match = re.search("name='([^']+)'", first_line)
     version_match = re.search("versionCode='([0-9]+)'", first_line)
@@ -66,7 +66,7 @@ def details(apk: Path, aapt: str, signer: str) -> tuple[str, int, str]:
         "Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-fA-F:]{64,95})",
         signatures,
     )
-    if len(digest) != 1:
+    if len(digest) != 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", digest[0].replace(":", "")):
         raise RuntimeError(f"Expected exactly one signer for {apk.name}: {signatures}")
     return package_match.group(1), version, digest[0].replace(":", "").lower()
 
@@ -74,6 +74,8 @@ def details(apk: Path, aapt: str, signer: str) -> tuple[str, int, str]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--core", type=Path, required=True)
+    parser.add_argument("--report", type=Path, help="Write verified APK identities, sizes and SHA-256")
+    parser.add_argument("--build-mode", choices=("debug", "release"), required=True)
     parser.add_argument(
         "--plugin", action="append", nargs=2, metavar=("ID", "APK"),
         default=[], help="Plugin ID followed by compiled APK path",
@@ -81,10 +83,11 @@ def main() -> None:
     args = parser.parse_args()
     aapt = sdk_tool("aapt")
     signer = sdk_tool("apksigner")
-    core_pkg, core_version, core_signer = details(args.core, aapt, signer)
+    core_pkg, core_version, core_signer = details(args.core, aapt, signer, args.build_mode)
     if core_pkg != PREFIX:
         raise RuntimeError(f"Core applicationId changed: {core_pkg}")
     print(f"Core: {core_pkg} v{core_version} signer={core_signer[:16]}...")
+    records = [artifact_record("core", args.core, core_pkg, core_version, core_signer)]
     seen: set[str] = set()
     for plugin_id, path in args.plugin:
         if plugin_id not in PLUGINS:
@@ -93,7 +96,7 @@ def main() -> None:
             raise RuntimeError(f"Duplicate plugin ID: {plugin_id}")
         seen.add(plugin_id)
         apk = Path(path)
-        pkg, version, digest = details(apk, aapt, signer)
+        pkg, version, digest = details(apk, aapt, signer, args.build_mode)
         if pkg != PLUGINS[plugin_id]:
             raise RuntimeError(
                 f"{plugin_id} package mismatch: {pkg} != {PLUGINS[plugin_id]}"
@@ -103,10 +106,28 @@ def main() -> None:
                 f"{plugin_id} is NOT signed by the Core signing identity"
             )
         print(f"PASS: {plugin_id} ({pkg}) v{version} same-signer")
+        records.append(artifact_record(plugin_id, apk, pkg, version, digest))
     if seen != PLUGINS.keys():
         raise RuntimeError(
             f"Expected all {sorted(PLUGINS)}, checked only {sorted(seen)}"
         )
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps({
+            "schemaVersion": 1,
+            "buildMode": args.build_mode,
+            "protocolVersion": load_catalog().protocol,
+            # This is verification evidence, not an authenticated update feed.
+            "artifacts": records,
+        }, indent=2) + "\n", encoding="utf-8")
+
+
+def artifact_record(plugin_id: str, apk: Path, package: str, version: int, signer: str) -> dict:
+    with apk.open("rb") as stream:
+        digest = hashlib.file_digest(stream, "sha256").hexdigest()
+    return {"id": plugin_id, "file": apk.name, "package": package,
+            "versionCode": version, "signerSha256": signer,
+            "sha256": digest, "bytes": apk.stat().st_size}
 
 
 if __name__ == "__main__":

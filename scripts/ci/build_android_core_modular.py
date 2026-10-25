@@ -17,6 +17,8 @@ import subprocess
 import tempfile
 from zipfile import ZipFile
 
+from dart_source_boundary import verify_dart_sources
+
 ROOT = Path(__file__).resolve().parents[2]
 OVERLAY = ROOT / "android_modular/core_overlay"
 AVATAR_ROOT = "assets/images/avater/"
@@ -342,40 +344,7 @@ def verify_sources(stage: Path) -> None:
         (stage / "lib/l10n/slang/strings.g.dart").resolve(),
         (stage / "lib/l10n/generated/app_localizations_compat.g.dart").resolve(),
     }
-    # Fail before Flutter compilation if the staged code still imports an
-    # implementation which was physically removed. Check imports/exports/parts
-    # including conditional and package:fluxdo imports; do not rely on
-    # Platform.isAndroid tree shaking.
-    missing = []
-    for source in (stage / "lib").rglob("*.dart"):
-        body = source.read_text(encoding="utf-8")
-        # A conditional Dart directive can name several alternative sources:
-        #   import 'stub.dart' if (dart.library.io) 'native.dart';
-        # Checking only its first URI misses a removed plugin implementation.
-        # Work on complete, semicolon-terminated directives (also multiline).
-        for declaration in re.finditer(
-            r"""(?ms)^[ \t]*(?:import|export|part)\b(?![ \t]+of\b)\s+([^;]+);""",
-            body,
-        ):
-            for uri in re.findall(r"""['"]([^'"]+[.]dart)['"]""", declaration.group(1)):
-                if uri.startswith("dart:") or uri.startswith("package:flutter/"):
-                    continue
-                if uri.startswith("package:fluxdo/"):
-                    target = stage / "lib" / uri[len("package:fluxdo/"):]
-                elif uri.startswith("package:") or uri.startswith("http"):
-                    continue
-                else:
-                    target = source.parent / uri
-                resolved = target.resolve()
-                if not resolved.is_relative_to(stage.resolve()):
-                    missing.append(f"{source.relative_to(stage)} -> {uri} (escapes stage)")
-                elif not target.is_file() and resolved not in pending_generated:
-                    missing.append(f"{source.relative_to(stage)} -> {uri}")
-    if missing:
-        raise RuntimeError(
-            "Broken Dart import graph in Android Core:\\n" +
-            "\\n".join(missing[:30])
-        )
+    verify_dart_sources(stage, own_package="fluxdo", pending_generated=pending_generated)
 
 
 def check_apk(apk: Path) -> None:

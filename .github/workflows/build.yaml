@@ -96,13 +96,14 @@ jobs:
         if: startsWith(matrix.platform, 'android')
         uses: gradle/actions/setup-gradle@v4
         with:
+          gradle-version: '8.14'
           cache-read-only: false
           cache-cleanup: on-success
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.0'
+          flutter-version: ${{ startsWith(matrix.platform, 'android') && '3.47.5' || '3.44.0' }}
           cache: true
 
       - name: Setup Rust
@@ -255,17 +256,8 @@ jobs:
           plugin_code=$(($(date -u +%s) / 60))
           plugin_name="0.1.${plugin_code}"
           dart tool/project_prep.dart test
-          (
-            cd android
-            ./gradlew --no-daemon \
-              -PpluginVersionCode="${plugin_code}" \
-              -PpluginVersionName="${plugin_name}" \
-              :plugin_deviceinfo:assembleRelease \
-              :plugin_network:assembleRelease \
-              :plugin_cdk:assembleRelease \
-              :plugin_ldc:assembleRelease \
-              :plugin_ldc_reward:assembleRelease
-          )
+          python3 scripts/ci/build_native_plugins.py --mode release \
+            --version-code "${plugin_code}" --version-name "${plugin_name}"
           python3 scripts/ci/check_sticker_isolation.py
           python3 scripts/ci/build_sticker_companion.py \
             --mode release --abi ${{ matrix.flutter-target }} \
@@ -279,6 +271,7 @@ jobs:
           cp build/plugin_sticker/fluxdo-sticker-${{ matrix.flutter-target }}-release.apk dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
           cat build/plugin_sticker/sticker-dependencies-${{ matrix.flutter-target }}-release.md >> "${GITHUB_STEP_SUMMARY}"
           python3 scripts/ci/check_android_apk_contract.py \
+            --build-mode release --report build/android-modular-apks.json \
             --core dist/fluxdo-${{ matrix.arch }}.apk \
             --plugin deviceinfo dist/fluxdo-plugin-deviceinfo.apk \
             --plugin network dist/fluxdo-plugin-network.apk \
@@ -286,6 +279,13 @@ jobs:
             --plugin ldc dist/fluxdo-plugin-ldc.apk \
             --plugin ldc_reward dist/fluxdo-plugin-ldc-reward.apk \
             --plugin sticker dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.platform == 'android'
+        with:
+          name: fluxdo-modular-identities-${{ matrix.arch }}
+          path: build/android-modular-apks.json
+          if-no-files-found: error
 
       - name: Authenticate to Google Cloud
         if: startsWith(matrix.platform, 'android') && env.GCP_WIF != '' && env.GCP_SA != ''

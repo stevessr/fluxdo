@@ -1,5 +1,7 @@
 # Android 独立插件 APK（实验阶段，协议 v1）
 
+模块清单、独立原生构建、版本与验证入口见 [Android 模块构建](android-module-builds.md)。
+
 主程序仍是 `com.github.lingyan000.fluxdo`，不更换 applicationId，
 保留账户、登录和 OTA 升级数据。插件是**独立安装的软件包**，不是
 `--split-per-abi` 生成的多个互斥 CPU 架构 APK，也不是 Play Dynamic

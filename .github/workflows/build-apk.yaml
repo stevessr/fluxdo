@@ -14,6 +14,10 @@ on:
       - 'tool/gen_avatar_deltas.dart'
       - 'scripts/ci/build_android_core_modular.py'
       - 'scripts/ci/build_sticker_companion.py'
+      - 'scripts/ci/build_native_plugins.py'
+      - 'scripts/ci/android_plugin_catalog.py'
+      - 'scripts/ci/generate_android_plugin_catalog.py'
+      - 'scripts/ci/dart_source_boundary.py'
       - 'core/doh_proxy/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
@@ -28,6 +32,10 @@ on:
       - 'tool/gen_avatar_deltas.dart'
       - 'scripts/ci/build_android_core_modular.py'
       - 'scripts/ci/build_sticker_companion.py'
+      - 'scripts/ci/build_native_plugins.py'
+      - 'scripts/ci/android_plugin_catalog.py'
+      - 'scripts/ci/generate_android_plugin_catalog.py'
+      - 'scripts/ci/dart_source_boundary.py'
       - 'scripts/ci/check_android_apk_contract.py'
       - 'lib/services/android_optional_plugin_service.dart'
       - 'lib/services/android_sticker_companion_service.dart'
@@ -164,6 +172,7 @@ jobs:
       - name: Setup Gradle Cache
         uses: gradle/actions/setup-gradle@v4
         with:
+          gradle-version: '8.14'
           cache-read-only: false
           # on-success 会在 post 阶段再起 Gradle daemon 做 cache cleanup，
           # 实测额外 ~60s；缓存体积由 GitHub cache 限额约束，日常 APK 构建不需要每次清理。
@@ -381,18 +390,8 @@ jobs:
           plugin_code=$(($(date -u +%s) / 60))
           plugin_name="0.1.${plugin_code}"
           dart tool/project_prep.dart test
-          (
-            cd android
-            chmod +x gradlew
-            ./gradlew --no-daemon \
-              -PpluginVersionCode="${plugin_code}" \
-              -PpluginVersionName="${plugin_name}" \
-              :plugin_deviceinfo:assembleRelease \
-              :plugin_network:assembleRelease \
-              :plugin_cdk:assembleRelease \
-              :plugin_ldc:assembleRelease \
-              :plugin_ldc_reward:assembleRelease
-          )
+          python3 scripts/ci/build_native_plugins.py --mode release \
+            --version-code "${plugin_code}" --version-name "${plugin_name}"
           python3 scripts/ci/check_sticker_isolation.py
           python3 scripts/ci/build_sticker_companion.py \
             --mode release --abi ${{ matrix.flutter-target }} \
@@ -408,6 +407,7 @@ jobs:
           core_apk=$(find dist -maxdepth 1 -name 'fluxdo-v*${{ matrix.arch }}.apk' -print -quit)
           test -n "${core_apk}"
           python3 scripts/ci/check_android_apk_contract.py \
+            --build-mode release --report build/android-modular-apks.json \
             --core "${core_apk}" \
             --plugin deviceinfo dist/fluxdo-plugin-deviceinfo.apk \
             --plugin network dist/fluxdo-plugin-network.apk \
@@ -424,6 +424,12 @@ jobs:
             --plugin dist/fluxdo-plugin-ldc-reward.apk \
             --plugin dist/fluxdo-plugin-sticker-${{ matrix.arch }}.apk
           cat build/android_modular_sizes.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-modular-identities-${{ matrix.arch }}
+          path: build/android-modular-apks.json
+          if-no-files-found: error
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4

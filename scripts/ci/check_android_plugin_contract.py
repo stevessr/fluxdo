@@ -5,34 +5,17 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
+from android_plugin_catalog import HOST_PACKAGE, load_catalog
+from build_native_plugins import verify_source_graph
+from generate_android_plugin_catalog import HOST_CATALOG, synchronize
+
 ROOT = Path(__file__).resolve().parents[2]
 ANDROID = "{http://schemas.android.com/apk/res/android}"
-MAIN_PACKAGE = "com.github.lingyan000.fluxdo"
+CATALOG = load_catalog()
+MAIN_PACKAGE = HOST_PACKAGE
 PERMISSION = MAIN_PACKAGE + ".permission.BIND_PLUGIN"
-VERSION = "1"
-
-PLUGINS = {
-    "plugin_deviceinfo": (
-        MAIN_PACKAGE + ".plugin.deviceinfo",
-        MAIN_PACKAGE + ".plugin.deviceinfo.DeviceInfoService",
-    ),
-    "plugin_network": (
-        MAIN_PACKAGE + ".plugin.network",
-        MAIN_PACKAGE + ".plugin.network.NetworkService",
-    ),
-    "plugin_cdk": (
-        MAIN_PACKAGE + ".plugin.cdk",
-        MAIN_PACKAGE + ".plugin.cdk.CdkPluginService",
-    ),
-    "plugin_ldc": (
-        MAIN_PACKAGE + ".plugin.ldc",
-        MAIN_PACKAGE + ".plugin.ldc.LdcPluginService",
-    ),
-    "plugin_ldc_reward": (
-        MAIN_PACKAGE + ".plugin.ldc_reward",
-        MAIN_PACKAGE + ".plugin.ldc_reward.LdcRewardPluginService",
-    ),
-}
+VERSION = str(CATALOG.protocol)
+PLUGINS = {spec.module: (spec.package, spec.service) for spec in CATALOG.native}
 
 
 def check(condition: bool, message: str) -> None:
@@ -45,6 +28,8 @@ def attr(node: ET.Element, key: str) -> str | None:
 
 
 def main() -> None:
+    synchronize(check=True)
+    verify_source_graph(ROOT, CATALOG)
     manifest = ET.parse(ANDROID_PATH := ROOT / "android/app/src/main/AndroidManifest.xml").getroot()
     check(any(attr(item, "name") == PERMISSION and
               attr(item, "protectionLevel") == "signature"
@@ -54,6 +39,9 @@ def main() -> None:
 
     host = (ROOT / "android/app/src/main/kotlin/com/github/lingyan000/fluxdo/"
             "OptionalPluginChannel.kt").read_text()
+    host_catalog = (ROOT / HOST_CATALOG).read_text()
+    check("private val specs = OptionalPluginCatalog.specs" in host,
+          "Host must consume generated module allowlist")
     protocol = (ROOT / "android/plugin_api/src/main/kotlin/com/github/"
                 "lingyan000/fluxdo/plugin/api/PluginProtocol.kt").read_text()
     settings = (ROOT / "android/settings.gradle.kts").read_text()
@@ -77,7 +65,7 @@ def main() -> None:
         check(f'applicationId = "{package}"' in gradle,
               f"{module}: wrong application ID")
         check(package in queried, f"{module}: not visible through <queries>")
-        check(f'"{package}"' in host and f'"{service_name}"' in host,
+        check(f'"{package}"' in host_catalog and f'"{service_name}"' in host_catalog,
               f"{module}: host allowlist doesn't match")
         plugin_manifest = ET.parse(ROOT / f"android/{module}/src/main/AndroidManifest.xml").getroot()
         check(any(attr(item, "name") == PERMISSION

@@ -8,17 +8,22 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val keyFile = rootProject.file("key.properties")
+// The module directory stays under android/ in both Gradle roots.
+// Resolve host signing material identically even in the independent build.
+val androidRoot = projectDir.parentFile
+val versions = Properties().apply {
+    androidRoot.resolve("plugin-versions.properties").inputStream().use { load(it) }
+}
+val keyFile = androidRoot.resolve("key.properties")
 val keys = Properties().apply {
     if (keyFile.exists()) keyFile.inputStream().use { load(it) }
 }
 val keyStore = keys.getProperty("storeFile")?.trim()?.takeIf { it.isNotEmpty() }?.let { path ->
     val raw = File(path)
     if (raw.isAbsolute) raw else listOf(
-        file(path),
-        rootProject.file(path),
-        rootProject.file("app/$path"),
-    ).firstOrNull { it.isFile } ?: rootProject.file("app/$path")
+        androidRoot.resolve("app/$path"),
+        androidRoot.resolve(path),
+    ).firstOrNull { it.isFile } ?: androidRoot.resolve("app/$path")
 }
 val signed = listOf("keyAlias", "keyPassword", "storePassword")
     .all { !keys.getProperty(it).isNullOrBlank() } && keyStore?.isFile == true
@@ -32,8 +37,14 @@ android {
         applicationId = "com.github.lingyan000.fluxdo.plugin.deviceinfo"
         minSdk = 24
         targetSdk = 35
-        versionCode = providers.gradleProperty("pluginVersionCode").orNull?.toIntOrNull() ?: 1
-        versionName = providers.gradleProperty("pluginVersionName").orNull ?: "0.1.0"
+        versionCode = (providers.gradleProperty("pluginVersionCode.deviceinfo")
+            .orElse(providers.gradleProperty("pluginVersionCode")).orNull
+            ?: versions.getProperty("deviceinfo.versionCode")).toInt().also {
+            require(it in 1 until 2100000000) { "Invalid deviceinfo versionCode" }
+        }
+        versionName = providers.gradleProperty("pluginVersionName.deviceinfo")
+            .orElse(providers.gradleProperty("pluginVersionName")).orNull
+            ?: versions.getProperty("deviceinfo.versionName")
     }
 
     compileOptions {
@@ -58,16 +69,8 @@ android {
             if (signed) signingConfig = signingConfigs.getByName("pluginRelease")
         }
         getByName("release") {
-            // An unsigned or debug-signed Release cannot be loaded by the
-            // signed host. Fail explicitly when building this plugin release.
-            val thisPluginRelease = gradle.startParameter.taskNames.any {
-                it.contains("plugin_deviceinfo:assembleRelease", ignoreCase = true) ||
-                it.contains("plugin_deviceinfo:bundleRelease", ignoreCase = true)
-            }
-            if (thisPluginRelease && !signed) {
-                throw GradleException("plugin_deviceinfo Release must use FluxDO host key.properties")
-            }
-            signingConfig = signingConfigs.getByName(if (signed) "pluginRelease" else "debug")
+            // Never silently fall back to the debug identity for release.
+            signingConfig = if (signed) signingConfigs.getByName("pluginRelease") else null
             isMinifyEnabled = false
         }
     }
@@ -79,4 +82,12 @@ kotlin {
 
 dependencies {
     implementation(project(":plugin_api"))
+}
+
+// Check the actual variant task, including unqualified assembleRelease/bundleRelease.
+// Matching only command-line task strings could bypass the signing requirement.
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    doFirst {
+        check(signed) { "plugin_deviceinfo Release must use FluxDO host key.properties" }
+    }
 }
