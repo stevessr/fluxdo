@@ -179,6 +179,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
                 .toUtc().toIso8601String(),
             'before': period.end.toUtc().toIso8601String(),
             'include_ongoing': true,
+            if (username != null) 'include_interested': true,
             if (username != null && username.isNotEmpty)
               'attending_user': username,
           },
@@ -186,7 +187,9 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       ));
       final found = <String, Map<String, dynamic>>{};
       for (final response in responses) {
-        final entries = _asMapList(_asMap(response.data)['events']);
+        final entries = expandCalendarEventOccurrences(
+          _asMapList(_asMap(response.data)['events']),
+        );
         for (final event in entries) {
           final key = '${event['id']}:${event['starts_at']}';
           found[key] = event;
@@ -407,7 +410,9 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       );
     }
     if (widget.view == CommunityEventsView.upcoming) {
-      return CommunityEventsCalendar(
+      return RefreshIndicator(
+        onRefresh: _loadCalendarEvents,
+        child: CommunityEventsCalendar(
         date: _calendarDate,
         scale: _calendarScale,
         events: _items,
@@ -419,6 +424,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           final url = _string(post['url']) ?? _string(event['url']);
           if (url != null) launchContentLink(context, url);
         },
+        ),
       );
     }
     if (_items.isEmpty) {
