@@ -135,10 +135,7 @@ class UserApiKeyService {
 
   /// 授权登录收口后的"用完即焚":scopes 无 write(本地无自愈价值)时
   /// 撤销并清除刚拿到的 key,不给服务端留永久零权限凭据。
-  Future<void> burnAfterLoginIfUseless(
-    Dio dio, {
-    String? expectedKey,
-  }) async {
+  Future<void> burnAfterLoginIfUseless(Dio dio, {String? expectedKey}) async {
     if (keyWorthKeeping) return;
     final key = await readApiKey();
     if (key == null || key.isEmpty) return;
@@ -535,7 +532,11 @@ class UserApiKeyService {
 
   /// 用 API key 静默补发 OTP。
   /// 服务端 302 到 auth_redirect?oneTimePassword=<加密>,从 Location 头解析。
-  Future<String?> requestOtp(Dio dio, {int? requestGeneration, String? overrideApiKey}) async {
+  Future<String?> requestOtp(
+    Dio dio, {
+    int? requestGeneration,
+    String? overrideApiKey,
+  }) async {
     final generation = requestGeneration ?? AuthSession().generation;
     bool isCurrent() => AuthSession().isValid(generation);
 
