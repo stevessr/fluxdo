@@ -6,6 +6,7 @@ typedef XdgBrowserEntry = ({
   String name,
   String path,
   String? command,
+  String? icon,
 });
 
 class XdgBrowserDiscovery {
@@ -70,7 +71,13 @@ class XdgBrowserDiscovery {
                 (command == null || await _executable(command) == null)) {
               continue;
             }
-            result.add((id: id, name: name, path: file.path, command: command));
+            result.add((
+              id: id,
+              name: name,
+              path: file.path,
+              command: command,
+              icon: values['Icon'],
+            ));
           } on FileSystemException {
             // 不可读或损坏的单个入口不阻断其他浏览器。
           } on FormatException {
