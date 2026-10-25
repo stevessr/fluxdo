@@ -15,14 +15,13 @@ import 'user_api_key_service.dart';
 class DeviceAuthorizationService {
   DeviceAuthorizationService(
     this.dio, {
-    Future<String> Function()? publicKeyProvider,
-    Future<String> Function()? clientIdProvider,
-  }) : _publicKeyProvider = publicKeyProvider,
-       _clientIdProvider = clientIdProvider;
+    this.publicKeyProvider,
+    this.clientIdProvider,
+  });
 
   final Dio dio;
-  final Future<String> Function()? _publicKeyProvider;
-  final Future<String> Function()? _clientIdProvider;
+  final Future<String> Function()? publicKeyProvider;
+  final Future<String> Function()? clientIdProvider;
   final UserApiKeyService _keys = UserApiKeyService();
 
   static const String _deviceEndpoint = '/user-api-key/device.json';
@@ -39,9 +38,9 @@ class DeviceAuthorizationService {
     final generation = AuthSession().generation;
     final nonce = const Uuid().v4();
     final publicKey =
-        await (_publicKeyProvider?.call() ?? _keys.ensurePublicKeyPem());
+        await (publicKeyProvider?.call() ?? _keys.ensurePublicKeyPem());
     final clientId =
-        await (_clientIdProvider?.call() ?? _keys.ensureDeviceClientId());
+        await (clientIdProvider?.call() ?? _keys.ensureDeviceClientId());
     if (!AuthSession().isValid(generation)) {
       throw StateError('登录会话已变化，请重新开始');
     }
