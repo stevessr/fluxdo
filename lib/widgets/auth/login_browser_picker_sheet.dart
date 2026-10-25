@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:jovial_svg/jovial_svg.dart';
 
 import '../../services/system_browser_service.dart';
+import '../../utils/svg_utils.dart';
 
 /// 可独立测试的浏览器选择弹窗。系统「打开方式」始终在滚动列表外，
 /// 防止浏览器安装数量多时入口被挤到列表末尾。
@@ -13,6 +17,22 @@ class LoginBrowserPickerSheet extends StatelessWidget {
     final bytes = browser.iconBytes;
     if (bytes == null || bytes.isEmpty) {
       return const Icon(Icons.open_in_browser_rounded, size: 28);
+    }
+    if (browser.iconIsSvg) {
+      try {
+        final source = SvgUtils.stripActiveContent(utf8.decode(bytes));
+        final image = ScalableImage.fromSvgString(
+          SvgUtils.sanitize(source),
+          warnF: (_) {},
+        );
+        return SizedBox(
+          width: 40,
+          height: 40,
+          child: ScalableImageWidget(si: image, fit: BoxFit.contain),
+        );
+      } catch (_) {
+        return const Icon(Icons.open_in_browser_rounded, size: 28);
+      }
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(9),
