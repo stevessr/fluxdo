@@ -1298,6 +1298,7 @@ class MainActivity : FlutterActivity() {
 
     private fun isLoginAuthorizationUri(uri: Uri): Boolean =
         uri.scheme == "https" && uri.host == "linux.do" &&
+            (uri.port == -1 || uri.port == 443) && uri.userInfo == null &&
             uri.path == "/user-api-key/new"
 
     private fun launchLoginBrowser(browserPackage: String, rawUrl: String): Boolean {
