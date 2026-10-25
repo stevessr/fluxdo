@@ -30,8 +30,11 @@ void main() {
       addTearDown(() => service.dio.interceptors.remove(interceptor));
 
       const expectedTypes = <NotificationCategory, String>{
-        NotificationCategory.mentions: 'mentioned',
         NotificationCategory.replies: 'posted,quoted,replied',
+        NotificationCategory.mentions: 'mentioned',
+        NotificationCategory.assigned: 'assigned',
+        NotificationCategory.chat:
+            'chat_mention,chat_message,chat_invitation,chat_quoted,chat_watched_thread',
       };
 
       for (final entry in expectedTypes.entries) {
@@ -56,7 +59,7 @@ void main() {
         );
         expect(request.queryParameters.containsKey('filter'), isFalse);
       }
-      expect(requests, hasLength(2));
+      expect(requests, hasLength(expectedTypes.length));
     },
   );
 }
