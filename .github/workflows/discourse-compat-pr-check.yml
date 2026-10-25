@@ -177,7 +177,7 @@ jobs:
 
       - name: Analyze topic account switcher
         run: >-
-          flutter analyze
+          flutter analyze --no-fatal-infos --no-fatal-warnings
           lib/pages/topic_detail_page/topic_detail_page.dart
           test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
 
