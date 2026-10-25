@@ -169,27 +169,11 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         periods.add(visible);
       }
 
-      final responses = await Future.wait(periods.map((period) =>
-        _service.dio.get<dynamic>(
-          '/discourse-post-event/events',
-          queryParameters: {
-            'limit': 200,
-            // Include events starting at exactly the first instant.
-            'after': period.start.subtract(const Duration(seconds: 1))
-                .toUtc().toIso8601String(),
-            'before': period.end.toUtc().toIso8601String(),
-            'include_ongoing': true,
-            if (username != null) 'include_interested': true,
-            if (username != null && username.isNotEmpty)
-              'attending_user': username,
-          },
-        ),
-      ));
+      final batches = await Future.wait(
+        periods.map((period) => _fetchCalendarPeriod(period, username)),
+      );
       final found = <String, Map<String, dynamic>>{};
-      for (final response in responses) {
-        final entries = expandCalendarEventOccurrences(
-          _asMapList(_asMap(response.data)['events']),
-        );
+      for (final entries in batches) {
         for (final event in entries) {
           final key = '${event['id']}:${event['starts_at']}';
           found[key] = event;
@@ -219,6 +203,45 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         _loading = false;
       });
     }
+  }
+
+  /// Discourse limits one response to 200 event series. Split saturated
+  /// windows so a busy site doesn't silently lose events in month/year view.
+  /// A one-day window is the smallest useful partition.
+  Future<List<Map<String, dynamic>>> _fetchCalendarPeriod(
+    EventCalendarRange period,
+    String? username,
+  ) async {
+    final response = await _service.dio.get<dynamic>(
+      '/discourse-post-event/events',
+      queryParameters: {
+        'limit': 200,
+        'after': period.start.subtract(const Duration(seconds: 1))
+            .toUtc().toIso8601String(),
+        'before': period.end.toUtc().toIso8601String(),
+        'include_ongoing': true,
+        if (username != null) 'include_interested': true,
+        if (username != null && username.isNotEmpty)
+          'attending_user': username,
+      },
+    );
+    final events = _asMapList(_asMap(response.data)['events']);
+    final days = DateTime.utc(period.end.year, period.end.month, period.end.day)
+        .difference(DateTime.utc(
+          period.start.year, period.start.month, period.start.day,
+        ))
+        .inDays;
+    if (events.length < 200 || days <= 1) {
+      return expandCalendarEventOccurrences(events);
+    }
+    final midpoint = DateTime(
+      period.start.year, period.start.month, period.start.day + days ~/ 2,
+    );
+    final halves = await Future.wait([
+      _fetchCalendarPeriod(EventCalendarRange(period.start, midpoint), username),
+      _fetchCalendarPeriod(EventCalendarRange(midpoint, period.end), username),
+    ]);
+    return [...halves[0], ...halves[1]];
   }
 
   void _setCalendarDate(DateTime date, {EventCalendarScale? scale}) {
