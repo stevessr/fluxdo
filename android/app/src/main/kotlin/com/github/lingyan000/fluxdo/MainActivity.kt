@@ -194,7 +194,17 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "listLoginBrowsers" -> {
-                    result.success(listLoginBrowsers())
+                    // PackageManager 查询与应用图标 PNG 编码可能触发磁盘 I/O，
+                    // 必须离开 Android 主线程，避免打开选择面板时丢帧。
+                    Thread({
+                        val browsers = try {
+                            listLoginBrowsers()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Browser discovery failed", e)
+                            emptyList<Map<String, Any>>()
+                        }
+                        mainHandler.post { result.success(browsers) }
+                    }, "fluxdo-browser-discovery").start()
                 }
                 "launchLoginBrowser" -> {
                     val url = call.argument<String>("url")
