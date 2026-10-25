@@ -149,6 +149,23 @@ void main() {
       },
     );
 
+    test('SVG payload total stays bounded after visiting many accounts', () {
+      final pool = AvatarCachePool.forTesting(svgLoader: (_) async => null);
+      final svg = 'x' * (48 * 1024);
+      for (var i = 0; i < 100; i++) {
+        pool.rememberSvg('https://a.test/$i.svg', svg);
+      }
+
+      // 100 * 48 KiB exceeds the independent 4 MiB SVG memo limit.
+      expect(pool.svgMemoCharactersForTest, lessThanOrEqualTo(4 * 1024 * 1024));
+      expect(pool.hasSvgResult('https://a.test/0.svg'), isFalse);
+      expect(pool.hasSvgResult('https://a.test/99.svg'), isTrue);
+
+      final previous = pool.svgMemoCharactersForTest;
+      pool.rememberSvg('https://a.test/99.svg', '<svg/>');
+      expect(pool.svgMemoCharactersForTest, previous - svg.length + 6);
+    });
+
     test('SVG metadata is bounded independently from active accounts', () {
       final pool = AvatarCachePool.forTesting(svgLoader: (_) async => null);
       for (var i = 0; i < 1600; i++) {
