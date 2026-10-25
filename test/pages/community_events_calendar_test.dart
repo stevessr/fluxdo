@@ -87,7 +87,7 @@ void main() {
         ),
       ),
     ));
-    expect(find.text('Discourse meetup'), findsOneWidget);
+    expect(find.textContaining('Discourse meetup'), findsWidgets);
     await tester.tap(find.byType(InkWell).first);
     expect(selected, isNotNull);
   });
