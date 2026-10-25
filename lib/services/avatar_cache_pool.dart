@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
-import 'blob_image_cache.dart';
 import 'discourse_cache_manager.dart';
 import '../utils/svg_utils.dart';
 
@@ -23,8 +22,8 @@ class AvatarCachePool {
   static final AvatarCachePool instance = AvatarCachePool._(_readCachedSvg);
 
   @visibleForTesting
-  AvatarCachePool.forTesting({required AvatarSvgLoader svgLoader})
-    : _svgLoader = svgLoader;
+  factory AvatarCachePool.forTesting({required AvatarSvgLoader svgLoader}) =>
+      AvatarCachePool._(svgLoader);
 
   static const int _maxSvgEntries = 1500;
   static const int _maxMemoizedSvgCharacters = 64 * 1024;
