@@ -179,7 +179,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
                 .toUtc().toIso8601String(),
             'before': period.end.toUtc().toIso8601String(),
             'include_ongoing': true,
-            if (username != null) 'attending_user': username,
+            if (username != null && username.isNotEmpty)
+              'attending_user': username,
           },
         ),
       ));
@@ -198,14 +199,18 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           return first.compareTo(second);
         });
       if (!mounted || request != _eventRequestId ||
-          !AuthSession().isValid(generation)) return;
+          !AuthSession().isValid(generation)) {
+        return;
+      }
       setState(() {
         _items = ordered;
         _loading = false;
       });
     } catch (error) {
       if (!mounted || request != _eventRequestId ||
-          !AuthSession().isValid(generation)) return;
+          !AuthSession().isValid(generation)) {
+        return;
+      }
       setState(() {
         _error = error;
         _loading = false;
@@ -244,11 +249,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     return switch (_calendarScale) {
       EventCalendarScale.day => localizations.formatMediumDate(date),
       EventCalendarScale.week =>
-        localizations.formatMediumDate(calendarWeekStart(date)) +
-        ' – ' +
-        localizations.formatMediumDate(
-          DateTime(date.year, date.month,
-            date.day - date.weekday + 7)),
+          '${localizations.formatMediumDate(calendarWeekStart(date))} – '
+          '${localizations.formatMediumDate(DateTime(date.year, date.month, date.day - date.weekday + 7))}',
       EventCalendarScale.month => localizations.formatMonthYear(date),
       EventCalendarScale.year => date.year.toString(),
     };
