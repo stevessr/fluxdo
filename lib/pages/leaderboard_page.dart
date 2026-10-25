@@ -297,7 +297,10 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
               onOpenUser: _openUser,
             );
           }
-          if (showPersonal && index == 1) {
+          if (index == 1) {
+            return _LeaderboardListHeading();
+          }
+          if (showPersonal && index == 2) {
             return _LeaderboardSelfRank(
               personal: personal!,
               onTap: () => Navigator.of(context).push(
@@ -306,9 +309,6 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                 ),
               ),
             );
-          }
-          if (index == listStart - 1) {
-            return _LeaderboardListHeading();
           }
           final entryIndex = index - listStart;
           if (entryIndex >= rankings.length) {
@@ -701,7 +701,7 @@ class _LeaderboardSelfRank extends StatelessWidget {
         .format(personal.totalScore).toLowerCase();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 18, bottom: 20),
+      padding: const EdgeInsets.only(top: 0, bottom: 20),
       child: Material(
         color: scheme.primary,
         borderRadius: BorderRadius.circular(16),
@@ -759,7 +759,7 @@ class _LeaderboardListHeading extends StatelessWidget {
     final locale = Localizations.localeOf(context);
     final rank = locale.languageCode == 'zh' ? '排名' : 'Rank';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      padding: const EdgeInsets.fromLTRB(14, 28, 14, 12),
       child: Row(
         children: [
           Text(
