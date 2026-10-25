@@ -68,7 +68,7 @@ class XdgBrowserIconLoader {
         ? environment['XDG_DATA_DIRS']!
         : '/usr/local/share:/usr/share';
     final roots = <String>{
-      if (effectiveHome != null) effectiveHome,
+      ?effectiveHome,
       ...dataDirs.split(':').where((p) => p.startsWith('/')),
     };
     final iconRoots = <String>{
