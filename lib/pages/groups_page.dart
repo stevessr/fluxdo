@@ -30,6 +30,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   int _total = 0;
   bool _hasMore = false;
   bool _loading = false;
+  bool _reloadQueued = false;
+  int _membershipRevision = 0;
   Object? _error;
 
   @override
@@ -53,11 +55,16 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   }
 
   Future<void> _load({required bool reset}) async {
-    if (_loading || !mounted) return;
+    if (!mounted) return;
+    if (_loading) {
+      if (reset) _reloadQueued = true;
+      return;
+    }
     if (!reset && !_hasMore) return;
 
     final page = reset ? 0 : _nextPage;
     final requestedFilter = _filter;
+    final requestedRevision = _membershipRevision;
     setState(() {
       _loading = true;
       _error = null;
@@ -70,7 +77,11 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
             page: page,
             filter: requestedFilter.isEmpty ? null : requestedFilter,
           );
-      if (!mounted || requestedFilter != _filter) return;
+      if (!mounted ||
+          requestedFilter != _filter ||
+          requestedRevision != _membershipRevision) {
+        return;
+      }
 
       final merged = reset
           ? result.groups
@@ -82,10 +93,20 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
         _nextPage = page + 1;
       });
     } catch (error) {
-      if (!mounted || requestedFilter != _filter) return;
+      if (!mounted ||
+          requestedFilter != _filter ||
+          requestedRevision != _membershipRevision) {
+        return;
+      }
       setState(() => _error = error);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        if (_reloadQueued) {
+          _reloadQueued = false;
+          scheduleMicrotask(() => _load(reset: true));
+        }
+      }
     }
   }
 
@@ -176,6 +197,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
         isGroupOwner: false,
       );
       setState(() {
+        _membershipRevision++;
         _groups = [
           for (final item in _groups)
             if (item.id == latest.id) updated else item,
