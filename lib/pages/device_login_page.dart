@@ -316,7 +316,8 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                 if (_mode == DeviceAuthorizationMode.cookieLogin) ...[
                   const SizedBox(height: 8),
                   TextButton(
-                    onPressed: () => _start(mode: DeviceAuthorizationMode.readOnly),
+                    onPressed: () =>
+                        _start(mode: DeviceAuthorizationMode.readOnly),
                     child: const Text('只申请原生只读 API Key（不建立 Cookie）'),
                   ),
                 ],
