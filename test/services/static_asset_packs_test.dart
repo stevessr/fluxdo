@@ -186,6 +186,33 @@ void main() {
     expect(await StaticAssetPacks.loadString(_path), await rootBundle.loadString(_path));
   }, skip: !File('test/fixtures/generated_asset_packs/catalog.json').existsSync());
 
+  test('ZIP 中央目录声明异常压缩比时在解压前拒绝', () async {
+    final input = Uint8List.fromList(
+      List<int>.generate(10000, (index) => index % 251),
+    );
+    final zip = _makePack(_path, input);
+    var entry = -1;
+    for (var i = 0; i < zip.length - 46; i++) {
+      if (zip[i] == 0x50 && zip[i + 1] == 0x4b &&
+          zip[i + 2] == 0x01 && zip[i + 3] == 0x02) {
+        entry = i;
+        break;
+      }
+    }
+    expect(entry, greaterThanOrEqualTo(0));
+    // Announce one compressed byte for a 10 KiB uncompressed payload.
+    for (var i = 0; i < 4; i++) {
+      zip[entry + 20 + i] = i == 0 ? 1 : 0;
+    }
+    await expectLater(
+      StaticAssetPacks.installTrustedZip(
+        packId: 'render-cook', zipBytes: zip,
+        expectedSha256: sha256.convert(zip).toString(),
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('篡改 ZIP 中央目录为超大文件会在解压前拒绝', () async {
     final zip = _makePack(_path, Uint8List.fromList(utf8.encode('small')));
     var entry = -1;

@@ -156,8 +156,10 @@ def verify(catalog_path):
             for entry in entries:
                 name = entry["path"]
                 info = archive.getinfo(name)
-                if info.file_size > MAX_FILE:
-                    raise ValueError("文件超限: " + name)
+                if (info.file_size > MAX_FILE or
+                        (info.file_size > 4096 and
+                         info.compress_size * 500 < info.file_size)):
+                    raise ValueError("文件大小或压缩比超限: " + name)
                 content = archive.read(name)
                 if len(content) != entry["bytes"] or sha(content) != entry["sha256"]:
                     raise ValueError("内容校验失败: " + name)

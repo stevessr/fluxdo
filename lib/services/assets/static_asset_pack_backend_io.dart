@@ -57,9 +57,14 @@ void _preflightZip(Uint8List bytes) {
     }
     final flags = view.getUint16(position + 8, Endian.little);
     final method = view.getUint16(position + 10, Endian.little);
+    final compressed = view.getUint32(position + 20, Endian.little);
     final size = view.getUint32(position + 24, Endian.little);
+    final localOffset = view.getUint32(position + 42, Endian.little);
     if ((flags & 1) != 0 || (method != 0 && method != 8) ||
-        size == 0xffffffff || size > _maxFile) {
+        size == 0xffffffff || size > _maxFile ||
+        compressed == 0xffffffff || compressed > bytes.length ||
+        localOffset + 30 > directoryOffset ||
+        (size > 4096 && compressed * 500 < size)) {
       throw FormatException('ZIP 加密/压缩方法或单文件大小不受支持');
     }
     totalSize += size;
