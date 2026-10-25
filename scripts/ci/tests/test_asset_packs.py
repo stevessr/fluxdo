@@ -74,7 +74,7 @@ class AssetPacksTest(unittest.TestCase):
             file.symlink_to(self.root / "assets/fonts/MiSansVF.ttf")
         except (NotImplementedError, OSError):
             self.skipTest("文件系统不支持符号链接")
-        with self.assertRaisesRegex(ValueError, "不安全资源"):
+        with self.assertRaisesRegex(ValueError, "禁止符号链接"):
             asset_packs.build(self.root, self.root / "out")
 
     def test_traversal_rejected(self):
