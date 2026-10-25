@@ -60,6 +60,44 @@ bool eventOnCalendarDay(Map<String, dynamic> event, DateTime date) {
   return !day.isBefore(first) && !day.isAfter(last);
 }
 
+/// Discourse returns one event with an `occurrences` array for recurring
+/// series. Treat each occurrence as a calendar entry while preserving its post
+/// URL, name, RSVP information and original event id.
+List<Map<String, dynamic>> expandCalendarEventOccurrences(
+  List<Map<String, dynamic>> events,
+) {
+  final expanded = <Map<String, dynamic>>[];
+  for (final event in events) {
+    final occurrences = event['occurrences'];
+    if (occurrences is List) {
+      if (occurrences.isNotEmpty) {
+        for (final occurrence in occurrences) {
+          if (occurrence is! Map) continue;
+          final start = occurrence['starts_at'];
+          if (parseCalendarEventDate(start) == null) continue;
+          expanded.add({
+            ...event,
+            'starts_at': start,
+            'ends_at': occurrence['ends_at'],
+          });
+        }
+        continue;
+      }
+      // An empty occurrence array for a recurring series means there is
+      // nothing in the requested window. Don't display its original date.
+      final recurrence = event['recurrence'];
+      if (recurrence is String && recurrence.isNotEmpty &&
+          recurrence != 'none') {
+        continue;
+      }
+    }
+    if (parseCalendarEventDate(event['starts_at']) != null) {
+      expanded.add(event);
+    }
+  }
+  return expanded;
+}
+
 List<Map<String, dynamic>> calendarEventsForDay(
     List<Map<String, dynamic>> events, DateTime day) {
   return events.where((event) => eventOnCalendarDay(event, day)).toList();
