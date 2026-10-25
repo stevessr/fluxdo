@@ -202,7 +202,6 @@ void main() {
       expect(stored, false);
     });
 
-
     test('native write grant mints OTP and revokes temporary key', () async {
       final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
       final key = List.filled(64, 'b').join();
@@ -214,26 +213,32 @@ void main() {
           onRequest: (options, handler) {
             sent.add(options);
             if (options.path == '/user-api-key/device.json') {
-              return handler.resolve(Response(
-                requestOptions: options,
-                statusCode: 200,
-                data: {
-                  'device_code': List.filled(64, 'a').join(),
-                  'user_code': 'ABCD-EFGH',
-                  'verification_uri': 'https://linux.do/user-api-key/activate',
-                  'verification_uri_with_request':
-                      'https://linux.do/user-api-key/activate?request=abc123_-',
-                  'expires_in': 600,
-                  'interval': 5,
-                },
-              ));
+              return handler.resolve(
+                Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'device_code': List.filled(64, 'a').join(),
+                    'user_code': 'ABCD-EFGH',
+                    'verification_uri':
+                        'https://linux.do/user-api-key/activate',
+                    'verification_uri_with_request': 'https://linux.do/user-api-key/activate?request=abc123_-',
+                    'expires_in': 600,
+                    'interval': 5,
+                  },
+                ),
+              );
             }
             if (options.path == '/session/current.json') {
-              return handler.resolve(Response(
-                requestOptions: options,
-                statusCode: 200,
-                data: {'current_user': {'username': 'alice'}},
-              ));
+              return handler.resolve(
+                Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'current_user': {'username': 'alice'},
+                  },
+                ),
+              );
             }
             throw StateError('unexpected endpoint: ${options.path}');
           },
@@ -243,8 +248,10 @@ void main() {
         dio,
         publicKeyProvider: () async => 'RSA-TEST-KEY',
         clientIdProvider: () async => 'DEVICE-CLIENT-ID',
-        payloadDecryptor: (payload, nonce) async =>
-            {'key': key, 'nonce': nonce},
+        payloadDecryptor: (payload, nonce) async => {
+          'key': key,
+          'nonce': nonce,
+        },
         credentialSaver: (key, clientId, username, expires) async {
           persisted = true;
         },
@@ -271,89 +278,112 @@ void main() {
       expect(sent.last.headers['User-Api-Client-Id'], 'DEVICE-CLIENT-ID');
     });
 
-    test('write device grant does not fabricate OTP on server denial', () async {
-      final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
-      final key = List.filled(64, 'b').join();
-      dio.interceptors.add(InterceptorsWrapper(
-        onRequest: (options, handler) {
-          if (options.path == '/user-api-key/device.json') {
-            return handler.resolve(Response(
-              requestOptions: options,
-              statusCode: 200,
-              data: {
-                'device_code': List.filled(64, 'a').join(),
-                'user_code': 'ABCD-EFGH',
-                'verification_uri': 'https://linux.do/user-api-key/activate',
-                'verification_uri_with_request':
-                    'https://linux.do/user-api-key/activate?request=abc123_-',
-                'expires_in': 600,
-                'interval': 5,
-              },
-            ));
-          }
-          return handler.resolve(Response(
-            requestOptions: options,
-            statusCode: 200,
-            data: {'current_user': {'username': 'alice'}},
-          ));
-        },
-      ));
-      var revoked = false;
-      final service = DeviceAuthorizationService(
-        dio,
-        publicKeyProvider: () async => 'RSA-TEST-KEY',
-        clientIdProvider: () async => 'DEVICE-CLIENT-ID',
-        payloadDecryptor: (payload, nonce) async =>
-            {'key': key, 'nonce': nonce},
-        otpRequester: (key, clientId, generation) async => null,
-        keyRevoker: (key) async {
-          revoked = true;
-          return true;
-        },
-      );
-      final request = await service.create();
-      await expectLater(
-        service.authorize(request, 'ENCRYPTED-KEY'),
-        throwsA(isA<DeviceOtpUnavailableException>()),
-      );
-      expect(revoked, true);
-    });
+    test(
+      'write device grant does not fabricate OTP on server denial',
+      () async {
+        final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
+        final key = List.filled(64, 'b').join();
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path == '/user-api-key/device.json') {
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'device_code': List.filled(64, 'a').join(),
+                      'user_code': 'ABCD-EFGH',
+                      'verification_uri':
+                          'https://linux.do/user-api-key/activate',
+                      'verification_uri_with_request': 'https://linux.do/user-api-key/activate?request=abc123_-',
+                      'expires_in': 600,
+                      'interval': 5,
+                    },
+                  ),
+                );
+              }
+              return handler.resolve(
+                Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'current_user': {'username': 'alice'},
+                  },
+                ),
+              );
+            },
+          ),
+        );
+        var revoked = false;
+        final service = DeviceAuthorizationService(
+          dio,
+          publicKeyProvider: () async => 'RSA-TEST-KEY',
+          clientIdProvider: () async => 'DEVICE-CLIENT-ID',
+          payloadDecryptor: (payload, nonce) async => {
+            'key': key,
+            'nonce': nonce,
+          },
+          otpRequester: (key, clientId, generation) async => null,
+          keyRevoker: (key) async {
+            revoked = true;
+            return true;
+          },
+        );
+        final request = await service.create();
+        await expectLater(
+          service.authorize(request, 'ENCRYPTED-KEY'),
+          throwsA(isA<DeviceOtpUnavailableException>()),
+        );
+        expect(revoked, true);
+      },
+    );
 
     test('explicit read-only mode never mints OTP', () async {
       final dio = Dio(BaseOptions(baseUrl: 'https://linux.do'));
       final sent = <RequestOptions>[];
-      dio.interceptors.add(InterceptorsWrapper(
-        onRequest: (options, handler) {
-          sent.add(options);
-          if (options.path == '/user-api-key/device.json') {
-            return handler.resolve(Response(
-              requestOptions: options,
-              statusCode: 200,
-              data: {
-                'device_code': List.filled(64, 'a').join(),
-                'user_code': 'ABCD-EFGH',
-                'verification_uri': 'https://linux.do/user-api-key/activate',
-                'verification_uri_with_request':
-                    'https://linux.do/user-api-key/activate?request=abc123_-',
-                'expires_in': 600,
-                'interval': 5,
-              },
-            ));
-          }
-          return handler.resolve(Response(
-            requestOptions: options,
-            statusCode: 200,
-            data: {'current_user': {'username': 'alice'}},
-          ));
-        },
-      ));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            sent.add(options);
+            if (options.path == '/user-api-key/device.json') {
+              return handler.resolve(
+                Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'device_code': List.filled(64, 'a').join(),
+                    'user_code': 'ABCD-EFGH',
+                    'verification_uri':
+                        'https://linux.do/user-api-key/activate',
+                    'verification_uri_with_request': 'https://linux.do/user-api-key/activate?request=abc123_-',
+                    'expires_in': 600,
+                    'interval': 5,
+                  },
+                ),
+              );
+            }
+            return handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'current_user': {'username': 'alice'},
+                },
+              ),
+            );
+          },
+        ),
+      );
       var saved = false;
       final service = DeviceAuthorizationService(
         dio,
         publicKeyProvider: () async => 'RSA-TEST-KEY',
         clientIdProvider: () async => 'DEVICE-CLIENT-ID',
-        payloadDecryptor: (payload, nonce) async =>
-            {'key': List.filled(64, 'b').join(), 'nonce': nonce},
+        payloadDecryptor: (payload, nonce) async => {
+          'key': List.filled(64, 'b').join(),
+          'nonce': nonce,
+        },
         credentialSaver: (key, clientId, username, expires) async {
           saved = true;
         },
