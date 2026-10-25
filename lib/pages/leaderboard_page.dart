@@ -34,6 +34,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
 
   _LeaderboardPeriod _period = _LeaderboardPeriod.allTime;
   bool _loading = false;
+  int _accountVersion = 0;
 
   @override
   void initState() {
@@ -60,6 +61,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     if (_loading || !mounted) return;
 
     final requestedPeriod = _period;
+    final accountVersion = _accountVersion;
     final previous = _cache[requestedPeriod];
     if (!reset && previous != null && !previous.hasMore) return;
 
@@ -129,13 +131,13 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
         updatedAt: DateTime.now(),
       );
 
-      if (!mounted) return;
+      if (!mounted || accountVersion != _accountVersion) return;
       setState(() {
         _cache[requestedPeriod] = snapshot;
         _errors.remove(requestedPeriod);
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || accountVersion != _accountVersion) return;
       setState(() => _errors[requestedPeriod] = error);
     } finally {
       if (!mounted) return;
@@ -184,6 +186,18 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     // 触发网络请求；切回来后复用本 State 中的周期缓存。
     if (!widget.isActive) return const SizedBox.shrink();
 
+    // 切换账号后丢弃含有旧 personal 字段的快照；请求跨账号返回时
+    // 由 _accountVersion 拒绝写入，避免展示前一账号的私有排名。
+    ref.listen(currentUserProvider, (previous, next) {
+      if (previous?.value?.username == next.value?.username) return;
+      _accountVersion++;
+      setState(() {
+        _cache.clear();
+        _errors.clear();
+      });
+      if (!_loading) scheduleMicrotask(_ensureLoaded);
+    });
+
     final snapshot = _cache[_period];
     final error = _errors[_period];
     final currentUsername = ref.watch(currentUserProvider).value?.username;
@@ -230,7 +244,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                       ],
                     ),
                   ),
-                  icon: Icon(Symbols.info_outline_rounded, color: colors.primary),
+                  icon: Icon(AppIcons.info, color: colors.primary),
                 ),
               ],
             ),
@@ -444,7 +458,7 @@ class _PeriodSelector extends StatelessWidget {
                       ),
                     ),
                     if (period == selected)
-                      Icon(Symbols.check_rounded, size: 18, color: colors.primary),
+                      Icon(AppIcons.check, size: 18, color: colors.primary),
                   ],
                 ),
               );
@@ -459,7 +473,7 @@ class _PeriodSelector extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(Symbols.expand_more_rounded),
+                const Icon(AppIcons.expandMore),
               ],
             ),
           ),
@@ -549,7 +563,9 @@ class _LeaderboardWinner extends StatelessWidget {
       2 => const Color(0xffb9bdc7),
       _ => const Color(0xffcd8b4a),
     };
-    final radius = (slotWidth * (first ? 0.43 : 0.39)).clamp(24.0, 56.0);
+    final radius = (slotWidth * (first ? 0.43 : 0.39))
+        .clamp(24.0, 56.0)
+        .toDouble();
     final score = NumberFormat.decimalPattern(
       Localizations.localeOf(context).toString(),
     ).format(entry.totalScore);
@@ -657,7 +673,7 @@ class _LeaderboardRankingHeading extends StatelessWidget {
           Text(copy.rank, style: theme.textTheme.titleSmall),
           Row(
             children: [
-              Icon(Symbols.workspace_premium_rounded, size: 18, color: colors.primary),
+              Icon(AppIcons.medal, size: 18, color: colors.primary),
               const SizedBox(width: 6),
               Text(copy.points, style: theme.textTheme.titleSmall),
             ],
