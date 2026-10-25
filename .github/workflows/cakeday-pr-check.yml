@@ -46,18 +46,15 @@ jobs:
       - name: Generate localization code
         run: dart run tool/gen_l10n.dart
 
-      - name: Inspect changed Dart formatting
+      - name: Check changed Dart formatting
         run: |
-          dart format \
+          dart format --output=none --set-exit-if-changed \
             lib/pages/community_events_page.dart \
             lib/navigation/nav_entry_registry.dart \
             lib/utils/discourse_url_parser.dart \
             lib/utils/link_launcher.dart \
             test/pages/community_events_page_test.dart \
             test/utils/discourse_url_parser_test.dart
-          git diff -- lib/pages/community_events_page.dart lib/navigation/nav_entry_registry.dart \
-            lib/utils/discourse_url_parser.dart lib/utils/link_launcher.dart \
-            test/pages/community_events_page_test.dart test/utils/discourse_url_parser_test.dart
 
       - name: Analyze cakeday implementation
         run: >-
