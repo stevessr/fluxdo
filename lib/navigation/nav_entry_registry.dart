@@ -192,10 +192,8 @@ class NavEntryRegistry {
         iconData: Symbols.rule_rounded,
         selectedIconData: Symbols.rule_rounded,
         label: _siteGuidelinesLabel,
-        pageBuilder: (ctx, isActive) => SitePolicyPage(
-          kind: SitePolicyKind.guidelines,
-          isActive: isActive,
-        ),
+        pageBuilder: (ctx, isActive) =>
+            SitePolicyPage(kind: SitePolicyKind.guidelines, isActive: isActive),
         defaultInBottomNav: false,
       ),
       NavEntry(
@@ -204,10 +202,8 @@ class NavEntryRegistry {
         iconData: Symbols.description_rounded,
         selectedIconData: Symbols.description_rounded,
         label: _siteTermsLabel,
-        pageBuilder: (ctx, isActive) => SitePolicyPage(
-          kind: SitePolicyKind.terms,
-          isActive: isActive,
-        ),
+        pageBuilder: (ctx, isActive) =>
+            SitePolicyPage(kind: SitePolicyKind.terms, isActive: isActive),
         defaultInBottomNav: false,
       ),
       NavEntry(
@@ -216,10 +212,8 @@ class NavEntryRegistry {
         iconData: Symbols.privacy_tip_rounded,
         selectedIconData: Symbols.privacy_tip_rounded,
         label: _sitePrivacyLabel,
-        pageBuilder: (ctx, isActive) => SitePolicyPage(
-          kind: SitePolicyKind.privacy,
-          isActive: isActive,
-        ),
+        pageBuilder: (ctx, isActive) =>
+            SitePolicyPage(kind: SitePolicyKind.privacy, isActive: isActive),
         defaultInBottomNav: false,
       ),
       NavEntry(
