@@ -139,18 +139,6 @@ class NavEntryRegistry {
         requiresLogin: true,
       ),
       NavEntry(
-        id: 'birthdays',
-        kind: NavEntryKind.page,
-        iconData: Symbols.cake_rounded,
-        selectedIconData: Symbols.cake_rounded,
-        label: (ctx) =>
-            _communityEventLabel(ctx, CommunityEventsView.birthdays),
-        pageBuilder: (ctx, isActive) =>
-            const CommunityEventsPage(view: CommunityEventsView.birthdays),
-        defaultInBottomNav: false,
-        requiresLogin: true,
-      ),
-      NavEntry(
         id: NavEntryIds.bookmarks,
         kind: NavEntryKind.page,
         iconData: Symbols.bookmark_rounded,
@@ -200,8 +188,10 @@ class NavEntryRegistry {
 
   /// 按 id 查找 entry
   static NavEntry? byId(String id) {
+    // 兼容合并前保存的生日入口 ID。
+    final resolved = id == 'birthdays' ? 'anniversaries' : id;
     for (final e in buildAll()) {
-      if (e.id == id) return e;
+      if (e.id == resolved) return e;
     }
     return null;
   }
@@ -250,7 +240,7 @@ String _communityEventLabel(BuildContext context, CommunityEventsView view) {
   final zh = Localizations.localeOf(context).languageCode == 'zh';
   return switch (view) {
     CommunityEventsView.upcoming => zh ? '近期活动' : 'Upcoming events',
-    CommunityEventsView.anniversaries => zh ? '周年纪念日' : 'Anniversaries',
+    CommunityEventsView.anniversaries => zh ? '纪念日与生日' : 'Anniversaries & Birthdays',
     CommunityEventsView.birthdays => zh ? '生日' : 'Birthdays',
   };
 }
