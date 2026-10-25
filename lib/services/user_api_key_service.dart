@@ -553,7 +553,12 @@ class UserApiKeyService {
       );
 
       if (!isCurrent()) return null;
-      final location = response.headers.value('location');
+      // HTML requests return a 302 Location; JSON clients may receive
+      // {redirect_url: ...}. Both contain the same encrypted OTP.
+      var location = response.headers.value('location');
+      if ((location == null || location.isEmpty) && response.data is Map) {
+        location = (response.data as Map)['redirect_url']?.toString();
+      }
       if (location == null || location.isEmpty) {
         _log(
           'warning',
