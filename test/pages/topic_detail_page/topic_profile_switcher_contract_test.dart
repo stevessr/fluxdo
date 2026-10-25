@@ -23,7 +23,7 @@ void main() {
       search,
       contains('final profileAction = _buildProfileSwitcherAction();'),
     );
-    expect(search, contains('if (profileAction != null) profileAction'));
+    expect(search, contains('?profileAction'));
 
     final workspace = section(
       'PreferredSizeWidget _buildEmbeddedMobileWorkspaceAppBar({',
@@ -33,7 +33,7 @@ void main() {
       workspace,
       contains('final profileAction = _buildProfileSwitcherAction();'),
     );
-    expect(workspace, contains('if (profileAction != null) profileAction'));
+    expect(workspace, contains('?profileAction'));
 
     final normal = section(
       'List<Widget> _buildAppBarActions({',
@@ -43,11 +43,8 @@ void main() {
       normal,
       contains('final profileAction = _buildProfileSwitcherAction();'),
     );
-    expect(
-      normal,
-      contains('return [if (profileAction != null) profileAction];'),
-    );
-    expect(normal, contains('if (profileAction != null) profileAction'));
+    expect(normal, contains('return [?profileAction];'));
+    expect(normal, contains('?profileAction'));
   });
 
   test('profile avatar preserves tap and long-press account switching', () {
