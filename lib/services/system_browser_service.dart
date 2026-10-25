@@ -57,16 +57,20 @@ class SystemBrowserService {
       if (entry is! Map) continue;
       final id = entry['id'];
       final name = entry['name'];
-      if (id is! String || name is! String || id.isEmpty ||
+      if (id is! String ||
+          name is! String ||
+          id.isEmpty ||
           id == androidChooserId) {
         continue;
       }
       final icon = entry['icon'];
-      browsers.add(LoginBrowser(
-        id: id,
-        name: name,
-        iconBytes: icon is Uint8List && icon.isNotEmpty ? icon : null,
-      ));
+      browsers.add(
+        LoginBrowser(
+          id: id,
+          name: name,
+          iconBytes: icon is Uint8List && icon.isNotEmpty ? icon : null,
+        ),
+      );
     }
     return [...browsers, _androidChooser];
   }
