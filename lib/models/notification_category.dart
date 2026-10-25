@@ -10,11 +10,13 @@ import 'notification.dart';
 /// the bookmark list.
 enum NotificationCategory {
   all,
-  mentions,
   replies,
+  mentions,
   likes,
   messages,
   bookmarks,
+  assigned,
+  chat,
   other;
 
   /// Standalone @mentions without changing the existing replies aggregate.
@@ -43,6 +45,19 @@ enum NotificationCategory {
     NotificationType.bookmarkReminder,
   };
 
+  static const Set<NotificationType> _assignedTypes = {
+    NotificationType.assignedTopic,
+  };
+
+  static const Set<NotificationType> _chatTypes = {
+    NotificationType.chatMention,
+    NotificationType.chatMessage,
+    NotificationType.chatInvitation,
+    NotificationType.chatGroupMention,
+    NotificationType.chatQuotedPost,
+    NotificationType.chatWatchedThread,
+  };
+
   /// Discourse notification type names accepted by `filter_by_types`.
   ///
   /// `other` intentionally returns null. Discourse builds that group from the
@@ -64,6 +79,15 @@ enum NotificationCategory {
       'group_message_summary',
     ],
     NotificationCategory.bookmarks => const ['bookmark_reminder'],
+    NotificationCategory.assigned => const ['assigned'],
+    NotificationCategory.chat => const [
+      'chat_mention',
+      'chat_message',
+      'chat_invitation',
+      'chat_group_mention',
+      'chat_quoted',
+      'chat_watched_thread',
+    ],
     NotificationCategory.other => null,
   };
 
@@ -76,12 +100,16 @@ enum NotificationCategory {
       NotificationCategory.likes => _likeTypes.contains(type),
       NotificationCategory.messages => _messageTypes.contains(type),
       NotificationCategory.bookmarks => _bookmarkTypes.contains(type),
+      NotificationCategory.assigned => _assignedTypes.contains(type),
+      NotificationCategory.chat => _chatTypes.contains(type),
       NotificationCategory.other =>
         !_mentionTypes.contains(type) &&
             !_replyTypes.contains(type) &&
             !_likeTypes.contains(type) &&
             !_messageTypes.contains(type) &&
-            !_bookmarkTypes.contains(type),
+            !_bookmarkTypes.contains(type) &&
+            !_assignedTypes.contains(type) &&
+            !_chatTypes.contains(type),
     };
   }
 }
