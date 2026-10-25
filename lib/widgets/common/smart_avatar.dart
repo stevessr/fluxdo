@@ -119,9 +119,13 @@ class _SmartAvatarState extends State<SmartAvatar> {
   ) {
     // Shared decode-size buckets ensure that nearby avatar radii use the
     // same decoded ImageCache entry across accounts, lists and profiles.
+    final imageUrl = widget.imageUrl!;
     return Image(
+      // A retained avatar widget must not paint A's last frame while B's
+      // distinct URL is loading during an account switch.
+      key: ValueKey(imageUrl),
       image: AvatarCachePool.instance.imageProvider(
-        widget.imageUrl!,
+        imageUrl,
         logicalDiameter: innerSize,
         devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
       ),
@@ -147,7 +151,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
         );
       },
       errorBuilder: (context, error, stack) => _SvgFallbackBuilder(
-        imageUrl: widget.imageUrl!,
+        imageUrl: imageUrl,
         size: innerSize,
         fallback: _buildFallback(fgColor, innerRadius),
       ),
@@ -180,6 +184,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
       // 仍走 native Rust pipeline，继续规避旧 multi_frame disposal bug。
       child = RepaintBoundary(
         child: Image(
+          key: ValueKey(widget.imageUrl),
           image: discourseImageProvider(
             widget.imageUrl!,
             bucket: BlobImageCache.avatarBucket,
