@@ -807,6 +807,8 @@ class _GroupHeader extends StatelessWidget {
   final DiscourseGroup group;
   final bool membershipChanging;
   final bool membershipConfirmationPending;
+  bool get _membershipBusy => membershipChanging || membershipConfirmationPending;
+
   final VoidCallback onJoin;
   final VoidCallback onLeave;
   final VoidCallback onRequestMembership;
@@ -874,10 +876,7 @@ class _GroupHeader extends StatelessWidget {
                       const SizedBox(height: 12),
                       if (group.canJoin)
                         FilledButton.tonal(
-                          onPressed:
-                              membershipChanging || membershipConfirmationPending
-                              ? null
-                              : onJoin,
+                          onPressed: _membershipBusy ? null : onJoin,
                           child: membershipChanging
                               ? const SizedBox.square(
                                   dimension: 18,
@@ -892,10 +891,7 @@ class _GroupHeader extends StatelessWidget {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: scheme.error,
                           ),
-                          onPressed:
-                              membershipChanging || membershipConfirmationPending
-                              ? null
-                              : onLeave,
+                          onPressed: _membershipBusy ? null : onLeave,
                           icon: membershipChanging
                               ? const SizedBox.square(
                                   dimension: 18,
