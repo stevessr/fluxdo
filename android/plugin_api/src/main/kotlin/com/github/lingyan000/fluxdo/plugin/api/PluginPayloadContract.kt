@@ -2,6 +2,7 @@ package com.github.lingyan000.fluxdo.plugin.api
 
 import org.json.JSONException
 import org.json.JSONObject
+import org.json.JSONTokener
 
 /**
  * Validates the same narrow argument schemas enforced by the SDK-only Dart
@@ -26,7 +27,14 @@ object PluginPayloadContract {
             "Plugin request exceeds UTF-8 byte limit"
         }
         val payload = try {
-            JSONObject(raw)
+            val tokener = JSONTokener(raw)
+            val value = tokener.nextValue()
+            // JSONObject(String) is lenient on Android and may ignore
+            // trailing bytes. IPC messages must contain one full JSON object.
+            require(value is JSONObject && tokener.nextClean() == '\u0000') {
+                "Plugin request must contain exactly one JSON object"
+            }
+            value
         } catch (_: JSONException) {
             throw IllegalArgumentException("Plugin request must be a JSON object")
         }
