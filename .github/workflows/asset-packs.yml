@@ -11,6 +11,9 @@ on:
       - 'lib/services/webview_settings.dart'
       - 'lib/providers/theme_provider.dart'
       - 'lib/main.dart'
+      - 'lib/pages/static_asset_pack_manager_page.dart'
+      - 'lib/pages/settings_page.dart'
+      - 'test/pages/static_asset_pack_manager_page_test.dart'
       - 'test/services/static_asset_packs_test.dart'
       - 'scripts/ci/asset_packs.py'
       - 'scripts/ci/tests/test_asset_packs.py'
@@ -89,10 +92,13 @@ jobs:
           lib/services/webview_settings.dart
           lib/providers/theme_provider.dart
           lib/main.dart
+          lib/pages/static_asset_pack_manager_page.dart
+          lib/pages/settings_page.dart
           test/services/static_asset_packs_test.dart
+          test/pages/static_asset_pack_manager_page_test.dart
       - name: Build real Python Cook pack fixture
         run: python3 scripts/ci/asset_packs.py build --root . --out test/fixtures/generated_asset_packs --only render-cook
       - name: Verify fixture is available
         run: test -f test/fixtures/generated_asset_packs/catalog.json
       - name: Test lifecycle and Python-Dart ZIP interoperability
-        run: flutter test test/services/static_asset_packs_test.dart
+        run: flutter test test/services/static_asset_packs_test.dart test/pages/static_asset_pack_manager_page_test.dart
