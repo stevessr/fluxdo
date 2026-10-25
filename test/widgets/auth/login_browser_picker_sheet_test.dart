@@ -104,7 +104,10 @@ void main() {
                     showDragHandle: true,
                     builder: (_) => const LoginBrowserPickerSheet(
                       browsers: [
-                        LoginBrowser(id: 'com.android.chrome', name: 'Google Chrome'),
+                        LoginBrowser(
+                          id: 'com.android.chrome',
+                          name: 'Google Chrome',
+                        ),
                         LoginBrowser(
                           id: SystemBrowserService.androidChooserId,
                           name: '使用系统方式打开',
