@@ -151,7 +151,7 @@ void main() {
 
     test('SVG payload total stays bounded after visiting many accounts', () {
       final pool = AvatarCachePool.forTesting(svgLoader: (_) async => null);
-      final svg = 'x' * (48 * 1024);
+      final svg = ''.padRight(48 * 1024, 'x');
       for (var i = 0; i < 100; i++) {
         pool.rememberSvg('https://a.test/$i.svg', svg);
       }
