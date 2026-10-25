@@ -211,7 +211,8 @@ class DesktopBrowserDiscovery {
           // Multiple desktop IDs may point at exactly the same browser and
           // launch arguments. Preserve distinct --profile/channel arguments.
           final signature = entry.exec?.trim();
-          if (signature != null && signature.isNotEmpty &&
+          if (signature != null &&
+              signature.isNotEmpty &&
               !seenXdgLaunches.add('${entry.name}\u0000$signature')) {
             continue;
           }
