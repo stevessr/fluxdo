@@ -133,6 +133,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
               if (!mounted || _cancelled) return;
               final ok = await UserApiKeyLoginFlow.instance.completeDeviceOtp(
                 otp,
+                requestGeneration: request.generation,
               );
               if (!mounted || _cancelled) return;
               if (ok) {
