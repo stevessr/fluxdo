@@ -133,10 +133,19 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
         updatedAt: DateTime.now(),
       );
 
+      // 官方允许站点锁定默认周期；锁定时不能继续使用客户端的总榜默认值。
+      final configuredPeriod = leaderboard['default_period'];
+      final lockedPeriod = snapshot.periodFilterDisabled &&
+              configuredPeriod is int &&
+              configuredPeriod >= 0 &&
+              configuredPeriod < LeaderboardPeriod.values.length
+          ? LeaderboardPeriod.values[configuredPeriod]
+          : null;
       if (!mounted) return;
       setState(() {
         _cache[requestedPeriod] = snapshot;
         _errors.remove(requestedPeriod);
+        if (lockedPeriod != null) _period = lockedPeriod;
       });
     } catch (error) {
       if (!mounted) return;
