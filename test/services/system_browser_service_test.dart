@@ -174,6 +174,7 @@ void main() {
       expect(nativeSource, contains('if (!isLoginAuthorizationUri(uri)) return false'));
       expect(nativeSource, contains('packageManager.getApplicationIcon(entry.key)'));
       expect(nativeSource, contains('requestedSize = 64'));
+      expect(nativeSource, contains('listLoginBrowsers(includeIcons = false)'));
       final page = File('lib/pages/login_page.dart').readAsStringSync();
       expect(page, contains('Image.memory('));
       expect(page, contains('if (chooserChoices.isNotEmpty)'));
