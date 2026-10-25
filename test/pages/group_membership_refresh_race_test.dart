@@ -102,7 +102,10 @@ void main() {
         );
 
         await tester.tap(find.widgetWithText(OutlinedButton, '退出'));
-        await tester.pumpAndSettle();
+        // The held refresh may display an indeterminate progress indicator.
+        // Do not pumpAndSettle until the response is released.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
         await tester.tap(find.byKey(const ValueKey('leave-group-confirm')));
         await tester.pump();
         expect(leaveRequests, 1);
