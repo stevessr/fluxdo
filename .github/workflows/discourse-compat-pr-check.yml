@@ -18,6 +18,7 @@ on:
       - 'lib/pages/topic_detail_page/topic_more_menu_actions.dart'
       - 'lib/widgets/topic/add_to_board_sheet.dart'
       - 'test/pages/topic_detail_page/topic_more_menu_actions_test.dart'
+      - 'test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart'
       - 'test/widgets/topic/add_to_board_sheet_test.dart'
       - 'lib/pages/chat/chat_channel_members_sheet.dart'
       - 'lib/pages/chat/chat_channel_settings_sheet.dart'
@@ -167,4 +168,22 @@ jobs:
 
       - name: Run topic board picker tests
         run: flutter test test/pages/topic_detail_page/topic_more_menu_actions_test.dart test/widgets/topic/add_to_board_sheet_test.dart
+
+      - name: Check topic account switcher formatting
+        run: >-
+          dart format --output=none --set-exit-if-changed
+          lib/pages/topic_detail_page/topic_detail_page.dart
+          test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+
+      - name: Analyze topic account switcher
+        run: >-
+          flutter analyze
+          lib/pages/topic_detail_page/topic_detail_page.dart
+          test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+
+      - name: Run topic account switcher regression tests
+        run: >-
+          flutter test
+          test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+          test/widgets/user/account_switcher_sheet_test.dart
 
