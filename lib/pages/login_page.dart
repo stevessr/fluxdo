@@ -13,6 +13,7 @@ import '../services/system_browser_service.dart';
 import '../utils/blur_config.dart';
 import '../widgets/auth/webview_login_dialog.dart';
 import '../widgets/auth/login_form.dart';
+import '../widgets/auth/login_browser_picker_sheet.dart';
 import '../widgets/auth/two_factor_dialog.dart';
 import '../widgets/common/ambient_background.dart';
 import '../widgets/common/floating_logo.dart';
@@ -100,25 +101,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  Widget _loginBrowserIcon(LoginBrowser browser) {
-    final iconBytes = browser.iconBytes;
-    if (iconBytes == null) {
-      return const Icon(Symbols.open_in_browser_rounded, size: 28);
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(9),
-      child: Image.memory(
-        iconBytes,
-        width: 40,
-        height: 40,
-        fit: BoxFit.contain,
-        gaplessPlayback: true,
-        errorBuilder: (_, _, _) =>
-            const Icon(Symbols.open_in_browser_rounded, size: 28),
-      ),
-    );
-  }
-
   /// 浏览器授权登录:拉起系统浏览器打开 /user-api-key/new,授权后
   /// 深链 discourse://auth_redirect 回 App,由 UserApiKeyLoginFlow 完成
   /// OTP 兑换与登录收口,这里只负责发起和成功后 pop。
@@ -133,17 +115,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         return;
       }
 
-      final chooserChoices = browsers
-          .where(
-            (browser) => browser.id == SystemBrowserService.androidChooserId,
-          )
-          .toList();
-      final regularBrowsers = browsers
-          .where(
-            (browser) => browser.id != SystemBrowserService.androidChooserId,
-          )
-          .toList();
-
       // 选择完成后才生成 nonce 和 RSA 授权 URL。用户取消选择时
       // 不会创建待处理的授权请求。
       final LoginBrowser? selected;
@@ -156,63 +127,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           context: context,
           showDragHandle: true,
           isScrollControlled: true,
-          builder: (sheetContext) => SafeArea(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.75,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '选择浏览器',
-                    style: Theme.of(sheetContext).textTheme.titleLarge,
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(20, 10, 20, 12),
-                    child: Text(
-                      '选择已登录 Google / GitHub 等账号的浏览器，'
-                      '在 LINUX DO 完成授权后将自动返回 FluxDO。',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: regularBrowsers.length,
-                      itemBuilder: (context, index) {
-                        final browser = regularBrowsers[index];
-                        return ListTile(
-                          leading: SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: Center(child: _loginBrowserIcon(browser)),
-                          ),
-                          title: Text(browser.name),
-                          onTap: () => Navigator.of(context).pop(browser),
-                        );
-                      },
-                    ),
-                  ),
-                  if (chooserChoices.isNotEmpty) ...[
-                    const Divider(height: 12, indent: 16, endIndent: 16),
-                    ListTile(
-                      leading: const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Icon(Icons.apps_rounded, size: 28),
-                      ),
-                      title: Text(chooserChoices.first.name),
-                      subtitle: const Text('唤起 Android 系统的“打开方式”菜单'),
-                      onTap: () =>
-                          Navigator.of(sheetContext).pop(chooserChoices.first),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          ),
+          builder: (_) => LoginBrowserPickerSheet(browsers: browsers),
         );
       }
       if (selected == null || !mounted) return;
