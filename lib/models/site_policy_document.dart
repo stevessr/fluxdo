@@ -98,9 +98,9 @@ class SitePolicyDocument {
       if (node is dom.Element && _headingTags.contains(node.localName)) {
         flush();
         heading = node.text.trim();
-        anchor = node.id;
+        anchor = node.attributes['id'];
         if (anchor == null || anchor!.isEmpty) {
-          anchor = node.querySelector('[id]')?.id;
+          anchor = node.querySelector('[id]')?.attributes['id'];
         }
         if (anchor == null || anchor!.isEmpty) {
           anchor = node.querySelector('a[name]')?.attributes['name'];
