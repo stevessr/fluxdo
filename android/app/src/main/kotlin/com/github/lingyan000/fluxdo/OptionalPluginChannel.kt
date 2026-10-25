@@ -12,6 +12,7 @@ import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import android.os.RemoteException
+import com.github.lingyan000.fluxdo.plugin.api.PluginPayloadContract
 import com.github.lingyan000.fluxdo.plugin.api.PluginProtocol
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
@@ -41,8 +42,9 @@ class OptionalPluginChannel(
             when (call.method) {
                 "list" -> result.success(specs.map(::describe))
                 "launch" -> {
+                    val arguments = call.arguments as? Map<*, *>
                     val spec = specs.firstOrNull {
-                        it.id == call.argument<String>("id") && it.activityClass != null
+                        it.id == (arguments?.get("id") as? String) && it.activityClass != null
                     }
                     if (spec == null || describe(spec)["compatible"] != true) {
                         result.error("PLUGIN_UNAVAILABLE", "Signed metaverse companion unavailable", null)
@@ -66,8 +68,11 @@ class OptionalPluginChannel(
                                 // SHA-256 username partition, not an account token.
                                 // A missing slot always means an ephemeral guest
                                 // session; plugins clear cookies before opening.
-                                val payload = call.argument<Map<String, Any?>>("payload")
-                                    ?: emptyMap()
+                                val rawPayload = arguments?.get("payload")
+                                require(rawPayload == null || rawPayload is Map<*, *>) {
+                                    "Invalid launch payload"
+                                }
+                                val payload = rawPayload as? Map<*, *> ?: emptyMap<Any?, Any?>()
                                 require(payload.keys.all { it == "accountSlot" }) {
                                     "Undeclared launch fields"
                                 }
@@ -83,8 +88,11 @@ class OptionalPluginChannel(
                             if (spec.id == "ldc_reward") {
                                 // Public post identity only. Never pass tokens,
                                 // payment amounts, cookies or Basic Auth secrets.
-                                val raw = call.argument<Map<String, Any?>>("payload")
-                                    ?: emptyMap()
+                                val rawPayload = arguments?.get("payload")
+                                require(rawPayload == null || rawPayload is Map<*, *>) {
+                                    "Invalid launch payload"
+                                }
+                                val raw = rawPayload as? Map<*, *> ?: emptyMap<Any?, Any?>()
                                 require(raw.keys.all { it == "username" || it == "userId" }) {
                                     "Undeclared launch fields"
                                 }
@@ -109,21 +117,33 @@ class OptionalPluginChannel(
                     }
                 }
                 "invoke" -> {
-                    val id = call.argument<String>("id")
-                    val operation = call.argument<String>("operation")
-                    val payload = call.argument<String>("payload") ?: "{}"
+                    val args = call.arguments as? Map<*, *>
+                    val id = args?.get("id") as? String
+                    val operation = args?.get("operation") as? String
+                    val rawPayload = args?.get("payload")
+                    val payload = when (rawPayload) {
+                        null -> "{}"
+                        is String -> rawPayload
+                        else -> null
+                    }
                     val spec = specs.firstOrNull { it.id == id }
                     when {
                         spec == null -> result.error("UNKNOWN_PLUGIN", "Unknown plugin id", null)
                         operation == null || operation !in spec.operations ->
                             result.error("UNKNOWN_OPERATION", "Operation is not allowed", null)
-                        payload.toByteArray(Charsets.UTF_8).size > PluginProtocol.MAX_JSON_BYTES ->
-                            result.error("INVALID_ARGS", "Request too large", null)
+                        payload == null ||
+                            payload.toByteArray(Charsets.UTF_8).size > PluginProtocol.MAX_JSON_BYTES ->
+                            result.error("INVALID_ARGS", "Invalid or oversized request", null)
                         describe(spec)["compatible"] != true ->
                             result.error("PLUGIN_UNAVAILABLE", "Plugin missing, unsigned or incompatible", null)
                         active.size >= PluginProtocol.MAX_CONCURRENT_CALLS ->
                             result.error("BUSY", "Too many plugin requests; retry after completion", null)
-                        else -> Invocation(spec, operation!!, payload, result).start()
+                        else -> try {
+                            val validated = PluginPayloadContract.normalize(operation!!, payload!!)
+                            Invocation(spec, operation, validated, result).start()
+                        } catch (error: IllegalArgumentException) {
+                            result.error("INVALID_ARGS", error.message, null)
+                        }
                     }
                 }
                 else -> result.notImplemented()

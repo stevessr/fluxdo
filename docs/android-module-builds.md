@@ -60,6 +60,14 @@ dart run test/contract_test.dart
 解绑；Dart 另设 20 秒上限，处理平台未完成回调的情况。参数与响应校验不替代
 原生签名、权限或 Binder 校验；耗时操作仍在插件进程内执行。
 
+原生 `plugin_api/PluginPayloadContract` 现在同时在宿主 MethodChannel
+入口与独立 APK 的 Messenger 服务入口验证请求：无参操作只能发送空对象，
+`network.lookup` 只能发送符合 DNS 标签约束的 `hostname` 字符串；
+JSON 非对象、非法字段、超长 UTF-8 请求、非字符串原生参数都被拒绝。
+客户端与插件服务使用同一 Kotlin 实现，不允许绕过 Dart 校验直接把任意
+JSON 或凭据转交给伴随进程。CI 会比较该校验器的操作集合与声明式清单，
+添加操作时必须同步设计数据契约，不能默认接受任意字段。
+
 账号 Activity 仅接受 `guest` 或 64 位十六进制分区；Reward 仅接受有界的公开
 用户名和正整数用户 ID。原生桥也检查这些启动字段，拒绝传递凭据和任意参数。
 

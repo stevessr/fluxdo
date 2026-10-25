@@ -112,6 +112,32 @@ def main() -> None:
                       "lingyan000/fluxdo/plugin/api/PluginService.kt").read_text()
     check(plugin_service.count("PluginProtocol.MAX_JSON_BYTES") >= 2,
           "Plugin service must bound both request and response UTF-8 bytes")
+    payload_policy = (ROOT / "android/plugin_api/src/main/kotlin/com/github/"
+                      "lingyan000/fluxdo/plugin/api/PluginPayloadContract.kt").read_text()
+    policy_match = re.search(
+        r"private val emptyOperations\\s*=\\s*setOf\\((.*?)\\)",
+        payload_policy, re.S,
+    )
+    check(policy_match is not None, "Missing native empty-payload allowlist")
+    empty_operations = set(re.findall(r'"([a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)"',
+                                      policy_match.group(1)))
+    special_operations = set(re.findall(r'operation\\s*==\\s*"([^"]+)"',
+                                        payload_policy))
+    declared_operations = {op for spec in CATALOG.native for op in spec.operations}
+    check(empty_operations | special_operations == declared_operations and
+          not (empty_operations & special_operations),
+          "Native payload schema does not match the declarative operation catalog")
+    for mandatory in (
+        "PluginProtocol.MAX_JSON_BYTES",
+        "payload.length() == 0",
+        'payload.length() == 1 && payload.has("hostname")',
+        'payload.opt("hostname") as? String',
+        "hostnameLabel.matches(it)",
+    ):
+        check(mandatory in payload_policy, f"Native payload policy missing: {mandatory}")
+    check("PluginPayloadContract.normalize" in host and
+          "PluginPayloadContract.normalize" in plugin_service,
+          "Host and companion must both validate IPC payload schemas")
     check('MAX_JSON_BYTES = 8192' in protocol,
           "Unexpected IPC size limit")
     check('Intent.FLAG_ACTIVITY_CLEAR_TASK' in host,

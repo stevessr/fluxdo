@@ -42,7 +42,10 @@ abstract class PluginService : Service() {
                     require(raw.toByteArray(Charsets.UTF_8).size <= PluginProtocol.MAX_JSON_BYTES) {
                         "Request too large"
                     }
-                    val responseJson = execute(operation, JSONObject(raw)).toString()
+                    // Enforce the schema inside the independently installed APK
+                    // as well as at the host MethodChannel boundary.
+                    val validated = PluginPayloadContract.normalize(operation, raw)
+                    val responseJson = execute(operation, JSONObject(validated)).toString()
                     require(responseJson.toByteArray(Charsets.UTF_8).size <= PluginProtocol.MAX_JSON_BYTES) {
                         "Plugin result too large"
                     }

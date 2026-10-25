@@ -107,6 +107,9 @@ void main() {
         'a/b',
         'a b',
         'a\nb',
+        'a..',
+        'exa_mple.com',
+        'localhost:443',
         '${'a' * 64}.com',
         '${'a' * 63}.${'b' * 63}.${'c' * 63}.${'d' * 63}',
       ]) {
@@ -126,6 +129,27 @@ void main() {
             {'hostname': value},
           ),
         );
+      }
+    },
+    'empty native calls reject structured or extra payload fields': () {
+      for (final plugin in androidPluginCatalog.values) {
+        if (plugin.runtime != PluginRuntime.native) continue;
+        for (final operation in plugin.operations) {
+          if (operation == 'network.lookup') continue;
+          for (final payload in <Map<String, dynamic>>[
+            {'x': null},
+            {'hostname': 'linux.do'},
+            {'credentials': {'token': 'must-not-cross'}},
+          ]) {
+            rejects<FormatException>(
+              () => AndroidPluginContract.encodeInvocation(
+                plugin.id,
+                operation,
+                payload,
+              ),
+            );
+          }
+        }
       }
     },
     'response requires a non-null valid JSON object': () {
