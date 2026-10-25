@@ -51,7 +51,7 @@ class DeviceAuthorizationService {
         'expires_in_seconds': '600',
       },
       options: Options(
-        contentType: Headers.formUrlEncodedContentType,
+        contentType: Headers.jsonContentType,
         headers: const {'Accept': 'application/json'},
         extra: _options,
       ),
@@ -106,7 +106,7 @@ class DeviceAuthorizationService {
       _pollEndpoint,
       data: {'device_code': request.deviceCode},
       options: Options(
-        contentType: Headers.formUrlEncodedContentType,
+        contentType: Headers.jsonContentType,
         headers: const {'Accept': 'application/json'},
         extra: _options,
       ),
