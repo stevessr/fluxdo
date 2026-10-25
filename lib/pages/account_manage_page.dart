@@ -10,6 +10,7 @@ import '../l10n/s.dart';
 import '../providers/app_state_refresher.dart';
 import '../services/toast_service.dart';
 import '../utils/url_helper.dart';
+import '../widgets/common/smart_avatar.dart';
 import '../widgets/user/account_switch_loading.dart';
 import 'login_page.dart';
 
@@ -326,27 +327,16 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
 
   Widget _buildAvatar(ThemeData theme, SavedAccount account) {
     final template = account.avatarTemplate;
-    if (template != null && template.isNotEmpty) {
-      final url = UrlHelper.resolveUrlWithCdn(
-        template.replaceAll('{size}', '96'),
-      );
-      return CircleAvatar(
-        key: ValueKey('account-avatar-${account.username}-$url'),
-        radius: 20,
-        backgroundColor: theme.colorScheme.surfaceContainerHighest,
-        foregroundImage: NetworkImage(url),
-      );
-    }
-    return CircleAvatar(
-      key: ValueKey('account-avatar-${account.username}-placeholder'),
+    final imageUrl = template != null && template.isNotEmpty
+        ? UrlHelper.resolveUrlWithCdn(template.replaceAll('{size}', '96'))
+        : null;
+    return SmartAvatar(
+      key: ValueKey('account-avatar-${account.username}-$imageUrl'),
+      imageUrl: imageUrl,
       radius: 20,
+      fallbackText: account.username,
       backgroundColor: theme.colorScheme.surfaceContainerHighest,
-      child: Text(
-        account.username.isNotEmpty ? account.username[0].toUpperCase() : '?',
-        style: theme.textTheme.titleMedium?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
+      foregroundColor: theme.colorScheme.onSurfaceVariant,
     );
   }
 }
