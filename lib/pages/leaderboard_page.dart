@@ -290,10 +290,10 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
           }
           if (showPersonal && index == 1) {
             return _LeaderboardSelfRank(
-              personal: personal,
+              personal: personal!,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => UserProfilePage(username: currentUsername),
+                  builder: (_) => UserProfilePage(username: currentUsername!),
                 ),
               ),
             );
@@ -304,7 +304,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
           final entryIndex = index - listStart;
           if (entryIndex >= rankings.length) {
             return _LeaderboardFooter(
-              snapshot: snapshot,
+              snapshot: snapshot!,
               loading: _loading,
               error: error,
               onLoadMore: () => _load(reset: false),
@@ -483,6 +483,285 @@ String _formatLeaderboardRange(
   if (start == null) return formatDate(end!);
   if (end == null || start == end) return formatDate(start);
   return '${formatDate(start)} – ${formatDate(end)}';
+}
+
+/// 官方领奖台顺序为第二名、第一名、第三名，普通榜单不重复前三名。
+class _LeaderboardPodium extends StatelessWidget {
+  const _LeaderboardPodium({
+    required this.winners,
+    required this.onOpenUser,
+  });
+
+  final List<_LeaderboardEntry> winners;
+  final ValueChanged<_LeaderboardEntry> onOpenUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final first = winners.isNotEmpty ? winners[0] : null;
+    final second = winners.length > 1 ? winners[1] : null;
+    final third = winners.length > 2 ? winners[2] : null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 22, 12, 24),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: 0.32),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: second == null
+                ? const SizedBox.shrink()
+                : _LeaderboardWinner(
+                    entry: second,
+                    rank: 2,
+                    onTap: () => onOpenUser(second),
+                  ),
+          ),
+          Expanded(
+            child: first == null
+                ? const SizedBox.shrink()
+                : _LeaderboardWinner(
+                    entry: first,
+                    rank: 1,
+                    onTap: () => onOpenUser(first),
+                  ),
+          ),
+          Expanded(
+            child: third == null
+                ? const SizedBox.shrink()
+                : _LeaderboardWinner(
+                    entry: third,
+                    rank: 3,
+                    onTap: () => onOpenUser(third),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeaderboardWinner extends StatelessWidget {
+  const _LeaderboardWinner({
+    required this.entry,
+    required this.rank,
+    required this.onTap,
+  });
+
+  final _LeaderboardEntry entry;
+  final int rank;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final first = rank == 1;
+    final medal = switch (rank) {
+      1 => const Color(0xFFFFD32A),
+      2 => const Color(0xFFC8C9CD),
+      _ => const Color(0xFFCA8643),
+    };
+    final avatarRadius = first ? 42.0 : 34.0;
+    final score = NumberFormat.decimalPattern(
+      Localizations.localeOf(context).toString(),
+    ).format(entry.totalScore);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(2, first ? 0 : 24, 2, 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (first)
+              Icon(
+                Icons.workspace_premium_rounded,
+                color: medal,
+                size: 28,
+              ),
+            Stack(
+              alignment: Alignment.bottomCenter,
+              clipBehavior: Clip.none,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: medal, width: 2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: SmartAvatar(
+                      imageUrl: entry.avatarUrl,
+                      radius: avatarRadius,
+                      fallbackText: entry.username,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  child: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: medal,
+                    child: Text(
+                      '$rank',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: const Color(0xFF202020),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 44,
+              child: Center(
+                child: Text(
+                  entry.name?.isNotEmpty == true
+                      ? entry.name!
+                      : entry.username,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                score,
+                maxLines: 1,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 使用官方 personal 返回的名次，分页与当前用户是否在前百名无关。
+class _LeaderboardSelfRank extends StatelessWidget {
+  const _LeaderboardSelfRank({
+    required this.personal,
+    required this.onTap,
+  });
+
+  final _LeaderboardPersonal personal;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final locale = Localizations.localeOf(context);
+    final score = NumberFormat.decimalPattern(locale.toString())
+        .format(personal.totalScore);
+    final compactScore =
+        NumberFormat.compact(locale: locale.toString()).format(personal.totalScore);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 18, bottom: 20),
+      child: Material(
+        color: scheme.primary,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 72,
+                  child: Text(
+                    '#${personal.position}',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: scheme.onPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    _copy(context).you,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: scheme.onPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Tooltip(
+                  message: score,
+                  child: Text(
+                    compactScore,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: scheme.onPrimary,
+                      fontWeight: FontWeight.w800,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LeaderboardListHeading extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final locale = Localizations.localeOf(context);
+    final rank = locale.languageCode == 'zh' ? '排名' : 'Rank';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      child: Row(
+        children: [
+          Text(
+            rank,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const Spacer(),
+          Icon(
+            Icons.workspace_premium_rounded,
+            size: 16,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            _copy(context).points,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _LeaderboardTile extends StatelessWidget {
