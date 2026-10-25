@@ -13,7 +13,7 @@ DateTime calendarDay(DateTime date) => DateTime(date.year, date.month, date.day)
 
 DateTime calendarWeekStart(DateTime date) {
   final day = calendarDay(date);
-  return day.subtract(Duration(days: day.weekday - 1));
+  return DateTime(day.year, day.month, day.day - day.weekday + 1);
 }
 
 EventCalendarRange calendarRange(DateTime date, EventCalendarScale scale) {
@@ -23,10 +23,10 @@ EventCalendarRange calendarRange(DateTime date, EventCalendarScale scale) {
       return EventCalendarRange(day, DateTime(day.year, day.month, day.day + 1));
     case EventCalendarScale.week:
       final start = calendarWeekStart(day);
-      return EventCalendarRange(start, start.add(const Duration(days: 7)));
+      return EventCalendarRange(start, DateTime(start.year, start.month, start.day + 7));
     case EventCalendarScale.month:
       final start = calendarWeekStart(DateTime(day.year, day.month));
-      return EventCalendarRange(start, start.add(const Duration(days: 42)));
+      return EventCalendarRange(start, DateTime(start.year, start.month, start.day + 42));
     case EventCalendarScale.year:
       return EventCalendarRange(DateTime(day.year), DateTime(day.year + 1));
   }
@@ -55,7 +55,7 @@ bool eventOnCalendarDay(Map<String, dynamic> event, DateTime date) {
       end.hour == 0 && end.minute == 0 && end.second == 0 &&
       end.millisecond == 0 && end.microsecond == 0 &&
       last.isAfter(first)) {
-    last = last.subtract(const Duration(days: 1));
+    last = DateTime(last.year, last.month, last.day - 1);
   }
   return !day.isBefore(first) && !day.isAfter(last);
 }
@@ -144,7 +144,7 @@ class CommunityEventsCalendar extends StatelessWidget {
                       Expanded(
                         child: _monthCell(
                           context,
-                          first.add(Duration(days: week * 7 + weekday)),
+                          DateTime(first.year, first.month, first.day + week * 7 + weekday),
                           compact,
                         ),
                       ),
@@ -233,7 +233,7 @@ class CommunityEventsCalendar extends StatelessWidget {
         _weekdays(context),
         Row(children: [
           for (var i = 0; i < 7; i++)
-            Expanded(child: _weekCell(context, first.add(Duration(days: i)))),
+            Expanded(child: _weekCell(context, DateTime(first.year, first.month, first.day + i))),
         ]),
         const SizedBox(height: 20),
         _agenda(context, date),
@@ -323,7 +323,7 @@ class CommunityEventsCalendar extends StatelessWidget {
                   Expanded(child: Row(children: [
                     for (var weekday = 0; weekday < 7; weekday++)
                       Expanded(child: Builder(builder: (context) {
-                        final day = monday.add(Duration(days: week * 7 + weekday));
+                        final day = DateTime(monday.year, monday.month, monday.day + week * 7 + weekday);
                         final inside = day.month == month.month;
                         final marked = inside &&
                             calendarEventsForDay(events, day).isNotEmpty;
