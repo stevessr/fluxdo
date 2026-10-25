@@ -22,11 +22,7 @@ Response<dynamic> _page(
   return Response<dynamic>(
     requestOptions: request,
     statusCode: 200,
-    data: {
-      type: users,
-      'total_rows_$type': total,
-      'load_more_$type': next,
-    },
+    data: {type: users, 'total_rows_$type': total, 'load_more_$type': next},
   );
 }
 
