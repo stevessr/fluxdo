@@ -27,7 +27,7 @@ class CommunityEventsPage extends StatefulWidget {
   final CommunityEventsView view;
 
   /// 来自 `/cakeday/.../:filter` 的初始过滤器。
-  /// 只接受 today / tomorrow / upcoming；其它值按 today 处理。
+  /// 支持 today / tomorrow / upcoming / all（兼容旧 month）。
   final String? initialFilter;
 
   /// Discourse `/cakeday/{type}/all?month=N` 的月份参数。
@@ -171,9 +171,20 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           : 'load_more_anniversaries';
       final loaded = _asMapList(data[listKey]);
       if (!mounted || generation != _loadGeneration) return;
+      final combined = append ? [..._items, ...loaded] : loaded;
+      // 官方接口即使到了最后一页也可能返回下一页 URL；
+      // 应根据 total_rows 判断是否继续展示「加载更多」。
+      final totalValue = data['total_rows_$segment'];
+      final total = totalValue is num
+          ? totalValue.toInt()
+          : int.tryParse(totalValue?.toString() ?? '');
+      final morePath = _string(data[moreKey]);
+      final hasMore = total != null
+          ? combined.length < total
+          : loaded.isNotEmpty && morePath != null;
       setState(() {
-        _items = append ? [..._items, ...loaded] : loaded;
-        _loadMorePath = data[moreKey] as String?;
+        _items = combined;
+        _loadMorePath = hasMore ? morePath : null;
         _loading = false;
         _loadingMore = false;
       });
