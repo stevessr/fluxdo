@@ -53,6 +53,7 @@ class UserApiKeyService {
   // Stable, isolated client for short-lived DeviceAuth keys. Reusing it avoids
   // creating a new Discourse API client row for every retry.
   static const _keyDeviceClientId = 'user_api_key_device_client_id';
+
   /// Separately scoped device credential. This is NOT a Cookie session.
   static const _keyDeviceGrant = 'user_api_key_device_grant';
   // nonce 持久化:跨重启存活。冷启动 getInitialLink 会重放上次的
@@ -187,7 +188,8 @@ class UserApiKeyService {
     DateTime? expiresAt,
   }) async {
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(apiKey) ||
-        clientId.isEmpty || username.isEmpty) {
+        clientId.isEmpty ||
+        username.isEmpty) {
       throw ArgumentError('无效的设备 API 授权信息');
     }
     await _storage.write(
@@ -214,7 +216,9 @@ class UserApiKeyService {
       final client = data['client_id']?.toString() ?? '';
       final username = data['username']?.toString() ?? '';
       if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(key) ||
-          client.isEmpty || username.isEmpty) return null;
+          client.isEmpty ||
+          username.isEmpty)
+        return null;
       return {'key': key, 'client_id': client, 'username': username};
     } catch (_) {
       return null;
