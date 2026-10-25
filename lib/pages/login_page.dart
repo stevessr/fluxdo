@@ -13,6 +13,7 @@ import '../services/system_browser_service.dart';
 import '../utils/blur_config.dart';
 import '../widgets/auth/webview_login_dialog.dart';
 import '../widgets/auth/login_form.dart';
+import '../widgets/auth/login_browser_picker_sheet.dart';
 import '../widgets/auth/two_factor_dialog.dart';
 import '../widgets/common/ambient_background.dart';
 import '../widgets/common/floating_logo.dart';
@@ -126,45 +127,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           context: context,
           showDragHandle: true,
           isScrollControlled: true,
-          builder: (sheetContext) => SafeArea(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '选择浏览器',
-                    style: Theme.of(sheetContext).textTheme.titleLarge,
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(20, 10, 20, 12),
-                    child: Text(
-                      '选择已登录 Google / GitHub 等账号的浏览器，'
-                      '在 LINUX DO 完成授权后将自动返回 FluxDO。',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: browsers.length,
-                      itemBuilder: (context, index) {
-                        final browser = browsers[index];
-                        return ListTile(
-                          leading: const Icon(Symbols.open_in_browser_rounded),
-                          title: Text(browser.name),
-                          onTap: () => Navigator.of(context).pop(browser),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          ),
+          builder: (_) => LoginBrowserPickerSheet(browsers: browsers),
         );
       }
       if (selected == null || !mounted) return;

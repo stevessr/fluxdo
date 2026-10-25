@@ -194,7 +194,17 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "listLoginBrowsers" -> {
-                    result.success(listLoginBrowsers())
+                    // PackageManager 查询与应用图标 PNG 编码可能触发磁盘 I/O，
+                    // 必须离开 Android 主线程，避免打开选择面板时丢帧。
+                    Thread({
+                        val browsers = try {
+                            listLoginBrowsers()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Browser discovery failed", e)
+                            emptyList<Map<String, Any>>()
+                        }
+                        mainHandler.post { result.success(browsers) }
+                    }, "fluxdo-browser-discovery").start()
                 }
                 "launchLoginBrowser" -> {
                     val url = call.argument<String>("url")
@@ -203,6 +213,14 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGS", "url and browser id required", null)
                     } else {
                         result.success(launchLoginBrowser(browserId, url))
+                    }
+                }
+                "launchLoginBrowserChooser" -> {
+                    val url = call.argument<String>("url")
+                    if (url == null) {
+                        result.error("INVALID_URL", "url required", null)
+                    } else {
+                        result.success(launchLoginBrowserChooser(url))
                     }
                 }
                 "resolveAppLink" -> {
@@ -1096,11 +1114,10 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** 将 Drawable 转为 PNG 字节数组 */
-    private fun drawableToBytes(drawable: Drawable): ByteArray {
-        // 用 drawable 自身尺寸，但限制在合理范围
-        val w = drawable.intrinsicWidth.coerceIn(1, 256)
-        val h = drawable.intrinsicHeight.coerceIn(1, 256)
+    /** 将 Drawable 转为 PNG 字节数组；浏览器应用图标以 64px 输出，避免大图跨平台通道传输。 */
+    private fun drawableToBytes(drawable: Drawable, requestedSize: Int? = null): ByteArray {
+        val w = requestedSize ?: drawable.intrinsicWidth.coerceIn(1, 256)
+        val h = requestedSize ?: drawable.intrinsicHeight.coerceIn(1, 256)
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, w, h)
@@ -1145,7 +1162,7 @@ class MainActivity : FlutterActivity() {
      * Only generic HTTPS handlers are eligible; never offer FluxDO itself,
      * another app's deep-link target, or the Android resolver as a browser.
      */
-    private fun listLoginBrowsers(): List<Map<String, String>> {
+    private fun listLoginBrowsers(includeIcons: Boolean = true): List<Map<String, Any>> {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com/"))
         intent.addCategory(Intent.CATEGORY_BROWSABLE)
         val matches: List<ResolveInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -1236,7 +1253,24 @@ class MainActivity : FlutterActivity() {
         }
         return browsers.entries
             .sortedWith(compareBy({ it.value.lowercase() }, { it.key }))
-            .map { mapOf("id" to it.key, "name" to it.value) }
+            .map { entry ->
+                val browser = mutableMapOf<String, Any>(
+                    "id" to entry.key,
+                    "name" to entry.value
+                )
+                // 只有构建可见列表时才加载图标。点击后的校验无需重复 PNG 编码。
+                if (includeIcons) {
+                    try {
+                        browser["icon"] = drawableToBytes(
+                            packageManager.getApplicationIcon(entry.key),
+                            requestedSize = 64
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Cannot load browser icon for ${entry.key}", e)
+                    }
+                }
+                browser
+            }
     }
 
     private fun canOpenGenericWebUrls(browserPackage: String): Boolean {
@@ -1262,13 +1296,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun isLoginAuthorizationUri(uri: Uri): Boolean =
+        uri.scheme == "https" && uri.host == "linux.do" &&
+            (uri.port == -1 || uri.port == 443) && uri.userInfo == null &&
+            uri.path == "/user-api-key/new"
+
     private fun launchLoginBrowser(browserPackage: String, rawUrl: String): Boolean {
         val uri = try { Uri.parse(rawUrl) } catch (_: Exception) { return false }
-        if (uri.scheme != "https" || uri.host != "linux.do" ||
-            uri.path != "/user-api-key/new") return false
+        if (!isLoginAuthorizationUri(uri)) return false
         // Re-check the selection to prevent package spoofing and unintentional
         // disclosure of the one-time authorization request to other apps.
-        if (listLoginBrowsers().none { it["id"] == browserPackage }) return false
+        if (listLoginBrowsers(includeIcons = false).none { it["id"] == browserPackage }) return false
         return try {
             val intent = Intent(Intent.ACTION_VIEW, uri).apply {
                 addCategory(Intent.CATEGORY_BROWSABLE)
@@ -1282,6 +1320,32 @@ class MainActivity : FlutterActivity() {
             false
         } catch (e: SecurityException) {
             Log.w(TAG, "Selected browser launch was denied", e)
+            false
+        }
+    }
+
+    /**
+     * 使用 Android 系统的 ACTION_CHOOSER 展示原生「打开方式」菜单。
+     * 不给 Intent 绑定 package，避免退化为默认浏览器直接打开。
+     * 与手动选择路径共用授权 URL 白名单；回调仍由原有 DeepLinkService 处理。
+     */
+    private fun launchLoginBrowserChooser(rawUrl: String): Boolean {
+        val uri = try { Uri.parse(rawUrl) } catch (_: Exception) { return false }
+        if (!isLoginAuthorizationUri(uri)) return false
+        return try {
+            val viewIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+            }
+            val chooser = Intent.createChooser(viewIntent, "选择打开方式").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(chooser)
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "No app can handle the login authorization URL", e)
+            false
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Android chooser could not be opened", e)
             false
         }
     }
