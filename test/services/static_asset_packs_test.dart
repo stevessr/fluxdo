@@ -277,8 +277,15 @@ void main() {
   });
 
   test('签名资源序号不可降级，回滚/禁用后仍记录最高序号', () async {
+    // ZIP header timestamps can vary between separate encodings; use the
+    // same bytes when simulating a re-download of the same signed release.
+    final zipCache = <String, Uint8List>{};
     Future<void> signed(String value, int sequence) async {
-      final zip = _makePack(_path, Uint8List.fromList(utf8.encode(value)));
+      final key = '$sequence:$value';
+      final zip = zipCache.putIfAbsent(
+        key,
+        () => _makePack(_path, Uint8List.fromList(utf8.encode(value))),
+      );
       await backend.installAuthenticatedZip(
         packId: 'render-cook', zipBytes: zip,
         expectedSha256: sha256.convert(zip).toString(),
