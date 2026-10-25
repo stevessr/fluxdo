@@ -498,15 +498,35 @@ class UserApiKeyService {
     return (ok: true, otp: otp, stale: false);
   }
 
+  /// Decode and nonce-check a one-time device grant without persisting its
+  /// high-privilege API key into the normal browser-login credential slot.
+  Future<Map<String, dynamic>?> decryptDeviceAuthorizationPayload(
+    String encrypted, {
+    required String expectedNonce,
+  }) async {
+    final text = await _decrypt(encrypted);
+    if (text == null) return null;
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['nonce'] != expectedNonce) {
+        return null;
+      }
+      return decoded;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ---------- OTP 补发与兑换 ----------
 
   /// 用 API key 静默补发 OTP。
   /// 服务端 302 到 auth_redirect?oneTimePassword=<加密>,从 Location 头解析。
-  Future<String?> requestOtp(Dio dio, {int? requestGeneration}) async {
+  Future<String?> requestOtp(Dio dio, {int? requestGeneration, String? overrideApiKey}) async {
     final generation = requestGeneration ?? AuthSession().generation;
     bool isCurrent() => AuthSession().isValid(generation);
 
-    final apiKey = await readApiKey();
+    final apiKey = overrideApiKey ?? await readApiKey();
     if (!isCurrent()) return null;
     if (apiKey == null || apiKey.isEmpty) return null;
     final publicKeyPem = await ensurePublicKeyPem();
@@ -562,10 +582,10 @@ class UserApiKeyService {
       if (!isCurrent()) return null;
       // 403 = key 已撤销 / scope 不足 / 用户组不满足,key 已不可用则清除
       if (status == 403) {
-        _log('warning', 'otp_request_rejected', 'OTP 补发被拒(403),清除本地 key', {
+        _log('warning', 'otp_request_rejected', 'OTP 补发被拒(403)', {
           'statusCode': status,
         });
-        await clearKey();
+        if (overrideApiKey == null) await clearKey();
       } else {
         _log('warning', 'otp_request_failed', 'OTP 补发请求失败', {
           'statusCode': status,
