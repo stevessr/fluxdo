@@ -215,7 +215,7 @@ class UserApiKeyLoginFlow {
     required UserApiKeyService userApiKeyService,
     String? authorizedKey,
   }) async {
-      // 兑换 + 收口有网络耗时,显示全局 loading 反馈
+    // 兑换 + 收口有网络耗时,显示全局 loading 反馈
       _showLoading('正在完成登录…');
       try {
         final service = DiscourseService();
@@ -233,7 +233,12 @@ class UserApiKeyLoginFlow {
             ToastService.showError('安全验证未完成,登录凭证未按失效处理,请重新尝试授权');
             return false;
           }
-          await userApiKeyService.burnAfterLoginIfUseless(service.dio);
+          if (authorizedKey != null) {
+            await userApiKeyService.burnAfterLoginIfUseless(
+              service.dio,
+              expectedKey: authorizedKey,
+            );
+          }
           ToastService.showError('登录令牌兑换失败,请重试');
           return false;
         }
@@ -292,15 +297,20 @@ class UserApiKeyLoginFlow {
               notifyBeforePreload: true,
             );
             _burnKeyInBackground(
-          userApiKeyService,
-          service.dio,
-          authorizedKey: authorizedKey,
-        );
+              userApiKeyService,
+              service.dio,
+              authorizedKey: authorizedKey,
+            );
             ToastService.showSuccess('登录成功');
             return true;
           }
           // _t 已落 jar 但确认请求失败;不带空用户名走收口(会写坏本地状态)
-          await userApiKeyService.burnAfterLoginIfUseless(service.dio);
+          if (authorizedKey != null) {
+            await userApiKeyService.burnAfterLoginIfUseless(
+              service.dio,
+              expectedKey: authorizedKey,
+            );
+          }
           ToastService.showError('登录状态确认失败,请重试');
           return false;
         }
