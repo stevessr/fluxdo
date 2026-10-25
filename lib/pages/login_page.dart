@@ -551,9 +551,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Future<void> _loginWithDevice() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const DeviceLoginPage()),
-    );
+    final result = await Navigator.of(context)
+        .push<bool>(MaterialPageRoute(builder: (_) => const DeviceLoginPage()));
     if (result == true && mounted) {
       Navigator.of(context).pop(true);
     }
