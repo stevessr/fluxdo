@@ -9,8 +9,9 @@ import '../services/auth_session.dart';
 import '../services/device_authorization_service.dart';
 import '../services/discourse/discourse_service.dart';
 import '../services/login_token_redeemer.dart';
+import '../services/user_api_key_login_flow.dart';
 
-enum DeviceLoginResult { keyAuthorized, useBrowser }
+enum DeviceLoginResult { success, keyAuthorized, useBrowser }
 
 /// Manual confirmation works on any other device. On this device the
 /// request-token link opens the regular Discourse browser approval screen.
@@ -30,6 +31,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
   bool _completing = false;
   String? _error;
   String? _authorizedUsername;
+  DeviceAuthorizationMode _mode = DeviceAuthorizationMode.cookieLogin;
   String _status = '正在向 LINUX DO 申请设备授权…';
 
   @override
@@ -46,9 +48,12 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
     super.dispose();
   }
 
-  Future<void> _start() async {
+  Future<void> _start({
+    DeviceAuthorizationMode mode = DeviceAuthorizationMode.cookieLogin,
+  }) async {
     _ticker?.cancel();
     setState(() {
+      _mode = mode;
       _request = null;
       _starting = true;
       _completing = false;
@@ -57,7 +62,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
       _status = '正在创建授权请求…';
     });
     try {
-      final request = await _device.create();
+      final request = await _device.create(mode: mode);
       if (!mounted || _cancelled) return;
       setState(() {
         _request = request;
@@ -73,7 +78,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
         LoginTokenRedeemer.isChallengeError(e)
             ? 'Cloudflare 安全验证未完成，请使用系统浏览器登录。'
             : (e.response?.statusCode == 403 || e.response?.statusCode == 400)
-            ? '站点拒绝了原生设备 API 授权（read 权限可能未开放），请使用系统浏览器登录。'
+            ? '站点拒绝设备授权所需权限（可能未开放 write）。可改用系统浏览器完整登录。'
             : '创建设备授权失败：网络或站点验证异常（${e.response?.statusCode ?? e.type}）',
       );
     } catch (e) {
@@ -124,7 +129,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
           case DeviceAuthorizationStatus.authorized:
             setState(() {
               _completing = true;
-              _status = '已授权，正在验证原生 User API Key…';
+              _status = '设备授权成功，正在兑换登录凭证…';
             });
             try {
               final identity = await _device.authorize(
@@ -134,15 +139,31 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
               if (!mounted || _cancelled || !identical(_request, request)) {
                 return;
               }
+              if (identity.otp != null) {
+                final ok = await UserApiKeyLoginFlow.instance.completeDeviceOtp(
+                  identity.otp!,
+                  requestGeneration: request.generation,
+                  expectedUsername: identity.username,
+                );
+                if (!mounted || _cancelled) return;
+                if (ok) {
+                  Navigator.of(context).pop(DeviceLoginResult.success);
+                } else {
+                  _fail('OTP 兑换或 Cookie 会话确认失败，请使用系统浏览器登录');
+                }
+                return;
+              }
               _ticker?.cancel();
               setState(() {
                 _request = null;
                 _authorizedUsername = identity.username;
                 _completing = false;
-                _status = '设备 API 授权成功：${identity.username}';
+                _status = '只读设备 API Key 已授权：${identity.username}';
               });
+            } on DeviceOtpUnavailableException catch (e) {
+              _fail('$e。请使用系统浏览器 API Key 授权登录。');
             } catch (e) {
-              _fail('无法验证设备 API Key：$e');
+              _fail('无法完成设备登录：$e');
             }
             return;
         }
@@ -252,9 +273,10 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  '授权将在浏览器进行。请核对应用名 FluxDO Device API '
-                  '和只读 read 权限。此流程获取原生 User API Key，'
-                  '不会生成 Cookie 登录会话。',
+                  _mode == DeviceAuthorizationMode.cookieLogin
+                      ? '将申请短期 write Key 以换取一次性登录 OTP，并复用内置 '
+                            'OTP 兑换流程生成 _t Cookie。完成后撤销临时 API Key。'
+                      : '仅申请 read 权限的 User API Key，不生成 Cookie 会话。',
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
               ],
@@ -291,6 +313,13 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                   },
                   child: const Text('重新尝试'),
                 ),
+                if (_mode == DeviceAuthorizationMode.cookieLogin) ...[
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => _start(mode: DeviceAuthorizationMode.readOnly),
+                    child: const Text('只申请原生只读 API Key（不建立 Cookie）'),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 FilledButton.tonalIcon(
                   onPressed: () =>
