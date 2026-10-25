@@ -8,7 +8,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_session.dart';
 import '../services/device_authorization_service.dart';
 import '../services/discourse/discourse_service.dart';
+import '../services/login_token_redeemer.dart';
 import '../services/user_api_key_login_flow.dart';
+
+enum DeviceLoginResult { success, useBrowser }
 
 /// Manual confirmation works on any other device. On this device the
 /// request-token link opens the regular Discourse browser approval screen.
@@ -66,8 +69,10 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
       unawaited(_poll(request));
     } on DioException catch (e) {
       _fail(
-        (e.response?.statusCode == 403 || e.response?.statusCode == 400)
-            ? '站点拒绝设备授权。此方式需要临时 write API 权限；可改用系统浏览器登录。'
+        LoginTokenRedeemer.isChallengeError(e)
+            ? 'Cloudflare 安全验证未完成，请使用系统浏览器登录。'
+            : (e.response?.statusCode == 403 || e.response?.statusCode == 400)
+            ? '站点拒绝了设备授权，可能没有开放 write API 权限；建议使用系统浏览器登录。'
             : '创建设备授权失败：网络或站点验证异常（${e.response?.statusCode ?? e.type}）',
       );
     } catch (e) {
@@ -82,6 +87,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
       _starting = false;
       _completing = false;
       _error = error;
+      _status = '设备授权未完成';
     });
   }
 
@@ -130,7 +136,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
               );
               if (!mounted || _cancelled) return;
               if (ok) {
-                Navigator.of(context).pop(true);
+                Navigator.of(context).pop(DeviceLoginResult.success);
               } else {
                 _fail('OTP 兑换或会话确认失败，请改用系统浏览器登录');
               }
@@ -140,6 +146,10 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
             return;
         }
       } on DioException catch (e) {
+        if (LoginTokenRedeemer.isChallengeError(e)) {
+          _fail('设备授权轮询遇到 Cloudflare 安全验证，请改用系统浏览器登录');
+          return;
+        }
         consecutiveErrors++;
         if (consecutiveErrors >= 3) {
           _fail('轮询设备授权失败（${e.response?.statusCode ?? e.type}），请重新开始');
@@ -153,8 +163,15 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
   }
 
   Future<void> _openApprovalPage(Uri url) async {
-    final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
-    if (!opened) _fail('无法打开授权页面，请复制地址到浏览器');
+    try {
+      final opened = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) _fail('无法打开授权页面，请复制地址到浏览器');
+    } catch (_) {
+      _fail('无法打开授权页面，请复制地址到浏览器');
+    }
   }
 
   @override
@@ -250,6 +267,13 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                     _start();
                   },
                   child: const Text('重新尝试'),
+                ),
+                const SizedBox(height: 8),
+                FilledButton.tonalIcon(
+                  onPressed: () =>
+                      Navigator.of(context).pop(DeviceLoginResult.useBrowser),
+                  icon: const Icon(Icons.open_in_browser),
+                  label: const Text('改用系统浏览器登录'),
                 ),
               ],
               const SizedBox(height: 12),
