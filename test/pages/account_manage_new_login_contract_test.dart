@@ -31,4 +31,13 @@ void main() {
       expect(reload, greaterThan(reset));
     },
   );
+  test('account list avatars use the process-wide shared avatar provider', () {
+    final source = File('lib/pages/account_manage_page.dart')
+        .readAsStringSync();
+    final start = source.indexOf('Widget _buildAvatar(');
+    expect(start, greaterThanOrEqualTo(0));
+    final section = source.substring(start);
+    expect(section, contains('return SmartAvatar('));
+    expect(section, isNot(contains('NetworkImage(')));
+  });
 }

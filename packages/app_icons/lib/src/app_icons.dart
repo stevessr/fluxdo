@@ -153,6 +153,7 @@ abstract final class AppIcons {
   static const security = Symbols.security_rounded;
   static const verifiedUser = Symbols.verified_user_rounded;
   static const medal = Symbols.workspace_premium_rounded;
+  static const crown = Symbols.crown_rounded;
 
   // ─── 通讯 / 通知 ───────────────────────────────────────────────────
   static const mail = Symbols.mail_rounded;
