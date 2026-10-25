@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/assets/optional_font_loader.dart';
 import '../theme/accent_colors.dart';
 import '../theme/app_background.dart';
 import '../theme/app_palettes.dart';
@@ -227,7 +228,9 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
     // Load Font Family
     final savedFontFamily = prefs.getString(_fontFamilyKey);
     AppFontFamily fontFamily = AppFontFamily.system;
-    if (savedFontFamily == 'miSans') {
+    if (savedFontFamily == 'miSans' &&
+        (!const bool.fromEnvironment('FLUXDO_EXTERNAL_MISANS') ||
+            OptionalFontLoader.isLoaded)) {
       fontFamily = AppFontFamily.miSans;
     }
 
@@ -372,6 +375,11 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
   }
 
   Future<void> setFontFamily(AppFontFamily fontFamily) async {
+    if (fontFamily == AppFontFamily.miSans &&
+        const bool.fromEnvironment('FLUXDO_EXTERNAL_MISANS')) {
+      // 外置资源缺失/损坏时保留系统字体，不落盘无效选择。
+      if (!await OptionalFontLoader.ensureMiSansFromPack()) return;
+    }
     state = state.copyWith(fontFamily: fontFamily);
     switch (fontFamily) {
       case AppFontFamily.miSans:

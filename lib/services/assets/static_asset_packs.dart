@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,30 @@ import 'static_asset_pack_backend_stub.dart'
 
 /// 本地可信资源包优先；未安装或校验失败时回退 Flutter assets。
 abstract final class StaticAssetPacks {
+  static final _changes = StreamController<String>.broadcast(sync: true);
+
+  /// 已验证的激活/回滚/禁用会同步通知消费者丢弃缓存。
+  static Stream<String> get changes => _changes.stream;
+
+  /// 只读取独立安装的包，不会回退内置资源。用于外置字体等可选功能。
+  static Future<Uint8List?> loadInstalledBytes(String assetPath) =>
+      backend.readVerifiedAsset(assetPath);
+
+  static Future<List<Map<String, String>>> listInstalled() =>
+      backend.listInstalledPacks();
+
+  static Future<bool> rollback(String packId) async {
+    final changed = await backend.rollbackPack(packId);
+    if (changed) _changes.add(packId);
+    return changed;
+  }
+
+  static Future<bool> disable(String packId) async {
+    final changed = await backend.disablePack(packId);
+    if (changed) _changes.add(packId);
+    return changed;
+  }
+
   static Future<Uint8List> loadBytes(String assetPath) async {
     final installed = await backend.readVerifiedAsset(assetPath);
     if (installed != null) return installed;
@@ -28,11 +53,14 @@ abstract final class StaticAssetPacks {
     required String packId,
     required Uint8List zipBytes,
     required String expectedSha256,
-  }) => backend.installTrustedZip(
-    packId: packId,
-    zipBytes: zipBytes,
-    expectedSha256: expectedSha256,
-  );
+  }) async {
+    await backend.installTrustedZip(
+      packId: packId,
+      zipBytes: zipBytes,
+      expectedSha256: expectedSha256,
+    );
+    _changes.add(packId);
+  }
 }
 
 String _decodeUtf8(Uint8List bytes) => utf8.decode(bytes);

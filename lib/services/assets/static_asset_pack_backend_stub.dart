@@ -10,3 +10,9 @@ Future<void> installTrustedZip({
 }) {
   throw UnsupportedError('此平台暂不支持本地静态资源包安装');
 }
+
+Future<List<Map<String, String>>> listInstalledPacks() async => [];
+
+Future<bool> rollbackPack(String packId) async => false;
+
+Future<bool> disablePack(String packId) async => false;

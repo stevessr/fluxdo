@@ -53,3 +53,5 @@ installTrustedZip 对调用方提供的外部可信 SHA-256、ZIP 内每项散�
 角色素材加载器 StevessrCharacterAssets 已迁移到统一资源接口，覆盖主图、差分和清单。未安装时继续从内置 rootBundle 读取。角色渲染结果的进程内缓存暂时需要重启以切换新的资源版本；后续应与包更新事件集成缓存失效通知。
 
 手动触发 Actions 导出时会先运行生成型角色资源的 Dart 构建脚本，再打包；若缺少任一角色包则失败，避免发布缺失资源的‘完整’版本。PR/push 快速验证仍允许未生成目录被显式跳过。
+
+通过可选编译常量 `--dart-define=FLUXDO_EXTERNAL_MISANS=true` 启用外置 MiSans 预加载；只有用户此前选择 MiSans 且已验证资源包可用，才会在启动时注册字体。切换到 MiSans 时也会尝试加载，缺失时保留系统字体。**该选项不自动删除 Flutter pubspec 的内置字体定义**，真正瘦身需要 Android staging 单独改写声明并完成回归。Polyfill 初次预加载以及包切换后重新加载均经过统一资源接口，旧异步结果不得覆盖新版本；现存 WebView 页面不能热替换已注入脚本，新 WebView 才能获得更新。

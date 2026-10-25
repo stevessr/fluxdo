@@ -8,6 +8,9 @@ on:
       - 'lib/services/assets/**'
       - 'lib/services/discourse_cook_service.dart'
       - 'lib/services/stevessr_character_assets.dart'
+      - 'lib/services/webview_settings.dart'
+      - 'lib/providers/theme_provider.dart'
+      - 'lib/main.dart'
       - 'test/services/static_asset_packs_test.dart'
       - 'scripts/ci/asset_packs.py'
       - 'scripts/ci/tests/test_asset_packs.py'
@@ -80,6 +83,10 @@ jobs:
           lib/services/assets/static_asset_pack_backend_io.dart
           lib/services/discourse_cook_service.dart
           lib/services/stevessr_character_assets.dart
+          lib/services/assets/optional_font_loader.dart
+          lib/services/webview_settings.dart
+          lib/providers/theme_provider.dart
+          lib/main.dart
           test/services/static_asset_packs_test.dart
       - name: Test missing-pack fallback
         run: flutter test test/services/static_asset_packs_test.dart
