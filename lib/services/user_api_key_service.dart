@@ -50,6 +50,9 @@ class UserApiKeyService {
   /// 跨设备扫码专用 client_id(与浏览器授权 client 隔离)。
   /// 稳定复用,使服务端 create 时 destroy_all 只清掉上一枚分享 key。
   static const _keyQrClientId = 'user_api_key_qr_client_id';
+  // Stable, isolated client for short-lived DeviceAuth keys. Reusing it avoids
+  // creating a new Discourse API client row for every retry.
+  static const _keyDeviceClientId = 'user_api_key_device_client_id';
   // nonce 持久化:跨重启存活。冷启动 getInitialLink 会重放上次的
   // auth_redirect 深链,内存态 nonce 会丢失导致每次重启误报"回调解析失败"。
   static const _keyPendingNonce = 'user_api_key_pending_nonce';
@@ -163,6 +166,16 @@ class UserApiKeyService {
     if (clientId == null || clientId.isEmpty) {
       clientId = const Uuid().v4();
       await _storage.write(key: _keyQrClientId, value: clientId);
+    }
+    return clientId;
+  }
+
+  /// Client ID only for DeviceAuth: never share it with browser or QR flows.
+  Future<String> ensureDeviceClientId() async {
+    var clientId = await _storage.read(key: _keyDeviceClientId);
+    if (clientId == null || clientId.isEmpty) {
+      clientId = const Uuid().v4();
+      await _storage.write(key: _keyDeviceClientId, value: clientId);
     }
     return clientId;
   }
