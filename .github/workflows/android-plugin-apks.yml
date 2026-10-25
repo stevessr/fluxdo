@@ -6,6 +6,9 @@ on:
     branches:
       - 'feat/android-independent-plugin-apks'
     paths:
+      - 'packages/fluxdo_plugin_contract/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
       - 'android/plugin_*/**'
       - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
       - 'android/settings.gradle.kts'
@@ -41,6 +44,9 @@ on:
       - '.github/workflows/android-plugin-apks.yml'
   pull_request:
     paths:
+      - 'packages/fluxdo_plugin_contract/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
       - 'android/plugin_*/**'
       - 'android_modular/**'
       - 'scripts/ci/build_android_core_modular.py'
@@ -78,7 +84,7 @@ on:
 # Only the newest branch snapshot is useful when iterating on APK
 # compatibility. Avoid installing Rust/NDK/Flutter for obsolete pushes.
 concurrency:
-  group: android-plugin-apks-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: android-plugin-apks-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -96,8 +102,22 @@ jobs:
           python3 scripts/ci/build_native_plugins.py --plan
           python3 scripts/ci/build_android_core_modular.py --prepare-only
 
+  dart-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.13.1'
+      - name: Validate plugin contract without Flutter or network dependencies
+        working-directory: packages/fluxdo_plugin_contract
+        run: |
+          dart pub get --offline
+          dart analyze --fatal-infos
+          dart run test/contract_test.dart
+
   build:
-    needs: contracts
+    needs: [contracts, dart-contracts]
     runs-on: ubuntu-latest
     timeout-minutes: 70
     steps:

@@ -8,6 +8,7 @@
 
 | 模块 | 构建入口 | 编译依赖 | 资源与账号归属 |
 |---|---|---|---|
+| Dart 协议 | `packages/fluxdo_plugin_contract` | 仅 Dart SDK | 无平台状态、资源或凭据 |
 | Core | `build_android_core_modular.py` | 宿主 Flutter + `plugin_api` | 论坛会话；不携带角色素材 |
 | Deviceinfo / Network | `build_native_plugins.py` | `plugin_api` | 独立 Android 进程 |
 | CDK / LDC | `build_native_plugins.py` | `plugin_api` + `plugin_web_session` | 各 APK 的 WebView 会话 |
@@ -29,7 +30,8 @@ python3 scripts/ci/check_android_plugin_contract.py
 ```
 
 生成物包括宿主 `OptionalPluginCatalog.kt`、独立工程的
-`settings.gradle.kts` 以及 `android/plugin-versions.properties`。
+`settings.gradle.kts`、`android/plugin-versions.properties`、Dart 的
+`catalog.g.dart` 和原生 `PluginProtocol.kt`。
 宿主 Messenger 白名单、Sticker Activity 身份、原生构建计划和 APK 身份校验
 消费同一清单。Android Manifest 仍在模块内维护；契约检查保证包可见性、
 组件名称、签名权限、协议版本及项目依赖与清单一致。
@@ -37,6 +39,29 @@ python3 scripts/ci/check_android_plugin_contract.py
 重复 ID/JSON 键、未知字段、越界包名/组件、动态 Gradle 项目依赖、
 宿主或其他 APK 依赖、非法版本和过期生成物都会终止检查。
 新增功能模块时仍须实现 Kotlin 服务、Manifest 和必要的宿主调用入口。
+
+## 可独立验证的调用协议
+
+`packages/fluxdo_plugin_contract` 不加入根 Pub workspace，宿主以 path 依赖
+消费它。该包只依赖 Dart SDK，可以在没有 Flutter、Android SDK、网络依赖或
+子模块的环境独立执行。它集中定义模块身份、状态解析、操作参数与响应约束，
+Flutter 服务只负责平台传输和账号分区的哈希。
+
+```sh
+cd packages/fluxdo_plugin_contract
+dart pub get --offline
+dart analyze --fatal-infos
+dart run test/contract_test.dart
+```
+
+未声明操作或字段在调用平台前被拒绝；状态中的包名必须匹配清单，重复模块、
+错误类型和矛盾的就绪状态会报协议错误。JSON 以 UTF-8 字节计限，缺失、非对象
+或超过 8192 字节的响应不被接受。原生绑定最多同时运行 8 个请求，15 秒超时后
+解绑；Dart 另设 20 秒上限，处理平台未完成回调的情况。参数与响应校验不替代
+原生签名、权限或 Binder 校验；耗时操作仍在插件进程内执行。
+
+账号 Activity 仅接受 `guest` 或 64 位十六进制分区；Reward 仅接受有界的公开
+用户名和正整数用户 ID。原生桥也检查这些启动字段，拒绝传递凭据和任意参数。
 
 ## 独立版本与构建
 
@@ -92,7 +117,7 @@ python3 -m unittest discover -s scripts/ci -p 'test_dart_source_boundary.py' -v
 python3 scripts/ci/build_android_core_modular.py --prepare-only
 ```
 
-Android 插件 CI 先执行无 SDK 的契约测试，再在设置 Flutter 之前构建原生
+Android 插件 CI 先执行 Python 契约检查和独立 Dart 协议测试，再在设置 Flutter 之前构建原生
 插件。之后构建 Sticker 与隔离 Core。Core 构建已经包含宿主 Kotlin 编译，
 不得再次用未准备的根工程编译 `:app`，以免缺少 CA 或覆盖隔离产物。
 Sticker 的独立 Gradle 工程自行对齐 Android SDK 36 和 JVM 17，满足 AVIF

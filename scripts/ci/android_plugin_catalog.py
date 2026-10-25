@@ -14,6 +14,12 @@ ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "android_modular/plugins.json"
 HOST_PACKAGE = "com.github.lingyan000.fluxdo"
 SHARED_LIBRARIES = ("plugin_api", "plugin_web_session")
+# Shared by generated Dart and Kotlin contracts; changes are reviewed together.
+MAX_JSON_BYTES = 8192
+MAX_ERROR_CHARS = 256
+MAX_CONCURRENT_CALLS = 8
+INVOCATION_TIMEOUT_MS = 15000
+TRANSPORT_TIMEOUT_MS = 20000
 
 
 @dataclass(frozen=True)

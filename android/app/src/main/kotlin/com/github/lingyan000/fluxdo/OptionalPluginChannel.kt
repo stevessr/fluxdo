@@ -68,8 +68,12 @@ class OptionalPluginChannel(
                                 // session; plugins clear cookies before opening.
                                 val payload = call.argument<Map<String, Any?>>("payload")
                                     ?: emptyMap()
-                                val slot = (payload["accountSlot"] as? String)
-                                    ?: "guest"
+                                require(payload.keys.all { it == "accountSlot" }) {
+                                    "Undeclared launch fields"
+                                }
+                                val rawSlot = payload["accountSlot"] ?: "guest"
+                                require(rawSlot is String) { "Invalid account isolation slot" }
+                                val slot = rawSlot
                                 require(slot == "guest" ||
                                     Regex("^[0-9a-f]{64}$").matches(slot)) {
                                     "Invalid account isolation slot"
@@ -81,11 +85,17 @@ class OptionalPluginChannel(
                                 // payment amounts, cookies or Basic Auth secrets.
                                 val raw = call.argument<Map<String, Any?>>("payload")
                                     ?: emptyMap()
+                                require(raw.keys.all { it == "username" || it == "userId" }) {
+                                    "Undeclared launch fields"
+                                }
                                 val username = (raw["username"] as? String)
-                                    ?.trim()?.take(64).orEmpty()
-                                val userId = (raw["userId"] as? Number)
-                                    ?.toLong() ?: -1L
-                                require(username.isNotEmpty() && userId > 0L) {
+                                    ?.trim().orEmpty()
+                                val rawId = raw["userId"]
+                                require(rawId is Int || rawId is Long) { "Invalid recipient ID" }
+                                val userId = (rawId as Number).toLong()
+                                require(username.length in 1..64 &&
+                                    username.none { it.code < 32 || it.code == 127 } &&
+                                    userId in 1L..9007199254740991L) {
                                     "Missing recipient identity"
                                 }
                                 launch.putExtra("recipient_username", username)
@@ -111,6 +121,8 @@ class OptionalPluginChannel(
                             result.error("INVALID_ARGS", "Request too large", null)
                         describe(spec)["compatible"] != true ->
                             result.error("PLUGIN_UNAVAILABLE", "Plugin missing, unsigned or incompatible", null)
+                        active.size >= PluginProtocol.MAX_CONCURRENT_CALLS ->
+                            result.error("BUSY", "Too many plugin requests; retry after completion", null)
                         else -> Invocation(spec, operation!!, payload, result).start()
                     }
                 }
@@ -200,7 +212,7 @@ class OptionalPluginChannel(
 
         fun start() {
             active.add(this)
-            mainHandler.postDelayed(timeout, 15000L)
+            mainHandler.postDelayed(timeout, PluginProtocol.INVOCATION_TIMEOUT_MS)
             try {
                 bound = context.bindService(
                     Intent().setComponent(spec.component),

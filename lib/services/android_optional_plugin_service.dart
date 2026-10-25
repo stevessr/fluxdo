@@ -4,6 +4,10 @@ import 'package:crypto/crypto.dart' show sha256;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:fluxdo_plugin_contract/fluxdo_plugin_contract.dart';
+
+export 'package:fluxdo_plugin_contract/fluxdo_plugin_contract.dart'
+    show AndroidOptionalPlugin;
 
 /// Android APK extensions communicate through signed Binder services rather
 /// than loading code into the Flutter engine. Other platforms see no plugins.
@@ -29,25 +33,27 @@ class AndroidOptionalPluginService {
 
   Future<List<AndroidOptionalPlugin>> list() async {
     if (!supported) return const [];
-    final items = await _channel.invokeMethod<List<dynamic>>('list');
-    final plugins = (items ?? const [])
-        .whereType<Map>()
-        .map((item) => AndroidOptionalPlugin.fromMap(item))
-        .toList();
+    final items = await _channel
+        .invokeMethod<List<dynamic>>('list')
+        .timeout(pluginTransportTimeout);
+    if (items == null) {
+      throw const FormatException('Plugin host did not return a status list');
+    }
+    final statuses = List<dynamic>.of(items);
     try {
       const stickerChannel = MethodChannel(
         'com.github.lingyan000.fluxdo/sticker_companion',
       );
-      final sticker = await stickerChannel.invokeMapMethod<dynamic, dynamic>(
-        'status',
-      );
+      final sticker = await stickerChannel
+          .invokeMapMethod<dynamic, dynamic>('status')
+          .timeout(pluginTransportTimeout);
       if (sticker != null) {
-        plugins.add(AndroidOptionalPlugin.fromMap(sticker));
+        statuses.add(sticker);
       }
     } on MissingPluginException {
       // Older FluxDO installations have no sticker companion bridge.
     }
-    return plugins;
+    return AndroidOptionalPlugin.parseList(statuses);
   }
 
   Future<bool> launch(
@@ -55,10 +61,11 @@ class AndroidOptionalPluginService {
     Map<String, dynamic> payload = const {},
   }) async {
     if (!supported) return false;
-    return await _channel.invokeMethod<bool>('launch', {
-      'id': id,
-      'payload': payload,
-    }) ?? false;
+    final arguments = AndroidPluginContract.launchPayload(id, payload);
+    return await _channel
+            .invokeMethod<bool>('launch', {'id': id, 'payload': arguments})
+            .timeout(pluginTransportTimeout) ??
+        false;
   }
 
   Future<Map<String, dynamic>> invoke(
@@ -67,47 +74,18 @@ class AndroidOptionalPluginService {
     Map<String, dynamic> payload = const {},
   ]) async {
     if (!supported) throw UnsupportedError('Android plugins are unavailable');
-    final raw = await _channel.invokeMethod<String>('invoke', {
-      'id': id,
-      'operation': operation,
-      'payload': jsonEncode(payload),
-    });
-    final decoded = jsonDecode(raw ?? '{}');
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('Invalid optional plugin response');
-    }
-    return decoded;
-  }
-}
-
-class AndroidOptionalPlugin {
-  const AndroidOptionalPlugin({
-    required this.id,
-    required this.name,
-    required this.packageName,
-    required this.installed,
-    required this.compatible,
-    required this.reason,
-    this.version,
-  });
-
-  final String id;
-  final String name;
-  final String packageName;
-  final bool installed;
-  final bool compatible;
-  final String reason;
-  final String? version;
-
-  factory AndroidOptionalPlugin.fromMap(Map<dynamic, dynamic> data) {
-    return AndroidOptionalPlugin(
-      id: data['id'] as String? ?? '',
-      name: data['name'] as String? ?? '',
-      packageName: data['package'] as String? ?? '',
-      installed: data['installed'] == true,
-      compatible: data['compatible'] == true,
-      reason: data['reason'] as String? ?? 'unknown',
-      version: data['version'] as String?,
+    final encoded = AndroidPluginContract.encodeInvocation(
+      id,
+      operation,
+      payload,
     );
+    final raw = await _channel
+        .invokeMethod<String>('invoke', {
+          'id': id,
+          'operation': operation,
+          'payload': encoded,
+        })
+        .timeout(pluginTransportTimeout);
+    return AndroidPluginContract.decodeResponse(raw);
   }
 }
