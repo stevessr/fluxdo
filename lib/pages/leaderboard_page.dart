@@ -1064,6 +1064,10 @@ extension on _LeaderboardPeriod {
 class _LeaderboardCopy {
   const _LeaderboardCopy({
     required this.title,
+    required this.globalTitle,
+    required this.rank,
+    required this.about,
+    required this.aboutBody,
     required this.refresh,
     required this.empty,
     required this.points,
@@ -1084,6 +1088,10 @@ class _LeaderboardCopy {
   });
 
   final String title;
+  final String globalTitle;
+  final String rank;
+  final String about;
+  final String aboutBody;
   final String refresh;
   final String empty;
   final String points;
@@ -1108,6 +1116,10 @@ _LeaderboardCopy _copy(BuildContext context) {
   if (locale.languageCode != 'zh') {
     return const _LeaderboardCopy(
       title: 'Leaderboard',
+      globalTitle: 'Global leaderboard',
+      rank: 'Rank',
+      about: 'About the leaderboard',
+      aboutBody: 'Community points are calculated by the Discourse gamification plugin. Each time period has its own ranking.',
       refresh: 'Refresh',
       empty: 'No leaderboard data',
       points: 'points',
@@ -1120,11 +1132,11 @@ _LeaderboardCopy _copy(BuildContext context) {
       notReady: 'The leaderboard is being generated. Please refresh later.',
       retry: 'Retry',
       allTime: 'All time',
-      daily: 'Daily',
-      weekly: 'Weekly',
-      monthly: 'Monthly',
-      quarterly: 'Quarterly',
-      yearly: 'Yearly',
+      daily: 'Today',
+      weekly: 'Week',
+      monthly: 'Month',
+      quarterly: 'Quarter',
+      yearly: 'Year',
     );
   }
 
@@ -1135,6 +1147,10 @@ _LeaderboardCopy _copy(BuildContext context) {
   if (traditional) {
     return const _LeaderboardCopy(
       title: '排行榜',
+      globalTitle: '全域排行榜',
+      rank: '排名',
+      about: '關於排行榜',
+      aboutBody: '社群點數由 Discourse 積分外掛計算，不同時間範圍的排名各自獨立。',
       refresh: '重新整理',
       empty: '暫無排行榜資料',
       points: '點數',
@@ -1146,17 +1162,21 @@ _LeaderboardCopy _copy(BuildContext context) {
       rateLimited: '排行榜請求過於頻繁，請稍後再試。',
       notReady: '排行榜正在產生，請稍後重新整理。',
       retry: '重試',
-      allTime: '總榜',
-      daily: '日榜',
-      weekly: '週榜',
-      monthly: '月榜',
-      quarterly: '季榜',
-      yearly: '年榜',
+      allTime: '所有時間',
+      daily: '今天',
+      weekly: '週',
+      monthly: '月',
+      quarterly: '季度',
+      yearly: '年',
     );
   }
 
   return const _LeaderboardCopy(
     title: '排行榜',
+    globalTitle: '全局排行榜',
+    rank: '排名',
+    about: '关于排行榜',
+    aboutBody: '社区点数由 Discourse 积分插件计算，各个时间范围采用独立的排名。',
     refresh: '刷新',
     empty: '暂无排行榜数据',
     points: '点数',
@@ -1168,11 +1188,11 @@ _LeaderboardCopy _copy(BuildContext context) {
     rateLimited: '排行榜请求过于频繁，请稍后再试。',
     notReady: '排行榜正在生成，请稍后刷新。',
     retry: '重试',
-    allTime: '总榜',
-    daily: '日榜',
-    weekly: '周榜',
-    monthly: '月榜',
-    quarterly: '季榜',
-    yearly: '年榜',
+    allTime: '所有时间',
+    daily: '今天',
+    weekly: '周',
+    monthly: '月',
+    quarterly: '季度',
+    yearly: '年',
   );
 }
