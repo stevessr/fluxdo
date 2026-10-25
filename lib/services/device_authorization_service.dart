@@ -15,11 +15,15 @@ class DeviceAuthorizationService {
     this.dio, {
     this.publicKeyProvider,
     this.clientIdProvider,
+    this.payloadDecryptor,
+    this.credentialSaver,
   });
 
   final Dio dio;
   final Future<String> Function()? publicKeyProvider;
   final Future<String> Function()? clientIdProvider;
+  final Future<Map<String, dynamic>?> Function(String, String)? payloadDecryptor;
+  final Future<void> Function(String, String, String, DateTime?)? credentialSaver;
   final UserApiKeyService _keys = UserApiKeyService();
 
   static const String _deviceEndpoint = '/user-api-key/device.json';
@@ -141,10 +145,14 @@ class DeviceAuthorizationService {
   ) async {
     bool isCurrent() => AuthSession().isValid(request.generation);
     if (!isCurrent()) throw StateError('登录会话已变化');
-    final decrypted = await _keys.decryptDeviceAuthorizationPayload(
-      encryptedPayload,
-      expectedNonce: request.nonce,
-    );
+    final decrypted = await (payloadDecryptor?.call(
+          encryptedPayload,
+          request.nonce,
+        ) ??
+        _keys.decryptDeviceAuthorizationPayload(
+          encryptedPayload,
+          expectedNonce: request.nonce,
+        ));
     if (!isCurrent()) throw StateError('登录会话已变化');
     final apiKey = decrypted?['key']?.toString() ?? '';
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(apiKey)) {
@@ -175,14 +183,23 @@ class DeviceAuthorizationService {
     final username = user['username'] as String;
     // Device credentials are stored in an isolated slot, not the browser
     // OTP/self-heal key slot. This does not publish a Cookie-based login.
-    await _keys.persistDeviceAuthorization(
-      apiKey: apiKey,
-      clientId: request.clientId,
-      username: username,
-      expiresAt: DateTime.tryParse(decrypted?['expires_at']?.toString() ?? ''),
+    final expires = DateTime.tryParse(
+      decrypted?['expires_at']?.toString() ?? '',
     );
+    if (credentialSaver != null) {
+      await credentialSaver!(apiKey, request.clientId, username, expires);
+    } else {
+      await _keys.persistDeviceAuthorization(
+        apiKey: apiKey,
+        clientId: request.clientId,
+        username: username,
+        expiresAt: expires,
+      );
+    }
     if (!isCurrent()) {
-      await _keys.clearDeviceAuthorization(expectedKey: apiKey);
+      if (credentialSaver == null) {
+        await _keys.clearDeviceAuthorization(expectedKey: apiKey);
+      }
       throw StateError('登录会话已变化');
     }
     return DeviceAuthorizedIdentity(username: username);
