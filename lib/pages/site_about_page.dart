@@ -6,12 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../models/site_about.dart';
+import '../models/site_policy_document.dart';
+import '../widgets/common/site_info_tabs.dart';
 import '../providers/discourse_providers.dart';
 import '../services/discourse_cache_manager.dart';
 import '../utils/url_helper.dart';
 import '../widgets/common/smart_avatar.dart';
 import 'user_profile_page.dart';
 import 'webview_page.dart';
+import 'site_policy_page.dart';
 
 /// Native rendering of the public Discourse /about page.
 ///
@@ -229,31 +232,15 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
     );
   }
 
-  Widget _buildNavigation() {
-    Widget link(String label, String path) => ActionChip(
-      label: Text(label),
-      onPressed: () => _openSection(path, label),
-    );
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          Chip(
-            label: Text(_tr('关于', 'About')),
-            backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-            side: BorderSide.none,
-          ),
-          const SizedBox(width: 8),
-          link(_tr('准则', 'Guidelines'), '/guidelines'),
-          const SizedBox(width: 8),
-          link(_tr('服务条款', 'Terms of Service'), '/tos'),
-          const SizedBox(width: 8),
-          link(_tr('隐私', 'Privacy'), '/privacy'),
-        ],
-      ),
-    );
-  }
+  Widget _buildNavigation() => SiteInfoTabs(
+    selected: 0,
+    onSelected: (index) {
+      final kind = SitePolicyKind.values[index - 1];
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => SitePolicyPage(kind: kind)),
+      );
+    },
+  );
 
   Widget _buildBanner(String url) {
     final theme = Theme.of(context);
