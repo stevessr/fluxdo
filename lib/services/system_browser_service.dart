@@ -45,6 +45,8 @@ class SystemBrowserService {
   static bool isAuthorizationUrl(Uri uri) =>
       uri.scheme == 'https' &&
       uri.host == 'linux.do' &&
+      (!uri.hasPort || uri.port == 443) &&
+      uri.userInfo.isEmpty &&
       uri.path == '/user-api-key/new';
 
   /// 把 Android PackageManager 枚举结果转换为可渲染的条目。
