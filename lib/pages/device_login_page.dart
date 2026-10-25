@@ -131,7 +131,8 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                 request,
                 poll.encryptedPayload!,
               );
-              if (!mounted || _cancelled || !identical(_request, request)) return;
+              if (!mounted || _cancelled || !identical(_request, request))
+                return;
               _ticker?.cancel();
               setState(() {
                 _request = null;
@@ -266,16 +267,15 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                 ),
                 const SizedBox(height: 12),
                 FilledButton.tonalIcon(
-                  onPressed: () => Navigator.of(context).pop(
-                    DeviceLoginResult.useBrowser,
-                  ),
+                  onPressed: () =>
+                      Navigator.of(context).pop(DeviceLoginResult.useBrowser),
                   icon: const Icon(Icons.open_in_browser),
                   label: const Text('继续使用系统浏览器完成登录'),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(
-                    DeviceLoginResult.keyAuthorized,
-                  ),
+                  onPressed: () =>
+                      Navigator.of(context)
+                          .pop(DeviceLoginResult.keyAuthorized),
                   child: const Text('返回登录页面'),
                 ),
               ],
