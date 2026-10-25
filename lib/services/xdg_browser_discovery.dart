@@ -7,6 +7,7 @@ typedef XdgBrowserEntry = ({
   String path,
   String? command,
   String? icon,
+  String? exec,
 });
 
 class XdgBrowserDiscovery {
@@ -61,7 +62,7 @@ class XdgBrowserDiscovery {
                 !mimeTypes.contains('x-scheme-handler/https')) {
               continue;
             }
-            if (!_visible(values)) continue;
+            if (!_visible(values) || !_isBrowser(values, id)) continue;
             final name = _name(values);
             if (name.isEmpty) continue;
             final tryExec = values['TryExec'];
@@ -77,6 +78,7 @@ class XdgBrowserDiscovery {
               path: file.path,
               command: command,
               icon: values['Icon'],
+              exec: values['Exec'],
             ));
           } on FileSystemException {
             // 不可读或损坏的单个入口不阻断其他浏览器。
@@ -89,6 +91,19 @@ class XdgBrowserDiscovery {
       }
     }
     return result;
+  }
+
+  // Handling HTTPS alone does not mean the application is a browser (chat
+  // clients and other URL handlers often register both schemes).
+  static bool _isBrowser(Map<String, String> values, String id) {
+    if ((values['Categories'] ?? '').split(';').contains('WebBrowser')) {
+      return true;
+    }
+    final label = '${values['Name'] ?? ''} ${values['GenericName'] ?? ''} $id'
+        .toLowerCase();
+    return RegExp(
+      r'browser|firefox|chromium|chrome|librewolf|waterfox|floorp|brave|vivaldi|opera|falkon|epiphany|midori|qutebrowser|mullvad|cromite|thorium',
+    ).hasMatch(label);
   }
 
   Future<String?> _executable(String command) async {
