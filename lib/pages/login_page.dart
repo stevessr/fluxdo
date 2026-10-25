@@ -100,6 +100,25 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  Widget _loginBrowserIcon(LoginBrowser browser) {
+    final iconBytes = browser.iconBytes;
+    if (iconBytes == null) {
+      return const Icon(Symbols.open_in_browser_rounded, size: 28);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(9),
+      child: Image.memory(
+        iconBytes,
+        width: 40,
+        height: 40,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) =>
+            const Icon(Symbols.open_in_browser_rounded, size: 28),
+      ),
+    );
+  }
+
   /// 浏览器授权登录:拉起系统浏览器打开 /user-api-key/new,授权后
   /// 深链 discourse://auth_redirect 回 App,由 UserApiKeyLoginFlow 完成
   /// OTP 兑换与登录收口,这里只负责发起和成功后 pop。
@@ -113,6 +132,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         ToastService.showError('没有找到可用于登录的浏览器');
         return;
       }
+
+      final chooserChoices = browsers
+          .where((browser) => browser.id == SystemBrowserService.androidChooserId)
+          .toList();
+      final regularBrowsers = browsers
+          .where((browser) => browser.id != SystemBrowserService.androidChooserId)
+          .toList();
 
       // 选择完成后才生成 nonce 和 RSA 授权 URL。用户取消选择时
       // 不会创建待处理的授权请求。
@@ -129,7 +155,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           builder: (sheetContext) => SafeArea(
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
+                maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.75,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -149,17 +175,35 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   Flexible(
                     child: ListView.builder(
                       shrinkWrap: true,
-                      itemCount: browsers.length,
+                      itemCount: regularBrowsers.length,
                       itemBuilder: (context, index) {
-                        final browser = browsers[index];
+                        final browser = regularBrowsers[index];
                         return ListTile(
-                          leading: const Icon(Symbols.open_in_browser_rounded),
+                          leading: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: Center(child: _loginBrowserIcon(browser)),
+                          ),
                           title: Text(browser.name),
                           onTap: () => Navigator.of(context).pop(browser),
                         );
                       },
                     ),
                   ),
+                  if (chooserChoices.isNotEmpty) ...[
+                    const Divider(height: 12, indent: 16, endIndent: 16),
+                    ListTile(
+                      leading: const SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Icon(Icons.apps_rounded, size: 28),
+                      ),
+                      title: Text(chooserChoices.first.name),
+                      subtitle: const Text('唤起 Android 系统的“打开方式”菜单'),
+                      onTap: () => Navigator.of(sheetContext)
+                          .pop(chooserChoices.first),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                 ],
               ),
