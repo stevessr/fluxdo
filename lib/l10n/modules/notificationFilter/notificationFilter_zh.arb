@@ -9,6 +9,8 @@
   "notification_categoryLikes": "赞",
   "notification_categoryMessages": "私信",
   "notification_categoryBookmarks": "书签",
+  "notification_categoryAssigned": "指定列表",
+  "notification_categoryChat": "聊天通知",
   "notification_categoryOther": "其他",
   "notification_solvedAccepted": "您的帖子已被标记为解决方案"
 }
