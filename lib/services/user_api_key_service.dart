@@ -217,8 +217,9 @@ class UserApiKeyService {
       final username = data['username']?.toString() ?? '';
       if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(key) ||
           client.isEmpty ||
-          username.isEmpty)
+          username.isEmpty) {
         return null;
+      }
       return {'key': key, 'client_id': client, 'username': username};
     } catch (_) {
       return null;
