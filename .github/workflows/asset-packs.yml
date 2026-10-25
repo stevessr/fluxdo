@@ -133,4 +133,6 @@ jobs:
           openssl pkey -in "$out/ci-test-private.pem" -pubout -outform DER -out "$out/ci-test-public.der"
           python3 scripts/ci/sign_asset_catalog.py sign --catalog "$out/catalog.json" --key "$out/ci-test-private.pem" --signature "$out/catalog.sig"
       - name: Test lifecycle and Python-Dart ZIP interoperability
-        run: flutter test test/services/static_asset_packs_test.dart test/services/signed_asset_catalog_test.dart test/services/discourse_cook_service_test.dart test/pages/static_asset_pack_manager_page_test.dart
+        run: |
+          key=$(tail -c 32 test/fixtures/generated_asset_packs/ci-test-public.der | base64 -w0)
+          flutter test --dart-define=FLUXDO_ASSET_CATALOG_ED25519_PUBKEY_B64="$key" test/services/static_asset_packs_test.dart test/services/signed_asset_catalog_test.dart test/services/discourse_cook_service_test.dart test/pages/static_asset_pack_manager_page_test.dart
