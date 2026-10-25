@@ -62,7 +62,10 @@ void main() {
       expect(create['expires_in_seconds'], '600');
       expect(create['nonce'], request.nonce);
       expect((sent[1].data as Map)['device_code'], request.deviceCode);
-      expect(request.verificationUriWithRequest.queryParameters['request'], 'abc123_-');
+      expect(
+        request.verificationUriWithRequest.queryParameters['request'],
+        'abc123_-',
+      );
     });
 
     test('rejects altered activation origin and nonstandard ports', () async {
@@ -93,7 +96,7 @@ void main() {
         final service = DeviceAuthorizationService(
           dio,
           publicKeyProvider: () async => 'RSA-TEST-KEY',
-        clientIdProvider: () async => 'DEVICE-CLIENT-ID',
+          clientIdProvider: () async => 'DEVICE-CLIENT-ID',
         );
         await expectLater(service.create(), throwsFormatException);
       }
@@ -179,7 +182,9 @@ void main() {
 
     test('accepts decoded and serialized Discourse response maps', () {
       expect(
-        DeviceAuthorizationService.responseMap('{"status":"authorization_pending"}'),
+        DeviceAuthorizationService.responseMap(
+          '{"status":"authorization_pending"}',
+        ),
         {'status': 'authorization_pending'},
       );
       expect(
