@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/group.dart';
 import '../providers/discourse_providers.dart';
+import '../widgets/common/group_leave_confirmation_dialog.dart';
 import 'group_page.dart';
 
 /// Discourse 原生群组目录（网页 `/g`，API `/groups.json`）。
@@ -23,6 +24,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 
   List<DiscourseGroup> _groups = const [];
   final Set<int> _membershipChanging = <int>{};
+  final Set<int> _membershipConfirmationPending = <int>{};
   String _filter = '';
   int _nextPage = 0;
   int _total = 0;
@@ -124,26 +126,54 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     DiscourseGroup group, {
     required bool join,
   }) async {
-    if (_membershipChanging.contains(group.id)) return;
+    if (_membershipChanging.contains(group.id) ||
+        _membershipConfirmationPending.contains(group.id)) {
+      return;
+    }
     if (join ? !group.canJoin : !group.canLeave) return;
 
-    setState(() => _membershipChanging.add(group.id));
+    if (!join) {
+      setState(() => _membershipConfirmationPending.add(group.id));
+      bool confirmed;
+      try {
+        confirmed = await confirmLeaveGroup(
+          context,
+          groupLabel: group.label,
+        );
+      } finally {
+        if (mounted) {
+          setState(() => _membershipConfirmationPending.remove(group.id));
+        }
+      }
+      if (!confirmed || !mounted) return;
+    }
+
+    // The directory can refresh while the confirmation is open.
+    final matches = _groups.where((item) => item.id == group.id);
+    if (matches.isEmpty) return;
+    final latest = matches.first;
+    if (_membershipChanging.contains(latest.id) ||
+        (join ? !latest.canJoin : !latest.canLeave)) {
+      return;
+    }
+
+    setState(() => _membershipChanging.add(latest.id));
     try {
       final service = ref.read(discourseServiceProvider);
       if (join) {
-        await service.joinGroup(group.id);
+        await service.joinGroup(latest.id);
       } else {
-        await service.leaveGroup(group.id);
+        await service.leaveGroup(latest.id);
       }
       if (!mounted) return;
 
-      final currentCount = group.userCount;
+      final currentCount = latest.userCount;
       final nextCount = currentCount == null
           ? null
           : join
           ? currentCount + 1
           : (currentCount > 0 ? currentCount - 1 : 0);
-      final updated = group.copyWith(
+      final updated = latest.copyWith(
         userCount: nextCount,
         isGroupUser: join,
         isGroupOwner: false,
@@ -151,7 +181,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       setState(() {
         _groups = [
           for (final item in _groups)
-            if (item.id == group.id) updated else item,
+            if (item.id == latest.id) updated else item,
         ];
       });
 
@@ -239,6 +269,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       return _ErrorState(
         message: copy.loadFailed,
         detail: _error.toString(),
+        retryLabel: copy.retry,
         retry: () => _load(reset: true),
       );
     }
@@ -259,13 +290,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 
     return RefreshIndicator(
       onRefresh: () => _load(reset: true),
-      child: ListView.separated(
+      child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
         itemCount: _groups.length + 1,
-        separatorBuilder: (_, index) => index < _groups.length - 1
-            ? const Divider(height: 1, indent: 64)
-            : const SizedBox.shrink(),
         itemBuilder: (context, index) {
           if (index == _groups.length) {
             if (_loading) {
@@ -289,94 +317,145 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
           }
 
           final group = _groups[index];
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-              child: Icon(
-                Symbols.groups_rounded,
-                color: Theme.of(context).colorScheme.onSecondaryContainer,
+          final scheme = Theme.of(context).colorScheme;
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => _openGroup(group),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: scheme.secondaryContainer,
+                          child: Icon(
+                            Symbols.groups_rounded,
+                            color: scheme.onSecondaryContainer,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                group.label,
+                                style: Theme.of(context).textTheme.titleMedium,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '@${group.name}',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: scheme.onSurfaceVariant),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Symbols.chevron_right_rounded,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ],
+                    ),
+                    if (group.bioRaw?.trim().isNotEmpty == true) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        group.bioRaw!.trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              if (group.userCount != null)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Symbols.person_rounded,
+                                      size: 16,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      copy.memberCount(group.userCount!),
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              if (group.isGroupUser)
+                                Text(
+                                  group.isGroupOwner ? copy.owner : copy.member,
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(color: scheme.primary),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (group.canJoin || group.canLeave) ...[
+                          const SizedBox(width: 8),
+                          _buildMembershipButton(group, copy),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-            title: Text(
-              group.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              group.fullName != null && group.fullName!.trim().isNotEmpty
-                  ? '@${group.name}'
-                  : (group.bioRaw?.trim().isNotEmpty == true
-                        ? group.bioRaw!.trim()
-                        : '@${group.name}'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: _buildGroupTrailing(context, group, copy),
-            onTap: () => _openGroup(group),
           );
         },
       ),
     );
   }
 
-  Widget _buildGroupTrailing(
-    BuildContext context,
-    DiscourseGroup group,
-    _GroupsCopy copy,
-  ) {
+  Widget _buildMembershipButton(DiscourseGroup group, _GroupsCopy copy) {
     final busy = _membershipChanging.contains(group.id);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (group.canJoin || group.canLeave) ...[
-          SizedBox(
-            height: 34,
-            child: group.canJoin
-                ? FilledButton.tonal(
-                    style: FilledButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                    ),
-                    onPressed: busy
-                        ? null
-                        : () => _changeMembership(group, join: true),
-                    child: busy
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator.adaptive(
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(copy.join),
-                  )
-                : OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                    ),
-                    onPressed: busy
-                        ? null
-                        : () => _changeMembership(group, join: false),
-                    child: busy
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator.adaptive(
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(copy.leave),
-                  ),
-          ),
-          const SizedBox(width: 10),
-        ],
-        if (group.userCount != null) ...[
-          const Icon(Symbols.person_rounded, size: 18),
-          const SizedBox(width: 4),
-          Text('${group.userCount}'),
-          const SizedBox(width: 6),
-        ],
-        const Icon(Symbols.chevron_right_rounded),
-      ],
+    final disabled = busy || _membershipConfirmationPending.contains(group.id);
+    final indicator = const SizedBox.square(
+      dimension: 16,
+      child: CircularProgressIndicator.adaptive(strokeWidth: 2),
+    );
+    return SizedBox(
+      height: 36,
+      child: group.canJoin
+          ? FilledButton.tonal(
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              onPressed: disabled
+                  ? null
+                  : () => _changeMembership(group, join: true),
+              child: busy ? indicator : Text(copy.join),
+            )
+          : OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: disabled
+                  ? null
+                  : () => _changeMembership(group, join: false),
+              child: busy ? indicator : Text(copy.leave),
+            ),
     );
   }
 }
@@ -385,11 +464,13 @@ class _ErrorState extends StatelessWidget {
   const _ErrorState({
     required this.message,
     required this.detail,
+    required this.retryLabel,
     required this.retry,
   });
 
   final String message;
   final String detail;
+  final String retryLabel;
   final VoidCallback retry;
 
   @override
@@ -411,7 +492,7 @@ class _ErrorState extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 16),
-            FilledButton.tonal(onPressed: retry, child: const Text('Retry')),
+            FilledButton.tonal(onPressed: retry, child: Text(retryLabel)),
           ],
         ),
       ),
@@ -425,14 +506,18 @@ class _GroupsCopy {
 
   String get title => zh ? '群组' : 'Groups';
   String get refresh => zh ? '刷新' : 'Refresh';
+  String get retry => zh ? '重试' : 'Retry';
   String get searchHint => zh ? '搜索群组' : 'Search groups';
   String get clear => zh ? '清除' : 'Clear';
   String get empty => zh ? '没有可见群组' : 'No visible groups';
   String get loadMore => zh ? '加载更多' : 'Load more';
   String get loadFailed => zh ? '群组加载失败' : 'Failed to load groups';
-  String get join => zh ? '进入' : 'Join';
+  String get join => zh ? '加入' : 'Join';
+  String get member => zh ? '已加入' : 'Joined';
+  String get owner => zh ? '群主' : 'Owner';
+  String memberCount(int count) => zh ? '$count 位成员' : '$count members';
   String get leave => zh ? '退出' : 'Leave';
-  String get joined => zh ? '已进入群组' : 'Joined group';
+  String get joined => zh ? '已加入群组' : 'Joined group';
   String get left => zh ? '已退出群组' : 'Left group';
   String total(int value) => zh ? '共 $value 个群组' : '$value groups';
 }
