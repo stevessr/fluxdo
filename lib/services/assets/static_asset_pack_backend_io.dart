@@ -308,8 +308,6 @@ Future<Map<String, dynamic>?> _readPointerFile(File file, String id) async {
       return null;
     }
     final sequence = value['releaseSequence'];
-    if (sequence != null && (sequence is! int || sequence <= 0)) return null;
-    final sequence = value['releaseSequence'];
     if (sequence != null &&
         (sequence is! int || sequence <= 0 || sequence > 0x7fffffff)) return null;
     if (value['disabled'] == true) return value;
