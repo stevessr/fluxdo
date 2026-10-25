@@ -1,0 +1,74 @@
+name: Cakeday UI PR Check
+
+on:
+  pull_request:
+    paths:
+      - 'lib/pages/community_events_page.dart'
+      - 'lib/navigation/nav_entry_registry.dart'
+      - 'lib/providers/preferences_provider.dart'
+      - 'lib/utils/discourse_url_parser.dart'
+      - 'lib/utils/link_launcher.dart'
+      - 'test/pages/community_events_page_test.dart'
+      - 'test/utils/discourse_url_parser_test.dart'
+      - '.github/workflows/cakeday-pr-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cakeday-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Prepare generated assets
+        run: mkdir -p assets/certs
+
+      - name: Resolve packages
+        run: flutter pub get
+
+      - name: Generate localization code
+        run: dart run tool/gen_l10n.dart
+
+      - name: Check changed Dart formatting
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/pages/community_events_page.dart \
+            lib/navigation/nav_entry_registry.dart \
+            lib/utils/discourse_url_parser.dart \
+            lib/utils/link_launcher.dart \
+            test/pages/community_events_page_test.dart \
+            test/utils/discourse_url_parser_test.dart
+
+      - name: Analyze cakeday implementation
+        run: >-
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          lib/pages/community_events_page.dart
+          lib/navigation/nav_entry_registry.dart
+          lib/providers/preferences_provider.dart
+          lib/utils/discourse_url_parser.dart
+          lib/utils/link_launcher.dart
+          test/pages/community_events_page_test.dart
+          test/utils/discourse_url_parser_test.dart
+
+      - name: Run cakeday regression tests
+        run: >-
+          flutter test
+          test/pages/community_events_page_test.dart
+          test/utils/discourse_url_parser_test.dart
