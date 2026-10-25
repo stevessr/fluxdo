@@ -55,7 +55,8 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
   Future<void> _ensureLoaded() async {
     if (!mounted || !widget.isActive) return;
     final viewer = ref.read(currentUserProvider).value?.username;
-    if (_cache[_period]?.viewerUsername == viewer) return;
+    final saved = _cache[_period];
+    if (saved != null && saved.viewerUsername == viewer) return;
     await _load(reset: true);
   }
 
@@ -266,30 +267,63 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       );
     }
 
+    // 和官方一致：前三名在领奖台展示，个人名次独立显示，普通榜单从第 4 名开始。
+    final rankings = entries.skip(3).toList(growable: false);
+    final personal = snapshot!.viewerUsername == currentUsername
+        ? snapshot.personal
+        : null;
+    final showPersonal = currentUsername != null && personal != null;
+    final listStart = showPersonal ? 3 : 2;
+
     return RefreshIndicator(
       onRefresh: () => _load(reset: true),
-      child: ListView.separated(
+      child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
-        itemCount: entries.length + 1,
-        separatorBuilder: (_, index) => index < entries.length - 1
-            ? const Divider(height: 1, indent: 72)
-            : const SizedBox.shrink(),
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
+        itemCount: rankings.length + listStart + 1,
         itemBuilder: (context, index) {
-          if (index == entries.length) {
+          if (index == 0) {
+            return _LeaderboardPodium(
+              winners: entries.take(3).toList(growable: false),
+              onOpenUser: _openUser,
+            );
+          }
+          if (showPersonal && index == 1) {
+            return _LeaderboardSelfRank(
+              personal: personal,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => UserProfilePage(username: currentUsername),
+                ),
+              ),
+            );
+          }
+          if (index == listStart - 1) {
+            return _LeaderboardListHeading();
+          }
+          final entryIndex = index - listStart;
+          if (entryIndex >= rankings.length) {
             return _LeaderboardFooter(
-              snapshot: snapshot!,
+              snapshot: snapshot,
               loading: _loading,
               error: error,
               onLoadMore: () => _load(reset: false),
             );
           }
-          final entry = entries[index];
-          return _LeaderboardTile(
-            entry: entry,
-            isCurrentUser:
-                currentUsername != null && entry.username == currentUsername,
-            onTap: () => _openUser(entry),
+          final entry = rankings[entryIndex];
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _LeaderboardTile(
+                entry: entry,
+                isCurrentUser: currentUsername != null &&
+                    entry.username.toLowerCase() ==
+                        currentUsername.toLowerCase(),
+                onTap: () => _openUser(entry),
+              ),
+              if (entryIndex < rankings.length - 1)
+                const Divider(height: 1, indent: 64),
+            ],
           );
         },
       ),
@@ -301,34 +335,154 @@ class _PeriodSelector extends StatelessWidget {
   const _PeriodSelector({
     required this.selected,
     required this.enabled,
+    required this.fromDate,
+    required this.toDate,
     required this.onSelected,
   });
 
   final LeaderboardPeriod selected;
   final bool enabled;
+  final DateTime? fromDate;
+  final DateTime? toDate;
   final ValueChanged<LeaderboardPeriod> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 52,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        scrollDirection: Axis.horizontal,
-        itemCount: LeaderboardPeriod.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final period = LeaderboardPeriod.values[index];
-          return FilterChip(
-            selected: selected == period,
-            label: Text(period.label(context)),
-            onSelected: enabled ? (_) => onSelected(period) : null,
-            showCheckmark: false,
-          );
-        },
+    final scheme = Theme.of(context).colorScheme;
+    final range = _formatLeaderboardRange(context, selected, fromDate, toDate);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: PopupMenuButton<LeaderboardPeriod>(
+          enabled: enabled,
+          tooltip: _periodLabel(context, selected),
+          initialValue: selected,
+          position: PopupMenuPosition.under,
+          constraints: const BoxConstraints(minWidth: 280, maxWidth: 400),
+          onSelected: onSelected,
+          itemBuilder: (menuContext) => LeaderboardPeriod.values.map((period) {
+            final description =
+                _formatLeaderboardRange(menuContext, period, fromDate, toDate);
+            return PopupMenuItem<LeaderboardPeriod>(
+              value: period,
+              height: 62,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _periodLabel(menuContext, period),
+                          style: Theme.of(menuContext).textTheme.titleSmall
+                              ?.copyWith(
+                                fontWeight: period == selected
+                                    ? FontWeight.bold
+                                    : null,
+                              ),
+                        ),
+                        if (description.isNotEmpty)
+                          Text(
+                            description,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(menuContext).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(menuContext)
+                                      .colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (period == selected)
+                    Icon(Symbols.check_rounded, color: scheme.primary, size: 20),
+                ],
+              ),
+            );
+          }).toList(),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _periodLabel(context, selected),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Symbols.expand_more_rounded,
+                color: enabled ? scheme.onSurface : scheme.onSurfaceVariant,
+              ),
+              if (range.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    range,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+String _periodLabel(BuildContext context, LeaderboardPeriod period) {
+  final locale = Localizations.localeOf(context);
+  final zh = locale.languageCode == 'zh';
+  final hant = locale.scriptCode == 'Hant' ||
+      locale.countryCode == 'TW' || locale.countryCode == 'HK';
+  return switch (period) {
+    LeaderboardPeriod.allTime =>
+      zh ? (hant ? '所有時間' : '所有时间') : 'All time',
+    LeaderboardPeriod.yearly => zh ? '年' : 'Year',
+    LeaderboardPeriod.quarterly => zh ? '季度' : 'Quarter',
+    LeaderboardPeriod.monthly => zh ? '月' : 'Month',
+    LeaderboardPeriod.weekly => zh ? '周' : 'Week',
+    LeaderboardPeriod.daily => zh ? '今天' : 'Today',
+  };
+}
+
+String _formatLeaderboardRange(
+  BuildContext context,
+  LeaderboardPeriod period,
+  DateTime? fromDate,
+  DateTime? toDate,
+) {
+  final range = LeaderboardDateRange.forPeriod(
+    period,
+    fromDate: fromDate,
+    toDate: toDate,
+  );
+  final start = range.start;
+  final end = range.end;
+  if (start == null && end == null) return '';
+  final locale = Localizations.localeOf(context);
+  final useYear = start == null || end == null || start.year != end.year;
+  String formatDate(DateTime value) {
+    if (locale.languageCode == 'zh') {
+      return useYear
+          ? '${value.year}年${value.month}月${value.day}日'
+          : '${value.month}月${value.day}日';
+    }
+    return DateFormat(useYear ? 'MMM d, y' : 'MMM d', locale.toString())
+        .format(value);
+  }
+
+  if (start == null) return formatDate(end!);
+  if (end == null || start == end) return formatDate(start);
+  return '${formatDate(start)} – ${formatDate(end)}';
 }
 
 class _LeaderboardTile extends StatelessWidget {
@@ -636,20 +790,6 @@ class _LeaderboardEntry {
 
 class _LeaderboardNotReadyException implements Exception {
   const _LeaderboardNotReadyException();
-}
-
-extension _LeaderboardPeriodUi on LeaderboardPeriod {
-  String label(BuildContext context) {
-    final copy = _copy(context);
-    return switch (this) {
-      LeaderboardPeriod.allTime => copy.allTime,
-      LeaderboardPeriod.daily => copy.daily,
-      LeaderboardPeriod.weekly => copy.weekly,
-      LeaderboardPeriod.monthly => copy.monthly,
-      LeaderboardPeriod.quarterly => copy.quarterly,
-      LeaderboardPeriod.yearly => copy.yearly,
-    };
-  }
 }
 
 class _LeaderboardCopy {
