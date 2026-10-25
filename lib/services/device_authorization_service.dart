@@ -205,7 +205,38 @@ class DeviceAuthorizationService {
               overrideClientId: request.clientId,
             ));
         if (!isCurrent()) throw StateError('登录会话已变化');
-        if (otp == null || !RegExp(r'^[0-9a-f]+
+        if (otp == null || !RegExp(r'^[0-9a-f]+$').hasMatch(otp)) {
+          throw const DeviceOtpUnavailableException();
+        }
+        return DeviceAuthorizedIdentity(username: username, otp: otp);
+      } finally {
+        // A temporary write Key is never retained beyond the OTP request.
+        // OTP redemption is independent of the API Key after issuance.
+        await (keyRevoker?.call(apiKey) ?? _keys.revokeKey(dio, apiKey));
+      }
+    }
+
+    // Explicit API-only authorization, never confused with Cookie login.
+    final expires = DateTime.tryParse(
+      decrypted?['expires_at']?.toString() ?? '',
+    );
+    if (credentialSaver != null) {
+      await credentialSaver!(apiKey, request.clientId, username, expires);
+    } else {
+      await _keys.persistDeviceAuthorization(
+        apiKey: apiKey,
+        clientId: request.clientId,
+        username: username,
+        expiresAt: expires,
+      );
+    }
+    if (!isCurrent()) {
+      if (credentialSaver == null) {
+        await _keys.clearDeviceAuthorization(expectedKey: apiKey);
+      }
+      throw StateError('登录会话已变化');
+    }
+    return DeviceAuthorizedIdentity(username: username);
   }
 
   static Map<String, dynamic> responseMap(dynamic body) {
