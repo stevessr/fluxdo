@@ -555,8 +555,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       MaterialPageRoute(builder: (_) => const DeviceLoginPage()),
     );
     if (!mounted) return;
-    if (result == DeviceLoginResult.keyAuthorized) {
-      ToastService.showSuccess('设备 API Key 已授权；尚未建立 Cookie 登录会话');
+    if (result == DeviceLoginResult.success) {
+      Navigator.of(context).pop(true);
+    } else if (result == DeviceLoginResult.keyAuthorized) {
+      ToastService.showSuccess('只读 API Key 已授权；未建立 Cookie 登录会话');
     } else if (result == DeviceLoginResult.useBrowser) {
       await _loginWithBrowserAuth();
     }
