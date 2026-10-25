@@ -605,6 +605,13 @@ class UserApiKeyService {
     final publicKeyPem = await ensurePublicKeyPem();
     if (!isCurrent()) return null;
 
+    final otpHeaders = <String, String>{'User-Api-Key': apiKey};
+    if (overrideClientId != null) {
+      otpHeaders['User-Api-Client-Id'] = overrideClientId;
+    }
+    if (overrideApiKey != null) {
+      otpHeaders['Cookie'] = '';
+    }
     try {
       final response = await dio.post(
         '/user-api-key/otp',
@@ -614,12 +621,7 @@ class UserApiKeyService {
           'application_name': applicationName,
         },
         options: Options(
-          headers: {
-            'User-Api-Key': apiKey,
-            if (overrideClientId != null)
-              'User-Api-Client-Id': overrideClientId,
-            if (overrideApiKey != null) 'Cookie': '',
-          },
+          headers: otpHeaders,
           contentType: Headers.formUrlEncodedContentType,
           followRedirects: false,
           validateStatus: (status) =>
