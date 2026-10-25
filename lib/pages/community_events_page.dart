@@ -81,6 +81,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       await _loadCalendarEvents();
       return;
     }
+    // The widget can be reused for cakeday views: discard old calendar responses.
+    ++_eventRequestId;
     if (!append) {
       setState(() {
         _loading = true;
@@ -134,7 +136,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       });
     }
   }
-
 
   Future<void> _loadCalendarEvents() async {
     final request = ++_eventRequestId;
@@ -428,7 +429,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       );
     }
 
-
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
@@ -450,54 +450,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           }
           return _buildCakedayUserTile(context, _items[index]);
         },
-      ),
-    );
-  }
-
-  Widget _buildEventTile(BuildContext context, Map<String, dynamic> event) {
-    final post = _asMap(event['post']);
-    final topic = _asMap(post['topic']);
-    final name =
-        _string(event['name']) ??
-        _string(topic['title']) ??
-        (_zh(context) ? '未命名活动' : 'Untitled event');
-    final url = _string(post['url']);
-    final startsAt = _parseEventDate(event['starts_at']);
-    final endsAt = _parseEventDate(event['ends_at']);
-    final allDay = event['all_day'] == true;
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: ListTile(
-        leading: _eventDateBadge(context, startsAt),
-        title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Text(_eventTimeLabel(context, startsAt, endsAt, allDay)),
-        trailing: const Icon(Symbols.chevron_right_rounded),
-        onTap: url == null ? null : () => launchContentLink(context, url),
-      ),
-    );
-  }
-
-  Widget _eventDateBadge(BuildContext context, DateTime? date) {
-    if (date == null) return const Icon(Symbols.calendar_today_rounded);
-    final local = date.toLocal();
-    return Container(
-      width: 48,
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('${local.month}', style: Theme.of(context).textTheme.labelSmall),
-          Text(
-            '${local.day}',
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ],
       ),
     );
   }
@@ -550,32 +502,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
             ),
     );
   }
-
-  String _eventTimeLabel(
-    BuildContext context,
-    DateTime? start,
-    DateTime? end,
-    bool allDay,
-  ) {
-    if (start == null) return _zh(context) ? '时间待定' : 'Time TBD';
-    if (allDay) {
-      if (end != null && !_sameLocalDay(start, end)) {
-        return '${_dateLabel(context, start)} – ${_dateLabel(context, end)}';
-      }
-      return '${_dateLabel(context, start)} · ${_zh(context) ? '全天' : 'All day'}';
-    }
-    final localStart = start.toLocal();
-    final startTime = TimeOfDay.fromDateTime(localStart).format(context);
-    if (end == null) return '${_dateLabel(context, start)} · $startTime';
-    final localEnd = end.toLocal();
-    if (_sameLocalDay(start, end)) {
-      return '${_dateLabel(context, start)} · $startTime – ${TimeOfDay.fromDateTime(localEnd).format(context)}';
-    }
-    return '${_dateLabel(context, start)} $startTime – ${_dateLabel(context, end)} ${TimeOfDay.fromDateTime(localEnd).format(context)}';
-  }
-
-  String _dateLabel(BuildContext context, DateTime value) =>
-      MaterialLocalizations.of(context).formatMediumDate(value.toLocal());
 
   String _formatCakedate(BuildContext context, String value) {
     // anniversaries 的 cakedate 来自 users.created_at，序列化时可能是
@@ -642,12 +568,6 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       return DateTime(year, month, day);
     }
     return DateTime.tryParse(value);
-  }
-
-  static bool _sameLocalDay(DateTime a, DateTime b) {
-    final x = a.toLocal();
-    final y = b.toLocal();
-    return x.year == y.year && x.month == y.month && x.day == y.day;
   }
 
   static String _normalizeFilter(String? value) {
