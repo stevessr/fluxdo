@@ -64,10 +64,10 @@ class UserApiKeyLoginFlow {
   }) {
     if (authorizedKey == null || authorizedKey.isEmpty) return;
     unawaited(
-      keys.burnAfterLoginIfUseless(
-        dio,
-        expectedKey: authorizedKey,
-      ).catchError((Object error, StackTrace stackTrace) {
+      keys.burnAfterLoginIfUseless(dio, expectedKey: authorizedKey).catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
         debugPrint('[UserApiKeyLoginFlow] 授权 key 后台清理失败: $error');
       }),
     );
@@ -179,119 +179,166 @@ class UserApiKeyLoginFlow {
         return;
       }
 
-      // 兑换 + 收口有网络耗时,显示全局 loading 反馈
-      _showLoading('正在完成登录…');
-      try {
-        final service = DiscourseService();
-        final redeemResult = await LoginTokenRedeemer.redeemUserApiKeyOtp(
-          service.dio,
-          otp,
-          requestGeneration: requestGeneration,
-        );
-        if (!AuthSession().isValid(requestGeneration)) return;
-        final token = redeemResult.token;
-        if (token == null) {
-          if (redeemResult.challengeBlocked) {
-            // 盾不是 OTP/Key 失效。不要在这里焚毁刚拿到的 key，也不要把
-            // 用户误导成“令牌兑换失败”；重新授权时同 client_id 会自然替换旧 key。
-            ToastService.showError('安全验证未完成,登录凭证未按失效处理,请重新尝试授权');
-            onFlowFinished?.call(false);
-            return;
-          }
-          await userApiKeyService.burnAfterLoginIfUseless(service.dio);
-          ToastService.showError('登录令牌兑换失败,请重试');
-          onFlowFinished?.call(false);
-          return;
-        }
-
-        // 新 _t 已落 jar;取 username 后走与密码登录同一套收口
-        var username = '';
-        User? verifiedUser;
-        var currentUserBlockedByChallenge = false;
-        try {
-          final response = await service.dio.get(
-            '/session/current.json',
-            options: Options(
-              extra: const {
-                FluxRequestKeys.skipAuthCheck: true,
-                FluxRequestKeys.skipCsrf: true,
-                FluxRequestKeys.skipSessionStateSync: true,
-                FluxRequestKeys.noRecovery: true,
-              },
-            ),
-          );
-          if (!AuthSession().isValid(requestGeneration)) return;
-          final data = response.data;
-          final currentUser = data is Map<String, dynamic>
-              ? data['current_user']
-              : null;
-          if (currentUser is Map<String, dynamic>) {
-            username = currentUser['username']?.toString() ?? '';
-            if (username.isNotEmpty) {
-              try {
-                verifiedUser = User.fromJson(currentUser);
-              } catch (e) {
-                debugPrint(
-                  '[UserApiKeyLoginFlow] 用户资料解析失败，保留已确认用户名: $e',
-                );
-              }
-            }
-          }
-        } on DioException catch (e) {
-          currentUserBlockedByChallenge =
-              e.error is CfChallengeException ||
-              LoginTokenRedeemer.isChallengeError(e);
-          debugPrint('[UserApiKeyLoginFlow] 取 current_user 失败: $e');
-        } catch (e) {
-          debugPrint('[UserApiKeyLoginFlow] 取 current_user 失败: $e');
-        }
-
-        if (username.isEmpty) {
-          // `_t` 已经成功兑换，后续 current_user 只是为了拿本地显示用户名。
-          // 如果这里仅仅被盾挡住，不能把一个已建立的登录会话回滚成“登录失败”。
-          // 扫码登录已有同样的保守兜底：先用占位 identifier 收口，后续正常
-          // 会话请求/预加载会刷新真实用户信息。
-          if (currentUserBlockedByChallenge) {
-            if (!AuthSession().isValid(requestGeneration)) return;
-            await service.finalizeNativeLoginSuccess(
-              'user',
-              notifyBeforePreload: true,
-            );
-            _burnKeyInBackground(
-          userApiKeyService,
-          service.dio,
-          authorizedKey: authorizedKey,
-        );
-            ToastService.showSuccess('登录成功');
-            onFlowFinished?.call(true);
-            return;
-          }
-          // _t 已落 jar 但确认请求失败;不带空用户名走收口(会写坏本地状态)
-          await userApiKeyService.burnAfterLoginIfUseless(service.dio);
-          ToastService.showError('登录状态确认失败,请重试');
-          onFlowFinished?.call(false);
-          return;
-        }
-
-        if (!AuthSession().isValid(requestGeneration)) return;
-        await service.finalizeNativeLoginSuccess(
-          username,
-          confirmedUser: verifiedUser,
-          notifyBeforePreload: true,
-        );
-        // 认证状态、登录页导航先于耗时的远程 key revoke 完成。
-        _burnKeyInBackground(
-          userApiKeyService,
-          service.dio,
-          authorizedKey: authorizedKey,
-        );
-        ToastService.showSuccess('登录成功');
-        onFlowFinished?.call(true);
-      } finally {
-        _hideLoading();
-      }
+      final completed = await _finishOtpLogin(
+        otp: otp,
+        requestGeneration: requestGeneration,
+        userApiKeyService: userApiKeyService,
+        authorizedKey: authorizedKey,
+      );
+      if (completed != null) onFlowFinished?.call(completed);
     } finally {
       _handling = false;
+    }
+  }
+
+  /// The device flow must explicitly mint an OTP using its short-lived write
+  /// Key before reaching here. Reuse browser auth's session finalization.
+  Future<bool> completeDeviceOtp(
+    String otp, {
+    required int requestGeneration,
+    required String expectedUsername,
+  }) async {
+    if (_handling || !AuthSession().isValid(requestGeneration)) return false;
+    _handling = true;
+    try {
+      return await _finishOtpLogin(
+            otp: otp,
+            requestGeneration: requestGeneration,
+            userApiKeyService: UserApiKeyService(),
+            expectedUsername: expectedUsername,
+          ) ==
+          true;
+    } finally {
+      _handling = false;
+    }
+  }
+
+  Future<bool?> _finishOtpLogin({
+    required String otp,
+    required int requestGeneration,
+    required UserApiKeyService userApiKeyService,
+    String? authorizedKey,
+    String? expectedUsername,
+  }) async {
+    // 兑换 + 收口有网络耗时,显示全局 loading 反馈
+    _showLoading('正在完成登录…');
+    try {
+      final service = DiscourseService();
+      final redeemResult = await LoginTokenRedeemer.redeemUserApiKeyOtp(
+        service.dio,
+        otp,
+        requestGeneration: requestGeneration,
+      );
+      if (!AuthSession().isValid(requestGeneration)) return null;
+      final token = redeemResult.token;
+      if (token == null) {
+        if (redeemResult.challengeBlocked) {
+          // 盾不是 OTP/Key 失效。不要在这里焚毁刚拿到的 key，也不要把
+          // 用户误导成“令牌兑换失败”；重新授权时同 client_id 会自然替换旧 key。
+          ToastService.showError('安全验证未完成,登录凭证未按失效处理,请重新尝试授权');
+          return false;
+        }
+        if (authorizedKey != null) {
+          await userApiKeyService.burnAfterLoginIfUseless(
+            service.dio,
+            expectedKey: authorizedKey,
+          );
+        }
+        ToastService.showError('登录令牌兑换失败,请重试');
+        return false;
+      }
+
+      // 新 _t 已落 jar;取 username 后走与密码登录同一套收口
+      var username = '';
+      User? verifiedUser;
+      var currentUserBlockedByChallenge = false;
+      try {
+        final response = await service.dio.get(
+          '/session/current.json',
+          options: Options(
+            extra: const {
+              FluxRequestKeys.skipAuthCheck: true,
+              FluxRequestKeys.skipCsrf: true,
+              FluxRequestKeys.skipSessionStateSync: true,
+              FluxRequestKeys.noRecovery: true,
+            },
+          ),
+        );
+        if (!AuthSession().isValid(requestGeneration)) return null;
+        final data = response.data;
+        final currentUser = data is Map<String, dynamic>
+            ? data['current_user']
+            : null;
+        if (currentUser is Map<String, dynamic>) {
+          username = currentUser['username']?.toString() ?? '';
+          if (username.isNotEmpty) {
+            try {
+              verifiedUser = User.fromJson(currentUser);
+            } catch (e) {
+              debugPrint('[UserApiKeyLoginFlow] 用户资料解析失败，保留已确认用户名: $e');
+            }
+          }
+        }
+      } on DioException catch (e) {
+        currentUserBlockedByChallenge =
+            e.error is CfChallengeException ||
+            LoginTokenRedeemer.isChallengeError(e);
+        debugPrint('[UserApiKeyLoginFlow] 取 current_user 失败: $e');
+      } catch (e) {
+        debugPrint('[UserApiKeyLoginFlow] 取 current_user 失败: $e');
+      }
+
+      if (username.isEmpty) {
+        // `_t` 已经成功兑换，后续 current_user 只是为了拿本地显示用户名。
+        // 如果这里仅仅被盾挡住，不能把一个已建立的登录会话回滚成“登录失败”。
+        // 扫码登录已有同样的保守兜底：先用占位 identifier 收口，后续正常
+        // 会话请求/预加载会刷新真实用户信息。
+        if (currentUserBlockedByChallenge) {
+          if (!AuthSession().isValid(requestGeneration)) return null;
+          await service.finalizeNativeLoginSuccess(
+            expectedUsername ?? 'user',
+            notifyBeforePreload: true,
+          );
+          _burnKeyInBackground(
+            userApiKeyService,
+            service.dio,
+            authorizedKey: authorizedKey,
+          );
+          ToastService.showSuccess('登录成功');
+          return true;
+        }
+        // _t 已落 jar 但确认请求失败;不带空用户名走收口(会写坏本地状态)
+        if (authorizedKey != null) {
+          await userApiKeyService.burnAfterLoginIfUseless(
+            service.dio,
+            expectedKey: authorizedKey,
+          );
+        }
+        ToastService.showError('登录状态确认失败,请重试');
+        return false;
+      }
+
+      if (expectedUsername != null &&
+          username.toLowerCase() != expectedUsername.toLowerCase()) {
+        ToastService.showError('设备授权用户与 OTP 会话用户不一致，已终止登录');
+        return false;
+      }
+      if (!AuthSession().isValid(requestGeneration)) return null;
+      await service.finalizeNativeLoginSuccess(
+        username,
+        confirmedUser: verifiedUser,
+        notifyBeforePreload: true,
+      );
+      // 认证状态、登录页导航先于耗时的远程 key revoke 完成。
+      _burnKeyInBackground(
+        userApiKeyService,
+        service.dio,
+        authorizedKey: authorizedKey,
+      );
+      ToastService.showSuccess('登录成功');
+      return true;
+    } finally {
+      _hideLoading();
     }
   }
 }
