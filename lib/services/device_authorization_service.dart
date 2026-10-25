@@ -38,7 +38,8 @@ class DeviceAuthorizationService {
   Future<DeviceAuthorizationRequest> create() async {
     final generation = AuthSession().generation;
     final nonce = const Uuid().v4();
-    final publicKey = await (_publicKeyProvider?.call() ?? _keys.ensurePublicKeyPem());
+    final publicKey =
+        await (_publicKeyProvider?.call() ?? _keys.ensurePublicKeyPem());
     final clientId =
         await (_clientIdProvider?.call() ?? _keys.ensureDeviceClientId());
     if (!AuthSession().isValid(generation)) {
@@ -91,9 +92,9 @@ class DeviceAuthorizationService {
         !RegExp(r'^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$').hasMatch(userCode) ||
         !safe(verification) ||
         !safe(verificationWithRequest) ||
-        !RegExp(r'^[-_A-Za-z0-9]{8}$').hasMatch(
-          verificationWithRequest?.queryParameters['request'] ?? '',
-        )) {
+        !RegExp(
+          r'^[-_A-Za-z0-9]{8}$',
+        ).hasMatch(verificationWithRequest?.queryParameters['request'] ?? '')) {
       throw const FormatException('服务端设备授权响应格式无效');
     }
     final expiresIn = int.tryParse(body['expires_in']?.toString() ?? '') ?? 0;
@@ -113,7 +114,9 @@ class DeviceAuthorizationService {
     );
   }
 
-  Future<DeviceAuthorizationPoll> poll(DeviceAuthorizationRequest request) async {
+  Future<DeviceAuthorizationPoll> poll(
+    DeviceAuthorizationRequest request,
+  ) async {
     if (!AuthSession().isValid(request.generation)) {
       throw StateError('登录会话已变化');
     }
