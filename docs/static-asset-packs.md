@@ -64,3 +64,10 @@ installTrustedZip 对调用方提供的外部可信 SHA-256、ZIP 内每项散�
 现阶段不提供任意 URL 自动下载或自动执行更新，因为 SHA256 仅提供完整性，没有可信发行者身份。后续应在发行管道签名 catalog、在客户端内置可信公钥并验证签名，才开放联网发现和下载。不能将无签名的 catalog.json 自己声称的哈希当作安全锚点。
 
 应用内可手动清理旧包：仅匹配合法包 ID 与 64 位摘要命名目录、当前与 previous 一律保护、未知指针或目录内出现符号链接时拒绝清理。默认目录至少保留一天，读取/安装/清理由同一包锁串行化，不会删除并发读取内容。这个回收过程不会触及 Core 内置资源。
+
+
+## Ed25519 签名目录
+
+发布目录 catalog.json 的原始字节需使用仓库之外的 Ed25519 PEM 私钥签名，产生 catalog.sig。签名覆盖原始字节，不是对 ZIP 自带哈希的自我认证。使用 scripts/ci/sign_asset_catalog.py sign/verify。手动导出 Actions 要求 Secret FLUXDO_ASSET_CATALOG_ED25519_PRIVATE_KEY_PEM；无密钥则拒绝将目录发布为可信版本。客户端仅在构建时通过 --dart-define=FLUXDO_ASSET_CATALOG_ED25519_PUBKEY_B64=<独立核验的32字节公钥Base64> 提供发行公钥，未配置则拒绝签名目录安装。禁止将私钥提交到仓库。
+
+本阶段尚未配置正式发布公钥、目录抗回滚计数或自动下载策略；普通手动导入仍要求用户独立核验 SHA-256。

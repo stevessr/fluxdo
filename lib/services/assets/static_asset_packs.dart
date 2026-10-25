@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'signed_asset_catalog.dart';
 import 'static_asset_pack_backend_stub.dart'
     if (dart.library.io) 'static_asset_pack_backend_io.dart' as backend;
 
@@ -49,6 +50,34 @@ abstract final class StaticAssetPacks {
     // 大型 JS 在 isolate 中解码，保留 rootBundle.loadString 的性能特征。
     if (installed.length > 50 * 1024) return compute(_decodeUtf8, installed);
     return utf8.decode(installed);
+  }
+
+  /// Never derive publisher trust from a ZIP or an unsigned catalog.
+  static Future<void> installFromPinnedCatalog({
+    required String packId,
+    required Uint8List catalogBytes,
+    required Uint8List signatureBytes,
+    required Uint8List zipBytes,
+  }) async {
+    if (!SignedAssetCatalog.hasPinnedKey) {
+      throw StateError('未内置可信的资源目录 Ed25519 公钥');
+    }
+    final entries = await SignedAssetCatalog.verify(
+      catalogBytes: catalogBytes,
+      signatureBytes: signatureBytes,
+      trustedPublicKeyBase64: SignedAssetCatalog.publicKeyBase64,
+    );
+    final found = entries.where((item) => item.id == packId).toList();
+    if (found.length != 1) {
+      throw const FormatException('签名目录不包含该资源包');
+    }
+    final item = found.single;
+    if (zipBytes.length != item.bytes) {
+      throw const FormatException('ZIP 大小与签名目录不匹配');
+    }
+    await installTrustedZip(
+      packId: packId, zipBytes: zipBytes, expectedSha256: item.sha256,
+    );
   }
 
   /// expectedSha256 必须来自可信发布渠道，不得从待安装 ZIP 自身读取。
