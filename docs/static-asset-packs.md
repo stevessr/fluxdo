@@ -74,3 +74,8 @@ installTrustedZip 对调用方提供的外部可信 SHA-256、ZIP 内每项散�
 
 
 DiscourseCookService 订阅 render-cook 包切换通知：安装、禁用和回滚都会丢弃旧的 JS runtime、清理 onebox 缓存并重新初始化；如果更新发生在一次异步初始化或 onebox 网络查询中，会阻止旧版结果覆盖新引擎。原始根内置 Cook 保留作为回退资源。
+
+
+## Android MiSans 独立资源试验
+
+可在已经复制的临时 Android Core Flutter 工程里运行 scripts/ci/prepare_android_static_resources.py --stage /tmp/fluxdo-core-stage，删除临时工程 pubspec.yaml 的唯一 MiSans 字体声明和字体文件；随后必须使用 --dart-define=FLUXDO_EXTERNAL_MISANS=true 构建。脚本拒绝修改源仓库、缺失系统字体回退、额外字体声明或路径变更。Android Core 的真实 APK 体积对比与离线测试仍需在 PR #131 整合后完成，不得把此脚本的字节数视作实测 APK 缩减。

@@ -1,0 +1,47 @@
+"""Fail-closed checks for optional MiSans staged Android Core resources."""
+import pathlib
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import prepare_android_static_resources as modular
+
+
+class AndroidStaticResourceStageTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.stage = pathlib.Path(self.tmp.name) / "stage"
+        self.stage.mkdir()
+        font = self.stage / "assets/fonts/MiSansVF.ttf"
+        font.parent.mkdir(parents=True)
+        font.write_bytes(b"dummy font")
+        theme = self.stage / "lib/providers/theme_provider.dart"
+        theme.parent.mkdir(parents=True)
+        theme.write_text("const bool.fromEnvironment('FLUXDO_EXTERNAL_MISANS')")
+        loader = self.stage / "lib/services/assets/optional_font_loader.dart"
+        loader.parent.mkdir(parents=True)
+        loader.write_text("loader")
+        (self.stage / "pubspec.yaml").write_text(
+            "name: example\nflutter:\n  uses-material-design: true\n"
+            "  fonts:\n    - family: MiSans\n      fonts:\n"
+            "        - asset: assets/fonts/MiSansVF.ttf\n"
+        )
+
+    def test_strips_font_and_preserves_other_manifest(self):
+        modular.prepare(self.stage, self.stage.parent / "source")
+        result = (self.stage / "pubspec.yaml").read_text()
+        self.assertIn("uses-material-design: true", result)
+        self.assertNotIn("  fonts:", result)
+        self.assertFalse((self.stage / "assets/fonts/MiSansVF.ttf").exists())
+
+    def test_refuses_source_root_and_unknown_font(self):
+        with self.assertRaisesRegex(ValueError, "source repository"):
+            modular.prepare(self.stage, self.stage)
+        with self.assertRaisesRegex(ValueError, "font declarations changed"):
+            modular.strip_font("flutter:\n  fonts:\n    - family: Other\n")
+
+
+if __name__ == "__main__":
+    unittest.main()

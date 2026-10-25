@@ -20,7 +20,9 @@ import 'cook/cook_js_engine_stub.dart'
 /// 返回 null，由调用方降级到旧的 Dart 近似预览管线。
 class DiscourseCookService {
   static final DiscourseCookService _instance =
-      DiscourseCookService._internal() {
+      DiscourseCookService._internal();
+  factory DiscourseCookService() => _instance;
+  DiscourseCookService._internal() {
     StaticAssetPacks.changes.listen((packId) {
       if (packId != 'render-cook') return;
       _generation++;
@@ -32,8 +34,6 @@ class DiscourseCookService {
       _inlineOneboxAttempted.clear();
     });
   }
-  factory DiscourseCookService() => _instance;
-  DiscourseCookService._internal();
 
   CookJsEngine? _engine;
   Future<bool>? _initFuture;

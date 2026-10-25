@@ -16,6 +16,8 @@ on:
       - 'test/pages/static_asset_pack_manager_page_test.dart'
       - 'test/services/static_asset_packs_test.dart'
       - 'scripts/ci/asset_packs.py'
+      - 'scripts/ci/prepare_android_static_resources.py'
+      - 'scripts/ci/tests/test_asset_android_stage.py'
       - 'scripts/ci/sign_asset_catalog.py'
       - 'scripts/ci/tests/test_asset_catalog_signature.py'
       - 'lib/services/assets/signed_asset_catalog.dart'
