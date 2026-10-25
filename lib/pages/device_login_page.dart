@@ -9,9 +9,8 @@ import '../services/auth_session.dart';
 import '../services/device_authorization_service.dart';
 import '../services/discourse/discourse_service.dart';
 import '../services/login_token_redeemer.dart';
-import '../services/user_api_key_login_flow.dart';
 
-enum DeviceLoginResult { success, useBrowser }
+enum DeviceLoginResult { keyAuthorized, useBrowser }
 
 /// Manual confirmation works on any other device. On this device the
 /// request-token link opens the regular Discourse browser approval screen.
@@ -30,6 +29,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
   bool _starting = true;
   bool _completing = false;
   String? _error;
+  String? _authorizedUsername;
   String _status = '正在向 LINUX DO 申请设备授权…';
 
   @override
@@ -53,6 +53,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
       _starting = true;
       _completing = false;
       _error = null;
+      _authorizedUsername = null;
       _status = '正在创建授权请求…';
     });
     try {
@@ -72,7 +73,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
         LoginTokenRedeemer.isChallengeError(e)
             ? 'Cloudflare 安全验证未完成，请使用系统浏览器登录。'
             : (e.response?.statusCode == 403 || e.response?.statusCode == 400)
-            ? '站点拒绝了设备授权，可能没有开放 write API 权限；建议使用系统浏览器登录。'
+            ? '站点拒绝了原生设备 API 授权（read 权限可能未开放），请使用系统浏览器登录。'
             : '创建设备授权失败：网络或站点验证异常（${e.response?.statusCode ?? e.type}）',
       );
     } catch (e) {
@@ -123,26 +124,23 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
           case DeviceAuthorizationStatus.authorized:
             setState(() {
               _completing = true;
-              _status = '已授权，正在安全兑换登录会话…';
+              _status = '已授权，正在验证原生 User API Key…';
             });
             try {
-              final otp = await _device.exchangeForOtp(
+              final identity = await _device.authorize(
                 request,
                 poll.encryptedPayload!,
               );
-              if (!mounted || _cancelled) return;
-              final ok = await UserApiKeyLoginFlow.instance.completeDeviceOtp(
-                otp,
-                requestGeneration: request.generation,
-              );
-              if (!mounted || _cancelled) return;
-              if (ok) {
-                Navigator.of(context).pop(DeviceLoginResult.success);
-              } else {
-                _fail('OTP 兑换或会话确认失败，请改用系统浏览器登录');
-              }
+              if (!mounted || _cancelled || !identical(_request, request)) return;
+              _ticker?.cancel();
+              setState(() {
+                _request = null;
+                _authorizedUsername = identity.username;
+                _completing = false;
+                _status = '设备 API 授权成功：${identity.username}';
+              });
             } catch (e) {
-              _fail('无法将设备授权转换为登录会话：$e');
+              _fail('无法验证设备 API Key：$e');
             }
             return;
         }
@@ -200,7 +198,7 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                 const Center(child: CircularProgressIndicator()),
                 const SizedBox(height: 20),
               ],
-              if (request != null) ...[
+              if (request != null && _authorizedUsername == null) ...[
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -252,10 +250,33 @@ class _DeviceLoginPageState extends State<DeviceLoginPage> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  '授权将在浏览器进行。请核对应用名 FluxDO Device Login，'
-                  '并确认短期 write 权限。FluxDO 用该权限换取一次性登录令牌后'
-                  '会立即尝试吊销临时 API Key。',
+                  '授权将在浏览器进行。请核对应用名 FluxDO Device API '
+                  '和只读 read 权限。此流程获取原生 User API Key，'
+                  '不会生成 Cookie 登录会话。',
                   style: TextStyle(color: scheme.onSurfaceVariant),
+                ),
+              ],
+              if (_authorizedUsername != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  '已安全保存只读 User API Key。FluxDO 当前主会话仍使用 '
+                  '_t Cookie，此授权不会自动切换或创建登录账号。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: scheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: () => Navigator.of(context).pop(
+                    DeviceLoginResult.useBrowser,
+                  ),
+                  icon: const Icon(Icons.open_in_browser),
+                  label: const Text('继续使用系统浏览器完成登录'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(
+                    DeviceLoginResult.keyAuthorized,
+                  ),
+                  child: const Text('返回登录页面'),
                 ),
               ],
               if (_error != null) ...[
