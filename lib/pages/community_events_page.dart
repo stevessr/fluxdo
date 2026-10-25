@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../services/discourse/discourse_service.dart';
@@ -312,9 +313,10 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
                 DropdownMenuItem(
                   value: month,
                   child: Text(
-                    MaterialLocalizations.of(context).formatMonthYear(
-                      DateTime(DateTime.now().year, month),
-                    ),
+                    // 此处按每年的「月份」筛选，不能显示某个特定年份。
+                    DateFormat.MMMM(
+                      Localizations.localeOf(context).toString(),
+                    ).format(DateTime(2000, month)),
                   ),
                 ),
             ],
