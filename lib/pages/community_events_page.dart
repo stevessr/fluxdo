@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:app_icons/app_icons.dart';
@@ -23,6 +24,7 @@ class CommunityEventsPage extends StatefulWidget {
     required this.view,
     this.initialFilter,
     this.initialMonth,
+    this.client,
   });
 
   final CommunityEventsView view;
@@ -33,6 +35,9 @@ class CommunityEventsPage extends StatefulWidget {
 
   /// Discourse `/cakeday/{type}/all?month=N` 的月份参数。
   final int? initialMonth;
+
+  /// 允许测试注入 Dio；实际请求默认走全局 Discourse 网络链。
+  final Dio? client;
 
   @override
   State<CommunityEventsPage> createState() => _CommunityEventsPageState();
@@ -46,10 +51,11 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     'all',
   ];
 
-  final _service = DiscourseService();
+  Dio get _dio => widget.client ?? DiscourseService().dio;
 
   bool _loading = true;
   Object? _error;
+  Object? _loadMoreError;
   List<Map<String, dynamic>> _items = const [];
   String _filter = 'today';
   late CommunityEventsView _activeCakedayView;
@@ -76,7 +82,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.view != widget.view ||
         oldWidget.initialFilter != widget.initialFilter ||
-        oldWidget.initialMonth != widget.initialMonth) {
+        oldWidget.initialMonth != widget.initialMonth ||
+        oldWidget.client != widget.client) {
       _activeCakedayView = widget.view == CommunityEventsView.birthdays
           ? CommunityEventsView.birthdays
           : CommunityEventsView.anniversaries;
@@ -106,18 +113,22 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       setState(() {
         _loading = true;
         _error = null;
+        _loadMoreError = null;
         _loadMorePath = null;
         _loadingMore = false;
         _items = const [];
       });
     } else {
-      setState(() => _loadingMore = true);
+      setState(() {
+        _loadingMore = true;
+        _loadMoreError = null;
+      });
     }
 
     try {
       if (widget.view == CommunityEventsView.upcoming) {
         final now = DateTime.now();
-        final response = await _service.dio.get<dynamic>(
+        final response = await _dio.get<dynamic>(
           '/discourse-post-event/events',
           queryParameters: {
             // 官方 upcoming-events-list 默认向后看 180 天；原生页提高上限，
@@ -154,7 +165,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           : _filter == 'all'
           ? '/cakeday/$segment/all'
           : '/cakeday/$segment/$_filter';
-      final response = await _service.dio.get<dynamic>(
+      final response = await _dio.get<dynamic>(
         path,
         queryParameters: append
             ? null
@@ -185,6 +196,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           : loaded.isNotEmpty && morePath != null;
       setState(() {
         _items = combined;
+        _loadMoreError = null;
         _loadMorePath = hasMore ? morePath : null;
         _loading = false;
         _loadingMore = false;
@@ -192,7 +204,12 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     } catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _error = e;
+        if (append) {
+          // 下一页失败保留已加载的用户及重试入口。
+          _loadMoreError = e;
+        } else {
+          _error = e;
+        }
         _loading = false;
         _loadingMore = false;
       });
@@ -275,9 +292,13 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     required VoidCallback onTap,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
@@ -294,6 +315,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
+      ),
       ),
     );
   }
@@ -395,7 +417,11 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
                     ? const CircularProgressIndicator()
                     : FilledButton.tonal(
                         onPressed: () => _load(append: true),
-                        child: Text(_zh(context) ? '加载更多' : 'Load more'),
+                        child: Text(
+                          _loadMoreError != null
+                              ? (_zh(context) ? '加载失败，重试' : 'Retry loading')
+                              : (_zh(context) ? '加载更多' : 'Load more'),
+                        ),
                       ),
               ),
             );
