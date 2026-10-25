@@ -169,10 +169,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
         path,
         queryParameters: append
             ? null
-            : {
-                'page': 0,
-                if (_filter == 'all') 'month': _month,
-              },
+            : {'page': 0, if (_filter == 'all') 'month': _month},
       );
       final data = _asMap(response.data);
       final listKey = _activeCakedayView == CommunityEventsView.birthdays
@@ -299,23 +296,23 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       child: InkWell(
         onTap: onTap,
         child: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: selected ? colorScheme.primary : Colors.transparent,
-              width: 3,
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? colorScheme.primary : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: selected ? colorScheme.primary : colorScheme.onSurface,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: selected ? colorScheme.primary : colorScheme.onSurface,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-      ),
       ),
     );
   }
@@ -336,9 +333,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
                   value: month,
                   child: Text(
                     // 此处按每年的「月份」筛选，不能显示某个特定年份。
-                    DateFormat.MMMM(
-                      Localizations.localeOf(context).toString(),
-                    ).format(DateTime(2000, month)),
+                    DateFormat.MMMM(Localizations.localeOf(context).toString())
+                        .format(DateTime(2000, month)),
                   ),
                 ),
             ],
@@ -629,8 +625,10 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   }
 
   static String _normalizeFilter(String? value) {
-    if (value == 'today' || value == 'tomorrow' ||
-        value == 'upcoming' || value == 'all') {
+    if (value == 'today' ||
+        value == 'tomorrow' ||
+        value == 'upcoming' ||
+        value == 'all') {
       return value!;
     }
     if (value == 'month') return 'all';
@@ -638,9 +636,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   }
 
   static int _normalizeMonth(int? value) =>
-      value != null && value >= 1 && value <= 12
-          ? value
-          : DateTime.now().month;
+      value != null && value >= 1 && value <= 12 ? value : DateTime.now().month;
 
   static bool _zh(BuildContext context) =>
       Localizations.localeOf(context).languageCode == 'zh';
