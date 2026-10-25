@@ -239,13 +239,16 @@ Future<void> _installZip(
     } else {
       await stage.rename(target.path);
     }
-    await _commitPointer(base, packId, <String, dynamic>{
+    final pointer = <String, dynamic>{
       'schema': 1,
       'id': packId,
       'digest': expectedSha256,
       'files': hashes,
-      if (signedReleaseSequence != null) 'releaseSequence': signedReleaseSequence,
-    });
+    };
+    if (signedReleaseSequence != null) {
+      pointer['releaseSequence'] = signedReleaseSequence;
+    }
+    await _commitPointer(base, packId, pointer);
     if (signedReleaseSequence != null) {
       await _commitReleaseWatermark(base, packId, expectedSha256, signedReleaseSequence);
     }
@@ -309,7 +312,9 @@ Future<Map<String, dynamic>?> _readPointerFile(File file, String id) async {
     }
     final sequence = value['releaseSequence'];
     if (sequence != null &&
-        (sequence is! int || sequence <= 0 || sequence > 0x7fffffff)) return null;
+        (sequence is! int || sequence <= 0 || sequence > 0x7fffffff)) {
+      return null;
+    }
     if (value['disabled'] == true) return value;
     final digest = value['digest'];
     final hashes = value['files'];
