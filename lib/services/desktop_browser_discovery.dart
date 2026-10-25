@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'xdg_browser_discovery.dart';
 
@@ -9,12 +10,16 @@ class LoginBrowser {
     required this.name,
     this.executable,
     this.arguments = const [],
+    this.iconBytes,
   });
 
   final String id;
   final String name;
   final String? executable;
   final List<String> arguments;
+
+  /// Android 系统安装的真实应用图标（PNG）；桌面/iOS 可为空。
+  final Uint8List? iconBytes;
 }
 
 /// 桌面发现逻辑独立于 Flutter，可在三个系统运行文件与进程行为测试。
