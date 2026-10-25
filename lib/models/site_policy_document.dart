@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
@@ -58,7 +60,7 @@ class SitePolicyDocument {
     }
     for (final element in content.querySelectorAll('*')) {
       for (final key in element.attributes.keys.toList()) {
-        if (key.toLowerCase().startsWith('on')) {
+        if (key.toString().toLowerCase().startsWith('on')) {
           element.attributes.remove(key);
         }
       }
@@ -106,7 +108,11 @@ class SitePolicyDocument {
           anchor = node.querySelector('a[name]')?.attributes['name'];
         }
       }
-      buffer.write(node.outerHtml);
+      buffer.write(
+        node is dom.Element
+            ? node.outerHtml
+            : const HtmlEscape().convert(node.text ?? ''),
+      );
     }
     flush();
 
