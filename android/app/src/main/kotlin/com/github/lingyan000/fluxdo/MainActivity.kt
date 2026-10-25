@@ -1152,7 +1152,7 @@ class MainActivity : FlutterActivity() {
      * Only generic HTTPS handlers are eligible; never offer FluxDO itself,
      * another app's deep-link target, or the Android resolver as a browser.
      */
-    private fun listLoginBrowsers(): List<Map<String, Any>> {
+    private fun listLoginBrowsers(includeIcons: Boolean = true): List<Map<String, Any>> {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com/"))
         intent.addCategory(Intent.CATEGORY_BROWSABLE)
         val matches: List<ResolveInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -1248,14 +1248,16 @@ class MainActivity : FlutterActivity() {
                     "id" to entry.key,
                     "name" to entry.value
                 )
-                // 从已安装应用读取真正的 Launcher 图标；失败时 Flutter 使用默认图标。
-                try {
-                    browser["icon"] = drawableToBytes(
-                        packageManager.getApplicationIcon(entry.key),
-                        requestedSize = 64
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "Cannot load browser icon for ${entry.key}", e)
+                // 只有构建可见列表时才加载图标。点击后的校验无需重复 PNG 编码。
+                if (includeIcons) {
+                    try {
+                        browser["icon"] = drawableToBytes(
+                            packageManager.getApplicationIcon(entry.key),
+                            requestedSize = 64
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Cannot load browser icon for ${entry.key}", e)
+                    }
                 }
                 browser
             }
@@ -1293,7 +1295,7 @@ class MainActivity : FlutterActivity() {
         if (!isLoginAuthorizationUri(uri)) return false
         // Re-check the selection to prevent package spoofing and unintentional
         // disclosure of the one-time authorization request to other apps.
-        if (listLoginBrowsers().none { it["id"] == browserPackage }) return false
+        if (listLoginBrowsers(includeIcons = false).none { it["id"] == browserPackage }) return false
         return try {
             val intent = Intent(Intent.ACTION_VIEW, uri).apply {
                 addCategory(Intent.CATEGORY_BROWSABLE)
