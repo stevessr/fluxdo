@@ -170,10 +170,10 @@ jobs:
         run: flutter test test/pages/topic_detail_page/topic_more_menu_actions_test.dart test/widgets/topic/add_to_board_sheet_test.dart
 
       - name: Check topic account switcher formatting
-        run: >-
-          dart format --output=none --set-exit-if-changed
-          lib/pages/topic_detail_page/topic_detail_page.dart
-          test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+        run: |
+          dart format lib/pages/topic_detail_page/topic_detail_page.dart test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+          git diff -- lib/pages/topic_detail_page/topic_detail_page.dart test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
+          git diff --exit-code -- lib/pages/topic_detail_page/topic_detail_page.dart test/pages/topic_detail_page/topic_profile_switcher_contract_test.dart
 
       - name: Analyze topic account switcher
         run: >-
