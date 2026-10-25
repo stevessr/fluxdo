@@ -122,6 +122,8 @@ dependencies:
   mime: ^2.0.0
   # MediaCompatService 本地副本文件名 (sha1(url),确定性、重启可复用)
   crypto: ^3.0.7
+  fluxdo_plugin_contract:
+    path: packages/fluxdo_plugin_contract
   hive_ce: ^2.19.3
   hive_ce_flutter: ^2.3.4
   dns_client: ^1.3.1

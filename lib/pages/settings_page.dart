@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/s.dart';
 import '../models/shortcut_binding.dart';
+import '../services/android_sticker_companion_service.dart';
+import '../services/stevessr_export_service.dart';
 import '../providers/shortcut_provider.dart';
 import '../providers/theme_provider.dart';
 import '../settings/search/settings_search_index.dart';
@@ -16,6 +19,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 import '../widgets/esc_fallback_observer.dart';
 import '../widgets/layout/master_detail_layout.dart';
 import 'about_page.dart';
+import 'android_plugins_page.dart';
 import 'account_manage_page.dart';
 import 'appearance_page.dart';
 import 'bottom_nav_settings_page.dart';
@@ -413,9 +417,32 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               icon: Icons.auto_awesome_rounded,
               iconColor: Colors.pink,
               title: l10n.title,
-              onTap: () =>
-                  _openSettingsPage((_) => const StevessrGeneratorPage()),
+              onTap: () async {
+                if (await AndroidStickerCompanionService.isAvailable()) {
+                  try {
+                    final image = await AndroidStickerCompanionService.generate();
+                    if (image != null) await StevessrExportService.save(image);
+                  } catch (error) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(error.toString())),
+                      );
+                    }
+                  }
+                  return;
+                }
+                if (mounted) {
+                  _openSettingsPage((_) => const StevessrGeneratorPage());
+                }
+              },
             ),
+            if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+              _buildOptionTile(
+                icon: Icons.extension_rounded,
+                iconColor: Colors.deepPurple,
+                title: 'Android 插件',
+                onTap: () => _openSettingsPage((_) => const AndroidPluginsPage()),
+              ),
             _buildOptionTile(
               icon: Symbols.info_rounded,
               iconColor: Colors.indigo,

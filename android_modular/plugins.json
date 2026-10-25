@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": 1,
+  "hostPackage": "com.github.lingyan000.fluxdo",
+  "plugins": [
+    {
+      "id": "deviceinfo",
+      "name": "设备诊断",
+      "kind": "native",
+      "module": "plugin_deviceinfo",
+      "package": "com.github.lingyan000.fluxdo.plugin.deviceinfo",
+      "service": "com.github.lingyan000.fluxdo.plugin.deviceinfo.DeviceInfoService",
+      "operations": ["device.snapshot"],
+      "libraries": ["plugin_api"],
+      "versionCode": 1,
+      "versionName": "0.1.0"
+    },
+    {
+      "id": "network",
+      "name": "网络诊断",
+      "kind": "native",
+      "module": "plugin_network",
+      "package": "com.github.lingyan000.fluxdo.plugin.network",
+      "service": "com.github.lingyan000.fluxdo.plugin.network.NetworkService",
+      "operations": ["network.state", "network.lookup"],
+      "libraries": ["plugin_api"],
+      "versionCode": 1,
+      "versionName": "0.1.0"
+    },
+    {
+      "id": "cdk",
+      "name": "CDK 元宇宙",
+      "kind": "native",
+      "module": "plugin_cdk",
+      "package": "com.github.lingyan000.fluxdo.plugin.cdk",
+      "service": "com.github.lingyan000.fluxdo.plugin.cdk.CdkPluginService",
+      "activity": "com.github.lingyan000.fluxdo.plugin.cdk.CdkActivity",
+      "operations": ["metaverse.capabilities"],
+      "libraries": ["plugin_api", "plugin_web_session"],
+      "versionCode": 1,
+      "versionName": "0.1.0"
+    },
+    {
+      "id": "ldc",
+      "name": "LDC 元宇宙",
+      "kind": "native",
+      "module": "plugin_ldc",
+      "package": "com.github.lingyan000.fluxdo.plugin.ldc",
+      "service": "com.github.lingyan000.fluxdo.plugin.ldc.LdcPluginService",
+      "activity": "com.github.lingyan000.fluxdo.plugin.ldc.LdcActivity",
+      "operations": ["metaverse.capabilities"],
+      "libraries": ["plugin_api", "plugin_web_session"],
+      "versionCode": 1,
+      "versionName": "0.1.0"
+    },
+    {
+      "id": "ldc_reward",
+      "name": "LDC 打赏",
+      "kind": "native",
+      "module": "plugin_ldc_reward",
+      "package": "com.github.lingyan000.fluxdo.plugin.ldc_reward",
+      "service": "com.github.lingyan000.fluxdo.plugin.ldc_reward.LdcRewardPluginService",
+      "activity": "com.github.lingyan000.fluxdo.plugin.ldc_reward.LdcRewardActivity",
+      "operations": ["reward.capabilities"],
+      "libraries": ["plugin_api"],
+      "versionCode": 1,
+      "versionName": "0.1.0"
+    },
+    {
+      "id": "sticker",
+      "name": "表情包生成器",
+      "kind": "flutter",
+      "package": "com.github.lingyan000.fluxdo.plugin.sticker",
+      "activity": "com.github.lingyan000.fluxdo.plugin.sticker.StickerActivity",
+      "operations": [],
+      "libraries": [],
+      "versionCode": 1,
+      "versionName": "0.1.0"
+    }
+  ]
+}

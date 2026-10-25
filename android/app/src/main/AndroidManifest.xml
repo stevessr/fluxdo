@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only FluxDO-signed optional APKs may provide plugins. -->
+    <permission android:name="com.github.lingyan000.fluxdo.permission.BIND_PLUGIN" android:protectionLevel="signature" />
+    <uses-permission android:name="com.github.lingyan000.fluxdo.permission.BIND_PLUGIN" />
     <!-- 通知权限 (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- 扫码登录:相机 -->
@@ -171,6 +174,13 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Package visibility on Android 11+; no global enumeration needed for plugins. -->
+        <package android:name="com.github.lingyan000.fluxdo.plugin.deviceinfo" />
+        <package android:name="com.github.lingyan000.fluxdo.plugin.network" />
+        <package android:name="com.github.lingyan000.fluxdo.plugin.sticker" />
+        <package android:name="com.github.lingyan000.fluxdo.plugin.cdk" />
+        <package android:name="com.github.lingyan000.fluxdo.plugin.ldc" />
+        <package android:name="com.github.lingyan000.fluxdo.plugin.ldc_reward" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

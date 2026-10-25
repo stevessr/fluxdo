@@ -1,0 +1,294 @@
+name: Android optional plugin APKs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feat/android-independent-plugin-apks'
+    paths:
+      - 'packages/fluxdo_plugin_contract/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'android/plugin_*/**'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
+      - 'android/settings.gradle.kts'
+      - 'android/native_plugins/**'
+      - 'android/plugin-versions.properties'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginCatalog.kt'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/StickerCompanionChannel.kt'
+      - 'scripts/ci/android_plugin_catalog.py'
+      - 'scripts/ci/generate_android_plugin_catalog.py'
+      - 'scripts/ci/build_native_plugins.py'
+      - 'scripts/ci/dart_source_boundary.py'
+      - 'scripts/ci/test_android_plugin_catalog.py'
+      - 'scripts/ci/test_android_apk_contract.py'
+      - 'scripts/ci/prepare_android_nightly.py'
+      - 'scripts/ci/test_android_nightly.py'
+      - 'scripts/ci/test_dart_source_boundary.py'
+      - 'android_companions/**'
+      - 'scripts/ci/build_sticker_companion.py'
+      - 'scripts/ci/check_sticker_isolation.py'
+      - 'android_companions/sticker/shims/**'
+      - 'scripts/ci/build_android_core_modular.py'
+      - 'scripts/ci/test_android_modular_contract.py'
+      - 'scripts/ci/test_sticker_companion_contract.py'
+      - 'scripts/ci/check_android_apk_contract.py'
+      - 'android_modular/**'
+      - 'scripts/ci/check_android_plugin_contract.py'
+      - 'lib/services/android_optional_plugin_service.dart'
+      - 'lib/pages/android_plugins_page.dart'
+      - 'lib/pages/metaverse_page.dart'
+      - 'lib/services/android_sticker_companion_service.dart'
+      - 'lib/services/stevessr_composer_service.dart'
+      - 'test/services/android_sticker_companion_service_test.dart'
+      - 'test/services/android_optional_plugin_service_test.dart'
+      - 'android/plugin_api/src/main/kotlin/com/github/lingyan000/fluxdo/plugin/api/PluginWebSession.kt'
+      - '.github/workflows/android-plugin-apks.yml'
+  pull_request:
+    paths:
+      - 'packages/fluxdo_plugin_contract/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'android/plugin_*/**'
+      - 'android_modular/**'
+      - 'scripts/ci/build_android_core_modular.py'
+      - 'scripts/ci/test_android_modular_contract.py'
+      - 'scripts/ci/test_sticker_companion_contract.py'
+      - 'scripts/ci/check_android_apk_contract.py'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginChannel.kt'
+      - 'android/settings.gradle.kts'
+      - 'android/native_plugins/**'
+      - 'android/plugin-versions.properties'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/OptionalPluginCatalog.kt'
+      - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/StickerCompanionChannel.kt'
+      - 'scripts/ci/android_plugin_catalog.py'
+      - 'scripts/ci/generate_android_plugin_catalog.py'
+      - 'scripts/ci/build_native_plugins.py'
+      - 'scripts/ci/dart_source_boundary.py'
+      - 'scripts/ci/test_android_plugin_catalog.py'
+      - 'scripts/ci/test_android_apk_contract.py'
+      - 'scripts/ci/prepare_android_nightly.py'
+      - 'scripts/ci/test_android_nightly.py'
+      - 'scripts/ci/test_dart_source_boundary.py'
+      - 'android_companions/**'
+      - 'scripts/ci/build_sticker_companion.py'
+      - 'scripts/ci/check_sticker_isolation.py'
+      - 'android_companions/sticker/shims/**'
+      - 'scripts/ci/check_android_plugin_contract.py'
+      - 'lib/services/android_optional_plugin_service.dart'
+      - 'lib/pages/android_plugins_page.dart'
+      - 'lib/pages/metaverse_page.dart'
+      - 'lib/services/android_sticker_companion_service.dart'
+      - 'lib/services/stevessr_composer_service.dart'
+      - 'test/services/android_sticker_companion_service_test.dart'
+      - 'test/services/android_optional_plugin_service_test.dart'
+      - 'android/plugin_api/src/main/kotlin/com/github/lingyan000/fluxdo/plugin/api/PluginWebSession.kt'
+      - '.github/workflows/android-plugin-apks.yml'
+
+# Only the newest branch snapshot is useful when iterating on APK
+# compatibility. Avoid installing Rust/NDK/Flutter for obsolete pushes.
+concurrency:
+  group: android-plugin-apks-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate generated catalog, module boundaries and signing contracts
+        run: |
+          python3 scripts/ci/generate_android_plugin_catalog.py --check
+          python3 scripts/ci/check_android_plugin_contract.py
+          python3 -m unittest discover -s scripts/ci -p 'test_android*.py' -v
+          python3 -m unittest discover -s scripts/ci -p 'test_sticker*.py' -v
+          python3 -m unittest discover -s scripts/ci -p 'test_dart_source_boundary.py' -v
+          python3 scripts/ci/build_native_plugins.py --plan
+          python3 scripts/ci/build_android_core_modular.py --prepare-only
+
+  dart-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.13.1'
+      - name: Validate plugin contract without Flutter or network dependencies
+        working-directory: packages/fluxdo_plugin_contract
+        run: |
+          dart pub get --offline
+          dart analyze --fatal-infos
+          dart run test/contract_test.dart
+
+  flutter-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Prepare required asset directories
+        run: mkdir -p assets/certs
+      - name: Resolve host dependencies
+        run: flutter pub get
+      - name: Prepare generated locale and avatar assets
+        run: dart tool/project_prep.dart test
+      - name: Analyze Flutter plugin manager
+        run: |
+          dart analyze lib/services/android_optional_plugin_service.dart
+          dart analyze lib/pages/android_plugins_page.dart
+      - name: Analyze new companion callsites
+        run: |
+          dart analyze lib/services/android_sticker_companion_service.dart
+          dart analyze lib/services/stevessr_composer_service.dart
+          dart analyze lib/pages/metaverse_page.dart
+          dart analyze android_companions/sticker/shims/lib/services/assets/static_asset_packs.dart
+      - name: Test companion result protocol and account partition
+        run: |
+          flutter test test/services/android_sticker_companion_service_test.dart
+          flutter test test/services/android_optional_plugin_service_test.dart
+
+  build:
+    needs: [contracts, dart-contracts, flutter-contracts]
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # This repository deliberately does not check in android/gradlew or its
+      # wrapper JAR. Use the pinned Gradle version from wrapper.properties.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
+          cache-cleanup: never
+      # v3 asks sdkmanager for the retired "tools" package and now fails.
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - name: Install native Android SDK
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Unit test native cross-APK payload validation (no Flutter)
+        run: gradle -p android/native_plugins :plugin_api:testDebugUnitTest --no-daemon
+      - name: Build native companions before Flutter setup (debug test-signing)
+        id: build_native
+        run: python3 scripts/ci/build_native_plugins.py --mode debug
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Install Android SDK & Rust NDK build requirements
+        run: |
+          set -euo pipefail
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+          rustup target add aarch64-linux-android
+          if ! command -v cargo-ndk >/dev/null 2>&1; then
+            cargo install cargo-ndk --locked
+          fi
+      - name: Prepare required Flutter asset directories
+        run: mkdir -p assets/certs
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Prepare generated locale and avatar assets
+        run: dart tool/project_prep.dart test
+      - name: Check standalone Sticker source closure (no FluxDO import)
+        run: python3 scripts/ci/check_sticker_isolation.py
+      - name: Build independent Flutter sticker APK
+        id: build_sticker
+        continue-on-error: true
+        run: python3 scripts/ci/build_sticker_companion.py --mode debug --abi android-arm64
+      # Core still compiles when Sticker fails; the final gate checks outcomes.
+      - name: Compile lean Android Core APK (source and resources isolated)
+        id: build_core
+        run: |
+          python3 scripts/ci/build_android_core_modular.py --mode debug --abi android-arm64
+          test -s build/app/outputs/flutter-apk/app-debug.apk
+      # build_android_core_modular already compiles the host Kotlin bridge in
+      # its prepared, isolated project. Rebuilding :app here would compile the
+      # monolith without its generated CA and overwrite the verified Core APK.
+      - name: Validate produced APKs
+        if: ${{ always() && !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.build_native.outcome }}" = "success"
+          test "${{ steps.build_core.outcome }}" = "success"
+          test "${{ steps.build_sticker.outcome }}" = "success" || {
+            echo "::error::Standalone Sticker APK compile failed"; exit 1;
+          }
+          test -s build/plugin_deviceinfo/outputs/apk/debug/plugin_deviceinfo-debug.apk
+          test -s build/plugin_network/outputs/apk/debug/plugin_network-debug.apk
+          test -s build/plugin_cdk/outputs/apk/debug/plugin_cdk-debug.apk
+          test -s build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk
+          test -s build/plugin_ldc_reward/outputs/apk/debug/plugin_ldc_reward-debug.apk
+          python3 scripts/ci/check_android_apk_contract.py \
+            --build-mode debug --report build/android-modular-apks.json \
+            --core build/app/outputs/flutter-apk/app-debug.apk \
+            --plugin deviceinfo build/plugin_deviceinfo/outputs/apk/debug/plugin_deviceinfo-debug.apk \
+            --plugin network build/plugin_network/outputs/apk/debug/plugin_network-debug.apk \
+            --plugin cdk build/plugin_cdk/outputs/apk/debug/plugin_cdk-debug.apk \
+            --plugin ldc build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk \
+            --plugin ldc_reward build/plugin_ldc_reward/outputs/apk/debug/plugin_ldc_reward-debug.apk \
+            --plugin sticker build/plugin_sticker/fluxdo-sticker-android-arm64-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-modular-apk-identities
+          path: |
+            build/android-modular-apks.json
+            build/native_plugins/native-debug-artifacts.json
+          if-no-files-found: error
+      # A modular Core must be delivered alongside its separately signed
+      # companions; otherwise Android users cannot install/test the exact set.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-core-modular-arm64-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-sticker-dependency-audit
+          path: build/plugin_sticker/sticker-dependencies-android-arm64-debug.md
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-deviceinfo-debug-apk
+          path: build/plugin_deviceinfo/outputs/apk/debug/plugin_deviceinfo-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-network-debug-apk
+          path: build/plugin_network/outputs/apk/debug/plugin_network-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-sticker-arm64-debug-apk
+          path: build/plugin_sticker/fluxdo-sticker-android-arm64-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-cdk-debug-apk
+          path: build/plugin_cdk/outputs/apk/debug/plugin_cdk-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-ldc-debug-apk
+          path: build/plugin_ldc/outputs/apk/debug/plugin_ldc-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-ldc-reward-debug-apk
+          path: build/plugin_ldc_reward/outputs/apk/debug/plugin_ldc_reward-debug.apk
+          if-no-files-found: error

@@ -1,0 +1,535 @@
+#!/usr/bin/env python3
+"""Build a real, separately installable Flutter sticker companion APK.
+
+Runs outside the root Dart workspace to avoid nested-workspace conflicts.
+Requires root 'dart tool/project_prep.dart test' to have generated l10n and
+avatar delta assets. Uses the same applicationId on every update.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+from zipfile import ZipFile
+import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
+
+from android_plugin_catalog import load_catalog
+from dart_source_boundary import verify_dart_sources
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = ROOT / "android_companions/sticker"
+STICKER = load_catalog().plugin("sticker")
+PACKAGE = STICKER.package
+ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
+
+# Copy only the editor's Dart import closure. No entire FluxDO package, no
+# account/network/chat code, and no broad plugin registration in the APK.
+DRAWING_SOURCES = (
+    "lib/pages/stevessr_generator_page.dart",
+    "lib/models/stevessr_render_params.dart",
+    "lib/services/stevessr_export_service.dart",
+    "lib/services/stevessr_text_layout.dart",
+    "lib/services/stevessr_character_assets.dart",
+    "lib/services/avatar_delta_codec.dart",
+    "lib/utils/screenshot_utils.dart",
+    "lib/l10n/s.dart",
+    "lib/l10n/app_localizations.dart",
+)
+DRAWING_TREES = ("lib/widgets/stevessr", "lib/l10n/slang", "lib/l10n/generated")
+SHIM_TREE = SOURCE / "shims/lib"
+
+
+# Flutter's native registrant includes transitive *platform* implementations,
+# not just the dependencies listed directly in companion/pubspec.yaml.
+# This explicit set was audited from the isolated 2026-10-16 pub resolution.
+# It must never expand to arbitrary packages merely because the full host uses
+# them. The lockfile still has to contain every registered native package.
+ALLOWED_ANDROID_NATIVE_PLUGINS = frozenset({
+    "file_picker",
+    "flutter_avif_android",
+    "flutter_plugin_android_lifecycle",
+    "gal",
+    "jni",
+    "jni_flutter",
+    "path_provider_android",
+    "share_plus",
+    "sqflite_android",
+})
+FORBIDDEN_ANDROID_NATIVE_PLUGINS = frozenset({
+    "flutter_inappwebview_android",
+    "flutter_local_notifications",
+    "firebase_core",
+    "firebase_messaging",
+    "rhttp",
+    "cronet_http",
+})
+
+
+def stage_drawing_sources(target: Path) -> None:
+    for relative in DRAWING_SOURCES:
+        source = ROOT / relative
+        if not source.is_file():
+            raise FileNotFoundError(
+                f"Missing generated or checked-in drawing code: {source}; "
+                "run dart tool/project_prep.dart test"
+            )
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+    for relative in DRAWING_TREES:
+        source = ROOT / relative
+        if not source.is_dir():
+            raise FileNotFoundError(
+                f"Missing generated drawing/localization tree: {source}; "
+                "run dart tool/project_prep.dart test"
+            )
+        shutil.copytree(source, target / relative, dirs_exist_ok=True)
+    for source in SHIM_TREE.rglob("*.dart"):
+        destination = target / "lib" / source.relative_to(SHIM_TREE)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+
+    # Use the same complete directive parser as Core. Conditional imports,
+    # exports and parts cannot reach host sources or escape the staged tree.
+    verify_dart_sources(target, own_package="fluxdo_sticker_companion", allowed_packages={
+        "flutter", "flutter_localizations", "intl", "slang", "slang_flutter",
+        "file_picker", "flutter_avif", "image", "cross_file", "path_provider",
+        "share_plus", "gal",
+    })
+    print("Sticker source isolation: OK; no FluxDO root dependency")
+
+
+
+def execute(*args: str, cwd: Path) -> None:
+    print("+", " ".join(args), flush=True)
+    subprocess.run(args, cwd=cwd, check=True)
+
+
+def kotlin_path(path: Path) -> str:
+    return json.dumps(path.as_posix()).replace("$", r"\$")
+
+
+def configure_android_app_gradle(gradle: str, root: Path, mode: str) -> str:
+    """Configure a generated Flutter app without depending on Gradle or assets."""
+    # flutter create derives "<org>.sticker" as the exact expected package.
+    # Explicitly verify rather than allowing a non-upgradable package ID.
+    if f'applicationId = "{PACKAGE}"' not in gradle:
+        raise RuntimeError(
+            f"Unexpected Sticker applicationId; expected {PACKAGE}"
+        )
+    if f'namespace = "{PACKAGE}"' not in gradle:
+        raise RuntimeError(
+            f"Unexpected Sticker Android namespace; expected {PACKAGE}"
+        )
+    # Flutter currently emits a Kotlin DSL Android project. Preserve generated
+    # Flutter Gradle wiring; only inject the APK's native bridge requirements.
+    assert "flutter.compileSdkVersion" in gradle
+    if gradle.count("\nandroid {") != 1:
+        raise RuntimeError("Expected one Flutter Android extension block")
+    # Use AGP's public DSL explicitly; signing must not select a deprecated
+    # legacy android() overload or a Gradle java extension named `java`.
+    gradle = (
+        "import com.android.build.api.dsl.ApplicationExtension\n"
+        "import java.io.File as StickerSigningFile\n"
+        "import java.util.Properties as StickerSigningProperties\n\n" + gradle
+    ).replace("\nandroid {", "\nextensions.configure<ApplicationExtension> {", 1)
+    gradle = gradle.replace('        release {', '        getByName("release") {', 1)
+    gradle = gradle.replace(
+        "ndkVersion = flutter.ndkVersion",
+        'ndkVersion = "28.2.13676358"',
+    )
+    if "dependencies {" not in gradle:
+        gradle += '\n\ndependencies {\n    implementation("androidx.core:core:1.16.0")\n}\n'
+    else:
+        gradle = gradle.replace(
+            "dependencies {",
+            'dependencies {\n    implementation("androidx.core:core:1.16.0")',
+            1,
+        )
+    original_props = root / "android/key.properties"
+    if mode == "release" and not original_props.is_file():
+        raise RuntimeError("Release requires the same android/key.properties as FluxDO")
+    # Core :app signs *all* build variants with the release key when present.
+    # Apply the identical rule here so debug Core and debug Sticker match.
+    if original_props.is_file():
+        anchor = 'signingConfig = signingConfigs.getByName("debug")'
+        if anchor not in gradle:
+            raise RuntimeError("Generated Flutter release signing layout changed")
+        signing_block = '''
+    signingConfigs {
+        create("fluxdoSharedRelease") {
+            val props = StickerSigningProperties().apply {
+                StickerSigningFile(PLACEHOLDER_PROPS).inputStream().use { load(it) }
+            }
+            val keyLocation = StickerSigningFile(props.getProperty("storeFile"))
+            // Match :app's existing signing resolution order: relative paths
+            // are based on android/app, then the Android project root.
+            storeFile = if (keyLocation.isAbsolute) keyLocation else
+                sequenceOf(
+                    StickerSigningFile(PLACEHOLDER_APP, props.getProperty("storeFile")),
+                    StickerSigningFile(PLACEHOLDER_ANDROID, props.getProperty("storeFile")),
+                ).firstOrNull { it.isFile }
+            require(storeFile?.isFile == true) { "Release keystore not found" }
+            storePassword = props.getProperty("storePassword")
+            keyAlias = props.getProperty("keyAlias")
+            keyPassword = props.getProperty("keyPassword")
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
+'''
+        signing_block = signing_block.replace(
+            "PLACEHOLDER_PROPS", kotlin_path(original_props)
+        ).replace("PLACEHOLDER_APP", kotlin_path(root / "android/app"))
+        signing_block = signing_block.replace("PLACEHOLDER_ANDROID", kotlin_path(root / "android"))
+        if "    buildTypes {" not in gradle:
+            raise RuntimeError("Expected Flutter Android buildTypes block")
+        gradle = gradle.replace("    buildTypes {", signing_block + "    buildTypes {", 1)
+        gradle = gradle.replace(
+            anchor, 'signingConfig = signingConfigs.getByName("fluxdoSharedRelease")', 1
+        )
+        # Flutter's template declares release only; add an explicit debug
+        # signer in the generated app. Same-signer check must pass locally.
+        gradle = gradle.replace(
+            "    buildTypes {",
+            '    buildTypes {\n        getByName("debug") {\n'
+            '            signingConfig = signingConfigs.getByName("fluxdoSharedRelease")\n'
+            '        }',
+            1,
+        )
+    return gradle
+
+
+def setup_project(target: Path, mode: str) -> None:
+    execute(
+        "flutter", "create", "--platforms=android", "--org=com.github.lingyan000.fluxdo.plugin",
+        "--project-name=sticker", "--no-pub", str(target),
+        cwd=ROOT,
+    )
+    yaml = (SOURCE / "pubspec.yaml").read_text()
+    if "fluxdo:" in yaml or "path: ../.." in yaml:
+        raise RuntimeError("Sticker APK must not depend on the FluxDO app")
+    (target / "pubspec.yaml").write_text(yaml)
+    (target / "lib/main.dart").write_text((SOURCE / "lib/main.dart").read_text())
+    stage_drawing_sources(target)
+
+    source_assets = ROOT / "assets/images/avater"
+    for name in ["stevessr", "llm", "touhou", "blue_archive", "witch_judgment"]:
+        source_dir = source_assets / name
+        dest = target / "assets/images/avater" / name
+        assert source_dir.is_dir(), f"Missing avatar assets: {source_dir}"
+        shutil.copytree(source_dir, dest, dirs_exist_ok=True)
+    for name in ["stevessr", "llm"]:
+        assert (target / f"assets/images/avater/{name}/manifest.json").is_file(), (
+            "Missing generated avatar manifests; run dart tool/project_prep.dart test"
+        )
+
+    font = ROOT / "assets/fonts/MiSansVF.ttf"
+    assert font.is_file(), f"Missing MiSans font: {font}"
+    outfont = target / "assets/fonts/MiSansVF.ttf"
+    outfont.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(font, outfont)
+
+    src = target / "android/app/src/main"
+    kotlin_path = src / "kotlin/com/github/lingyan000/fluxdo/plugin/sticker"
+    kotlin_path.mkdir(parents=True, exist_ok=True)
+    # flutter create generates a placeholder MainActivity, but the companion
+    # hosts only StickerActivity. Delete the placeholder before compilation.
+    for placeholder in (
+        src / "kotlin/com/github/lingyan000/fluxdo/plugin/sticker/MainActivity.kt",
+        src / "java/com/github/lingyan000/fluxdo/plugin/sticker/MainActivity.java",
+    ):
+        if placeholder.exists():
+            original = placeholder.read_text()
+            if "class MainActivity" not in original:
+                raise RuntimeError("Unexpected Flutter-generated MainActivity layout")
+            placeholder.unlink()
+    shutil.copy2(SOURCE / "StickerActivity.kt", kotlin_path / "StickerActivity.kt")
+    paths_xml = src / "res/xml/companion_file_paths.xml"
+    paths_xml.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SOURCE / "android_file_paths.xml", paths_xml)
+
+    ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+    manifest_path = src / "AndroidManifest.xml"
+    manifest = ET.parse(manifest_path)
+    application = manifest.getroot().find("application")
+    assert application is not None
+    activity = application.find("activity")
+    assert activity is not None
+    activity.set(ANDROID_NS + "name", ".StickerActivity")
+    activity.set(ANDROID_NS + "exported", "true")
+    # This is a host-launched capability APK, NOT an independently launchable
+    # application. Do not advertise a launcher icon that cannot be opened
+    # without the host's signature-level permission.
+    for intent_filter in list(activity.findall("intent-filter")):
+        activity.remove(intent_filter)
+    # Host-only launch, including ACTION_GET_CONTENT image handoff.
+    # Third-party apps must not be able to impersonate an export request.
+    activity.set(
+        ANDROID_NS + "permission",
+        "com.github.lingyan000.fluxdo.permission.BIND_PLUGIN",
+    )
+    ET.SubElement(manifest.getroot(), "uses-permission", {
+        ANDROID_NS + "name":
+            "com.github.lingyan000.fluxdo.permission.BIND_PLUGIN",
+    })
+    application.set(ANDROID_NS + "label", "FluxDO StevesSR")
+    provider = ET.SubElement(application, "provider", {
+        ANDROID_NS + "name": "androidx.core.content.FileProvider",
+        ANDROID_NS + "authorities": "${applicationId}.files",
+        ANDROID_NS + "exported": "false",
+        ANDROID_NS + "grantUriPermissions": "true",
+    })
+    ET.SubElement(provider, "meta-data", {
+        ANDROID_NS + "name": "android.support.FILE_PROVIDER_PATHS",
+        ANDROID_NS + "resource": "@xml/companion_file_paths",
+    })
+    manifest.write(manifest_path, encoding="utf-8", xml_declaration=True)
+
+    build_file = target / "android/app/build.gradle.kts"
+    build_file.write_text(configure_android_app_gradle(build_file.read_text(), ROOT, mode))
+
+    # The original FluxDO Android Gradle setup patches a duplicate Java/Kotlin
+    # FlutterAvifPlugin class. A standalone Sticker app cannot inherit the
+    # host Gradle fix, so reproduce only this narrowly scoped workaround.
+    root_gradle = target / "android/build.gradle.kts"
+    build_script = root_gradle.read_text()
+    if "patchStandaloneStickerAvifRedeclaration" not in build_script:
+        build_script += """
+// Android Gradle Plugin can set compileOptions after the task is registered,
+// overriding early task configuration with Java 11 even when Kotlin targets 17.
+// Run this late ONLY when the project isn't already evaluated. Projects that
+// Flutter eagerly evaluated need the same task changes immediately.
+subprojects {
+    val alignCompilerTargets = {
+        // AGP derives javac's target from android.compileOptions, which can
+        // override JavaCompile.targetCompatibility at variant creation time.
+        // Fix the actual Android source-of-truth, not only the Java task.
+        val androidExtension = extensions.findByName("android")
+        if (androidExtension != null) {
+            // flutter_avif_android still declares compileSdk 31. The isolated
+            // project must satisfy its AndroidX AAR requirements itself.
+            // Support AGP's modern and legacy DSLs, failing closed when no
+            // integer SDK setter is available.
+            val sdkSetter = androidExtension.javaClass.methods.firstOrNull {
+                it.name in setOf("setCompileSdk", "setCompileSdkVersion") &&
+                    it.parameterCount == 1 && it.parameterTypes[0] in setOf(
+                        Int::class.javaObjectType, Int::class.javaPrimitiveType
+                    )
+            } ?: error("Unsupported Android compileSdk DSL: $path")
+            sdkSetter.invoke(androidExtension, 36)
+            val compileOptions = androidExtension.javaClass
+                .getMethod("getCompileOptions").invoke(androidExtension)
+            // AGP exposes these Kotlin DSL setters as Object/Any, not
+            // JavaVersion. Match the proven FluxDO :app Gradle reflection API.
+            compileOptions.javaClass
+                .getMethod("setSourceCompatibility", Any::class.java)
+                .invoke(compileOptions, JavaVersion.VERSION_17)
+            compileOptions.javaClass
+                .getMethod("setTargetCompatibility", Any::class.java)
+                .invoke(compileOptions, JavaVersion.VERSION_17)
+            // Do not read AGP's targetCompatibility before the model is
+            // finalized: AGP 9 throws "targetCompatibility is not yet finalized"
+            // during :file_picker project evaluation. Log the requested value.
+            println("Sticker JVM alignment requested: $path android.compileOptions=17")
+        }
+        tasks.withType<JavaCompile>().configureEach {
+            sourceCompatibility = "17"
+            targetCompatibility = "17"
+        }
+        tasks.matching {
+            it.name.startsWith("compile") && it.name.endsWith("Kotlin")
+        }.configureEach {
+            try {
+                val kotlinOptions = javaClass.getMethod("getKotlinOptions")
+                    .invoke(this)
+                kotlinOptions.javaClass.getMethod("setJvmTarget", String::class.java)
+                    .invoke(kotlinOptions, "17")
+            } catch (_: Exception) {
+                // Flutter/AGP's Kotlin compiler toolchain already uses Java 17.
+            }
+        }
+        if (name == "flutter_avif_android") {
+            val patchTask = tasks.register("patchStandaloneStickerAvifRedeclaration") {
+                doFirst {
+                    val duplicate = file(
+                        "src/main/java/com/teknorota/flutter_avif/FlutterAvifPlugin.java"
+                    )
+                    if (duplicate.isFile) duplicate.delete()
+                }
+            }
+            tasks.matching { it.name.startsWith("compile") }.configureEach {
+                dependsOn(patchTask)
+            }
+        }
+    }
+    if (state.executed) {
+        alignCompilerTargets()
+    } else {
+        afterEvaluate { alignCompilerTargets() }
+    }
+}
+"""
+    root_gradle.write_text(build_script)
+
+
+def verify_drawing_dependency_graph(target: Path) -> tuple[int, list[str]]:
+    """Validate every registered native package against the minimal APK.
+
+    A direct dependency may bring its own Android implementation, lifecycle
+    helpers, JNI or SQLite. They belong in the isolated lock/registrant graph
+    and must be reviewed by exact package ID, not a broad startswith prefix.
+    """
+    import re
+
+    lockfile = target / "pubspec.lock"
+    if not lockfile.is_file():
+        raise RuntimeError("Sticker Flutter pub get did not produce a lockfile")
+    lines = lockfile.read_text(encoding="utf-8").splitlines()
+    try:
+        packages_start = lines.index("packages:")
+        packages_end = lines.index("sdks:", packages_start + 1)
+    except ValueError as error:
+        raise RuntimeError("Unexpected pubspec.lock package structure") from error
+    packages = {
+        match.group(1)
+        for line in lines[packages_start + 1:packages_end]
+        if (match := re.fullmatch(r"  ([a-zA-Z][a-zA-Z0-9_]*):", line))
+    }
+    if len(packages) < 8 or "fluxdo" in packages:
+        raise RuntimeError("Sticker resolved incomplete or monolithic dependencies")
+
+    registration = target / ".flutter-plugins-dependencies"
+    if not registration.is_file():
+        raise RuntimeError("Sticker Flutter native plugin registry is missing")
+    data = json.loads(registration.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise RuntimeError("Sticker Flutter plugin registry is invalid")
+    entries = data.get("plugins", {}).get("android")
+    if not isinstance(entries, list):
+        raise RuntimeError("Sticker Flutter plugin registry lacks Android plugins")
+    plugins = []
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+            raise RuntimeError("Malformed Android plugin registry entry")
+        name = entry["name"]
+        if name in plugins:
+            raise RuntimeError(f"Duplicate Android native plugin: {name}")
+        plugins.append(name)
+    if not plugins:
+        raise RuntimeError("Sticker APK resolved no Android native plugins")
+
+    unexpected = set(plugins) - ALLOWED_ANDROID_NATIVE_PLUGINS
+    if unexpected:
+        raise RuntimeError(
+            "Unexpected native plugins in Sticker-only APK: "
+            + ", ".join(sorted(unexpected))
+        )
+    forbidden = set(plugins) & FORBIDDEN_ANDROID_NATIVE_PLUGINS
+    if forbidden:
+        raise RuntimeError("Host plugins registered in Sticker: " + ", ".join(sorted(forbidden)))
+    missing = set(plugins) - packages
+    if missing:
+        raise RuntimeError(
+            "Android plugin registry references missing lockfile packages: "
+            + ", ".join(sorted(missing))
+        )
+    # These must exist for the generator's own save/share/AVIF paths to work.
+    required = {"file_picker", "flutter_avif_android", "gal", "path_provider_android", "share_plus"}
+    if required - set(plugins):
+        raise RuntimeError("Sticker native plugins missing: " + ", ".join(sorted(required - set(plugins))))
+    print(f"Sticker Android native plugin registry: {plugins}")
+    print(f"Sticker resolved Dart packages: {len(packages)}")
+    return len(packages), plugins
+
+
+def verify_sticker_apk(apk: Path) -> None:
+    with ZipFile(apk) as bundle:
+        entries = bundle.namelist()
+    if not any("flutter_assets/assets/images/avater/" in name for name in entries):
+        raise RuntimeError("Sticker APK lost its companion-only character assets")
+    blocked_assets = (
+        "flutter_assets/assets/certs/",
+        "flutter_assets/assets/cook/",
+        "flutter_assets/assets/polyfill/",
+        "flutter_assets/assets/ai_brands/",
+    )
+    for asset in blocked_assets:
+        if any(asset in name for name in entries):
+            raise RuntimeError(f"FluxDO host asset leaked into Sticker: {asset}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["debug", "release"], default="debug")
+    parser.add_argument("--abi", choices=["android-arm", "android-arm64", "android-x64", "universal"],
+                        default="android-arm64")
+    parser.add_argument("--version-code", type=int, default=STICKER.version_code)
+    parser.add_argument("--version-name", default=STICKER.version_name)
+    args = parser.parse_args()
+    if args.version_code is not None and not (1 <= args.version_code < 2100000000):
+        parser.error("--version-code must be a positive Android-compatible int")
+    with tempfile.TemporaryDirectory(prefix="fluxdo-sticker-companion-") as temp:
+        target = Path(temp) / "sticker"
+        setup_project(target, args.mode)
+        execute("flutter", "pub", "get", cwd=target)
+        dart_packages, native_plugins = verify_drawing_dependency_graph(target)
+        flutter_abis = (
+            "android-arm,android-arm64,android-x64"
+            if args.abi == "universal" else args.abi
+        )
+        command = ["flutter", "build", "apk", "--" + args.mode,
+                   "--target-platform", flutter_abis, "--no-pub"]
+        if args.version_code is not None:
+            command += ["--build-number", str(args.version_code)]
+        if args.version_name:
+            command += ["--build-name", args.version_name]
+        try:
+            execute(*command, cwd=target)
+        except subprocess.CalledProcessError:
+            # Flutter normally prints only the Gradle task summary. Keep the
+            # ephemeral project alive long enough for a diagnostic rerun with
+            # actual AGP/Kotlin stacktraces before raising the original error.
+            gradle_wrapper = target / "android/gradlew"
+            if gradle_wrapper.is_file():
+                print("Sticker build failed; collecting Gradle stacktrace", flush=True)
+                subprocess.run(
+                    [str(gradle_wrapper), ":app:assembleDebug", "--stacktrace",
+                     "--console=plain", "--no-daemon"],
+                    cwd=target / "android",
+                    check=False,
+                    timeout=180,
+                )
+            raise
+        apk_dir = target / "build/app/outputs/flutter-apk"
+        candidates = list(apk_dir.glob("*.apk"))
+        assert len(candidates) == 1, f"Expected single APK: {candidates}"
+        verify_sticker_apk(candidates[0])
+        dest = ROOT / "build/plugin_sticker"
+        dest.mkdir(parents=True, exist_ok=True)
+        out = dest / f"fluxdo-sticker-{args.abi}-{args.mode}.apk"
+        shutil.copy2(candidates[0], out)
+        report = dest / f"sticker-dependencies-{args.abi}-{args.mode}.md"
+        report.write_text(chr(10).join([
+            "# Standalone Sticker dependencies",
+            "",
+            f"- Dart packages resolved: **{dart_packages}**",
+            f"- Android native Flutter plugins: **{len(native_plugins)}**",
+            f"- Native plugin names: {', '.join(native_plugins)}",
+            f"- APK compressed bytes: **{out.stat().st_size:,}**",
+            "- FluxDO root application dependency: **none**",
+            "- Forum/account/messaging native plugins: **excluded**",
+            "",
+        ]))
+        print(f"Independent companion APK: {out} ({out.stat().st_size} bytes)")
+        print(report.read_text())
+
+
+if __name__ == "__main__":
+    main()

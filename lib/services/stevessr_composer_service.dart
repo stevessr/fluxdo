@@ -9,6 +9,7 @@ import '../pages/stevessr_generator_page.dart';
 import '../widgets/content/discourse_html_content/image_utils.dart';
 import 'discourse/discourse_service.dart';
 import 'stevessr_export_service.dart';
+import 'android_sticker_companion_service.dart';
 
 /// 已上传的 StevesSR 图片，供帖子编辑器和聊天附件共用。
 class StevessrUploadedImage {
@@ -32,7 +33,16 @@ abstract final class StevessrComposerService {
 
   /// 打开生成器，点击「生成并插入」后上传图片并返回附件信息。
   /// 用户取消时返回 null。
-  static Future<StevessrUploadedImage?> openAndUpload(BuildContext context) {
+  static Future<StevessrUploadedImage?> openAndUpload(BuildContext context) async {
+    // Android only: use separately signed and independently updatable APK.
+    // Network upload still happens in the trusted FluxDO process, preserving
+    // its account cookies and the existing transparency/format safeguards.
+    if (await AndroidStickerCompanionService.isAvailable()) {
+      final image = await AndroidStickerCompanionService.generate();
+      if (image == null) return null;
+      return upload(image);
+    }
+    if (!context.mounted) return null;
     return Navigator.of(context).push<StevessrUploadedImage>(
       MaterialPageRoute(
         builder: (pageContext) => StevessrGeneratorPage(

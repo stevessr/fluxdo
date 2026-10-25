@@ -1,0 +1,10 @@
+name: fluxdo_plugin_contract
+description: Framework-independent contracts for FluxDO companion modules.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+# Intentionally outside the root Pub workspace. Resolve/analyze/test this
+# package with only Dart, including when the Flutter host is unavailable.

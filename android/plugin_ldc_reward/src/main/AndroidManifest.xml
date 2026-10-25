@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="com.github.lingyan000.fluxdo.permission.BIND_PLUGIN" />
+    <application android:label="FluxDO LDC Reward" android:usesCleartextTraffic="false">
+        <service android:name=".LdcRewardPluginService"
+            android:exported="true"
+            android:permission="com.github.lingyan000.fluxdo.permission.BIND_PLUGIN">
+            <meta-data android:name="com.github.lingyan000.fluxdo.plugin.PROTOCOL" android:value="1" />
+        </service>
+        <activity android:name=".LdcRewardActivity"
+            android:exported="true"
+            android:permission="com.github.lingyan000.fluxdo.permission.BIND_PLUGIN" />
+    </application>
+</manifest>
