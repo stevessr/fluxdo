@@ -29,6 +29,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   int _nextOffset = 0;
   bool _hasMore = false;
   bool _loading = false;
+  bool _reloadQueued = false;
+  int _membershipRevision = 0;
   bool _loadingMore = false;
   bool _adding = false;
   bool _membershipChanging = false;
@@ -50,8 +52,13 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   }
 
   Future<void> _reload() async {
-    if (_loading || !mounted) return;
+    if (!mounted) return;
+    if (_loading) {
+      _reloadQueued = true;
+      return;
+    }
     final requestedFilter = _memberFilter;
+    final requestedRevision = _membershipRevision;
     setState(() {
       _loading = true;
       _error = null;
@@ -67,7 +74,11 @@ class _GroupPageState extends ConsumerState<GroupPage> {
           filter: requestedFilter.isEmpty ? null : requestedFilter,
         );
       }
-      if (!mounted || requestedFilter != _memberFilter) return;
+      if (!mounted ||
+          requestedFilter != _memberFilter ||
+          requestedRevision != _membershipRevision) {
+        return;
+      }
       setState(() {
         _group = group;
         _members = members?.members ?? const [];
@@ -75,11 +86,19 @@ class _GroupPageState extends ConsumerState<GroupPage> {
         _hasMore = members?.hasMore ?? false;
       });
     } catch (error) {
-      if (mounted && requestedFilter == _memberFilter) {
+      if (mounted &&
+          requestedFilter == _memberFilter &&
+          requestedRevision == _membershipRevision) {
         setState(() => _error = error);
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        if (_reloadQueued) {
+          _reloadQueued = false;
+          Future.microtask(_reload);
+        }
+      }
     }
   }
 
@@ -202,6 +221,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
           ? currentCount + 1
           : (currentCount > 0 ? currentCount - 1 : 0);
       setState(() {
+        _membershipRevision++;
         _group = latest.copyWith(
           userCount: nextCount,
           isGroupUser: join,
