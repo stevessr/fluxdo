@@ -10,6 +10,9 @@ class PicoVrCapabilities {
     required this.isPico,
     required this.hasCamera2,
     this.hasCameraCaptureIntent = false,
+    this.hasExternalQrScanner = false,
+    this.cameraCount = 0,
+    this.cameraPermissionGranted = false,
     required this.supportsMultipleWindows,
     required this.isInMultiWindowMode,
     this.model = '',
@@ -20,6 +23,9 @@ class PicoVrCapabilities {
       isPico: data?['isPico'] == true,
       hasCamera2: data?['hasCamera2'] == true,
       hasCameraCaptureIntent: data?['hasCameraCaptureIntent'] == true,
+      hasExternalQrScanner: data?['hasExternalQrScanner'] == true,
+      cameraCount: data?['cameraCount'] is int ? data!['cameraCount'] as int : 0,
+      cameraPermissionGranted: data?['cameraPermissionGranted'] == true,
       supportsMultipleWindows: data?['supportsMultipleWindows'] == true,
       isInMultiWindowMode: data?['isInMultiWindowMode'] == true,
       model: data?['model'] is String ? data!['model'] as String : '',
@@ -29,6 +35,9 @@ class PicoVrCapabilities {
   final bool isPico;
   final bool hasCamera2;
   final bool hasCameraCaptureIntent;
+  final bool hasExternalQrScanner;
+  final int cameraCount;
+  final bool cameraPermissionGranted;
   final bool supportsMultipleWindows;
   final bool isInMultiWindowMode;
   final String model;
@@ -83,6 +92,21 @@ class PicoVrService {
       supportsMultipleWindows: false,
       isInMultiWindowMode: false,
     );
+  }
+
+  /// Recheck after USB camera attachment, permission changes, or activity resume.
+  /// Does not assume that a PICO XR passthrough camera is an Android camera.
+  Future<PicoVrCapabilities> refreshCapabilities() {
+    _future = _loadCapabilities();
+    return _future!;
+  }
+
+  /// ZXing's optional activity contract returns decoded content. It only works
+  /// if an installed app advertises that contract (not necessarily on PICO).
+  /// A null result means the user cancelled; callers must validate any payload.
+  Future<String?> scanWithExternalApp() async {
+    if (kIsWeb || !Platform.isAndroid) return null;
+    return _channel.invokeMethod<String>('scanWithExternalApp');
   }
 
   Future<bool> openNewWindow() async {
