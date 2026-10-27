@@ -60,7 +60,9 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
 
 - Uses the publicly documented ZXing scan action, restricted to `QR_CODE`.
   Only apps registered for the action are offered; PICO system-private
-  activities are not hardcoded.
+  activities are not hardcoded. The user must confirm that **the chosen scanner
+  app can read the login credential** before Android displays an app chooser.
+  The scanner should be treated as trusted software, not a blind fallback.
 - Per-Activity outstanding request is limited to one. Cancellation returns
   null; window destruction fails the pending request rather than delivering
   the next Activity's result.
