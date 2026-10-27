@@ -1,0 +1,71 @@
+name: PICO VR Compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'lib/services/pico_vr_service.dart'
+      - 'lib/pages/qr_login_scan_page.dart'
+      - 'lib/pages/settings_page.dart'
+      - 'android/app/src/main/**'
+      - 'test/services/pico_vr_service_test.dart'
+      - '.github/workflows/pico-vr-compatibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-vr:
+    name: Flutter VR capability checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Prepare generated directories
+        run: mkdir -p assets/certs assets/images/llm
+      - name: Resolve Flutter packages and l10n
+        run: |
+          flutter pub get
+          dart run tool/gen_l10n.dart
+      - name: Analyze changed Dart code
+        run: >-
+          flutter analyze
+          lib/services/pico_vr_service.dart
+          lib/pages/qr_login_scan_page.dart
+          lib/pages/settings_page.dart
+          test/services/pico_vr_service_test.dart
+      - name: Test VR capability routing
+        run: flutter test test/services/pico_vr_service_test.dart
+
+  kotlin-vr:
+    name: Compile native Android VR bridge
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
+      - uses: android-actions/setup-android@v3
+      - name: Prepare Flutter Android project
+        run: |
+          mkdir -p assets/certs assets/images/llm
+          flutter pub get
+      - name: Compile Android Kotlin sources
+        run: gradle -p android :app:compileDebugKotlin --no-daemon
