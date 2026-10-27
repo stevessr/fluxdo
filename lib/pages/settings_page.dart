@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/s.dart';
 import '../models/shortcut_binding.dart';
+import '../services/pico_vr_service.dart';
 import '../providers/shortcut_provider.dart';
 import '../providers/theme_provider.dart';
 import '../settings/search/settings_search_index.dart';
@@ -344,6 +345,38 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       children: [
         SegmentedCardGroup(
           children: [
+
+            FutureBuilder<PicoVrCapabilities>(
+              future: PicoVrService.instance.capabilities,
+              builder: (context, snapshot) {
+                final capabilities = snapshot.data;
+                if (capabilities == null ||
+                    !capabilities.isPico ||
+                    !capabilities.supportsMultipleWindows) {
+                  return const SizedBox.shrink();
+                }
+                final chinese =
+                    Localizations.localeOf(context).languageCode == 'zh';
+                return _buildOptionTile(
+                  icon: Icons.open_in_new_rounded,
+                  iconColor: Colors.indigo,
+                  title: chinese
+                      ? 'PICO VR · 新建窗口'
+                      : 'PICO VR · Open new window',
+                  onTap: () async {
+                    final opened = await PicoVrService.instance.openNewWindow();
+                    if (!context.mounted || opened) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(chinese
+                            ? '系统无法打开新窗口'
+                            : 'Unable to open a new window'),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
             _buildOptionTile(
               icon: Symbols.manage_accounts_rounded,
               iconColor: Colors.green,

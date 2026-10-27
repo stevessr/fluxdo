@@ -1,0 +1,89 @@
+name: PICO VR Compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'lib/services/pico_vr_service.dart'
+      - 'lib/pages/qr_login_scan_page.dart'
+      - 'lib/pages/settings_page.dart'
+      - 'android/app/src/main/**'
+      - 'test/services/pico_vr_service_test.dart'
+      - '.github/workflows/pico-vr-compatibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-vr:
+    name: Flutter VR capability checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Prepare generated directories
+        run: mkdir -p assets/certs assets/images/llm
+      - name: Resolve Flutter packages and l10n
+        run: |
+          flutter pub get
+          dart run tool/gen_l10n.dart
+      - name: Analyze changed Dart code
+        run: >-
+          flutter analyze
+          lib/services/pico_vr_service.dart
+          lib/pages/qr_login_scan_page.dart
+          lib/pages/settings_page.dart
+          test/services/pico_vr_service_test.dart
+      - name: Test VR capability routing
+        run: flutter test test/services/pico_vr_service_test.dart
+
+  kotlin-vr:
+    name: Compile native Android VR bridge
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
+      - name: Prepare Flutter Android project
+        run: |
+          mkdir -p assets/certs assets/images/llm
+          flutter pub get
+          dart run tool/gen_l10n.dart
+      # Android network_security_config.xml references @raw/proxy_ca.
+      # Reuse build-apk.yaml's ephemeral CI certificate generation.
+      - name: Generate build-time proxy CA fixture
+        run: |
+          set -euo pipefail
+          cert_dir="core/doh_proxy/certs"
+          mkdir -p "$cert_dir" assets/certs android/app/src/main/res/raw
+          if [ ! -f "$cert_dir/ca.crt" ] || [ ! -f "$cert_dir/ca.key" ] || [ ! -f "$cert_dir/ca.der" ]; then
+            openssl req -x509 -newkey ec \
+              -pkeyopt ec_paramgen_curve:prime256v1 \
+              -keyout "$cert_dir/ca.key" \
+              -out "$cert_dir/ca.crt" \
+              -days 3650 -nodes \
+              -subj "/CN=DOH Proxy CA/O=DOH Proxy/C=CN"
+            openssl x509 -in "$cert_dir/ca.crt" -outform DER -out "$cert_dir/ca.der"
+          fi
+          cp -f "$cert_dir/ca.crt" assets/certs/proxy_ca.pem
+          cp -f "$cert_dir/ca.der" android/app/src/main/res/raw/proxy_ca.der
+      - name: Compile Android Kotlin sources
+        run: gradle -p android :app:compileDebugKotlin --no-daemon

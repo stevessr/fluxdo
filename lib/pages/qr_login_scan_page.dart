@@ -3,12 +3,14 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../l10n/s.dart';
 import '../services/qr_login_service.dart';
+import '../services/pico_vr_service.dart';
 import '../services/toast_service.dart';
 
 import 'package:m3e_ui/m3e_ui.dart';
@@ -28,20 +30,70 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
   MobileScannerController? _controller;
   bool _handling = false;
   bool _cameraSupported = false;
+  bool _systemCameraAvailable = false;
+  bool _checkingCamera = false;
+  bool _pickingImage = false;
   String? _statusMessage;
 
   @override
   void initState() {
     super.initState();
-    _cameraSupported = _isCameraPlatform;
-    if (_cameraSupported) {
-      _controller = MobileScannerController(
-        formats: const [BarcodeFormat.qrCode],
-        detectionSpeed: DetectionSpeed.noDuplicates,
-        autoStart: true,
-      );
+    // Unlike phones, many XR headsets expose no camera through Android
+    // Camera2 even when they have physical passthrough cameras. Do not start
+    // CameraX/mobile_scanner on an unenumerated camera.
+    if (!kIsWeb && Platform.isAndroid) {
+      _checkingCamera = true;
+      unawaited(_initializeAndroidCamera());
+    } else {
+      _cameraSupported = _isCameraPlatform;
+      if (_cameraSupported) _initializeScanner();
     }
   }
+
+  void _initializeScanner() {
+    _controller = MobileScannerController(
+      formats: const [BarcodeFormat.qrCode],
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      autoStart: true,
+    );
+  }
+
+  Future<void> _initializeAndroidCamera() async {
+    final caps = await PicoVrService.instance.capabilities;
+    if (!mounted) return;
+    setState(() {
+      _checkingCamera = false;
+      _cameraSupported = caps.canUseMobileScanner;
+      _systemCameraAvailable = caps.hasCameraCaptureIntent;
+      if (_cameraSupported) _initializeScanner();
+    });
+  }
+
+  Future<void> _pasteQrContent() async {
+    if (_handling || _pickingImage) return;
+    try {
+      final raw = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim();
+      if (!mounted) return;
+      if (raw == null || QrLoginService.instance.parsePayload(raw) == null) {
+        ToastService.showError(S.current.login_qrScanFailed);
+        return;
+      }
+      await _completeWithRaw(raw);
+    } catch (e) {
+      debugPrint('[QrLoginScan] Clipboard import failed: $e');
+      if (mounted) ToastService.showError(S.current.login_qrScanFailed);
+    }
+  }
+
+  String get _systemCameraLabel =>
+      Localizations.localeOf(context).languageCode == 'zh'
+          ? '系统相机拍摄二维码'
+          : 'Capture QR with system camera';
+
+  String get _pasteLabel =>
+      Localizations.localeOf(context).languageCode == 'zh'
+          ? '粘贴二维码内容'
+          : 'Paste QR content';
 
   bool get _isCameraPlatform {
     if (kIsWeb) return false;
@@ -55,7 +107,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_handling) return;
+    if (_handling || _pickingImage) return;
     final raw = capture.barcodes
         .map((b) => b.rawValue)
         .whereType<String>()
@@ -67,11 +119,18 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
     await _completeWithRaw(raw);
   }
 
-  Future<void> _pickFromGallery() async {
-    if (_handling) return;
+  Future<void> _pickFromGallery() => _pickImage(ImageSource.gallery);
+
+  /// A vendor camera activity may exist even when Camera2 is unavailable.
+  /// Camera capture intents do not provide access to XR passthrough frames.
+  Future<void> _captureWithSystemCamera() => _pickImage(ImageSource.camera);
+
+  Future<void> _pickImage(ImageSource source) async {
+    if (_handling || _pickingImage) return;
+    setState(() => _pickingImage = true);
     try {
-      final file = await ImagePicker().pickImage(source: ImageSource.gallery);
-      if (file == null) return;
+      final file = await ImagePicker().pickImage(source: source);
+      if (file == null || !mounted) return;
       setState(() => _statusMessage = S.current.login_qrDecodingImage);
       final bytes = await file.readAsBytes();
       final raw = await QrLoginService.instance.decodeQrFromImageBytes(bytes);
@@ -83,11 +142,13 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
       }
       await _completeWithRaw(raw);
     } catch (e) {
-      debugPrint('[QrLoginScan] 相册选图失败: $e');
+      debugPrint('[QrLoginScan] 图片选择/拍摄失败: $e');
       if (mounted) {
         ToastService.showError(S.current.login_qrScanFailed);
         setState(() => _statusMessage = null);
       }
+    } finally {
+      if (mounted) setState(() => _pickingImage = false);
     }
   }
 
@@ -143,7 +204,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
           if (_cameraSupported)
             IconButton(
               tooltip: context.l10n.login_qrPickImage,
-              onPressed: _handling ? null : _pickFromGallery,
+              onPressed: _handling || _pickingImage ? null : _pickFromGallery,
               icon: const Icon(Symbols.photo_library_rounded),
             ),
         ],
@@ -151,7 +212,9 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          if (_cameraSupported && _controller != null)
+          if (_checkingCamera)
+            const Center(child: CircularProgressIndicator())
+          else if (_cameraSupported && _controller != null)
             _buildCameraBody(theme, scheme)
           else
             _buildGalleryOnlyBody(theme, scheme),
@@ -204,6 +267,12 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                     return _CameraErrorPane(
                       message: error.errorDetails?.message ?? error.toString(),
                       onPickImage: _pickFromGallery,
+                      onCapture: _systemCameraAvailable
+                          ? _captureWithSystemCamera
+                          : null,
+                      onPaste: _pasteQrContent,
+                      captureLabel: _systemCameraLabel,
+                      pasteLabel: _pasteLabel,
                     );
                   },
                 ),
@@ -242,9 +311,15 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
-                  onPressed: _handling ? null : _pickFromGallery,
+                  onPressed: _handling || _pickingImage ? null : _pickFromGallery,
                   icon: const Icon(Symbols.photo_library_rounded, size: 20),
                   label: Text(context.l10n.login_qrPickImage),
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _handling || _pickingImage ? null : _pasteQrContent,
+                  icon: const Icon(Icons.content_paste_rounded, size: 20),
+                  label: Text(_pasteLabel),
                 ),
               ],
             ),
@@ -275,10 +350,26 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
               ),
               const SizedBox(height: 28),
               FilledButton.icon(
-                onPressed: _handling ? null : _pickFromGallery,
+                onPressed: _handling || _pickingImage ? null : _pickFromGallery,
                 icon: const Icon(Symbols.photo_library_rounded),
                 label: Text(context.l10n.login_qrPickImage),
                 style: FilledButton.styleFrom(minimumSize: const Size(220, 52)),
+              ),
+              if (_systemCameraAvailable) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _handling || _pickingImage
+                      ? null
+                      : _captureWithSystemCamera,
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: Text(_systemCameraLabel),
+                ),
+              ],
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _handling || _pickingImage ? null : _pasteQrContent,
+                icon: const Icon(Icons.content_paste_rounded),
+                label: Text(_pasteLabel),
               ),
             ],
           ),
@@ -289,10 +380,21 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
 }
 
 class _CameraErrorPane extends StatelessWidget {
-  const _CameraErrorPane({required this.message, required this.onPickImage});
+  const _CameraErrorPane({
+    required this.message,
+    required this.onPickImage,
+    required this.onPaste,
+    required this.captureLabel,
+    required this.pasteLabel,
+    this.onCapture,
+  });
 
   final String message;
   final VoidCallback onPickImage;
+  final VoidCallback onPaste;
+  final VoidCallback? onCapture;
+  final String captureLabel;
+  final String pasteLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -331,6 +433,20 @@ class _CameraErrorPane extends StatelessWidget {
                 onPressed: onPickImage,
                 icon: const Icon(Symbols.photo_library_rounded),
                 label: Text(context.l10n.login_qrPickImage),
+              ),
+              if (onCapture != null) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: onCapture,
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: Text(captureLabel),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: onPaste,
+                icon: const Icon(Icons.content_paste_rounded),
+                label: Text(pasteLabel),
               ),
             ],
           ),

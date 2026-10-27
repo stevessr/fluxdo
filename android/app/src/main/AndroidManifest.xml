@@ -4,6 +4,7 @@
     <!-- 扫码登录:相机 -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.any" android:required="false"/>
     <!-- 语音消息录制 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <!-- APK 安装权限 -->
@@ -34,6 +35,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:resizeableActivity="true"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -107,6 +109,21 @@
                 <data android:scheme="discourse" />
             </intent-filter>
         </activity>
+
+        <!-- 主实例仍使用 singleTask 处理 OAuth/深链；非导出的次窗口不接受外部 Intent。 -->
+        <activity
+            android:name=".PicoVrWindowActivity"
+            android:exported="false"
+            android:launchMode="standard"
+            android:resizeableActivity="true"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+        </activity>
         <!-- 经典图标（默认启动入口） -->
         <activity-alias
             android:name=".DefaultIcon"
@@ -171,6 +188,10 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Detect vendor camera Activity as an optional PICO QR capture fallback. -->
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
