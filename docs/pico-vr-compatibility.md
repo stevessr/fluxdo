@@ -37,8 +37,41 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
 - If Camera2 lists a camera but the OEM blocks streaming, the existing
   scanner error view still offers image import.
 - On phones with Camera2 support, the scanner is still enabled.
+- If a third-party app implements the published ZXing
+  `com.google.zxing.client.android.SCAN` intent and returns `SCAN_RESULT`,
+  QR login also offers **Scan with another app**. The result goes through the
+  same Fluxdo QR-login payload validation as all other entry points. Fluxdo
+  never logs, caches or forwards the raw QR payload to diagnostics. This is
+  opt-in, unavailable without a matching app, and does **not** mean PICO's
+  system scanner implements ZXing.
+- **Recheck cameras** invalidates the cached capabilities (for example,
+  when a USB/UVC camera was connected after opening the app). The page shows
+  the Android camera count and permission status. On PICO, **Try Android
+  camera preview** is an opt-in diagnostic when the camera list is empty;
+  it is never treated as proof of an XR passthrough API.
 - **Not implemented**: live scanning through PICO XR passthrough (requires a
   dedicated native OpenXR or official PICO SDK integration and permissions).
+  The PICO Unity Integration SDK 3.4.0 release introduced camera image APIs,
+  but Flutter's normal 2D Activity does not create the required XR session.
+  A native XR scanning flow must be independently built and verified on the
+  headset; Android Camera2 workarounds cannot substitute for it.
+
+### External scanner interoperability
+
+- Uses the publicly documented ZXing scan action, restricted to `QR_CODE`.
+  Only apps registered for the action are offered; PICO system-private
+  activities are not hardcoded. The user must confirm that **the chosen scanner
+  app can read the login credential** before Android displays an app chooser.
+  The scanner should be treated as trusted software, not a blind fallback.
+- Per-Activity outstanding request is limited to one. Cancellation returns
+  null; window destruction fails the pending request rather than delivering
+  the next Activity's result.
+- The scanner returns its decoded text to Fluxdo through an Activity result.
+  The resulting string is validated as a Fluxdo login QR payload before
+  attempting authentication.
+- Apps with no ZXing-compatible scanner or system camera Activity continue to
+  offer image import / clipboard paste. There is no misleading fake camera
+  preview on headsets that expose no Android camera devices.
 
 ## Manual device matrix
 

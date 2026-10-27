@@ -9,6 +9,9 @@ void main() {
         'model': 'PICO 4 Ultra',
         'hasCamera2': false,
         'hasCameraCaptureIntent': true,
+        'hasExternalQrScanner': true,
+        'cameraCount': 0,
+        'cameraPermissionGranted': false,
         'supportsMultipleWindows': true,
         'isInMultiWindowMode': true,
       });
@@ -17,6 +20,9 @@ void main() {
       expect(caps.model, 'PICO 4 Ultra');
       expect(caps.canUseMobileScanner, isFalse);
       expect(caps.hasCameraCaptureIntent, isTrue);
+      expect(caps.hasExternalQrScanner, isTrue);
+      expect(caps.cameraCount, 0);
+      expect(caps.cameraPermissionGranted, isFalse);
       expect(caps.supportsMultipleWindows, isTrue);
       expect(caps.isInMultiWindowMode, isTrue);
     });
@@ -36,17 +42,26 @@ void main() {
         'isPico': 'true',
         'hasCamera2': null,
         'hasCameraCaptureIntent': 'true',
+        'hasExternalQrScanner': 'true',
+        'cameraCount': '2',
+        'cameraPermissionGranted': 'true',
         'supportsMultipleWindows': 1,
       });
       expect(caps.isPico, isFalse);
       expect(caps.canUseMobileScanner, isFalse);
       expect(caps.hasCameraCaptureIntent, isFalse);
+      expect(caps.hasExternalQrScanner, isFalse);
+      expect(caps.cameraCount, 0);
+      expect(caps.cameraPermissionGranted, isFalse);
       expect(caps.supportsMultipleWindows, isFalse);
 
       final missing = PicoVrCapabilities.fromMap(null);
       expect(missing.canUseMobileScanner, isFalse);
       expect(missing.model, isEmpty);
       expect(missing.hasCameraCaptureIntent, isFalse);
+      expect(missing.hasExternalQrScanner, isFalse);
+      expect(missing.cameraCount, 0);
+      expect(missing.cameraPermissionGranted, isFalse);
     });
   });
 }
