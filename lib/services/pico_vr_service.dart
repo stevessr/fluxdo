@@ -72,9 +72,11 @@ class PicoVrService {
     } on MissingPluginException {
       debugPrint('[PicoVr] Native compatibility channel unavailable');
     }
+    // Native channel failure must not turn off scanning on ordinary phones.
+    // The scanner's own errorBuilder still handles a missing physical camera.
     return const PicoVrCapabilities(
       isPico: false,
-      hasCamera2: false,
+      hasCamera2: true,
       supportsMultipleWindows: false,
       isInMultiWindowMode: false,
     );
