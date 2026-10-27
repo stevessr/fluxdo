@@ -1,10 +1,14 @@
 package com.github.lingyan000.fluxdo
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
+import android.Manifest
+import android.content.pm.PackageManager as AndroidPackageManager
+import androidx.core.content.ContextCompat
 import android.provider.MediaStore
 import android.os.Build
 import android.util.Log
@@ -19,10 +23,81 @@ class PicoVrChannel(
 ) {
     private val channel = MethodChannel(messenger, "com.fluxdo/pico_vr")
 
+    companion object {
+        // Kept separate from the file picker and other activity-result request codes.
+        private const val EXTERNAL_QR_REQUEST = 0x3B91
+        private const val ZXING_SCAN_ACTION = "com.google.zxing.client.android.SCAN"
+    }
+
+    private var pendingQrResult: MethodChannel.Result? = null
+
+    /** Only standardized third-party scanner contracts are accepted, not undocumented PICO Intents. */
+    fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode != EXTERNAL_QR_REQUEST || pendingQrResult == null) return false
+        val reply = pendingQrResult
+        pendingQrResult = null
+        val raw = if (resultCode == Activity.RESULT_OK) data?.getStringExtra("SCAN_RESULT") else null
+        reply?.success(raw)
+        return true
+    }
+
+    private fun qrScanIntent(): Intent = Intent(ZXING_SCAN_ACTION).apply {
+        addCategory(Intent.CATEGORY_DEFAULT)
+        putExtra("SCAN_MODE", "QR_CODE_MODE")
+        putExtra("SCAN_FORMATS", "QR_CODE")
+        putExtra("SAVE_HISTORY", false)
+    }
+
+    private fun hasHandler(intent: Intent): Boolean = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activity.packageManager.queryIntentActivities(
+                intent, PackageManager.ResolveInfoFlags.of(
+                    PackageManager.MATCH_DEFAULT_ONLY.toLong()
+                )
+            ).isNotEmpty()
+        } else {
+            @Suppress("DEPRECATION")
+            activity.packageManager.queryIntentActivities(
+                intent, PackageManager.MATCH_DEFAULT_ONLY
+            ).isNotEmpty()
+        }
+    } catch (e: RuntimeException) {
+        Log.w("PicoVr", "Intent availability probe failed: ${intent.action}", e)
+        false
+    }
+
+    private fun startExternalQrScanner(result: MethodChannel.Result) {
+        if (pendingQrResult != null) {
+            result.error("BUSY", "An external QR scanner is already open", null)
+            return
+        }
+        val intent = qrScanIntent()
+        if (!hasHandler(intent)) {
+            result.error("SCANNER_UNAVAILABLE", "No app implements the ZXing QR scan contract", null)
+            return
+        }
+        pendingQrResult = result
+        try {
+            @Suppress("DEPRECATION")
+            activity.startActivityForResult(intent, EXTERNAL_QR_REQUEST)
+        } catch (e: ActivityNotFoundException) {
+            pendingQrResult = null
+            result.error("SCANNER_UNAVAILABLE", "External QR scanner disappeared", null)
+        } catch (e: SecurityException) {
+            pendingQrResult = null
+            result.error("SCANNER_DENIED", "The scanner denied this intent", null)
+        } catch (e: RuntimeException) {
+            pendingQrResult = null
+            Log.w("PicoVr", "External QR scanner launch failed", e)
+            result.error("SCANNER_FAILED", "Unable to launch external scanner", null)
+        }
+    }
+
     init {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getCapabilities" -> result.success(getCapabilities())
+                "scanWithExternalApp" -> startExternalQrScanner(result)
                 "openNewWindow" -> result.success(openNewWindow())
                 else -> result.notImplemented()
             }
@@ -31,6 +106,8 @@ class PicoVrChannel(
 
     fun dispose() {
         channel.setMethodCallHandler(null)
+        pendingQrResult?.error("WINDOW_CLOSED", "The scanner's Flutter window was closed", null)
+        pendingQrResult = null
     }
 
     private fun getCapabilities(): Map<String, Any> {
@@ -47,26 +124,15 @@ class PicoVrChannel(
         }
         // A vendor-supplied camera Activity may exist even if the headset
         // exposes no camera devices through Camera2. This is not XR passthrough.
-        val captureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-        val hasCaptureHandler = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                activity.packageManager.queryIntentActivities(
-                    captureIntent, PackageManager.ResolveInfoFlags.of(
-                        PackageManager.MATCH_DEFAULT_ONLY.toLong()
-                    )
-                ).isNotEmpty()
-            } else {
-                @Suppress("DEPRECATION")
-                activity.packageManager.queryIntentActivities(
-                    captureIntent, PackageManager.MATCH_DEFAULT_ONLY
-                ).isNotEmpty()
-            }
-        } catch (e: Exception) {
-            Log.w("PicoVr", "Camera capture intent lookup failed", e)
-            false
-        }
+        val hasCaptureHandler = hasHandler(Intent(MediaStore.ACTION_IMAGE_CAPTURE))
         return mapOf(
             "hasCameraCaptureIntent" to hasCaptureHandler,
+            "hasExternalQrScanner" to hasHandler(qrScanIntent()),
+            "cameraCount" to cameraIds.size,
+            "cameraPermissionGranted" to (
+                ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) ==
+                    AndroidPackageManager.PERMISSION_GRANTED
+            ),
             "isPico" to identity.contains("pico"),
             "model" to Build.MODEL,
             "hasCamera2" to cameraIds.isNotEmpty(),
