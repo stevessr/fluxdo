@@ -40,7 +40,9 @@ import java.io.File
  */
 @UnstableApi
 class MediaTranscodeChannel {
-    private const val CHANNEL = "com.fluxdo/media_transcode"
+    companion object {
+        private const val CHANNEL = "com.fluxdo/media_transcode"
+    }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var transformer: Transformer? = null
