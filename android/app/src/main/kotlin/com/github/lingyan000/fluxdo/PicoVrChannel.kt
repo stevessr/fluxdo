@@ -3,7 +3,9 @@ package com.github.lingyan000.fluxdo
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
+import android.provider.MediaStore
 import android.os.Build
 import android.util.Log
 import io.flutter.plugin.common.BinaryMessenger
@@ -43,7 +45,28 @@ class PicoVrChannel(
             Log.w("PicoVr", "Camera2 enumeration failed", e)
             emptyList()
         }
+        // A vendor-supplied camera Activity may exist even if the headset
+        // exposes no camera devices through Camera2. This is not XR passthrough.
+        val captureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        val hasCaptureHandler = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                activity.packageManager.queryIntentActivities(
+                    captureIntent, PackageManager.ResolveInfoFlags.of(
+                        PackageManager.MATCH_DEFAULT_ONLY.toLong()
+                    )
+                ).isNotEmpty()
+            } else {
+                @Suppress("DEPRECATION")
+                activity.packageManager.queryIntentActivities(
+                    captureIntent, PackageManager.MATCH_DEFAULT_ONLY
+                ).isNotEmpty()
+            }
+        } catch (e: Exception) {
+            Log.w("PicoVr", "Camera capture intent lookup failed", e)
+            false
+        }
         return mapOf(
+            "hasCameraCaptureIntent" to hasCaptureHandler,
             "isPico" to identity.contains("pico"),
             "model" to Build.MODEL,
             "hasCamera2" to cameraIds.isNotEmpty(),
@@ -55,7 +78,8 @@ class PicoVrChannel(
     }
 
     private fun openNewWindow(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N ||
+            !PicoVrWindowActivity.reserveLaunch()) return false
         return try {
             // NEW_TASK | MULTIPLE_TASK creates an independent Activity/FlutterEngine
             // even if another secondary Fluxdo window is already running.
@@ -66,12 +90,15 @@ class PicoVrChannel(
             activity.startActivity(intent)
             true
         } catch (e: ActivityNotFoundException) {
+            PicoVrWindowActivity.cancelLaunch()
             Log.w("PicoVr", "No activity for secondary window", e)
             false
         } catch (e: SecurityException) {
+            PicoVrWindowActivity.cancelLaunch()
             Log.w("PicoVr", "Secondary window was blocked", e)
             false
         } catch (e: RuntimeException) {
+            PicoVrWindowActivity.cancelLaunch()
             Log.w("PicoVr", "Secondary window failed", e)
             false
         }
