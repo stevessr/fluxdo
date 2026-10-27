@@ -73,6 +73,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
     if (_handling || _pickingImage) return;
     try {
       final raw = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim();
+      if (!mounted) return;
       if (raw == null || QrLoginService.instance.parsePayload(raw) == null) {
         ToastService.showError(S.current.login_qrScanFailed);
         return;
