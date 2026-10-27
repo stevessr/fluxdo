@@ -30,7 +30,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicInteger
 
-class MainActivity : FlutterActivity() {
+open class MainActivity : FlutterActivity() {
 
     companion object {
         private const val TAG = "AppLink"
@@ -89,6 +89,9 @@ class MainActivity : FlutterActivity() {
     private var ownsProvidedFlutterEngine = false
     private var interactiveKeyboardChannel: InteractiveKeyboardChannel? = null
     private var vpnBypassChannel: VpnBypassChannel? = null
+    private var picoVrChannel: PicoVrChannel? = null
+    private var publicFileChannel: PublicFileChannel? = null
+    private var mediaTranscodeChannel: MediaTranscodeChannel? = null
 
     // Cookie IPC 专用后台线程。CookieManager 的 getCookie / setCookie /
     // getCookieInfo 可从任意线程调用(Chromium cookie store 在自己的 IO
@@ -122,7 +125,7 @@ class MainActivity : FlutterActivity() {
 
     // SAF「另存为」建档结果先给 PublicFileChannel 认领,不是它的再交给插件
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (PublicFileChannel.handleActivityResult(requestCode, resultCode, data)) return
+        if (publicFileChannel?.handleActivityResult(requestCode, resultCode, data) == true) return
         super.onActivityResult(requestCode, resultCode, data)
     }
 
@@ -131,6 +134,12 @@ class MainActivity : FlutterActivity() {
         interactiveKeyboardChannel = null
         vpnBypassChannel?.dispose()
         vpnBypassChannel = null
+        picoVrChannel?.dispose()
+        picoVrChannel = null
+        publicFileChannel?.dispose()
+        publicFileChannel = null
+        mediaTranscodeChannel?.dispose()
+        mediaTranscodeChannel = null
         FairMemoryReceiver.detachEngine(flutterEngine)
         super.cleanUpFlutterEngine(flutterEngine)
     }
@@ -179,9 +188,17 @@ class MainActivity : FlutterActivity() {
         // 公平内存预警 → Dart 标准 memoryPressure 的转发依赖 engine 引用
         FairMemoryReceiver.attachEngine(flutterEngine)
         // 媒体转码通道(音视频压缩到 4MB:media3 Transformer 硬编)
-        MediaTranscodeChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
-        // 公共文件落盘通道(MediaStore 下载目录 / SAF 另存为 / 打开 content uri)
-        PublicFileChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        mediaTranscodeChannel?.dispose()
+        mediaTranscodeChannel = MediaTranscodeChannel().also {
+            it.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        }
+        // 按窗口隔离 SAF 回调、转码作业，避免相互串线。
+        publicFileChannel?.dispose()
+        publicFileChannel = PublicFileChannel(this).also {
+            it.register(flutterEngine.dartExecutor.binaryMessenger)
+        }
+        picoVrChannel?.dispose()
+        picoVrChannel = PicoVrChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "openInBrowser" -> {
