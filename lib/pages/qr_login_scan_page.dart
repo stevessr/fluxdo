@@ -356,6 +356,8 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                           ? _captureWithSystemCamera
                           : null,
                       onPaste: _pasteQrContent,
+                      onRecheck: _refreshCamera,
+                      recheckLabel: _retryCameraLabel,
                       onExternalScan: _externalScannerAvailable
                           ? _scanWithExternalApp
                           : null,
@@ -517,6 +519,8 @@ class _CameraErrorPane extends StatelessWidget {
     required this.captureLabel,
     required this.pasteLabel,
     required this.externalScanLabel,
+    required this.recheckLabel,
+    this.onRecheck,
     this.onCapture,
     this.onExternalScan,
   });
@@ -526,6 +530,8 @@ class _CameraErrorPane extends StatelessWidget {
   final VoidCallback onPaste;
   final VoidCallback? onCapture;
   final VoidCallback? onExternalScan;
+  final VoidCallback? onRecheck;
+  final String recheckLabel;
   final String externalScanLabel;
   final String captureLabel;
   final String pasteLabel;
@@ -582,6 +588,14 @@ class _CameraErrorPane extends StatelessWidget {
                   onPressed: onExternalScan,
                   icon: const Icon(Icons.qr_code_scanner),
                   label: Text(externalScanLabel),
+                ),
+              ],
+              if (onRecheck != null) ...[
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: onRecheck,
+                  icon: const Icon(Icons.refresh),
+                  label: Text(recheckLabel),
                 ),
               ],
               const SizedBox(height: 12),
