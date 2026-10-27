@@ -365,7 +365,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       : 'PICO VR · Open new window',
                   onTap: () async {
                     final opened = await PicoVrService.instance.openNewWindow();
-                    if (!mounted || opened) return;
+                    if (!context.mounted || opened) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(chinese
