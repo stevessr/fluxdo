@@ -9,6 +9,7 @@ class PicoVrCapabilities {
   const PicoVrCapabilities({
     required this.isPico,
     required this.hasCamera2,
+    this.hasCameraCaptureIntent = false,
     required this.supportsMultipleWindows,
     required this.isInMultiWindowMode,
     this.model = '',
@@ -18,6 +19,7 @@ class PicoVrCapabilities {
     return PicoVrCapabilities(
       isPico: data?['isPico'] == true,
       hasCamera2: data?['hasCamera2'] == true,
+      hasCameraCaptureIntent: data?['hasCameraCaptureIntent'] == true,
       supportsMultipleWindows: data?['supportsMultipleWindows'] == true,
       isInMultiWindowMode: data?['isInMultiWindowMode'] == true,
       model: data?['model'] is String ? data!['model'] as String : '',
@@ -26,6 +28,7 @@ class PicoVrCapabilities {
 
   final bool isPico;
   final bool hasCamera2;
+  final bool hasCameraCaptureIntent;
   final bool supportsMultipleWindows;
   final bool isInMultiWindowMode;
   final String model;
