@@ -3,12 +3,14 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../l10n/s.dart';
 import '../services/qr_login_service.dart';
+import '../services/pico_vr_service.dart';
 import '../services/toast_service.dart';
 
 import 'package:m3e_ui/m3e_ui.dart';
@@ -28,20 +30,61 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
   MobileScannerController? _controller;
   bool _handling = false;
   bool _cameraSupported = false;
+  bool _checkingCamera = false;
   String? _statusMessage;
 
   @override
   void initState() {
     super.initState();
-    _cameraSupported = _isCameraPlatform;
-    if (_cameraSupported) {
-      _controller = MobileScannerController(
-        formats: const [BarcodeFormat.qrCode],
-        detectionSpeed: DetectionSpeed.noDuplicates,
-        autoStart: true,
-      );
+    // Unlike phones, many XR headsets expose no camera through Android
+    // Camera2 even when they have physical passthrough cameras. Do not start
+    // CameraX/mobile_scanner on an unenumerated camera.
+    if (!kIsWeb && Platform.isAndroid) {
+      _checkingCamera = true;
+      unawaited(_initializeAndroidCamera());
+    } else {
+      _cameraSupported = _isCameraPlatform;
+      if (_cameraSupported) _initializeScanner();
     }
   }
+
+  void _initializeScanner() {
+    _controller = MobileScannerController(
+      formats: const [BarcodeFormat.qrCode],
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      autoStart: true,
+    );
+  }
+
+  Future<void> _initializeAndroidCamera() async {
+    final caps = await PicoVrService.instance.capabilities;
+    if (!mounted) return;
+    setState(() {
+      _checkingCamera = false;
+      _cameraSupported = caps.canUseMobileScanner;
+      if (_cameraSupported) _initializeScanner();
+    });
+  }
+
+  Future<void> _pasteQrContent() async {
+    if (_handling) return;
+    try {
+      final raw = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim();
+      if (raw == null || QrLoginService.instance.parsePayload(raw) == null) {
+        ToastService.showError(S.current.login_qrScanFailed);
+        return;
+      }
+      await _completeWithRaw(raw);
+    } catch (e) {
+      debugPrint('[QrLoginScan] Clipboard import failed: $e');
+      if (mounted) ToastService.showError(S.current.login_qrScanFailed);
+    }
+  }
+
+  String get _pasteLabel =>
+      Localizations.localeOf(context).languageCode == 'zh'
+          ? '粘贴二维码内容'
+          : 'Paste QR content';
 
   bool get _isCameraPlatform {
     if (kIsWeb) return false;
@@ -151,7 +194,9 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          if (_cameraSupported && _controller != null)
+          if (_checkingCamera)
+            const Center(child: CircularProgressIndicator())
+          else if (_cameraSupported && _controller != null)
             _buildCameraBody(theme, scheme)
           else
             _buildGalleryOnlyBody(theme, scheme),
@@ -246,6 +291,12 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                   icon: const Icon(Symbols.photo_library_rounded, size: 20),
                   label: Text(context.l10n.login_qrPickImage),
                 ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _handling ? null : _pasteQrContent,
+                  icon: const Icon(Icons.content_paste_rounded, size: 20),
+                  label: Text(_pasteLabel),
+                ),
               ],
             ),
           ),
@@ -279,6 +330,12 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                 icon: const Icon(Symbols.photo_library_rounded),
                 label: Text(context.l10n.login_qrPickImage),
                 style: FilledButton.styleFrom(minimumSize: const Size(220, 52)),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _handling ? null : _pasteQrContent,
+                icon: const Icon(Icons.content_paste_rounded),
+                label: Text(_pasteLabel),
               ),
             ],
           ),
