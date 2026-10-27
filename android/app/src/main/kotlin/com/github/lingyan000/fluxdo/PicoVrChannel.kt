@@ -79,7 +79,12 @@ class PicoVrChannel(
         pendingQrResult = result
         try {
             @Suppress("DEPRECATION")
-            activity.startActivityForResult(intent, EXTERNAL_QR_REQUEST)
+            // Always surface the chooser, even when there is a default app:
+            // a QR login may carry credentials read by the selected scanner.
+            activity.startActivityForResult(
+                Intent.createChooser(intent, "Scan login QR code"),
+                EXTERNAL_QR_REQUEST
+            )
         } catch (e: ActivityNotFoundException) {
             pendingQrResult = null
             result.error("SCANNER_UNAVAILABLE", "External QR scanner disappeared", null)
