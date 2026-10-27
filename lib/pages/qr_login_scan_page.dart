@@ -96,6 +96,33 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
 
   Future<void> _scanWithExternalApp() async {
     if (_handling || _pickingImage || _checkingCamera) return;
+
+    // QR login payloads can be credentials. An external scanner receives
+    // the raw content; the user must explicitly consent to that boundary.
+    final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(chinese ? '使用第三方扫码应用' : 'Use an external scanner'),
+        content: Text(
+          chinese
+              ? '所选扫码应用可以读取登录二维码内容，可能包含敏感的登录凭据。仅在信任该应用时继续。'
+              : 'The scanner app can read the login QR content, which may '
+                    'contain sensitive credentials. Continue only if you trust it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(chinese ? '取消' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(chinese ? '继续' : 'Continue'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || approved != true || _handling || _pickingImage) return;
     setState(() => _pickingImage = true);
     var shouldResumeCamera = true;
     try {
