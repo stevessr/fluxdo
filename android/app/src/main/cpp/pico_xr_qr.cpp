@@ -2,11 +2,11 @@
 // Headless OpenXR PICO camera bridge. Only a user-initiated, foreground scan
 // may acquire frames. No frame or credential is written to disk or logcat.
 #define XR_USE_PLATFORM_ANDROID
+#include <jni.h> // openxr_platform.h uses jobject in Android extension typedefs
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 #include "pico_camera_image.h"
 #include <android/log.h>
-#include <jni.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
