@@ -75,10 +75,12 @@ struct XrState {
     PFN_xrDestroyCameraCaptureSessionPICO destroyCapture{};
     PFN_xrEndCameraCapturePICO endCapture{};
     bool capturing{false};
+    bool sessionRunning{false};
     ~XrState() {
         if (capturing && endCapture) endCapture(capture);
         if (capture != XR_NULL_HANDLE && destroyCapture) destroyCapture(capture);
         if (device != XR_NULL_HANDLE && destroyDevice) destroyDevice(device);
+        if (sessionRunning) xrEndSession(session);
         if (session != XR_NULL_HANDLE) xrDestroySession(session);
         if (instance != XR_NULL_HANDLE) xrDestroyInstance(instance);
     }
@@ -165,6 +167,37 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     sessionInfo.systemId = systemId; // XR_MND_headless: no graphics binding
     if (XR_FAILED(xrCreateSession(xr.instance, &sessionInfo, &xr.session))) {
         status("Headless XR session rejected (2D app may lack XR entitlement)"); return nullptr;
+    }
+    // OpenXR sessions must enter the running state before camera capture.
+    // A headless session omits graphics binding, not the session lifecycle.
+    while (!expired(deadline) && !xr.sessionRunning) {
+        XrEventDataBuffer event{XR_TYPE_EVENT_DATA_BUFFER};
+        const XrResult eventResult = xrPollEvent(xr.instance, &event);
+        if (eventResult == XR_EVENT_UNAVAILABLE) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            continue;
+        }
+        if (XR_FAILED(eventResult)) {
+            status("OpenXR event polling failed"); return nullptr;
+        }
+        if (event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
+            const auto& changed = reinterpret_cast<const XrEventDataSessionStateChanged&>(event);
+            if (changed.session != xr.session) continue;
+            if (changed.state == XR_SESSION_STATE_READY) {
+                XrSessionBeginInfo beginInfo{XR_TYPE_SESSION_BEGIN_INFO};
+                beginInfo.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+                if (XR_FAILED(xrBeginSession(xr.session, &beginInfo))) {
+                    status("Headless OpenXR session could not begin"); return nullptr;
+                }
+                xr.sessionRunning = true;
+            } else if (changed.state == XR_SESSION_STATE_EXITING ||
+                       changed.state == XR_SESSION_STATE_LOSS_PENDING) {
+                status("XR runtime ended the scan session"); return nullptr;
+            }
+        }
+    }
+    if (!xr.sessionRunning) {
+        status("Headless XR session did not become ready"); return nullptr;
     }
 
     PFN_xrPollFutureEXT poll = nullptr;
