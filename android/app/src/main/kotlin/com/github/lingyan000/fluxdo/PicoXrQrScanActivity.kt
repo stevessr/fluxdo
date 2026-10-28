@@ -49,11 +49,12 @@ class PicoXrQrScanActivity : Activity() {
         }
     }
 
-    private external fun scanNative(timeoutMillis: Long): String?
-    private external fun cancelNative()
+    private external fun scanNative(timeoutMillis: Long, scanToken: Long): String?
+    private external fun cancelNative(scanToken: Long)
     private external fun lastNativeError(): String
 
     private val executor = Executors.newSingleThreadExecutor()
+    private val scanToken = System.identityHashCode(this).toLong()
     private val scanning = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
     private var active = false
@@ -93,7 +94,7 @@ class PicoXrQrScanActivity : Activity() {
             description.text = "OpenXR scanner native library is unavailable."
             return
         }
-        ensurePermissionAndScan()
+        // onResume starts capture after Activity becomes foreground.
     }
 
     private fun ensurePermissionAndScan() {
@@ -109,7 +110,7 @@ class PicoXrQrScanActivity : Activity() {
             var code: String? = null
             var error = "XR scanner unavailable"
             try {
-                code = scanNative(20000L)
+                code = scanNative(20000L, scanToken)
                 error = lastNativeError()
             } catch (_: UnsatisfiedLinkError) {
                 error = "OpenXR scanner native symbols unavailable"
@@ -178,18 +179,18 @@ class PicoXrQrScanActivity : Activity() {
 
     override fun onPause() {
         active = false
-        if (nativeLoaded) cancelNative()
+        if (nativeLoaded) cancelNative(scanToken)
         super.onPause()
     }
 
     private fun finishWithCancel() {
-        if (nativeLoaded) cancelNative()
+        if (nativeLoaded) cancelNative(scanToken)
         setResult(RESULT_CANCELED)
         finish()
     }
 
     override fun onDestroy() {
-        if (nativeLoaded) cancelNative()
+        if (nativeLoaded) cancelNative(scanToken)
         executor.shutdown()
         mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
