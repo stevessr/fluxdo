@@ -226,9 +226,21 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
         status("PICO runtime missing camera extension entry points"); return nullptr;
     }
 
-    // A filtered camera list would require querying vendor camera properties;
-    // the extension only offers color passthrough cameras in this revision.
+    // Restrict discovery to world-facing RGB passthrough cameras; do not
+    // accidentally request inward-tracking/infrared or non-color sensors.
+    XrCameraPropertyFacingPICO facing{XR_TYPE_CAMERA_PROPERTY_FACING_PICO};
+    facing.facing = XR_CAMERA_FACING_WORLD_PICO;
+    XrCameraPropertyCameraTypePICO type{XR_TYPE_CAMERA_PROPERTY_CAMERA_TYPE_PICO};
+    type.cameraType = XR_CAMERA_TYPE_PASSTHROUGH_COLOR_PICO;
+    XrCameraPropertyBaseHeaderPICO* propertyFilter[] = {
+        reinterpret_cast<XrCameraPropertyBaseHeaderPICO*>(&facing),
+        reinterpret_cast<XrCameraPropertyBaseHeaderPICO*>(&type)
+    };
+    XrCameraPropertiesPICO properties{XR_TYPE_CAMERA_PROPERTIES_PICO};
+    properties.propertyCount = 2;
+    properties.properties = propertyFilter;
     XrAvailableCamerasEnumerateInfoPICO filter{XR_TYPE_AVAILABLE_CAMERAS_ENUMERATE_INFO_PICO};
+    filter.properties = &properties;
     uint32_t cameraCount = 0;
     if (XR_FAILED(enumerate(xr.instance, &filter, 0, &cameraCount, nullptr)) ||
         cameraCount == 0 || cameraCount > 16) {
