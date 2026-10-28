@@ -88,5 +88,7 @@ jobs:
           cp -f "$cert_dir/ca.der" android/app/src/main/res/raw/proxy_ca.der
       - name: Compile Android Kotlin sources
         run: gradle -p android :app:compileDebugKotlin --no-daemon
+      # Build only this app's arm64 CMake target; externalNativeBuildDebug also
+      # builds every Flutter plugin's Rust/C++ library for all ABIs.
       - name: Compile PICO OpenXR JNI scanner (arm64)
-        run: gradle -p android :app:externalNativeBuildDebug -Ptarget-platform=android-arm64 --no-daemon
+        run: gradle -p android ':app:buildCMakeDebug[arm64-v8a]' -Ptarget-platform=android-arm64 --no-daemon
