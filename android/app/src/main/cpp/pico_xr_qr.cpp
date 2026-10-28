@@ -21,6 +21,11 @@ using Clock = std::chrono::steady_clock;
 std::mutex scanMutex;
 std::mutex statusMutex;
 std::atomic<bool> cancelled{false};
+std::atomic<jlong> activeScan{0};
+struct ScanToken {
+    explicit ScanToken(jlong token) { activeScan = token; }
+    ~ScanToken() { activeScan = 0; }
+};
 std::string lastError;
 void status(const char* text) {
     std::lock_guard<std::mutex> lock(statusMutex);
@@ -67,10 +72,11 @@ struct XrState {
     }
 };
 
-jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis) {
+jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     std::unique_lock<std::mutex> singleScan(scanMutex, std::try_to_lock);
     if (!singleScan.owns_lock()) { status("Another XR scan is active"); return nullptr; }
     cancelled = false;
+    ScanToken active(token);
     const auto deadline = Clock::now() +
         std::chrono::milliseconds(std::clamp(static_cast<long long>(timeoutMillis), 1000LL, 30000LL));
 
@@ -295,13 +301,15 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis) {
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_github_lingyan000_fluxdo_PicoXrQrScanActivity_scanNative(
-    JNIEnv* env, jobject activity, jlong timeoutMillis) {
-    return run(env, activity, timeoutMillis);
+    JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
+    return run(env, activity, timeoutMillis, token);
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_github_lingyan000_fluxdo_PicoXrQrScanActivity_cancelNative(
-    JNIEnv*, jobject) { cancelled = true; }
+    JNIEnv*, jobject, jlong token) {
+    if (activeScan.load() == token) cancelled = true;
+}
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_github_lingyan000_fluxdo_PicoXrQrScanActivity_lastNativeError(
