@@ -88,3 +88,5 @@ jobs:
           cp -f "$cert_dir/ca.der" android/app/src/main/res/raw/proxy_ca.der
       - name: Compile Android Kotlin sources
         run: gradle -p android :app:compileDebugKotlin --no-daemon
+      - name: Compile PICO OpenXR JNI scanner (arm64)
+        run: gradle -p android :app:externalNativeBuildDebug -Ptarget-platform=android-arm64 --no-daemon
