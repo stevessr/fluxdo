@@ -22,6 +22,7 @@ import com.google.zxing.qrcode.QRCodeReader
 import java.util.EnumMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Short-lived, non-exported, PICO-only headless OpenXR camera session.
@@ -36,6 +37,7 @@ class PicoXrQrScanActivity : Activity() {
         const val EXTRA_QR = "SCAN_RESULT"
         private const val CAMERA_PERMISSION_REQUEST = 0x513
         @Volatile private var nativeLoaded = false
+        private val nextScanToken = AtomicLong(1)
 
         private fun loadLibrary(): Boolean {
             if (nativeLoaded) return true
@@ -54,7 +56,7 @@ class PicoXrQrScanActivity : Activity() {
     private external fun lastNativeError(): String
 
     private val executor = Executors.newSingleThreadExecutor()
-    private val scanToken = System.identityHashCode(this).toLong()
+    @Volatile private var scanToken = 0L
     private val scanning = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
     private var active = false
@@ -105,12 +107,16 @@ class PicoXrQrScanActivity : Activity() {
         }
         if (!active || !scanning.compareAndSet(false, true)) return
         retry.isEnabled = false
+        // Token per attempt: a paused/abandoned queued scan must not start on
+        // resume or cancel a different window's current capture.
+        val token = nextScanToken.incrementAndGet()
+        scanToken = token
         description.text = "Scanning PICO XR color cameras…"
         executor.execute {
             var code: String? = null
             var error = "XR scanner unavailable"
             try {
-                code = scanNative(20000L, scanToken)
+                code = scanNative(20000L, token)
                 error = lastNativeError()
             } catch (_: UnsatisfiedLinkError) {
                 error = "OpenXR scanner native symbols unavailable"
@@ -179,18 +185,18 @@ class PicoXrQrScanActivity : Activity() {
 
     override fun onPause() {
         active = false
-        if (nativeLoaded) cancelNative(scanToken)
+        if (nativeLoaded && scanToken != 0L) cancelNative(scanToken)
         super.onPause()
     }
 
     private fun finishWithCancel() {
-        if (nativeLoaded) cancelNative(scanToken)
+        if (nativeLoaded && scanToken != 0L) cancelNative(scanToken)
         setResult(RESULT_CANCELED)
         finish()
     }
 
     override fun onDestroy() {
-        if (nativeLoaded) cancelNative(scanToken)
+        if (nativeLoaded && scanToken != 0L) cancelNative(scanToken)
         executor.shutdown()
         mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
