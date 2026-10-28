@@ -14,6 +14,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -22,9 +23,20 @@ std::mutex scanMutex;
 std::mutex statusMutex;
 std::atomic<bool> cancelled{false};
 std::atomic<jlong> activeScan{0};
+std::mutex cancelledMutex;
+std::unordered_set<jlong> cancelledTokens;
+bool wasCancelled(jlong token) {
+    std::lock_guard<std::mutex> lock(cancelledMutex);
+    return cancelledTokens.count(token) != 0;
+}
 struct ScanToken {
-    explicit ScanToken(jlong token) { activeScan = token; }
-    ~ScanToken() { activeScan = 0; }
+    explicit ScanToken(jlong token) : token_(token) { activeScan = token; }
+    ~ScanToken() {
+        activeScan = 0;
+        std::lock_guard<std::mutex> lock(cancelledMutex);
+        cancelledTokens.erase(token_);
+    }
+    jlong token_;
 };
 std::string lastError;
 void status(const char* text) {
@@ -77,6 +89,12 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     if (!singleScan.owns_lock()) { status("Another XR scan is active"); return nullptr; }
     cancelled = false;
     ScanToken active(token);
+    // onPause() may have cancelled while the scan was queued behind another
+    // window's session. Do not resurrect a background camera capture.
+    if (wasCancelled(token)) {
+        status("XR scan cancelled before start");
+        return nullptr;
+    }
     const auto deadline = Clock::now() +
         std::chrono::milliseconds(std::clamp(static_cast<long long>(timeoutMillis), 1000LL, 30000LL));
 
@@ -308,6 +326,12 @@ Java_com_github_lingyan000_fluxdo_PicoXrQrScanActivity_scanNative(
 extern "C" JNIEXPORT void JNICALL
 Java_com_github_lingyan000_fluxdo_PicoXrQrScanActivity_cancelNative(
     JNIEnv*, jobject, jlong token) {
+    {
+        std::lock_guard<std::mutex> lock(cancelledMutex);
+        // Cap stale tokens after aborted JNI dispatches.
+        if (cancelledTokens.size() >= 128) cancelledTokens.clear();
+        cancelledTokens.insert(token);
+    }
     if (activeScan.load() == token) cancelled = true;
 }
 
