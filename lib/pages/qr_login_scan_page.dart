@@ -94,6 +94,43 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
     });
   }
 
+  /// Direct PICO OpenXR color camera scan; no third-party app or Camera2.
+  /// Native frames stay on device; only a matching login payload is accepted.
+  Future<void> _scanWithXrCamera() async {
+    if (_handling || _pickingImage || _checkingCamera) return;
+    setState(() => _pickingImage = true);
+    try {
+      await _controller?.stop();
+      final raw = (await PicoVrService.instance.scanWithXrCamera())?.trim();
+      if (!mounted || raw == null) return;
+      if (QrLoginService.instance.parsePayload(raw) == null) {
+        ToastService.showError(S.current.login_qrScanFailed);
+        return;
+      }
+      await _completeWithRaw(raw);
+    } on PlatformException catch (e) {
+      debugPrint('[QrLoginScan] XR camera error: ${e.code}');
+      if (mounted) ToastService.showError(S.current.login_qrCameraUnavailable);
+    } catch (e) {
+      debugPrint('[QrLoginScan] XR camera failed: $e');
+      if (mounted) ToastService.showError(S.current.login_qrScanFailed);
+    } finally {
+      if (mounted) {
+        setState(() => _pickingImage = false);
+        if (!_handling) {
+          try {
+            await _controller?.start();
+          } catch (_) {}
+        }
+      }
+    }
+  }
+
+  String get _xrCameraLabel =>
+      Localizations.localeOf(context).languageCode == 'zh'
+          ? '使用 PICO XR 摄像头扫码'
+          : 'Scan with PICO XR camera';
+
   Future<void> _scanWithExternalApp() async {
     if (_handling || _pickingImage || _checkingCamera) return;
 
@@ -433,6 +470,14 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                   icon: const Icon(Symbols.photo_library_rounded, size: 20),
                   label: Text(context.l10n.login_qrPickImage),
                 ),
+                if (_capabilities?.isPico == true) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _handling || _pickingImage ? null : _scanWithXrCamera,
+                    icon: const Icon(Icons.camera_alt_outlined),
+                    label: Text(_xrCameraLabel),
+                  ),
+                ],
                 if (_externalScannerAvailable) ...[
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
@@ -489,6 +534,14 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                       : _captureWithSystemCamera,
                   icon: const Icon(Icons.photo_camera_outlined),
                   label: Text(_systemCameraLabel),
+                ),
+              ],
+              if (_capabilities?.isPico == true) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _handling || _pickingImage ? null : _scanWithXrCamera,
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: Text(_xrCameraLabel),
                 ),
               ],
               if (_externalScannerAvailable) ...[
