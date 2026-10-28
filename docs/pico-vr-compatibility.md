@@ -49,12 +49,11 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
   the Android camera count and permission status. On PICO, **Try Android
   camera preview** is an opt-in diagnostic when the camera list is empty;
   it is never treated as proof of an XR passthrough API.
-- **Not implemented**: live scanning through PICO XR passthrough (requires a
-  dedicated native OpenXR or official PICO SDK integration and permissions).
-  The PICO Unity Integration SDK 3.4.0 release introduced camera image APIs,
-  but Flutter's normal 2D Activity does not create the required XR session.
-  A native XR scanning flow must be independently built and verified on the
-  headset; Android Camera2 workarounds cannot substitute for it.
+- **Experimental native path (PR #166)**: an opt-in, separate
+  `PicoXrQrScanActivity` now creates a headless OpenXR session and attempts
+  to capture PICO color camera images. PICO firmware/runtime and real-headset
+  permission behavior remain unverified; this is **not** yet hardware-proven.
+  Normal Android 2D Camera2 and import/paste remain independent fallbacks.
 
 ### External scanner interoperability
 
