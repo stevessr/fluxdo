@@ -7,6 +7,7 @@ on:
       - 'lib/pages/qr_login_scan_page.dart'
       - 'lib/pages/settings_page.dart'
       - 'android/app/src/main/**'
+      - 'android/app/build.gradle.kts'
       - 'test/services/pico_vr_service_test.dart'
       - '.github/workflows/pico-vr-compatibility.yml'
   workflow_dispatch:
