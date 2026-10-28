@@ -173,6 +173,7 @@ class PicoXrQrScanActivity : Activity() {
     override fun onResume() {
         super.onResume()
         active = true
+        if (loadLibrary()) ensurePermissionAndScan()
     }
 
     override fun onPause() {
