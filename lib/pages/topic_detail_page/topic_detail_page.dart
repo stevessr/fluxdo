@@ -1650,11 +1650,11 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         content: Text(
           atCapacity
               ? (chinese
-                  ? '已达到10个窗口上限，请先关闭一个窗口'
-                  : 'The 10-window limit was reached; close one first')
+                    ? '已达到10个窗口上限，请先关闭一个窗口'
+                    : 'The 10-window limit was reached; close one first')
               : (chinese
-                  ? 'PICO 系统未能创建新的原生窗口'
-                  : 'PICO could not create a native window'),
+                    ? 'PICO 系统未能创建新的原生窗口'
+                    : 'PICO could not create a native window'),
         ),
       ),
     );
