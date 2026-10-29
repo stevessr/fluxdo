@@ -76,7 +76,6 @@ import '../../providers/nested_topic_provider.dart';
 import 'controllers/topic_detail_controller.dart';
 import 'controllers/topic_toc_controller.dart';
 import 'widgets/nested_post_list.dart';
-import 'widgets/invite_private_message_dialog.dart';
 import 'widgets/topic_detail_overlay.dart';
 import 'widgets/topic_post_list.dart';
 import '../webview_page.dart';
@@ -227,8 +226,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   bool _isCheckTitleVisibilityScheduled = false;
   bool _isRefreshing = false;
   int? _removingPrivateMessageParticipantId;
-  String? _removingPrivateMessageGroupName;
-  bool _isTogglingArchiveMessage = false;
 
   /// 本地屏蔽名单过滤缓存：provider 状态与名单实例都未变时复用同一份
   /// 过滤结果，保证同一帧内多处读取拿到 identical 的 posts 列表
