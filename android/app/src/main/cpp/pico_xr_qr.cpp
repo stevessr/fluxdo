@@ -146,8 +146,17 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
         if (std::none_of(extensions.begin(), extensions.end(), [needed](const auto& x) {
             return std::strcmp(x.extensionName, needed) == 0;
         })) {
-            if (std::strcmp(needed, "XR_PICO_camera_image") == 0)
-                status("PICO firmware does not expose XR_PICO_camera_image");
+            if (std::strcmp(needed, "XR_PICO_camera_image") == 0) {
+                const bool hasBdCamera = std::any_of(
+                    extensions.begin(), extensions.end(), [](const auto& ext) {
+                        return std::strcmp(ext.extensionName, "XR_BD_camera_image") == 0;
+                    });
+                // XR_BD_camera_image has a different ABI, not interchangeable
+                // with the PICO types. Report it without calling wrong symbols.
+                status(hasBdCamera
+                    ? "XR_PICO_camera_image absent; XR_BD_camera_image present (different ABI)"
+                    : "PICO firmware does not expose XR_PICO_camera_image");
+            }
             else if (std::strcmp(needed, "XR_MND_headless") == 0)
                 status("Headless OpenXR unsupported by firmware");
             else status("Required OpenXR extension unavailable");
