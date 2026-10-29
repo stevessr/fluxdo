@@ -128,6 +128,34 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
 
   Future<void> _scanWithExternalQrScanner() async {
     if (_handling || _pickingImage) return;
+    // A third-party scanner receives the plaintext QR payload, including
+    // the API key (which may not expire) and one-time login OTP.
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(zh ? '外部扫码安全提醒' : 'External scanner security'),
+        content: Text(zh
+            ? '登录二维码包含明文 API Key 和一次性验证码，API Key 可能长期有效。'
+              '外部扫码应用能够读取这些凭证。请仅在信任该应用时继续，'
+              '否则使用应用内相机、图片导入或粘贴。'
+            : 'Login QR codes contain a plaintext API key and one-time '
+              'code. The API key may not expire. External scanner apps can '
+              'read these credentials. Continue only if you trust the app, '
+              'or use the in-app camera, image import or paste.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(zh ? '取消' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(zh ? '继续扫码' : 'Continue'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || approved != true) return;
     setState(() => _pickingImage = true);
     try {
       final raw = await PicoVrService.instance.scanWithExternalQrScanner();
