@@ -67,9 +67,9 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
    to revisit an earlier pane without discarding other tabs, close a
    background tab, and then close the active tab. Confirm embedded state and
    scrolling still belong to the original pane instances.
-2. Resize/move windows in the PICO UI, switch focus, background and resume;
+8. Resize/move windows in the PICO UI, switch focus, background and resume;
    verify all windows remain interactive.
-3. Use the system file picker in both windows concurrently and verify each
+7. Use the system file picker in both windows concurrently and verify each
    result returns only to its initiating Flutter route.
 4. On PICO 4 Ultra with no Android Camera2 camera, open QR login: verify
    it shows the gallery/paste fallback rather than a blank camera preview.
