@@ -110,6 +110,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Foreground-only PICO XR camera scanner; not callable by other apps.
+             Keep the main Flutter activity a standard 2D panel. -->
+        <activity
+            android:name=".PicoXrQrScanActivity"
+            android:exported="false"
+            android:resizeableActivity="false"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
         <!-- 主实例仍使用 singleTask 处理 OAuth/深链；非导出的次窗口不接受外部 Intent。 -->
         <activity
             android:name=".PicoVrWindowActivity"

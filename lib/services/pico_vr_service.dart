@@ -109,6 +109,14 @@ class PicoVrService {
     return _channel.invokeMethod<String>('scanWithExternalApp');
   }
 
+  /// Opens a non-exported, foreground-only native OpenXR headless scanner.
+  /// Null means cancelled; any returned content still needs Fluxdo QR validation.
+  /// Does not assume PICO firmware exposes XR_PICO_camera_image.
+  Future<String?> scanWithXrCamera() async {
+    if (kIsWeb || !Platform.isAndroid) return null;
+    return _channel.invokeMethod<String>('scanWithXrCamera');
+  }
+
   Future<bool> openNewWindow() async {
     if (kIsWeb || !Platform.isAndroid) return false;
     try {

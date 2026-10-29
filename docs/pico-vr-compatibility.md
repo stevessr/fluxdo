@@ -22,8 +22,10 @@ It does not request an immersive XR session.
 ## Camera
 
 PICO passthrough cameras are **not equivalent to an Android Camera2 camera**.
-The PICO SDK 3.4.0 `PXR_CameraImage` / `XR_PICO_camera_image` API works
-with a supported XR session; that is not provided by a normal Flutter 2D panel.
+PICO Native OpenXR SDK 3.0.0 defines `XR_PICO_camera_image` for access via
+an XR session. It is distinct from Unity Integration SDK 3.4.0. Neither makes
+passthrough camera images available through Android Camera2; a standard 2D
+Flutter Activity does not own an XR session.
 
 - Native capability detection enumerates the `CameraManager.cameraIdList`
   before initializing the CameraX-backed `mobile_scanner`.
@@ -49,12 +51,11 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
   the Android camera count and permission status. On PICO, **Try Android
   camera preview** is an opt-in diagnostic when the camera list is empty;
   it is never treated as proof of an XR passthrough API.
-- **Not implemented**: live scanning through PICO XR passthrough (requires a
-  dedicated native OpenXR or official PICO SDK integration and permissions).
-  The PICO Unity Integration SDK 3.4.0 release introduced camera image APIs,
-  but Flutter's normal 2D Activity does not create the required XR session.
-  A native XR scanning flow must be independently built and verified on the
-  headset; Android Camera2 workarounds cannot substitute for it.
+- **Experimental native path (PR #166)**: an opt-in, separate
+  `PicoXrQrScanActivity` now creates a headless OpenXR session and attempts
+  to capture PICO color camera images. PICO firmware/runtime and real-headset
+  permission behavior remain unverified; this is **not** yet hardware-proven.
+  Normal Android 2D Camera2 and import/paste remain independent fallbacks.
 
 ### External scanner interoperability
 
@@ -102,3 +103,109 @@ adb logcat -s PicoVr AppLink Camera2CameraImpl
 CI can run analyzer/build checks, but real PICO window placement and XR
 camera availability require the target headset/firmware. Do not label
 CI-only checks as hardware validation.
+
+## Experimental native OpenXR QR camera (PICO 4 Ultra)
+
+This branch implements a **headless OpenXR** scan route, separate from the
+standard 2D Flutter camera and from an external camera application.
+
+- **Entry**: QR login → "Scan with PICO XR camera". A non-exported Android
+  `PicoXrQrScanActivity` requests Android CAMERA permission and starts a
+  20-second foreground-only capture attempt on a dedicated thread.
+- **Runtime**: Khronos OpenXR loader initializes with the JavaVM/Activity,
+  enumerates instance extensions, requires
+  `XR_KHR_android_create_instance`, `XR_MND_headless`,
+  `XR_EXT_future`, and `XR_PICO_camera_image`, then builds an OpenXR
+  headless instance/session.
+- **Camera**: Enumerates PICO camera IDs, creates camera device and capture
+  session via the PICO async APIs, configures raw RGBA frames, acquires
+  and releases each frame. The native session is RAII-cleaned on every exit
+  including permission failure, timeout, cancellation and runtime errors.
+- **Decode**: Bounds-checks frame dimensions/strides/buffer lengths, converts
+  to a <=1024-pixel grayscale image in memory, decodes locally via embedded
+  ZXing QRCodeReader without sending pixels to a server, and returns only
+  decoded text to the originating Flutter window. The existing
+  `QrLoginService.parsePayload` validates its login format before use.
+- **Lifecycle**: One native scan process-wide at a time. Each Activity's
+  scan token isolates cancellation across concurrent windows. Per-thread error
+  reporting prevents one window overwriting another window's XR diagnostics.
+  Native enumeration now filters for world-facing color cameras with raw-buffer
+  RGBA capture support before creating the device. Backgrounding/closing the
+  Activity cancels capture; gallery and clipboard remain fallbacks.
+
+### Hardware caveats / acceptance
+
+PICO's documented OpenXR extension ABI and presence of physical color cameras
+**do not prove** that the consumer firmware grants XR camera access from a
+separate non-immersive 2D Activity. The Native SDK 3.0.0 support table lists
+`XR_MND_headless` for PICO 4 Ultra but does **not** explicitly list
+`XR_PICO_camera_image` as supported by the device. PICO ships its own Loader
+for private extensions, whereas this branch currently uses Khronos Android
+Loader 1.1.65 plus a locally isolated PICO camera extension header. The device
+must establish whether this combination exposes the extension.
+
+If the session or extension is unavailable,
+the XR scanner shows an explicit error without trying private services.
+This native route is not called a *verified PICO 4 Ultra fix* until an actual
+headset (with its OS build recorded) has acquired a color frame and logged in
+with a QR code. CI builds are only compile/static checks.
+
+To debug without exposing login secrets:
+
+```sh
+adb shell getprop ro.pico.ota.version
+adb shell getprop ro.build.fingerprint
+adb shell dumpsys package com.github.lingyan000.fluxdo | grep -A4 CAMERA
+adb logcat -s OpenXR-Loader PicoVr
+```
+
+Manually verify: permission denied, runtime unavailable, no camera extension,
+camera occupied, app pause/resume, timeout, concurrent second window,
+normal Android phone scanning, QR success/failure. Test on PICO 4 Ultra before
+merging into main; native loader or XR session behavior may need adaptation.
+
+### Native QR robustness and privacy checks
+
+- The native image path now validates RGB layout, pixel stride, row stride,
+  last-row bounds and total buffer size before touching a pixel. Up to
+  8192×8192 sensor dimensions / 256 MiB of runtime-owned raw RGBA data are
+  accepted, but only a bounded <=1024px grayscale plane is copied to ZXing.
+- The decoder alternates **full view** and **center 50% crop** to retain QR
+  module detail when the source camera image is high-resolution. ZXing tries
+  regular and inverted contrast. These are best-effort improvements, not a
+  guarantee of autofocus or QR visibility on the headset.
+- Foreground cancellation invalidates the paused attempt's result. If the
+  Activity resumes while the old native worker is unwinding, one replacement
+  scan is started after it exits. Permission requests are single-flight and a
+  denied permission is not immediately requested again until the user retries.
+- The scanner Activity uses `FLAG_SECURE` to prevent screenshots and recent-app
+  previews from capturing QR credentials. No camera frames or decoded QR values
+  are written to files or logs.
+- `.github/workflows/pico-vr-compatibility.yml` now compiles and executes a
+  host-side C++ sanitizer test for RGBA row padding, grayscale sampling, center
+  crop, downsampling and invalid camera layout rejection. Android Kotlin and
+  ARM64 JNI compilation remain independent checks. No CI run can substitute
+  for live PICO firmware extension enumeration.
+
+Manual additional cases: rapidly pause/resume the QR scanner; deny permission,
+retry only after explicitly pressing Try; show a QR small in the passthrough
+field of view, and an inverted (light-on-dark) QR; start scans from two different
+Flutter windows; verify that a paused window never accepts an old QR result.
+
+### PICO 4 Ultra SDK acceptance checkpoints
+
+Open **QR login → Scan with PICO XR camera** on the physical headset and
+record the error text shown after a scan attempt, plus the OS version. Error
+messages contain no QR contents or frames. The key stages are:
+
+| Native error | What it proves / next check |
+|---|---|
+| `XR_PICO_camera_image absent; XR_BD_camera_image present (different ABI)` | Runtime exposes the newer Khronos ByteDance extension, not PICO's older interface. They differ in camera enumeration and image structures; a dedicated adapter is required rather than renaming symbols. |
+| `PICO firmware does not expose XR_PICO_camera_image` | Enumerated runtime extensions lack camera image support; verify PICO Loader and firmware rather than QR decoder. |
+| `Headless OpenXR unsupported by firmware` | `XR_MND_headless` is not exposed despite its listing in the PICO SDK device matrix. |
+| `Headless XR session rejected by runtime (XrResult ...)` | 2D Activity may not be allowed to own an XR session; consider an explicit XR host Activity if confirmed. |
+| `PICO camera denied, unavailable or occupied (XrResult ...)` | Distinguish permission and camera contention by numeric return code. |
+| `No world-facing RGB camera supporting raw RGBA capture` | No available passthrough camera meets the requested raw image configuration. |
+| `QR scan timed out: received 0 frames` | Camera setup succeeded but image delivery did not; if frames were received, check image format and QR decoding. |
+
+Official references: [Native SDK downloads](https://developer.picoxr.com/resources/?platform=native), [PICO OpenXR quickstart](https://developer.picoxr.com/document/native/openxr-sdk-quickstart/), [Native SDK extension specification](https://lf3-static.bytednsdoc.com/obj/eden-cn/sliheh7phbozbps/NativeSDK/3.0.0/NativeSdkSpec.html), [PICO extension support matrix](https://developer.picoxr.com/document/native/about-extensions/).

@@ -26,19 +26,54 @@ class PicoVrChannel(
     companion object {
         // Kept separate from the file picker and other activity-result request codes.
         private const val EXTERNAL_QR_REQUEST = 0x3B91
+        private const val XR_QR_REQUEST = 0x3B92
         private const val ZXING_SCAN_ACTION = "com.google.zxing.client.android.SCAN"
     }
 
     private var pendingQrResult: MethodChannel.Result? = null
+    private var pendingXrResult: MethodChannel.Result? = null
 
     /** Only standardized third-party scanner contracts are accepted, not undocumented PICO Intents. */
     fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == XR_QR_REQUEST && pendingXrResult != null) {
+            val reply = pendingXrResult
+            pendingXrResult = null
+            val raw = if (resultCode == Activity.RESULT_OK)
+                data?.getStringExtra(PicoXrQrScanActivity.EXTRA_QR) else null
+            reply?.success(raw)
+            return true
+        }
         if (requestCode != EXTERNAL_QR_REQUEST || pendingQrResult == null) return false
         val reply = pendingQrResult
         pendingQrResult = null
         val raw = if (resultCode == Activity.RESULT_OK) data?.getStringExtra("SCAN_RESULT") else null
         reply?.success(raw)
         return true
+    }
+
+    private fun startXrQrScanner(result: MethodChannel.Result) {
+        val identity = listOf(Build.MANUFACTURER, Build.BRAND, Build.MODEL, Build.DEVICE)
+            .joinToString(" ").lowercase(Locale.ROOT)
+        if (!identity.contains("pico")) {
+            result.error("NOT_PICO", "XR scanner is only offered on PICO", null)
+            return
+        }
+        if (pendingXrResult != null) {
+            result.error("BUSY", "XR camera is already scanning", null)
+            return
+        }
+        pendingXrResult = result
+        try {
+            @Suppress("DEPRECATION")
+            activity.startActivityForResult(
+                Intent(activity, PicoXrQrScanActivity::class.java),
+                XR_QR_REQUEST
+            )
+        } catch (e: RuntimeException) {
+            pendingXrResult = null
+            Log.w("PicoVr", "XR scanner launch failed", e)
+            result.error("XR_LAUNCH_FAILED", "Unable to open headless XR scanner", null)
+        }
     }
 
     private fun qrScanIntent(): Intent = Intent(ZXING_SCAN_ACTION).apply {
@@ -103,6 +138,7 @@ class PicoVrChannel(
             when (call.method) {
                 "getCapabilities" -> result.success(getCapabilities())
                 "scanWithExternalApp" -> startExternalQrScanner(result)
+                "scanWithXrCamera" -> startXrQrScanner(result)
                 "openNewWindow" -> result.success(openNewWindow())
                 else -> result.notImplemented()
             }
@@ -113,6 +149,8 @@ class PicoVrChannel(
         channel.setMethodCallHandler(null)
         pendingQrResult?.error("WINDOW_CLOSED", "The scanner's Flutter window was closed", null)
         pendingQrResult = null
+        pendingXrResult?.error("WINDOW_CLOSED", "XR scan window was closed", null)
+        pendingXrResult = null
     }
 
     private fun getCapabilities(): Map<String, Any> {

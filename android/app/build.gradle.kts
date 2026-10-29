@@ -61,6 +61,10 @@ android {
     // 避免插件 side-by-side 再拉 27.x 导致重复下载。
     ndkVersion = "28.2.13676358"
 
+    buildFeatures {
+        prefab = true
+    }
+
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -68,6 +72,11 @@ android {
     }
 
     defaultConfig {
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+            }
+        }
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.github.lingyan000.fluxdo"
         // You can update the following values to match your application needs.
@@ -76,6 +85,13 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     signingConfigs {
@@ -158,6 +174,10 @@ flutter {
 }
 
 dependencies {
+    // Khronos OpenXR Android loader with prefab C++ headers and library.
+    implementation("org.khronos.openxr:openxr_loader_for_android:1.1.65")
+    // Offline, embedded QR decoder: no network access or Play Services needed.
+    implementation("com.google.zxing:core:3.5.4")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation(platform("com.google.firebase:firebase-bom:33.14.0"))
     implementation("com.google.firebase:firebase-crashlytics-ndk")
