@@ -37,7 +37,13 @@ The PICO SDK 3.4.0 `PXR_CameraImage` / `XR_PICO_camera_image` API works
 with a supported XR session; that is not provided by a normal Flutter 2D panel.
 
 - Native capability detection enumerates the `CameraManager.cameraIdList`
-  before initializing the CameraX-backed `mobile_scanner`.
+  and verifies a backward-compatible camera with YUV_420_888 output before
+  initializing the CameraX-backed `mobile_scanner`. Depth-only or metadata-only
+  sensors are not considered QR cameras.
+- If a ZXing-compatible Android scanner Activity is installed, the QR page
+  offers **system QR scanner**, accepts its `SCAN_RESULT`, and runs the regular
+  login validation. This is independent of Camera2 enumeration, but the
+  external scanner must itself have camera access and may not work on PICO.
 - If no Android camera is enumerated, the QR login page immediately offers
   **image import** and **paste QR payload**; it does not repeatedly attempt
   a camera session that cannot start.
@@ -50,6 +56,9 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
 - On phones with Camera2 support, the scanner is still enabled.
 - **Not implemented**: live scanning through PICO XR passthrough (requires a
   dedicated native OpenXR or official PICO SDK integration and permissions).
+  PICO Mixed Reality Capture (MRC) composites real and virtual recordings;
+  it does not provide a raw camera-frame API. `XR_PICO_camera_image` can
+  retrieve camera images inside an XR session, not from this 2D Flutter panel.
 
 ## Manual device matrix
 
@@ -78,6 +87,9 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
    validation path works. Paste invalid text and verify no login occurs.
    If a system camera app is available, capture a QR code and verify decoding.
    If no camera capture handler exists, confirm the action is not offered.
+   If a compatible external QR scanner is installed, test successful scan,
+   cancellation, and rescanning in a second window. Without that Activity,
+   verify the extra button stays hidden.
 8. Regression check on ordinary Android: main launcher/deep link login,
    Camera2 QR scan, attachment picker, transcoding, memory pressure.
 
