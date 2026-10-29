@@ -280,14 +280,18 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     XrCameraDeviceCreateInfoPICO deviceInfo{XR_TYPE_CAMERA_DEVICE_CREATE_INFO_PICO};
     deviceInfo.cameraId = cameraIds[0];
     XrFutureEXT future = XR_NULL_FUTURE_EXT;
-    if (XR_FAILED(createDevice(xr.instance, &deviceInfo, &future)) ||
-        !waitForFuture(xr.instance, future, poll, deadline)) {
-        status("PICO camera device could not be opened"); return nullptr;
+    const XrResult openDeviceResult = createDevice(xr.instance, &deviceInfo, &future);
+    if (XR_FAILED(openDeviceResult)) {
+        xrFailure("PICO camera device request failed", openDeviceResult); return nullptr;
     }
+    if (!waitForFuture(xr.instance, future, poll, deadline)) return nullptr;
     XrCreateCameraDeviceCompletionPICO deviceCompletion{XR_TYPE_CREATE_CAMERA_DEVICE_COMPLETION_PICO};
-    if (XR_FAILED(completeDevice(xr.instance, future, &deviceCompletion)) ||
-        XR_FAILED(deviceCompletion.futureResult)) {
-        status("Camera access denied, unavailable or occupied"); return nullptr;
+    const XrResult deviceCompleteResult = completeDevice(xr.instance, future, &deviceCompletion);
+    if (XR_FAILED(deviceCompleteResult)) {
+        xrFailure("PICO device future completion failed", deviceCompleteResult); return nullptr;
+    }
+    if (XR_FAILED(deviceCompletion.futureResult)) {
+        xrFailure("PICO camera denied, unavailable or occupied", deviceCompletion.futureResult); return nullptr;
     }
     xr.device = deviceCompletion.device;
 
@@ -304,20 +308,25 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     captureInfo.configCount = 2;
     captureInfo.configs = configs;
     future = XR_NULL_FUTURE_EXT;
-    if (XR_FAILED(createCapture(xr.session, &captureInfo, &future)) ||
-        !waitForFuture(xr.instance, future, poll, deadline)) {
-        status("PICO camera capture session unavailable"); return nullptr;
+    const XrResult openCaptureResult = createCapture(xr.session, &captureInfo, &future);
+    if (XR_FAILED(openCaptureResult)) {
+        xrFailure("PICO camera capture request failed", openCaptureResult); return nullptr;
     }
+    if (!waitForFuture(xr.instance, future, poll, deadline)) return nullptr;
     XrCreateCameraCaptureSessionCompletionPICO captureCompletion{
         XR_TYPE_CREATE_CAMERA_CAPTURE_SESSION_COMPLETION_PICO};
-    if (XR_FAILED(completeCapture(xr.session, future, &captureCompletion)) ||
-        XR_FAILED(captureCompletion.futureResult)) {
-        status("PICO camera capture creation failed"); return nullptr;
+    const XrResult captureCompleteResult = completeCapture(xr.session, future, &captureCompletion);
+    if (XR_FAILED(captureCompleteResult)) {
+        xrFailure("PICO capture future completion failed", captureCompleteResult); return nullptr;
+    }
+    if (XR_FAILED(captureCompletion.futureResult)) {
+        xrFailure("PICO camera capture creation failed", captureCompletion.futureResult); return nullptr;
     }
     xr.capture = captureCompletion.captureSession;
     XrCameraCaptureBeginInfoPICO beginInfo{XR_TYPE_CAMERA_CAPTURE_BEGIN_INFO_PICO};
-    if (XR_FAILED(begin(xr.capture, &beginInfo))) {
-        status("PICO camera refused to start capturing"); return nullptr;
+    const XrResult beginCaptureResult = begin(xr.capture, &beginInfo);
+    if (XR_FAILED(beginCaptureResult)) {
+        xrFailure("PICO camera refused to start capturing", beginCaptureResult); return nullptr;
     }
     xr.capturing = true;
 
@@ -331,6 +340,10 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     }
     env->DeleteLocalRef(cls);
     XrTime lastTime = 0;
+    uint32_t framesReceived = 0;
+    uint32_t framesDecoded = 0;
+    uint32_t frameLayoutsRejected = 0;
+    uint32_t imageDataFailures = 0;
     while (!expired(deadline)) {
         XrCameraImageAcquireInfoPICO acquireInfo{XR_TYPE_CAMERA_IMAGE_ACQUIRE_INFO_PICO};
         acquireInfo.lastCaptureTime = lastTime;
@@ -340,7 +353,8 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
             std::this_thread::sleep_for(std::chrono::milliseconds(35));
             continue;
         }
-        if (XR_FAILED(res)) { status("XR frame acquisition failed"); break; }
+        if (XR_FAILED(res)) { xrFailure("XR frame acquisition failed", res); return nullptr; }
+        ++framesReceived;
         XrCameraImageDataRawBufferPICO pixels{XR_TYPE_CAMERA_IMAGE_DATA_RAW_BUFFER_PICO};
         const XrResult dataResult = imageData(xr.capture, frame.imageId,
             reinterpret_cast<XrCameraImageDataBaseHeaderPICO*>(&pixels));
@@ -371,12 +385,17 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
             }
             jbyteArray data = env->NewByteArray(static_cast<jsize>(gray.size()));
             if (data) {
+                ++framesDecoded;
                 env->SetByteArrayRegion(data, 0, static_cast<jsize>(gray.size()), gray.data());
                 found = static_cast<jstring>(env->CallObjectMethod(
                     activity, decodeMethod, data, static_cast<jint>(w), static_cast<jint>(h)));
                 env->DeleteLocalRef(data);
                 if (env->ExceptionCheck()) { env->ExceptionClear(); found = nullptr; }
             }
+        } else if (XR_FAILED(dataResult)) {
+            ++imageDataFailures;
+        } else {
+            ++frameLayoutsRejected;
         }
         release(xr.capture, frame.imageId); // Always release, even when decoding failed.
         lastTime = frame.captureTime;
@@ -384,7 +403,12 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
     }
     if (cancelled) status("QR scan cancelled");
-    else if (Clock::now() >= deadline) status("QR scan timed out");
+    else if (Clock::now() >= deadline) {
+        status("QR scan timed out: received " + std::to_string(framesReceived) +
+               " frames, checked " + std::to_string(framesDecoded) +
+               ", invalid layout " + std::to_string(frameLayoutsRejected) +
+               ", image data failures " + std::to_string(imageDataFailures));
+    }
     return nullptr;
 }
 }  // namespace
