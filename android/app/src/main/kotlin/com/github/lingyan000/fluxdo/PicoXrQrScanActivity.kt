@@ -15,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
+import com.google.zxing.LuminanceSource
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
@@ -185,15 +186,19 @@ class PicoXrQrScanActivity : Activity() {
     private fun decodeQrFrame(gray: ByteArray, width: Int, height: Int): String? {
         if (width <= 0 || height <= 0 || width > 1024 || height > 1024 ||
             gray.size != width * height) return null
-        return try {
-            val source = PlanarYUVLuminanceSource(gray, width, height, 0, 0, width, height, false)
-            val bitmap = BinaryBitmap(HybridBinarizer(source))
-            reader.decode(bitmap, hints).text
-        } catch (_: ReaderException) {
-            null
-        } finally {
-            reader.reset()
+        val source = PlanarYUVLuminanceSource(gray, width, height, 0, 0, width, height, false)
+        fun decode(candidate: LuminanceSource): String? {
+            return try {
+                reader.decode(BinaryBitmap(HybridBinarizer(candidate)), hints).text
+            } catch (_: ReaderException) {
+                null
+            } finally {
+                reader.reset()
+            }
         }
+        // PICO passthrough may see light-on-dark QR codes (dark-mode apps).
+        // Only spend the second decoding pass when the ordinary scan misses.
+        return decode(source) ?: decode(source.invert())
     }
 
     override fun onRequestPermissionsResult(
