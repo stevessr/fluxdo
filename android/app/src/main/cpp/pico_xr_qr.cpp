@@ -20,7 +20,6 @@
 namespace {
 using Clock = std::chrono::steady_clock;
 std::mutex scanMutex;
-std::mutex statusMutex;
 std::atomic<bool> cancelled{false};
 std::atomic<jlong> activeScan{0};
 std::mutex cancelledMutex;
@@ -38,10 +37,12 @@ struct ScanToken {
     }
     jlong token_;
 };
-std::string lastError;
-void status(const char* text) {
-    std::lock_guard<std::mutex> lock(statusMutex);
-    lastError = text;  // Never write decoded QR contents to diagnostics.
+thread_local std::string lastError;
+void status(const std::string& text) {
+    lastError = text;  // No frames, QR payloads, or credentials in diagnostics.
+}
+void xrFailure(const char* operation, XrResult result) {
+    status(std::string(operation) + " (XrResult " + std::to_string(static_cast<int>(result)) + ")");
 }
 bool expired(Clock::time_point deadline) {
     return cancelled.load() || Clock::now() >= deadline;
@@ -58,7 +59,7 @@ bool waitForFuture(XrInstance instance, XrFutureEXT future,
         info.future = future;
         XrFuturePollResultEXT state{XR_TYPE_FUTURE_POLL_RESULT_EXT};
         const XrResult result = poll(instance, &info, &state);
-        if (XR_FAILED(result)) { status("XR future poll failed"); return false; }
+        if (XR_FAILED(result)) { xrFailure("XR future poll failed", result); return false; }
         if (state.state == XR_FUTURE_STATE_READY_EXT) return true;
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
@@ -90,6 +91,7 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     std::unique_lock<std::mutex> singleScan(scanMutex, std::try_to_lock);
     if (!singleScan.owns_lock()) { status("Another XR scan is active"); return nullptr; }
     cancelled = false;
+    status("Starting OpenXR camera scan");
     ScanToken active(token);
     // onPause() may have cancelled while the scan was queued behind another
     // window's session. Do not resurrect a background camera capture.
@@ -154,19 +156,22 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     instanceInfo.applicationInfo.engineVersion = 1;
     instanceInfo.enabledExtensionCount = sizeof(required) / sizeof(required[0]);
     instanceInfo.enabledExtensionNames = required;
-    if (XR_FAILED(xrCreateInstance(&instanceInfo, &xr.instance))) {
-        status("XR instance creation failed"); return nullptr;
+    const XrResult createInstanceResult = xrCreateInstance(&instanceInfo, &xr.instance);
+    if (XR_FAILED(createInstanceResult)) {
+        xrFailure("XR instance creation failed", createInstanceResult); return nullptr;
     }
     XrSystemGetInfo getSystem{XR_TYPE_SYSTEM_GET_INFO};
     getSystem.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
     XrSystemId systemId = XR_NULL_SYSTEM_ID;
-    if (XR_FAILED(xrGetSystem(xr.instance, &getSystem, &systemId))) {
-        status("No active XR headset system"); return nullptr;
+    const XrResult getSystemResult = xrGetSystem(xr.instance, &getSystem, &systemId);
+    if (XR_FAILED(getSystemResult)) {
+        xrFailure("No active XR headset system", getSystemResult); return nullptr;
     }
     XrSessionCreateInfo sessionInfo{XR_TYPE_SESSION_CREATE_INFO};
     sessionInfo.systemId = systemId; // XR_MND_headless: no graphics binding
-    if (XR_FAILED(xrCreateSession(xr.instance, &sessionInfo, &xr.session))) {
-        status("Headless XR session rejected (2D app may lack XR entitlement)"); return nullptr;
+    const XrResult createSessionResult = xrCreateSession(xr.instance, &sessionInfo, &xr.session);
+    if (XR_FAILED(createSessionResult)) {
+        xrFailure("Headless XR session rejected by runtime", createSessionResult); return nullptr;
     }
     // OpenXR sessions must enter the running state before camera capture.
     // A headless session omits graphics binding, not the session lifecycle.
@@ -178,7 +183,7 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
             continue;
         }
         if (XR_FAILED(eventResult)) {
-            status("OpenXR event polling failed"); return nullptr;
+            xrFailure("OpenXR event polling failed", eventResult); return nullptr;
         }
         if (event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
             const auto& changed = reinterpret_cast<const XrEventDataSessionStateChanged&>(event);
@@ -186,8 +191,9 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
             if (changed.state == XR_SESSION_STATE_READY) {
                 XrSessionBeginInfo beginInfo{XR_TYPE_SESSION_BEGIN_INFO};
                 beginInfo.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-                if (XR_FAILED(xrBeginSession(xr.session, &beginInfo))) {
-                    status("Headless OpenXR session could not begin"); return nullptr;
+                const XrResult beginResult = xrBeginSession(xr.session, &beginInfo);
+                if (XR_FAILED(beginResult)) {
+                    xrFailure("Headless OpenXR session could not begin", beginResult); return nullptr;
                 }
                 xr.sessionRunning = true;
             } else if (changed.state == XR_SESSION_STATE_EXITING ||
@@ -239,17 +245,38 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     XrCameraPropertiesPICO properties{XR_TYPE_CAMERA_PROPERTIES_PICO};
     properties.propertyCount = 2;
     properties.properties = propertyFilter;
+    // Filter by the exact configuration we will request, rather than picking
+    // the first color camera and assuming it supports CPU RGBA frames.
+    XrCameraCapabilityDataTransferTypePICO requiredTransfer{
+        XR_TYPE_CAMERA_CAPABILITY_DATA_TRANSFER_TYPE_PICO};
+    requiredTransfer.transferType = XR_CAMERA_DATA_TRANSFER_TYPE_RAW_BUFFER_PICO;
+    XrCameraCapabilityImageFormatPICO requiredFormat{
+        XR_TYPE_CAMERA_CAPABILITY_IMAGE_FORMAT_PICO};
+    requiredFormat.format = XR_CAMERA_IMAGE_FORMAT_RGBA_8888_PICO;
+    XrCameraCapabilityBaseHeaderPICO* capabilityFilter[] = {
+        reinterpret_cast<XrCameraCapabilityBaseHeaderPICO*>(&requiredTransfer),
+        reinterpret_cast<XrCameraCapabilityBaseHeaderPICO*>(&requiredFormat)
+    };
+    XrCameraCapabilitiesPICO capabilities{XR_TYPE_CAMERA_CAPABILITIES_PICO};
+    capabilities.capabilityCount = 2;
+    capabilities.capabilities = capabilityFilter;
     XrAvailableCamerasEnumerateInfoPICO filter{XR_TYPE_AVAILABLE_CAMERAS_ENUMERATE_INFO_PICO};
     filter.properties = &properties;
+    filter.capabilities = &capabilities;
     uint32_t cameraCount = 0;
-    if (XR_FAILED(enumerate(xr.instance, &filter, 0, &cameraCount, nullptr)) ||
-        cameraCount == 0 || cameraCount > 16) {
-        status("No accessible PICO passthrough cameras"); return nullptr;
+    const XrResult cameraQueryResult = enumerate(xr.instance, &filter, 0, &cameraCount, nullptr);
+    if (XR_FAILED(cameraQueryResult)) {
+        xrFailure("PICO camera capability enumeration failed", cameraQueryResult); return nullptr;
+    }
+    if (cameraCount == 0 || cameraCount > 16) {
+        status("No world-facing RGB camera supporting raw RGBA capture"); return nullptr;
     }
     std::vector<XrCameraIdPICO> cameraIds(cameraCount);
-    if (XR_FAILED(enumerate(xr.instance, &filter, cameraCount, &cameraCount, cameraIds.data()))) {
-        status("PICO camera enumeration failed"); return nullptr;
+    const XrResult cameraListResult = enumerate(xr.instance, &filter, cameraCount, &cameraCount, cameraIds.data());
+    if (XR_FAILED(cameraListResult)) {
+        xrFailure("PICO camera enumeration failed", cameraListResult); return nullptr;
     }
+    if (cameraCount == 0) { status("PICO camera disappeared during enumeration"); return nullptr; }
     XrCameraDeviceCreateInfoPICO deviceInfo{XR_TYPE_CAMERA_DEVICE_CREATE_INFO_PICO};
     deviceInfo.cameraId = cameraIds[0];
     XrFutureEXT future = XR_NULL_FUTURE_EXT;
@@ -321,13 +348,13 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
         if (XR_SUCCEEDED(dataResult) && pixels.buffer &&
             pixels.width > 0 && pixels.height > 0 &&
             pixels.width <= 4096 && pixels.height <= 4096 &&
-            pixels.bytesPerPixel >= 3 && pixels.pixelStride >= 3 &&
+            pixels.bytesPerPixel == 4 && pixels.pixelStride >= 4 &&
             pixels.pixelStride <= 16 &&
             static_cast<uint64_t>(pixels.stride) >=
-                static_cast<uint64_t>(pixels.width - 1) * pixels.pixelStride + 3 &&
+                static_cast<uint64_t>(pixels.width - 1) * pixels.pixelStride + 4 &&
             static_cast<uint64_t>(pixels.bufferSize) >=
                 static_cast<uint64_t>(pixels.height - 1) * pixels.stride +
-                static_cast<uint64_t>(pixels.width - 1) * pixels.pixelStride + 3 &&
+                static_cast<uint64_t>(pixels.width - 1) * pixels.pixelStride + 4 &&
             pixels.bufferSize <= 64 * 1024 * 1024) {
             // Decode at <=1024 pixels to bound CPU and Java heap use.
             const uint32_t step = std::max(1u, (std::max(pixels.width, pixels.height) + 1023) / 1024);
@@ -383,6 +410,5 @@ Java_com_github_lingyan000_fluxdo_PicoXrQrScanActivity_cancelNative(
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_github_lingyan000_fluxdo_PicoXrQrScanActivity_lastNativeError(
     JNIEnv* env, jobject) {
-    std::lock_guard<std::mutex> lock(statusMutex);
     return env->NewStringUTF(lastError.c_str());
 }
