@@ -23,7 +23,15 @@ class PicoVrChannel(
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getCapabilities" -> result.success(getCapabilities())
-                "openNewWindow" -> result.success(openNewWindow())
+                "openNewWindow" -> result.success(
+                    openNewWindow(
+                        call.argument<Int>("topicId"),
+                        call.argument<Int>("postNumber")
+                    )
+                )
+                "consumeLaunchRequest" -> result.success(
+                    (activity as? PicoVrWindowActivity)?.consumeLaunchRequest()
+                )
                 else -> result.notImplemented()
             }
         }
@@ -77,7 +85,7 @@ class PicoVrChannel(
         )
     }
 
-    private fun openNewWindow(): Boolean {
+    private fun openNewWindow(topicId: Int?, postNumber: Int?): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N ||
             !PicoVrWindowActivity.reserveLaunch()) return false
         return try {
@@ -85,8 +93,21 @@ class PicoVrChannel(
             // even if another secondary Fluxdo window is already running.
             val intent = Intent(activity, PicoVrWindowActivity::class.java).apply {
                 action = Intent.ACTION_MAIN
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                        Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT
+                )
+                if (topicId != null && topicId > 0) {
+                    putExtra(PicoVrWindowActivity.EXTRA_TOPIC_ID, topicId)
+                    if (postNumber != null && postNumber > 0) {
+                        putExtra(PicoVrWindowActivity.EXTRA_POST_NUMBER, postNumber)
+                    }
+                }
             }
+            // Android's real multi-task / multi-window path, not an in-app
+            // imitation. The XR shell chooses panel geometry and may ignore
+            // LAUNCH_ADJACENT if it does not implement native placement.
             activity.startActivity(intent)
             true
         } catch (e: ActivityNotFoundException) {
