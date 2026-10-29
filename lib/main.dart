@@ -71,6 +71,8 @@ import 'package:fluxdo_render/fluxdo_render.dart'
 
 import 'services/clipboard_topic_link_service.dart';
 import 'services/deep_link_service.dart';
+import 'services/pico_vr_service.dart';
+import 'pages/topic_detail_page/topic_detail_page.dart';
 import 'services/windows_protocol_registrar_stub.dart'
     if (dart.library.ffi) 'services/windows_protocol_registrar_io.dart';
 import 'services/background/background_notification_service.dart';
@@ -1005,6 +1007,9 @@ class _MainPageState extends ConsumerState<MainPage>
 
       // 初始化 Deep Link 服务
       DeepLinkService.instance.initialize(context);
+      // Secondary native Android tasks carry a one-shot, per-Activity topic
+      // request. MainPage is mounted only after onboarding/preheat is ready.
+      unawaited(_consumePicoLaunchRequest());
       unawaited(
         _runStartupUiTasks().catchError((Object e, StackTrace s) {
           debugPrint('[MainPage] 启动 UI 任务失败: $e\n$s');
@@ -1214,6 +1219,19 @@ class _MainPageState extends ConsumerState<MainPage>
       // 明确拒绝（含点遮罩关闭）后不再自动弹窗
       await RenderBackendService.dismissSuggestion();
     }
+  }
+
+  Future<void> _consumePicoLaunchRequest() async {
+    final request = await PicoVrService.instance.consumeLaunchRequest();
+    if (!mounted || request == null) return;
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TopicDetailPage(
+          topicId: request.topicId,
+          scrollToPostNumber: request.postNumber,
+        ),
+      ),
+    );
   }
 
   Future<void> _showCrashlyticsNotice() async {
