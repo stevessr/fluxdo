@@ -1641,12 +1641,21 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       postNumber: _resolvedViewportPostNumber,
     );
     if (!mounted || opened) return;
+    final status = await PicoVrService.instance.getWindowStatus();
+    if (!mounted) return;
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    final atCapacity = status?.isAtCapacity == true;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
-        content: Text(chinese
-            ? '无法打开原生 Android 新窗口'
-            : 'Unable to open a native Android window'),
+        content: Text(
+          atCapacity
+              ? (chinese
+                  ? '已达到10个窗口上限，请先关闭一个窗口'
+                  : 'The 10-window limit was reached; close one first')
+              : (chinese
+                  ? 'PICO 系统未能创建新的原生窗口'
+                  : 'PICO could not create a native window'),
+        ),
       ),
     );
   }
@@ -2046,9 +2055,11 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
                   color: Theme.of(context).colorScheme.onSurface,
                 ),
                 const SizedBox(width: 12),
-                Text(Localizations.localeOf(context).languageCode == 'zh'
-                    ? '在新窗口打开'
-                    : 'Open in new window'),
+                Text(
+                  Localizations.localeOf(context).languageCode == 'zh'
+                      ? '在新窗口打开'
+                      : 'Open in new window',
+                ),
               ],
             ),
           ),
