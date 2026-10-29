@@ -9,6 +9,7 @@ void main() {
         'model': 'PICO 4 Ultra',
         'hasCamera2': false,
         'hasCameraCaptureIntent': true,
+        'hasExternalQrScanner': true,
         'supportsMultipleWindows': true,
         'isInMultiWindowMode': true,
         'maxWindows': 10,
@@ -18,6 +19,7 @@ void main() {
       expect(caps.model, 'PICO 4 Ultra');
       expect(caps.canUseMobileScanner, isFalse);
       expect(caps.hasCameraCaptureIntent, isTrue);
+      expect(caps.hasExternalQrScanner, isTrue);
       expect(caps.supportsMultipleWindows, isTrue);
       expect(caps.isInMultiWindowMode, isTrue);
       expect(caps.maxWindows, 10);
@@ -49,6 +51,7 @@ void main() {
       expect(missing.canUseMobileScanner, isFalse);
       expect(missing.model, isEmpty);
       expect(missing.hasCameraCaptureIntent, isFalse);
+      expect(missing.hasExternalQrScanner, isFalse);
       expect(missing.maxWindows, 1);
     });
   });
