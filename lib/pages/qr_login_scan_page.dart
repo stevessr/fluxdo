@@ -31,6 +31,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
   bool _handling = false;
   bool _cameraSupported = false;
   bool _systemCameraAvailable = false;
+  bool _externalQrScannerAvailable = false;
   bool _checkingCamera = false;
   bool _pickingImage = false;
   String? _statusMessage;
@@ -65,6 +66,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
       _checkingCamera = false;
       _cameraSupported = caps.canUseMobileScanner;
       _systemCameraAvailable = caps.hasCameraCaptureIntent;
+      _externalQrScannerAvailable = caps.hasExternalQrScanner;
       if (_cameraSupported) _initializeScanner();
     });
   }
@@ -89,6 +91,11 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
       Localizations.localeOf(context).languageCode == 'zh'
           ? '系统相机拍摄二维码'
           : 'Capture QR with system camera';
+
+  String get _externalQrLabel =>
+      Localizations.localeOf(context).languageCode == 'zh'
+          ? '使用系统扫码应用'
+          : 'Scan with another app';
 
   String get _pasteLabel =>
       Localizations.localeOf(context).languageCode == 'zh'
@@ -117,6 +124,23 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
     // 先快速过滤非本协议内容,避免误扫普通二维码就弹错误
     if (QrLoginService.instance.parsePayload(raw) == null) return;
     await _completeWithRaw(raw);
+  }
+
+  Future<void> _scanWithExternalQrScanner() async {
+    if (_handling || _pickingImage) return;
+    setState(() => _pickingImage = true);
+    try {
+      final raw = await PicoVrService.instance.scanWithExternalQrScanner();
+      if (!mounted || raw == null) return;
+      final text = raw.trim();
+      if (QrLoginService.instance.parsePayload(text) == null) {
+        ToastService.showError(S.current.login_qrScanFailed);
+        return;
+      }
+      await _completeWithRaw(text);
+    } finally {
+      if (mounted) setState(() => _pickingImage = false);
+    }
   }
 
   Future<void> _pickFromGallery() => _pickImage(ImageSource.gallery);
@@ -271,6 +295,10 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                           ? _captureWithSystemCamera
                           : null,
                       onPaste: _pasteQrContent,
+                      onExternalScan: _externalQrScannerAvailable
+                          ? _scanWithExternalQrScanner
+                          : null,
+                      externalScanLabel: _externalQrLabel,
                       captureLabel: _systemCameraLabel,
                       pasteLabel: _pasteLabel,
                     );
@@ -315,6 +343,16 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                   icon: const Icon(Symbols.photo_library_rounded, size: 20),
                   label: Text(context.l10n.login_qrPickImage),
                 ),
+                if (_externalQrScannerAvailable) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _handling || _pickingImage
+                        ? null
+                        : _scanWithExternalQrScanner,
+                    icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+                    label: Text(_externalQrLabel),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: _handling || _pickingImage ? null : _pasteQrContent,
@@ -355,6 +393,16 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
                 label: Text(context.l10n.login_qrPickImage),
                 style: FilledButton.styleFrom(minimumSize: const Size(220, 52)),
               ),
+              if (_externalQrScannerAvailable) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _handling || _pickingImage
+                      ? null
+                      : _scanWithExternalQrScanner,
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: Text(_externalQrLabel),
+                ),
+              ],
               if (_systemCameraAvailable) ...[
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
@@ -384,6 +432,8 @@ class _CameraErrorPane extends StatelessWidget {
     required this.message,
     required this.onPickImage,
     required this.onPaste,
+    required this.externalScanLabel,
+    this.onExternalScan,
     required this.captureLabel,
     required this.pasteLabel,
     this.onCapture,
@@ -392,6 +442,8 @@ class _CameraErrorPane extends StatelessWidget {
   final String message;
   final VoidCallback onPickImage;
   final VoidCallback onPaste;
+  final VoidCallback? onExternalScan;
+  final String externalScanLabel;
   final VoidCallback? onCapture;
   final String captureLabel;
   final String pasteLabel;
@@ -434,6 +486,14 @@ class _CameraErrorPane extends StatelessWidget {
                 icon: const Icon(Symbols.photo_library_rounded),
                 label: Text(context.l10n.login_qrPickImage),
               ),
+              if (onExternalScan != null) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: onExternalScan,
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: Text(externalScanLabel),
+                ),
+              ],
               if (onCapture != null) ...[
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
