@@ -99,14 +99,21 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
   Future<void> _scanWithXrCamera() async {
     if (_handling || _pickingImage || _checkingCamera) return;
     setState(() => _pickingImage = true);
+    var shouldResumeCamera = true;
     try {
-      await _controller?.stop();
+      // An Android Camera2 preview may fail independently of PICO OpenXR.
+      // Never block the separate XR scanner if stopping Camera2 fails.
+      try {
+        await _controller?.stop();
+      } catch (_) {}
       final raw = (await PicoVrService.instance.scanWithXrCamera())?.trim();
       if (!mounted || raw == null) return;
       if (QrLoginService.instance.parsePayload(raw) == null) {
         ToastService.showError(S.current.login_qrScanFailed);
         return;
       }
+      // _completeWithRaw owns restarting Camera2 if the login fails.
+      shouldResumeCamera = false;
       await _completeWithRaw(raw);
     } on PlatformException catch (e) {
       debugPrint('[QrLoginScan] XR camera error: ${e.code}');
@@ -117,7 +124,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
     } finally {
       if (mounted) {
         setState(() => _pickingImage = false);
-        if (!_handling) {
+        if (shouldResumeCamera) {
           try {
             await _controller?.start();
           } catch (_) {}
