@@ -164,6 +164,34 @@ camera occupied, app pause/resume, timeout, concurrent second window,
 normal Android phone scanning, QR success/failure. Test on PICO 4 Ultra before
 merging into main; native loader or XR session behavior may need adaptation.
 
+### Native QR robustness and privacy checks
+
+- The native image path now validates RGB layout, pixel stride, row stride,
+  last-row bounds and total buffer size before touching a pixel. Up to
+  8192×8192 sensor dimensions / 256 MiB of runtime-owned raw RGBA data are
+  accepted, but only a bounded <=1024px grayscale plane is copied to ZXing.
+- The decoder alternates **full view** and **center 50% crop** to retain QR
+  module detail when the source camera image is high-resolution. ZXing tries
+  regular and inverted contrast. These are best-effort improvements, not a
+  guarantee of autofocus or QR visibility on the headset.
+- Foreground cancellation invalidates the paused attempt's result. If the
+  Activity resumes while the old native worker is unwinding, one replacement
+  scan is started after it exits. Permission requests are single-flight and a
+  denied permission is not immediately requested again until the user retries.
+- The scanner Activity uses `FLAG_SECURE` to prevent screenshots and recent-app
+  previews from capturing QR credentials. No camera frames or decoded QR values
+  are written to files or logs.
+- `.github/workflows/pico-vr-compatibility.yml` now compiles and executes a
+  host-side C++ sanitizer test for RGBA row padding, grayscale sampling, center
+  crop, downsampling and invalid camera layout rejection. Android Kotlin and
+  ARM64 JNI compilation remain independent checks. No CI run can substitute
+  for live PICO firmware extension enumeration.
+
+Manual additional cases: rapidly pause/resume the QR scanner; deny permission,
+retry only after explicitly pressing Try; show a QR small in the passthrough
+field of view, and an inverted (light-on-dark) QR; start scans from two different
+Flutter windows; verify that a paused window never accepts an old QR result.
+
 ### PICO 4 Ultra SDK acceptance checkpoints
 
 Open **QR login → Scan with PICO XR camera** on the physical headset and
