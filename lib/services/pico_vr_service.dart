@@ -38,6 +38,30 @@ class PicoVrCapabilities {
   bool get canUseMobileScanner => hasCamera2;
 }
 
+/// A one-shot navigation target owned by the newly launched Android Activity.
+@immutable
+class PicoVrLaunchRequest {
+  const PicoVrLaunchRequest({
+    required this.topicId,
+    this.postNumber,
+  });
+
+  factory PicoVrLaunchRequest.fromMap(Map<String, dynamic>? raw) {
+    final topicId = raw?['topicId'];
+    final postNumber = raw?['postNumber'];
+    if (topicId is! int || topicId <= 0) {
+      throw const FormatException('Invalid native window topic');
+    }
+    return PicoVrLaunchRequest(
+      topicId: topicId,
+      postNumber: postNumber is int && postNumber > 0 ? postNumber : null,
+    );
+  }
+
+  final int topicId;
+  final int? postNumber;
+}
+
 class PicoVrService {
   PicoVrService._();
 
@@ -85,15 +109,42 @@ class PicoVrService {
     );
   }
 
-  Future<bool> openNewWindow() async {
+  /// The Android shell owns placement. A positive topic ID opens that topic
+  /// in the new task, rather than returning to the home feed.
+  Future<bool> openNewWindow({int? topicId, int? postNumber}) async {
     if (kIsWeb || !Platform.isAndroid) return false;
     try {
-      return await _channel.invokeMethod<bool>('openNewWindow') ?? false;
+      return await _channel.invokeMethod<bool>('openNewWindow', {
+            if (topicId != null && topicId > 0) 'topicId': topicId,
+            if (postNumber != null && postNumber > 0)
+              'postNumber': postNumber,
+          }) ??
+          false;
     } on PlatformException catch (error) {
       debugPrint('[PicoVr] New window failed: ${error.code}');
       return false;
     } on MissingPluginException {
       return false;
     }
+  }
+
+  /// Read once from the *current* native Activity. Never use shared
+  /// preferences or a process-global variable for cross-window routing.
+  Future<PicoVrLaunchRequest?> consumeLaunchRequest() async {
+    if (kIsWeb || !Platform.isAndroid) return null;
+    try {
+      final data = await _channel.invokeMapMethod<String, dynamic>(
+        'consumeLaunchRequest',
+      );
+      if (data == null) return null;
+      return PicoVrLaunchRequest.fromMap(data);
+    } on PlatformException catch (error) {
+      debugPrint('[PicoVr] Window launch request unavailable: ${error.code}');
+    } on MissingPluginException {
+      return null;
+    } on FormatException {
+      debugPrint('[PicoVr] Invalid native window launch request');
+    }
+    return null;
   }
 }
