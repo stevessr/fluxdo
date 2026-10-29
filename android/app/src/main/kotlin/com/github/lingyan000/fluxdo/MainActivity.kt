@@ -126,6 +126,7 @@ open class MainActivity : FlutterActivity() {
     // SAF「另存为」建档结果先给 PublicFileChannel 认领,不是它的再交给插件
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (publicFileChannel?.handleActivityResult(requestCode, resultCode, data) == true) return
+        if (picoVrChannel?.handleActivityResult(requestCode, resultCode, data) == true) return
         super.onActivityResult(requestCode, resultCode, data)
     }
 
