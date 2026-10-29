@@ -22,8 +22,10 @@ It does not request an immersive XR session.
 ## Camera
 
 PICO passthrough cameras are **not equivalent to an Android Camera2 camera**.
-The PICO SDK 3.4.0 `PXR_CameraImage` / `XR_PICO_camera_image` API works
-with a supported XR session; that is not provided by a normal Flutter 2D panel.
+PICO Native OpenXR SDK 3.0.0 defines `XR_PICO_camera_image` for access via
+an XR session. It is distinct from Unity Integration SDK 3.4.0. Neither makes
+passthrough camera images available through Android Camera2; a standard 2D
+Flutter Activity does not own an XR session.
 
 - Native capability detection enumerates the `CameraManager.cameraIdList`
   before initializing the CameraX-backed `mobile_scanner`.
@@ -108,12 +110,12 @@ This branch implements a **headless OpenXR** scan route, separate from the
 standard 2D Flutter camera and from an external camera application.
 
 - **Entry**: QR login → "Scan with PICO XR camera". A non-exported Android
-  \`PicoXrQrScanActivity\` requests Android CAMERA permission and starts a
+  `PicoXrQrScanActivity` requests Android CAMERA permission and starts a
   20-second foreground-only capture attempt on a dedicated thread.
 - **Runtime**: Khronos OpenXR loader initializes with the JavaVM/Activity,
   enumerates instance extensions, requires
-  \`XR_KHR_android_create_instance\`, \`XR_MND_headless\`,
-  \`XR_EXT_future\`, and \`XR_PICO_camera_image\`, then builds an OpenXR
+  `XR_KHR_android_create_instance`, `XR_MND_headless`,
+  `XR_EXT_future`, and `XR_PICO_camera_image`, then builds an OpenXR
   headless instance/session.
 - **Camera**: Enumerates PICO camera IDs, creates camera device and capture
   session via the PICO async APIs, configures raw RGBA frames, acquires
@@ -123,17 +125,26 @@ standard 2D Flutter camera and from an external camera application.
   to a <=1024-pixel grayscale image in memory, decodes locally via embedded
   ZXing QRCodeReader without sending pixels to a server, and returns only
   decoded text to the originating Flutter window. The existing
-  \`QrLoginService.parsePayload\` validates its login format before use.
+  `QrLoginService.parsePayload` validates its login format before use.
 - **Lifecycle**: One native scan process-wide at a time. Each Activity's
-  scan token isolates cancellation across concurrent windows. Backgrounding
-  or closing the Activity requests cancellation, and the UI remains able to
-  fall back to gallery, clipboard or ordinary Camera2 scanner.
+  scan token isolates cancellation across concurrent windows. Per-thread error
+  reporting prevents one window overwriting another window's XR diagnostics.
+  Native enumeration now filters for world-facing color cameras with raw-buffer
+  RGBA capture support before creating the device. Backgrounding/closing the
+  Activity cancels capture; gallery and clipboard remain fallbacks.
 
 ### Hardware caveats / acceptance
 
 PICO's documented OpenXR extension ABI and presence of physical color cameras
 **do not prove** that the consumer firmware grants XR camera access from a
-separate non-immersive 2D Activity. If the session or extension is unavailable,
+separate non-immersive 2D Activity. The Native SDK 3.0.0 support table lists
+`XR_MND_headless` for PICO 4 Ultra but does **not** explicitly list
+`XR_PICO_camera_image` as supported by the device. PICO ships its own Loader
+for private extensions, whereas this branch currently uses Khronos Android
+Loader 1.1.65 plus a locally isolated PICO camera extension header. The device
+must establish whether this combination exposes the extension.
+
+If the session or extension is unavailable,
 the XR scanner shows an explicit error without trying private services.
 This native route is not called a *verified PICO 4 Ultra fix* until an actual
 headset (with its OS build recorded) has acquired a color frame and logged in
@@ -141,13 +152,31 @@ with a QR code. CI builds are only compile/static checks.
 
 To debug without exposing login secrets:
 
-\`\`\`sh
+```sh
 adb shell getprop ro.pico.ota.version
-adb shell dumpsys package com.github.lingyan000.fluxdo | grep -A3 CAMERA
+adb shell getprop ro.build.fingerprint
+adb shell dumpsys package com.github.lingyan000.fluxdo | grep -A4 CAMERA
 adb logcat -s OpenXR-Loader PicoVr
-\`\`\`
+```
 
 Manually verify: permission denied, runtime unavailable, no camera extension,
 camera occupied, app pause/resume, timeout, concurrent second window,
 normal Android phone scanning, QR success/failure. Test on PICO 4 Ultra before
 merging into main; native loader or XR session behavior may need adaptation.
+
+### PICO 4 Ultra SDK acceptance checkpoints
+
+Open **QR login → Scan with PICO XR camera** on the physical headset and
+record the error text shown after a scan attempt, plus the OS version. Error
+messages contain no QR contents or frames. The key stages are:
+
+| Native error | What it proves / next check |
+|---|---|
+| `PICO firmware does not expose XR_PICO_camera_image` | Enumerated runtime extensions lack camera image support; verify PICO Loader and firmware rather than QR decoder. |
+| `Headless OpenXR unsupported by firmware` | `XR_MND_headless` is not exposed despite its listing in the PICO SDK device matrix. |
+| `Headless XR session rejected by runtime (XrResult ...)` | 2D Activity may not be allowed to own an XR session; consider an explicit XR host Activity if confirmed. |
+| `PICO camera denied, unavailable or occupied (XrResult ...)` | Distinguish permission and camera contention by numeric return code. |
+| `No world-facing RGB camera supporting raw RGBA capture` | No available passthrough camera meets the requested raw image configuration. |
+| `QR scan timed out: received 0 frames` | Camera setup succeeded but image delivery did not; if frames were received, check image format and QR decoding. |
+
+Official references: [Native SDK downloads](https://developer.picoxr.com/resources/?platform=native), [PICO OpenXR quickstart](https://developer.picoxr.com/document/native/openxr-sdk-quickstart/), [Native SDK extension specification](https://lf3-static.bytednsdoc.com/obj/eden-cn/sliheh7phbozbps/NativeSDK/3.0.0/NativeSdkSpec.html), [PICO extension support matrix](https://developer.picoxr.com/document/native/about-extensions/).
