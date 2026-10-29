@@ -124,40 +124,40 @@ class _MasterDetailPaneHostState extends ConsumerState<MasterDetailPaneHost> {
           ),
           Expanded(
             child: MasterDetailLayout(
-        masterWidth: widget.masterWidth,
-        minDetailWidth: widget.minDetailWidth,
-        maxMasterRatio:
-            widget.maxMasterRatio ?? MasterDetailLayout.defaultMaxMasterRatio,
-        preferredMasterRatio: widget.preferredMasterRatio,
-        projectDetailWhenNarrow: true,
-        // 列表恒驻左栏(pinMaster 默认 true),层带在右格区内滑——
-        // 右栏内部压栈(话题里点链接)也是格间滑动,State 恒驻。
-        master: widget.master,
-        panes: [
-          for (var i = 0; i < selected.stack.length; i++)
-            KeyedSubtree(
-              key: ValueKey(
-                'pane_host_${selected.stack[i].kind}_'
-                '${selected.stack[i].instanceId ?? selected.stack[i].username ?? selected.stack[i].topicId}',
-              ),
-              child: PaneContentWidget(
-                entry: selected.stack[i],
-                stackProvider: widget.stackProvider,
-                parentActive: widget.isActive,
-                truncateOnPush: i < selected.stack.length - 1,
-                onBack: () {
-                  final n = ref.read(widget.stackProvider.notifier);
-                  if (ref.read(widget.stackProvider).isStacked) {
-                    n.pop();
-                  } else {
-                    n.clear();
-                  }
-                },
-              ),
-            ),
-        ],
-        emptyDetail: widget.emptyDetail,
-        masterFloatingActionButton: widget.masterFloatingActionButton,
+              masterWidth: widget.masterWidth,
+              minDetailWidth: widget.minDetailWidth,
+              maxMasterRatio:
+                  widget.maxMasterRatio ?? MasterDetailLayout.defaultMaxMasterRatio,
+              preferredMasterRatio: widget.preferredMasterRatio,
+              projectDetailWhenNarrow: true,
+              // 列表恒驻左栏(pinMaster 默认 true),层带在右格区内滑——
+              // 右栏内部压栈(话题里点链接)也是格间滑动,State 恒驻。
+              master: widget.master,
+              panes: [
+                for (var i = 0; i < selected.stack.length; i++)
+                  KeyedSubtree(
+                    key: ValueKey(
+                      'pane_host_${selected.stack[i].kind}_'
+                      '${selected.stack[i].instanceId ?? selected.stack[i].username ?? selected.stack[i].topicId}',
+                    ),
+                    child: PaneContentWidget(
+                      entry: selected.stack[i],
+                      stackProvider: widget.stackProvider,
+                      parentActive: widget.isActive,
+                      truncateOnPush: i < selected.stack.length - 1,
+                      onBack: () {
+                        final n = ref.read(widget.stackProvider.notifier);
+                        if (ref.read(widget.stackProvider).isStacked) {
+                          n.pop();
+                        } else {
+                          n.clear();
+                        }
+                      },
+                    ),
+                  ),
+              ],
+              emptyDetail: widget.emptyDetail,
+              masterFloatingActionButton: widget.masterFloatingActionButton,
             ),
           ),
         ],
