@@ -23,6 +23,7 @@ class PicoVrChannel(
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getCapabilities" -> result.success(getCapabilities())
+                "getWindowStatus" -> result.success(PicoVrWindowActivity.windowStatus())
                 "openNewWindow" -> result.success(
                     openNewWindow(
                         call.argument<Int>("topicId"),
@@ -78,6 +79,7 @@ class PicoVrChannel(
             "isPico" to identity.contains("pico"),
             "model" to Build.MODEL,
             "hasCamera2" to cameraIds.isNotEmpty(),
+            "maxWindows" to PicoVrWindowActivity.MAX_TOTAL_WINDOWS,
             "supportsMultipleWindows" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N),
             "isInMultiWindowMode" to (
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && activity.isInMultiWindowMode
@@ -86,13 +88,17 @@ class PicoVrChannel(
     }
 
     private fun openNewWindow(topicId: Int?, postNumber: Int?): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N ||
-            !PicoVrWindowActivity.reserveLaunch()) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        val reservationId = PicoVrWindowActivity.reserveLaunch() ?: run {
+            Log.i("PicoVr", "Reached the limit of 10 FluxDO windows including main")
+            return false
+        }
         return try {
             // NEW_TASK | MULTIPLE_TASK creates an independent Activity/FlutterEngine
             // even if another secondary Fluxdo window is already running.
             val intent = Intent(activity, PicoVrWindowActivity::class.java).apply {
                 action = Intent.ACTION_MAIN
+                putExtra(PicoVrWindowActivity.EXTRA_RESERVATION_ID, reservationId)
                 addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
@@ -111,15 +117,15 @@ class PicoVrChannel(
             activity.startActivity(intent)
             true
         } catch (e: ActivityNotFoundException) {
-            PicoVrWindowActivity.cancelLaunch()
+            PicoVrWindowActivity.cancelLaunch(reservationId)
             Log.w("PicoVr", "No activity for secondary window", e)
             false
         } catch (e: SecurityException) {
-            PicoVrWindowActivity.cancelLaunch()
+            PicoVrWindowActivity.cancelLaunch(reservationId)
             Log.w("PicoVr", "Secondary window was blocked", e)
             false
         } catch (e: RuntimeException) {
-            PicoVrWindowActivity.cancelLaunch()
+            PicoVrWindowActivity.cancelLaunch(reservationId)
             Log.w("PicoVr", "Secondary window failed", e)
             false
         }
