@@ -5,6 +5,7 @@ import '../../pages/topics_screen.dart' show PaneContentWidget;
 import '../../providers/selected_topic_provider.dart';
 import '../../providers/shortcut_provider.dart';
 import 'master_detail_layout.dart';
+import 'pico_parallel_tabs.dart';
 import 'pane_projection_back_scope.dart';
 
 /// "列表 + 详情"页面的双栏宿主标准件。
@@ -112,7 +113,17 @@ class _MasterDetailPaneHostState extends ConsumerState<MasterDetailPaneHost> {
       isActive: widget.isActive,
       masterWidth: widget.masterWidth,
       minDetailWidth: widget.minDetailWidth,
-      child: MasterDetailLayout(
+      child: Column(
+        children: [
+          PicoParallelTabs(
+            selected: selected,
+            onActivate: (index) =>
+                ref.read(widget.stackProvider.notifier).activateTab(index),
+            onClose: (index) =>
+                ref.read(widget.stackProvider.notifier).closeTab(index),
+          ),
+          Expanded(
+            child: MasterDetailLayout(
         masterWidth: widget.masterWidth,
         minDetailWidth: widget.minDetailWidth,
         maxMasterRatio:
@@ -147,6 +158,9 @@ class _MasterDetailPaneHostState extends ConsumerState<MasterDetailPaneHost> {
         ],
         emptyDetail: widget.emptyDetail,
         masterFloatingActionButton: widget.masterFloatingActionButton,
+            ),
+          ),
+        ],
       ),
     );
   }
