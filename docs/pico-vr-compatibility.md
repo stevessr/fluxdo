@@ -7,8 +7,19 @@ It does not request an immersive XR session.
 
 - `MainActivity` remains `singleTask` for OAuth and deep-link callbacks.
 - A non-exported, resizeable `PicoVrWindowActivity` is launched with
-  `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_MULTIPLE_TASK` when users select
-  **Settings → PICO VR · New window**.
+  `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_MULTIPLE_TASK | FLAG_ACTIVITY_LAUNCH_ADJACENT`
+  when users select **Settings → PICO VR · New window**. This is a real
+  independent Android task; it requests native adjacent placement where the
+  PICO shell supports it, rather than drawing a fake window inside Flutter.
+- In Android landscape, the **topic overflow menu → Open in new window**
+  carries the current topic and optional post number in Activity extras.
+  The new Flutter engine consumes its own one-shot launch request after the
+  onboarding/preheat gate and opens that topic. Nothing is stored in shared
+  preferences or a global queue that could mix concurrent windows.
+- In a PICO landscape panel, parallel view exposes a horizontal **tab strip**
+  for currently open topic/profile/settings panes. Select a tab to move it
+  to the foreground without deleting the others; close only the chosen tab.
+  This strip is intra-window navigation, *not* an additional Android task.
 - Limit additional windows to **3** active secondary Flutter engines to reduce headset OOM risk; rapid taps reserve pending slots.
 - Each activity has its own Flutter engine and navigation tree. The SAF file
   picker and Media3 transcoder are scoped to their activity, while memory
@@ -45,6 +56,17 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
 1. On PICO 4 Ultra, confirm Settings shows **PICO VR · New window**.
    Open it twice; check each window navigates independently. Attempt a fourth
    secondary window and confirm the cap does not spawn an extra engine.
+   Check Android's task overview, as well as PICO's panel switcher; do not
+   accept two simulated Flutter panes as proof of native multi-window.
+2. In landscape, open a topic overflow menu and choose **Open in new window**.
+   Confirm the second Android task opens that exact topic/post; open two
+   different topics in quick succession and confirm the requests do not cross.
+   If the PICO shell declines adjacent placement, record the task/window
+   behavior rather than claiming the panel was created.
+3. In landscape parallel view, open several topics/profiles. Use the tab strip
+   to revisit an earlier pane without discarding other tabs, close a
+   background tab, and then close the active tab. Confirm embedded state and
+   scrolling still belong to the original pane instances.
 2. Resize/move windows in the PICO UI, switch focus, background and resume;
    verify all windows remain interactive.
 3. Use the system file picker in both windows concurrently and verify each
