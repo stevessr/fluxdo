@@ -347,6 +347,26 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     );
   }
 
+  /// PICO 平行视界标签：激活某层时移到末尾，保留其余层和稳定
+  /// instanceId；区别于 back/pop，不会丢掉其它已打开的内容。
+  void activateTab(int index) {
+    if (index < 0 || index >= state.stack.length ||
+        index == state.stack.length - 1) {
+      return;
+    }
+    final panes = [...state.stack];
+    final active = panes.removeAt(index);
+    panes.add(active);
+    state = SelectedTopicState(stack: panes);
+  }
+
+  /// 关闭单个标签。关闭背景层不影响当前页；关闭栈顶则回到上一层。
+  void closeTab(int index) {
+    if (index < 0 || index >= state.stack.length) return;
+    final panes = [...state.stack]..removeAt(index);
+    state = SelectedTopicState(stack: panes);
+  }
+
   /// 关闭当前层，退回上一层。栈已空时是 no-op。
   void pop() {
     if (state.stack.isEmpty) return;
