@@ -4,6 +4,15 @@ on:
   pull_request:
     paths:
       - 'lib/services/pico_vr_service.dart'
+      - 'lib/main.dart'
+      - 'lib/pages/topic_detail_page/**'
+      - 'lib/pages/topics_screen.dart'
+      - 'lib/providers/selected_topic_provider.dart'
+      - 'lib/widgets/layout/pico_parallel_tabs.dart'
+      - 'lib/widgets/layout/pane_filmstrip.dart'
+      - 'lib/widgets/layout/master_detail_pane_host.dart'
+      - 'test/providers/selected_topic_provider_test.dart'
+      - 'test/pages/topic_detail_page/topic_more_menu_actions_test.dart'
       - 'lib/pages/qr_login_scan_page.dart'
       - 'lib/pages/settings_page.dart'
       - 'android/app/src/main/**'
@@ -39,9 +48,23 @@ jobs:
           lib/services/pico_vr_service.dart
           lib/pages/qr_login_scan_page.dart
           lib/pages/settings_page.dart
+          lib/pages/topic_detail_page/topic_detail_page.dart
+          lib/pages/topic_detail_page/topic_more_menu_actions.dart
+          lib/pages/topics_screen.dart
+          lib/main.dart
+          lib/providers/selected_topic_provider.dart
+          lib/widgets/layout/master_detail_pane_host.dart
+          lib/widgets/layout/pico_parallel_tabs.dart
+          lib/widgets/layout/pane_filmstrip.dart
           test/services/pico_vr_service_test.dart
+          test/providers/selected_topic_provider_test.dart
+          test/pages/topic_detail_page/topic_more_menu_actions_test.dart
       - name: Test VR capability routing
-        run: flutter test test/services/pico_vr_service_test.dart
+        run: >-
+          flutter test
+          test/services/pico_vr_service_test.dart
+          test/providers/selected_topic_provider_test.dart
+          test/pages/topic_detail_page/topic_more_menu_actions_test.dart
 
   kotlin-vr:
     name: Compile native Android VR bridge
