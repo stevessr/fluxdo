@@ -155,7 +155,9 @@ class PicoVrService {
   /// An installed system/third-party scanner may return QR text without FluxDO
   /// opening Camera2. This is not access to the PICO passthrough feed.
   Future<String?> scanWithExternalQrScanner() async {
-    if (kIsWeb || !Platform.isAndroid) return null;
+    // Flutter's target platform is overrideable in widget tests. On device it
+    // resolves to Android; do not attempt an Android intent on other hosts.
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return null;
     try {
       return await _channel.invokeMethod<String>('scanWithExternalQrScanner');
     } on PlatformException catch (error) {
