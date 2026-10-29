@@ -60,9 +60,9 @@ jobs:
       - name: Validate PICO RGBA frame sampling on Linux
         run: |
           set -euo pipefail
-          c++ -std=c++17 -O1 -g -Wall -Wextra -Werror \\
-            -fsanitize=address,undefined -fno-omit-frame-pointer \\
-            android/app/src/main/cpp/tests/pico_qr_luma_test.cpp \\
+          c++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            android/app/src/main/cpp/tests/pico_qr_luma_test.cpp \
             -o /tmp/pico_qr_luma_test
           /tmp/pico_qr_luma_test
       - uses: subosito/flutter-action@v2
