@@ -200,6 +200,7 @@ messages contain no QR contents or frames. The key stages are:
 
 | Native error | What it proves / next check |
 |---|---|
+| `XR_PICO_camera_image absent; XR_BD_camera_image present (different ABI)` | Runtime exposes the newer Khronos ByteDance extension, not PICO's older interface. They differ in camera enumeration and image structures; a dedicated adapter is required rather than renaming symbols. |
 | `PICO firmware does not expose XR_PICO_camera_image` | Enumerated runtime extensions lack camera image support; verify PICO Loader and firmware rather than QR decoder. |
 | `Headless OpenXR unsupported by firmware` | `XR_MND_headless` is not exposed despite its listing in the PICO SDK device matrix. |
 | `Headless XR session rejected by runtime (XrResult ...)` | 2D Activity may not be allowed to own an XR session; consider an explicit XR host Activity if confirmed. |
