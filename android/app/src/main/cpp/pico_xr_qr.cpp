@@ -374,7 +374,7 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
         jstring found = nullptr;
         if (XR_SUCCEEDED(dataResult) && pixels.buffer &&
             pixels.width > 0 && pixels.height > 0 &&
-            pixels.width <= 4096 && pixels.height <= 4096 &&
+            pixels.width <= 8192 && pixels.height <= 8192 &&
             pixels.bytesPerPixel == 4 && pixels.pixelStride >= 4 &&
             pixels.pixelStride <= 16 &&
             static_cast<uint64_t>(pixels.stride) >=
@@ -382,16 +382,30 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
             static_cast<uint64_t>(pixels.bufferSize) >=
                 static_cast<uint64_t>(pixels.height - 1) * pixels.stride +
                 static_cast<uint64_t>(pixels.width - 1) * pixels.pixelStride + 4 &&
-            pixels.bufferSize <= 64 * 1024 * 1024) {
-            // Decode at <=1024 pixels to bound CPU and Java heap use.
-            const uint32_t step = std::max(1u, (std::max(pixels.width, pixels.height) + 1023) / 1024);
-            const uint32_t w = (pixels.width + step - 1) / step;
-            const uint32_t h = (pixels.height + step - 1) / step;
+            pixels.bufferSize <= 256ull * 1024 * 1024) {
+            // Alternate the full sensor view with a centered 50% crop.
+            // A small QR may be lost when the entire high-resolution image
+            // is reduced to 1024px; cropping retains more pixels per module
+            // without allocating or transferring an entire 32MP camera frame.
+            const bool centerCrop = (framesReceived % 2 == 0) &&
+                pixels.width >= 512 && pixels.height >= 512;
+            const uint32_t originX = centerCrop ? pixels.width / 4 : 0;
+            const uint32_t originY = centerCrop ? pixels.height / 4 : 0;
+            const uint32_t roiWidth = centerCrop ? pixels.width / 2 : pixels.width;
+            const uint32_t roiHeight = centerCrop ? pixels.height / 2 : pixels.height;
+            const uint32_t step = std::max(1u,
+                (std::max(roiWidth, roiHeight) + 1023) / 1024);
+            const uint32_t w = (roiWidth + step - 1) / step;
+            const uint32_t h = (roiHeight + step - 1) / step;
             std::vector<jbyte> gray(static_cast<size_t>(w) * h);
             for (uint32_t y = 0; y < h; ++y) {
-                const uint8_t* row = pixels.buffer + static_cast<size_t>(y * step) * pixels.stride;
+                const size_t rowOffset =
+                    static_cast<size_t>(originY + y * step) * pixels.stride;
+                const uint8_t* row = pixels.buffer + rowOffset;
                 for (uint32_t x = 0; x < w; ++x) {
-                    const uint8_t* c = row + static_cast<size_t>(x * step) * pixels.pixelStride;
+                    const size_t colOffset =
+                        static_cast<size_t>(originX + x * step) * pixels.pixelStride;
+                    const uint8_t* c = row + colOffset;
                     gray[static_cast<size_t>(y) * w + x] =
                         static_cast<jbyte>((77 * c[0] + 150 * c[1] + 29 * c[2]) >> 8);
                 }
