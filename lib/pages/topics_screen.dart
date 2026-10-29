@@ -12,6 +12,7 @@ import '../providers/shortcut_provider.dart';
 import '../providers/discourse_providers.dart';
 import '../utils/platform_utils.dart';
 import '../widgets/layout/master_detail_layout.dart';
+import '../widgets/layout/pico_parallel_tabs.dart';
 import '../widgets/topics/topics_fab.dart';
 import '../widgets/layout/pane_projection_back_scope.dart';
 import '../widgets/layout/home_workspace_scope.dart';
@@ -177,7 +178,17 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       child: PaneProjectionBackScope(
         stackProvider: selectedTopicProvider,
         isActive: widget.isActive,
-        child: MasterDetailLayout(
+        child: Column(
+          children: [
+            PicoParallelTabs(
+              selected: selectedTopic,
+              onActivate: (index) =>
+                  ref.read(selectedTopicProvider.notifier).activateTab(index),
+              onClose: (index) =>
+                  ref.read(selectedTopicProvider.notifier).closeTab(index),
+            ),
+            Expanded(
+              child: MasterDetailLayout(
           // 压栈时左栏显示的是"上一层"内容而不是列表，才是真正的平行
           // 视界——放宽到接近对半分；master 还是列表时维持列表该有的窄栏。
           //
@@ -221,6 +232,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
             onCreateTopic: () => _createTopic(context, ref),
             onOpenDrafts: () => _openDrafts(context),
           ),
+              ),
+            ),
+          ],
         ),
       ),
     );
