@@ -50,6 +50,7 @@ import '../../providers/message_bus_providers.dart';
 import '../../providers/pinned_categories_provider.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/pico_vr_service.dart';
 import '../../services/screen_track.dart';
 import '../../services/toast_service.dart';
 import '../../services/log/log_writer.dart';
@@ -1637,10 +1638,52 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     ];
   }
 
+  Future<void> _openTopicInNativeWindow() async {
+    final opened = await PicoVrService.instance.openNewWindow(
+      topicId: widget.topicId,
+      postNumber: _resolvedViewportPostNumber,
+    );
+    if (!mounted || opened) return;
+    final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(chinese
+            ? '无法打开原生 Android 新窗口'
+            : 'Unable to open a native Android window'),
+      ),
+    );
+  }
+
   Widget _buildMoreMenuAction({
     required TopicDetail detail,
     required TopicDetailNotifier notifier,
     required bool canEditTopic,
+  }) {
+    if (defaultTargetPlatform != TargetPlatform.android ||
+        MediaQuery.orientationOf(context) != Orientation.landscape) {
+      return _buildMoreMenuActionBody(
+        detail: detail,
+        notifier: notifier,
+        canEditTopic: canEditTopic,
+        showNewWindow: false,
+      );
+    }
+    return FutureBuilder<PicoVrCapabilities>(
+      future: PicoVrService.instance.capabilities,
+      builder: (context, snapshot) => _buildMoreMenuActionBody(
+        detail: detail,
+        notifier: notifier,
+        canEditTopic: canEditTopic,
+        showNewWindow: snapshot.data?.supportsMultipleWindows == true,
+      ),
+    );
+  }
+
+  Widget _buildMoreMenuActionBody({
+    required TopicDetail detail,
+    required TopicDetailNotifier notifier,
+    required bool canEditTopic,
+    required bool showNewWindow,
   }) {
     final bookmarkTarget = _bookmarkEditTarget(detail);
     final hasEditableBookmark = bookmarkTarget != null || detail.bookmarked;
@@ -1911,6 +1954,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           onShareImage: _shareAsImage,
           onExport: _showExportSheet,
           onOpenInBrowser: _openInBrowser,
+          onOpenInNewWindow: () => unawaited(_openTopicInNativeWindow()),
           onFilter: _showFilterSheet,
           onReadingSettings: () {
             Navigator.push(
@@ -1992,6 +2036,25 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             ],
           ),
         ),
+        if (showNewWindow)
+          PopupMenuItem(
+            key: const ValueKey('topic-open-native-window'),
+            value: 'open_in_new_window',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.open_in_new_rounded,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                const SizedBox(width: 12),
+                Text(Localizations.localeOf(context).languageCode == 'zh'
+                    ? '在新窗口打开'
+                    : 'Open in new window'),
+              ],
+            ),
+          ),
         PopupMenuItem(
           value: 'open_in_browser',
           child: Row(
