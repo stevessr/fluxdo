@@ -6,6 +6,7 @@
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 #include "pico_camera_image.h"
+#include "pico_qr_luma.h"
 #include <android/log.h>
 #include <algorithm>
 #include <atomic>
@@ -372,57 +373,39 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
         const XrResult dataResult = imageData(xr.capture, frame.imageId,
             reinterpret_cast<XrCameraImageDataBaseHeaderPICO*>(&pixels));
         jstring found = nullptr;
-        if (XR_SUCCEEDED(dataResult) && pixels.buffer &&
-            pixels.width > 0 && pixels.height > 0 &&
-            pixels.width <= 8192 && pixels.height <= 8192 &&
-            pixels.bytesPerPixel == 4 && pixels.pixelStride >= 4 &&
-            pixels.pixelStride <= 16 &&
-            static_cast<uint64_t>(pixels.stride) >=
-                static_cast<uint64_t>(pixels.width - 1) * pixels.pixelStride + 4 &&
-            static_cast<uint64_t>(pixels.bufferSize) >=
-                static_cast<uint64_t>(pixels.height - 1) * pixels.stride +
-                static_cast<uint64_t>(pixels.width - 1) * pixels.pixelStride + 4 &&
-            pixels.bufferSize <= 256ull * 1024 * 1024) {
-            // Alternate the full sensor view with a centered 50% crop.
-            // A small QR may be lost when the entire high-resolution image
-            // is reduced to 1024px; cropping retains more pixels per module
-            // without allocating or transferring an entire 32MP camera frame.
-            const bool centerCrop = (framesReceived % 2 == 0) &&
-                pixels.width >= 512 && pixels.height >= 512;
-            const uint32_t originX = centerCrop ? pixels.width / 4 : 0;
-            const uint32_t originY = centerCrop ? pixels.height / 4 : 0;
-            const uint32_t roiWidth = centerCrop ? pixels.width / 2 : pixels.width;
-            const uint32_t roiHeight = centerCrop ? pixels.height / 2 : pixels.height;
-            const uint32_t step = std::max(1u,
-                (std::max(roiWidth, roiHeight) + 1023) / 1024);
-            const uint32_t w = (roiWidth + step - 1) / step;
-            const uint32_t h = (roiHeight + step - 1) / step;
-            std::vector<jbyte> gray(static_cast<size_t>(w) * h);
-            for (uint32_t y = 0; y < h; ++y) {
-                const size_t rowOffset =
-                    static_cast<size_t>(originY + y * step) * pixels.stride;
-                const uint8_t* row = pixels.buffer + rowOffset;
-                for (uint32_t x = 0; x < w; ++x) {
-                    const size_t colOffset =
-                        static_cast<size_t>(originX + x * step) * pixels.pixelStride;
-                    const uint8_t* c = row + colOffset;
-                    gray[static_cast<size_t>(y) * w + x] =
-                        static_cast<jbyte>((77 * c[0] + 150 * c[1] + 29 * c[2]) >> 8);
+        if (XR_SUCCEEDED(dataResult)) {
+            pico_qr::GrayFrame gray;
+            const pico_qr::RgbaFrame rgba{
+                pixels.buffer, pixels.width, pixels.height, pixels.stride,
+                pixels.pixelStride, pixels.bytesPerPixel, pixels.bufferSize
+            };
+            // Camera source may be padded, as validated by the pure helper.
+            // Alternate a full view and a centered crop for distant QR codes.
+            if (pico_qr::toGray(rgba, framesReceived % 2 == 0, gray)) {
+                jbyteArray data = env->NewByteArray(
+                    static_cast<jsize>(gray.pixels.size()));
+                if (data) {
+                    ++framesDecoded;
+                    env->SetByteArrayRegion(
+                        data, 0, static_cast<jsize>(gray.pixels.size()),
+                        reinterpret_cast<const jbyte*>(gray.pixels.data()));
+                    if (!env->ExceptionCheck()) {
+                        found = static_cast<jstring>(env->CallObjectMethod(
+                            activity, decodeMethod, data,
+                            static_cast<jint>(gray.width),
+                            static_cast<jint>(gray.height)));
+                    }
+                    env->DeleteLocalRef(data);
                 }
+                if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                    found = nullptr;
+                }
+            } else {
+                ++frameLayoutsRejected;
             }
-            jbyteArray data = env->NewByteArray(static_cast<jsize>(gray.size()));
-            if (data) {
-                ++framesDecoded;
-                env->SetByteArrayRegion(data, 0, static_cast<jsize>(gray.size()), gray.data());
-                found = static_cast<jstring>(env->CallObjectMethod(
-                    activity, decodeMethod, data, static_cast<jint>(w), static_cast<jint>(h)));
-                env->DeleteLocalRef(data);
-                if (env->ExceptionCheck()) { env->ExceptionClear(); found = nullptr; }
-            }
-        } else if (XR_FAILED(dataResult)) {
-            ++imageDataFailures;
         } else {
-            ++frameLayoutsRejected;
+            ++imageDataFailures;
         }
         release(xr.capture, frame.imageId); // Always release, even when decoding failed.
         lastTime = frame.captureTime;
