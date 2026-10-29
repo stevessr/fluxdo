@@ -60,6 +60,10 @@ class PicoXrQrScanActivity : Activity() {
     private val scanning = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
     private var active = false
+    private var restartWhenIdle = false
+    private var invalidatedScanToken = 0L
+    private var permissionRequestPending = false
+    private var permissionDeclined = false
     private lateinit var description: TextView
     private lateinit var retry: Button
     private val reader = QRCodeReader()
@@ -70,7 +74,10 @@ class PicoXrQrScanActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // The QR being scanned may contain a login secret. Keep it out of
+        // screen captures and recent-task thumbnails while scanning.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_SECURE)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -83,7 +90,10 @@ class PicoXrQrScanActivity : Activity() {
         }
         retry = Button(this).apply {
             text = "Try XR camera"
-            setOnClickListener { ensurePermissionAndScan() }
+            setOnClickListener {
+                permissionDeclined = false
+                ensurePermissionAndScan()
+            }
         }
         root.addView(description)
         root.addView(retry)
@@ -94,21 +104,30 @@ class PicoXrQrScanActivity : Activity() {
         setContentView(root)
         if (!loadLibrary()) {
             description.text = "OpenXR scanner native library is unavailable."
+            retry.isEnabled = false
             return
         }
         // onResume starts capture after Activity becomes foreground.
     }
 
     private fun ensurePermissionAndScan() {
+        if (!active || isFinishing || isDestroyed || !loadLibrary()) return
         if (Build.VERSION.SDK_INT >= 23 &&
             checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST)
+            if (!permissionRequestPending && !permissionDeclined) {
+                permissionRequestPending = true
+                requestPermissions(arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST)
+            }
             return
         }
-        if (!active || !scanning.compareAndSet(false, true)) return
+        if (!scanning.compareAndSet(false, true)) {
+            // onResume may race the worker still unwinding from onPause.
+            // Request exactly one restart after that worker has exited.
+            restartWhenIdle = true
+            return
+        }
+        restartWhenIdle = false
         retry.isEnabled = false
-        // Token per attempt: a paused/abandoned queued scan must not start on
-        // resume or cancel a different window's current capture.
         val token = nextScanToken.incrementAndGet()
         scanToken = token
         description.text = "Scanning PICO XR color cameras…"
@@ -126,20 +145,33 @@ class PicoXrQrScanActivity : Activity() {
             val found = code
             val diagnostic = error
             mainHandler.post {
+                // The next scan must never receive an older scan's callback.
+                if (scanToken != token) return@post
                 scanning.set(false)
+                scanToken = 0L
                 if (isFinishing || isDestroyed) return@post
                 if (!active) {
                     retry.isEnabled = true
                     return@post
                 }
-                if (found != null && found.isNotEmpty()) {
+                val invalidated = invalidatedScanToken == token
+                if (!invalidated && !found.isNullOrEmpty()) {
                     setResult(RESULT_OK, Intent().putExtra(EXTRA_QR, found))
                     finish()
-                } else {
-                    // Error strings contain no frame data, QR payloads or secrets.
-                    description.text = diagnostic
-                    retry.isEnabled = true
+                    return@post
                 }
+                if (restartWhenIdle) {
+                    restartWhenIdle = false
+                    ensurePermissionAndScan()
+                    return@post
+                }
+                description.text = if (invalidated) {
+                    "Previous scan stopped when the window lost focus. Try again."
+                } else {
+                    // No frame bytes or scanned QR contents in diagnostics.
+                    diagnostic
+                }
+                retry.isEnabled = true
             }
         }
     }
@@ -169,10 +201,13 @@ class PicoXrQrScanActivity : Activity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == CAMERA_PERMISSION_REQUEST) {
-            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            permissionRequestPending = false
+            permissionDeclined = grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED
+            if (!permissionDeclined) {
                 ensurePermissionAndScan()
             } else {
                 description.text = "Camera permission denied. Return to Fluxdo to import a QR image."
+                retry.isEnabled = true
             }
         }
     }
@@ -185,6 +220,9 @@ class PicoXrQrScanActivity : Activity() {
 
     override fun onPause() {
         active = false
+        // Any result computed during the transition to background is stale,
+        // even if a native frame finished decoding just before cancellation.
+        invalidatedScanToken = scanToken
         if (nativeLoaded && scanToken != 0L) cancelNative(scanToken)
         super.onPause()
     }
