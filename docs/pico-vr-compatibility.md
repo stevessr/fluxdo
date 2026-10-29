@@ -20,7 +20,7 @@ It does not request an immersive XR session.
   for currently open topic/profile/settings panes. Select a tab to move it
   to the foreground without deleting the others; close only the chosen tab.
   This strip is intra-window navigation, *not* an additional Android task.
-- Limit additional windows to **3** active secondary Flutter engines to reduce headset OOM risk; rapid taps reserve pending slots.
+- Follow PICO's **10-window total cap**: 1 primary Activity plus up to **9** additional FluxDO Android tasks. Fast launches reserve per-request tokens; the native bridge releases the matching reservation on failure and counts active engines. PICO still controls placement and may reject a launch under memory pressure.
 - Each activity has its own Flutter engine and navigation tree. The SAF file
   picker and Media3 transcoder are scoped to their activity, while memory
   pressure notifies all running engines.
@@ -53,9 +53,10 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
 
 ## Manual device matrix
 
-1. On PICO 4 Ultra, confirm Settings shows **PICO VR · New window**.
-   Open it twice; check each window navigates independently. Attempt a fourth
-   secondary window and confirm the cap does not spawn an extra engine.
+1. On PICO 4 Ultra, confirm Settings shows **PICO VR · New window (max 10)**.
+   Open nine secondary panels while keeping the main one: verify ten FluxDO
+   tasks overall. Attempt an eleventh window and verify the app declines without
+   launching an engine; close an extra window, then confirm a slot can be reused.
    Check Android's task overview, as well as PICO's panel switcher; do not
    accept two simulated Flutter panes as proof of native multi-window.
 2. In landscape, open a topic overflow menu and choose **Open in new window**.
@@ -67,17 +68,17 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
    to revisit an earlier pane without discarding other tabs, close a
    background tab, and then close the active tab. Confirm embedded state and
    scrolling still belong to the original pane instances.
-8. Resize/move windows in the PICO UI, switch focus, background and resume;
+4. Resize/move windows in the PICO UI, switch focus, background and resume;
    verify all windows remain interactive.
-7. Use the system file picker in both windows concurrently and verify each
+5. Use the system file picker in both windows concurrently and verify each
    result returns only to its initiating Flutter route.
-4. On PICO 4 Ultra with no Android Camera2 camera, open QR login: verify
+6. On PICO 4 Ultra with no Android Camera2 camera, open QR login: verify
    it shows the gallery/paste fallback rather than a blank camera preview.
-5. Import a valid QR image / paste valid QR text and confirm the same login
+7. Import a valid QR image / paste valid QR text and confirm the same login
    validation path works. Paste invalid text and verify no login occurs.
    If a system camera app is available, capture a QR code and verify decoding.
    If no camera capture handler exists, confirm the action is not offered.
-6. Regression check on ordinary Android: main launcher/deep link login,
+8. Regression check on ordinary Android: main launcher/deep link login,
    Camera2 QR scan, attachment picker, transcoding, memory pressure.
 
 Android diagnostics:
