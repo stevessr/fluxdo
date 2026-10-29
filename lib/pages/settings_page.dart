@@ -361,16 +361,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   icon: Icons.open_in_new_rounded,
                   iconColor: Colors.indigo,
                   title: chinese
-                      ? 'PICO VR · 新建窗口'
-                      : 'PICO VR · Open new window',
+                      ? 'PICO VR · 新建窗口（最多${capabilities.maxWindows}个）'
+                      : 'PICO VR · New window (max ${capabilities.maxWindows})',
                   onTap: () async {
                     final opened = await PicoVrService.instance.openNewWindow();
                     if (!context.mounted || opened) return;
+                    final status =
+                        await PicoVrService.instance.getWindowStatus();
+                    if (!context.mounted) return;
+                    final atCapacity = status?.isAtCapacity == true;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(chinese
-                            ? '系统无法打开新窗口'
-                            : 'Unable to open a new window'),
+                        content: Text(
+                          atCapacity
+                              ? (chinese
+                                  ? '已达到最多${capabilities.maxWindows}个窗口，请先关闭一个'
+                                  : 'Maximum of ${capabilities.maxWindows} windows reached; close one first')
+                              : (chinese
+                                  ? 'PICO 系统未能创建新的原生窗口'
+                                  : 'PICO could not create a native window'),
+                        ),
                       ),
                     );
                   },

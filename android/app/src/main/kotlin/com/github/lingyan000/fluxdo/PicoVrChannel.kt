@@ -23,7 +23,16 @@ class PicoVrChannel(
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getCapabilities" -> result.success(getCapabilities())
-                "openNewWindow" -> result.success(openNewWindow())
+                "getWindowStatus" -> result.success(PicoVrWindowActivity.windowStatus())
+                "openNewWindow" -> result.success(
+                    openNewWindow(
+                        call.argument<Int>("topicId"),
+                        call.argument<Int>("postNumber")
+                    )
+                )
+                "consumeLaunchRequest" -> result.success(
+                    (activity as? PicoVrWindowActivity)?.consumeLaunchRequest()
+                )
                 else -> result.notImplemented()
             }
         }
@@ -70,6 +79,7 @@ class PicoVrChannel(
             "isPico" to identity.contains("pico"),
             "model" to Build.MODEL,
             "hasCamera2" to cameraIds.isNotEmpty(),
+            "maxWindows" to PicoVrWindowActivity.MAX_TOTAL_WINDOWS,
             "supportsMultipleWindows" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N),
             "isInMultiWindowMode" to (
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && activity.isInMultiWindowMode
@@ -77,28 +87,45 @@ class PicoVrChannel(
         )
     }
 
-    private fun openNewWindow(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N ||
-            !PicoVrWindowActivity.reserveLaunch()) return false
+    private fun openNewWindow(topicId: Int?, postNumber: Int?): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        val reservationId = PicoVrWindowActivity.reserveLaunch() ?: run {
+            Log.i("PicoVr", "Reached the limit of 10 FluxDO windows including main")
+            return false
+        }
         return try {
             // NEW_TASK | MULTIPLE_TASK creates an independent Activity/FlutterEngine
             // even if another secondary Fluxdo window is already running.
             val intent = Intent(activity, PicoVrWindowActivity::class.java).apply {
                 action = Intent.ACTION_MAIN
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                putExtra(PicoVrWindowActivity.EXTRA_RESERVATION_ID, reservationId)
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                        Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT
+                )
+                if (topicId != null && topicId > 0) {
+                    putExtra(PicoVrWindowActivity.EXTRA_TOPIC_ID, topicId)
+                    if (postNumber != null && postNumber > 0) {
+                        putExtra(PicoVrWindowActivity.EXTRA_POST_NUMBER, postNumber)
+                    }
+                }
             }
+            // Android's real multi-task / multi-window path, not an in-app
+            // imitation. The XR shell chooses panel geometry and may ignore
+            // LAUNCH_ADJACENT if it does not implement native placement.
             activity.startActivity(intent)
             true
         } catch (e: ActivityNotFoundException) {
-            PicoVrWindowActivity.cancelLaunch()
+            PicoVrWindowActivity.cancelLaunch(reservationId)
             Log.w("PicoVr", "No activity for secondary window", e)
             false
         } catch (e: SecurityException) {
-            PicoVrWindowActivity.cancelLaunch()
+            PicoVrWindowActivity.cancelLaunch(reservationId)
             Log.w("PicoVr", "Secondary window was blocked", e)
             false
         } catch (e: RuntimeException) {
-            PicoVrWindowActivity.cancelLaunch()
+            PicoVrWindowActivity.cancelLaunch(reservationId)
             Log.w("PicoVr", "Secondary window failed", e)
             false
         }

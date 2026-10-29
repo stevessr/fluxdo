@@ -112,4 +112,25 @@ void main() {
     );
     expect(boardsOpened, 1);
   });
+  test('open_in_new_window 只分发新原生窗口动作', () {
+    var nativeWindowOpened = 0;
+    handleTopicDetailMoreMenuSelection(
+      'open_in_new_window',
+      onEditTopic: () => fail('不应触发'),
+      onBookmark: () => fail('不应触发'),
+      onReadLater: () => fail('不应触发'),
+      onSubscribe: () => fail('不应触发'),
+      onMarkUnread: () => fail('不应触发'),
+      onMarkUnreadAll: () => fail('不应触发'),
+      onShareLink: () => fail('不应触发'),
+      onShareImage: () => fail('不应触发'),
+      onExport: () => fail('不应触发'),
+      onOpenInBrowser: () => fail('不应触发'),
+      onOpenInNewWindow: () => nativeWindowOpened++,
+      onFilter: () => fail('不应触发'),
+      onReadingSettings: () => fail('不应触发'),
+    );
+    expect(nativeWindowOpened, 1);
+  });
+
 }

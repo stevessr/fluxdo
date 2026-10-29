@@ -327,6 +327,24 @@ class _PaneFilmstripState extends State<PaneFilmstrip>
       structureChanged = true;
     }
 
+    // A PICO tab switch can move an existing pane to the end without
+    // creating or destroying it. Paint the active pane last, otherwise its
+    // older insertion z-order would leave it underneath the previous tab.
+    // Retain exiting cells after live ones to preserve their exit animation.
+    final orderedCells = <Key, _Cell>{};
+    final masterCell = _cells[masterCellKey];
+    if (masterCell != null) orderedCells[masterCellKey] = masterCell;
+    for (final pane in widget.panes) {
+      final cell = _cells[pane.key!];
+      if (cell != null) orderedCells[pane.key!] = cell;
+    }
+    for (final entry in _cells.entries) {
+      orderedCells.putIfAbsent(entry.key, () => entry.value);
+    }
+    _cells
+      ..clear()
+      ..addAll(orderedCells);
+
     if (!animateChanges) {
       _cells.removeWhere((_, cell) => cell.exiting);
       for (final cell in _cells.values) {

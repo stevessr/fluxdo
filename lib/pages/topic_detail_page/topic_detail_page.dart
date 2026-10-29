@@ -50,6 +50,7 @@ import '../../providers/message_bus_providers.dart';
 import '../../providers/pinned_categories_provider.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/pico_vr_service.dart';
 import '../../services/screen_track.dart';
 import '../../services/toast_service.dart';
 import '../../services/log/log_writer.dart';
@@ -75,7 +76,6 @@ import '../../providers/nested_topic_provider.dart';
 import 'controllers/topic_detail_controller.dart';
 import 'controllers/topic_toc_controller.dart';
 import 'widgets/nested_post_list.dart';
-import 'widgets/invite_private_message_dialog.dart';
 import 'widgets/topic_detail_overlay.dart';
 import 'widgets/topic_post_list.dart';
 import '../webview_page.dart';
@@ -226,8 +226,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   bool _isCheckTitleVisibilityScheduled = false;
   bool _isRefreshing = false;
   int? _removingPrivateMessageParticipantId;
-  String? _removingPrivateMessageGroupName;
-  bool _isTogglingArchiveMessage = false;
 
   /// 本地屏蔽名单过滤缓存：provider 状态与名单实例都未变时复用同一份
   /// 过滤结果，保证同一帧内多处读取拿到 identical 的 posts 列表
@@ -1637,10 +1635,61 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     ];
   }
 
+  Future<void> _openTopicInNativeWindow() async {
+    final opened = await PicoVrService.instance.openNewWindow(
+      topicId: widget.topicId,
+      postNumber: _resolvedViewportPostNumber,
+    );
+    if (!mounted || opened) return;
+    final status = await PicoVrService.instance.getWindowStatus();
+    if (!mounted) return;
+    final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    final atCapacity = status?.isAtCapacity == true;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          atCapacity
+              ? (chinese
+                    ? '已达到10个窗口上限，请先关闭一个窗口'
+                    : 'The 10-window limit was reached; close one first')
+              : (chinese
+                    ? 'PICO 系统未能创建新的原生窗口'
+                    : 'PICO could not create a native window'),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMoreMenuAction({
     required TopicDetail detail,
     required TopicDetailNotifier notifier,
     required bool canEditTopic,
+  }) {
+    if (defaultTargetPlatform != TargetPlatform.android ||
+        MediaQuery.orientationOf(context) != Orientation.landscape) {
+      return _buildMoreMenuActionBody(
+        detail: detail,
+        notifier: notifier,
+        canEditTopic: canEditTopic,
+        showNewWindow: false,
+      );
+    }
+    return FutureBuilder<PicoVrCapabilities>(
+      future: PicoVrService.instance.capabilities,
+      builder: (context, snapshot) => _buildMoreMenuActionBody(
+        detail: detail,
+        notifier: notifier,
+        canEditTopic: canEditTopic,
+        showNewWindow: snapshot.data?.supportsMultipleWindows == true,
+      ),
+    );
+  }
+
+  Widget _buildMoreMenuActionBody({
+    required TopicDetail detail,
+    required TopicDetailNotifier notifier,
+    required bool canEditTopic,
+    required bool showNewWindow,
   }) {
     final bookmarkTarget = _bookmarkEditTarget(detail);
     final hasEditableBookmark = bookmarkTarget != null || detail.bookmarked;
@@ -1911,6 +1960,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           onShareImage: _shareAsImage,
           onExport: _showExportSheet,
           onOpenInBrowser: _openInBrowser,
+          onOpenInNewWindow: () => unawaited(_openTopicInNativeWindow()),
           onFilter: _showFilterSheet,
           onReadingSettings: () {
             Navigator.push(
@@ -1992,6 +2042,27 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             ],
           ),
         ),
+        if (showNewWindow)
+          PopupMenuItem(
+            key: const ValueKey('topic-open-native-window'),
+            value: 'open_in_new_window',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.open_in_new_rounded,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  Localizations.localeOf(context).languageCode == 'zh'
+                      ? '在新窗口打开'
+                      : 'Open in new window',
+                ),
+              ],
+            ),
+          ),
         PopupMenuItem(
           value: 'open_in_browser',
           child: Row(
