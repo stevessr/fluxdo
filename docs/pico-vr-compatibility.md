@@ -44,6 +44,9 @@ with a supported XR session; that is not provided by a normal Flutter 2D panel.
   offers **system QR scanner**, accepts its `SCAN_RESULT`, and runs the regular
   login validation. This is independent of Camera2 enumeration, but the
   external scanner must itself have camera access and may not work on PICO.
+  Explicit consent is required before launching it because QR login payloads
+  include a **plaintext API key that may never expire** plus an OTP. Do not
+  recommend untrusted scanner apps for logging in.
 - If no Android camera is enumerated, the QR login page immediately offers
   **image import** and **paste QR payload**; it does not repeatedly attempt
   a camera session that cannot start.
