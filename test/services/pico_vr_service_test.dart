@@ -11,6 +11,7 @@ void main() {
         'hasCameraCaptureIntent': true,
         'supportsMultipleWindows': true,
         'isInMultiWindowMode': true,
+        'maxWindows': 10,
       });
 
       expect(caps.isPico, isTrue);
@@ -19,6 +20,7 @@ void main() {
       expect(caps.hasCameraCaptureIntent, isTrue);
       expect(caps.supportsMultipleWindows, isTrue);
       expect(caps.isInMultiWindowMode, isTrue);
+      expect(caps.maxWindows, 10);
     });
 
     test('uses Android Camera2 when it is enumerated', () {
@@ -47,6 +49,7 @@ void main() {
       expect(missing.canUseMobileScanner, isFalse);
       expect(missing.model, isEmpty);
       expect(missing.hasCameraCaptureIntent, isFalse);
+      expect(missing.maxWindows, 1);
     });
   });
   group('PicoVrLaunchRequest', () {
@@ -77,4 +80,28 @@ void main() {
     });
   });
 
+  group('PicoVrWindowStatus', () {
+    test('ten total windows includes the primary and nine extra windows', () {
+      final status = PicoVrWindowStatus.fromMap({
+        'maxWindows': 10,
+        'openWindows': 10,
+        'pendingWindows': 0,
+        'availableSlots': 0,
+      });
+      expect(status.isAtCapacity, isTrue);
+      expect(status.openWindows, 10);
+    });
+
+    test('pending secondary launches consume capacity until acknowledged', () {
+      final status = PicoVrWindowStatus.fromMap({
+        'maxWindows': 10,
+        'openWindows': 7,
+        'pendingWindows': 2,
+        'availableSlots': 1,
+      });
+      expect(status.isAtCapacity, isFalse);
+      expect(status.availableSlots, 1);
+      expect(PicoVrWindowStatus.fromMap(null).isAtCapacity, isFalse);
+    });
+  });
 }
