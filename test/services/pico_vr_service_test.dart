@@ -1,12 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:fluxdo/services/pico_vr_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('External QR scanner MethodChannel', () {
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    });
     const channel = MethodChannel('com.fluxdo/pico_vr');
 
     tearDown(() {
+      debugDefaultTargetPlatformOverride = null;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null);
     });
@@ -26,6 +33,15 @@ void main() {
     test('cancellation returns null', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async => null);
+      expect(await PicoVrService.instance.scanWithExternalQrScanner(), isNull);
+    });
+
+    test('never invokes an Android scanner on a non-Android platform', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        fail('Android-only channel must not run on Linux');
+      });
       expect(await PicoVrService.instance.scanWithExternalQrScanner(), isNull);
     });
 
