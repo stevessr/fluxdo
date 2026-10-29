@@ -49,4 +49,32 @@ void main() {
       expect(missing.hasCameraCaptureIntent, isFalse);
     });
   });
+  group('PicoVrLaunchRequest', () {
+    test('decodes a scoped native topic and optional post number', () {
+      final target = PicoVrLaunchRequest.fromMap({
+        'topicId': 123,
+        'postNumber': 7,
+      });
+      expect(target.topicId, 123);
+      expect(target.postNumber, 7);
+
+      final home = PicoVrLaunchRequest.fromMap({
+        'topicId': 123,
+        'postNumber': 0,
+      });
+      expect(home.postNumber, isNull);
+    });
+
+    test('rejects malformed launch requests', () {
+      expect(
+        () => PicoVrLaunchRequest.fromMap({'topicId': '123'}),
+        throwsFormatException,
+      );
+      expect(
+        () => PicoVrLaunchRequest.fromMap(null),
+        throwsFormatException,
+      );
+    });
+  });
+
 }
