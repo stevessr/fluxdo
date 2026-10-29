@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <utility>
 
 namespace pico_qr {
 
