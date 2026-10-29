@@ -66,7 +66,8 @@ int main() {
     assert(!pico_qr::toGray(src, false, full));
     src.bufferSize = spaced.size();
 
-    src.stride = width * 8 - 1;
+    // Last packed pixel ends at (width - 1) * 8 + 4 bytes.
+    src.stride = (width - 1) * 8 + 3;
     assert(!pico_qr::validRgbaFrame(src));
     src.stride = paddedStride;
 
