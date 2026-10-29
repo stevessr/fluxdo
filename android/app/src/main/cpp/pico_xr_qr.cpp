@@ -53,17 +53,28 @@ bool load(XrInstance instance, const char* name, T& fn) {
         reinterpret_cast<PFN_xrVoidFunction*>(&fn)) == XR_SUCCESS && fn;
 }
 bool waitForFuture(XrInstance instance, XrFutureEXT future,
-                   PFN_xrPollFutureEXT poll, Clock::time_point deadline) {
+                   PFN_xrPollFutureEXT poll, PFN_xrCancelFutureEXT cancel,
+                   Clock::time_point deadline) {
     while (!expired(deadline)) {
         XrFuturePollInfoEXT info{XR_TYPE_FUTURE_POLL_INFO_EXT};
         info.future = future;
         XrFuturePollResultEXT state{XR_TYPE_FUTURE_POLL_RESULT_EXT};
         const XrResult result = poll(instance, &info, &state);
-        if (XR_FAILED(result)) { xrFailure("XR future poll failed", result); return false; }
+        if (XR_FAILED(result)) {
+            xrFailure("XR future poll failed", result);
+            XrFutureCancelInfoEXT cancelInfo{XR_TYPE_FUTURE_CANCEL_INFO_EXT};
+            cancelInfo.future = future;
+            cancel(instance, &cancelInfo);
+            return false;
+        }
         if (state.state == XR_FUTURE_STATE_READY_EXT) return true;
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
-    status("XR camera initialization cancelled or timed out");
+    XrFutureCancelInfoEXT cancelInfo{XR_TYPE_FUTURE_CANCEL_INFO_EXT};
+    cancelInfo.future = future;
+    cancel(instance, &cancelInfo);  // Cancel before destroying a session with a pending future.
+    status(cancelled ? "XR camera initialization cancelled" :
+                       "XR camera initialization timed out");
     return false;
 }
 // RAII frees resources on every return path (including scan timeout).
@@ -207,6 +218,7 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     }
 
     PFN_xrPollFutureEXT poll = nullptr;
+    PFN_xrCancelFutureEXT cancelFuture = nullptr;
     PFN_xrEnumerateAvailableCamerasPICO enumerate = nullptr;
     PFN_xrCreateCameraDeviceAsyncPICO createDevice = nullptr;
     PFN_xrCreateCameraDeviceCompletePICO completeDevice = nullptr;
@@ -217,6 +229,7 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     PFN_xrGetCameraImageDataPICO imageData = nullptr;
     PFN_xrReleaseCameraImagePICO release = nullptr;
     if (!load(xr.instance, "xrPollFutureEXT", poll) ||
+        !load(xr.instance, "xrCancelFutureEXT", cancelFuture) ||
         !load(xr.instance, "xrEnumerateAvailableCamerasPICO", enumerate) ||
         !load(xr.instance, "xrCreateCameraDeviceAsyncPICO", createDevice) ||
         !load(xr.instance, "xrCreateCameraDeviceCompletePICO", completeDevice) ||
@@ -284,7 +297,7 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     if (XR_FAILED(openDeviceResult)) {
         xrFailure("PICO camera device request failed", openDeviceResult); return nullptr;
     }
-    if (!waitForFuture(xr.instance, future, poll, deadline)) return nullptr;
+    if (!waitForFuture(xr.instance, future, poll, cancelFuture, deadline)) return nullptr;
     XrCreateCameraDeviceCompletionPICO deviceCompletion{XR_TYPE_CREATE_CAMERA_DEVICE_COMPLETION_PICO};
     const XrResult deviceCompleteResult = completeDevice(xr.instance, future, &deviceCompletion);
     if (XR_FAILED(deviceCompleteResult)) {
@@ -312,7 +325,7 @@ jstring run(JNIEnv* env, jobject activity, jlong timeoutMillis, jlong token) {
     if (XR_FAILED(openCaptureResult)) {
         xrFailure("PICO camera capture request failed", openCaptureResult); return nullptr;
     }
-    if (!waitForFuture(xr.instance, future, poll, deadline)) return nullptr;
+    if (!waitForFuture(xr.instance, future, poll, cancelFuture, deadline)) return nullptr;
     XrCreateCameraCaptureSessionCompletionPICO captureCompletion{
         XR_TYPE_CREATE_CAMERA_CAPTURE_SESSION_COMPLETION_PICO};
     const XrResult captureCompleteResult = completeCapture(xr.session, future, &captureCompletion);
