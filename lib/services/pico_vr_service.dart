@@ -10,6 +10,7 @@ class PicoVrCapabilities {
     required this.isPico,
     required this.hasCamera2,
     this.hasCameraCaptureIntent = false,
+    this.hasExternalQrScanner = false,
     required this.supportsMultipleWindows,
     required this.isInMultiWindowMode,
     this.maxWindows = 1,
@@ -21,6 +22,7 @@ class PicoVrCapabilities {
       isPico: data?['isPico'] == true,
       hasCamera2: data?['hasCamera2'] == true,
       hasCameraCaptureIntent: data?['hasCameraCaptureIntent'] == true,
+      hasExternalQrScanner: data?['hasExternalQrScanner'] == true,
       supportsMultipleWindows: data?['supportsMultipleWindows'] == true,
       isInMultiWindowMode: data?['isInMultiWindowMode'] == true,
       maxWindows: data?['maxWindows'] is int &&
@@ -34,6 +36,8 @@ class PicoVrCapabilities {
   final bool isPico;
   final bool hasCamera2;
   final bool hasCameraCaptureIntent;
+  /// A ZXing-compatible external QR scanner Activity is installed.
+  final bool hasExternalQrScanner;
   final bool supportsMultipleWindows;
   final bool isInMultiWindowMode;
   /// Maximum number of FluxDO native panels, including the main window.
@@ -146,6 +150,22 @@ class PicoVrService {
       supportsMultipleWindows: false,
       isInMultiWindowMode: false,
     );
+  }
+
+  /// An installed system/third-party scanner may return QR text without FluxDO
+  /// opening Camera2. This is not access to the PICO passthrough feed.
+  Future<String?> scanWithExternalQrScanner() async {
+    // Flutter's target platform is overrideable in widget tests. On device it
+    // resolves to Android; do not attempt an Android intent on other hosts.
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return null;
+    try {
+      return await _channel.invokeMethod<String>('scanWithExternalQrScanner');
+    } on PlatformException catch (error) {
+      debugPrint('[PicoVr] External QR scanner failed: ${error.code}');
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
   }
 
   /// Lightweight native count; unlike capabilities this is NOT cached.

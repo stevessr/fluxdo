@@ -1,9 +1,12 @@
 package com.github.lingyan000.fluxdo
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.ImageFormat
+import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.provider.MediaStore
 import android.os.Build
@@ -19,10 +22,74 @@ class PicoVrChannel(
 ) {
     private val channel = MethodChannel(messenger, "com.fluxdo/pico_vr")
 
+    companion object {
+        private const val QR_SCAN_REQUEST_CODE = 0x50C0
+        private const val QR_SCAN_ACTION = "com.google.zxing.client.android.SCAN"
+    }
+
+    private var pendingQrResult: MethodChannel.Result? = null
+
+    /** Optional Android scanner Activity; does not expose PICO XR frames. */
+    private fun qrScannerIntent(): Intent = Intent(QR_SCAN_ACTION).apply {
+        putExtra("SCAN_MODE", "QR_CODE_MODE")
+    }
+
+    private fun hasExternalQrScanner(): Boolean = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activity.packageManager.queryIntentActivities(
+                qrScannerIntent(),
+                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+            ).isNotEmpty()
+        } else {
+            @Suppress("DEPRECATION")
+            activity.packageManager.queryIntentActivities(
+                qrScannerIntent(), PackageManager.MATCH_DEFAULT_ONLY
+            ).isNotEmpty()
+        }
+    } catch (e: RuntimeException) {
+        Log.w("PicoVr", "External QR scanner lookup failed", e)
+        false
+    }
+
+    private fun scanWithExternalQrScanner(result: MethodChannel.Result) {
+        if (pendingQrResult != null) {
+            result.error("QR_SCAN_BUSY", "A QR scan is already running", null)
+            return
+        }
+        if (!hasExternalQrScanner()) {
+            result.error("QR_SCAN_UNAVAILABLE", "No compatible QR scanner is installed", null)
+            return
+        }
+        try {
+            pendingQrResult = result
+            @Suppress("DEPRECATION")
+            activity.startActivityForResult(qrScannerIntent(), QR_SCAN_REQUEST_CODE)
+        } catch (e: RuntimeException) {
+            pendingQrResult = null
+            Log.w("PicoVr", "External QR scanner launch failed", e)
+            result.error("QR_SCAN_LAUNCH_FAILED", e.message, null)
+        }
+    }
+
+    /** The result is owned by this Activity, not shared with other windows. */
+    fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode != QR_SCAN_REQUEST_CODE) return false
+        val callback = pendingQrResult ?: return true
+        pendingQrResult = null
+        val content = if (resultCode == Activity.RESULT_OK) {
+            data?.getStringExtra("SCAN_RESULT")
+                ?: data?.getStringExtra(Intent.EXTRA_TEXT)
+                ?: data?.dataString
+        } else null
+        callback.success(content?.takeIf { it.isNotBlank() })
+        return true
+    }
+
     init {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getCapabilities" -> result.success(getCapabilities())
+                "scanWithExternalQrScanner" -> scanWithExternalQrScanner(result)
                 "getWindowStatus" -> result.success(PicoVrWindowActivity.windowStatus())
                 "openNewWindow" -> result.success(
                     openNewWindow(
@@ -40,6 +107,8 @@ class PicoVrChannel(
 
     fun dispose() {
         channel.setMethodCallHandler(null)
+        pendingQrResult?.error("QR_SCAN_CANCELLED", "Scanner Activity was destroyed", null)
+        pendingQrResult = null
     }
 
     private fun getCapabilities(): Map<String, Any> {
@@ -47,12 +116,30 @@ class PicoVrChannel(
             .joinToString(" ").lowercase(Locale.ROOT)
         // CameraX/mobile_scanner requires a camera enumerated by Android Camera2.
         // PICO headset passthrough needs a separate XR camera integration.
-        val cameraIds = try {
-            (activity.getSystemService(Context.CAMERA_SERVICE) as CameraManager)
-                .cameraIdList.toList()
+        val hasScannerCamera = try {
+            val manager = activity.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            manager.cameraIdList.any { cameraId ->
+                try {
+                    val characteristics = manager.getCameraCharacteristics(cameraId)
+                    val caps = characteristics.get(
+                        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES
+                    ) ?: intArrayOf()
+                    val backwardCompatible = caps.contains(
+                        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE
+                    )
+                    val outputs = characteristics.get(
+                        CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+                    )
+                    backwardCompatible &&
+                        !outputs?.getOutputSizes(ImageFormat.YUV_420_888).isNullOrEmpty()
+                } catch (e: Exception) {
+                    Log.w("PicoVr", "Camera2 device is not usable for QR scanning", e)
+                    false
+                }
+            }
         } catch (e: Exception) {
             Log.w("PicoVr", "Camera2 enumeration failed", e)
-            emptyList()
+            false
         }
         // A vendor-supplied camera Activity may exist even if the headset
         // exposes no camera devices through Camera2. This is not XR passthrough.
@@ -76,9 +163,10 @@ class PicoVrChannel(
         }
         return mapOf(
             "hasCameraCaptureIntent" to hasCaptureHandler,
+            "hasExternalQrScanner" to hasExternalQrScanner(),
             "isPico" to identity.contains("pico"),
             "model" to Build.MODEL,
-            "hasCamera2" to cameraIds.isNotEmpty(),
+            "hasCamera2" to hasScannerCamera,
             "maxWindows" to PicoVrWindowActivity.MAX_TOTAL_WINDOWS,
             "supportsMultipleWindows" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N),
             "isInMultiWindowMode" to (

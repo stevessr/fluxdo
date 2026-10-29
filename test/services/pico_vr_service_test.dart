@@ -1,7 +1,59 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:fluxdo/services/pico_vr_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('External QR scanner MethodChannel', () {
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    });
+    const channel = MethodChannel('com.fluxdo/pico_vr');
+
+    tearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    test('returns a scanner payload without relying on Camera2', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        expect(call.method, 'scanWithExternalQrScanner');
+        return 'fluxdo://qr-login?v=2&k=demo&o=code&exp=0';
+      });
+      expect(
+        await PicoVrService.instance.scanWithExternalQrScanner(),
+        contains('qr-login'),
+      );
+    });
+
+    test('cancellation returns null', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async => null);
+      expect(await PicoVrService.instance.scanWithExternalQrScanner(), isNull);
+    });
+
+    test('never invokes an Android scanner on a non-Android platform', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        fail('Android-only channel must not run on Linux');
+      });
+      expect(await PicoVrService.instance.scanWithExternalQrScanner(), isNull);
+    });
+
+    test('native launch failure is nonfatal', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        throw PlatformException(code: 'QR_SCAN_UNAVAILABLE');
+      });
+      expect(await PicoVrService.instance.scanWithExternalQrScanner(), isNull);
+    });
+  });
+
   group('PicoVrCapabilities', () {
     test('does not mistake XR passthrough for an Android Camera2 camera', () {
       final caps = PicoVrCapabilities.fromMap({
@@ -9,6 +61,7 @@ void main() {
         'model': 'PICO 4 Ultra',
         'hasCamera2': false,
         'hasCameraCaptureIntent': true,
+        'hasExternalQrScanner': true,
         'supportsMultipleWindows': true,
         'isInMultiWindowMode': true,
         'maxWindows': 10,
@@ -18,6 +71,7 @@ void main() {
       expect(caps.model, 'PICO 4 Ultra');
       expect(caps.canUseMobileScanner, isFalse);
       expect(caps.hasCameraCaptureIntent, isTrue);
+      expect(caps.hasExternalQrScanner, isTrue);
       expect(caps.supportsMultipleWindows, isTrue);
       expect(caps.isInMultiWindowMode, isTrue);
       expect(caps.maxWindows, 10);
@@ -49,6 +103,7 @@ void main() {
       expect(missing.canUseMobileScanner, isFalse);
       expect(missing.model, isEmpty);
       expect(missing.hasCameraCaptureIntent, isFalse);
+      expect(missing.hasExternalQrScanner, isFalse);
       expect(missing.maxWindows, 1);
     });
   });
