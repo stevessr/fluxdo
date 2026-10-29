@@ -188,6 +188,10 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Optional ZXing-compatible QR scanner Activity. This is not XR passthrough. -->
+        <intent>
+            <action android:name="com.google.zxing.client.android.SCAN" />
+        </intent>
         <!-- Detect vendor camera Activity as an optional PICO QR capture fallback. -->
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
