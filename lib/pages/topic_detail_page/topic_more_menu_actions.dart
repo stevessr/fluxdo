@@ -11,6 +11,7 @@ void handleTopicDetailMoreMenuSelection(
   required void Function() onExport,
   required void Function() onOpenInBrowser,
   void Function()? onOpenInBuiltInBrowser,
+  void Function()? onOpenInNewWindow,
   void Function()? onAddToBoard,
   required void Function() onFilter,
   required void Function() onReadingSettings,
@@ -49,6 +50,9 @@ void handleTopicDetailMoreMenuSelection(
       return;
     case 'open_in_browser':
       onOpenInBrowser();
+      return;
+    case 'open_in_new_window':
+      onOpenInNewWindow?.call();
       return;
     case 'open_in_built_in_browser':
       onOpenInBuiltInBrowser?.call();
