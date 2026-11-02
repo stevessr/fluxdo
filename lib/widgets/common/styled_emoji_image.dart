@@ -82,6 +82,7 @@ class StyledEmojiImage extends ConsumerWidget {
     this.cacheWidth,
     this.fit = BoxFit.contain,
     this.gaplessPlayback = true,
+    this.showPlaceholder = false,
     this.errorFallback,
   });
 
@@ -92,6 +93,7 @@ class StyledEmojiImage extends ConsumerWidget {
   final int? cacheWidth;
   final BoxFit fit;
   final bool gaplessPlayback;
+  final bool showPlaceholder;
   final Widget? errorFallback;
 
   @override
@@ -105,6 +107,7 @@ class StyledEmojiImage extends ConsumerWidget {
         final regularUrl = EmojiHandler().getEmojiUrl(name, serverUrl: serverUrl);
         final styledUrl = EmojiStyleAssets.urlFor(name, style);
         Widget normalImage() => _image(
+          context,
           regularUrl,
           onError: errorFallback ?? Text(
             name.isEmpty ? ':?:' : ':$name:',
@@ -115,12 +118,12 @@ class StyledEmojiImage extends ConsumerWidget {
         if (styledUrl == null || styledUrl == regularUrl) {
           return normalImage();
         }
-        return _image(styledUrl, onError: normalImage());
+        return _image(context, styledUrl, onError: normalImage());
       },
     );
   }
 
-  Widget _image(String url, {required Widget onError}) => Image(
+  Widget _image(BuildContext context, String url, {required Widget onError}) => Image(
     image: ResizeImage.resizeIfNeeded(
       cacheWidth,
       null,
@@ -130,6 +133,19 @@ class StyledEmojiImage extends ConsumerWidget {
     height: height,
     fit: fit,
     gaplessPlayback: gaplessPlayback,
+    frameBuilder: showPlaceholder
+        ? (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded || frame != null) return child;
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.onSurfaceVariant
+                    .withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SizedBox(width: width, height: height),
+            );
+          }
+        : null,
     errorBuilder: (_, _, _) => onError,
   );
 }
