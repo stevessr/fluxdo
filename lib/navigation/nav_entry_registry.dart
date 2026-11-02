@@ -61,9 +61,8 @@ class NavEntryRegistry {
         kind: NavEntryKind.page,
         iconData: Icons.apps_outlined,
         selectedIconData: Icons.apps_rounded,
-        label: (ctx) => Localizations.localeOf(ctx).languageCode == 'zh'
-            ? '应用'
-            : 'Apps',
+        label: (ctx) =>
+            Localizations.localeOf(ctx).languageCode == 'zh' ? '应用' : 'Apps',
         pageBuilder: (ctx, isActive) => MiniAppsPage(isActive: isActive),
         defaultInBottomNav: false,
       ),

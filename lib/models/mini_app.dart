@@ -19,9 +19,8 @@ class MiniApp {
   static MiniApp? tryParse(Object? raw, {required Uri site}) {
     if (raw is! Map) return null;
     final data = Map<String, dynamic>.from(raw);
-    final id = _string(data['slug']) ??
-        _string(data['id']) ??
-        _string(data['uuid']);
+    final id =
+        _string(data['slug']) ?? _string(data['id']) ?? _string(data['uuid']);
     if (id == null || !RegExp(r'^[a-zA-Z0-9_-]{1,128}$').hasMatch(id)) {
       return null;
     }
@@ -41,11 +40,13 @@ class MiniApp {
       return null;
     }
 
-    final icon = _string(data['icon_url']) ??
+    final icon =
+        _string(data['icon_url']) ??
         _string(data['iconUrl']) ??
         _string(data['image_url']);
     final iconUri = icon == null ? null : site.resolve(icon);
-    final iconUrl = iconUri != null &&
+    final iconUrl =
+        iconUri != null &&
             (iconUri.scheme == 'https' || iconUri.scheme == 'http')
         ? iconUri.toString()
         : null;
@@ -53,9 +54,8 @@ class MiniApp {
     return MiniApp(
       id: id,
       name: _string(data['name']) ?? _string(data['title']) ?? id,
-      description: _string(data['description']) ??
-          _string(data['summary']) ??
-          '',
+      description:
+          _string(data['description']) ?? _string(data['summary']) ?? '',
       url: candidate,
       iconUrl: iconUrl,
       ageRating: rawRating is int
@@ -93,13 +93,12 @@ class MiniAppDirectory {
     if (source is Map && source['data'] is Map) {
       source = source['data'];
     }
-    final Map<dynamic, dynamic>? envelope =
-        source is Map ? source : null;
+    final Map<dynamic, dynamic>? envelope = source is Map ? source : null;
     final rows = source is List
         ? source
         : envelope?['apps'] is List
-            ? envelope!['apps'] as List
-            : null;
+        ? envelope!['apps'] as List
+        : null;
     if (rows == null) {
       throw const FormatException('Unsupported mini app directory response');
     }

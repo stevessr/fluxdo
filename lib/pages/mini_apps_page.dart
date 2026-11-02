@@ -35,8 +35,11 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
   @override
   void didUpdateWidget(covariant MiniAppsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive && !oldWidget.isActive && _apps.isEmpty &&
-        !_loading && _error == null) {
+    if (widget.isActive &&
+        !oldWidget.isActive &&
+        _apps.isEmpty &&
+        !_loading &&
+        _error == null) {
       _loadPage(reset: true);
     }
   }
@@ -129,80 +132,83 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
       body: _apps.isEmpty && _loading
           ? const Center(child: CircularProgressIndicator())
           : _apps.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.apps_outage_rounded, size: 52),
-                        const SizedBox(height: 12),
-                        Text(
-                          _error ??
-                              (zh ? '暂无可用的站内应用' : 'No mini apps available'),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton.tonalIcon(
-                          onPressed: _openDirectoryWebsite,
-                          icon: const Icon(Icons.open_in_browser_rounded),
-                          label: Text(zh ? '查看网页目录' : 'Open web directory'),
-                        ),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.apps_outage_rounded, size: 52),
+                    const SizedBox(height: 12),
+                    Text(
+                      _error ?? (zh ? '暂无可用的站内应用' : 'No mini apps available'),
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () => _loadPage(reset: true),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                    itemCount: _apps.length + (_hasNext || _error != null ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _apps.length) {
-                        return Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: _loading
-                                ? const CircularProgressIndicator()
-                                : TextButton(
-                                    onPressed: () => _loadPage(),
-                                    child: Text(_error != null
-                                        ? (zh ? '加载失败，重试' : 'Retry')
-                                        : (zh ? '加载更多' : 'Load more')),
-                                  ),
-                          ),
-                        );
-                      }
-                      final app = _apps[index];
-                      return Card(
-                        clipBehavior: Clip.antiAlias,
-                        child: ListTile(
-                          leading: SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: Center(child: _buildIcon(app)),
-                          ),
-                          title: Text(app.name),
-                          subtitle: Text(
-                            [
-                              if (app.description.isNotEmpty) app.description,
-                              if (app.ageRating != null)
-                                zh ? '适用年龄 ${app.ageRating}+' : 'Age ${app.ageRating}+',
-                            ].join(' · '),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => WebViewPage.open(
-                            context,
-                            app.url.toString(),
-                            title: app.name,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                    const SizedBox(height: 16),
+                    FilledButton.tonalIcon(
+                      onPressed: _openDirectoryWebsite,
+                      icon: const Icon(Icons.open_in_browser_rounded),
+                      label: Text(zh ? '查看网页目录' : 'Open web directory'),
+                    ),
+                  ],
                 ),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () => _loadPage(reset: true),
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                itemCount: _apps.length + (_hasNext || _error != null ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == _apps.length) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: _loading
+                            ? const CircularProgressIndicator()
+                            : TextButton(
+                                onPressed: () => _loadPage(),
+                                child: Text(
+                                  _error != null
+                                      ? (zh ? '加载失败，重试' : 'Retry')
+                                      : (zh ? '加载更多' : 'Load more'),
+                                ),
+                              ),
+                      ),
+                    );
+                  }
+                  final app = _apps[index];
+                  return Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      leading: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Center(child: _buildIcon(app)),
+                      ),
+                      title: Text(app.name),
+                      subtitle: Text(
+                        [
+                          if (app.description.isNotEmpty) app.description,
+                          if (app.ageRating != null)
+                            zh
+                                ? '适用年龄 ${app.ageRating}+'
+                                : 'Age ${app.ageRating}+',
+                        ].join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => WebViewPage.open(
+                        context,
+                        app.url.toString(),
+                        title: app.name,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }

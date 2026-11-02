@@ -158,17 +158,12 @@ Future<void> launchContentLink(
   // Site-hosted mini apps run in their original web origin with the active
   // account's primed cookies; they are not HTML post fragments.
   if (internal && DiscourseUrlParser.isMiniAppsDirectory(url)) {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const MiniAppsPage()),
-    );
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const MiniAppsPage()));
     return;
   }
   if (internal && DiscourseUrlParser.parseMiniApp(url) != null) {
-    await WebViewPage.open(
-      context,
-      UrlHelper.resolveUrl(url),
-      title: '站内应用',
-    );
+    await WebViewPage.open(context, UrlHelper.resolveUrl(url), title: '站内应用');
     return;
   }
 

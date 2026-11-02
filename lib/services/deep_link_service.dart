@@ -126,9 +126,8 @@ class DeepLinkService {
     // /apps/:id as the hosted interactive app (with WebView cookie priming).
     if (uri.host == 'linux.do' &&
         DiscourseUrlParser.isMiniAppsDirectory(uri.path)) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const MiniAppsPage()),
-      );
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const MiniAppsPage()));
       return;
     }
     if (uri.host == 'linux.do' &&

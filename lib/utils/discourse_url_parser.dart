@@ -326,8 +326,14 @@ class DiscourseUrlParser {
       return null;
     }
     final id = parts[1];
-    if (const {'directory', 'installs', 'api', 'new', 'manage', 'settings'}
-        .contains(id.toLowerCase())) {
+    if (const {
+      'directory',
+      'installs',
+      'api',
+      'new',
+      'manage',
+      'settings',
+    }.contains(id.toLowerCase())) {
       return null;
     }
     if (!RegExp(r'^[a-zA-Z0-9_-]{1,128}$').hasMatch(id)) return null;
