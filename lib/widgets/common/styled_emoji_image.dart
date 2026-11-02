@@ -6,7 +6,7 @@ import '../../providers/preferences_provider.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/emoji_handler.dart';
 
-/// Maps standard emoji shortcodes to Fluent artwork without changing the
+/// Maps standard emoji shortcodes to Google Noto Emoji artwork without changing the
 /// original Discourse shortcode or replacing site-uploaded custom emoji.
 ///
 /// Assets are fetched lazily via the existing shared emoji cache; the selected
@@ -34,7 +34,7 @@ class EmojiStyleAssets {
         return null;
       }
     }
-    final unicode = glyph.runes.map((r) => r.toRadixString(16)).join('-');
+    final unicode = glyph.runes.map((r) => r.toRadixString(16)).join('_');
     // Keep the bounded cache small even if a server sends unique emoji names.
     if (_unicodeCache.length >= 4096) _unicodeCache.clear();
     _unicodeCache[normalized] = unicode;
@@ -52,26 +52,26 @@ class EmojiStyleAssets {
   /// A separate, pure URL builder makes source style routing testable.
   static String? urlForUnicode(String unicode, EmojiRenderStyle style) {
     if (style == EmojiRenderStyle.normal || unicode.isEmpty) return null;
-    final pkg = switch (style) {
+    // Official Google Fonts Emoji CDN:
+    // Animated Noto Emoji: https://googlefonts.github.io/noto-emoji-animation/
+    // Noto 3D: https://googlefonts.github.io/noto-emoji-files/
+    // Both use underscore-separated Unicode scalar values, including ZWJ
+    // and variation selectors where present.
+    if (!RegExp(r'^[0-9a-f]+(?:_[0-9a-f]+)*$').hasMatch(unicode)) {
+      return null;
+    }
+    return switch (style) {
       EmojiRenderStyle.normal => null,
-      EmojiRenderStyle.threeD => 'fluent-emoji-3d',
-      EmojiRenderStyle.animated => _animatedPackage(unicode),
+      EmojiRenderStyle.animated =>
+        'https://fonts.gstatic.com/s/e/notoemoji/latest/$unicode/512.webp',
+      EmojiRenderStyle.threeD =>
+        'https://fonts.gstatic.com/s/e/noto3demoji/latest/$unicode/512.png',
     };
-    if (pkg == null) return null;
-    return 'https://registry.npmmirror.com/@lobehub/$pkg/latest/files/assets/$unicode.webp';
-  }
-
-  static String _animatedPackage(String unicode) {
-    final first = int.tryParse(unicode.split('-').first, radix: 16) ?? 0;
-    if (first < 0x1f469) return 'fluent-emoji-anim-1';
-    if (first < 0x1f620) return 'fluent-emoji-anim-2';
-    if (first < 0x1f9a0) return 'fluent-emoji-anim-3';
-    return 'fluent-emoji-anim-4';
   }
 }
 
 /// One widget for post HTML, chat reactions, editor/picker and inline text.
-/// Any unsupported/missing Fluent asset falls back to the server's real emoji.
+/// Any unsupported/missing Google Noto asset falls back to the server's real emoji.
 class StyledEmojiImage extends ConsumerWidget {
   const StyledEmojiImage({
     super.key,
