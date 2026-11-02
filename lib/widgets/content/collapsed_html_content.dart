@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../services/discourse_cache_manager.dart';
+import '../common/styled_emoji_image.dart';
 import '../../utils/url_helper.dart';
 
 /// 一个支持 maxLines 截断的简化 HTML 渲染组件
@@ -74,12 +74,56 @@ class CollapsedHtmlContent extends StatelessWidget {
         spans.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
-            child: Image(
-              image: discourseImageProvider(fullUrl),
+            child: StyledEmojiImage(
+              name: (alt ?? '').replaceAll(RegExp(r'^:|:
+          ),
+        );
+      } else {
+        // 非 emoji 图片，或者是普通图片，在简介里通常不显示大图，或者显示 alt
+        if (alt != null && alt.isNotEmpty) {
+          spans.add(TextSpan(text: alt, style: style));
+        }
+      }
+
+      lastIndex = match.end;
+    }
+
+    // 添加剩余文本
+    if (lastIndex < htmlContent.length) {
+      final text = _stripTags(htmlContent.substring(lastIndex));
+      if (text.isNotEmpty) {
+        spans.add(TextSpan(text: text, style: style));
+      }
+    }
+
+    return spans;
+  }
+
+  String _stripTags(String html) {
+    // 移除所有 HTML 标签，只保留内容
+    // 替换 <br> 为换行
+    var text = html.replaceAll(
+      RegExp(r'<br\s*\/?>', caseSensitive: false),
+      '\n',
+    );
+    // 移除其他标签
+    text = text.replaceAll(RegExp(r'<[^>]*>'), '');
+    // 解码实体字符 (简单处理)
+    text = text
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"');
+    return text;
+  }
+}
+), ''),
+              serverUrl: fullUrl,
               width: emojiSize,
               height: emojiSize,
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => Text(alt ?? ''),
+              cacheWidth: (emojiSize * MediaQuery.devicePixelRatioOf(context)).round(),
+              errorFallback: Text(alt ?? ''),
             ),
           ),
         );
