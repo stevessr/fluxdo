@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/emoji.dart';
 import '../../providers/discourse_providers.dart';
 import '../../services/emoji_handler.dart';
-import '../../services/discourse_cache_manager.dart';
+import '../common/styled_emoji_image.dart';
 import '../../utils/dialog_utils.dart';
 import '../common/app_bottom_sheet.dart';
 
@@ -631,34 +631,13 @@ class _EmojiCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: EmojiHandler(),
-      builder: (context, _) => Image(
-        image: ResizeImage(
-          emojiImageProvider(
-            EmojiHandler().getEmojiUrl(name, serverUrl: serverUrl),
-          ),
-          width: decodeSize,
-          height: decodeSize,
-          policy: ResizeImagePolicy.fit,
-        ),
-        width: width,
-        height: height,
-        fit: BoxFit.contain,
-        gaplessPlayback: true,
-        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          if (wasSynchronouslyLoaded || frame != null) return child;
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.onSurfaceVariant
-                  .withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: SizedBox(width: width, height: height),
-          );
-        },
-        errorBuilder: (_, _, _) => SizedBox(width: width, height: height),
-      ),
+    return StyledEmojiImage(
+      name: name,
+      serverUrl: serverUrl,
+      width: width,
+      height: height,
+      cacheWidth: decodeSize,
+      errorFallback: SizedBox(width: width, height: height),
     );
   }
 }
