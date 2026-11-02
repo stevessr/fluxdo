@@ -9,6 +9,7 @@ import '../config/site_customization.dart';
 import '../constants.dart';
 import '../pages/badge_page.dart';
 import '../pages/boards_page.dart';
+import '../pages/mini_apps_page.dart';
 import '../pages/community_events_page.dart';
 import '../pages/group_page.dart';
 import '../pages/image_viewer_page.dart';
@@ -153,6 +154,23 @@ Future<void> launchContentLink(
   }
 
   final internal = isInternalUrlString(url);
+
+  // Site-hosted mini apps run in their original web origin with the active
+  // account's primed cookies; they are not HTML post fragments.
+  if (internal && DiscourseUrlParser.isMiniAppsDirectory(url)) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MiniAppsPage()),
+    );
+    return;
+  }
+  if (internal && DiscourseUrlParser.parseMiniApp(url) != null) {
+    await WebViewPage.open(
+      context,
+      UrlHelper.resolveUrl(url),
+      title: '站内应用',
+    );
+    return;
+  }
 
   // discourse-boards 看板页面优先原生打开，避免落回 WebView。
   final boardInfo = DiscourseUrlParser.parseBoard(url);
