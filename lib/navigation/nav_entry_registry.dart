@@ -10,6 +10,7 @@ import '../pages/site_policy_page.dart';
 import '../models/site_policy_document.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/boards_page.dart';
+import '../pages/mini_apps_page.dart';
 import '../pages/browsing_history_page.dart';
 import '../pages/community_events_page.dart';
 import '../pages/drafts_page.dart';
@@ -53,6 +54,16 @@ class NavEntryRegistry {
         selectedIconData: Icons.view_kanban,
         label: _boardsLabel,
         pageBuilder: (ctx, isActive) => BoardsPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'mini_apps',
+        kind: NavEntryKind.page,
+        iconData: Icons.apps_outlined,
+        selectedIconData: Icons.apps_rounded,
+        label: (ctx) =>
+            Localizations.localeOf(ctx).languageCode == 'zh' ? '应用' : 'Apps',
+        pageBuilder: (ctx, isActive) => MiniAppsPage(isActive: isActive),
         defaultInBottomNav: false,
       ),
       NavEntry(

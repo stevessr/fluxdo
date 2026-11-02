@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/boards_page.dart';
+import '../pages/mini_apps_page.dart';
 import '../pages/user_profile_page.dart';
 import '../pages/webview_login_page.dart';
 import '../pages/webview_page.dart';
@@ -118,6 +119,20 @@ class DeepLinkService {
     // 自定义 scheme (fluxdo://...)
     if (uri.scheme == 'fluxdo') {
       _handleCustomScheme(context, uri);
+      return;
+    }
+
+    // Route /apps/directory into the native catalogue, and preserve
+    // /apps/:id as the hosted interactive app (with WebView cookie priming).
+    if (uri.host == 'linux.do' &&
+        DiscourseUrlParser.isMiniAppsDirectory(uri.path)) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const MiniAppsPage()));
+      return;
+    }
+    if (uri.host == 'linux.do' &&
+        DiscourseUrlParser.parseMiniApp(uri.path) != null) {
+      WebViewPage.open(context, url, title: '站内应用');
       return;
     }
 
