@@ -48,5 +48,15 @@ jobs:
             lib/widgets/content/collapsed_html_content.dart \
             lib/widgets/markdown_editor/emoji_picker.dart \
             test/emoji_render_style_test.dart
+      - name: Smoke-check official Google Noto CDN artwork
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            'https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.webp' \
+            'https://fonts.gstatic.com/s/e/noto3demoji/latest/1fa99/512.png'; do
+            curl --fail --location --silent --show-error --max-time 25 \
+              --retry 2 --retry-delay 1 --output /dev/null "$url"
+          done
       - name: Test emoji style and artwork routing
         run: dart tool/flutterw.dart test test/emoji_render_style_test.dart
