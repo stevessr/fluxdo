@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../services/emoji_handler.dart';
 import 'styled_emoji_image.dart';
 import '../../utils/emoji_shortcodes.dart';
 
