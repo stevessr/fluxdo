@@ -34,7 +34,7 @@ void main() {
         'https://registry.npmmirror.com/@lobehub/${entry.value}/latest/files/assets/${entry.key}.webp',
       );
     }
-  }
+  });
 
   test('unsupported shortcode has no replacement artwork', () {
     expect(EmojiStyleAssets.unicodeFor('not_a_real_emoji'), isNull);
