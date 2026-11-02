@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../constants.dart';
@@ -64,12 +65,9 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
       }
     });
     try {
-      final response = await DiscourseService().dio.get<Object?>(
-        '${AppConstants.baseUrl}/apps/directory.json',
-        queryParameters: {'page': requestedPage},
-      );
+      final payload = await _fetchDirectoryPage(requestedPage);
       final directory = MiniAppDirectory.parse(
-        response.data,
+        payload,
         site: Uri.parse(AppConstants.baseUrl),
         requestedPage: requestedPage,
       );
@@ -89,6 +87,31 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
         _loading = false;
         _error = '无法获取应用目录，站点可能尚未开放目录接口。';
       });
+    }
+  }
+
+  /// Different discourse-apps installations expose either the App Store
+  /// directory or the legacy app list. Only retry missing endpoints; never
+  /// retry auth failures (401/403), rate limits or challenge responses.
+  Future<Object?> _fetchDirectoryPage(int page) async {
+    final dio = DiscourseService().dio;
+    final params = {'page': page};
+    try {
+      final response = await dio.get<Object?>(
+        '${AppConstants.baseUrl}/apps/directory.json',
+        queryParameters: params,
+      );
+      return response.data;
+    } on DioException catch (error) {
+      if (error.response?.statusCode != 404 &&
+          error.response?.statusCode != 405) {
+        rethrow;
+      }
+      final response = await dio.get<Object?>(
+        '${AppConstants.baseUrl}/apps.json',
+        queryParameters: params,
+      );
+      return response.data;
     }
   }
 
