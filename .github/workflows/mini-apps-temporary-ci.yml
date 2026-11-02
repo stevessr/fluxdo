@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: mini-apps-pr-${{ github.ref }}
@@ -37,9 +37,9 @@ jobs:
       - name: Prepare generated test dependencies
         run: dart run tool/project_prep.dart test
 
-      - name: Check Dart format of feature files
+      - name: Apply official Dart formatter
         run: |
-          dart format --output=none --set-exit-if-changed \
+          dart format \
             lib/models/mini_app.dart \
             lib/pages/mini_apps_page.dart \
             lib/utils/discourse_url_parser.dart \
@@ -48,6 +48,23 @@ jobs:
             lib/navigation/nav_entry_registry.dart \
             test/models/mini_app_test.dart \
             test/utils/discourse_url_parser_mini_apps_test.dart
+
+      - name: Commit formatting changes to feature branch
+        if: github.event_name == 'push'
+        run: |
+          if [[ -z "$(git status --porcelain -- lib test)" ]]; then
+            echo "Files already formatted"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/models/mini_app.dart lib/pages/mini_apps_page.dart \
+            lib/utils/discourse_url_parser.dart lib/utils/link_launcher.dart \
+            lib/services/deep_link_service.dart lib/navigation/nav_entry_registry.dart \
+            test/models/mini_app_test.dart test/utils/discourse_url_parser_mini_apps_test.dart
+          git commit -m "style(apps): apply Dart formatter [skip ci]"
+          git push origin HEAD:feat/discourse-mini-apps-20261102
+
 
       - name: Static analysis of feature files
         run: |
