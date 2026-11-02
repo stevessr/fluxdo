@@ -43,7 +43,7 @@ void main() {
   test('Discourse standard shortcodes resolve to Google Unicode keys', () {
     expect(EmojiStyleAssets.unicodeFor('grinning'), '1f600');
     expect(EmojiStyleAssets.unicodeFor(':grinning:'), '1f600');
-    expect(EmojiStyleAssets.unicodeFor('smile'), '1f603');
+    expect(EmojiStyleAssets.unicodeFor('smile'), '1f604');
     expect(EmojiStyleAssets.unicodeFor('tada'), '1f389');
     expect(
       EmojiStyleAssets.urlFor('grinning', EmojiRenderStyle.animated),
