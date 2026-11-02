@@ -77,6 +77,12 @@ class TitleUrlInfo {
   const TitleUrlInfo({required this.url, required this.uri});
 }
 
+/// A hosted mini app link (/apps/:slug or /apps/:uuid).
+class MiniAppLinkInfo {
+  const MiniAppLinkInfo({required this.id});
+  final String id;
+}
+
 class DiscourseUrlParser {
   DiscourseUrlParser._();
 
@@ -309,6 +315,46 @@ class DiscourseUrlParser {
       );
     }
     return null;
+  }
+
+  /// Only accept app detail paths. Do not confuse directory, install,
+  /// management or JSON API routes with executable hosted apps.
+  static MiniAppLinkInfo? parseMiniApp(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    final parts = uri.pathSegments;
+    if (parts.length != 2 || parts[0].toLowerCase() != 'apps') {
+      return null;
+    }
+    final id = parts[1];
+    if (const {'directory', 'installs', 'api', 'new', 'manage', 'settings'}
+        .contains(id.toLowerCase())) {
+      return null;
+    }
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,128}\
+    final resolved = Uri.tryParse(url);
+    if (resolved == null) return false;
+    return (resolved.path.isEmpty || resolved.path == '/') &&
+        resolved.query.isEmpty &&
+        resolved.fragment.isEmpty;
+  }
+
+  /// 是否是用户链接（用于快速判断）
+  static bool isUserLink(String url) {
+    return _userRegex.hasMatch(url);
+  }
+}
+).hasMatch(id)) return null;
+    return MiniAppLinkInfo(id: id);
+  }
+
+  static bool isMiniAppsDirectory(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    return uri.path == '/apps' ||
+        uri.path == '/apps/' ||
+        uri.path == '/apps/directory' ||
+        uri.path == '/apps/directory/';
   }
 
   static bool isHomepage(String url) {
