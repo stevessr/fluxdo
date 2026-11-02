@@ -317,8 +317,7 @@ class DiscourseUrlParser {
     return null;
   }
 
-  /// Only accept app detail paths. Do not confuse directory, install,
-  /// management or JSON API routes with executable hosted apps.
+  /// Only accept app detail paths, not directory, install or management routes.
   static MiniAppLinkInfo? parseMiniApp(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null) return null;
@@ -331,20 +330,7 @@ class DiscourseUrlParser {
         .contains(id.toLowerCase())) {
       return null;
     }
-    if (!RegExp(r'^[a-zA-Z0-9_-]{1,128}\
-    final resolved = Uri.tryParse(url);
-    if (resolved == null) return false;
-    return (resolved.path.isEmpty || resolved.path == '/') &&
-        resolved.query.isEmpty &&
-        resolved.fragment.isEmpty;
-  }
-
-  /// 是否是用户链接（用于快速判断）
-  static bool isUserLink(String url) {
-    return _userRegex.hasMatch(url);
-  }
-}
-).hasMatch(id)) return null;
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,128}$').hasMatch(id)) return null;
     return MiniAppLinkInfo(id: id);
   }
 
