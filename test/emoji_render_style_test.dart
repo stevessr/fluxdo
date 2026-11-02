@@ -14,26 +14,37 @@ void main() {
     expect(EmojiStyleAssets.urlForUnicode('1f600', EmojiRenderStyle.normal), isNull);
   });
 
-  test('3D uses Fluent emoji raster artwork', () {
+  test('Google Noto 3D uses PNG from the official Fonts CDN', () {
     expect(
       EmojiStyleAssets.urlForUnicode('1f600', EmojiRenderStyle.threeD),
-      'https://registry.npmmirror.com/@lobehub/fluent-emoji-3d/latest/files/assets/1f600.webp',
+      'https://fonts.gstatic.com/s/e/noto3demoji/latest/1f600/512.png',
     );
   });
 
-  test('animated assets are partitioned into four published packages', () {
-    const samples = <String, String>{
-      '1f44b': 'fluent-emoji-anim-1',
-      '1f469': 'fluent-emoji-anim-2',
-      '1f620': 'fluent-emoji-anim-3',
-      '1f9a0': 'fluent-emoji-anim-4',
-    };
-    for (final entry in samples.entries) {
-      expect(
-        EmojiStyleAssets.urlForUnicode(entry.key, EmojiRenderStyle.animated),
-        'https://registry.npmmirror.com/@lobehub/${entry.value}/latest/files/assets/${entry.key}.webp',
-      );
-    }
+  test('Google animated Noto uses WebP from the official Fonts CDN', () {
+    expect(
+      EmojiStyleAssets.urlForUnicode('1f600', EmojiRenderStyle.animated),
+      'https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.webp',
+    );
+  });
+
+  test('complex emoji use underscore-separated Unicode scalars', () {
+    expect(EmojiStyleAssets.unicodeFor('👩‍💻'), '1f469_200d_1f4bb');
+    expect(EmojiStyleAssets.unicodeFor('❤️'), '2764_fe0f');
+    expect(
+      EmojiStyleAssets.urlForUnicode(
+        EmojiStyleAssets.unicodeFor('👩‍💻')!,
+        EmojiRenderStyle.threeD,
+      ),
+      'https://fonts.gstatic.com/s/e/noto3demoji/latest/1f469_200d_1f4bb/512.png',
+    );
+  });
+
+  test('invalid CDN path characters never request arbitrary URLs', () {
+    expect(
+      EmojiStyleAssets.urlForUnicode('../test', EmojiRenderStyle.animated),
+      isNull,
+    );
   });
 
   test('unsupported shortcode has no replacement artwork', () {
