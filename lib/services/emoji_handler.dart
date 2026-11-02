@@ -141,6 +141,11 @@ class EmojiHandler extends ChangeNotifier {
     });
   }
 
+  /// Explicit server-uploaded custom emojis must not be restyled or replaced.
+  bool isCustomEmoji(String name) => _customEmojiMap.containsKey(
+    normalizeEmojiShortcodeName(name).toLowerCase(),
+  );
+
   /// 获取 emoji 的完整 URL
   ///
   /// 优先查找自定义 emoji（有服务端提供的真实 URL），

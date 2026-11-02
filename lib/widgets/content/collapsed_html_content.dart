@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../services/discourse_cache_manager.dart';
+import '../common/styled_emoji_image.dart';
 import '../../utils/url_helper.dart';
 
 /// 一个支持 maxLines 截断的简化 HTML 渲染组件
@@ -74,12 +74,14 @@ class CollapsedHtmlContent extends StatelessWidget {
         spans.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
-            child: Image(
-              image: discourseImageProvider(fullUrl),
+            child: StyledEmojiImage(
+              name: (alt ?? '').replaceAll(RegExp(r'^:|:$'), ''),
+              serverUrl: fullUrl,
               width: emojiSize,
               height: emojiSize,
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => Text(alt ?? ''),
+              cacheWidth:
+                  (emojiSize * MediaQuery.devicePixelRatioOf(context)).round(),
+              errorFallback: Text(alt ?? ''),
             ),
           ),
         );

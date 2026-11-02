@@ -34,6 +34,19 @@ enum NestedLineStyle {
   }
 }
 
+/// Local emoji artwork preference. Missing/invalid stored values stay normal.
+enum EmojiRenderStyle {
+  normal,
+  animated,
+  threeD;
+
+  static EmojiRenderStyle fromString(String? value) =>
+      EmojiRenderStyle.values.firstWhere(
+        (style) => style.name == value,
+        orElse: () => EmojiRenderStyle.normal,
+      );
+}
+
 enum BookmarksOpenMode {
   defaultRoute,
   tabbedWorkspace;
@@ -225,6 +238,9 @@ class AppPreferences {
   /// 且第三方签名图成本高、良莠不齐,默认关对齐网页更稳妥。
   final bool showSignatures;
 
+  /// Emoji presentation: normal Discourse assets, animated Fluent, or Fluent 3D.
+  final EmojiRenderStyle emojiRenderStyle;
+
   /// 小尾巴动画 SVG 自适应帧率
   final bool adaptiveSignatureFrameRate;
 
@@ -345,6 +361,7 @@ class AppPreferences {
     required this.cryptoRememberPassword,
     required this.cryptoRecentAlgorithms,
     this.showSignatures = false,
+    this.emojiRenderStyle = EmojiRenderStyle.normal,
     this.adaptiveSignatureFrameRate = true,
     this.boostDanmaku = false,
     this.showSuggestedTopics = true,
@@ -412,6 +429,7 @@ class AppPreferences {
     bool? cryptoRememberPassword,
     List<String>? cryptoRecentAlgorithms,
     bool? showSignatures,
+    EmojiRenderStyle? emojiRenderStyle,
     bool? adaptiveSignatureFrameRate,
     bool? boostDanmaku,
     bool? showSuggestedTopics,
@@ -492,6 +510,7 @@ class AppPreferences {
       cryptoRecentAlgorithms:
           cryptoRecentAlgorithms ?? this.cryptoRecentAlgorithms,
       showSignatures: showSignatures ?? this.showSignatures,
+      emojiRenderStyle: emojiRenderStyle ?? this.emojiRenderStyle,
       adaptiveSignatureFrameRate:
           adaptiveSignatureFrameRate ?? this.adaptiveSignatureFrameRate,
       boostDanmaku: boostDanmaku ?? this.boostDanmaku,
@@ -585,6 +604,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   static const String _cryptoRecentAlgorithmsKey =
       'pref_crypto_recent_algorithms';
   static const String _showSignaturesKey = 'pref_show_signatures';
+  static const String _emojiRenderStyleKey = 'pref_emoji_render_style';
   static const String _adaptiveSignatureFrameRateKey =
       'pref_adaptive_signature_frame_rate';
   static const String _boostDanmakuKey = 'pref_boost_danmaku';
@@ -677,6 +697,9 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
           cryptoRecentAlgorithms:
               _prefs.getStringList(_cryptoRecentAlgorithmsKey) ?? const [],
           showSignatures: _prefs.getBool(_showSignaturesKey) ?? false,
+          emojiRenderStyle: EmojiRenderStyle.fromString(
+            _prefs.getString(_emojiRenderStyleKey),
+          ),
           adaptiveSignatureFrameRate:
               _prefs.getBool(_adaptiveSignatureFrameRateKey) ?? true,
           boostDanmaku: _prefs.getBool(_boostDanmakuKey) ?? false,
@@ -1008,6 +1031,12 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
     TopicCardStyleScope.current = style;
     TopicCardLayout.evictAll();
     await _prefs.setString(_topicCardStyleKey, style.toJsonString());
+  }
+
+  Future<void> setEmojiRenderStyle(EmojiRenderStyle style) async {
+    if (state.emojiRenderStyle == style) return;
+    state = state.copyWith(emojiRenderStyle: style);
+    await _prefs.setString(_emojiRenderStyleKey, style.name);
   }
 
   Future<void> setShowSignatures(bool enabled) async {
