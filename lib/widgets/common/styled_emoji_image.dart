@@ -125,7 +125,10 @@ class StyledEmojiImage extends ConsumerWidget {
 
   Widget _image(BuildContext context, String url, {required Widget onError}) => Image(
     image: ResizeImage.resizeIfNeeded(
-      cacheWidth,
+      // The native multi-frame WebP/GIF/APNG provider has its own decode path.
+      // ResizeImage would wrap it in the static image resize pipeline, which
+      // the shared image router deliberately skips for animated sources.
+      isNativeAnimatedUrl(url) ? null : cacheWidth,
       null,
       emojiImageProvider(url),
     ),
