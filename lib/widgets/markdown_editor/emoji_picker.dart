@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/emoji.dart';
 import '../../providers/discourse_providers.dart';
-import '../../services/emoji_handler.dart';
 import '../common/styled_emoji_image.dart';
 import '../../utils/dialog_utils.dart';
 import '../common/app_bottom_sheet.dart';
@@ -637,6 +636,7 @@ class _EmojiCell extends StatelessWidget {
       width: width,
       height: height,
       cacheWidth: decodeSize,
+      showPlaceholder: true,
       errorFallback: SizedBox(width: width, height: height),
     );
   }
