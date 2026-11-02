@@ -38,6 +38,7 @@ import '../utils/url_helper.dart';
 import '../widgets/common/image_context_menu.dart';
 import '../widgets/common/image_lift_menu.dart';
 import '../widgets/common/smart_avatar.dart';
+import '../widgets/common/styled_emoji_image.dart';
 import '../widgets/post/quote_image_scope.dart';
 import '../widgets/content/animated_svg_view.dart';
 import '../widgets/content/audio/discourse_audio_player.dart';
@@ -306,20 +307,14 @@ class FluxdoRenderCallbacks {
     if (emoji.url.isEmpty) {
       return Text(emoji.name.isEmpty ? ':?:' : ':${emoji.name}:');
     }
-    final resolvedUrl = UrlHelper.resolveUrlWithCdn(emoji.url);
-    // 按显示尺寸 × dpr 解码:动图 emoji 是全帧驻留内存(GIF 每帧一张位图),
-    // 原图尺寸解码内存翻倍且无视觉收益
     final dpr = MediaQuery.devicePixelRatioOf(ctx);
-    Widget image = Image(
-      image: ResizeImage.resizeIfNeeded(
-        (size * dpr).round(),
-        null,
-        emojiImageProvider(resolvedUrl),
-      ),
+    final image = StyledEmojiImage(
+      name: emoji.name,
+      serverUrl: emoji.url,
       width: size,
       height: size,
-      gaplessPlayback: true,
-      errorBuilder: (_, _, _) => Icon(
+      cacheWidth: (size * dpr).round(),
+      errorFallback: Icon(
         Symbols.broken_image_rounded,
         size: size,
         color: Theme.of(ctx).colorScheme.outline,
