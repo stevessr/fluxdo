@@ -56,13 +56,13 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
               EmojiRenderStyle.normal => localized(
                   '使用站点原有表情', '使用網站原有表情', 'Original site emoji'),
               EmojiRenderStyle.animated => localized(
-                  'Fluent 动态表情，缺失资源回退常规',
-                  'Fluent 動態表情，缺失資源回退一般',
-                  'Animated Fluent emoji; normal fallback'),
+                  'Google Noto 动态表情，缺失资源回退常规',
+                  'Google Noto 動態表情，缺失資源回退一般',
+                  'Animated Google Noto emoji; normal fallback'),
               EmojiRenderStyle.threeD => localized(
-                  'Fluent 3D 风格静态表情，缺失资源回退常规',
-                  'Fluent 3D 風格靜態表情，缺失資源回退一般',
-                  'Fluent 3D-style artwork; normal fallback'),
+                  'Google Noto 3D 静态表情，缺失资源回退常规',
+                  'Google Noto 3D 靜態表情，缺失資源回退一般',
+                  'Google Noto 3D artwork; normal fallback'),
             };
             return ListTile(
               leading: Icon(
