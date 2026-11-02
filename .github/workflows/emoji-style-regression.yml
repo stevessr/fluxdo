@@ -1,0 +1,52 @@
+name: Emoji Style Regression
+
+on:
+  pull_request:
+    paths:
+      - 'lib/providers/preferences_provider.dart'
+      - 'lib/services/emoji_handler.dart'
+      - 'lib/settings/definitions/reading_defs.dart'
+      - 'lib/utils/fluxdo_render_callbacks.dart'
+      - 'lib/widgets/common/emoji_text.dart'
+      - 'lib/widgets/common/styled_emoji_image.dart'
+      - 'lib/widgets/content/collapsed_html_content.dart'
+      - 'lib/widgets/markdown_editor/emoji_picker.dart'
+      - 'test/emoji_render_style_test.dart'
+      - '.github/workflows/emoji-style-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  emoji-style:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Prepare assets
+        run: mkdir -p assets/certs
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Generate localizations
+        run: dart run tool/gen_l10n.dart
+      - name: Analyze emoji style changes
+        run: |
+          flutter analyze \
+            lib/providers/preferences_provider.dart \
+            lib/services/emoji_handler.dart \
+            lib/settings/definitions/reading_defs.dart \
+            lib/utils/fluxdo_render_callbacks.dart \
+            lib/widgets/common/emoji_text.dart \
+            lib/widgets/common/styled_emoji_image.dart \
+            lib/widgets/content/collapsed_html_content.dart \
+            lib/widgets/markdown_editor/emoji_picker.dart \
+            test/emoji_render_style_test.dart
+      - name: Test emoji style and artwork routing
+        run: dart tool/flutterw.dart test test/emoji_render_style_test.dart
