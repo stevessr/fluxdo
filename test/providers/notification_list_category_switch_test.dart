@@ -79,6 +79,6 @@ void main() {
 
     expect(notifier.category, NotificationCategory.replies);
     expect(container.read(notificationListProvider).value?.single.id, 2);
-    expect(notifier.hasMore, isFalse);
+    expect(notifier.hasMore, isTrue);
   });
 }
