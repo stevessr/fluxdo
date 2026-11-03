@@ -26,7 +26,7 @@ class NotificationsPage extends ConsumerStatefulWidget {
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   final ScrollController _scrollController = ScrollController();
-  final LoadMoreCoordinator _loadMoreCoordinator = LoadMoreCoordinator();
+  LoadMoreCoordinator _loadMoreCoordinator = LoadMoreCoordinator();
   NotificationReadFilter _filter = NotificationReadFilter.all;
   NotificationCategory _category = NotificationCategory.all;
   bool _autoFillScheduled = false;
@@ -105,7 +105,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   Future<void> _onRefresh() async {
     _autoFillAttempts = 0;
-    _loadMoreCoordinator.resetCooldown();
+    // 旧分类的网络请求可能仍未结束，不能占用新分类的协调器。
+    _loadMoreCoordinator = LoadMoreCoordinator();
     await ref.read(notificationListProvider.notifier).refresh();
   }
 
@@ -115,7 +116,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       _filter = filter;
       _autoFillAttempts = 0;
     });
-    _loadMoreCoordinator.resetCooldown();
+    // 旧分类的网络请求可能仍未结束，不能占用新分类的协调器。
+    _loadMoreCoordinator = LoadMoreCoordinator();
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
@@ -138,7 +140,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       _category = category;
       _autoFillAttempts = 0;
     });
-    _loadMoreCoordinator.resetCooldown();
+    // 旧分类的网络请求可能仍未结束，不能占用新分类的协调器。
+    _loadMoreCoordinator = LoadMoreCoordinator();
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
