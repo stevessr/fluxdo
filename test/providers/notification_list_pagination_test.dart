@@ -52,6 +52,13 @@ void main() {
           ));
           return;
         }
+        if (!options.queryParameters.containsKey('offset')) {
+          handler.resolve(Response(
+            requestOptions: options,
+            data: _response([], total: 0),
+          ));
+          return;
+        }
         final offset = options.queryParameters['offset'] as int? ?? 0;
         offsets.add(offset);
         final items = switch (offset) {
@@ -100,6 +107,13 @@ void main() {
           handler.resolve(Response(
             requestOptions: options,
             data: _response([_notification(400, NotificationType.mentioned)]),
+          ));
+          return;
+        }
+        if (!options.queryParameters.containsKey('offset')) {
+          handler.resolve(Response(
+            requestOptions: options,
+            data: _response([], total: 0),
           ));
           return;
         }
@@ -159,6 +173,13 @@ void main() {
           ));
           return;
         }
+        if (!options.queryParameters.containsKey('offset')) {
+          handler.resolve(Response(
+            requestOptions: options,
+            data: _response([], total: 0),
+          ));
+          return;
+        }
         if (!historyRequested.isCompleted) historyRequested.complete();
         historyResponse.future.then((data) {
           handler.resolve(Response(requestOptions: options, data: data));
@@ -196,6 +217,13 @@ void main() {
           handler.resolve(Response(
             requestOptions: options,
             data: _response([]),
+          ));
+          return;
+        }
+        if (!options.queryParameters.containsKey('offset')) {
+          handler.resolve(Response(
+            requestOptions: options,
+            data: _response([], total: 0),
           ));
           return;
         }
