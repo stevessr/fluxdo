@@ -454,4 +454,104 @@ void main() {
     expect(current.single.id, 42);
     expect(current.single.read, isTrue);
   });
+  test('mark-all refreshes the read filter after updates', () async {
+    final service = DiscourseService();
+    var markedAll = false;
+    var readRequests = 0;
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.method == 'PUT') {
+          markedAll = true;
+          handler.resolve(
+            Response(requestOptions: options, data: <String, dynamic>{}),
+          );
+          return;
+        }
+        if (options.queryParameters['filter'] == 'read') {
+          readRequests++;
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              data: _response([
+                if (markedAll)
+                  {..._notification(12, NotificationType.replied), 'read': true},
+                {..._notification(10, NotificationType.replied), 'read': true},
+              ], total: markedAll ? 2 : 1),
+            ),
+          );
+          return;
+        }
+        handler.resolve(
+          Response(requestOptions: options, data: _response([], total: 0)),
+        );
+      },
+    );
+    service.dio.interceptors.insert(0, interceptor);
+    addTearDown(() => service.dio.interceptors.remove(interceptor));
+
+    final container = _container();
+    await container.read(notificationListProvider.future);
+    final notifier = container.read(notificationListProvider.notifier);
+    await notifier.setFilter(NotificationReadFilter.read);
+    expect(container.read(notificationListProvider).value!.single.id, 10);
+
+    await notifier.markAllAsRead();
+
+    expect(readRequests, 2);
+    expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+      12,
+      10,
+    ]);
+  });
+
+  test('single read adjusts unread history offset', () async {
+    final service = DiscourseService();
+    final offsets = <int>[];
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.queryParameters['filter'] != 'unread') {
+          handler.resolve(
+            Response(requestOptions: options, data: _response([], total: 0)),
+          );
+          return;
+        }
+        final offset = options.queryParameters['offset'] as int?;
+        if (offset == null) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              data: _response([
+                _notification(60, NotificationType.replied),
+              ], total: 61),
+            ),
+          );
+          return;
+        }
+        offsets.add(offset);
+        handler.resolve(
+          Response(
+            requestOptions: options,
+            data: _response([
+              _notification(59, NotificationType.replied),
+            ], total: 60),
+          ),
+        );
+      },
+    );
+    service.dio.interceptors.insert(0, interceptor);
+    addTearDown(() => service.dio.interceptors.remove(interceptor));
+
+    final container = _container();
+    await container.read(notificationListProvider.future);
+    final notifier = container.read(notificationListProvider.notifier);
+    await notifier.setFilter(NotificationReadFilter.unread);
+    expect(notifier.historyOffset, 60);
+
+    notifier.markAsRead(60);
+    expect(notifier.historyOffset, 59);
+    await notifier.loadMore();
+
+    expect(offsets, [59]);
+    expect(container.read(notificationListProvider).value!.single.id, 59);
+  });
 }
