@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification.dart';
 import '../models/notification_category.dart';
 import '../utils/paged_async_notifier.dart';
-import '../utils/pagination_helper.dart';
 import 'core_providers.dart';
 import 'message_bus_providers.dart';
 
@@ -17,27 +16,32 @@ enum NotificationReadFilter {
   const NotificationReadFilter(this.apiValue);
 }
 
-/// 通知列表 Notifier。
+/// 通知列表：分类首屏使用 Discourse recent API，之后按历史 offset 续页。
 ///
-/// “全部”使用 Discourse 历史通知接口并正常分页；用户菜单语义的通知子分类
-/// 使用 bounded recent API。后者是 Discourse 真正支持 `filter_by_types` 的
-/// 分支，避免为了在本地凑够某一类通知而把历史页连续全部拉下来。
+/// recent 是唯一支持 filter_by_types 的分支，但完全忽略 offset；历史分支
+/// 支持 offset / read 筛选，却忽略通知类型。续页因此必须逐批扫描并按类型
+/// 本地筛选，不能用当前显示的分类条数当作原始历史记录的 offset。
 class NotificationListNotifier
     extends AsyncNotifier<List<DiscourseNotification>>
     with PagedAsyncNotifierMixin<DiscourseNotification> {
+  static const int _historyPageSize = 60;
+  // 稀有类型最多每次扫描四个历史页，避免触底后请求风暴。
+  static const int _maxHistoryPagesPerLoad = 4;
+
   int _totalRows = 0;
+  int _historyOffset = 0;
   int _refreshGeneration = 0;
+  bool _needsManualLoadMore = false;
   NotificationReadFilter _filter = NotificationReadFilter.all;
   NotificationCategory _category = NotificationCategory.all;
 
   NotificationReadFilter get filter => _filter;
   NotificationCategory get category => _category;
+  bool get needsManualLoadMore => _needsManualLoadMore;
+  int get historyOffset => _historyOffset;
 
-  /// 分页助手
-  static final _paginationHelper =
-      PaginationHelpers.forNotifications<DiscourseNotification>(
-        keyExtractor: (n) => n.id,
-      );
+  /// 用户明确继续查找更早的历史通知。
+  void allowMoreHistoryScan() => _needsManualLoadMore = false;
 
   bool _matchesReadFilter(
     DiscourseNotification notification,
@@ -50,8 +54,11 @@ class NotificationListNotifier
     };
   }
 
-  Future<({PagedPage<DiscourseNotification> page, int totalRows})>
-  _fetchFirstPage({
+  Future<({
+    PagedPage<DiscourseNotification> page,
+    int totalRows,
+    int historyOffset,
+  })> _fetchFirstPage({
     required NotificationCategory category,
     required NotificationReadFilter filter,
   }) async {
@@ -62,19 +69,20 @@ class NotificationListNotifier
       return (
         page: PagedPage(
           items: response.notifications,
-          hasMore:
-              response.notifications.length < response.totalRowsNotifications,
+          // 服务端总数是在过滤不可见记录前统计的；不要用实际返回条数
+          // 作为 offset，否则有被隐藏的项目时会重复请求同一批记录。
+          hasMore: _historyPageSize < response.totalRowsNotifications,
         ),
         totalRows: response.totalRowsNotifications,
+        historyOffset: _historyPageSize,
       );
     }
 
-    // Discourse applies `filter_by_types` only to the recent endpoint.
-    // Capture category/filter before awaiting: a quick tab switch must never
-    // process an older response using the newly selected category.
+    // Discourse recent 按类型返回最近通知，但不支持 offset；保留它作为
+    // 快速首屏，触底后从历史接口逐页寻找仍未显示的同类型记录。
     final response = await service.getRecentNotifications(
       filterByTypes: category.serverFilterTypeNames,
-      limit: 60,
+      limit: _historyPageSize,
       silent: true,
       bumpLastSeenReviewable: false,
     );
@@ -83,8 +91,9 @@ class NotificationListNotifier
         .where((notification) => _matchesReadFilter(notification, filter))
         .toList(growable: false);
     return (
-      page: PagedPage(items: items, hasMore: false),
-      totalRows: items.length,
+      page: PagedPage(items: items, hasMore: true),
+      totalRows: 0, // recent 响应不包含历史总数，第一次续页时获取。
+      historyOffset: 0,
     );
   }
 
@@ -98,13 +107,15 @@ class NotificationListNotifier
       return state.value ?? const <DiscourseNotification>[];
     }
     _totalRows = result.totalRows;
+    _historyOffset = result.historyOffset;
+    _needsManualLoadMore = false;
     return completePagedRefresh(result.page);
   }
 
   /// 切换全部 / 已读 / 未读筛选。
   ///
-  /// “全部”模式由服务端历史接口筛选；子分类是 bounded recent 列表，已读
-  /// 状态在这 60 条内过滤，且不会为此继续翻历史分页。
+  /// “全部”模式由服务端历史接口筛选；子分类 recent 首屏在本地按已读
+  /// 状态过滤，历史续页还会向服务端传入 read / unread 以减少扫描量。
   Future<void> setFilter(NotificationReadFilter filter) async {
     if (_filter == filter && state.hasValue) return;
     _filter = filter;
@@ -129,6 +140,8 @@ class NotificationListNotifier
       final result = await _fetchFirstPage(category: category, filter: filter);
       if (generation != _refreshGeneration) return;
       _totalRows = result.totalRows;
+      _historyOffset = result.historyOffset;
+      _needsManualLoadMore = false;
       state = AsyncValue.data(completePagedRefresh(result.page));
     } catch (error, stackTrace) {
       if (generation != _refreshGeneration) return;
@@ -136,30 +149,72 @@ class NotificationListNotifier
     }
   }
 
-  /// 加载更多。只有“全部”历史通知支持分页；子分类是 bounded recent。
+  /// 继续分页。历史 offset 按服务端扫描记录数推进，而不是按分类命中数。
+  ///
+  /// 分类 recent 首屏可能已经涵盖了很久以前的 60 条，因此续页必须去重；
+  /// 每轮至多扫描四页，若全是非目标类型 / 重复条目，则等待用户手动继续。
   Future<void> loadMore() async {
-    if (_category != NotificationCategory.all) return;
+    if (_needsManualLoadMore) return;
+    final generation = _refreshGeneration;
+    final category = _category;
+    final filter = _filter;
 
-    await runPagedLoadMore((currentList, _) async {
-      final offset = currentList.length;
+    await runPagedLoadMore(
+      (currentList, _) async {
+        final service = ref.read(discourseServiceProvider);
+        var offset = _historyOffset;
+        var totalRows = _totalRows;
+        final ids = currentList.map((item) => item.id).toSet();
+        final additions = <DiscourseNotification>[];
+        final pages = category == NotificationCategory.all
+            ? 1
+            : _maxHistoryPagesPerLoad;
 
-      final service = ref.read(discourseServiceProvider);
-      final response = await service.getNotifications(
-        offset: offset,
-        filter: _filter.apiValue,
-      );
+        for (var page = 0; page < pages; page++) {
+          final response = await service.getNotifications(
+            offset: offset,
+            filter: filter.apiValue,
+          );
+          // 切换筛选/分类期间完成的旧请求不得写入新分类游标。
+          if (generation != _refreshGeneration) {
+            return PagedPage(items: currentList, hasMore: false);
+          }
+          totalRows = response.totalRowsNotifications;
+          offset += _historyPageSize;
 
-      final currentState = PaginationState(items: currentList);
-      final paginationResult = _paginationHelper.processLoadMore(
-        currentState,
-        PaginationResult(items: response.notifications, totalRows: _totalRows),
-      );
+          for (final item in response.notifications) {
+            if (category.matches(item) &&
+                _matchesReadFilter(item, filter) &&
+                ids.add(item.id)) {
+              additions.add(item);
+            }
+          }
 
-      return PagedPage(
-        items: paginationResult.items,
-        hasMore: response.notifications.isNotEmpty && paginationResult.hasMore,
-      );
-    });
+          if (offset >= totalRows || additions.isNotEmpty) break;
+        }
+
+        if (generation != _refreshGeneration) {
+          return PagedPage(items: currentList, hasMore: false);
+        }
+        _historyOffset = offset;
+        _totalRows = totalRows;
+        final hasMoreHistory = offset < totalRows;
+        _needsManualLoadMore =
+            category != NotificationCategory.all &&
+            additions.isEmpty &&
+            hasMoreHistory;
+
+        final result = [...currentList, ...additions];
+        if (category != NotificationCategory.all) {
+          result.sort((a, b) {
+            final timeOrder = b.createdAt.compareTo(a.createdAt);
+            return timeOrder != 0 ? timeOrder : b.id.compareTo(a.id);
+          });
+        }
+        return PagedPage(items: result, hasMore: hasMoreHistory);
+      },
+      isCurrent: () => generation == _refreshGeneration,
+    );
   }
 
   /// 手动重试加载更多
