@@ -86,6 +86,26 @@ void main() {
     expect(result.hasNext, isTrue);
   });
 
+  test('keeps pagination metadata from the outer data wrapper', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'total': 25,
+        'page': 0,
+        'per_page': 24,
+        'data': {
+          'apps': [
+            {'id': 'wrapped'},
+          ],
+        },
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps.single.id, 'wrapped');
+    expect(result.hasNext, isTrue);
+    expect(result.nextPage, 1);
+  });
+
   test('honors explicit end even with a full page', () {
     final result = MiniAppDirectory.parse(
       {
