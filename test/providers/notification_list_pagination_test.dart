@@ -287,9 +287,7 @@ void main() {
           handler.resolve(
             Response(
               requestOptions: options,
-              data: _response([
-                _notification(30, NotificationType.mentioned),
-              ]),
+              data: _response([_notification(30, NotificationType.mentioned)]),
             ),
           );
           return;
