@@ -395,4 +395,65 @@ void main() {
       75,
     ]);
   });
+  test('mark-all while switching category finishes refresh', () async {
+    final service = DiscourseService();
+    final firstRecentStarted = Completer<void>();
+    final firstRecent = Completer<Map<String, dynamic>>();
+    var recentCalls = 0;
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.method == 'PUT') {
+          handler.resolve(
+            Response(requestOptions: options, data: <String, dynamic>{}),
+          );
+          return;
+        }
+        if (options.queryParameters['recent'] == true) {
+          recentCalls++;
+          if (recentCalls == 1) {
+            firstRecentStarted.complete();
+            firstRecent.future.then((data) {
+              handler.resolve(Response(requestOptions: options, data: data));
+            });
+          } else {
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                data: _response([
+                  {
+                    ..._notification(42, NotificationType.mentioned),
+                    'read': true,
+                  },
+                ]),
+              ),
+            );
+          }
+          return;
+        }
+        handler.resolve(
+          Response(requestOptions: options, data: _response([], total: 0)),
+        );
+      },
+    );
+    service.dio.interceptors.insert(0, interceptor);
+    addTearDown(() => service.dio.interceptors.remove(interceptor));
+
+    final container = _container();
+    await container.read(notificationListProvider.future);
+    final notifier = container.read(notificationListProvider.notifier);
+    final pendingCategory = notifier.setCategory(NotificationCategory.mentions);
+    await firstRecentStarted.future;
+    await notifier.markAllAsRead();
+
+    firstRecent.complete(
+      _response([_notification(45, NotificationType.mentioned)]),
+    );
+    await pendingCategory;
+
+    expect(recentCalls, 2);
+    expect(container.read(notificationListProvider).isLoading, isFalse);
+    final current = container.read(notificationListProvider).value!;
+    expect(current.single.id, 42);
+    expect(current.single.read, isTrue);
+  });
 }
