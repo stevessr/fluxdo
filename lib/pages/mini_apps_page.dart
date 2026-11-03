@@ -30,6 +30,7 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
 
   bool _loading = false;
   bool _refreshing = false;
+  bool _retryReset = false;
   bool _hasNext = true;
   int _page = 0;
   int _generation = 0;
@@ -89,6 +90,7 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
     setState(() {
       _loading = true;
       _refreshing = reset && _apps.isNotEmpty;
+      _retryReset = false;
       _error = null;
     });
 
@@ -119,6 +121,7 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
         // Keep the last successful list and cursor if a refresh failed.
         _loading = false;
         _refreshing = false;
+        _retryReset = reset;
         _error = error;
       });
     }
@@ -203,7 +206,7 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
                     if (_error != null || _hasNext)
                       FilledButton.tonalIcon(
                         onPressed: () => unawaited(
-                          _loadPage(reset: _error != null && _page == 0),
+                          _loadPage(reset: _retryReset),
                         ),
                         icon: const Icon(Icons.refresh_rounded),
                         label: Text(zh ? '重试' : 'Retry'),
@@ -237,7 +240,9 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
                               child: _loading
                                   ? const CircularProgressIndicator()
                                   : TextButton(
-                                      onPressed: () => unawaited(_loadPage()),
+                                      onPressed: () => unawaited(
+                                        _loadPage(reset: _retryReset),
+                                      ),
                                       child: Text(
                                         _error != null
                                             ? (zh ? '加载失败，重试' : 'Retry')
