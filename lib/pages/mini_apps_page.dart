@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../constants.dart';
 import '../models/mini_app.dart';
 import '../services/discourse/discourse_service.dart';
+import '../services/mini_app_directory_repository.dart';
 import 'webview_page.dart';
 
 /// Native directory for site-hosted mini apps. Execution stays in the website:
@@ -19,17 +22,25 @@ class MiniAppsPage extends StatefulWidget {
 
 class _MiniAppsPageState extends State<MiniAppsPage> {
   final List<MiniApp> _apps = [];
+  final ScrollController _scrollController = ScrollController();
+  late final MiniAppDirectoryRepository _repository = MiniAppDirectoryRepository(
+    dio: DiscourseService().dio,
+    site: Uri.parse(AppConstants.baseUrl),
+  );
+
   bool _loading = false;
+  bool _refreshing = false;
   bool _hasNext = true;
   int _page = 0;
   int _generation = 0;
-  String? _error;
+  Object? _error;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_maybeLoadMore);
     if (widget.isActive) {
-      _loadPage(reset: true);
+      unawaited(_loadPage(reset: true));
     }
   }
 
@@ -41,14 +52,34 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
         _apps.isEmpty &&
         !_loading &&
         _error == null) {
-      _loadPage(reset: true);
+      unawaited(_loadPage(reset: true));
     }
   }
 
   @override
   void dispose() {
     _generation++;
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _maybeLoadMore() {
+    if (!mounted ||
+        !widget.isActive ||
+        _loading ||
+        !_hasNext ||
+        _error != null ||
+        _apps.isEmpty ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    if (_scrollController.position.extentAfter < 480) {
+      unawaited(_loadPage());
+    }
+  }
+
+  void _fillViewportIfNeeded() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeLoadMore());
   }
 
   Future<void> _loadPage({bool reset = false}) async {
@@ -57,62 +88,62 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
     final requestedPage = reset ? 0 : _page;
     setState(() {
       _loading = true;
+      _refreshing = reset && _apps.isNotEmpty;
       _error = null;
-      if (reset) {
-        _apps.clear();
-        _page = 0;
-        _hasNext = true;
-      }
     });
+
     try {
-      final payload = await _fetchDirectoryPage(requestedPage);
-      final directory = MiniAppDirectory.parse(
-        payload,
-        site: Uri.parse(AppConstants.baseUrl),
-        requestedPage: requestedPage,
-      );
+      final directory = await _repository.fetchPage(requestedPage);
       if (!mounted || generation != _generation) return;
       setState(() {
+        if (reset) _apps.clear();
+
         final existingIds = _apps.map((app) => app.id).toSet();
+        var added = 0;
         for (final app in directory.apps) {
-          if (existingIds.add(app.id)) _apps.add(app);
+          if (existingIds.add(app.id)) {
+            _apps.add(app);
+            added++;
+          }
         }
-        _page = directory.page + 1;
-        _hasNext = directory.hasNext;
+        _page = directory.nextPage;
+        // Avoid refetching an endless duplicate page from a broken endpoint.
+        _hasNext = directory.hasNext && (reset || added > 0);
         _loading = false;
+        _refreshing = false;
       });
-    } catch (_) {
+      _fillViewportIfNeeded();
+    } catch (error) {
       if (!mounted || generation != _generation) return;
       setState(() {
+        // Keep the last successful list and cursor if a refresh failed.
         _loading = false;
-        _error = '无法获取应用目录，站点可能尚未开放目录接口。';
+        _refreshing = false;
+        _error = error;
       });
     }
   }
 
-  /// Different discourse-apps installations expose either the App Store
-  /// directory or the legacy app list. Only retry missing endpoints; never
-  /// retry auth failures (401/403), rate limits or challenge responses.
-  Future<Object?> _fetchDirectoryPage(int page) async {
-    final dio = DiscourseService().dio;
-    final params = {'page': page};
-    try {
-      final response = await dio.get<Object?>(
-        '${AppConstants.baseUrl}/apps/directory.json',
-        queryParameters: params,
-      );
-      return response.data;
-    } on DioException catch (error) {
-      if (error.response?.statusCode != 404 &&
-          error.response?.statusCode != 405) {
-        rethrow;
-      }
-      final response = await dio.get<Object?>(
-        '${AppConstants.baseUrl}/apps.json',
-        queryParameters: params,
-      );
-      return response.data;
+  String _errorMessage(bool zh) {
+    final error = _error;
+    if (error is FormatException) {
+      return zh
+          ? '应用目录返回了不支持的数据格式'
+          : 'The app directory returned an unsupported format';
     }
+    if (error is DioException) {
+      final code = error.response?.statusCode;
+      if (code == 401 || code == 403) {
+        return zh ? '无法访问应用目录，请检查登录状态' : 'App directory access denied';
+      }
+      if (code == 429) {
+        return zh ? '请求过于频繁，请稍后重试' : 'Too many requests. Try again later';
+      }
+      if (code == 404 || code == 405) {
+        return zh ? '站点暂未提供可用的应用目录接口' : 'App directory API is unavailable';
+      }
+    }
+    return zh ? '应用目录加载失败，请检查网络后重试' : 'Could not load apps. Try again';
   }
 
   void _openDirectoryWebsite() {
@@ -134,8 +165,7 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final locale = Localizations.localeOf(context).languageCode;
-    final zh = locale == 'zh';
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
     return Scaffold(
       appBar: AppBar(
         title: Text(zh ? '站内应用' : 'Mini apps'),
@@ -148,7 +178,7 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
           IconButton(
             tooltip: zh ? '刷新' : 'Refresh',
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => _loadPage(reset: true),
+            onPressed: () => unawaited(_loadPage(reset: true)),
           ),
         ],
       ),
@@ -164,11 +194,22 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
                     const Icon(Icons.apps_outage_rounded, size: 52),
                     const SizedBox(height: 12),
                     Text(
-                      _error ?? (zh ? '暂无可用的站内应用' : 'No mini apps available'),
+                      _error != null
+                          ? _errorMessage(zh)
+                          : (zh ? '暂无可用的站内应用' : 'No mini apps available'),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
-                    FilledButton.tonalIcon(
+                    if (_error != null || _hasNext)
+                      FilledButton.tonalIcon(
+                        onPressed: () => unawaited(
+                          _loadPage(reset: _error != null && _page == 0),
+                        ),
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: Text(zh ? '重试' : 'Retry'),
+                      ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
                       onPressed: _openDirectoryWebsite,
                       icon: const Icon(Icons.open_in_browser_rounded),
                       label: Text(zh ? '查看网页目录' : 'Open web directory'),
@@ -177,60 +218,69 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
                 ),
               ),
             )
-          : RefreshIndicator(
-              onRefresh: () => _loadPage(reset: true),
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                itemCount: _apps.length + (_hasNext || _error != null ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == _apps.length) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: _loading
-                            ? const CircularProgressIndicator()
-                            : TextButton(
-                                onPressed: () => _loadPage(),
-                                child: Text(
-                                  _error != null
-                                      ? (zh ? '加载失败，重试' : 'Retry')
-                                      : (zh ? '加载更多' : 'Load more'),
-                                ),
-                              ),
-                      ),
-                    );
-                  }
-                  final app = _apps[index];
-                  return Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: ListTile(
-                      leading: SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: Center(child: _buildIcon(app)),
-                      ),
-                      title: Text(app.name),
-                      subtitle: Text(
-                        [
-                          if (app.description.isNotEmpty) app.description,
-                          if (app.ageRating != null)
-                            zh
-                                ? '适用年龄 ${app.ageRating}+'
-                                : 'Age ${app.ageRating}+',
-                        ].join(' · '),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () => WebViewPage.open(
-                        context,
-                        app.url.toString(),
-                        title: app.name,
-                      ),
+          : Column(
+              children: [
+                if (_refreshing) const LinearProgressIndicator(minHeight: 2),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () => _loadPage(reset: true),
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                      itemCount: _apps.length + (_hasNext || _error != null ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == _apps.length) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: _loading
+                                  ? const CircularProgressIndicator()
+                                  : TextButton(
+                                      onPressed: () => unawaited(_loadPage()),
+                                      child: Text(
+                                        _error != null
+                                            ? (zh ? '加载失败，重试' : 'Retry')
+                                            : (zh ? '加载更多' : 'Load more'),
+                                      ),
+                                    ),
+                            ),
+                          );
+                        }
+                        final app = _apps[index];
+                        return Card(
+                          clipBehavior: Clip.antiAlias,
+                          child: ListTile(
+                            leading: SizedBox(
+                              width: 44,
+                              height: 44,
+                              child: Center(child: _buildIcon(app)),
+                            ),
+                            title: Text(app.name),
+                            subtitle: Text(
+                              [
+                                if (app.description.isNotEmpty) app.description,
+                                if (app.ageRating != null)
+                                  zh
+                                      ? '适用年龄 ${app.ageRating}+'
+                                      : 'Age ${app.ageRating}+',
+                              ].join(' · '),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: () => WebViewPage.open(
+                              context,
+                              app.url.toString(),
+                              title: app.name,
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
     );
   }
