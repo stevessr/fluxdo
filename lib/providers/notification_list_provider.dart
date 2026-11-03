@@ -223,44 +223,58 @@ class NotificationListNotifier
     final service = ref.read(discourseServiceProvider);
     await service.markAllNotificationsRead();
 
-    // 重置通知计数
+    // 服务端操作已成功：取消所有仍在飞行中的旧分页响应。
+    // 否则旧的 unread 结果可能在清空列表后再次发布。
+    ++_refreshGeneration;
     ref.read(notificationCountStateProvider.notifier).markAllRead();
 
-    // 未读筛选下所有项目都已离开当前筛选集合。
     if (_filter == NotificationReadFilter.unread) {
       _totalRows = 0;
+      _historyOffset = 0;
+      _needsManualLoadMore = false;
       resetPagingState(hasMore: false);
       state = const AsyncValue.data([]);
       return;
     }
 
-    // 其他筛选只需更新本地已加载项目。
-    state.whenData((list) {
-      state = AsyncValue.data(list.map((n) => n.copyWith(read: true)).toList());
-    });
+    // 即使当前处于带有 previous value 的分页 loading 状态，
+    // 也要立即发布已读数据，结束旧的 loading 快照。
+    final currentList = state.value;
+    if (currentList != null) {
+      state = AsyncValue.data(
+        currentList.map((n) => n.copyWith(read: true)).toList(),
+      );
+    }
   }
 
-  /// 标记单个通知为已读
+  /// 标记单个通知为已读。
+  ///
+  /// 取消正在进行的历史续页，避免它用请求开始时的旧列表覆盖本地已读状态。
   void markAsRead(int notificationId) {
-    state.whenData((list) {
-      if (_filter == NotificationReadFilter.unread) {
-        final nextList = list.where((n) => n.id != notificationId).toList();
-        if (nextList.length != list.length) {
-          _totalRows = (_totalRows - 1).clamp(0, _totalRows).toInt();
-          state = AsyncValue.data(nextList);
-        }
-        return;
-      }
+    final currentList = state.value;
+    if (currentList == null) return;
 
-      state = AsyncValue.data(
-        list.map((n) {
-          if (n.id == notificationId && !n.read) {
-            return n.copyWith(read: true);
-          }
-          return n;
-        }).toList(),
-      );
-    });
+    if (_filter == NotificationReadFilter.unread) {
+      final nextList = currentList
+          .where((n) => n.id != notificationId)
+          .toList();
+      if (nextList.length == currentList.length) return;
+      ++_refreshGeneration;
+      _totalRows = (_totalRows - 1).clamp(0, _totalRows).toInt();
+      state = AsyncValue.data(nextList);
+      return;
+    }
+
+    if (!currentList.any((n) => n.id == notificationId && !n.read)) return;
+    ++_refreshGeneration;
+    state = AsyncValue.data(
+      currentList.map((n) {
+        if (n.id == notificationId) {
+          return n.copyWith(read: true);
+        }
+        return n;
+      }).toList(),
+    );
   }
 }
 
