@@ -263,8 +263,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       (p) => p.normalizedBlockedUsernames,
                     ),
                   );
-                  // 类型分类已经在 provider 的数据源层完成，这里只保留本地
-                  // 用户屏蔽过滤，绝不再为了“凑够分类条目”扫描历史分页。
+                  // 历史游标扫描及类型筛选由 provider 负责；
+                  // UI 只做用户屏蔽过滤，避免影响分页偏移量。
                   final visibleNotifications = notifications
                       .where(
                         (notification) =>
