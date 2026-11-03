@@ -240,11 +240,14 @@ class NotificationListNotifier
     // 即使当前处于带有 previous value 的分页 loading 状态，
     // 也要立即发布已读数据，结束旧的 loading 快照。
     final currentList = state.value;
-    if (currentList != null) {
-      state = AsyncValue.data(
-        currentList.map((n) => n.copyWith(read: true)).toList(),
-      );
+    if (currentList == null) {
+      // 首屏刷新也可能还未完成；失效旧响应后重新获取最新分类。
+      await refresh();
+      return;
     }
+    state = AsyncValue.data(
+      currentList.map((n) => n.copyWith(read: true)).toList(),
+    );
   }
 
   /// 标记单个通知为已读。
