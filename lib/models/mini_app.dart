@@ -26,9 +26,14 @@ class MiniApp {
     }
 
     final suppliedUrl = _string(data['url']) ?? _string(data['path']);
-    final candidate = suppliedUrl == null
-        ? site.resolve('/apps/${Uri.encodeComponent(id)}')
-        : site.resolve(suppliedUrl);
+    late final Uri candidate;
+    try {
+      candidate = suppliedUrl == null
+          ? site.resolve('/apps/${Uri.encodeComponent(id)}')
+          : site.resolve(suppliedUrl);
+    } on FormatException {
+      return null;
+    }
     // A directory response cannot launch an arbitrary origin or a non-app path.
     // The app itself may navigate normally within the hosted web container.
     if (candidate.scheme != 'https' ||
@@ -44,7 +49,12 @@ class MiniApp {
         _string(data['icon_url']) ??
         _string(data['iconUrl']) ??
         _string(data['image_url']);
-    final iconUri = icon == null ? null : site.resolve(icon);
+    Uri? iconUri;
+    try {
+      iconUri = icon == null ? null : site.resolve(icon);
+    } on FormatException {
+      // A bad icon must not prevent a valid app from being listed.
+    }
     final iconUrl = iconUri != null && iconUri.scheme == 'https'
         ? iconUri.toString()
         : null;
