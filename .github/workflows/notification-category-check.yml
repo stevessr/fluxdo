@@ -10,6 +10,7 @@ on:
       - 'lib/l10n/modules/notificationFilter/**'
       - 'test/models/notification_category_test.dart'
       - 'test/providers/notification_list_category_switch_test.dart'
+      - 'test/providers/notification_list_pagination_test.dart'
       - 'test/services/discourse_notification_categories_test.dart'
       - '.github/workflows/notification-category-check.yml'
   workflow_dispatch:
@@ -52,6 +53,7 @@ jobs:
             lib/providers/notification_list_provider.dart \
             test/models/notification_category_test.dart \
             test/providers/notification_list_category_switch_test.dart \
+            test/providers/notification_list_pagination_test.dart \
             test/services/discourse_notification_categories_test.dart
           git diff --check
 
@@ -63,6 +65,7 @@ jobs:
           lib/providers/notification_list_provider.dart
           test/models/notification_category_test.dart
           test/providers/notification_list_category_switch_test.dart
+          test/providers/notification_list_pagination_test.dart
           test/services/discourse_notification_categories_test.dart
 
       - name: Test separate mentions and replies
@@ -70,4 +73,5 @@ jobs:
           flutter test
           test/models/notification_category_test.dart
           test/providers/notification_list_category_switch_test.dart
+          test/providers/notification_list_pagination_test.dart
           test/services/discourse_notification_categories_test.dart
