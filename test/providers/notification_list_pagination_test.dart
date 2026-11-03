@@ -271,4 +271,128 @@ void main() {
     expect(container.read(notificationListProvider).value!.single.id, 25);
     expect(notifier.hasMore, isFalse);
   });
+  test('mark-all during a pending unread page keeps notifications cleared', () async {
+    final service = DiscourseService();
+    final requested = Completer<void>();
+    final delayedHistory = Completer<Map<String, dynamic>>();
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.method == 'PUT') {
+          handler.resolve(
+            Response(requestOptions: options, data: <String, dynamic>{}),
+          );
+          return;
+        }
+        if (options.queryParameters['recent'] == true) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              data: _response([
+                _notification(30, NotificationType.mentioned),
+              ]),
+            ),
+          );
+          return;
+        }
+        if (!options.queryParameters.containsKey('offset')) {
+          handler.resolve(
+            Response(requestOptions: options, data: _response([], total: 0)),
+          );
+          return;
+        }
+        if (!requested.isCompleted) requested.complete();
+        delayedHistory.future.then((data) {
+          handler.resolve(Response(requestOptions: options, data: data));
+        });
+      },
+    );
+    service.dio.interceptors.insert(0, interceptor);
+    addTearDown(() => service.dio.interceptors.remove(interceptor));
+
+    final container = _container();
+    await container.read(notificationListProvider.future);
+    final notifier = container.read(notificationListProvider.notifier);
+    await notifier.setCategory(NotificationCategory.mentions);
+    await notifier.setFilter(NotificationReadFilter.unread);
+
+    final pending = notifier.loadMore();
+    await requested.future;
+    await notifier.markAllAsRead();
+
+    expect(container.read(notificationListProvider).value, isEmpty);
+    delayedHistory.complete(
+      _response([_notification(20, NotificationType.mentioned)], total: 60),
+    );
+    await pending;
+
+    expect(container.read(notificationListProvider).value, isEmpty);
+    expect(notifier.hasMore, isFalse);
+    expect(notifier.historyOffset, 0);
+  });
+
+  test('single read during an in-flight page preserves state and cursor', () async {
+    final service = DiscourseService();
+    final requested = Completer<void>();
+    final delayedHistory = Completer<Map<String, dynamic>>();
+    final offsets = <int>[];
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        final offset = options.queryParameters['offset'] as int?;
+        if (offset == null) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              data: _response([
+                _notification(80, NotificationType.mentioned),
+              ], total: 120),
+            ),
+          );
+          return;
+        }
+        offsets.add(offset);
+        if (offsets.length == 1) {
+          requested.complete();
+          delayedHistory.future.then((data) {
+            handler.resolve(Response(requestOptions: options, data: data));
+          });
+        } else {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              data: _response([
+                _notification(75, NotificationType.replied),
+              ], total: 120),
+            ),
+          );
+        }
+      },
+    );
+    service.dio.interceptors.insert(0, interceptor);
+    addTearDown(() => service.dio.interceptors.remove(interceptor));
+
+    final container = _container();
+    await container.read(notificationListProvider.future);
+    final notifier = container.read(notificationListProvider.notifier);
+
+    final pending = notifier.loadMore();
+    await requested.future;
+    notifier.markAsRead(80);
+    delayedHistory.complete(
+      _response([_notification(75, NotificationType.replied)], total: 120),
+    );
+    await pending;
+
+    final current = container.read(notificationListProvider).value!;
+    expect(current.single.id, 80);
+    expect(current.single.read, isTrue);
+    expect(notifier.historyOffset, 60);
+    expect(notifier.hasMore, isTrue);
+
+    await notifier.loadMore();
+    expect(offsets, [60, 60]);
+    expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+      80,
+      75,
+    ]);
+  });
 }
