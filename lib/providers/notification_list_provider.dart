@@ -54,11 +54,10 @@ class NotificationListNotifier
     };
   }
 
-  Future<({
-    PagedPage<DiscourseNotification> page,
-    int totalRows,
-    int historyOffset,
-  })> _fetchFirstPage({
+  Future<
+    ({PagedPage<DiscourseNotification> page, int totalRows, int historyOffset})
+  >
+  _fetchFirstPage({
     required NotificationCategory category,
     required NotificationReadFilter filter,
   }) async {
@@ -159,62 +158,59 @@ class NotificationListNotifier
     final category = _category;
     final filter = _filter;
 
-    await runPagedLoadMore(
-      (currentList, _) async {
-        final service = ref.read(discourseServiceProvider);
-        var offset = _historyOffset;
-        var totalRows = _totalRows;
-        final ids = currentList.map((item) => item.id).toSet();
-        final additions = <DiscourseNotification>[];
-        final pages = category == NotificationCategory.all
-            ? 1
-            : _maxHistoryPagesPerLoad;
+    await runPagedLoadMore((currentList, _) async {
+      final service = ref.read(discourseServiceProvider);
+      var offset = _historyOffset;
+      var totalRows = _totalRows;
+      final ids = currentList.map((item) => item.id).toSet();
+      final additions = <DiscourseNotification>[];
+      final pages = category == NotificationCategory.all
+          ? 1
+          : _maxHistoryPagesPerLoad;
 
-        for (var page = 0; page < pages; page++) {
-          final response = await service.getNotifications(
-            offset: offset,
-            filter: filter.apiValue,
-          );
-          // 切换筛选/分类期间完成的旧请求不得写入新分类游标。
-          if (generation != _refreshGeneration) {
-            return PagedPage(items: currentList, hasMore: false);
-          }
-          totalRows = response.totalRowsNotifications;
-          offset += _historyPageSize;
-
-          for (final item in response.notifications) {
-            if (category.matches(item) &&
-                _matchesReadFilter(item, filter) &&
-                ids.add(item.id)) {
-              additions.add(item);
-            }
-          }
-
-          if (offset >= totalRows || additions.isNotEmpty) break;
-        }
-
+      for (var page = 0; page < pages; page++) {
+        final response = await service.getNotifications(
+          offset: offset,
+          filter: filter.apiValue,
+        );
+        // 切换筛选/分类期间完成的旧请求不得写入新分类游标。
         if (generation != _refreshGeneration) {
           return PagedPage(items: currentList, hasMore: false);
         }
-        _historyOffset = offset;
-        _totalRows = totalRows;
-        final hasMoreHistory = offset < totalRows;
-        _needsManualLoadMore =
-            category != NotificationCategory.all &&
-            additions.isEmpty &&
-            hasMoreHistory;
+        totalRows = response.totalRowsNotifications;
+        offset += _historyPageSize;
 
-        final result = [...currentList, ...additions];
-        if (category != NotificationCategory.all) {
-          result.sort((a, b) {
-            final timeOrder = b.createdAt.compareTo(a.createdAt);
-            return timeOrder != 0 ? timeOrder : b.id.compareTo(a.id);
-          });
+        for (final item in response.notifications) {
+          if (category.matches(item) &&
+              _matchesReadFilter(item, filter) &&
+              ids.add(item.id)) {
+            additions.add(item);
+          }
         }
-        return PagedPage(items: result, hasMore: hasMoreHistory);
-      },
-      isCurrent: () => generation == _refreshGeneration,
-    );
+
+        if (offset >= totalRows || additions.isNotEmpty) break;
+      }
+
+      if (generation != _refreshGeneration) {
+        return PagedPage(items: currentList, hasMore: false);
+      }
+      _historyOffset = offset;
+      _totalRows = totalRows;
+      final hasMoreHistory = offset < totalRows;
+      _needsManualLoadMore =
+          category != NotificationCategory.all &&
+          additions.isEmpty &&
+          hasMoreHistory;
+
+      final result = [...currentList, ...additions];
+      if (category != NotificationCategory.all) {
+        result.sort((a, b) {
+          final timeOrder = b.createdAt.compareTo(a.createdAt);
+          return timeOrder != 0 ? timeOrder : b.id.compareTo(a.id);
+        });
+      }
+      return PagedPage(items: result, hasMore: hasMoreHistory);
+    }, isCurrent: () => generation == _refreshGeneration);
   }
 
   /// 手动重试加载更多
