@@ -271,7 +271,7 @@ void main() {
     expect(container.read(notificationListProvider).value!.single.id, 25);
     expect(notifier.hasMore, isFalse);
   });
-  test('mark-all during a pending unread page keeps notifications cleared', () async {
+  test('mark-all cancels pending unread pagination', () async {
     final service = DiscourseService();
     final requested = Completer<void>();
     final delayedHistory = Completer<Map<String, dynamic>>();
@@ -330,7 +330,7 @@ void main() {
     expect(notifier.historyOffset, 0);
   });
 
-  test('single read during an in-flight page preserves state and cursor', () async {
+  test('single read preserves state during pagination', () async {
     final service = DiscourseService();
     final requested = Completer<void>();
     final delayedHistory = Completer<Map<String, dynamic>>();
