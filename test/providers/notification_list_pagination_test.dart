@@ -37,176 +37,195 @@ ProviderContainer _container() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('category continues into historical pages and de-duplicates recent',
-      () async {
-    final service = DiscourseService();
-    final offsets = <int>[];
-    final interceptor = InterceptorsWrapper(
-      onRequest: (options, handler) {
-        if (options.queryParameters['recent'] == true) {
-          handler.resolve(Response(
-            requestOptions: options,
-            data: _response([
-              _notification(300, NotificationType.mentioned),
-            ]),
-          ));
-          return;
-        }
-        if (!options.queryParameters.containsKey('offset')) {
-          handler.resolve(Response(
-            requestOptions: options,
-            data: _response([], total: 0),
-          ));
-          return;
-        }
-        final offset = options.queryParameters['offset'] as int? ?? 0;
-        offsets.add(offset);
-        final items = switch (offset) {
-          0 => [_notification(300, NotificationType.mentioned)],
-          60 => [_notification(280, NotificationType.replied)],
-          120 => [_notification(150, NotificationType.mentioned)],
-          _ => <Map<String, dynamic>>[],
-        };
-        handler.resolve(Response(
-          requestOptions: options,
-          data: _response(items, total: 181),
-        ));
-      },
-    );
-    service.dio.interceptors.insert(0, interceptor);
-    addTearDown(() => service.dio.interceptors.remove(interceptor));
+  test(
+    'category continues into historical pages and de-duplicates recent',
+    () async {
+      final service = DiscourseService();
+      final offsets = <int>[];
+      final interceptor = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.queryParameters['recent'] == true) {
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                data: _response([
+                  _notification(300, NotificationType.mentioned),
+                ]),
+              ),
+            );
+            return;
+          }
+          if (!options.queryParameters.containsKey('offset')) {
+            handler.resolve(
+              Response(requestOptions: options, data: _response([], total: 0)),
+            );
+            return;
+          }
+          final offset = options.queryParameters['offset'] as int? ?? 0;
+          offsets.add(offset);
+          final items = switch (offset) {
+            0 => [_notification(300, NotificationType.mentioned)],
+            60 => [_notification(280, NotificationType.replied)],
+            120 => [_notification(150, NotificationType.mentioned)],
+            _ => <Map<String, dynamic>>[],
+          };
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              data: _response(items, total: 181),
+            ),
+          );
+        },
+      );
+      service.dio.interceptors.insert(0, interceptor);
+      addTearDown(() => service.dio.interceptors.remove(interceptor));
 
-    final container = _container();
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
-    await notifier.setCategory(NotificationCategory.mentions);
-    expect(notifier.hasMore, isTrue);
-    expect(container.read(notificationListProvider).value!.single.id, 300);
+      final container = _container();
+      await container.read(notificationListProvider.future);
+      final notifier = container.read(notificationListProvider.notifier);
+      await notifier.setCategory(NotificationCategory.mentions);
+      expect(notifier.hasMore, isTrue);
+      expect(container.read(notificationListProvider).value!.single.id, 300);
 
-    await notifier.loadMore();
-    expect(offsets, [0, 60, 120]);
-    expect(container.read(notificationListProvider).value!.map((n) => n.id),
-        [300, 150]);
-    expect(notifier.historyOffset, 180);
-    expect(notifier.needsManualLoadMore, isFalse);
+      await notifier.loadMore();
+      expect(offsets, [0, 60, 120]);
+      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+        300,
+        150,
+      ]);
+      expect(notifier.historyOffset, 180);
+      expect(notifier.needsManualLoadMore, isFalse);
 
-    await notifier.loadMore();
-    expect(offsets, [0, 60, 120, 180]);
-    expect(notifier.hasMore, isFalse);
-    await notifier.loadMore();
-    expect(offsets, hasLength(4));
-  });
+      await notifier.loadMore();
+      expect(offsets, [0, 60, 120, 180]);
+      expect(notifier.hasMore, isFalse);
+      await notifier.loadMore();
+      expect(offsets, hasLength(4));
+    },
+  );
 
-  test('sparse category pauses after bounded scan and resumes at cursor',
-      () async {
-    final service = DiscourseService();
-    final offsets = <int>[];
-    final interceptor = InterceptorsWrapper(
-      onRequest: (options, handler) {
-        if (options.queryParameters['recent'] == true) {
-          handler.resolve(Response(
-            requestOptions: options,
-            data: _response([_notification(400, NotificationType.mentioned)]),
-          ));
-          return;
-        }
-        if (!options.queryParameters.containsKey('offset')) {
-          handler.resolve(Response(
-            requestOptions: options,
-            data: _response([], total: 0),
-          ));
-          return;
-        }
-        final offset = options.queryParameters['offset'] as int? ?? 0;
-        offsets.add(offset);
-        handler.resolve(Response(
-          requestOptions: options,
-          data: _response(
-            offset == 240
-                ? [_notification(10, NotificationType.mentioned)]
-                : [_notification(500 - offset, NotificationType.replied)],
-            total: 300,
-          ),
-        ));
-      },
-    );
-    service.dio.interceptors.insert(0, interceptor);
-    addTearDown(() => service.dio.interceptors.remove(interceptor));
+  test(
+    'sparse category pauses after bounded scan and resumes at cursor',
+    () async {
+      final service = DiscourseService();
+      final offsets = <int>[];
+      final interceptor = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.queryParameters['recent'] == true) {
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                data: _response([
+                  _notification(400, NotificationType.mentioned),
+                ]),
+              ),
+            );
+            return;
+          }
+          if (!options.queryParameters.containsKey('offset')) {
+            handler.resolve(
+              Response(requestOptions: options, data: _response([], total: 0)),
+            );
+            return;
+          }
+          final offset = options.queryParameters['offset'] as int? ?? 0;
+          offsets.add(offset);
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              data: _response(
+                offset == 240
+                    ? [_notification(10, NotificationType.mentioned)]
+                    : [_notification(500 - offset, NotificationType.replied)],
+                total: 300,
+              ),
+            ),
+          );
+        },
+      );
+      service.dio.interceptors.insert(0, interceptor);
+      addTearDown(() => service.dio.interceptors.remove(interceptor));
 
-    final container = _container();
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
-    await notifier.setCategory(NotificationCategory.mentions);
+      final container = _container();
+      await container.read(notificationListProvider.future);
+      final notifier = container.read(notificationListProvider.notifier);
+      await notifier.setCategory(NotificationCategory.mentions);
 
-    await notifier.loadMore();
-    expect(offsets, [0, 60, 120, 180]);
-    expect(notifier.needsManualLoadMore, isTrue);
-    expect(notifier.hasMore, isTrue);
-    await notifier.loadMore();
-    expect(offsets, hasLength(4), reason: 'automatic retry must be bounded');
+      await notifier.loadMore();
+      expect(offsets, [0, 60, 120, 180]);
+      expect(notifier.needsManualLoadMore, isTrue);
+      expect(notifier.hasMore, isTrue);
+      await notifier.loadMore();
+      expect(offsets, hasLength(4), reason: 'automatic retry must be bounded');
 
-    notifier.allowMoreHistoryScan();
-    await notifier.loadMore();
-    expect(offsets, [0, 60, 120, 180, 240]);
-    expect(container.read(notificationListProvider).value!.map((n) => n.id),
-        [400, 10]);
-    expect(notifier.hasMore, isFalse);
-  });
+      notifier.allowMoreHistoryScan();
+      await notifier.loadMore();
+      expect(offsets, [0, 60, 120, 180, 240]);
+      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+        400,
+        10,
+      ]);
+      expect(notifier.hasMore, isFalse);
+    },
+  );
 
-  test('late history response cannot overwrite a newly selected category',
-      () async {
-    final service = DiscourseService();
-    final historyRequested = Completer<void>();
-    final historyResponse = Completer<Map<String, dynamic>>();
-    final interceptor = InterceptorsWrapper(
-      onRequest: (options, handler) {
-        if (options.queryParameters['recent'] == true) {
-          final type = options.queryParameters['filter_by_types'];
-          handler.resolve(Response(
-            requestOptions: options,
-            data: _response([
-              if (type == 'mentioned')
-                _notification(1, NotificationType.mentioned)
-              else
-                _notification(2, NotificationType.replied),
-            ]),
-          ));
-          return;
-        }
-        if (!options.queryParameters.containsKey('offset')) {
-          handler.resolve(Response(
-            requestOptions: options,
-            data: _response([], total: 0),
-          ));
-          return;
-        }
-        if (!historyRequested.isCompleted) historyRequested.complete();
-        historyResponse.future.then((data) {
-          handler.resolve(Response(requestOptions: options, data: data));
-        });
-      },
-    );
-    service.dio.interceptors.insert(0, interceptor);
-    addTearDown(() => service.dio.interceptors.remove(interceptor));
+  test(
+    'late history response cannot overwrite a newly selected category',
+    () async {
+      final service = DiscourseService();
+      final historyRequested = Completer<void>();
+      final historyResponse = Completer<Map<String, dynamic>>();
+      final interceptor = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.queryParameters['recent'] == true) {
+            final type = options.queryParameters['filter_by_types'];
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                data: _response([
+                  if (type == 'mentioned')
+                    _notification(1, NotificationType.mentioned)
+                  else
+                    _notification(2, NotificationType.replied),
+                ]),
+              ),
+            );
+            return;
+          }
+          if (!options.queryParameters.containsKey('offset')) {
+            handler.resolve(
+              Response(requestOptions: options, data: _response([], total: 0)),
+            );
+            return;
+          }
+          if (!historyRequested.isCompleted) historyRequested.complete();
+          historyResponse.future.then((data) {
+            handler.resolve(Response(requestOptions: options, data: data));
+          });
+        },
+      );
+      service.dio.interceptors.insert(0, interceptor);
+      addTearDown(() => service.dio.interceptors.remove(interceptor));
 
-    final container = _container();
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
-    await notifier.setCategory(NotificationCategory.mentions);
+      final container = _container();
+      await container.read(notificationListProvider.future);
+      final notifier = container.read(notificationListProvider.notifier);
+      await notifier.setCategory(NotificationCategory.mentions);
 
-    final oldPage = notifier.loadMore();
-    await historyRequested.future;
-    await notifier.setCategory(NotificationCategory.replies);
-    historyResponse.complete(_response([
-      _notification(3, NotificationType.mentioned),
-    ], total: 60));
-    await oldPage;
+      final oldPage = notifier.loadMore();
+      await historyRequested.future;
+      await notifier.setCategory(NotificationCategory.replies);
+      historyResponse.complete(
+        _response([_notification(3, NotificationType.mentioned)], total: 60),
+      );
+      await oldPage;
 
-    expect(notifier.category, NotificationCategory.replies);
-    expect(container.read(notificationListProvider).value!.single.id, 2);
-    expect(notifier.historyOffset, 0);
-    expect(notifier.hasMore, isTrue);
-  });
+      expect(notifier.category, NotificationCategory.replies);
+      expect(container.read(notificationListProvider).value!.single.id, 2);
+      expect(notifier.historyOffset, 0);
+      expect(notifier.hasMore, isTrue);
+    },
+  );
 
   test('unread category scans history with server read filter', () async {
     final service = DiscourseService();
@@ -214,25 +233,26 @@ void main() {
     final interceptor = InterceptorsWrapper(
       onRequest: (options, handler) {
         if (options.queryParameters['recent'] == true) {
-          handler.resolve(Response(
-            requestOptions: options,
-            data: _response([]),
-          ));
+          handler.resolve(
+            Response(requestOptions: options, data: _response([])),
+          );
           return;
         }
         if (!options.queryParameters.containsKey('offset')) {
-          handler.resolve(Response(
-            requestOptions: options,
-            data: _response([], total: 0),
-          ));
+          handler.resolve(
+            Response(requestOptions: options, data: _response([], total: 0)),
+          );
           return;
         }
         historyQueries.add(options.queryParameters);
-        handler.resolve(Response(
-          requestOptions: options,
-          data: _response([_notification(25, NotificationType.replied)],
-              total: 60),
-        ));
+        handler.resolve(
+          Response(
+            requestOptions: options,
+            data: _response([
+              _notification(25, NotificationType.replied),
+            ], total: 60),
+          ),
+        );
       },
     );
     service.dio.interceptors.insert(0, interceptor);
