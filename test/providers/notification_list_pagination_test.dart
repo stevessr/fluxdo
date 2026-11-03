@@ -474,7 +474,10 @@ void main() {
               requestOptions: options,
               data: _response([
                 if (markedAll)
-                  {..._notification(12, NotificationType.replied), 'read': true},
+                  {
+                    ..._notification(12, NotificationType.replied),
+                    'read': true,
+                  },
                 {..._notification(10, NotificationType.replied), 'read': true},
               ], total: markedAll ? 2 : 1),
             ),
