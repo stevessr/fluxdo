@@ -144,6 +144,21 @@ void main() {
     expect(result.apps.first.iconUrl, isNull);
   });
 
+  test('skips malformed destinations without losing neighboring apps', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': [
+          {'id': 'broken', 'url': 'https://%invalid/apps/broken'},
+          {'id': 'valid', 'icon_url': 'https://%invalid/icon.png'},
+        ],
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps.map((app) => app.id), ['valid']);
+    expect(result.apps.single.iconUrl, isNull);
+  });
+
   test('rejects unknown response formats', () {
     expect(
       () =>
