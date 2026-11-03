@@ -47,7 +47,7 @@ jobs:
 
       - name: Verify Dart formatting
         run: |
-          dart format --output=none --set-exit-if-changed \
+          dart format --output=write \
             lib/models/notification_category.dart \
             lib/pages/notifications_page.dart \
             lib/providers/notification_list_provider.dart \
@@ -56,6 +56,14 @@ jobs:
             test/providers/notification_list_pagination_test.dart \
             test/services/discourse_notification_categories_test.dart
           git diff --check
+          git diff --exit-code -- \
+            lib/models/notification_category.dart \
+            lib/pages/notifications_page.dart \
+            lib/providers/notification_list_provider.dart \
+            test/models/notification_category_test.dart \
+            test/providers/notification_list_category_switch_test.dart \
+            test/providers/notification_list_pagination_test.dart \
+            test/services/discourse_notification_categories_test.dart
 
       - name: Analyze category integration
         run: >-
