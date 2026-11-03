@@ -1,0 +1,57 @@
+name: Mini App Directory
+
+on:
+  pull_request:
+    paths:
+      - 'lib/models/mini_app.dart'
+      - 'lib/pages/mini_apps_page.dart'
+      - 'lib/services/mini_app_directory_repository.dart'
+      - 'test/models/mini_app_test.dart'
+      - 'test/services/mini_app_directory_repository_test.dart'
+      - '.github/workflows/mini-app-directory-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mini-app-directory-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Prepare assets
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate translations
+        run: dart run tool/gen_l10n.dart
+
+      - name: Analyze mini app directory
+        run: >-
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          lib/models/mini_app.dart
+          lib/pages/mini_apps_page.dart
+          lib/services/mini_app_directory_repository.dart
+          test/models/mini_app_test.dart
+          test/services/mini_app_directory_repository_test.dart
+
+      - name: Test directory parsing and fallback
+        run: >-
+          flutter test
+          test/models/mini_app_test.dart
+          test/services/mini_app_directory_repository_test.dart
