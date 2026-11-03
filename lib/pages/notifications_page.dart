@@ -298,7 +298,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                     );
                   }
 
-                  if (notifier.hasMore && !notifier.isLoadingMore &&
+                  if (notifier.hasMore &&
+                      !notifier.isLoadingMore &&
                       !notifier.isLoadMoreFailed &&
                       !notifier.needsManualLoadMore) {
                     _maybeAutoFillViewport();
