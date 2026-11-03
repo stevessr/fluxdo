@@ -99,10 +99,11 @@ class MiniAppDirectory {
     }
 
     Object? source = payload;
-    Map? envelope;
+    final wrappers = <Map>[];
     // Some plugins wrap the same response in `data` or `result`.
+    // Retain outer metadata: total/per_page may live outside the app rows.
     for (var depth = 0; depth < 3 && source is Map; depth++) {
-      envelope = source;
+      wrappers.add(source);
       final nested = source['data'] ?? source['result'];
       if (nested is Map || nested is List) {
         source = nested;
@@ -127,17 +128,22 @@ class MiniAppDirectory {
       if (app != null && ids.add(app.id)) apps.add(app);
     }
 
-    final pagination = envelope?['pagination'] is Map
-        ? envelope!['pagination'] as Map
-        : envelope?['meta'] is Map
-        ? envelope!['meta'] as Map
-        : null;
-
-    Object? field(String snake, String camel) =>
-        envelope?[snake] ??
-        envelope?[camel] ??
-        pagination?[snake] ??
-        pagination?[camel];
+    Object? field(String snake, String camel) {
+      for (final wrapper in wrappers.reversed) {
+        final pagination = wrapper['pagination'] is Map
+            ? wrapper['pagination'] as Map
+            : null;
+        final meta = wrapper['meta'] is Map ? wrapper['meta'] as Map : null;
+        final value = wrapper[snake] ??
+            wrapper[camel] ??
+            pagination?[snake] ??
+            pagination?[camel] ??
+            meta?[snake] ??
+            meta?[camel];
+        if (value != null) return value;
+      }
+      return null;
+    }
 
     int? number(Object? value) {
       if (value is int) return value;
