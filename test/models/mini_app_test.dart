@@ -64,6 +64,66 @@ void main() {
     expect(result.apps.single.url.queryParameters['from'], 'directory');
   });
 
+
+  test('uses raw page size before filtering, and honors explicit pagination', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'data': {
+          'apps': [
+            {'id': 'safe', 'name': 'Safe'},
+            {'id': 'safe', 'name': 'Duplicate'},
+            {'id': 'unsafe', 'url': 'https://elsewhere.test/apps/unsafe'},
+          ],
+          'pagination': {'has_next': true, 'next_page': 4},
+        },
+      },
+      site: site,
+      requestedPage: 3,
+    );
+    expect(result.apps.map((app) => app.name), ['Safe']);
+    expect(result.rawCount, 3);
+    expect(result.nextPage, 4);
+    expect(result.hasNext, isTrue);
+  });
+
+  test('honors explicit end even with a full page', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': List.generate(24, (i) => {'id': 'app-$i'}),
+        'has_next': false,
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps, hasLength(24));
+    expect(result.hasNext, isFalse);
+  });
+
+  test('prevents endless loading on an empty response', () {
+    final result = MiniAppDirectory.parse(
+      {'apps': [], 'has_next': true, 'total': 1000},
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.hasNext, isFalse);
+    expect(result.rawCount, 0);
+  });
+
+  test('does not accept insecure icon URLs or malformed map keys', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': [
+          {'id': 'safe', 'icon_url': 'http://example.test/icon.png'},
+          {123: 'strange', 'slug': 'other'},
+        ],
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps, hasLength(2));
+    expect(result.apps.first.iconUrl, isNull);
+  });
+
   test('rejects unknown response formats', () {
     expect(
       () =>
