@@ -29,6 +29,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   final LoadMoreCoordinator _loadMoreCoordinator = LoadMoreCoordinator();
   NotificationReadFilter _filter = NotificationReadFilter.all;
   NotificationCategory _category = NotificationCategory.all;
+  bool _autoFillScheduled = false;
+  int _autoFillAttempts = 0;
+  static const int _maxAutoFillAttempts = 2;
 
   @override
   void initState() {
@@ -43,6 +46,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   void _onScroll() {
+    if (!_scrollController.hasClients) return;
     final distance =
         _scrollController.position.maxScrollExtent -
         _scrollController.position.pixels;
@@ -53,6 +57,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   Future<void> _loadMore() async {
     final notifier = ref.read(notificationListProvider.notifier);
+    if (notifier.category != _category ||
+        notifier.filter != _filter ||
+        notifier.needsManualLoadMore) {
+      return;
+    }
     await _loadMoreCoordinator.loadMore(
       loadMore: notifier.loadMore,
       hasMore: () => notifier.hasMore,
@@ -62,14 +71,50 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     );
   }
 
+  /// 首屏记录不足以撑满视口时没有滚动事件，主动尝试补充少量历史页。
+  /// 每次分类切换只自动补两轮，避免稀有类型无限扫描。
+  void _maybeAutoFillViewport() {
+    if (_autoFillScheduled || _autoFillAttempts >= _maxAutoFillAttempts) {
+      return;
+    }
+    _autoFillScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoFillScheduled = false;
+      if (!mounted || !_scrollController.hasClients) return;
+      final notifier = ref.read(notificationListProvider.notifier);
+      if (notifier.category != _category ||
+          notifier.filter != _filter ||
+          !notifier.hasMore ||
+          notifier.isLoadingMore ||
+          notifier.needsManualLoadMore ||
+          _scrollController.position.maxScrollExtent > 0) {
+        return;
+      }
+      _autoFillAttempts++;
+      _loadMore();
+    });
+  }
+
+  Future<void> _continueHistory() async {
+    _loadMoreCoordinator.resetCooldown();
+    ref.read(notificationListProvider.notifier).allowMoreHistoryScan();
+    // Manual continuation should not restart automatic scanning loops.
+    _autoFillAttempts = _maxAutoFillAttempts;
+    await _loadMore();
+  }
+
   Future<void> _onRefresh() async {
+    _autoFillAttempts = 0;
     _loadMoreCoordinator.resetCooldown();
     await ref.read(notificationListProvider.notifier).refresh();
   }
 
   Future<void> _setFilter(NotificationReadFilter filter) async {
     if (_filter == filter) return;
-    setState(() => _filter = filter);
+    setState(() {
+      _filter = filter;
+      _autoFillAttempts = 0;
+    });
     _loadMoreCoordinator.resetCooldown();
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
@@ -89,7 +134,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     }
 
     if (_category == category) return;
-    setState(() => _category = category);
+    setState(() {
+      _category = category;
+      _autoFillAttempts = 0;
+    });
     _loadMoreCoordinator.resetCooldown();
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
@@ -228,19 +276,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       .toList(growable: false);
                   final notifier = ref.read(notificationListProvider.notifier);
 
-                  // 只有“全部”历史分页可能因为当前页全被本地屏蔽而需要补载。
-                  // 子分类本身是 bounded recent，hasMore=false，不会触发这里。
-                  if (_category == NotificationCategory.all &&
-                      visibleNotifications.isEmpty &&
-                      notifications.isNotEmpty &&
-                      notifier.hasMore) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) _loadMore();
-                    });
-                  }
-
-                  if (visibleNotifications.isEmpty &&
-                      (notifications.isEmpty || !notifier.hasMore)) {
+                  // 即使分类为空也必须保留一个可滚动的分页视图；
+                  // 否则该分类永远不会触发下一页历史查询。
+                  if (visibleNotifications.isEmpty && !notifier.hasMore) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -260,11 +298,29 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                     );
                   }
 
+                  if (notifier.hasMore && !notifier.isLoadingMore &&
+                      !notifier.isLoadMoreFailed &&
+                      !notifier.needsManualLoadMore) {
+                    _maybeAutoFillViewport();
+                  }
+
                   return ListView.builder(
                     controller: _scrollController,
                     itemCount: visibleNotifications.length + 1,
                     itemBuilder: (context, index) {
                       if (index == visibleNotifications.length) {
+                        if (notifier.hasMore &&
+                            !notifier.isLoadingMore &&
+                            !notifier.isLoadMoreFailed &&
+                            (notifier.needsManualLoadMore ||
+                                _autoFillAttempts >= _maxAutoFillAttempts)) {
+                          return Center(
+                            child: TextButton(
+                              onPressed: _continueHistory,
+                              child: Text(context.l10n.common_searchMore),
+                            ),
+                          );
+                        }
                         return PagedListFooter(
                           hasMore: notifier.hasMore,
                           isLoadingMore: notifier.isLoadingMore,
