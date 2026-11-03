@@ -239,9 +239,14 @@ class NotificationListNotifier
 
     // 即使当前处于带有 previous value 的分页 loading 状态，
     // 也要立即发布已读数据，结束旧的 loading 快照。
+    // read 筛选的服务端数据集已经扩大；刷新以免旧 offset 跳页。
+    // Riverpod 的 loading 也可能保留上一分类的数据，不能将它当成本次首屏。
+    if (_filter == NotificationReadFilter.read || state.isLoading) {
+      await refresh();
+      return;
+    }
     final currentList = state.value;
     if (currentList == null) {
-      // 首屏刷新也可能还未完成；失效旧响应后重新获取最新分类。
       await refresh();
       return;
     }
@@ -264,6 +269,8 @@ class NotificationListNotifier
       if (nextList.length == currentList.length) return;
       ++_refreshGeneration;
       _totalRows = (_totalRows - 1).clamp(0, _totalRows).toInt();
+      // 未读列表在服务端缩短，下一次 offset 必须回退以免漏掉一条。
+      if (_historyOffset > 0) _historyOffset--;
       state = AsyncValue.data(nextList);
       return;
     }
