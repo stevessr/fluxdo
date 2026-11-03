@@ -60,10 +60,9 @@ enum NotificationCategory {
   /// Discourse notification type names accepted by `filter_by_types`.
   ///
   /// `other` intentionally returns null. Discourse builds that group from the
-  /// site's dynamic notification-type registry (including plugins), which the
-  /// historical notifications payload does not expose. For that tab FluxDO
-  /// fetches one bounded recent page and applies [matches] locally; importantly
-  /// it never walks the historical pagination to fill the category.
+  /// site's dynamic notification-type registry (including plugins).
+  /// Historical requests ignore filter_by_types, so history is always filtered
+  /// locally with [matches] as pages are fetched.
   List<String>? get serverFilterTypeNames => switch (this) {
     NotificationCategory.all => null,
     NotificationCategory.mentions => const ['mentioned'],
