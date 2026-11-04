@@ -86,7 +86,7 @@ class PmTrackingNotifier extends Notifier<PmIncomingState> {
 
     for (final channel in channels) {
       void onMessage(MessageBusMessage message) =>
-          _processMessage(message, currentUserId: currentUser.id);
+          _processMessage(message, currentUserId: currentUserId);
       _callbacks[channel] = onMessage;
       messageBus.subscribe(channel, onMessage);
     }

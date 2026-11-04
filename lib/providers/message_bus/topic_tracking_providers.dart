@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/topic.dart';
 import '../../services/message_bus_service.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/background/ios_background_fetch.dart';
