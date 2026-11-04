@@ -10,7 +10,7 @@ permissions:
 jobs:
   merge-main:
     if: >-
-      github.event.head_commit.message == 'chore(ci): retry upstream dev integration runner'
+      github.event.head_commit.message == 'ci(merge): verify resolved upstream integration'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -19,9 +19,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
-          submodules: false
+          submodules: recursive
 
       - name: Merge fork main with three-way history preservation
+        if: ${{ false }}
         shell: bash
         run: |
           set -euo pipefail
