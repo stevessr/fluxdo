@@ -57,18 +57,21 @@ object FairMemoryReceiver {
     private var initialized = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    /** 主 engine 引用:收到预警时向 Dart 转发标准 memoryPressure。
-     *  engine 未起/已销毁时静默跳过(回执不受影响)。 */
-    @Volatile
-    private var engine: FlutterEngine? = null
+    // Each VR window owns an engine. A pressure broadcast must reach all of them.
+    private val engines = LinkedHashSet<FlutterEngine>()
 
+    @Synchronized
     fun attachEngine(e: FlutterEngine) {
-        engine = e
+        engines.add(e)
     }
 
+    @Synchronized
     fun detachEngine(e: FlutterEngine) {
-        if (engine === e) engine = null
+        engines.remove(e)
     }
+
+    @Synchronized
+    private fun activeEngines(): List<FlutterEngine> = engines.toList()
 
     /** 进程级注册(Application.onCreate),广播在专用 HandlerThread 处理。 */
     @Synchronized
@@ -137,7 +140,7 @@ object FairMemoryReceiver {
     private fun dispatchMemoryPressure() {
         mainHandler.post {
             try {
-                engine?.systemChannel?.sendMemoryPressureWarning()
+                activeEngines().forEach { it.systemChannel.sendMemoryPressureWarning() }
             } catch (e: Throwable) {
                 Log.w(TAG, "转发 memoryPressure 失败: ${e.message}")
             }

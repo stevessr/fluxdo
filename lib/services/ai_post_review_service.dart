@@ -274,9 +274,10 @@ ${request.content.trim()}
     final cleaned = _stripJsonFence(raw);
     try {
       final decoded = jsonDecode(cleaned) as Map<String, dynamic>;
-      final suggestions = _readStringList(
-        decoded['suggestions'],
-      ).map(_hideLikelyFullRewrite).take(3).toList(growable: false);
+      final suggestions = _readStringList(decoded['suggestions'])
+          .map(_hideLikelyFullRewrite)
+          .take(3)
+          .toList(growable: false);
       return AiPostReviewResult(
         level: _parseLevel(decoded['level']),
         suggestions: suggestions.isEmpty

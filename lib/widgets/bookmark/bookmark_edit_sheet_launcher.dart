@@ -98,11 +98,7 @@ Future<BookmarkEditResult?> showBookmarkEditSheetWithCachedNames(
 
   // 统一写穿透 BookmarksRepository：所有书签编辑入口（书签页 / 详情页 /
   // 帖子 footer / 预览卡）共用 launcher，本地缓存的同步收敛在这一处。
-  await _syncToBookmarkRepository(
-    ref,
-    bookmarkId: bookmarkId,
-    result: result,
-  );
+  await _syncToBookmarkRepository(ref, bookmarkId: bookmarkId, result: result);
 
   writeBookmarkEditTrace(
     phase: 'launcher_completed',

@@ -46,6 +46,7 @@
   "topicDetail_markUnreadAllDesc": "清空阅读进度，下次从头读",
   "topicDetail_markUnreadSuccess": "已标记为未读",
   "topicDetail_openInBrowser": "在浏览器打开",
+  "topicDetail_openInBuiltInBrowser": "在内置浏览器打开",
   "topicDetail_readLaterFull": "浮窗已满（最多 {max} 个）",
   "@topicDetail_readLaterFull": {
     "placeholders": {
@@ -284,5 +285,24 @@
       }
     }
   },
-  "topic_keywordFilter_manage": "管理"
+  "topic_keywordFilter_manage": "管理",
+  "topicDetail_addParticipant": "添加成员",
+  "topicDetail_addParticipantHint": "搜索要添加的用户",
+  "topicDetail_addParticipantTitle": "添加成员",
+  "topicDetail_archivePrivateMessage": "归档",
+  "topicDetail_confirmKickTitle": "移出成员",
+  "topicDetail_kickParticipant": "移出 @{username}",
+  "@topicDetail_kickParticipant": {"placeholders": {"username": {"type": "String"}}},
+  "topicDetail_leavePrivateMessageConfirm": "确定要退出此私信吗？退出后将无法再查看或回复。",
+  "topicDetail_moveToInbox": "移回收件箱",
+  "topicDetail_participantAddFailed": "添加成员失败: {error}",
+  "@topicDetail_participantAddFailed": {"placeholders": {"error": {"type": "String"}}},
+  "topicDetail_participantAdded": "已将 {username} 添加到私信",
+  "@topicDetail_participantAdded": {"placeholders": {"username": {"type": "String"}}},
+  "topicDetail_participantRemoveFailed": "移除成员失败: {error}",
+  "@topicDetail_participantRemoveFailed": {"placeholders": {"error": {"type": "String"}}},
+  "topicDetail_removePrivateMessageParticipantConfirm": "确定要将 @{username} 移出此私信吗？",
+  "@topicDetail_removePrivateMessageParticipantConfirm": {"placeholders": {"username": {"type": "String"}}},
+  "topicDetail_removedPrivateMessageParticipant": "已将 @{username} 移出私信",
+  "@topicDetail_removedPrivateMessageParticipant": {"placeholders": {"username": {"type": "String"}}}
 }

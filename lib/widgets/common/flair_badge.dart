@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import '../../services/discourse_cache_manager.dart';
 import '../../services/emoji_handler.dart';
 import '../../utils/svg_utils.dart';
@@ -36,9 +37,9 @@ class FlairBadge extends StatelessWidget {
     if (flairUrl == null) return false;
     // 完整 URL、相对路径、emoji 名称都是图片
     return flairUrl!.startsWith('http://') ||
-           flairUrl!.startsWith('https://') ||
-           flairUrl!.startsWith('/') ||
-           (flairUrl!.startsWith(':') && flairUrl!.endsWith(':'));
+        flairUrl!.startsWith('https://') ||
+        flairUrl!.startsWith('/') ||
+        (flairUrl!.startsWith(':') && flairUrl!.endsWith(':'));
   }
 
   /// 检查是否是 SVG 图片
@@ -107,7 +108,9 @@ class FlairBadge extends StatelessWidget {
       // 有背景时图标缩小一点，留出内边距
       final iconSize = hasBgColor ? size * 0.6 : size * 0.8;
       // 图标颜色：优先使用 flairColor，否则有背景用白色，无背景用主题色
-      final iconColor = fgColor ?? (hasBgColor ? Colors.white : Theme.of(context).colorScheme.onSurface);
+      final iconColor =
+          fgColor ??
+          (hasBgColor ? Colors.white : Theme.of(context).colorScheme.onSurface);
 
       return Tooltip(
         message: flairName ?? '',
@@ -115,17 +118,10 @@ class FlairBadge extends StatelessWidget {
           width: size,
           height: size,
           decoration: hasBgColor
-              ? BoxDecoration(
-                  color: bgColor,
-                  shape: BoxShape.circle,
-                )
+              ? BoxDecoration(color: bgColor, shape: BoxShape.circle)
               : null,
           child: Center(
-            child: FaIcon(
-              iconData,
-              size: iconSize,
-              color: iconColor,
-            ),
+            child: FaIcon(iconData, size: iconSize, color: iconColor),
           ),
         ),
       );
@@ -135,7 +131,7 @@ class FlairBadge extends StatelessWidget {
     final imageSize = hasBgColor ? size * 0.7 : size;
     final fullUrl = _getFullFlairUrl();
 
-    // SVG 图片使用 DiscourseCacheManager 下载后用 jovial_svg 渲染
+    // SVG 图片使用全局站点资源缓存下载后用 jovial_svg 渲染
     if (_isSvg) {
       return _SvgFlairBadge(
         url: fullUrl,
@@ -147,21 +143,18 @@ class FlairBadge extends StatelessWidget {
       );
     }
 
-    // 普通图片使用 Image 渲染
+    // 普通图片使用全局站点资源缓存渲染；flair 不随账号变化。
     return Tooltip(
       message: flairName ?? '',
       child: Container(
         width: size,
         height: size,
         decoration: hasBgColor
-            ? BoxDecoration(
-                color: bgColor,
-                shape: BoxShape.circle,
-              )
+            ? BoxDecoration(color: bgColor, shape: BoxShape.circle)
             : null,
         child: Center(
           child: Image(
-            image: discourseImageProvider(fullUrl),
+            image: siteAssetImageProvider(fullUrl),
             width: imageSize,
             height: imageSize,
             fit: BoxFit.contain,
@@ -194,10 +187,13 @@ class AvatarWithFlair extends StatelessWidget {
   final String? flairName;
   final String? flairBgColor;
   final String? flairColor;
+
   /// Flair 徽章大小，需要调用方根据头像大小自行设置
   final double flairSize;
+
   /// Flair 徽章右偏移，需要调用方根据头像大小自行设置
   final double flairRight;
+
   /// Flair 徽章下偏移，需要调用方根据头像大小自行设置
   final double flairBottom;
 
@@ -239,7 +235,7 @@ class AvatarWithFlair extends StatelessWidget {
   }
 }
 
-/// SVG Flair 徽章组件（使用 DiscourseCacheManager 加载）
+/// SVG Flair 徽章组件（使用全局站点资源缓存加载）
 class _SvgFlairBadge extends StatefulWidget {
   final String url;
   final double size;
@@ -288,13 +284,13 @@ class _SvgFlairBadgeState extends State<_SvgFlairBadge> {
 
     try {
       final bytes = await BlobImageCache.fetch(
-        BlobImageCache.avatarBucket,
+        BlobImageCache.externalBucket,
         widget.url,
       );
       // 读取 SVG 内容并清理动画/不支持的元素
       String content = utf8.decode(bytes, allowMalformed: true);
       content = SvgUtils.sanitize(content);
-      
+
       if (mounted) {
         setState(() {
           _svgContent = content;
@@ -338,10 +334,7 @@ class _SvgFlairBadgeState extends State<_SvgFlairBadge> {
         width: widget.size,
         height: widget.size,
         decoration: widget.hasBgColor
-            ? BoxDecoration(
-                color: widget.bgColor,
-                shape: BoxShape.circle,
-              )
+            ? BoxDecoration(color: widget.bgColor, shape: BoxShape.circle)
             : null,
         child: Center(child: content),
       ),

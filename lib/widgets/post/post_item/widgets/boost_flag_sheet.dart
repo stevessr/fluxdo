@@ -10,8 +10,10 @@ import '../../../../utils/fluxdo_render_callbacks.dart';
 import '../../../common/app_bottom_sheet.dart';
 
 typedef BoostFlagTypesLoader = Future<List<FlagType>> Function();
-typedef BoostFlagSubmitter =
-    Future<void> Function(int flagTypeId, String? message);
+typedef BoostFlagSubmitter = Future<void> Function(
+  int flagTypeId,
+  String? message,
+);
 
 bool boostAlreadyReportedByCurrentUser({
   required Boost boost,

@@ -153,12 +153,21 @@ void main() {
       await tester.pumpWidget(host(post));
       await tester.pump();
 
-      expect(find.byType(LinearProgressIndicator), findsNWidgets(2),
-          reason: 'hasVoted=true 应显示条形结果,而不是选项列表');
-      expect(find.byIcon(Symbols.check_circle_rounded), findsOneWidget,
-          reason: '自己投的选项应有勾选标记');
-      expect(find.byIcon(Symbols.radio_button_unchecked_rounded), findsNothing,
-          reason: '不应回到未投票的选项界面');
+      expect(
+        find.byType(LinearProgressIndicator),
+        findsNWidgets(2),
+        reason: 'hasVoted=true 应显示条形结果,而不是选项列表',
+      );
+      expect(
+        find.byIcon(Symbols.check_circle_rounded),
+        findsOneWidget,
+        reason: '自己投的选项应有勾选标记',
+      );
+      expect(
+        find.byIcon(Symbols.radio_button_unchecked_rounded),
+        findsNothing,
+        reason: '不应回到未投票的选项界面',
+      );
     });
 
     testWidgets('未投票(对照组)→ 选项界面', (tester) async {
@@ -166,8 +175,10 @@ void main() {
       await tester.pump();
 
       expect(find.byType(LinearProgressIndicator), findsNothing);
-      expect(find.byIcon(Symbols.radio_button_unchecked_rounded),
-          findsNWidgets(2));
+      expect(
+        find.byIcon(Symbols.radio_button_unchecked_rounded),
+        findsNWidgets(2),
+      );
     });
   });
 }

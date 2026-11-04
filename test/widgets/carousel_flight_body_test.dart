@@ -55,9 +55,7 @@ void main() {
     return tester.getSize(find.byKey(const ValueKey('flight')));
   }
 
-  testWidgets('contain 源(t 钉在 1):飞行体填满盒子,内容完整不裁切', (
-    tester,
-  ) async {
+  testWidgets('contain 源(t 钉在 1):飞行体填满盒子,内容完整不裁切', (tester) async {
     final size = await mount(
       tester,
       box: const Size(225, 300), // 轮播落点(与图片同比例)

@@ -71,9 +71,8 @@ Future<void> _pump(
         supportedLocales: AppLocaleUtils.supportedLocales,
         home: Builder(
           builder: (context) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
             child: Scaffold(
               body: Center(
                 child: ContentActionsButton(provider: p, listenable: p),

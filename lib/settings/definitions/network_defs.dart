@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../../l10n/s.dart';
 import '../../pages/network_settings_page/widgets/cf_verify_card.dart';
+import '../../pages/network_settings_page/widgets/custom_hosts_card.dart';
 import '../../pages/network_settings_page/widgets/debug_tools_card.dart';
 import '../../pages/network_settings_page/widgets/doh_settings_card.dart';
 import '../../pages/network_settings_page/widgets/engine_card.dart';
@@ -10,6 +13,7 @@ import '../../pages/network_settings_page/widgets/eruda_card.dart';
 import '../../pages/network_settings_page/widgets/http_proxy_card.dart';
 import '../../pages/network_settings_page/widgets/rate_limit_card.dart';
 import '../../pages/network_settings_page/widgets/vpn_auto_toggle_card.dart';
+import '../../pages/network_settings_page/widgets/vpn_bypass_card.dart';
 import '../settings_model.dart';
 import '../../providers/preferences_provider.dart';
 
@@ -45,6 +49,13 @@ List<SettingsGroup> buildNetworkGroups(BuildContext context) {
           builder: (context, ref) => const DohSettingsCard(),
         ),
         CustomModel(
+          id: 'customHosts',
+          title: l10n.customHosts_title,
+          subtitle: l10n.customHosts_subtitle,
+          builder: (context, ref) =>
+              const SizedBox(width: double.infinity, child: CustomHostsCard()),
+        ),
+        CustomModel(
           id: 'httpProxy',
           title: l10n.httpProxy_title,
           subtitle: l10n.networkSettings_proxy,
@@ -65,6 +76,13 @@ List<SettingsGroup> buildNetworkGroups(BuildContext context) {
           subtitle: l10n.vpnToggle_subtitle,
           builder: (context, ref) => const VpnAutoToggleCard(),
         ),
+        if (Platform.isAndroid)
+          CustomModel(
+            id: 'vpnBypass',
+            title: l10n.vpnBypass_title,
+            subtitle: l10n.vpnBypass_subtitle,
+            builder: (context, ref) => const VpnBypassCard(),
+          ),
         CustomModel(
           id: 'cfVerify',
           title: l10n.cf_securityVerifyTitle,

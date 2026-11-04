@@ -70,7 +70,9 @@ class ConnectivityService {
     try {
       return await Connectivity().checkConnectivity();
     } catch (e) {
-      debugPrint('[Connectivity] checkConnectivity 失败，fallback to connected state: $e');
+      debugPrint(
+        '[Connectivity] checkConnectivity 失败，fallback to connected state: $e',
+      );
       return const [ConnectivityResult.other];
     }
   }
@@ -92,7 +94,9 @@ class ConnectivityService {
     _connectivitySub = _connectivity.onConnectivityChanged.listen(
       _onConnectivityChanged,
       onError: (Object error, StackTrace stackTrace) {
-        debugPrint('[Connectivity] 监听网络状态失败，fallback to connected state: $error');
+        debugPrint(
+          '[Connectivity] 监听网络状态失败，fallback to connected state: $error',
+        );
         _setConnected(true);
       },
     );
@@ -113,7 +117,8 @@ class ConnectivityService {
   Future<void> _onConnectivityChanged(List<ConnectivityResult> results) async {
     debugPrint('[Connectivity] onConnectivityChanged: $results');
     VpnAutoToggleService.instance.handleConnectivityChanged(results);
-    final hasNetwork = results.isNotEmpty &&
+    final hasNetwork =
+        results.isNotEmpty &&
         !results.every((r) => r == ConnectivityResult.none);
 
     if (!hasNetwork) {
@@ -191,12 +196,14 @@ class ConnectivityService {
       _retryInFlight = true;
       try {
         final result = await safeCheckConnectivity();
-        final hasNetwork = result.isNotEmpty &&
+        final hasNetwork =
+            result.isNotEmpty &&
             !result.every((r) => r == ConnectivityResult.none);
         if (hasNetwork) {
           if (enableServerPing) {
             final reachable = await pingServer();
-            if (reachable) _setConnected(true); // _setConnected(true) 内部会调用 _stopRetry
+            if (reachable)
+              _setConnected(true); // _setConnected(true) 内部会调用 _stopRetry
           } else {
             _setConnected(true);
           }
@@ -208,7 +215,10 @@ class ConnectivityService {
       }
       // 仍未恢复，增大退避间隔并继续重试
       if (!_isConnected) {
-        _retryBackoffSeconds = (_retryBackoffSeconds * 2).clamp(1, _maxRetryBackoffSeconds);
+        _retryBackoffSeconds = (_retryBackoffSeconds * 2).clamp(
+          1,
+          _maxRetryBackoffSeconds,
+        );
         _scheduleNextRetry();
       }
     });
@@ -228,7 +238,8 @@ class ConnectivityService {
       _setConnected(reachable);
     } else {
       final result = await safeCheckConnectivity();
-      final hasNetwork = result.isNotEmpty &&
+      final hasNetwork =
+          result.isNotEmpty &&
           !result.every((r) => r == ConnectivityResult.none);
       _setConnected(hasNetwork);
     }

@@ -44,6 +44,13 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>FlutterDeepLinkingEnabled</key>
 	<false/>
+  <!-- canLaunchUrl 发现已安装的第三方浏览器，选中后按其 URL scheme 启动。 -->
+  <key>LSApplicationQueriesSchemes</key>
+  <array>
+    <string>googlechromes</string>
+    <string>firefox</string>
+    <string>microsoft-edge-https</string>
+  </array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>

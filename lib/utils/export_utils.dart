@@ -1,6 +1,7 @@
 import 'package:cross_file/cross_file.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+
 import '../l10n/s.dart';
 import '../models/topic.dart';
 import '../services/discourse/discourse_service.dart';
@@ -11,6 +12,7 @@ import 'share_utils.dart';
 enum ExportScope {
   /// 仅主帖
   firstPostOnly,
+
   /// 全部帖子
   allPosts,
 }
@@ -201,7 +203,9 @@ class ExportUtils {
         allPosts.addAll(postStream.posts);
         onProgress?.call(allPosts.length, total);
       } catch (e) {
-        debugPrint('[ExportUtils] getPosts failed for batch starting at $i: $e');
+        debugPrint(
+          '[ExportUtils] getPosts failed for batch starting at $i: $e',
+        );
         // 继续尝试下一批
       }
     }
@@ -222,7 +226,9 @@ class ExportUtils {
     // 标题
     buffer.writeln('# ${detail.title}');
     buffer.writeln();
-    buffer.writeln('> 来源: ${AppConstants.baseUrl}/t/${detail.slug}/${detail.id}');
+    buffer.writeln(
+      '> 来源: ${AppConstants.baseUrl}/t/${detail.slug}/${detail.id}',
+    );
     buffer.writeln();
     buffer.writeln('---');
     buffer.writeln();
@@ -273,7 +279,9 @@ class ExportUtils {
     buffer.writeln('<html lang="zh-CN">');
     buffer.writeln('<head>');
     buffer.writeln('<meta charset="UTF-8">');
-    buffer.writeln('<meta name="viewport" content="width=device-width, initial-scale=1.0">');
+    buffer.writeln(
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+    );
     buffer.writeln('<title>${_escapeHtml(detail.title)}</title>');
     buffer.writeln('<style>');
     buffer.writeln(_htmlStyles);
@@ -284,7 +292,9 @@ class ExportUtils {
     // 标题
     buffer.writeln('<header>');
     buffer.writeln('<h1>${_escapeHtml(detail.title)}</h1>');
-    buffer.writeln('<p class="source">来源: <a href="${AppConstants.baseUrl}/t/${detail.slug}/${detail.id}">${AppConstants.baseUrl}/t/${detail.slug}/${detail.id}</a></p>');
+    buffer.writeln(
+      '<p class="source">来源: <a href="${AppConstants.baseUrl}/t/${detail.slug}/${detail.id}">${AppConstants.baseUrl}/t/${detail.slug}/${detail.id}</a></p>',
+    );
     buffer.writeln('</header>');
 
     // 帖子内容
@@ -292,7 +302,9 @@ class ExportUtils {
       buffer.writeln('<article class="post">');
       buffer.writeln('<div class="post-header">');
       buffer.writeln('<span class="post-number">#${post.postNumber}</span>');
-      buffer.writeln('<span class="username">@${_escapeHtml(post.username)}</span>');
+      buffer.writeln(
+        '<span class="username">@${_escapeHtml(post.username)}</span>',
+      );
       buffer.writeln('</div>');
       buffer.writeln('<div class="post-content">');
       buffer.writeln(post.cooked);

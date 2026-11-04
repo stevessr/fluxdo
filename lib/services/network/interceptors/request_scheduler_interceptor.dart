@@ -181,8 +181,7 @@ class RequestSchedulerInterceptor extends Interceptor {
     // 进入挑战循环。
     //
     // 仅 CfChallengeInterceptor 内部 retry（标记 skipCfBlock=true）能绕过。
-    if (!options.spec.skipCfBlock &&
-        CfChallengeService().isVerifying) {
+    if (!options.spec.skipCfBlock && CfChallengeService().isVerifying) {
       handler.reject(
         DioException(
           requestOptions: options,

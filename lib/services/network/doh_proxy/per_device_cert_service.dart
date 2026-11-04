@@ -130,7 +130,8 @@ class PerDeviceCertService {
   /// 生成 .mobileconfig XML
   String _buildMobileConfig(String certPem) {
     // 从 PEM 中提取 base64 编码的证书数据
-    final lines = certPem.split('\n')
+    final lines = certPem
+        .split('\n')
         .where((line) => !line.startsWith('-----') && line.trim().isNotEmpty)
         .join('');
 

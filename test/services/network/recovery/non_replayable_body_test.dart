@@ -110,11 +110,10 @@ Dio _buildDio(_ScriptedAdapter adapter) {
 class _Reply {
   _Reply(this.statusCode, this.body, [this.headers = const {}]);
 
-  factory _Reply.rateLimited({required String retryAfter}) => _Reply(
-    429,
-    '{"errors":["rate limited"]}',
-    {'retry-after': [retryAfter]},
-  );
+  factory _Reply.rateLimited({required String retryAfter}) =>
+      _Reply(429, '{"errors":["rate limited"]}', {
+        'retry-after': [retryAfter],
+      });
 
   final int statusCode;
   final String body;

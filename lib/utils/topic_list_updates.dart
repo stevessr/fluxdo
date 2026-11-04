@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import '../models/topic.dart';
 import '../providers/message_bus/topic_list_events.dart';
 import '../providers/topic_list/filter_provider.dart';
@@ -28,8 +29,12 @@ class TopicListUpdateQuery {
       (type == 'new_topic' && (!newNewView || subset != NewSubset.replies)) ||
           (type == 'unread' && newNewView && subset != NewSubset.topics),
     TopicListFilter.unread => type == 'unread',
+    TopicListFilter.read => type == 'read',
     TopicListFilter.unseen => type == 'new_topic' || type == 'unread',
-    TopicListFilter.top || TopicListFilter.hot => false,
+    TopicListFilter.solved ||
+    TopicListFilter.unsolved ||
+    TopicListFilter.top ||
+    TopicListFilter.hot => false,
   };
 
   bool sameRequest(TopicListUpdateQuery other) =>

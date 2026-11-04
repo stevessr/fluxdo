@@ -46,10 +46,7 @@ void main() {
       // 相对路径没有 host，不能当精选链接
       expect(DiscourseUrlParser.parseTitleUrl('/t/topic/123'), isNull);
       // javascript: 等危险协议必须拦下
-      expect(
-        DiscourseUrlParser.parseTitleUrl('javascript:alert(1)'),
-        isNull,
-      );
+      expect(DiscourseUrlParser.parseTitleUrl('javascript:alert(1)'), isNull);
     });
 
     test('协议大小写不敏感，且保留原始 URL 形态', () {
@@ -80,6 +77,73 @@ void main() {
       );
 
       expect(result?.absoluteUrl, 'https://example.com/a?b=1');
+    });
+  });
+
+  group('站内插件链接解析', () {
+    test('解析徽章 ID 和 slug，并把 Discourse 的 - 占位符归一化', () {
+      final placeholder = DiscourseUrlParser.parseBadge(
+        'https://linux.do/badges/128/-',
+      );
+      expect(placeholder?.badgeId, 128);
+      expect(placeholder?.slug, isNull);
+
+      final named = DiscourseUrlParser.parseBadge('/badges/42/great-reader');
+      expect(named?.badgeId, 42);
+      expect(named?.slug, 'great-reader');
+
+      expect(DiscourseUrlParser.parseBadge('/badges/not-a-number/-'), isNull);
+    });
+
+    test('解析 cakeday 类型和已原生支持的过滤器', () {
+      final birthday = DiscourseUrlParser.parseCakeday(
+        '/cakeday/birthdays/today',
+      );
+      expect(birthday?.birthdays, isTrue);
+      expect(birthday?.filter, 'today');
+
+      final anniversary = DiscourseUrlParser.parseCakeday(
+        'https://linux.do/cakeday/anniversaries/upcoming',
+      );
+      expect(anniversary?.birthdays, isFalse);
+      expect(anniversary?.filter, 'upcoming');
+
+      // 官方两个大类处于同一页面层，四个时间维度均可原生打开。
+      final all = DiscourseUrlParser.parseCakeday(
+        '/cakeday/anniversaries/all?month=7',
+      );
+      expect(all?.birthdays, isFalse);
+      expect(all?.filter, 'all');
+      expect(all?.month, 7);
+
+      final birthdayAll = DiscourseUrlParser.parseCakeday(
+        'https://linux.do/cakeday/birthdays/all?month=12',
+      );
+      expect(birthdayAll?.birthdays, isTrue);
+      expect(birthdayAll?.filter, 'all');
+      expect(birthdayAll?.month, 12);
+
+      final invalidMonth = DiscourseUrlParser.parseCakeday(
+        '/cakeday/birthdays/all?month=13',
+      );
+      expect(invalidMonth?.filter, 'all');
+      expect(invalidMonth?.month, isNull);
+      expect(
+        DiscourseUrlParser.parseCakeday('/cakeday/birthdays')?.filter,
+        isNull,
+      );
+      expect(DiscourseUrlParser.parseCakeday('/cakeday/nope/today'), isNull);
+    });
+
+    test('识别 discourse-events 近期活动页面', () {
+      expect(DiscourseUrlParser.isUpcomingEvents('/upcoming-events'), isTrue);
+      expect(
+        DiscourseUrlParser.isUpcomingEvents(
+          'https://linux.do/upcoming-events/month/2026/8/31',
+        ),
+        isTrue,
+      );
+      expect(DiscourseUrlParser.isUpcomingEvents('/latest'), isFalse);
     });
   });
 }

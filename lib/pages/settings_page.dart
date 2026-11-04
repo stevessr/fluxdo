@@ -4,24 +4,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/s.dart';
 import '../models/shortcut_binding.dart';
+import '../services/pico_vr_service.dart';
 import '../providers/shortcut_provider.dart';
 import '../providers/theme_provider.dart';
 import '../settings/search/settings_search_index.dart';
 import '../utils/appearance_warmup.dart';
 import '../utils/platform_utils.dart';
 import '../utils/responsive.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../widgets/esc_fallback_observer.dart';
 import '../widgets/layout/master_detail_layout.dart';
 import 'about_page.dart';
+import 'account_manage_page.dart';
 import 'appearance_page.dart';
 import 'bottom_nav_settings_page.dart';
+import 'custom_settings_page.dart';
 import 'data_management_page.dart';
 import 'network_settings_page/network_settings_page.dart';
 import 'notion_settings_page.dart';
 import 'preferences_page.dart';
 import 'reading_settings_page.dart';
 import 'shortcut_settings_page.dart';
+import 'stevessr_generator_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   static const double parallelMasterWidth = PaneBreakpoints.settingsMasterWidth;
@@ -161,7 +167,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
       body: Column(
         children: [
-          // 搜索栏
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: TextField(
@@ -198,7 +203,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               style: theme.textTheme.bodyMedium,
             ),
           ),
-          // 内容区域
           Expanded(
             child: isSearching
                 ? _buildSearchResults(theme)
@@ -258,7 +262,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  /// 搜索结果（自动从数据声明派生）
   Widget _buildSearchResults(ThemeData theme) {
     final allResults = buildSearchIndex(context);
     final q = _query.toLowerCase();
@@ -336,13 +339,60 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  /// 默认分类列表
   Widget _buildCategoryList(ThemeData theme, AppLocalizations l10n) {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       children: [
         SegmentedCardGroup(
           children: [
+
+            FutureBuilder<PicoVrCapabilities>(
+              future: PicoVrService.instance.capabilities,
+              builder: (context, snapshot) {
+                final capabilities = snapshot.data;
+                if (capabilities == null ||
+                    !capabilities.isPico ||
+                    !capabilities.supportsMultipleWindows) {
+                  return const SizedBox.shrink();
+                }
+                final chinese =
+                    Localizations.localeOf(context).languageCode == 'zh';
+                return _buildOptionTile(
+                  icon: Icons.open_in_new_rounded,
+                  iconColor: Colors.indigo,
+                  title: chinese
+                      ? 'PICO VR · 新建窗口（最多${capabilities.maxWindows}个）'
+                      : 'PICO VR · New window (max ${capabilities.maxWindows})',
+                  onTap: () async {
+                    final opened = await PicoVrService.instance.openNewWindow();
+                    if (!context.mounted || opened) return;
+                    final status =
+                        await PicoVrService.instance.getWindowStatus();
+                    if (!context.mounted) return;
+                    final atCapacity = status?.isAtCapacity == true;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          atCapacity
+                              ? (chinese
+                                  ? '已达到最多${capabilities.maxWindows}个窗口，请先关闭一个'
+                                  : 'Maximum of ${capabilities.maxWindows} windows reached; close one first')
+                              : (chinese
+                                  ? 'PICO 系统未能创建新的原生窗口'
+                                  : 'PICO could not create a native window'),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+            _buildOptionTile(
+              icon: Symbols.manage_accounts_rounded,
+              iconColor: Colors.green,
+              title: l10n.accountManage_title,
+              onTap: () => _openSettingsPage((_) => const AccountManagePage()),
+            ),
             _buildOptionTile(
               icon: Symbols.color_lens_rounded,
               iconColor: Colors.teal,
@@ -355,6 +405,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: l10n.settings_reading,
               onTap: () =>
                   _openSettingsPage((_) => const ReadingSettingsPage()),
+            ),
+            _buildOptionTile(
+              icon: Symbols.dashboard_customize_rounded,
+              iconColor: Colors.indigo,
+              title: CustomSettingsPage.titleFor(context),
+              onTap: () => _openSettingsPage((_) => const CustomSettingsPage()),
             ),
             _buildOptionTile(
               icon: Symbols.network_check_rounded,
@@ -388,7 +444,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: l10n.notion_title,
               onTap: () => _openSettingsPage((_) => const NotionSettingsPage()),
             ),
-            // 快捷键（仅桌面端）
             if (PlatformUtils.isDesktop)
               _buildOptionTile(
                 icon: Symbols.keyboard_rounded,
@@ -397,6 +452,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onTap: () =>
                     _openSettingsPage((_) => const ShortcutSettingsPage()),
               ),
+            _buildOptionTile(
+              icon: Icons.auto_awesome_rounded,
+              iconColor: Colors.pink,
+              title: l10n.title,
+              onTap: () =>
+                  _openSettingsPage((_) => const StevessrGeneratorPage()),
+            ),
             _buildOptionTile(
               icon: Symbols.info_rounded,
               iconColor: Colors.indigo,

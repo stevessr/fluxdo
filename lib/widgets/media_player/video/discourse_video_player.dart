@@ -46,11 +46,11 @@ class DiscourseVideoPlayer extends StatefulWidget {
 
   /// 错误回调
   final Widget Function(BuildContext context, String url, dynamic error)?
-      errorBuilder;
+  errorBuilder;
 
   /// 加载中回调
   final Widget Function(BuildContext context, String url, Widget child)?
-      loadingBuilder;
+  loadingBuilder;
 
   /// 是否循环播放
   final bool loop;
@@ -95,7 +95,7 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
     );
     _displayAspectRatio = widget.autoResize
         ? (VideoSessionRegistry.knownAspectRatios[widget.url] ??
-            widget.aspectRatio)
+              widget.aspectRatio)
         : widget.aspectRatio;
     unawaited(_initSession());
   }
@@ -178,14 +178,13 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
     }
 
     try {
-      await session.controller
-          .initialize()
-          .timeout(const Duration(seconds: 15));
+      await session.controller.initialize().timeout(
+        const Duration(seconds: 15),
+      );
       await session.controller.setLooping(widget.loop);
       // 位置记忆:初始化完成即静默 seek,封面帧直接停在续播点;
       // 「已从 xx:xx 继续播放」提示留给用户首次点播放时(控制层)
-      final resumed =
-          await PlaybackPositionStore.instance.restore(widget.url);
+      final resumed = await PlaybackPositionStore.instance.restore(widget.url);
       if (resumed != null) {
         session.resumedPosition = resumed;
         await session.controller.seekTo(resumed);
@@ -216,10 +215,13 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
   int _buildFingerprint() {
     final value = _session?.controller.value;
     if (value == null) return 0;
-    final posterVisible =
-        !value.isPlaying && value.position == Duration.zero;
-    return Object.hash(value.isInitialized, value.isPlaying, posterVisible,
-        value.aspectRatio);
+    final posterVisible = !value.isPlaying && value.position == Duration.zero;
+    return Object.hash(
+      value.isInitialized,
+      value.isPlaying,
+      posterVisible,
+      value.aspectRatio,
+    );
   }
 
   int _lastFingerprint = 0;
@@ -322,9 +324,9 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
             if (widget.poster != null)
               IgnorePointer(
                 child: AnimatedOpacity(
-                  opacity: (!session.controller.value.isPlaying &&
-                          session.controller.value.position ==
-                              Duration.zero)
+                  opacity:
+                      (!session.controller.value.isPlaying &&
+                          session.controller.value.position == Duration.zero)
                       ? 1
                       : 0,
                   duration: const Duration(milliseconds: 250),

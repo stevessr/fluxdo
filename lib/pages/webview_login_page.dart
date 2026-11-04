@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../constants.dart';
 import '../providers/preferences_provider.dart';
 import '../services/credential_store_service.dart';
@@ -25,7 +26,9 @@ import '../services/webview_session_cookie_refresh_service.dart';
 import '../services/windows_webview_environment_service.dart';
 import '../services/log/log_writer.dart';
 import '../services/login_ready_coordinator.dart';
+
 import 'package:common_ui/common_ui.dart';
+
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
 
@@ -144,9 +147,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       body: Column(
         children: [
           if (_isLoading || _isCompletingLogin)
-            M3eLinearProgress(
-              value: _isCompletingLogin ? null : _progress,
-            ),
+            M3eLinearProgress(value: _isCompletingLogin ? null : _progress),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -253,9 +254,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                         // Android: 启用 WebAuthn/PassKey 支持
                         if (Platform.isAndroid) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
-                            const MethodChannel(
-                              'com.fluxdo/webauthn',
-                            ).invokeMethod('enableWebAuthentication');
+                            const MethodChannel('com.fluxdo/webauthn')
+                                .invokeMethod('enableWebAuthentication');
                           });
                         }
                       },
@@ -312,9 +312,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                 if (_isCompletingLogin)
                   Positioned.fill(
                     child: ColoredBox(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surface.withValues(alpha: 0.88),
+                      color: Theme.of(context).colorScheme.surface
+                          .withValues(alpha: 0.88),
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -534,7 +533,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       }
 
       _loginHandled = true;
-      final finalToken = await _finalizeLoginBeforeExit(
+      final (finalToken, loginGeneration) = await _finalizeLoginBeforeExit(
         controller,
         username: username,
         currentUrl: currentUrl,
@@ -546,13 +545,12 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
         requestGeneration: AuthSession().generation,
         token: finalToken,
       );
+      if (!AuthSession().isValid(loginGeneration)) return;
       String? pageHtml;
       try {
-        pageHtml =
-            await controller.evaluateJavascript(
-                  source: 'window.__rawPreloaded || null',
-                )
-                as String?;
+        pageHtml = await controller.evaluateJavascript(
+          source: 'window.__rawPreloaded || null',
+        ) as String?;
       } catch (_) {}
 
       await _finalizeLoginBootstrap(
@@ -560,6 +558,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
         token: finalToken,
         pageHtml: pageHtml,
         browserSessionSynced: browserSessionSynced,
+        requestGeneration: loginGeneration,
       );
 
       if (mounted) {
@@ -571,24 +570,31 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
     }
   }
 
-  Future<String> _finalizeLoginBeforeExit(
+  Future<(String, int)> _finalizeLoginBeforeExit(
     InAppWebViewController controller, {
     required String username,
     required String? currentUrl,
     required String webViewToken,
   }) async {
-    await _service.saveUsername(username);
-    await _syncCsrfFromPage(controller);
-
     // 先切断旧请求，防止登录收口期间旧响应的 Set-Cookie 写入竞争
-    AuthSession().advance();
-    final loginGeneration = AuthSession().generation;
+    final loginGeneration = AuthSession().advance();
+    await _service.saveUsername(username, requestGeneration: loginGeneration);
+    if (!AuthSession().isValid(loginGeneration)) {
+      throw StateError('登录收口期间会话已切换');
+    }
+    await _syncCsrfFromPage(controller);
+    if (!AuthSession().isValid(loginGeneration)) {
+      throw StateError('登录收口期间会话已切换');
+    }
 
     await _syncAuthCookiesFromWebView(
       controller,
       currentUrl: currentUrl,
       requestGeneration: loginGeneration,
     );
+    if (!AuthSession().isValid(loginGeneration)) {
+      throw StateError('登录 Cookie 同步期间会话已切换');
+    }
 
     final jarToken = await _cookieJar.getTToken();
     final finalToken = (jarToken != null && jarToken.isNotEmpty)
@@ -620,7 +626,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
     }
 
     _service.setToken(finalToken);
-    return finalToken;
+    return (finalToken, loginGeneration);
   }
 
   Future<void> _syncAuthCookiesFromWebView(
@@ -826,6 +832,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
     required String token,
     String? pageHtml,
     required bool browserSessionSynced,
+    required int requestGeneration,
   }) async {
     // PreloadedDataService.refresh 底层 Dio 请求没有显式超时，极端网络下
     // 可能挂住很久；这里整段限时 8 秒，超时也要兜底广播登录成功，
@@ -841,6 +848,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
           await PreloadedDataService().refresh();
         },
         notifyLoginReady: (finalToken) {
+          if (!AuthSession().isValid(requestGeneration)) return;
           loginReadyNotified = true;
           _service.onLoginSuccess(
             finalToken,
@@ -882,7 +890,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
     } catch (e) {
       debugPrint('[Login] 登录态收尾失败: $e');
     } finally {
-      if (!loginReadyNotified) {
+      if (!loginReadyNotified && AuthSession().isValid(requestGeneration)) {
         _service.onLoginSuccess(
           token,
           forceBrowserSessionSync: !browserSessionSynced,

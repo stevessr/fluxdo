@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../../../l10n/s.dart';
 import '../../../../models/topic.dart';
 import '../../../../utils/fluxdo_render_callbacks.dart';
@@ -14,7 +15,7 @@ class PostFlagSheet extends StatefulWidget {
   final int postId;
   final String postUsername;
   final DiscourseService service;
-  final VoidCallback? onSuccess;
+  final ValueChanged<FlagType>? onSuccess;
 
   const PostFlagSheet({
     super.key,
@@ -97,8 +98,9 @@ class _PostFlagSheetState extends State<PostFlagSheet> {
       );
 
       if (mounted) {
+        final submittedType = _selectedType!;
         Navigator.pop(context);
-        widget.onSuccess?.call();
+        widget.onSuccess?.call(submittedType);
       }
     } catch (e) {
       if (mounted) {
@@ -248,7 +250,9 @@ class _PostFlagSheetState extends State<PostFlagSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  isSelected ? Symbols.radio_button_checked_rounded : Symbols.radio_button_unchecked_rounded,
+                  isSelected
+                      ? Symbols.radio_button_checked_rounded
+                      : Symbols.radio_button_unchecked_rounded,
                   size: 20,
                   color: isSelected
                       ? theme.colorScheme.primary

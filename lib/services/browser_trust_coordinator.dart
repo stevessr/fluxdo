@@ -75,7 +75,6 @@ class BrowserTrustCoordinator {
   BrowserTrustCoordinator._();
   static final BrowserTrustCoordinator instance = BrowserTrustCoordinator._();
 
-  static const Duration _trustedClearanceMinTtl = Duration(minutes: 10);
   static const Duration _requestClearanceMinTtl = Duration(seconds: 30);
   static const Duration _webViewPreloadTimeout = Duration(seconds: 25);
   static const Duration _domSnapshotTimeout = Duration(seconds: 12);
@@ -85,6 +84,12 @@ class BrowserTrustCoordinator {
   static const Duration _diagnosticBackgroundPauseDelay = Duration(seconds: 60);
   static const Duration _webViewTeardownCooldown = Duration(milliseconds: 1200);
 
+  // Precursor keeper 会创建常驻真实同源 WebView。它不属于首屏/预加载依赖，
+  // 如果在 preload/browser bootstrap 刚结束时立刻启动，会和首批 topic/feed
+  // 请求争抢网络、CPU 与平台 WebView 线程。留出一个短暂的启动后空窗；期间
+  // 真遇到 CF 拒绝仍由现有 challenge interceptor 立即恢复，不牺牲正确性。
+  static const Duration _clearanceRefreshStartupDelay = Duration(seconds: 5);
+
   final CookieJarService _jar = CookieJarService();
   final PreloadedDataService _preload = PreloadedDataService();
 
@@ -92,7 +97,9 @@ class BrowserTrustCoordinator {
   Future<bool>? _activeBrowserTrust;
   Future<bool>? _activeBrowserTrustGate;
   Timer? _backgroundPauseTimer;
+  Timer? _clearanceRefreshStartTimer;
   String? _pendingClearanceRefreshReason;
+  String? _scheduledClearanceRefreshReason;
 
   /// 导航 context,供 bootstrap 被 CF 挡下时主动发起 CF 验证(showManualVerify)。
   BuildContext? _navigatorContext;
@@ -265,26 +272,67 @@ class BrowserTrustCoordinator {
   }
 
   void _startClearanceRefreshNow({required String reason}) {
-    _log('start cf_clearance refresh: reason=$reason');
-    CfClearanceRefreshService().start();
+    _scheduledClearanceRefreshReason = reason;
+    if (_clearanceRefreshStartTimer != null) {
+      _log('reuse scheduled cf_clearance refresh: reason=$reason');
+      return;
+    }
+
+    _log(
+      'schedule cf_clearance refresh after startup quiet window: '
+      'reason=$reason delay=${_clearanceRefreshStartupDelay.inSeconds}s',
+    );
+    _clearanceRefreshStartTimer = Timer(_clearanceRefreshStartupDelay, () {
+      _clearanceRefreshStartTimer = null;
+      final scheduledReason = _scheduledClearanceRefreshReason ?? reason;
+      _scheduledClearanceRefreshReason = null;
+
+      // preload / session bootstrap 仍在跑时绝不创建第二个真实页面 WebView。
+      // 让当前任务结束后的既有 pending 路径重新调度，避免平台线程与首批
+      // feed 请求发生资源竞争。
+      if (_activePreload != null || _activeBrowserTrust != null) {
+        _pendingClearanceRefreshReason = scheduledReason;
+        _log(
+          'defer scheduled cf_clearance refresh until startup work settles: '
+          'reason=$scheduledReason',
+        );
+        return;
+      }
+      if (_preload.currentUserSync == null) {
+        _log('skip scheduled cf_clearance refresh: not logged in');
+        return;
+      }
+
+      _log('start cf_clearance refresh: reason=$scheduledReason');
+      CfClearanceRefreshService().start();
+    });
   }
 
   Future<void> _ensurePreloadedInternal({required String reason}) async {
-    final nativeTrusted = await _isNativePreloadTrusted();
-    if (nativeTrusted) {
+    // A missing/short-lived cf_clearance is not proof that the homepage needs a
+    // browser. Discourse may answer native HTTP normally, and the preload cache
+    // interceptor may satisfy this request without touching the network at all.
+    // Probe native first and suppress CF UI for this one attempt; a genuine CF
+    // rejection falls through to the startup WebView below.
+    if (!_clearanceRecentlyRejected) {
       _lastPreloadPath = BrowserTrustPreloadPath.native;
-      _log('preload path=native reason=$reason');
+      _log('preload path=native_probe reason=$reason');
       try {
-        await _preload.ensureLoaded();
-        _log('native preload success reason=$reason');
-        _startBrowserTrustAfterNativePreload(reason: reason);
+        await _preload.ensureLoaded(suppressCfChallenge: true);
+        _log('native preload fast path success reason=$reason');
+        _startBrowserTrustAfterPreload(reason: reason, path: 'native');
         return;
       } catch (e) {
         _log(
-          'trusted native preload failed, switching to startup WebView: $e',
+          'native preload fast path unavailable, switching to startup WebView: $e',
           level: 'warning',
         );
       }
+    } else {
+      _log(
+        'skip native preload probe after recent CF rejection reason=$reason',
+        level: 'warning',
+      );
     }
 
     _log('preload path=startup_webview reason=$reason');
@@ -307,7 +355,7 @@ class BrowserTrustCoordinator {
     if (hydrated) {
       _lastPreloadPath = BrowserTrustPreloadPath.webView;
       _log('startup WebView preload success reason=$reason');
-      _startClearanceRefreshIfLoggedIn();
+      _startBrowserTrustAfterPreload(reason: reason, path: 'webview');
       return;
     }
 
@@ -318,27 +366,27 @@ class BrowserTrustCoordinator {
     );
     await _preload.ensureLoaded();
     _log('fallback native preload success reason=$reason');
-    _startBrowserTrustAfterNativePreload(reason: reason);
+    _startBrowserTrustAfterPreload(reason: reason, path: 'native');
   }
 
-  void _startBrowserTrustAfterNativePreload({required String reason}) {
+  void _startBrowserTrustAfterPreload({
+    required String reason,
+    required String path,
+  }) {
     if (!_preload.isLoaded) return;
     if (_preload.currentUserSync == null) {
-      _log('skip native preload browser trust settle: not logged in');
+      _log('skip $path preload browser trust settle: not logged in');
       return;
     }
 
     unawaited(() async {
       try {
         final synced = await ensureBrowserTrust(
-          reason: '$reason:native_preload_settle',
+          reason: '$reason:${path}_preload_settle',
         );
-        _log('native preload browser trust settled=$synced reason=$reason');
+        _log('$path preload browser trust settled=$synced reason=$reason');
       } catch (e) {
-        _log(
-          'native preload browser trust settle failed: $e',
-          level: 'warning',
-        );
+        _log('$path preload browser trust settle failed: $e', level: 'warning');
       }
     }());
   }
@@ -581,63 +629,43 @@ class BrowserTrustCoordinator {
         if (cancellation.isCancelled) return false;
       }
 
-      loadCompleter = Completer<void>();
       await _navigateToHome(c);
       if (cancellation.isCancelled) return false;
-      await _waitForLoad(loadCompleter, cancellation: cancellation);
-      if (cancellation.isCancelled) return false;
-      _log('startup WebView home loaded, syncing cookies reason=$reason');
-      await _syncCookiesFromController(c);
-      if (cancellation.isCancelled) return false;
 
+      // data-preloaded 在 HTML 解析阶段就会出现，不需要等待 onLoadStop。
+      // onLoadStop 还会被图片、插件 JS、字体等非首屏依赖拖住，过去最多白等 8s。
+      // 直接轮询 document-start 注入脚本捕获的快照，拿到后再同步 response
+      // cookies；此时主文档已经解析到 data-preloaded，cookie 也已经落入 WebView。
       final html = await _readPreloadedSnapshot(c, cancellation: cancellation);
       if (cancellation.isCancelled) return false;
-      final hydrated =
-          html != null &&
-          html.isNotEmpty &&
-          await _preload.hydrateFromHtml(html);
+      final hasSnapshot = html != null && html.isNotEmpty;
+      _log(
+        'startup WebView snapshot captured=$hasSnapshot, '
+        'syncing cookies + hydrating reason=$reason',
+      );
+
+      // Cookie boundary sync and preload JSON hydration are independent once the
+      // document-start snapshot has been captured. Start both immediately and
+      // wait for both before disposing the WebView; this turns two serial chunks
+      // on the startup critical path into max(sync, hydrate) instead of their sum.
+      final cookieSyncFuture = _syncCookiesFromController(c);
+      final hydrateFuture = hasSnapshot
+          ? _preload.hydrateFromHtml(html)
+          : Future<bool>.value(false);
+      final hydrated = await hydrateFuture;
+      await cookieSyncFuture;
       if (cancellation.isCancelled) return false;
       _log(
         'startup WebView snapshot html=${html != null && html.isNotEmpty} hydrated=$hydrated reason=$reason',
         level: hydrated ? 'info' : 'warning',
       );
 
-      final tToken = await _jar.getTToken();
-      if (tToken != null && tToken.isNotEmpty) {
-        if (cancellation.isCancelled) return false;
-        _log('startup WebView session bootstrap begin reason=$reason');
-        final bootstrapResult = await WebViewSessionCookieRefreshService
-            .instance
-            .runOnController(
-              c,
-              reason: '$reason:startup_webview',
-              pluginCandidates: _preload.pluginCandidatesSync,
-              isCancelled: () => cancellation.isCancelled,
-              cancellationSignal: cancellation.whenCancelled,
-            );
-        if (cancellation.isCancelled) return false;
-        final bootstrapped = bootstrapResult.ok;
-        await _syncCookiesFromController(c);
-        if (cancellation.isCancelled) return false;
-        final runtimeDetails = await _jar.getCookieDiagnosticsForRequest(
-          Uri.parse(AppConstants.baseUrl),
-          names: const {'_rt'},
-        );
-        final hasRuntimeCookie = runtimeDetails.any(
-          (cookie) => (cookie['valueLength'] as int? ?? 0) > 0,
-        );
-        if (bootstrapped && hasRuntimeCookie) {
-          WebViewSessionCookieRefreshService.instance.markSynced(
-            reason: '$reason:startup_webview',
-            tToken: await _jar.getTToken(),
-            hasRuntimeCookie: hasRuntimeCookie,
-          );
-        }
-        _log('startup WebView session bootstrap end reason=$reason');
-      } else {
-        _log('startup WebView session bootstrap skipped: no _t');
-      }
-
+      // data-preloaded 一旦 hydrate 成功，首页所需数据已经可用。Fingerprint
+      // session bootstrap 最坏还会单独占用 18s，并且后面还有第二次 cookie
+      // 同步和 _rt 诊断；这些属于“浏览器会话收敛”，不是首屏数据依赖。
+      // 这里立即结束临时 preload WebView。finally 完成 dispose + cooldown 后，
+      // _ensurePreloadedInternal 再通过 ensureBrowserTrust() 后台补齐 bootstrap，
+      // 同时保留 request gate，首波业务请求仍可在有上限的情况下等待它。
       return hydrated;
     } catch (e) {
       _log('startup WebView preload failed: $e', level: 'warning');
@@ -648,7 +676,10 @@ class BrowserTrustCoordinator {
       } catch (e) {
         _log('dispose startup WebView failed: $e', level: 'warning');
       }
-      if (platformViewStarted) {
+      // 1.2s 冷却是为 Windows WebView2 Controller 的异步真实析构保留的；
+      // Android/iOS/macOS/Linux 的 dispose Future 已经是此路径的 teardown 边界，
+      // 不再让其它平台为 Windows 的稳定性 workaround 固定多等 1.2 秒。
+      if (platformViewStarted && io.Platform.isWindows) {
         await Future<void>.delayed(_webViewTeardownCooldown);
       }
       FrameJankMonitor.logEvent('WEBVIEW', 'BrowserTrust dispose');
@@ -667,25 +698,15 @@ class BrowserTrustCoordinator {
     );
   }
 
-  Future<void> _waitForLoad(
-    Completer<void> loadCompleter, {
-    required BrowserTrustRunCancellation cancellation,
-  }) async {
-    try {
-      await Future.any<void>([
-        loadCompleter.future.timeout(_originLoadTimeout),
-        cancellation.whenCancelled,
-      ]);
-    } on TimeoutException {
-      _log('startup WebView load timeout, continue', level: 'warning');
-    }
-  }
-
   Future<String?> _readPreloadedSnapshot(
     InAppWebViewController controller, {
     required BrowserTrustRunCancellation cancellation,
   }) async {
     final deadline = DateTime.now().add(_domSnapshotTimeout);
+    // The preload element usually appears very early in HTML parsing. Poll
+    // aggressively for the first few hundred milliseconds, then back off to the
+    // old 250ms cadence so slow/CF pages do not spam the JS bridge.
+    var pollDelay = const Duration(milliseconds: 25);
     while (!cancellation.isCancelled && DateTime.now().isBefore(deadline)) {
       try {
         final raw = await controller.evaluateJavascript(
@@ -698,9 +719,13 @@ class BrowserTrustCoordinator {
         }
       } catch (_) {}
       await Future.any<void>([
-        Future<void>.delayed(const Duration(milliseconds: 250)),
+        Future<void>.delayed(pollDelay),
         cancellation.whenCancelled,
       ]);
+      final currentDelayMs = pollDelay.inMilliseconds;
+      pollDelay = Duration(
+        milliseconds: currentDelayMs < 125 ? currentDelayMs * 2 : 250,
+      );
     }
     return null;
   }
@@ -715,42 +740,6 @@ class BrowserTrustCoordinator {
       allowLowConfidenceSessionCookies: true,
       trusted: true,
     );
-  }
-
-  Future<bool> _isNativePreloadTrusted() async {
-    if (_clearanceRecentlyRejected) {
-      _log(
-        'native trust check: untrusted, clearance recently rejected by server',
-        level: 'warning',
-      );
-      return false;
-    }
-    if (!_jar.isInitialized) {
-      await _jar.initialize();
-    }
-    final clearance = await _jar.getCanonicalCookie('cf_clearance');
-    if (clearance == null || clearance.value.isEmpty) {
-      _log('native trust check: untrusted, no cf_clearance');
-      return false;
-    }
-    if (!CookieJarService.matchesAppHost(clearance.domain)) {
-      _log(
-        'native trust check: untrusted, domain=${clearance.domain}',
-        level: 'warning',
-      );
-      return false;
-    }
-    final expiresAt = clearance.expiresAt?.toLocal();
-    if (expiresAt == null) {
-      _log('native trust check: trusted, no expires');
-      return true;
-    }
-    final ttl = expiresAt.difference(DateTime.now());
-    final trusted = ttl >= _trustedClearanceMinTtl;
-    _log(
-      'native trust check: trusted=$trusted ttl=${ttl.inSeconds}s expires=${expiresAt.toIso8601String()}',
-    );
-    return trusted;
   }
 
   Future<bool> _isRequestGateTrusted() async {

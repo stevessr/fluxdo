@@ -30,7 +30,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicInteger
 
-class MainActivity : FlutterActivity() {
+open class MainActivity : FlutterActivity() {
 
     companion object {
         private const val TAG = "AppLink"
@@ -88,6 +88,10 @@ class MainActivity : FlutterActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var ownsProvidedFlutterEngine = false
     private var interactiveKeyboardChannel: InteractiveKeyboardChannel? = null
+    private var vpnBypassChannel: VpnBypassChannel? = null
+    private var picoVrChannel: PicoVrChannel? = null
+    private var publicFileChannel: PublicFileChannel? = null
+    private var mediaTranscodeChannel: MediaTranscodeChannel? = null
 
     // Cookie IPC 专用后台线程。CookieManager 的 getCookie / setCookie /
     // getCookieInfo 可从任意线程调用(Chromium cookie store 在自己的 IO
@@ -121,13 +125,22 @@ class MainActivity : FlutterActivity() {
 
     // SAF「另存为」建档结果先给 PublicFileChannel 认领,不是它的再交给插件
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (PublicFileChannel.handleActivityResult(requestCode, resultCode, data)) return
+        if (publicFileChannel?.handleActivityResult(requestCode, resultCode, data) == true) return
+        if (picoVrChannel?.handleActivityResult(requestCode, resultCode, data) == true) return
         super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         interactiveKeyboardChannel?.dispose()
         interactiveKeyboardChannel = null
+        vpnBypassChannel?.dispose()
+        vpnBypassChannel = null
+        picoVrChannel?.dispose()
+        picoVrChannel = null
+        publicFileChannel?.dispose()
+        publicFileChannel = null
+        mediaTranscodeChannel?.dispose()
+        mediaTranscodeChannel = null
         FairMemoryReceiver.detachEngine(flutterEngine)
         super.cleanUpFlutterEngine(flutterEngine)
     }
@@ -171,14 +184,22 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         interactiveKeyboardChannel?.dispose()
         interactiveKeyboardChannel = InteractiveKeyboardChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        vpnBypassChannel?.dispose()
+        vpnBypassChannel = VpnBypassChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         // 公平内存预警 → Dart 标准 memoryPressure 的转发依赖 engine 引用
         FairMemoryReceiver.attachEngine(flutterEngine)
         // 媒体转码通道(音视频压缩到 4MB:media3 Transformer 硬编)
-        MediaTranscodeChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
-        // 公共文件落盘通道(MediaStore 下载目录 / SAF 另存为 / 打开 content uri)
-        PublicFileChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
-        // 会话通知快捷方式(系统通知左侧显示发送者头像)
-        ConversationShortcutChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        mediaTranscodeChannel?.dispose()
+        mediaTranscodeChannel = MediaTranscodeChannel().also {
+            it.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        }
+        // 按窗口隔离 SAF 回调、转码作业，避免相互串线。
+        publicFileChannel?.dispose()
+        publicFileChannel = PublicFileChannel(this).also {
+            it.register(flutterEngine.dartExecutor.binaryMessenger)
+        }
+        picoVrChannel?.dispose()
+        picoVrChannel = PicoVrChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "openInBrowser" -> {
@@ -188,6 +209,36 @@ class MainActivity : FlutterActivity() {
                         result.success(success)
                     } else {
                         result.error("INVALID_URL", "URL is null", null)
+                    }
+                }
+                "listLoginBrowsers" -> {
+                    // PackageManager 查询与应用图标 PNG 编码可能触发磁盘 I/O，
+                    // 必须离开 Android 主线程，避免打开选择面板时丢帧。
+                    Thread({
+                        val browsers = try {
+                            listLoginBrowsers()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Browser discovery failed", e)
+                            emptyList<Map<String, Any>>()
+                        }
+                        mainHandler.post { result.success(browsers) }
+                    }, "fluxdo-browser-discovery").start()
+                }
+                "launchLoginBrowser" -> {
+                    val url = call.argument<String>("url")
+                    val browserId = call.argument<String>("id")
+                    if (url == null || browserId == null) {
+                        result.error("INVALID_ARGS", "url and browser id required", null)
+                    } else {
+                        result.success(launchLoginBrowser(browserId, url))
+                    }
+                }
+                "launchLoginBrowserChooser" -> {
+                    val url = call.argument<String>("url")
+                    if (url == null) {
+                        result.error("INVALID_URL", "url required", null)
+                    } else {
+                        result.success(launchLoginBrowserChooser(url))
                     }
                 }
                 "resolveAppLink" -> {
@@ -338,6 +389,81 @@ class MainActivity : FlutterActivity() {
                         }
                     } else {
                         result.error("INVALID_ARGS", "url and rawSetCookie required", null)
+                    }
+                }
+
+                // Android 原生批量写入：整批只跨 MethodChannel 一次，并在所有
+                // setCookie callback 收口后 flush 一次。不同 cookie identity 已由
+                // Dart 层去重，因此无需依赖回调完成顺序来决定最终值。
+                "setRawCookiesBatch" -> {
+                    val rawItems = call.argument<List<Map<*, *>>>("cookies")
+                    if (rawItems != null) {
+                        val items = rawItems.mapNotNull { item ->
+                            val url = item["url"] as? String
+                            val rawSetCookie = item["rawSetCookie"] as? String
+                            if (url.isNullOrEmpty() || rawSetCookie.isNullOrEmpty()) {
+                                null
+                            } else {
+                                Pair(url, rawSetCookie)
+                            }
+                        }
+                        if (items.size != rawItems.size) {
+                            result.error(
+                                "INVALID_ARGS",
+                                "each cookie requires url and rawSetCookie",
+                                null
+                            )
+                        } else if (items.isEmpty()) {
+                            result.success(0)
+                        } else {
+                            onCookieThread {
+                                try {
+                                    val mgr = WebCookieManager.getInstance()
+                                    val remaining = AtomicInteger(items.size)
+                                    val written = AtomicInteger(0)
+                                    fun completeOne(success: Boolean) {
+                                        if (success) written.incrementAndGet()
+                                        if (remaining.decrementAndGet() == 0) {
+                                            try {
+                                                mgr.flush()
+                                            } catch (e: Exception) {
+                                                Log.w(
+                                                    "RawCookie",
+                                                    "batch set flush failed: ${e.message}",
+                                                    e
+                                                )
+                                            }
+                                            mainHandler.post {
+                                                result.success(written.get())
+                                            }
+                                        }
+                                    }
+                                    for ((url, rawSetCookie) in items) {
+                                        try {
+                                            mgr.setCookie(url, rawSetCookie) { success ->
+                                                completeOne(success == true)
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e(
+                                                "RawCookie",
+                                                "batch setCookie failed for $url: ${e.message}",
+                                                e
+                                            )
+                                            completeOne(false)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(
+                                        "RawCookie",
+                                        "setRawCookiesBatch failed: ${e.message}",
+                                        e
+                                    )
+                                    mainHandler.post { result.success(0) }
+                                }
+                            }
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "cookies required", null)
                     }
                 }
 
@@ -523,6 +649,104 @@ class MainActivity : FlutterActivity() {
                         }
                     } else {
                         result.error("INVALID_ARGS", "url, name, path required", null)
+                    }
+                }
+
+                // Android 原生批量精确删除。每个 identity 仍发四种属性删除头，
+                // 但整个账号切换批次共用一次 MethodChannel 和一次 flush。
+                "deleteExactCookiesBatch" -> {
+                    val rawItems = call.argument<List<Map<*, *>>>("cookies")
+                    if (rawItems != null) {
+                        val items = rawItems.mapNotNull { item ->
+                            val url = item["url"] as? String
+                            val name = item["name"] as? String
+                            val domain = item["domain"] as? String
+                            val path = item["path"] as? String
+                            if (url.isNullOrEmpty() || name.isNullOrEmpty() || path.isNullOrEmpty()) {
+                                null
+                            } else {
+                                arrayOf(url, name, domain, path)
+                            }
+                        }
+                        if (items.size != rawItems.size) {
+                            result.error(
+                                "INVALID_ARGS",
+                                "each cookie requires url, name and path",
+                                null
+                            )
+                        } else if (items.isEmpty()) {
+                            result.success(0)
+                        } else {
+                            onCookieThread {
+                                try {
+                                    val mgr = WebCookieManager.getInstance()
+                                    val successfulTargets = Array(items.size) {
+                                        java.util.concurrent.atomic.AtomicBoolean(false)
+                                    }
+                                    val remaining = AtomicInteger(items.size * 4)
+                                    fun completeOne(index: Int, success: Boolean) {
+                                        if (success) successfulTargets[index].set(true)
+                                        if (remaining.decrementAndGet() == 0) {
+                                            try {
+                                                mgr.flush()
+                                            } catch (e: Exception) {
+                                                Log.w(
+                                                    "RawCookie",
+                                                    "batch delete flush failed: ${e.message}",
+                                                    e
+                                                )
+                                            }
+                                            val deleted = successfulTargets.count { it.get() }
+                                            mainHandler.post { result.success(deleted) }
+                                        }
+                                    }
+
+                                    for ((index, item) in items.withIndex()) {
+                                        val url = item[0]!!
+                                        val name = item[1]!!
+                                        val domain = item[2]
+                                        val path = item[3]!!
+                                        val base = mutableListOf(
+                                            "$name=",
+                                            "Max-Age=0",
+                                            "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+                                            "Path=$path"
+                                        )
+                                        if (domain != null) base.add("Domain=$domain")
+                                        val plain = base.joinToString("; ")
+                                        val raws = listOf(
+                                            plain,
+                                            "$plain; Secure",
+                                            "$plain; Secure; SameSite=None",
+                                            "$plain; Secure; SameSite=None; Partitioned"
+                                        )
+                                        for (raw in raws) {
+                                            try {
+                                                mgr.setCookie(url, raw) { success ->
+                                                    completeOne(index, success == true)
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e(
+                                                    "RawCookie",
+                                                    "batch delete failed for $name@$url: ${e.message}",
+                                                    e
+                                                )
+                                                completeOne(index, false)
+                                            }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(
+                                        "RawCookie",
+                                        "deleteExactCookiesBatch failed: ${e.message}",
+                                        e
+                                    )
+                                    mainHandler.post { result.success(0) }
+                                }
+                            }
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "cookies required", null)
                     }
                 }
 
@@ -908,11 +1132,10 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** 将 Drawable 转为 PNG 字节数组 */
-    private fun drawableToBytes(drawable: Drawable): ByteArray {
-        // 用 drawable 自身尺寸，但限制在合理范围
-        val w = drawable.intrinsicWidth.coerceIn(1, 256)
-        val h = drawable.intrinsicHeight.coerceIn(1, 256)
+    /** 将 Drawable 转为 PNG 字节数组；浏览器应用图标以 64px 输出，避免大图跨平台通道传输。 */
+    private fun drawableToBytes(drawable: Drawable, requestedSize: Int? = null): ByteArray {
+        val w = requestedSize ?: drawable.intrinsicWidth.coerceIn(1, 256)
+        val h = requestedSize ?: drawable.intrinsicHeight.coerceIn(1, 256)
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, w, h)
@@ -951,6 +1174,198 @@ class MainActivity : FlutterActivity() {
             e.printStackTrace()
         }
         return false
+    }
+
+    /**
+     * Only generic HTTPS handlers are eligible; never offer FluxDO itself,
+     * another app's deep-link target, or the Android resolver as a browser.
+     */
+    private fun listLoginBrowsers(includeIcons: Boolean = true): List<Map<String, Any>> {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com/"))
+        intent.addCategory(Intent.CATEGORY_BROWSABLE)
+        val matches: List<ResolveInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.queryIntentActivities(
+                intent, PackageManager.ResolveInfoFlags.of(
+                    (PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_RESOLVED_FILTER).toLong()
+                )
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.queryIntentActivities(
+                intent, PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_RESOLVED_FILTER
+            )
+        }
+
+        // 除正式版之外，枚举 Chrome / Edge / Firefox 的独立安装通道。
+        // 预览通道常不在默认浏览器的解析结果中，因此还要按包名主动探测。
+        val knownPackages = setOf(
+            "com.android.chrome", "com.chrome.beta", "com.chrome.dev", "com.chrome.canary",
+            "org.chromium.chrome", "org.chromium.chrome.stable",
+            "org.mozilla.firefox", "org.mozilla.firefox_beta", "org.mozilla.firefox.beta",
+            "org.mozilla.fenix", "org.mozilla.firefox_nightly", "org.mozilla.fenix.nightly",
+            "org.mozilla.focus", "org.mozilla.focus.beta", "org.mozilla.focus.nightly",
+            "org.mozilla.fennec.aurora", "org.mozilla.fennec_fdroid",
+            "com.brave.browser", "com.brave.browser_beta", "com.brave.browser_nightly",
+            "com.microsoft.emmx", "com.microsoft.emmx.beta",
+            "com.microsoft.emmx.dev", "com.microsoft.emmx.canary",
+            "com.sec.android.app.sbrowser", "com.sec.android.app.sbrowser.beta",
+            "com.vivaldi.browser", "com.opera.browser", "com.opera.mini.native",
+            "com.duckduckgo.mobile.android", "com.kiwibrowser.browser",
+            "org.bromite.bromite", "org.cromite.cromite",
+            "org.torproject.torbrowser"
+        )
+
+        // 预览版的系统应用标签可能没有显示版本后缀；明确标注通道，
+        // 避免用户把 Beta/Canary 与 Stable 混淆并选错 OAuth Profile。
+        val channelLabels = mapOf(
+            "com.android.chrome" to "Google Chrome",
+            "com.chrome.beta" to "Google Chrome Beta",
+            "com.chrome.dev" to "Google Chrome Dev",
+            "com.chrome.canary" to "Google Chrome Canary",
+            "org.mozilla.firefox" to "Firefox",
+            "org.mozilla.firefox_beta" to "Firefox Beta",
+            "org.mozilla.firefox.beta" to "Firefox Beta",
+            "org.mozilla.fenix" to "Firefox Nightly",
+            "org.mozilla.firefox_nightly" to "Firefox Nightly",
+            "org.mozilla.focus.beta" to "Firefox Focus Beta",
+            "org.mozilla.focus.nightly" to "Firefox Focus Nightly",
+            "com.microsoft.emmx" to "Microsoft Edge",
+            "com.microsoft.emmx.beta" to "Microsoft Edge Beta",
+            "com.microsoft.emmx.dev" to "Microsoft Edge Dev",
+            "com.microsoft.emmx.canary" to "Microsoft Edge Canary"
+        )
+        val browsers = linkedMapOf<String, String>()
+        matches.forEach { match ->
+            val pkg = match.activityInfo.packageName
+            if (pkg == packageName || pkg == "android") return@forEach
+            val filter = match.filter
+            // 部分浏览器分别声明 HTTP 与 HTTPS 的 IntentFilter，
+            // 不能要求一次查询返回的同一 Filter 同时包含两种 scheme。
+            // 后续 canOpenGenericWebUrls 会单独验证两种协议。
+            val genericBrowser = filter != null &&
+                (filter.hasDataScheme("http") || filter.hasDataScheme("https")) &&
+                filter.countDataAuthorities() == 0
+            if (!genericBrowser && pkg !in knownPackages) return@forEach
+            if (canOpenGenericWebUrls(pkg)) {
+                browsers.putIfAbsent(
+                    pkg, channelLabels[pkg] ?: match.loadLabel(packageManager).toString()
+                )
+            }
+        }
+
+        // 对未出现在 queryIntentActivities 列表中的已安装官方通道进行补查。
+        // 必须能处理通用的 http 与 https 链接；单纯包名存在不算浏览器。
+        knownPackages.forEach { pkg ->
+            if (pkg == packageName || pkg in browsers) return@forEach
+            val info = try {
+                getAppInfo(pkg)
+            } catch (_: PackageManager.NameNotFoundException) {
+                return@forEach
+            } catch (_: SecurityException) {
+                return@forEach
+            }
+            if (canOpenGenericWebUrls(pkg)) {
+                browsers[pkg] = channelLabels[pkg]
+                    ?: packageManager.getApplicationLabel(info).toString()
+            }
+        }
+        return browsers.entries
+            .sortedWith(compareBy({ it.value.lowercase() }, { it.key }))
+            .map { entry ->
+                val browser = mutableMapOf<String, Any>(
+                    "id" to entry.key,
+                    "name" to entry.value
+                )
+                // 只有构建可见列表时才加载图标。点击后的校验无需重复 PNG 编码。
+                if (includeIcons) {
+                    try {
+                        browser["icon"] = drawableToBytes(
+                            packageManager.getApplicationIcon(entry.key),
+                            requestedSize = 64
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Cannot load browser icon for ${entry.key}", e)
+                    }
+                }
+                browser
+            }
+    }
+
+    private fun canOpenGenericWebUrls(browserPackage: String): Boolean {
+        return listOf("http", "https").all { scheme ->
+            val probe = Intent(
+                Intent.ACTION_VIEW, Uri.parse("$scheme://example.com/")
+            ).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                setPackage(browserPackage)
+            }
+            val resolved = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.queryIntentActivities(
+                    probe,
+                    PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.queryIntentActivities(probe, PackageManager.MATCH_DEFAULT_ONLY)
+            }
+            resolved.any {
+                it.activityInfo.packageName == browserPackage && it.activityInfo.exported
+            }
+        }
+    }
+
+    private fun isLoginAuthorizationUri(uri: Uri): Boolean =
+        uri.scheme == "https" && uri.host == "linux.do" &&
+            (uri.port == -1 || uri.port == 443) && uri.userInfo == null &&
+            uri.path == "/user-api-key/new"
+
+    private fun launchLoginBrowser(browserPackage: String, rawUrl: String): Boolean {
+        val uri = try { Uri.parse(rawUrl) } catch (_: Exception) { return false }
+        if (!isLoginAuthorizationUri(uri)) return false
+        // Re-check the selection to prevent package spoofing and unintentional
+        // disclosure of the one-time authorization request to other apps.
+        if (listLoginBrowsers(includeIcons = false).none { it["id"] == browserPackage }) return false
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                setPackage(browserPackage)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "Selected browser is no longer installed", e)
+            false
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Selected browser launch was denied", e)
+            false
+        }
+    }
+
+    /**
+     * 使用 Android 系统的 ACTION_CHOOSER 展示原生「打开方式」菜单。
+     * 不给 Intent 绑定 package，避免退化为默认浏览器直接打开。
+     * 与手动选择路径共用授权 URL 白名单；回调仍由原有 DeepLinkService 处理。
+     */
+    private fun launchLoginBrowserChooser(rawUrl: String): Boolean {
+        val uri = try { Uri.parse(rawUrl) } catch (_: Exception) { return false }
+        if (!isLoginAuthorizationUri(uri)) return false
+        return try {
+            val viewIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+            }
+            val chooser = Intent.createChooser(viewIntent, "选择打开方式").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(chooser)
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "No app can handle the login authorization URL", e)
+            false
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Android chooser could not be opened", e)
+            false
+        }
     }
 
     // ======================== 外部浏览器 ========================

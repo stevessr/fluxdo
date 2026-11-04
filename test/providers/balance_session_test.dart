@@ -10,11 +10,16 @@ import 'package:fluxdo/models/user.dart';
 import 'package:fluxdo/providers/cdk_providers.dart';
 import 'package:fluxdo/providers/core_providers.dart';
 import 'package:fluxdo/providers/ldc_providers.dart';
+import 'package:fluxdo/services/account_manager.dart';
 import 'package:fluxdo/services/cdk_oauth_service.dart';
 import 'package:fluxdo/services/ldc_oauth_service.dart';
 import 'package:fluxdo/services/network/exceptions/api_exception.dart';
 import 'package:fluxdo/services/network/exceptions/oauth_exception.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// 本 fork 的余额缓存与启用开关按账号作用域存储；上游种子仍写旧的全局键，
+// notifier 首次 build 时会迁移到作用域键，这里统一按作用域键断言。
+String _scoped(String key) => AccountManager.accountScopedKey(key, 'alice');
 
 const _userInfo = <String, dynamic>{
   'id': 1,
@@ -121,7 +126,7 @@ void main() {
         load = () async => throw challenge();
         await expectLater(read(), throwsA(isA<DioException>()));
         expect(OAuthErrorPolicy.isCfChallenge(current().error), isTrue);
-        expect(prefs.getString(cacheKey), isNotNull);
+        expect(prefs.getString(_scoped(cacheKey)), isNotNull);
       });
 
       test('刷新遇到 CF 保留旧数据与缓存，同时暴露验证错误', () async {
@@ -131,7 +136,7 @@ void main() {
         await refresh();
         expect(OAuthErrorPolicy.isCfChallenge(current().error), isTrue);
         expect(current().value, same(previous));
-        expect(prefs.getString(cacheKey), isNotNull);
+        expect(prefs.getString(_scoped(cacheKey)), isNotNull);
       });
 
       test('确认授权过期才清除余额缓存', () async {
@@ -167,7 +172,7 @@ void main() {
         await Future<void>.delayed(Duration.zero);
         expect(current().value, isNull);
         expect(current().hasError, isFalse);
-        expect(prefs.getString(cacheKey), isNull);
+        expect(prefs.getString(_scoped(cacheKey)), isNull);
       });
 
       test('停用服务后，晚到的刷新响应不能恢复余额或写回缓存', () async {
@@ -190,8 +195,8 @@ void main() {
         await refreshing;
         expect(current().value, isNull);
         expect(current().hasError, isFalse);
-        expect(prefs.getString(cacheKey), isNull);
-        expect(prefs.getBool('${name}_enabled'), isFalse);
+        expect(prefs.getString(_scoped(cacheKey)), isNull);
+        expect(prefs.getBool(_scoped('${name}_enabled')), isFalse);
       });
     });
   }

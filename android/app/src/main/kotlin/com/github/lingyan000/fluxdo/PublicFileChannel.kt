@@ -30,23 +30,32 @@ import java.io.File
  *
  * 均返回 `{uri, displayName}`:uri 用于后续打开,displayName 用于提示文案。
  */
-object PublicFileChannel {
+class PublicFileChannel(activity: Activity) {
+    companion object {
     private const val CHANNEL = "com.fluxdo/public_file"
     private const val TAG = "PublicFile"
 
     /** SAF 建档请求码,避开插件常用的低位段。 */
     const val REQUEST_CREATE_DOCUMENT = 0x5AF1
 
+    }
+
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private var activityRef: Activity? = null
+    private var activityRef: Activity? = activity
 
     /** 等待 SAF 回调的一次性上下文(同一时刻只允许一个建档流程)。 */
     private var pendingResult: MethodChannel.Result? = null
     private var pendingSourcePath: String? = null
 
-    fun register(activity: Activity, messenger: BinaryMessenger) {
-        activityRef = activity
+    fun dispose() {
+        // The picker may outlive the window. Complete only this window's pending call.
+        pendingResult?.error("WINDOW_CLOSED", "The requesting window was closed", null)
+        clearPending()
+        activityRef = null
+    }
+
+    fun register(messenger: BinaryMessenger) {
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "saveToDownloads" -> saveToDownloads(call.args(), result)

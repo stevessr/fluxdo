@@ -146,9 +146,9 @@ void main() {
   testWidgets('已有 fallback 探测收到源站状态后立即收场', (tester) async {
     final results = <bool>[];
     await mount(tester, results);
-    final pendingProbe =
-        platform.controller.handlers['onChallengeNavigation']!(const [])
-            as Future<void>;
+    final pendingProbe = platform.controller.handlers['onChallengeNavigation']!(
+      const [],
+    ) as Future<void>;
     await tester.pump();
     expect(results, isEmpty);
     source404();
@@ -189,9 +189,9 @@ void main() {
     final results = <bool>[];
     await mount(tester, results);
     platform.controller.documentHtml = '<html><body>Origin page</body></html>';
-    final probe =
-        platform.controller.handlers['onChallengeNavigation']!(const [])
-            as Future<void>;
+    final probe = platform.controller.handlers['onChallengeNavigation']!(
+      const [],
+    ) as Future<void>;
     await tester.pump();
     await probe;
 
@@ -210,9 +210,9 @@ void main() {
         final results = <bool>[];
         await mount(tester, results);
         platform.controller.documentHtml = html;
-        final probe =
-            platform.controller.handlers['onChallengeNavigation']!(const [])
-                as Future<void>;
+        final probe = platform.controller.handlers['onChallengeNavigation']!(
+          const [],
+        ) as Future<void>;
         await tester.pump();
         expect(results, isEmpty);
 
@@ -230,17 +230,16 @@ void main() {
         '<html><body><div class="cf-turnstile"></div></body></html>';
     final challengeCallback =
         platform.controller.handlers['onChallengeComplete']!(const [
-              '/cdn-cgi/challenge-platform',
-              200,
-            ])
-            as Future<void>;
+          '/cdn-cgi/challenge-platform',
+          200,
+        ]) as Future<void>;
     await tester.pump();
     await challengeCallback;
     expect(results, isEmpty);
 
-    final probe =
-        platform.controller.handlers['onChallengeNavigation']!(const [])
-            as Future<void>;
+    final probe = platform.controller.handlers['onChallengeNavigation']!(
+      const [],
+    ) as Future<void>;
     await tester.pump();
     expect(results, isEmpty, reason: 'Cookie 续期不证明当前页面已经无盾');
 

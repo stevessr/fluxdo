@@ -139,8 +139,7 @@ void main() {
       );
       final box = tester.getRect(find.byType(Hero));
       // 0.75 比例进 400x300 ⇒ 受高度约束 → 225x300
-      expect(box.width, closeTo(225, 1),
-          reason: 'Hero 盒子应按比例收到画面宽,否则尾帧铺满外层盒子');
+      expect(box.width, closeTo(225, 1), reason: 'Hero 盒子应按比例收到画面宽,否则尾帧铺满外层盒子');
       expect(box.height, closeTo(300, 1));
     });
 
@@ -179,9 +178,6 @@ void main() {
       const ViewerSourceStyle.contain(),
       isNot(const ViewerSourceStyle.cover(radius: 0)),
     );
-    expect(
-      const ViewerSourceStyle.circular().toString(),
-      contains('circular'),
-    );
+    expect(const ViewerSourceStyle.circular().toString(), contains('circular'));
   });
 }

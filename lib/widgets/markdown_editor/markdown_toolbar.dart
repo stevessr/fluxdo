@@ -42,6 +42,8 @@ import 'uploads/upload_task_panel.dart';
 import 'uploads/markdown_insertion_anchor.dart';
 import 'voice_recorder_sheet.dart';
 import 'image_upload_dialog.dart';
+import 'long_image_upload_dialog.dart';
+import 'color_insert_dialog.dart';
 import 'content_actions_button.dart';
 import 'content_actions_providers.dart';
 import 'link_insert_dialog.dart';
@@ -346,6 +348,20 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
+  /// 插入已上传的表情包图片，不再弹出确认框。
+  void insertUploadedImage(UploadResult uploadResult, {String alt = '表情包'}) {
+    _seedUploadCache(uploadResult);
+    final selection = widget.controller.selection;
+    final text = widget.controller.text;
+    final needsLeadingNewline =
+        selection.isValid &&
+        selection.start > 0 &&
+        text[selection.start - 1] != '\n';
+    final prefix = needsLeadingNewline ? '\n' : '';
+    insertText('$prefix${uploadResult.toMarkdown(alt: alt)}\n');
+    widget.focusNode?.requestFocus();
+  }
+
   /// 用指定前后缀包裹选中文本（无选中时插入占位符并选中）
   void wrapSelection(String start, String end, {String? placeholder}) {
     final selection = widget.controller.selection;
@@ -611,6 +627,15 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       );
     }
 
+    widget.focusNode?.requestFocus();
+  }
+
+  /// 文字颜色：选色对话框后以 `[color=…]` BBCode 包裹选区。
+  /// 无选区时插入并选中占位文字，和其它格式工具保持一致。
+  Future<void> insertColor(BuildContext context) async {
+    final value = await showColorInsertDialog(context);
+    if (!mounted || value == null) return;
+    wrapSelection('[color=$value]', '[/color]', placeholder: '彩色文字');
     widget.focusNode?.requestFocus();
   }
 
@@ -1034,6 +1059,38 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
+  /// 独立长图上传：只允许单选，并在读取宽高比通过后显示切片数量选择。
+  Future<void> pickAndUploadLongImage() async {
+    final anchor = _uploadAnchors.capture();
+    _uploadingCount++;
+    try {
+      final image = await _picker.pickImage(source: ImageSource.gallery);
+      if (!mounted || image == null) return;
+
+      final results = await showLongImageUploadDialog(
+        context,
+        imagePath: image.path,
+        imageName: image.name,
+      );
+      if (!mounted || results == null || results.isEmpty) return;
+
+      final anchors = [for (final _ in results) _uploadAnchors.fork(anchor)];
+      for (var i = 0; i < results.length; i++) {
+        _enqueueUpload(
+          path: results[i].path,
+          name: results[i].originalName,
+          anchor: anchors[i],
+          image: true,
+        );
+      }
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    } finally {
+      _uploadingCount--;
+      _uploadAnchors.release(anchor);
+    }
+  }
+
   Future<void> pickAndUploadFile() async {
     final anchor = _uploadAnchors.capture();
     var registered = false;
@@ -1346,6 +1403,7 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       toolsAnchor: widget.toolsAnchor,
       onExpandTools: widget.onToggleTools,
       metadata: widget.metaBar,
+
       controls: [
         if (!PlatformUtils.isDesktop)
           ComposerEditingControls(

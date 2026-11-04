@@ -191,8 +191,6 @@ void main() {
     await pumpBar(tester, labelless: false, count: count);
 
     final capsule = capsuleOf(tester);
-    // pill 是 StadiumBorder 的 DecoratedBox；条目的墨水层也用 StadiumBorder，
-    // 这里按尺寸筛出 pill（宽 = 槽宽、高 = item 高）
     final itemHeight = capsule.size.height - 4 * 2;
     final slot = (capsule.size.width - 4 * 2) / count;
 
@@ -219,7 +217,6 @@ void main() {
       return d is ShapeDecoration && d.shape is StadiumBorder;
     });
 
-    // 入口数少到不触发宽度压缩（5 项在 390 宽下会被 maxWidth 压窄）
     await pumpBar(tester, labelless: false, count: 3);
     final labeled = tester.renderObject<RenderBox>(pill.first).size;
     expect(
@@ -259,9 +256,62 @@ void main() {
     expect(endX, greaterThan(startX), reason: 'pill 随选中项右移');
   });
 
+  testWidgets('长按条目触发 onLongPress，点按仍正常切换', (tester) async {
+    tester.view.physicalSize = screen;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({
+      'pref_bottom_nav_floating': true,
+      'pref_bottom_nav_labelless': false,
+      'pref_bottom_nav_floating_blur': true,
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    var longPressed = false;
+    int? switchedTo;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        child: MaterialApp(
+          home: Scaffold(
+            extendBody: true,
+            bottomNavigationBar: AdaptiveBottomNavigation(
+              selectedIndex: 0,
+              onDestinationSelected: (i) => switchedTo = i,
+              destinations: [
+                const AdaptiveDestination(
+                  id: 'home',
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home),
+                  label: '标签0',
+                ),
+                AdaptiveDestination(
+                  id: 'profile',
+                  icon: const Icon(Icons.person_outline),
+                  selectedIcon: const Icon(Icons.person),
+                  label: '标签1',
+                  onLongPress: () => longPressed = true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('标签1'));
+    await tester.pumpAndSettle();
+    expect(longPressed, isTrue);
+    expect(switchedTo, isNull);
+
+    await tester.tap(find.text('标签1'));
+    await tester.pumpAndSettle();
+    expect(switchedTo, 1);
+  });
+
   testWidgets('pill 飞行中横向拉伸，停下后恢复原宽', (tester) async {
-    // 拉伸是 Transform 的 scaleX，不改布局宽，所以看渲染后的
-    // 包围盒（localToGlobal 两角之差）而不是 RenderBox.size。
     final pill = find.byWidgetPredicate((w) {
       if (w is! DecoratedBox) return false;
       final d = w.decoration;
@@ -277,9 +327,6 @@ void main() {
     await pumpBar(tester, labelless: false, selectedIndex: 0);
     final restWidth = paintedWidth();
 
-    // ⚠️ 不能用 pumpBar 切选中项：它末尾的 pumpAndSettle 会把整段
-    // 飞行一口气跑完，采样不到中间帧。这里只重建 widget（触发
-    // didUpdateWidget 启动弹簧），然后自己逐帧推进。
     await rebuildWithIndex(tester, labelless: false, selectedIndex: 3);
     var peak = restWidth;
     for (var i = 0; i < 12; i++) {
@@ -290,7 +337,6 @@ void main() {
     expect(peak, greaterThan(restWidth * 1.02), reason: '飞行中应被拉长（至少 2%）');
     expect(peak, lessThan(restWidth * 1.19), reason: '拉伸不得超过上限 18%');
 
-    // 停下来必须完全恢复，否则 pill 永久变形
     await tester.pumpAndSettle();
     expect(
       paintedWidth(),

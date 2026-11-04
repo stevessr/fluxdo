@@ -458,6 +458,7 @@ class DohProxyFfi {
     String? caKeyPem,
     bool mitmConnect = true,
     bool h2Mitm = false,
+    Map<String, List<String>>? hostOverrides,
     EchDnsPolicy echDnsPolicy = const EchDnsPolicy(),
   }) {
     if (!_initialized && !initialize()) {
@@ -495,6 +496,8 @@ class DohProxyFfi {
         },
       if (caCertPem != null && caCertPem.isNotEmpty) 'ca_cert_pem': caCertPem,
       if (caKeyPem != null && caKeyPem.isNotEmpty) 'ca_key_pem': caKeyPem,
+      if (hostOverrides != null && hostOverrides.isNotEmpty)
+        'host_overrides': hostOverrides,
     });
     final configPtr = configJson.toNativeUtf8();
     try {

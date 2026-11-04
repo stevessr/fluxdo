@@ -121,4 +121,28 @@ void main() {
     expect(state.scrollToPostNumber, 7);
     expect(container.read(selectedTopicProvider).hasSelection, isFalse);
   });
+  test('PICO 标签激活保留全部层与实例 ID，关闭指定层不串位', () {
+    final notifier = SelectedTopicNotifier()
+      ..select(topicId: 1, instanceId: 'first')
+      ..pushProfile('alice')
+      ..push(topicId: 2, instanceId: 'second');
+
+    notifier.activateTab(0);
+    expect(notifier.state.stack, hasLength(3));
+    expect(notifier.state.topEntry?.instanceId, 'first');
+    expect(notifier.state.stack[1].instanceId, 'second');
+
+    notifier.closeTab(0); // 关闭背景资料标签
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.instanceId, 'first');
+
+    notifier.closeTab(1); // 关闭活动标签
+    expect(notifier.state.topEntry?.instanceId, 'second');
+
+    final unchanged = notifier.state;
+    notifier.activateTab(-1);
+    notifier.closeTab(99);
+    expect(notifier.state, same(unchanged));
+  });
+
 }

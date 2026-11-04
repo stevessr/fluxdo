@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'font_awesome_helper.dart';
 
 class TagIconInfo {
@@ -42,7 +43,8 @@ class TagIconList {
   static Color _parseColor(String hex) {
     var clean = hex.replaceAll('#', '');
     if (clean.length == 3) {
-      clean = '${clean[0]}${clean[0]}${clean[1]}${clean[1]}${clean[2]}${clean[2]}';
+      clean =
+          '${clean[0]}${clean[0]}${clean[1]}${clean[1]}${clean[2]}${clean[2]}';
     }
     if (clean.length == 6) {
       return Color(int.parse('0xFF$clean'));

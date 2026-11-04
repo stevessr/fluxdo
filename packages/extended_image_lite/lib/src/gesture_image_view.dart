@@ -6,13 +6,17 @@ import 'gesture/gesture_surface.dart';
 import 'image/raw_gesture_image.dart';
 
 /// 失败态构建(AVIF/SVG 嗅探 fallback 由主工程注入)
-typedef GestureImageFailedBuilder =
-    Widget Function(BuildContext context, ImageGestureController controller);
+typedef GestureImageFailedBuilder = Widget Function(
+  BuildContext context,
+  ImageGestureController controller,
+);
 
 /// 主图加载进度构建器。[event] 为 null 表示尚未收到字节进度，或服务端
 /// 没有提供可计算的总大小；调用方应回退为不定态进度。
-typedef GestureImageProgressBuilder =
-    Widget Function(BuildContext context, ImageChunkEvent? event);
+typedef GestureImageProgressBuilder = Widget Function(
+  BuildContext context,
+  ImageChunkEvent? event,
+);
 
 /// 手势图片查看组件 —— 持久层栈 + 常驻手势层。
 ///

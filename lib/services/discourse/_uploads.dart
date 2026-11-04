@@ -271,6 +271,7 @@ mixin _UploadsMixin on _DiscourseServiceBase {
     String filePath, {
     String? filenameOverride,
     DioMediaType? contentTypeOverride,
+    bool preserveImageFormat = false,
     CancelToken? cancelToken,
     UploadProgressCallback? onProgress,
   }) async {
@@ -301,7 +302,11 @@ mixin _UploadsMixin on _DiscourseServiceBase {
           );
         } else {
           final formData = FormData.fromMap({
-            'upload_type': 'composer',
+            // Discourse's UploadCreator may convert large PNGs to JPEG for normal
+            // composer uploads. topic_og_image is an upstream-supported upload type
+            // that explicitly skips that format conversion; use it only when the
+            // caller must preserve alpha/format byte-for-byte.
+            'upload_type': preserveImageFormat ? 'topic_og_image' : 'composer',
             'synchronous': true,
             'file': await MultipartFile.fromFile(
               filePath,
@@ -416,12 +421,20 @@ mixin _UploadsMixin on _DiscourseServiceBase {
     throw Exception(S.current.error_uploadNoUrl);
   }
 
-  /// 上传图片（uploadFile 的别名，保持向后兼容）
+  /// 上传图片（uploadFile 的别名，保持向后兼容）。
+  ///
+  /// [preserveImageFormat] 用于透明图片等不能接受 PNG -> JPEG 转换的场景。
   Future<UploadResult> uploadImage(
     String filePath, {
+    bool preserveImageFormat = false,
     CancelToken? cancelToken,
     UploadProgressCallback? onProgress,
-  }) => uploadFile(filePath, cancelToken: cancelToken, onProgress: onProgress);
+  }) => uploadFile(
+    filePath,
+    preserveImageFormat: preserveImageFormat,
+    cancelToken: cancelToken,
+    onProgress: onProgress,
+  );
 
   /// 媒体上传的站点体积上限(linux.do 4MB;超限服务端 413)。
 

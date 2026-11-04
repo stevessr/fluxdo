@@ -3,7 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/l10n/s.dart';
 import 'package:fluxdo/models/category.dart';
-import 'package:fluxdo/services/local_notification_service.dart' show navigatorKey;
+import 'package:fluxdo/services/local_notification_service.dart'
+    show navigatorKey;
 import 'package:fluxdo/plugins/plugins.dart';
 import 'package:fluxdo/widgets/common/character_counts_overlay.dart';
 import 'package:fluxdo/widgets/topic/topic_editor_helpers.dart';
@@ -96,10 +97,7 @@ void main() {
         'warden_min_post_length': 16,
         'warden_min_first_post_length': 30,
       };
-      expect(
-        plugin.composerMinPostLength(8, _ctx(extras: extras)),
-        16,
-      );
+      expect(plugin.composerMinPostLength(8, _ctx(extras: extras)), 16);
       expect(
         plugin.composerMinPostLength(
           20,

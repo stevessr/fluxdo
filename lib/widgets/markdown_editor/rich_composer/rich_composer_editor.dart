@@ -72,6 +72,7 @@ import '../../../models/mention_user.dart';
 import '../../../services/app_error_handler.dart';
 import '../../../services/discourse/discourse_service.dart';
 import '../../../services/discourse_cook_service.dart';
+import '../../../services/stevessr_composer_service.dart';
 import '../../../services/emoji_alias_service.dart';
 import '../../../services/emoji_handler.dart';
 import '../../../utils/clipboard_image_native.dart';
@@ -87,27 +88,29 @@ import '../../mention/mention_autocomplete.dart';
 import '../composer_workbench.dart';
 import '../composer_table_panel.dart';
 import '../composer_anchored_panel.dart';
-import '../composer_tool_style.dart';
 import '../composer_object_toolbar.dart';
 import '../composer_object_surface.dart';
 import '../composer_block_picker.dart';
 import '../composer_block_hover.dart';
 import '../composer_object_controller.dart';
 import '../composer_object_pointer_region.dart';
-import '../composer_desktop_layout.dart';
 import '../composer_desktop_workbench.dart';
 import '../composer_tools_panel.dart';
 import '../composer_quick_panel.dart';
 import '../composer_tools_anchor.dart';
+import '../composer_tool_style.dart';
+import '../composer_desktop_layout.dart';
 import '../composer_view_mode_switcher.dart';
 import '../content_actions_button.dart';
 import '../content_actions_providers.dart';
 import '../emoji_popover.dart';
 import '../emoji_sticker_panel.dart';
 import '../image_upload_dialog.dart';
+import '../long_image_upload_dialog.dart';
 import '../uploads/task_controller.dart';
 import '../uploads/upload_task_panel.dart';
 import '../link_insert_dialog.dart';
+import '../color_insert_dialog.dart';
 import '../poll_builder_dialog.dart';
 import '../template_insert_dialog.dart';
 import '../composer_shortcuts.dart' show composerShortcutHint;
@@ -195,6 +198,7 @@ class RichComposerEditor extends StatefulWidget {
     this.mentionDataSource,
     this.onFallbackToPlain,
     this.onSwitchToSource,
+    this.enableStevessr = false,
     this.semanticCodec,
   });
 
@@ -236,6 +240,9 @@ class RichComposerEditor extends StatefulWidget {
   /// (controller.text 即最新 markdown),宿主直接换 MarkdownEditor
   /// 即可,内容无缝衔接。null 时不显示切换按钮。
   final VoidCallback? onSwitchToSource;
+
+  /// 是否在工具面板提供 StevesSR 生成并插入。
+  final bool enableStevessr;
 
   @override
   State<RichComposerEditor> createState() => RichComposerEditorState();
@@ -789,6 +796,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       _emojiPopover = EmojiPopoverController()
         ..addListener(_onEmojiPopoverChanged);
     }
+    _editorAreaFocus.addListener(_onEditorAreaFocusChanged);
     if (kDebugMode) EditorImeClient.debugLogging = true;
     _importInitial();
   }
@@ -898,11 +906,16 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     _objectSelection.dispose();
     _tableContext.dispose();
     if (_ownsFocus) _editorFocus.dispose();
+    _editorAreaFocus.removeListener(_onEditorAreaFocusChanged);
     _editorAreaFocus.dispose();
     _scrollController.dispose();
     _editor?.removeListener(_onDocChanged);
     _session?.dispose();
     super.dispose();
+  }
+
+  void _onEditorAreaFocusChanged() {
+    if (mounted) setState(() {});
   }
 
   /// 预览返回时恢复输入连接；关闭面板留下的只读状态不能带回来。
@@ -913,6 +926,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       SystemChannels.textInput.invokeMethod('TextInput.show');
     }
   }
+
+  Widget _buildIntendedPanel() => _buildEmojiPanel();
 
   void _switchToSource() {
     if (hasPendingUploads) {
@@ -945,6 +960,20 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       return _toolsTask ?? Future.value();
     }
     return _toolsTask = _presentTools(quick: false);
+  }
+
+  Future<void> _insertStevessrImage() async {
+    final editor = _editor;
+    final selection = editor?.selection;
+    final generated = await StevessrComposerService.openAndUpload(context);
+    if (!mounted || generated == null || editor == null) return;
+    if (selection != null) editor.updateSelection(selection);
+    insertUploadedImage(
+      shortUrl: generated.upload.shortUrl,
+      alt: '表情包',
+      width: generated.upload.width,
+      height: generated.upload.height,
+    );
   }
 
   Future<void> _presentTools({required bool quick}) async {
@@ -1034,6 +1063,28 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                   .setRichToolbarTools(ids);
             },
             run: () => run(action.run),
+          ),
+        if (widget.enableStevessr)
+          ComposerToolAction(
+            id: 'stevessr',
+            label: S.current.stevessr.insert,
+            icon: const Icon(Icons.auto_awesome_rounded),
+            searchText: 'stevessr image bubble',
+            group: ComposerToolGroup.insert,
+            isPinned: () => container
+                .read(preferencesProvider)
+                .richToolbarTools
+                .contains('stevessr'),
+            togglePinned: () {
+              final ids = List<String>.of(
+                container.read(preferencesProvider).richToolbarTools,
+              );
+              if (!ids.remove('stevessr')) ids.add('stevessr');
+              container
+                  .read(preferencesProvider.notifier)
+                  .setRichToolbarTools(ids);
+            },
+            run: () => run(_insertStevessrImage),
           ),
         if (widget.onSwitchToSource != null)
           ComposerToolAction(
@@ -1448,6 +1499,12 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       '上传图片',
       Icons.image_outlined,
       () async => _pickAndUploadImages(),
+    ),
+    (
+      ['longimage', '长图', '切图', 'ct'],
+      '长图上传',
+      Icons.content_cut_rounded,
+      () async => _pickAndUploadLongImage(),
     ),
     (
       ['callout', '标注', 'bz', 'note'],
@@ -2039,7 +2096,6 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   /// 表情面板开关(MarkdownEditor._togglePanel 同构:移动端经
   /// ChatBottomPanelContainer 与键盘等高互切零跳变;桌面走悬浮弹层)。
   void _toggleEmojiPanel() {
-    _toolsAnchor.dismiss();
     // 桌面端:悬浮弹层,不收 IME、焦点/光标原地不动;
     // _showEmojiPanel 由 popover listener 同步(驱动按钮高亮)
     if (_isDesktop) {
@@ -2080,9 +2136,17 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     state: editor,
     onInsertLink: _insertLink,
     onPickImage: _pickAndUploadImages,
+    onPickLongImage: _pickAndUploadLongImage,
     onToggleInlineSpoiler: () => toggleInlineSpoilerOn(editor),
     onSetHeading: (level) => editor.setHeading(level),
+    onApplyTextColor: () => unawaited(_applyTextColor(editor)),
   );
+
+  Future<void> _applyTextColor(EditorState editor) async {
+    final value = await showColorInsertDialog(context);
+    if (!mounted || value == null || editor != _editor) return;
+    editor.applyTextColor(value);
+  }
 
   /// 光标状态快照，驱动工具格子/按钮的激活态。
   RichToolSnapshot _buildToolSnapshot(EditorState editor) {
@@ -2402,6 +2466,44 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     }
   }
 
+  /// 独立长图上传：只选一张，宽高比校验通过后由用户选择切片数量。
+  Future<void> _pickAndUploadLongImage() async {
+    final editor = _editor;
+    if (editor == null) return;
+    final bookmark = InsertionBookmark(editor);
+    try {
+      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (image == null || !mounted || !identical(editor, _editor)) return;
+
+      final results = await showLongImageUploadDialog(
+        context,
+        imagePath: image.path,
+        imageName: image.name,
+      );
+      if (results == null ||
+          results.isEmpty ||
+          !mounted ||
+          !identical(editor, _editor) ||
+          !bookmark.valid) {
+        return;
+      }
+
+      for (final image in results) {
+        _queueUpload(
+          image.path,
+          image.originalName,
+          image: true,
+          insertionSelection: bookmark.selection,
+        );
+        bookmark.moveTo(editor.selection);
+      }
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    } finally {
+      bookmark.dispose();
+    }
+  }
+
   int _uploadingCount = 0;
   final Set<String> _addingImageGrids = {};
 
@@ -2648,6 +2750,13 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       ),
       ComposerToolAction(
         group: ComposerToolGroup.insert,
+        label: '长图上传',
+        icon: const Icon(Icons.content_cut_rounded),
+        searchText: 'long image split',
+        run: () => _runInsertAction('__long_image__'),
+      ),
+      ComposerToolAction(
+        group: ComposerToolGroup.insert,
         label: '上传文件',
         icon: const Icon(Icons.attach_file_rounded),
         searchText: 'file attachment',
@@ -2686,6 +2795,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       await _recordAndInsertVoice();
     } else if (selected == '__file__') {
       await _pickAndInsertFile();
+    } else if (selected == '__long_image__') {
+      await _pickAndUploadLongImage();
     } else if (selected == '__callout__') {
       await _insertCallout();
     } else if (selected == '__link__') {
@@ -2831,7 +2942,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     });
   }
 
-  Future<void> _showTableStructureMenu(String tableId, bool row, Rect anchor) async {
+  Future<void> _showTableStructureMenu(
+    String tableId,
+    bool row,
+    Rect anchor,
+  ) async {
     final target = _tableContext.value;
     if (target == null || target.tableId != tableId) return;
     final releaseChrome = ComposerChromeScope.maybeOf(context)?.hold();
@@ -3948,19 +4063,18 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                                                       radius: 8,
                                                       child: child,
                                                     ),
-                                            caretViewportInsets:
-                                                EdgeInsets.only(
-                                                  // 创建/编辑页的顶栏覆盖在滚动区上方。
-                                                  top:
-                                                      ComposerChromeScope.topInsetOf(
-                                                        context,
-                                                      ),
-                                                  bottom:
-                                                      bottomInset +
-                                                      _toolsAnchor
-                                                          .contextExtent
-                                                          .value,
-                                                ),
+                                            caretViewportInsets: EdgeInsets.only(
+                                              // 创建/编辑页的顶栏覆盖在滚动区上方。
+                                              top:
+                                                  ComposerChromeScope.topInsetOf(
+                                                    context,
+                                                  ),
+                                              bottom:
+                                                  bottomInset +
+                                                  _toolsAnchor
+                                                      .contextExtent
+                                                      .value,
+                                            ),
                                             showTrailingParagraph: true,
                                             emptyParagraphHint:
                                                 isEmpty &&
@@ -4005,8 +4119,18 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                                             // cook 替换
                                             onTableEdited: _onTableEdited,
                                             onTableCommit: _onTableEdited,
-                                            tableStructureControlsBuilder: _isDesktop ? null : (context, cell, open) => ComposerTableControls(cell: cell, onOpen: open),
-                                            onTableStructureMenuRequested: _isDesktop ? null : _showTableStructureMenu,
+                                            tableStructureControlsBuilder:
+                                                _isDesktop
+                                                ? null
+                                                : (context, cell, open) =>
+                                                      ComposerTableControls(
+                                                        cell: cell,
+                                                        onOpen: open,
+                                                      ),
+                                            onTableStructureMenuRequested:
+                                                _isDesktop
+                                                ? null
+                                                : _showTableStructureMenu,
                                             onTableContextChanged: _isDesktop
                                                 ? null
                                                 : _updateTableContext,
@@ -4205,7 +4329,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
           // 表情面板意图保持中,无论容器报什么态都续显面板
           if (_intendedPanel != _RichPanelType.none &&
               panelType != ChatBottomPanelType.other) {
-            return ColoredBox(color: surface, child: _buildEmojiPanel());
+            return ColoredBox(color: surface, child: _buildIntendedPanel());
           }
           switch (panelType) {
             case ChatBottomPanelType.keyboard:
@@ -4514,19 +4638,27 @@ class _RichToolbarState extends State<_RichToolbar> {
             ? child!
             : Tooltip(
                 message: context.l10n.editor.table_format_unavailable,
-                child: ExcludeFocus(child: AbsorbPointer(
-                  child: Opacity(opacity: .45, child: Row(
-                    key: const ValueKey('table-format-tools'),
-                    children: [
-                      _buildEmojiButton(theme),
-                      Expanded(child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(children: _buildMiddleTools(theme)),
-                      )),
-                      if (widget.onToggleTools != null) _buildToolsButton(theme),
-                    ],
-                  )),
-                )),
+                child: ExcludeFocus(
+                  child: AbsorbPointer(
+                    child: Opacity(
+                      opacity: .45,
+                      child: Row(
+                        key: const ValueKey('table-format-tools'),
+                        children: [
+                          _buildEmojiButton(theme),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(children: _buildMiddleTools(theme)),
+                            ),
+                          ),
+                          if (widget.onToggleTools != null)
+                            _buildToolsButton(theme),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
         child: ValueListenableBuilder<ComposerObjectSelection?>(
           valueListenable: widget.objectSelection,

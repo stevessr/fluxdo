@@ -19,6 +19,7 @@ import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:app_icons/app_icons.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../l10n/s.dart';
 import 'composer_action_menu.dart';
 

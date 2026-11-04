@@ -25,10 +25,10 @@ void main() {
   });
 
   Map<String, dynamic> payloadWithTags(List<int> ids) => {
-        'tags': [
-          for (final id in ids) {'id': id},
-        ],
-      };
+    'tags': [
+      for (final id in ids) {'id': id},
+    ],
+  };
 
   group('always 模式', () {
     test('命中任一静音标签即过滤', () {

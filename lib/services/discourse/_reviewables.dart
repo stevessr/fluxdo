@@ -25,13 +25,36 @@ mixin _ReviewablesMixin on _DiscourseServiceBase, _UsersMixin {
       final data = response.data;
       final list = data is Map ? data['pending_posts'] : null;
       if (list is! List) return const [];
-      return list
+
+      final pendingPosts = list
           .whereType<Map>()
           .map((e) => PendingPost.fromJson(Map<String, dynamic>.from(e)))
           .toList();
+
+      await PendingReviewContextStore.retainTopicTags(
+        site: AppConstants.baseUrl,
+        username: username,
+        activeReviewableIds: pendingPosts.map((post) => post.id).toSet(),
+      );
+      return pendingPosts;
     } on DioException catch (e) {
       _throwApiError(e);
     }
+  }
+
+  /// 读取待审新主题送审时补记的标签。
+  ///
+  /// 服务端若未来直接在 PendingPostSerializer 返回 tags，调用方应优先使用
+  /// [PendingPost.tags]；这里仅补足官方当前缺失的作者视角字段。
+  Future<List<String>?> getPendingTopicTags(int reviewableId) async {
+    final username = await getUsername();
+    if (username == null || username.isEmpty) return null;
+
+    return PendingReviewContextStore.readTopicTags(
+      site: AppConstants.baseUrl,
+      username: username,
+      reviewableId: reviewableId,
+    );
   }
 
   /// 撤回自己的待审核内容
@@ -39,12 +62,23 @@ mixin _ReviewablesMixin on _DiscourseServiceBase, _UsersMixin {
   /// 服务端 DELETE /review/{id},队列帖创建者本人有权,无需 version
   /// (对齐官方前端 topic.js deletePending)。
   Future<void> deleteReviewable(int reviewableId) async {
+    final username = await getUsername();
+
     try {
       await _dio.delete('/review/$reviewableId');
     } on DioException catch (e) {
       // 404:已被审核/已撤回,视为目标达成
-      if (e.response?.statusCode == 404) return;
-      _throwApiError(e);
+      if (e.response?.statusCode != 404) {
+        _throwApiError(e);
+      }
+    }
+
+    if (username != null && username.isNotEmpty) {
+      await PendingReviewContextStore.removeTopicTags(
+        site: AppConstants.baseUrl,
+        username: username,
+        reviewableId: reviewableId,
+      );
     }
   }
 }

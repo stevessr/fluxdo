@@ -20,9 +20,7 @@ void main() {
                 onPressed: () {},
               ),
             ],
-            child: const ListTile(
-              title: Text('供应商'),
-            ),
+            child: const ListTile(title: Text('供应商')),
           ),
         ),
       ),

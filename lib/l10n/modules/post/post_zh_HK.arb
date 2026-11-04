@@ -62,6 +62,14 @@
     }
   },
   "post_flagNotifyModerators": "私下通知管理人員",
+  "post_flaggedAs": "已舉報為{reason}",
+  "@post_flaggedAs": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "post_flagSubmitted": "舉報已提交",
   "post_flagTitle": "舉報帖子",
   "post_generateShareImage": "生成分享圖片",
@@ -110,6 +118,16 @@
   "post_replySentAction": "查看",
   "post_replyTo": "回覆給",
   "post_replyToTopic": "回覆話題",
+  "post_replyAsNewTopic": "回覆為關連的話題",
+  "post_replyAsNewPrivateMessage": "回覆作為新訊息給同一收件人",
+  "post_continueDiscussion": "繼續 {postLink} 的討論:",
+  "@post_continueDiscussion": {
+    "placeholders": {
+      "postLink": {
+        "type": "String"
+      }
+    }
+  },
   "post_replyToUser": "回覆 @{username}",
   "@post_replyToUser": {
     "placeholders": {

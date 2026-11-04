@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../common/skeleton.dart';
 
 /// 通知列表骨架屏
@@ -33,10 +34,7 @@ class _NotificationItemSkeleton extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             // 头像占位
-            Align(
-              alignment: Alignment.center,
-              child: SkeletonCircle(size: 40),
-            ),
+            Align(alignment: Alignment.center, child: SkeletonCircle(size: 40)),
             // 右上角图标占位
             Positioned(
               top: -2,
@@ -69,9 +67,7 @@ class _NotificationItemSkeleton extends StatelessWidget {
         padding: const EdgeInsets.only(top: 8),
         child: Row(
           children: [
-            Expanded(
-              child: SkeletonBox(width: double.infinity, height: 13),
-            ),
+            Expanded(child: SkeletonBox(width: double.infinity, height: 13)),
             const SizedBox(width: 8),
             SkeletonBox(width: 40, height: 12),
           ],

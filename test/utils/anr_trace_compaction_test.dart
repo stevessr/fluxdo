@@ -52,7 +52,8 @@ String compactTrace(String trace) {
       final line = lines[i];
       final trimmed = line.trimLeft();
       final isThreadHeader = line.startsWith('"');
-      final isFrame = trimmed.startsWith('at ') ||
+      final isFrame =
+          trimmed.startsWith('at ') ||
           trimmed.startsWith('- ') ||
           trimmed.startsWith('native: ');
 
@@ -170,7 +171,8 @@ void main() {
     });
 
     test('短 trace 原样保留,不做无谓折叠', () {
-      const trace = '----- pid 123 -----\n'
+      const trace =
+          '----- pid 123 -----\n'
           '"main" prio=5 tid=1 Native\n'
           '  at java.lang.Object.wait(Native method)\n'
           '  at foo.Bar.baz(Bar.java:1)\n'

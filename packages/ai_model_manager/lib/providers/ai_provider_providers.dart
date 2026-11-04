@@ -16,13 +16,15 @@ import '../utils/model_capabilities.dart';
 /// 需要主应用在 ProviderScope.overrides 中注入
 final aiSharedPreferencesProvider = Provider<SharedPreferences>((_) {
   throw UnimplementedError(
-      'aiSharedPreferencesProvider 必须在 ProviderScope.overrides 中注入');
+    'aiSharedPreferencesProvider 必须在 ProviderScope.overrides 中注入',
+  );
 });
 
 /// 可选的 HttpClientAdapter 工厂，由主应用在 ProviderScope.overrides 中注入
 /// 用于让 AI 请求复用应用的网络配置（代理等）
-final aiDioAdapterFactoryProvider =
-    Provider<HttpClientAdapter Function()?>((_) => null);
+final aiDioAdapterFactoryProvider = Provider<HttpClientAdapter Function()?>(
+  (_) => null,
+);
 
 /// 是否跟随应用网络配置
 final aiUseAppNetworkProvider = StateProvider<bool>((ref) {
@@ -54,9 +56,9 @@ final aiThinkingConfigProvider = StateProvider<ThinkingConfig>((ref) {
 /// 供应商列表状态管理
 final aiProviderListProvider =
     StateNotifierProvider<AiProviderListNotifier, List<AiProvider>>((ref) {
-  final prefs = ref.watch(aiSharedPreferencesProvider);
-  return AiProviderListNotifier(prefs);
-});
+      final prefs = ref.watch(aiSharedPreferencesProvider);
+      return AiProviderListNotifier(prefs);
+    });
 
 /// API 服务
 final aiProviderApiServiceProvider = Provider((ref) {
@@ -128,10 +130,7 @@ Future<void> setDefaultAiModel(
 ///
 /// [isImageMode]：true 清图像默认；false 清文本默认；null 清通用 + 同时
 /// 清空两个分模式 key（一键回到无默认状态）。
-Future<void> clearDefaultAiModel(
-  WidgetRef ref, {
-  bool? isImageMode,
-}) async {
+Future<void> clearDefaultAiModel(WidgetRef ref, {bool? isImageMode}) async {
   final prefs = ref.read(aiSharedPreferencesProvider);
   if (isImageMode == true) {
     final imageKey = prefs.getString(_kDefaultImageModelKey);
@@ -302,8 +301,9 @@ class AiProviderListNotifier extends StateNotifier<List<AiProvider>> {
   }
 
   Future<void> _reorderByPinned(bool pinned, int oldIndex, int newIndex) async {
-    final pinnedItems =
-        state.where((provider) => provider.pinned == pinned).toList();
+    final pinnedItems = state
+        .where((provider) => provider.pinned == pinned)
+        .toList();
     if (pinnedItems.isEmpty) return;
     if (oldIndex < 0 ||
         oldIndex >= pinnedItems.length ||
@@ -313,9 +313,12 @@ class AiProviderListNotifier extends StateNotifier<List<AiProvider>> {
     }
     final moved = pinnedItems.removeAt(oldIndex);
     pinnedItems.insert(newIndex, moved);
-    final otherItems =
-        state.where((provider) => provider.pinned != pinned).toList();
-    state = pinned ? [...pinnedItems, ...otherItems] : [...otherItems, ...pinnedItems];
+    final otherItems = state
+        .where((provider) => provider.pinned != pinned)
+        .toList();
+    state = pinned
+        ? [...pinnedItems, ...otherItems]
+        : [...otherItems, ...pinnedItems];
     await _save();
   }
 

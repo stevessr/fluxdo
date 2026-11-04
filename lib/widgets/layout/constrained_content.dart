@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+
 import '../../utils/responsive.dart';
 
 /// 内容宽度约束组件
@@ -28,10 +29,7 @@ class ConstrainedContent extends StatelessWidget {
       content = Padding(padding: padding!, child: content);
     }
 
-    return Align(
-      alignment: alignment,
-      child: content,
-    );
+    return Align(alignment: alignment, child: content);
   }
 }
 
@@ -65,10 +63,7 @@ class SliverConstrainedContent extends StatelessWidget {
           bottom: (effectivePadding as EdgeInsets?)?.bottom ?? 0,
         );
 
-        return SliverPadding(
-          padding: combinedPadding,
-          sliver: sliver,
-        );
+        return SliverPadding(padding: combinedPadding, sliver: sliver);
       },
     );
   }

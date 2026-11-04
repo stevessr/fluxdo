@@ -1,16 +1,21 @@
 import 'package:ai_model_manager/ai_model_manager.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+
 import '../../services/app_error_handler.dart';
 import '../../services/notion/notion_bookmark_auto_sync.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderSliver, RenderViewport;
 import 'package:flutter/services.dart';
+
 import '../../utils/idle_task.dart';
+
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scroll_to_index/scroll_to_index.dart';
 import 'package:share_plus/share_plus.dart';
+
 import '../../l10n/s.dart';
 import '../../utils/frame_jank_monitor.dart';
 import '../../utils/html_text_mapper.dart';
@@ -19,11 +24,14 @@ import '../../utils/code_selection_context.dart';
 import '../../utils/link_launcher.dart';
 import '../../utils/quote_builder.dart';
 import '../../utils/scroll_jump.dart';
+
 import 'package:fluxdo_render/fluxdo_render.dart'
     show SelectionCoordinator, TocEntry;
 import 'package:uuid/uuid.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
+
 import '../../models/draft.dart';
 import '../../models/nested_topic.dart';
 import '../../models/nested_reading_position.dart';
@@ -42,6 +50,7 @@ import '../../providers/message_bus_providers.dart';
 import '../../providers/pinned_categories_provider.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/pico_vr_service.dart';
 import '../../services/screen_track.dart';
 import '../../services/toast_service.dart';
 import '../../services/log/log_writer.dart';
@@ -56,17 +65,20 @@ import '../../widgets/post/post_revision/revision_modal.dart';
 import '../../widgets/post/reply_sheet.dart';
 import '../../widgets/topic/topic_progress.dart';
 import '../../widgets/topic/topic_notification_button.dart';
+
 import 'package:common_ui/common_ui.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../widgets/common/emoji_text.dart';
+import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/common/error_view.dart';
 import '../../providers/nested_topic_provider.dart';
 import 'controllers/topic_detail_controller.dart';
 import 'controllers/topic_toc_controller.dart';
 import 'widgets/nested_post_list.dart';
-import 'widgets/invite_private_message_dialog.dart';
 import 'widgets/topic_detail_overlay.dart';
 import 'widgets/topic_post_list.dart';
+import '../webview_page.dart';
 import 'widgets/topic_toc_panel.dart';
 import 'widgets/topic_detail_header.dart';
 import '../../widgets/layout/master_detail_layout.dart';
@@ -91,6 +103,7 @@ import '../../models/shortcut_binding.dart';
 import '../../providers/shortcut_provider.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
 import '../../widgets/topic/assign_sheet.dart';
+import '../../widgets/user/account_switcher_sheet.dart';
 
 part 'actions/_scroll_actions.dart';
 part 'actions/_user_actions.dart';
@@ -213,8 +226,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   bool _isCheckTitleVisibilityScheduled = false;
   bool _isRefreshing = false;
   int? _removingPrivateMessageParticipantId;
-  String? _removingPrivateMessageGroupName;
-  bool _isTogglingArchiveMessage = false;
 
   /// 本地屏蔽名单过滤缓存：provider 状态与名单实例都未变时复用同一份
   /// 过滤结果，保证同一帧内多处读取拿到 identical 的 posts 列表
@@ -323,7 +334,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     _isParentActive = widget.parentActive;
     _providerPostNumber = widget.scrollToPostNumber;
     _nestedReadingStore = ref.read(nestedReadingStoreProvider);
-    _hadNestedSession = _nestedReadingStore.existingSession(_instanceId) != null;
+    _hadNestedSession =
+        _nestedReadingStore.existingSession(_instanceId) != null;
     _nestedReadingSession = _nestedReadingStore.session(_instanceId);
     if (!_hadNestedSession) {
       _nestedReadingSession.sort = _nestedReadingStore.sort;
@@ -340,7 +352,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     _nestedTargetPostNumber = _hadNestedSession
         ? _nestedReadingSession.contextTarget
         : (widget.scrollToPostNumber != null && widget.scrollToPostNumber! > 1
-            ? widget.scrollToPostNumber : null);
+              ? widget.scrollToPostNumber
+              : null);
     _searchFocusNode = FocusNode(onKeyEvent: _handleSearchKeyEvent);
 
     _expandController = AnimationController(
@@ -1129,7 +1142,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       if (mounted &&
           _nestedTargetPostNumber == saved.postNumber &&
           data.sort != saved.sort) {
-        await ref.read(nestedTopicProvider(params).notifier).changeSort(saved.sort);
+        await ref
+            .read(nestedTopicProvider(params).notifier)
+            .changeSort(saved.sort);
       }
     } catch (_) {
       // 定位接口失败由树形视图的错误/平铺回落入口处理。
@@ -1245,6 +1260,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
 
     // 搜索模式下的 AppBar
     if (searchState.isSearchMode) {
+      final profileAction = _buildProfileSwitcherAction();
       return AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: theme.colorScheme.surface,
@@ -1270,6 +1286,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             icon: const Icon(Symbols.close_rounded),
             onPressed: _exitSearchMode,
           ),
+          ?profileAction,
         ],
       );
     }
@@ -1430,6 +1447,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     required TopicDetailNotifier notifier,
     required double elevation,
   }) {
+    final profileAction = _buildProfileSwitcherAction();
     return MobileTopicWorkspaceAppBar(
       backButtonKey: const ValueKey('bookmark-workspace-mobile-back'),
       closeButtonKey: const ValueKey('bookmark-workspace-mobile-close'),
@@ -1457,6 +1475,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             notifier: notifier,
             canEditTopic: _canEditTopic(detail),
           ),
+        ?profileAction,
       ],
     );
   }
@@ -1538,6 +1557,41 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     );
   }
 
+  /// 帖子详情右上角的当前账号头像。登录账号更换后重新读取头像。
+  Widget? _buildProfileSwitcherAction() {
+    final currentUser = ref.watch(currentUserProvider).value;
+    if (currentUser == null) return null;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Tooltip(
+        message: context.l10n.accountManage_title,
+        child: Material(
+          type: MaterialType.transparency,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => unawaited(AccountSwitcherSheet.showClassic(context)),
+            onLongPress: () => unawaited(
+              AccountSwitcherSheet.show(
+                context,
+                placement: AccountQuickSwitcherPlacement.topRight,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: SmartAvatar(
+                imageUrl: currentUser.getAvatarUrl(),
+                radius: 14,
+                fallbackText: currentUser.username,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// 构建 AppBar Actions
   List<Widget> _buildAppBarActions({
     required TopicDetail? detail,
@@ -1545,8 +1599,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     required bool shouldShowTitle,
     required double expandProgress,
   }) {
+    final profileAction = _buildProfileSwitcherAction();
     if (detail == null) {
-      return [];
+      return [?profileAction];
     }
 
     final canEditTopic = _canEditTopic(detail);
@@ -1557,9 +1612,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     final hasAiModel = ref.watch(hasAvailableAiModelProvider);
     final isAiGenerating = hasAiModel
         ? ref.watch(
-            topicAiChatProvider(
-              widget.topicId,
-            ).select((state) => state.isGenerating),
+            topicAiChatProvider(widget.topicId)
+                .select((state) => state.isGenerating),
           )
         : false;
 
@@ -1577,13 +1631,65 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         notifier: notifier,
         canEditTopic: canEditTopic,
       ),
+      ?profileAction,
     ];
+  }
+
+  Future<void> _openTopicInNativeWindow() async {
+    final opened = await PicoVrService.instance.openNewWindow(
+      topicId: widget.topicId,
+      postNumber: _resolvedViewportPostNumber,
+    );
+    if (!mounted || opened) return;
+    final status = await PicoVrService.instance.getWindowStatus();
+    if (!mounted) return;
+    final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    final atCapacity = status?.isAtCapacity == true;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          atCapacity
+              ? (chinese
+                    ? '已达到10个窗口上限，请先关闭一个窗口'
+                    : 'The 10-window limit was reached; close one first')
+              : (chinese
+                    ? 'PICO 系统未能创建新的原生窗口'
+                    : 'PICO could not create a native window'),
+        ),
+      ),
+    );
   }
 
   Widget _buildMoreMenuAction({
     required TopicDetail detail,
     required TopicDetailNotifier notifier,
     required bool canEditTopic,
+  }) {
+    if (defaultTargetPlatform != TargetPlatform.android ||
+        MediaQuery.orientationOf(context) != Orientation.landscape) {
+      return _buildMoreMenuActionBody(
+        detail: detail,
+        notifier: notifier,
+        canEditTopic: canEditTopic,
+        showNewWindow: false,
+      );
+    }
+    return FutureBuilder<PicoVrCapabilities>(
+      future: PicoVrService.instance.capabilities,
+      builder: (context, snapshot) => _buildMoreMenuActionBody(
+        detail: detail,
+        notifier: notifier,
+        canEditTopic: canEditTopic,
+        showNewWindow: snapshot.data?.supportsMultipleWindows == true,
+      ),
+    );
+  }
+
+  Widget _buildMoreMenuActionBody({
+    required TopicDetail detail,
+    required TopicDetailNotifier notifier,
+    required bool canEditTopic,
+    required bool showNewWindow,
   }) {
     final bookmarkTarget = _bookmarkEditTarget(detail);
     final hasEditableBookmark = bookmarkTarget != null || detail.bookmarked;
@@ -1854,9 +1960,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           onShareImage: _shareAsImage,
           onExport: _showExportSheet,
           onOpenInBrowser: _openInBrowser,
+          onOpenInNewWindow: () => unawaited(_openTopicInNativeWindow()),
           onFilter: _showFilterSheet,
-          onToggleArchiveMessage: () =>
-              unawaited(_handleToggleArchiveMessage(notifier)),
           onReadingSettings: () {
             Navigator.push(
               context,
@@ -1937,6 +2042,27 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             ],
           ),
         ),
+        if (showNewWindow)
+          PopupMenuItem(
+            key: const ValueKey('topic-open-native-window'),
+            value: 'open_in_new_window',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.open_in_new_rounded,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  Localizations.localeOf(context).languageCode == 'zh'
+                      ? '在新窗口打开'
+                      : 'Open in new window',
+                ),
+              ],
+            ),
+          ),
         PopupMenuItem(
           value: 'open_in_browser',
           child: Row(
@@ -3130,18 +3256,22 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               : null,
           restorePosition: _nestedRestorePosition,
           fullTargetPostNumber: _nestedFullTarget,
-          active: _isRouteVisible &&
+          active:
+              _isRouteVisible &&
               _isParentActive &&
               !ref.read(topicSearchProvider(widget.topicId)).isSearchMode,
           onViewportPostChanged: (postNumber) {
             if (!_controller.isPositioned) _controller.markPositioned();
             _controller.updateViewportPostNumber(postNumber);
             ref
-                .read(detailScrollPositionProvider((
-                  topicId: widget.topicId,
-                  instanceId: _instanceId,
-                )).notifier)
-                .state = postNumber;
+                    .read(
+                      detailScrollPositionProvider((
+                        topicId: widget.topicId,
+                        instanceId: _instanceId,
+                      )).notifier,
+                    )
+                    .state =
+                postNumber;
           },
           onPositionChanged: (position) =>
               _nestedReadingStore.save(widget.topicId, position),
@@ -3157,17 +3287,13 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           headerKey: _headerKey,
           hideHeaderTitle: widget.hideInlineHeaderTitle,
           isLoggedIn: isLoggedIn,
+          currentUserId: ref.read(currentUserProvider).value?.id,
+          currentUserIsAdmin:
+              ref.read(currentUserProvider).value?.admin ?? false,
           removingPrivateMessageParticipantId:
               _removingPrivateMessageParticipantId,
-          removingPrivateMessageGroupName: _removingPrivateMessageGroupName,
           onRemovePrivateMessageParticipant: isLoggedIn
               ? _handleRemovePrivateMessageParticipant
-              : null,
-          onRemovePrivateMessageGroup: isLoggedIn
-              ? _handleRemovePrivateMessageGroup
-              : null,
-          onInvitePrivateMessageParticipants: isLoggedIn
-              ? _handleInvitePrivateMessageParticipants
               : null,
           onReply: _handleReply,
           onEdit: _handleEdit,
@@ -3221,15 +3347,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               headingAnchorRegistry: _tocController.registry,
               removingPrivateMessageParticipantId:
                   _removingPrivateMessageParticipantId,
-              removingPrivateMessageGroupName: _removingPrivateMessageGroupName,
               onRemovePrivateMessageParticipant: isLoggedIn
                   ? _handleRemovePrivateMessageParticipant
-                  : null,
-              onRemovePrivateMessageGroup: isLoggedIn
-                  ? _handleRemovePrivateMessageGroup
-                  : null,
-              onInvitePrivateMessageParticipants: isLoggedIn
-                  ? _handleInvitePrivateMessageParticipants
                   : null,
               hasMoreBefore: notifier.hasMoreBefore,
               hasMoreAfter: notifier.hasMoreAfter,

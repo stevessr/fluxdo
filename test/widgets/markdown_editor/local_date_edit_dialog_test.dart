@@ -11,11 +11,41 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     LocalDateRun? result;
-    const initial = LocalDateRun(date: '2027-03-12', time: '10:20:30', fallbackText: '日期', recurring: '1.months', countdownRaw: 'false', endDate: '2027-03-15', endTime: '12:34:56');
-    await tester.pumpWidget(ProviderScope(overrides: [sharedPreferencesProvider.overrideWithValue(prefs)], child: MaterialApp(home: Builder(builder: (context) => Scaffold(body: TextButton(onPressed: () async { result = await showLocalDateEditDialog(context, initial: initial); }, child: const Text('打开')))))));
+    const initial = LocalDateRun(
+      date: '2027-03-12',
+      time: '10:20:30',
+      fallbackText: '日期',
+      recurring: '1.months',
+      countdownRaw: 'false',
+      endDate: '2027-03-15',
+      endTime: '12:34:56',
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async {
+                  result = await showLocalDateEditDialog(
+                    context,
+                    initial: initial,
+                  );
+                },
+                child: const Text('打开'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.tap(find.text('打开'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, '2027-03-15'), '2027-03-16');
+    await tester.enterText(
+      find.widgetWithText(TextField, '2027-03-15'),
+      '2027-03-16',
+    );
     await tester.tap(find.text('应用'));
     await tester.pumpAndSettle();
     expect(result?.recurring, '1.months');

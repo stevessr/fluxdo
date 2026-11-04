@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
@@ -6,20 +7,27 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../utils/frame_jank_monitor.dart';
 import '../utils/link_launcher.dart';
 import '../services/deep_link_service.dart';
 import '../services/toast_service.dart';
 import '../services/app_link_service.dart';
 import '../services/network/cookie/cookie_store_observer.dart';
+import 'webview_cookie_manager_page.dart';
 import '../services/network/cookie/webview_cookie_priming.dart';
 import '../services/webview_settings.dart';
 import '../services/windows_webview_environment_service.dart';
 import '../widgets/common/app_link_confirm_dialog.dart';
+import '../widgets/common/smart_avatar.dart';
+import '../widgets/user/account_switcher_sheet.dart';
+import '../providers/discourse_providers.dart';
 import '../providers/web_bookmark_provider.dart';
 import '../providers/web_history_provider.dart';
 import '../providers/download_provider.dart';
+
 import 'package:common_ui/common_ui.dart';
+
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
 
@@ -66,14 +74,11 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
   /// hybrid composition（Android）/HWND（Windows）实时回读造成卡顿。
   Uint8List? _webViewSnapshot;
 
-
   @override
   void initState() {
     super.initState();
     _currentUrl = widget.url;
     _currentTitle = widget.title ?? '';
-    // 可见 WebView(hybrid composition)在位期间会参与每帧合成,
-    // 打点让诊断时间轴能对齐"WebView 页在前台"与掉帧段
     FrameJankMonitor.logEvent('WEBVIEW', 'WebViewPage mount');
   }
 
@@ -88,8 +93,8 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
   Widget build(BuildContext context) {
     final windowsWebViewEnvironment =
         WindowsWebViewEnvironmentService.instance.environment;
-
     final theme = Theme.of(context);
+    final currentUser = ref.watch(currentUserProvider).value;
     final isBookmarked = ref.watch(
       webBookmarkProvider.select(
         (list) => list.any((e) => e.url == _currentUrl),
@@ -97,10 +102,6 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
     );
 
     return PopScope(
-      // WebView 还有历史时，返回键先回退网页；到首层后交给路由，
-      // 这样离开浏览器页面可以使用 Android 预测式返回动画。
-      // 历史状态未稳定时保守拦截并实时查询，避免新页面刚开始导航、
-      // _canGoBack 尚未回填的窗口里把整个 WebView 路由直接退出。
       canPop: _historyStateSettled && !_canGoBack,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
@@ -197,8 +198,7 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                   value: 'toggle_bookmark',
                   child: Row(
                     children: [
-                      Icon(Symbols.star_rounded, fill: isBookmarked ? 1 : 0,
-                      ),
+                      Icon(Symbols.star_rounded, fill: isBookmarked ? 1 : 0),
                       const SizedBox(width: 8),
                       Text(
                         isBookmarked
@@ -219,6 +219,16 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                   ),
                 ),
                 PopupMenuItem(
+                  value: 'clear_site_cookies',
+                  child: Row(
+                    children: [
+                      const Icon(Symbols.cookie_rounded),
+                      const SizedBox(width: 8),
+                      const Text('Cookie 管理器'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
                   value: 'open_external',
                   child: Row(
                     children: [
@@ -230,79 +240,130 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                 ),
               ],
             ),
+            if (currentUser != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Tooltip(
+                  message: context.l10n.accountManage_title,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () =>
+                          unawaited(AccountSwitcherSheet.showClassic(context)),
+                      onLongPress: () => unawaited(
+                        AccountSwitcherSheet.show(
+                          context,
+                          placement: AccountQuickSwitcherPlacement.topRight,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: SmartAvatar(
+                          imageUrl: currentUser.getAvatarUrl(),
+                          radius: 14,
+                          fallbackText: currentUser.username,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
         body: Column(
-              children: [
-                if (_isLoading)
-                  M3eLinearProgress(
-                    value: _progress,
-                    trackColor: theme.colorScheme.surfaceContainerHighest,
-                  ),
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Offstage(
-                        offstage: _webViewSnapshot != null,
-                        child: WebViewSettings.wrapWithScrollFix(
+          children: [
+            if (_isLoading)
+              M3eLinearProgress(
+                value: _progress,
+                trackColor: theme.colorScheme.surfaceContainerHighest,
+              ),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Offstage(
+                    offstage: _webViewSnapshot != null,
+                    child: WebViewSettings.wrapWithScrollFix(
                       InAppWebView(
-                            webViewEnvironment: windowsWebViewEnvironment,
-                            initialSettings: WebViewSettings.visible
-                              ..useShouldOverrideUrlLoading = true,
-                            initialUserScripts:
-                                WebViewSettings.compatPolyfillScripts,
-                            shouldOverrideUrlLoading:
-                                _shouldOverrideUrlLoading,
-                            onReceivedServerTrustAuthRequest: (_, challenge) =>
-                                WebViewSettings.handleServerTrustAuthRequest(
-                                  challenge,
-                                ),
-                            onWebViewCreated: (controller) async {
-                              _controller = controller;
-                              // 老 WKWebView 的 JS 运行时错误回传到 LogWriter。
-                              WebViewSettings.registerJsErrorReporter(controller);
-                              if (widget.url.isNotEmpty) {
-                                // v0.4.0: 取代 RawSetCookieQueue.flush
-                                await WebViewCookiePriming.instance
-                                    .prime(widget.url);
-                                await controller.loadUrl(
-                                  urlRequest:
-                                      URLRequest(url: WebUri(widget.url)),
-                                );
-                              }
-                              // Android: 启用 WebAuthn/PassKey 支持
-                              if (io.Platform.isAndroid) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  const MethodChannel('com.fluxdo/webauthn')
-                                      .invokeMethod('enableWebAuthentication');
-                                });
-                              }
-                            },
-                            onLoadStart: (controller, url) {
-                              setState(() {
-                                _navigationRevision += 1;
-                                _historyStateSettled = false;
-                                _isLoading = true;
-                                _currentUrl = url?.toString() ?? '';
-                              });
-                            },
-                            onProgressChanged: (controller, progress) {
-                              setState(() => _progress = progress / 100);
-                            },
-                            onLoadStop: (controller, url) async {
+                        webViewEnvironment: windowsWebViewEnvironment,
+                        initialSettings: WebViewSettings.visible
+                          ..useShouldOverrideUrlLoading = true,
+                        initialUserScripts:
+                            WebViewSettings.compatPolyfillScripts,
+                        shouldOverrideUrlLoading: _shouldOverrideUrlLoading,
+                        onReceivedServerTrustAuthRequest: (_, challenge) =>
+                            WebViewSettings.handleServerTrustAuthRequest(
+                              challenge,
+                            ),
+                        onWebViewCreated: (controller) async {
+                          _controller = controller;
+                          WebViewSettings.registerJsErrorReporter(controller);
+                          if (widget.url.isNotEmpty) {
+                            await WebViewCookiePriming.instance.prime(
+                              widget.url,
+                            );
+                            await controller.loadUrl(
+                              urlRequest: URLRequest(url: WebUri(widget.url)),
+                            );
+                          }
+                          if (io.Platform.isAndroid) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              const MethodChannel('com.fluxdo/webauthn')
+                                  .invokeMethod('enableWebAuthentication');
+                            });
+                          }
+                        },
+                        onLoadStart: (controller, url) {
+                          setState(() {
+                            _navigationRevision += 1;
+                            _historyStateSettled = false;
+                            _isLoading = true;
+                            _currentUrl = url?.toString() ?? '';
+                          });
+                        },
+                        onProgressChanged: (controller, progress) {
+                          setState(() => _progress = progress / 100);
+                        },
+                        onLoadStop: (controller, url) async {
+                          final revision = _navigationRevision;
+                          setState(() => _isLoading = false);
+                          CookieStoreObserver.instance.notifyExternalChange();
+                          await WebViewSettings.injectScrollFix(controller);
+                          final title = await controller.getTitle();
+                          final canGoBack = await controller.canGoBack();
+                          final canGoForward = await controller.canGoForward();
+                          if (!mounted || revision != _navigationRevision) {
+                            return;
+                          }
+                          final urlString = url?.toString();
+                          setState(() {
+                            _currentUrl = urlString ?? '';
+                            _canGoBack = canGoBack;
+                            _canGoForward = canGoForward;
+                            _historyStateSettled = true;
+                            if (title != null && title.isNotEmpty) {
+                              _currentTitle = title;
+                            }
+                          });
+                          if (widget.injectCss != null) {
+                            await controller.injectCSSCode(
+                              source: widget.injectCss!,
+                            );
+                          }
+                          if (urlString != null && urlString.isNotEmpty) {
+                            ref
+                                .read(webHistoryProvider.notifier)
+                                .record(urlString, _currentTitle);
+                          }
+                        },
+                        onUpdateVisitedHistory:
+                            (controller, url, isReload) async {
                               final revision = _navigationRevision;
-                              setState(() => _isLoading = false);
-                              // 触发 cookie observer sweep (Android 主要触发点;
-                              // Apple 平台 native observer 已有覆盖, 此处与 debounce
-                              // 合并不会重复 sweep)
-                              CookieStoreObserver.instance.notifyExternalChange();
-                              await WebViewSettings.injectScrollFix(controller);
-                              final title = await controller.getTitle();
                               final canGoBack = await controller.canGoBack();
-                              final canGoForward =
-                                  await controller.canGoForward();
+                              final canGoForward = await controller
+                                  .canGoForward();
                               if (!mounted || revision != _navigationRevision) {
                                 return;
                               }
@@ -312,77 +373,43 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                                 _canGoBack = canGoBack;
                                 _canGoForward = canGoForward;
                                 _historyStateSettled = true;
-                                if (title != null && title.isNotEmpty) {
-                                  _currentTitle = title;
-                                }
                               });
-                              if (widget.injectCss != null) {
-                                await controller.injectCSSCode(
-                                  source: widget.injectCss!,
-                                );
-                              }
-                              // 记录浏览历史
-                              if (urlString != null && urlString.isNotEmpty) {
-                                ref
-                                    .read(webHistoryProvider.notifier)
-                                    .record(urlString, _currentTitle);
-                              }
                             },
-                            onUpdateVisitedHistory:
-                                (controller, url, isReload) async {
-                                  final revision = _navigationRevision;
-                                  final canGoBack =
-                                      await controller.canGoBack();
-                                  final canGoForward =
-                                      await controller.canGoForward();
-                                  if (!mounted ||
-                                      revision != _navigationRevision) {
-                                    return;
-                                  }
-                                  final urlString = url?.toString();
-                                  setState(() {
-                                    _currentUrl = urlString ?? '';
-                                    _canGoBack = canGoBack;
-                                    _canGoForward = canGoForward;
-                                    _historyStateSettled = true;
-                                  });
-                                },
-                            onTitleChanged: (controller, title) {
-                              if (title != null && title.isNotEmpty) {
-                                setState(() => _currentTitle = title);
-                              }
-                            },
-                            onDownloadStarting: (controller, request) {
-                              final url = request.url.toString();
-                              ref
-                                  .read(downloadProvider.notifier)
-                                  .startDownload(
-                                    url: url,
-                                    suggestedFilename:
-                                        request.suggestedFilename,
-                                    mimeType: request.mimeType,
-                                    contentLength: request.contentLength,
-                                  );
-                              return null;
-                            },
-                          ),
-                          getController: () => _controller,
+                        onTitleChanged: (controller, title) {
+                          if (title != null && title.isNotEmpty) {
+                            setState(() => _currentTitle = title);
+                          }
+                        },
+                        onDownloadStarting: (controller, request) {
+                          final url = request.url.toString();
+                          ref
+                              .read(downloadProvider.notifier)
+                              .startDownload(
+                                url: url,
+                                suggestedFilename: request.suggestedFilename,
+                                mimeType: request.mimeType,
+                                contentLength: request.contentLength,
+                              );
+                          return null;
+                        },
+                      ),
+                      getController: () => _controller,
+                    ),
+                  ),
+                  if (_webViewSnapshot != null)
+                    Positioned.fill(
+                      child: RepaintBoundary(
+                        child: Image.memory(
+                          _webViewSnapshot!,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
                         ),
                       ),
-                      if (_webViewSnapshot != null)
-                        Positioned.fill(
-                          child: RepaintBoundary(
-                            child: Image.memory(
-                              _webViewSnapshot!,
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -400,31 +427,20 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
     if (url == null) return NavigationActionPolicy.ALLOW;
 
     final scheme = url.scheme.toLowerCase();
-
-    // HTTP(S) 和内部 scheme 正常加载
     if (_allowedSchemes.contains(scheme)) {
       return NavigationActionPolicy.ALLOW;
     }
-
-    // javascript: 静默阻止
     if (scheme == 'javascript') {
       return NavigationActionPolicy.CANCEL;
     }
-
-    // 应用自有 scheme 直接交给深链服务，避免授权回调被当成外部应用
-    // 链接弹出确认框，或在 WebView 内导航失败。
     if (scheme == 'fluxdo' || scheme == 'discourse') {
       DeepLinkService.instance.handleUri(url);
       return NavigationActionPolicy.CANCEL;
     }
 
-    // 其他 scheme（应用链接）：解析目标应用并弹出确认对话框
     final urlString = url.toString();
     if (!mounted) return NavigationActionPolicy.CANCEL;
-
-    // 通过原生代码解析目标应用信息
     final appInfo = await AppLinkService.resolveAppLink(urlString);
-
     if (!mounted) return NavigationActionPolicy.CANCEL;
 
     final confirmed = await showAppLinkConfirmDialog(
@@ -433,15 +449,12 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
       appName: appInfo.appName,
       appIcon: appInfo.appIcon,
     );
-
     if (confirmed == true) {
       final success = await AppLinkService.launchAppLink(urlString);
       if (!success && mounted) {
         ToastService.showError(S.current.webview_noAppForLink);
       }
     }
-
-    // 无论用户选择如何，都不让 WebView 加载此 URL
     return NavigationActionPolicy.CANCEL;
   }
 
@@ -453,17 +466,15 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
       case 'copy_url':
         _copyUrl();
         break;
+      case 'clear_site_cookies':
+        unawaited(_showCookieManager());
+        break;
       case 'open_external':
         _openInExternalBrowser();
         break;
     }
   }
 
-  /// 弹出 URL 输入对话框。
-  ///
-  /// 为避免 BackdropFilter 对实时 WebView 做高斯模糊导致的掉帧，
-  /// 先截图盖在 WebView 之上，让对话框模糊的是静态图像。
-  /// 截图覆盖后 WebView 也不再持有 InputConnection，键盘可立即弹出。
   Future<void> _showUrlInput() async {
     final snapshot = await _controller?.takeScreenshot();
     if (!mounted) return;
@@ -519,10 +530,34 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
     }
   }
 
+  Future<void> _showCookieManager() async {
+    final uri = Uri.tryParse(_currentUrl);
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      return;
+    }
+
+    final snapshot = await _controller?.takeScreenshot();
+    if (!mounted) return;
+    if (snapshot != null) {
+      setState(() => _webViewSnapshot = snapshot);
+    }
+
+    try {
+      await WebViewCookieManagerPage.open(context, _currentUrl);
+      if (!mounted) return;
+      await _controller?.reload();
+    } finally {
+      if (mounted && _webViewSnapshot != null) {
+        setState(() => _webViewSnapshot = null);
+      }
+    }
+  }
+
   void _navigateToUrl(String input) {
     var url = input.trim();
     if (url.isEmpty) return;
-    // 自动补全 scheme
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       url = 'https://$url';
     }
@@ -566,7 +601,6 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
 
   Future<void> _openInExternalBrowser() async {
     if (_currentUrl.isEmpty) return;
-
     try {
       final success = await launchInExternalBrowser(_currentUrl);
       if (!success && mounted) {

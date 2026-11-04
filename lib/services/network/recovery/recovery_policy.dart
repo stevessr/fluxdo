@@ -48,7 +48,14 @@ sealed class RecoveryDecision {
   const factory RecoveryDecision.complete() = RecoveryComplete;
 
   /// 延迟 [delay] 后重放。
-  const factory RecoveryDecision.retry({Duration delay}) = RecoveryRetry;
+  ///
+  /// [requestExtra] 仅用于描述“下一次尝试”的请求语义变化，由
+  /// [RecoveryCoordinator] 在重建 RequestOptions 时统一应用。策略仍然不直接
+  /// 修改原请求，也不会新增第二套 dio.fetch() 重放入口。
+  const factory RecoveryDecision.retry({
+    Duration delay,
+    Map<String, dynamic> requestExtra,
+  }) = RecoveryRetry;
 
   /// 先执行全局恢复动作,成功后再重放;动作失败则终止。
   ///
@@ -68,9 +75,13 @@ final class RecoveryComplete extends RecoveryDecision {
 }
 
 final class RecoveryRetry extends RecoveryDecision {
-  const RecoveryRetry({this.delay = Duration.zero});
+  const RecoveryRetry({
+    this.delay = Duration.zero,
+    this.requestExtra = const <String, dynamic>{},
+  });
 
   final Duration delay;
+  final Map<String, dynamic> requestExtra;
 }
 
 final class RecoveryRecoverThenRetry extends RecoveryDecision {
@@ -121,17 +132,18 @@ class AttemptBudget {
 
   int get attemptsUsed => _attempts;
 
-  /// 记账并判断是否允许再来一次。
+  /// 某策略已触发次数(诊断用)。
+  int usageOf(String policyName) => _policyUse[policyName] ?? 0;
+
+  /// 尝试为某策略再消费一次预算。
   bool tryConsume(String policyName) {
     if (_attempts >= maxAttempts) return false;
-    final cap = perPolicyCap[policyName];
+    final perPolicyLimit = perPolicyCap[policyName];
     final used = _policyUse[policyName] ?? 0;
-    if (cap != null && used >= cap) return false;
-    _attempts++;
+    if (perPolicyLimit != null && used >= perPolicyLimit) return false;
+
+    _attempts += 1;
     _policyUse[policyName] = used + 1;
     return true;
   }
-
-  /// 某策略已触发次数(诊断用)。
-  int usageOf(String policyName) => _policyUse[policyName] ?? 0;
 }

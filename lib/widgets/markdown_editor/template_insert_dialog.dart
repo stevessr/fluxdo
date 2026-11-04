@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
+
 import '../../services/discourse/discourse_service.dart';
 import '../../models/template.dart';
 import '../../utils/dialog_utils.dart';
 import '../common/app_bottom_sheet.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../../../../l10n/s.dart';
 
 /// 模板选择底部弹窗
@@ -179,7 +182,9 @@ class _TemplateInsertDialogState extends State<TemplateInsertDialog> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isExpanded ? Symbols.expand_less_rounded : Symbols.expand_more_rounded,
+                    isExpanded
+                        ? Symbols.expand_less_rounded
+                        : Symbols.expand_more_rounded,
                     size: 20,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

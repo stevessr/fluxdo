@@ -145,9 +145,8 @@ class ContentActionsButton extends StatelessWidget {
     if (items.isEmpty) return;
 
     final width = composerActionMenuWidth(context);
-    final labelStyle = Theme.of(
-      context,
-    ).textTheme.labelLarge!.copyWith(height: 1.25);
+    final labelStyle = Theme.of(context).textTheme.labelLarge!
+        .copyWith(height: 1.25);
     var rowHeight = 76.0;
     for (final item in items) {
       final painter = TextPainter(
@@ -233,9 +232,9 @@ class _ContentActionsGridEntryState extends State<_ContentActionsGridEntry> {
                                       'composer-content-action-${row * 3 + col}',
                                     ),
                                     onPressed: items[row * 3 + col].enabled
-                                        ? () => Navigator.of(
-                                            context,
-                                          ).pop(row * 3 + col)
+                                        ? () =>
+                                              Navigator.of(context)
+                                                  .pop(row * 3 + col)
                                         : null,
                                     style: TextButton.styleFrom(
                                       foregroundColor: colors.onSurface,

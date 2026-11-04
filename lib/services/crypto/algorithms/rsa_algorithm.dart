@@ -65,7 +65,8 @@ RsaParsedKey parseRsaPem(String pemText) {
       return RsaParsedPrivateKey(_parsePkcs1PrivateKey(der));
     case 'ENCRYPTED PRIVATE KEY':
       throw const CryptoException(
-          '暂不支持加密私钥，请先用 openssl 去除口令（openssl pkcs8 -topk8 -nocrypt）');
+        '暂不支持加密私钥，请先用 openssl 去除口令（openssl pkcs8 -topk8 -nocrypt）',
+      );
     default:
       throw CryptoException('不支持的 PEM 类型: $label');
   }
@@ -161,8 +162,9 @@ class RsaOaepAlgorithm extends CryptoAlgorithm {
       final out = <int>[];
       var start = 0;
       while (true) {
-        final end =
-            start + maxBlock > input.length ? input.length : start + maxBlock;
+        final end = start + maxBlock > input.length
+            ? input.length
+            : start + maxBlock;
         final block = Uint8List.fromList(input.sublist(start, end));
         final cipher = OAEPEncoding.withSHA256(RSAEngine())
           ..init(true, PublicKeyParameter<RSAPublicKey>(key.key));
@@ -196,14 +198,14 @@ class RsaOaepAlgorithm extends CryptoAlgorithm {
       throw const CryptoException('密文不是有效的 Base64');
     }
     if (input.isEmpty || input.length % modulusBytes != 0) {
-      throw CryptoException(
-          '密文长度异常（应为模长 $modulusBytes 字节的整数倍）');
+      throw CryptoException('密文长度异常（应为模长 $modulusBytes 字节的整数倍）');
     }
     final out = <int>[];
     try {
       for (var start = 0; start < input.length; start += modulusBytes) {
-        final block =
-            Uint8List.fromList(input.sublist(start, start + modulusBytes));
+        final block = Uint8List.fromList(
+          input.sublist(start, start + modulusBytes),
+        );
         final cipher = OAEPEncoding.withSHA256(RSAEngine())
           ..init(false, PrivateKeyParameter<RSAPrivateKey>(key.key));
         final pt = cipher.process(block);

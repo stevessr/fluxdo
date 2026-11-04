@@ -886,7 +886,10 @@ class _AppIconCard extends StatelessWidget {
                         Container(
                           color: Colors.black26,
                           child: const Center(
-                            child: LoadingSpinner(size: 24, color: Colors.white),
+                            child: LoadingSpinner(
+                              size: 24,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                     ],
@@ -1615,7 +1618,10 @@ class _ThemeColorSectionState extends ConsumerState<_ThemeColorSection> {
                                 setState(() => _removableColor = null);
                               },
                               iconSize: 28,
-                              icon: Icon(Symbols.delete_rounded, color: cs.primary),
+                              icon: Icon(
+                                Symbols.delete_rounded,
+                                color: cs.primary,
+                              ),
                             ),
                           ),
                       ],
@@ -1743,9 +1749,9 @@ class _ThemeColorSectionState extends ConsumerState<_ThemeColorSection> {
                                         .titleMedium
                                         ?.copyWith(
                                           fontWeight: FontWeight.w500,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurfaceVariant,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
                                         ),
                                   ),
                                   const SizedBox(width: 4),
@@ -1790,9 +1796,9 @@ class _ThemeColorSectionState extends ConsumerState<_ThemeColorSection> {
                                 'B:${(value * 100).round()}%',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                     ),
                               ),
                             ],

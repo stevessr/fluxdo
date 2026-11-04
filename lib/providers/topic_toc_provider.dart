@@ -10,9 +10,9 @@ import 'theme_provider.dart';
 /// - `true`/`false`:用户显式展开/收起的持久化选择,优先于自动规则。
 final topicTocVisibilityProvider =
     StateNotifierProvider<TopicTocVisibilityNotifier, bool?>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return TopicTocVisibilityNotifier(prefs);
-});
+      final prefs = ref.watch(sharedPreferencesProvider);
+      return TopicTocVisibilityNotifier(prefs);
+    });
 
 class TopicTocVisibilityNotifier extends StateNotifier<bool?> {
   static const String _key = 'topic_toc_visible';

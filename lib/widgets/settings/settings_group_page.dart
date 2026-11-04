@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../settings/settings_model.dart';
 import '../../settings/settings_renderer.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
 
 /// 通用数据驱动设置页
@@ -121,9 +122,7 @@ class _SettingsGroupPageState extends ConsumerState<SettingsGroupPage> {
     }
 
     return SegmentedCardGroup(
-      children: [
-        for (final item in effectiveItems) _buildItem(theme, item),
-      ],
+      children: [for (final item in effectiveItems) _buildItem(theme, item)],
     );
   }
 

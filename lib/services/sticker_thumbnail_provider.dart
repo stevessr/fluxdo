@@ -4,12 +4,16 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter_avif/flutter_avif.dart' as fa;
+import 'package:image/image.dart' as img;
 import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageFfi, NativeAnimatedImageException;
 
+import 'avif_fast_bridge.dart';
 import 'avif_image_provider.dart';
 import 'blob_image_cache.dart';
 import 'dio_http_client.dart';
+import 'sticker_thumbnail_cache_policy.dart';
 
 // 与 native_animated_image 内部定义的错误码保持一致(Rust 端 ERR_UNSUPPORTED = -2),
 // dart 端没单独 export 这个常量,我们直接复用数字 — 这是 stable FFI contract。
@@ -43,12 +47,67 @@ bool _bytesLookLikeAvif(Uint8List bytes) {
   return false;
 }
 
+/// ftyp 的 major / compatible brand 是否表明这是 AVIF sequence。
+///
+/// 对动画 AVIF，缩略图必须和完整动画使用同一个 libavif 后端。Android
+/// ImageDecoder / Flutter 平台 codec 对 AVIF sequence 的首帧支持并不一致：
+/// 有些文件会“成功”返回图像但颜色转换错误（典型表现就是整张偏紫），
+/// 因而不能用“平台 codec 成功”作为颜色正确的判据。
+bool _bytesLookLikeAnimatedAvif(Uint8List bytes) {
+  if (bytes.length < 16) return false;
+  if (bytes[4] != 0x66 ||
+      bytes[5] != 0x74 ||
+      bytes[6] != 0x79 ||
+      bytes[7] != 0x70) {
+    return false;
+  }
+
+  bool isAnimationBrand(int offset) {
+    if (offset < 0 || offset + 4 > bytes.length) return false;
+    final b0 = bytes[offset];
+    final b1 = bytes[offset + 1];
+    final b2 = bytes[offset + 2];
+    final b3 = bytes[offset + 3];
+    return (b0 == 0x61 && b1 == 0x76 && b2 == 0x69 && b3 == 0x73) || // avis
+        (b0 == 0x6D && b1 == 0x73 && b2 == 0x66 && b3 == 0x31); // msf1
+  }
+
+  if (isAnimationBrand(8)) return true;
+
+  final boxSize =
+      (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+  final end = boxSize.clamp(16, bytes.length);
+  for (var offset = 16; offset + 4 <= end; offset += 4) {
+    if (isAnimationBrand(offset)) return true;
+  }
+  return false;
+}
+
+/// GIF87a / GIF89a magic bytes。
+///
+/// 缩略图只需要首帧。GIF 在这里单独分流到 Flutter codec，避免调用
+/// native_animated_image 的“全动画 → 全帧 RGBA → 只取第一帧”路径：
+/// 后者既浪费 CPU/内存，又多了一次 raw RGBA 到 ui.Image 的颜色转换。
+bool _bytesLookLikeGif(Uint8List bytes) {
+  if (bytes.length < 6) return false;
+  return bytes[0] == 0x47 && // G
+      bytes[1] == 0x49 && // I
+      bytes[2] == 0x46 && // F
+      bytes[3] == 0x38 && // 8
+      (bytes[4] == 0x37 || bytes[4] == 0x39) && // 7 / 9
+      bytes[5] == 0x61; // a
+}
+
 /// 通用 sticker thumbnail provider — 单帧解码 + 缩放 + PNG cache。
 ///
 /// 这是 fluxdo sticker 面板的"地板": 30 张同屏的 grid 场景下,任何格式
 /// (.avif / .gif / .webp / .apng) 都走同一个 thumbnail PNG cache 路径,
 /// 首次解码后写 PNG 到磁盘,后续直接 Flutter 内置 codec 读 PNG
 /// (毫秒级,完全跳过 AV1 / GIF disposal 这类慢路径)。
+///
+/// 缓存身份与 decoder 版本彻底解耦：资源 key 永远是无版本号的
+/// `sticker_thumb:<targetSize>:<url>`；格式和 schema version 存在缓存记录
+/// envelope 里。未来只升级某个格式的 schema 时，其它格式继续命中。
 ///
 /// 之前架构错误:`AvifImageProvider` 只覆盖 AVIF,GIF/WebP sticker group
 /// 直接走 `CachedNetworkImageProvider` 没任何优化 → 30 个 GIF 同屏卡死。
@@ -75,9 +134,6 @@ class StickerThumbnailProvider extends ImageProvider<StickerThumbnailProvider> {
     this._keyGeneration,
   );
 
-  final DownloadPriority priority;
-  final int? _keyGeneration;
-
   /// 主动 cancel 所有 in-flight thumbnail decode。
   ///
   /// sticker panel dispose 时调用。Bumps 一个 generation counter,
@@ -98,6 +154,12 @@ class StickerThumbnailProvider extends ImageProvider<StickerThumbnailProvider> {
   /// 原文件所在 blob bucket(贴纸默认 stickerOriginal)。
   final String bucket;
 
+  /// 下载队列优先级(前景市场可越过后台预取)。
+  final DownloadPriority priority;
+
+  /// obtainKey 时捕获的解码代数：cancelInflight 后同参数新 key。
+  final int? _keyGeneration;
+
   /// URL 是否走得通这个 provider(AVIF / GIF / animated WebP / APNG)。
   /// 静态图(PNG/JPEG)和其它格式应该走 `CachedNetworkImageProvider`。
   static bool supports(String url) {
@@ -116,46 +178,169 @@ class StickerThumbnailProvider extends ImageProvider<StickerThumbnailProvider> {
     }
   }
 
-  /// 批量预热与可见请求共用首帧任务，下载及各后端仍各自限流。
+  /// 批量预热缩略图缓存(sticker 面板打开时一次性 30 张这种场景)。
+  ///
+  /// 已在 cache 或正在解的 URL 自动跳过,主 isolate 只做轻量 IO + ui.Image 创建。
   static Future<void> precacheBatch(
     List<String> urls, {
     required int targetSize,
     String bucket = BlobImageCache.stickerOriginalBucket,
+    DownloadPriority priority = DownloadPriority.normal,
     bool Function()? shouldContinue,
   }) async {
-    await Future.wait([
-      for (final url in urls)
-        if (shouldContinue == null || shouldContinue())
-          precache(
+    // 全程流水线:每张图「下载 → magic 分流 → 解码 → 写缩略图」独立。
+    // AVIF 走专用 decoder；GIF 缩略图走 Flutter codec 惰性取首帧；
+    // WebP/APNG 继续走 Rust worker pool。所有分流均看实际 magic bytes，
+    // 不信 URL 后缀（CDN 可能改写容器）。
+    Future<void> one(String url) async {
+      if (!supports(url)) return;
+      final thumbKey = _thumbnailCacheKey(url, targetSize);
+      if (_knownThumbnailKeys.contains(thumbKey)) return;
+      if (_pendingThumbnailTasks.containsKey(thumbKey)) return;
+      if (shouldContinue != null && !shouldContinue()) return;
+
+      try {
+        final cachedBytes = await _readCachedThumbnailBytes(thumbKey);
+        if (cachedBytes != null) return;
+
+        final bytes = await BlobImageCache.fetch(
+          bucket,
+          url,
+          priority: priority,
+        );
+        if (shouldContinue != null && !shouldContinue()) return;
+
+        if (_bytesLookLikeAvif(bytes)) {
+          // AVIF → precache(_pendingThumbnailTasks 去重,与 grid 现场
+          // 解码互不重复;_avifSemaphore(4) 限流)
+          await precache(
             url,
             targetSize: targetSize,
             bucket: bucket,
-            shouldContinue: shouldContinue,
-          ),
-    ]);
+            priority: priority,
+          );
+        } else if (_bytesLookLikeGif(bytes)) {
+          // GIF thumbnail 只需要首帧。Flutter codec 的 getNextFrame 是
+          // 惰性的，不会像 Rust FFI decode() 一样先把整段动画解成 RGBA。
+          // 同时直接在 codec 阶段等比降采样，避免 full-size 纹理上传。
+          await _nonAvifSemaphore.acquire();
+          ui.Image? image;
+          try {
+            if (shouldContinue != null && !shouldContinue()) return;
+            image = await _decodeFirstFrameViaFlutterCodec(
+              bytes,
+              targetSize: targetSize,
+            );
+            if (shouldContinue != null && !shouldContinue()) return;
+            await _cacheThumbnail(
+              thumbKey,
+              image,
+              format: StickerThumbnailFormat.gif,
+            );
+            _knownThumbnailKeys.add(thumbKey);
+          } finally {
+            image?.dispose();
+            _nonAvifSemaphore.release();
+          }
+        } else {
+          // animated WebP / APNG → Rust worker pool
+          final reply = await _DecoderWorkerPool.instance.decode(bytes);
+          if (reply == null) return;
+          if (shouldContinue != null && !shouldContinue()) return;
+          await _writeThumbnailFromRustOrFallback(
+            url: url,
+            bytes: bytes,
+            reply: reply,
+            targetSize: targetSize,
+          );
+        }
+      } on _ThumbnailCancelled {
+        // 面板关闭触发的取消,静默
+      } catch (e) {
+        debugPrint('[StickerThumbnail] prefetch failed $url: $e');
+      }
+    }
+
+    await Future.wait([for (final url in urls) one(url)]);
   }
 
-  /// 预热等待首帧而非写盘；后台缓存自行持有图像。
+  static Future<void> _writeThumbnailFromRustOrFallback({
+    required String url,
+    required Uint8List bytes,
+    required _DecodeReply reply,
+    required int targetSize,
+  }) async {
+    ui.Image? srcImage;
+    try {
+      if (reply.rgba != null) {
+        srcImage = await _rgbaToUiImage(reply.rgba!, reply.width, reply.height);
+      } else if (reply.unsupported) {
+        // Rust 不识别 → Flutter codec(静态 webp / png / jpeg)
+        try {
+          srcImage = await _decodeFirstFrameViaFlutterCodec(
+            bytes,
+            targetSize: targetSize,
+          );
+        } catch (e) {
+          debugPrint('[StickerThumbnail] both decoders failed $url: $e');
+          return;
+        }
+      } else {
+        // decode error or cancelled
+        return;
+      }
+      final displayImage =
+          (srcImage.width > targetSize || srcImage.height > targetSize)
+          ? await _resize(srcImage, targetSize)
+          : srcImage;
+      final thumbKey = _thumbnailCacheKey(url, targetSize);
+      await _cacheThumbnail(
+        thumbKey,
+        displayImage,
+        format: StickerThumbnailCachePolicy.detectFormat(bytes, url),
+      );
+      _knownThumbnailKeys.add(thumbKey);
+      if (displayImage != srcImage) displayImage.dispose();
+    } finally {
+      srcImage?.dispose();
+    }
+  }
+
+  /// 单 URL 预热(已 cache 立即 short-circuit;in-flight 等同一个 future)。
+  ///
+  /// 用于用户实际访问 + 没命中 batch prefetch 的 cache miss 路径。
   static Future<void> precache(
     String url, {
     required int targetSize,
     String bucket = BlobImageCache.stickerOriginalBucket,
-    bool Function()? shouldContinue,
+    DownloadPriority priority = DownloadPriority.normal,
   }) async {
     if (!supports(url)) return;
+
+    final thumbKey = _thumbnailCacheKey(url, targetSize);
+    if (_knownThumbnailKeys.contains(thumbKey)) return;
+
+    final cachedBytes = await _readCachedThumbnailBytes(thumbKey);
+    if (cachedBytes != null) return;
+
+    final pending = _pendingThumbnailTasks[thumbKey];
+    if (pending != null) {
+      await pending;
+      return;
+    }
+
+    final task = _warmThumbnail(
+      bucket: bucket,
+      url: url,
+      targetSize: targetSize,
+      thumbKey: thumbKey,
+      priority: priority,
+    );
+    _pendingThumbnailTasks[thumbKey] = task;
     try {
-      final image = await _acquireThumbnail(
-        bucket: bucket,
-        url: url,
-        targetSize: targetSize,
-        shouldContinue: shouldContinue,
-        visible: false,
-      );
-      image.dispose();
-    } on _ThumbnailCancelled {
-      // 预热取消不影响调用方。
-    } catch (e) {
-      debugPrint('[StickerThumbnail] prefetch failed $url: $e');
+      await task;
+    } finally {
+      _pendingThumbnailTasks.remove(thumbKey);
     }
   }
 
@@ -193,22 +378,35 @@ class StickerThumbnailProvider extends ImageProvider<StickerThumbnailProvider> {
   }
 
   Future<ImageInfo> _loadThumbnail(StickerThumbnailProvider key) async {
-    final generation = _thumbnailGeneration;
-    Future<ui.Image> acquire() => _acquireThumbnail(
+    final thumbKey = _thumbnailCacheKey(key.url, key.targetSize);
+
+    // 快速路径:格式 envelope 校验通过 → Flutter 内置 PNG codec(毫秒级)
+    final cachedBytes = await _readCachedThumbnailBytes(thumbKey);
+    if (cachedBytes != null) {
+      return _decodeThumbnailBytes(cachedBytes, key.scale);
+    }
+
+    // 首次解码走预热,避免重复
+    await precache(
+      key.url,
+      targetSize: key.targetSize,
+      bucket: key.bucket,
+      priority: key.priority,
+    );
+    final warmedBytes = await _readCachedThumbnailBytes(thumbKey);
+    if (warmedBytes != null) {
+      return _decodeThumbnailBytes(warmedBytes, key.scale);
+    }
+
+    // 缓存写入失败兜底:现场解 + 显示,不让用户看到空白
+    final decoded = await _decodeFirstFrameImage(
       bucket: key.bucket,
       url: key.url,
       targetSize: key.targetSize,
       priority: key.priority,
     );
-    ui.Image image;
-    try {
-      image = await acquire();
-    } on _ThumbnailCancelled {
-      // 共享预热的 shouldContinue 可以单独取消；可见请求在同代重试一次。
-      if (generation != _thumbnailGeneration) rethrow;
-      image = await acquire();
-    }
-    return ImageInfo(image: image, scale: key.scale);
+    unawaited(_cacheThumbnail(thumbKey, decoded.image, format: decoded.format));
+    return ImageInfo(image: decoded.image, scale: key.scale);
   }
 
   @override
@@ -243,14 +441,20 @@ class StickerThumbnailProvider extends ImageProvider<StickerThumbnailProvider> {
 /// 的约束已不存在,放开到 4 让首开 30 张 AVIF 从串行 3-9s 变成秒级。
 final _avifSemaphore = _Semaphore(4);
 
-/// 非 AVIF (GIF / WebP / APNG) 解码并发。decode 走 `_DecoderWorkerPool`
-/// (long-lived worker isolate)在后台串行,主 isolate 只做轻量 ui.Image
-/// 创建,可以放开并发到 8。
-///
-/// 关键:跟 AVIF 用**独立** semaphore,AVIF 慢不会阻塞 GIF/WebP/APNG 解码。
+/// sticker 动画 AVIF 首帧 decoder key。和 AvifImageProvider 自己的私有
+/// key 序列分开命名，避免共享 flutter_avif Rust decoder registry 时碰撞。
+int _stickerAvifCodecKeySeq = 0;
+
+/// 非 AVIF 解码并发。GIF 的 Flutter codec 首帧路径和 WebP/APNG 的
+/// Rust worker 路径共用这层入口限流；AVIF 有独立 semaphore。
 final _nonAvifSemaphore = _Semaphore(8);
 
-final _thumbnailFrames = StickerThumbnailFirstFrameLoader();
+/// in-flight prefetch task,去重避免重复解
+final _pendingThumbnailTasks = <String, Future<void>>{};
+
+/// 已知 cache 命中(进程级 in-memory 索引,跳过磁盘查询)。key 本身永远
+/// 不携带 schema version；格式版本只由 cache envelope 校验。
+final _knownThumbnailKeys = <String>{};
 
 /// 生成号 — 每次 [StickerThumbnailProvider.cancelInflight] 调用 ++,
 /// `_decodeFirstFrameImage` 内部 await 链的多个检查点都 captures 起始号,
@@ -266,7 +470,6 @@ int _thumbnailGeneration = 0;
 /// `_decodeFirstFrameImage` 内部检查 generation,mismatch 即 throw 退出。
 void _bumpThumbnailGeneration() {
   _thumbnailGeneration++;
-  _thumbnailFrames.cancel();
 }
 
 class _ThumbnailCancelled implements Exception {
@@ -275,179 +478,89 @@ class _ThumbnailCancelled implements Exception {
   String toString() => 'sticker thumbnail decode cancelled';
 }
 
-String _thumbnailCacheKey(String url, int targetSize) {
-  return 'sticker_thumb:$targetSize:$url';
+class _DecodedThumbnail {
+  const _DecodedThumbnail({required this.image, required this.format});
+
+  final ui.Image image;
+  final StickerThumbnailFormat format;
 }
 
-/// 缩略图 PNG 走 [BlobImageCache](零 sqlite 寻址):30 张同屏的 grid
-/// 场景下,cache_manager 的每 key 一次 SELECT 是纯浪费。原图字节仍走
-/// cache manager(下载进度/大文件语义)。
+String _thumbnailCacheKey(String url, int targetSize) {
+  return StickerThumbnailCachePolicy.key(url, targetSize);
+}
+
+/// 缩略图仍共用 BlobImageCache 的 stickerThumb 物理池，但 record 自带
+/// source-format/schema envelope。这样资源 key 稳定、格式版本彼此独立，
+/// 且继续复用现有 90 天 retention / 清缓存 / sweep 逻辑。
 Future<Uint8List?> _readCachedThumbnailBytes(String thumbKey) async {
-  final bytes = await BlobImageCache.read(
+  final record = await BlobImageCache.read(
     BlobImageCache.stickerThumbBucket,
     thumbKey,
   );
-  if (bytes == null) return null;
-  return bytes;
+  if (record == null) return null;
+  final pngBytes = StickerThumbnailCachePolicy.unwrap(record);
+  if (pngBytes == null) return null;
+  _knownThumbnailKeys.add(thumbKey);
+  return pngBytes;
 }
 
-/// 首帧共享器：每个消费者独占 clone，任务只在解码或写盘期间保留原图。
-/// 注入解码和缓存操作，测试无需网络、磁盘或原生 AVIF 插件。
-@visibleForTesting
-class StickerThumbnailFirstFrameLoader {
-  final _tasks = <String, _SharedThumbnailFrame>{};
-  int _generation = 0;
-
-  void cancel() {
-    _generation++;
-    // 旧任务自行收敛；新一代绝不加入旧任务。
-    _tasks.clear();
-  }
-
-  Future<ui.Image> load(
-    String key, {
-    required Future<ui.Image> Function() decode,
-    required Future<void> Function(ui.Image) cache,
-    DownloadPriority priority = DownloadPriority.normal,
-    bool visible = true,
-    bool Function()? shouldContinue,
-  }) async {
-    final generation = _generation;
-    final task = _tasks.putIfAbsent(key, _SharedThumbnailFrame.new);
-    if (priority == DownloadPriority.high) task.priority = priority;
-    task.hasVisibleRequest |= visible;
-    task.users++;
-    void release() {
-      if (task.users != 0 || task.writing) return;
-      if (identical(_tasks[key], task)) _tasks.remove(key);
-      task.image?.dispose();
-      task.image = null;
-    }
-
-    task.future ??= (() async {
-      final image = await decode();
-      if (generation != _generation ||
-          (!task.hasVisibleRequest && shouldContinue != null && !shouldContinue())) {
-        image.dispose();
-        throw const _ThumbnailCancelled();
-      }
-      task.image = image;
-      // 写盘持有独立句柄，UI dispose 不会影响编码。
-      final cacheImage = image.clone();
-      task.writing = true;
-      unawaited(
-        (() async {
-          try {
-            await cache(cacheImage);
-          } catch (_) {
-            // 缓存失败不重解原文件，也不影响首帧。
-          } finally {
-            cacheImage.dispose();
-            task.writing = false;
-            release();
-          }
-        })(),
-      );
-      return image;
-    })();
-    try {
-      final image = await task.future!;
-      if (generation != _generation) throw const _ThumbnailCancelled();
-      return image.clone();
-    } finally {
-      task.users--;
-      release();
-    }
-  }
+Future<ImageInfo> _decodeThumbnailBytes(Uint8List bytes, double scale) async {
+  final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+  final codec = await ui.instantiateImageCodecFromBuffer(buffer);
+  final frame = await codec.getNextFrame();
+  codec.dispose();
+  return ImageInfo(image: frame.image, scale: scale);
 }
 
-class _SharedThumbnailFrame {
-  Future<ui.Image>? future;
-  ui.Image? image;
-  int users = 0;
-  bool writing = false;
-  bool hasVisibleRequest = false;
-  DownloadPriority priority = DownloadPriority.normal;
-}
-
-Future<ui.Image> _acquireThumbnail({
+Future<void> _warmThumbnail({
   required String bucket,
   required String url,
   required int targetSize,
-  bool Function()? shouldContinue,
+  required String thumbKey,
   DownloadPriority priority = DownloadPriority.normal,
-  bool visible = true,
-}) {
-  final generation = _thumbnailGeneration;
-  final thumbKey = _thumbnailCacheKey(url, targetSize);
-  final taskKey = '$bucket:$thumbKey';
-  if (priority == DownloadPriority.high) BlobImageCache.bump(bucket, url);
-  var cold = false;
-  _SharedThumbnailFrame? sharedTask;
-  bool canContinue() =>
-      (sharedTask?.hasVisibleRequest ?? visible) ||
-      shouldContinue == null || shouldContinue();
-  void checkCancel() {
-    if (generation != _thumbnailGeneration || !canContinue()) {
-      throw const _ThumbnailCancelled();
-    }
+}) async {
+  _DecodedThumbnail? decoded;
+  try {
+    decoded = await _decodeFirstFrameImage(
+      bucket: bucket,
+      url: url,
+      targetSize: targetSize,
+      priority: priority,
+    );
+    await _cacheThumbnail(thumbKey, decoded.image, format: decoded.format);
+    _knownThumbnailKeys.add(thumbKey);
+  } finally {
+    decoded?.image.dispose();
   }
-
-  return _thumbnailFrames.load(
-    taskKey,
-    priority: priority,
-    visible: visible,
-    shouldContinue: shouldContinue,
-    decode: () async {
-      sharedTask = _thumbnailFrames._tasks[taskKey]!;
-      checkCancel();
-      final bytes = await _readCachedThumbnailBytes(thumbKey);
-      checkCancel();
-      if (bytes != null) return _decodeFirstFrameViaFlutterCodec(bytes);
-      cold = true;
-      return _decodeFirstFrameImage(
-        bucket: bucket,
-        url: url,
-        targetSize: targetSize,
-        shouldContinue: canContinue,
-        priority: () => sharedTask!.priority,
-      );
-    },
-    cache: (image) async {
-      if (cold) await _cacheThumbnail(thumbKey, image);
-    },
-  );
 }
 
 /// 从 cache 拿 bytes → backend dispatch 解第一帧 → 必要时缩放到 targetSize。
 ///
 /// 用 magic bytes 决定走 AVIF semaphore 还是非 AVIF semaphore。两者**独立**
-/// 限流,AVIF 慢不阻塞 GIF/WebP/APNG。
-Future<ui.Image> _decodeFirstFrameImage({
+/// 限流,AVIF 慢不阻塞 GIF/WebP/APNG。同时把真实 container format 带回
+/// cache writer，保证 CDN 改后缀时仍使用正确格式的 schema version。
+Future<_DecodedThumbnail> _decodeFirstFrameImage({
   required String bucket,
   required String url,
   required int targetSize,
-  bool Function()? shouldContinue,
-  required DownloadPriority Function() priority,
+  DownloadPriority priority = DownloadPriority.normal,
 }) async {
   final startGen = _thumbnailGeneration;
   void checkCancel() {
-    if (_thumbnailGeneration != startGen ||
-        (shouldContinue != null && !shouldContinue())) {
-      throw const _ThumbnailCancelled();
-    }
+    if (_thumbnailGeneration != startGen) throw const _ThumbnailCancelled();
   }
 
   // 先把 bytes 拉出来,根据 magic 选 semaphore(不能用 URL 后缀 — CDN 可能
   // 给 `.gif/.webp` 后缀但实际是 AVIF)。bytes 读取本身是 IO async,不占
   // semaphore 配额。
-  final bytes = await BlobImageCache.fetch(bucket, url, priority: priority());
+  final bytes = await BlobImageCache.fetch(bucket, url, priority: priority);
   checkCancel();
 
+  final format = StickerThumbnailCachePolicy.detectFormat(bytes, url);
   final isAvif = _bytesLookLikeAvif(bytes);
   final semaphore = isAvif ? _avifSemaphore : _nonAvifSemaphore;
 
-  await semaphore.acquire(priority: priority);
+  await semaphore.acquire();
   // 拿到 semaphore 槽后再检查 — 关 panel 后排队中的任务在这里立即
   // release 槽 + abort,不再发起新的解码;已经在跑的解码跑完即停。
   try {
@@ -462,30 +575,24 @@ Future<ui.Image> _decodeFirstFrameImage({
   } finally {
     semaphore.release();
   }
-  try {
-    checkCancel();
-    if (srcImage.width > targetSize || srcImage.height > targetSize) {
-      final resized = await _resize(srcImage, targetSize);
-      srcImage.dispose();
-      srcImage = resized;
-      checkCancel();
-    }
-    return srcImage;
-  } catch (_) {
+  checkCancel();
+
+  if (srcImage.width > targetSize || srcImage.height > targetSize) {
+    final resized = await _resize(srcImage, targetSize);
     srcImage.dispose();
-    rethrow;
+    return _DecodedThumbnail(image: resized, format: format);
   }
+  return _DecodedThumbnail(image: srcImage, format: format);
 }
 
 /// 解第一帧。按**实际 magic bytes** dispatch backend:
 ///
-/// - **AVIF**(magic ftyp/avif/avis/mif1/msf1):走 `flutter_avif`(libavif + dav1d,
-///   C 实现,工业标准稳定)。不进 native_animated_image 的 Rust pipeline。
-///
-/// - **GIF / animated WebP / APNG**:走 [_DecoderWorkerPool](long-lived worker
-///   isolate),解码在 background isolate 串行,**主线程零 spawn 开销**。
-///
-/// - **其它 / 静态格式**:worker 返 unsupported → Flutter 内置 codec fallback。
+/// - **AVIF**:走 `flutter_avif`。
+/// - **GIF**:走 Flutter 内置 codec，只调用一次 `getNextFrame()`；这是缩略图
+///   专用路径，不进入 Rust 全动画解码，因此既避免颜色转换链路，也避免
+///   为了一个首帧把整段 GIF 解码成 RGBA。
+/// - **animated WebP / APNG**:继续走 [_DecoderWorkerPool]。
+/// - **其它 / 静态格式**:worker 返 unsupported → Flutter codec fallback。
 Future<ui.Image> _decodeFirstFrame(
   String url,
   Uint8List bytes, {
@@ -495,13 +602,16 @@ Future<ui.Image> _decodeFirstFrame(
   if (_bytesLookLikeAvif(bytes)) {
     return _decodeAvifFirstFrame(bytes, url, targetSize: targetSize);
   }
+  if (_bytesLookLikeGif(bytes)) {
+    return _decodeFirstFrameViaFlutterCodec(bytes, targetSize: targetSize);
+  }
 
   final reply = await _DecoderWorkerPool.instance.decode(bytes);
   if (reply == null) {
     throw StateError('decode cancelled: $url');
   }
   if (reply.unsupported) {
-    return _decodeFirstFrameViaFlutterCodec(bytes);
+    return _decodeFirstFrameViaFlutterCodec(bytes, targetSize: targetSize);
   }
   if (reply.rgba == null) {
     throw StateError('decode failed: $url (${reply.error})');
@@ -514,17 +624,72 @@ Future<ui.Image> _decodeAvifFirstFrame(
   String url, {
   int? targetSize,
 }) async {
-  // 平台 codec 可用时 targetSize 直接 decode-time 降采样出小图;
-  // Rust 回落 = 增量解码:只解第 1 帧立即 dispose,不像 fa.decodeAvif
-  // 全帧解完丢 N-1 帧
+  if (_bytesLookLikeAnimatedAvif(bytes)) {
+    // 完整动画路径本来就会绕开平台 codec，走 flutter_avif/libavif。
+    // 缩略图也必须使用同一颜色转换链路，否则 Android ImageDecoder 对
+    // 某些 AVIF sequence 的首帧会出现“解码成功但严重偏紫”的静默错误。
+    if (AvifFastBridge.available) {
+      final key = 'sticker-ff${_stickerAvifCodecKeySeq++}';
+      try {
+        await AvifFastBridge.initDecoder(key, bytes);
+        final frame = await AvifFastBridge.getNextFrame(
+          key,
+          maxDim: targetSize,
+        );
+        return frame.image;
+      } finally {
+        unawaited(AvifFastBridge.disposeDecoder(key));
+      }
+    }
+
+    // web / 无 fast bridge 时也不要回到平台 codec；官方逐帧 codec 同样
+    // 使用 flutter_avif 的动画解码后端。只拉第一帧后立即 dispose。
+    final codec = fa.MultiFrameAvifCodec(
+      key: _stickerAvifCodecKeySeq++,
+      avifBytes: bytes,
+    );
+    try {
+      await codec.ready();
+      final frame = await codec.getNextFrame();
+      return frame.image;
+    } finally {
+      codec.dispose();
+    }
+  }
+
+  // 静态 AVIF 保留平台 codec 的 decode-time 降采样性能优势。
   return AvifImageProvider.decodeFirstFrame(bytes, maxDim: targetSize);
 }
 
-/// Flutter 内置 codec fallback:Rust pipeline 不识别的格式走这条
-/// (主要是静态 webp / png / jpeg)。只取第一帧,丢弃多余 codec 资源。
-Future<ui.Image> _decodeFirstFrameViaFlutterCodec(Uint8List bytes) async {
+/// Flutter codec 的单帧路径。只拉取第一帧，并在 codec 阶段按最长边
+/// [targetSize] 等比降采样；不会触发后续帧的 disposal 逻辑，所以不涉及
+/// Flutter multi_frame_codec 在特定后续帧上的历史问题。
+Future<ui.Image> _decodeFirstFrameViaFlutterCodec(
+  Uint8List bytes, {
+  int? targetSize,
+}) async {
   final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-  final codec = await ui.instantiateImageCodecFromBuffer(buffer);
+  final codec = targetSize == null
+      ? await ui.instantiateImageCodecFromBuffer(buffer)
+      : await PaintingBinding.instance.instantiateImageCodecWithSize(
+          buffer,
+          getTargetSize: (int intrinsicWidth, int intrinsicHeight) {
+            final longest = intrinsicWidth > intrinsicHeight
+                ? intrinsicWidth
+                : intrinsicHeight;
+            if (longest <= targetSize) {
+              return ui.TargetImageSize(
+                width: intrinsicWidth,
+                height: intrinsicHeight,
+              );
+            }
+            final ratio = targetSize / longest;
+            return ui.TargetImageSize(
+              width: (intrinsicWidth * ratio).round().clamp(1, targetSize),
+              height: (intrinsicHeight * ratio).round().clamp(1, targetSize),
+            );
+          },
+        );
   try {
     final frame = await codec.getNextFrame();
     return frame.image;
@@ -545,16 +710,56 @@ Future<ui.Image> _rgbaToUiImage(Uint8List rgba, int width, int height) {
   return completer.future;
 }
 
-Future<void> _cacheThumbnail(String key, ui.Image image) async {
+/// 将缩略图持久化为 PNG，但刻意绕开 `ui.Image.toByteData(png)`。
+///
+/// AVIF/HEIF（尤其带 alpha / 非普通 sRGB 元数据的样本）经过 Impeller
+/// raster image 再走 Flutter PNG encoder 时，历史上存在颜色回读/像素格式
+/// 失真的问题。这里先请求 straight RGBA，再交给纯 Dart `image` 库在 CPU
+/// 上编码 PNG：GPU 只负责一次 raw readback，PNG 编码本身完全不经过
+/// Impeller/Skia 的 image encoder，避免把正确首帧永久缓存成偏紫 PNG。
+///
+/// PNG 编码后再由 [StickerThumbnailCachePolicy] 加上格式/schema envelope；
+/// version 不再污染 BlobImageCache 的资源 key。
+Future<void> _cacheThumbnail(
+  String key,
+  ui.Image image, {
+  required StickerThumbnailFormat format,
+}) async {
   try {
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData != null) {
-      await BlobImageCache.write(
-        BlobImageCache.stickerThumbBucket,
-        key,
-        byteData.buffer.asUint8List(),
+    final byteData = await image.toByteData(
+      format: ui.ImageByteFormat.rawStraightRgba,
+    );
+    if (byteData == null) return;
+
+    // ByteData 可能只是更大 buffer 的 view，先严格裁出有效 RGBA 区间。
+    final rgba = Uint8List.fromList(
+      byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      ),
+    );
+    final width = image.width;
+    final height = image.height;
+
+    // PNG 压缩属于纯 CPU 工作，放到 isolate，避免一次打开几十张表情时
+    // 把主 isolate 卡在 deflate 上。
+    final pngBytes = await Isolate.run(() {
+      final cpuImage = img.Image.fromBytes(
+        width: width,
+        height: height,
+        bytes: rgba.buffer,
+        numChannels: 4,
+        order: img.ChannelOrder.rgba,
       );
-    }
+      return Uint8List.fromList(img.encodePng(cpuImage));
+    }, debugName: 'StickerThumbnail.pngEncode');
+
+    final cacheRecord = StickerThumbnailCachePolicy.wrap(format, pngBytes);
+    await BlobImageCache.write(
+      BlobImageCache.stickerThumbBucket,
+      key,
+      cacheRecord,
+    );
   } catch (_) {
     // 缓存写入失败不影响显示
   }
@@ -589,26 +794,21 @@ class _Semaphore {
 
   final int maxCount;
   int _current = 0;
-  final _queue =
-      <({Completer<void> ready, DownloadPriority Function() priority})>[];
+  final _queue = <Completer<void>>[];
 
-  Future<void> acquire({required DownloadPriority Function() priority}) {
+  Future<void> acquire() {
     if (_current < maxCount) {
       _current++;
       return SynchronousFuture(null);
     }
     final c = Completer<void>();
-    _queue.add((ready: c, priority: priority));
+    _queue.add(c);
     return c.future;
   }
 
   void release() {
     if (_queue.isNotEmpty) {
-      // 入队后仍动态读取共享任务优先级，高优可见请求能提升预热队列项。
-      final high = _queue.indexWhere(
-        (item) => item.priority() == DownloadPriority.high,
-      );
-      _queue.removeAt(high < 0 ? 0 : high).ready.complete();
+      _queue.removeAt(0).complete();
     } else {
       _current--;
     }
@@ -633,19 +833,19 @@ class _Semaphore {
 
 class _DecodeReply {
   const _DecodeReply.ok(this.width, this.height, this.rgba)
-      : error = null,
-        unsupported = false;
+    : error = null,
+      unsupported = false;
   const _DecodeReply.unsupported()
-      : width = 0,
-        height = 0,
-        rgba = null,
-        error = null,
-        unsupported = true;
+    : width = 0,
+      height = 0,
+      rgba = null,
+      error = null,
+      unsupported = true;
   const _DecodeReply.err(this.error)
-      : width = 0,
-        height = 0,
-        rgba = null,
-        unsupported = false;
+    : width = 0,
+      height = 0,
+      rgba = null,
+      unsupported = false;
 
   final int width;
   final int height;
@@ -702,9 +902,11 @@ class _DecoderWorkerPool {
       }
     });
     for (var i = 0; i < _workerCount; i++) {
-      Isolate.spawn<SendPort>(_decoderWorkerEntry, receivePort.sendPort,
-              debugName: 'StickerThumbnailWorker#$i')
-          .then((_) {});
+      Isolate.spawn<SendPort>(
+        _decoderWorkerEntry,
+        receivePort.sendPort,
+        debugName: 'StickerThumbnailWorker#$i',
+      ).then((_) {});
     }
     return completer.future;
   }
@@ -712,10 +914,7 @@ class _DecoderWorkerPool {
   /// 提交一个 decode 任务(round-robin 派给某条 worker,各自串行)。
   /// 如果在解码过程中 [token] 被 cancel,Future 立即 complete `_DecodeReply.err`
   /// (用 sentinel 错误),后续 ui.Image 创建会被跳过。
-  Future<_DecodeReply?> decode(
-    Uint8List bytes, {
-    _CancelToken? token,
-  }) async {
+  Future<_DecodeReply?> decode(Uint8List bytes, {_CancelToken? token}) async {
     await _ensureInit();
     if (token != null && token.isCancelled) return null;
     final taskId = _nextTaskId++;
@@ -761,9 +960,10 @@ void _decoderWorkerEntry(SendPort mainSendPort) {
         return;
       }
       final first = decoded.frames.first;
-      mainSendPort.send(
-        [taskId, _DecodeReply.ok(decoded.width, decoded.height, first.rgba)],
-      );
+      mainSendPort.send([
+        taskId,
+        _DecodeReply.ok(decoded.width, decoded.height, first.rgba),
+      ]);
     } on NativeAnimatedImageException catch (e) {
       if (e.code == _kErrUnsupported) {
         mainSendPort.send([taskId, const _DecodeReply.unsupported()]);
@@ -774,4 +974,85 @@ void _decoderWorkerEntry(SendPort mainSendPort) {
       mainSendPort.send([taskId, _DecodeReply.err(e)]);
     }
   });
+}
+
+/// 首帧共享器：每个消费者独占 clone，任务只在解码或写盘期间保留原图。
+/// 注入解码和缓存操作，测试无需网络、磁盘或原生 AVIF 插件。
+@visibleForTesting
+class StickerThumbnailFirstFrameLoader {
+  final _tasks = <String, _SharedThumbnailFrame>{};
+  int _generation = 0;
+
+  void cancel() {
+    _generation++;
+    // 旧任务自行收敛；新一代绝不加入旧任务。
+    _tasks.clear();
+  }
+
+  Future<ui.Image> load(
+    String key, {
+    required Future<ui.Image> Function() decode,
+    required Future<void> Function(ui.Image) cache,
+    DownloadPriority priority = DownloadPriority.normal,
+    bool visible = true,
+    bool Function()? shouldContinue,
+  }) async {
+    final generation = _generation;
+    final task = _tasks.putIfAbsent(key, _SharedThumbnailFrame.new);
+    if (priority == DownloadPriority.high) task.priority = priority;
+    task.hasVisibleRequest |= visible;
+    task.users++;
+    void release() {
+      if (task.users != 0 || task.writing) return;
+      if (identical(_tasks[key], task)) _tasks.remove(key);
+      task.image?.dispose();
+      task.image = null;
+    }
+
+    task.future ??= (() async {
+      final image = await decode();
+      if (generation != _generation ||
+          (!task.hasVisibleRequest &&
+              shouldContinue != null &&
+              !shouldContinue())) {
+        image.dispose();
+        throw const _ThumbnailCancelled();
+      }
+      task.image = image;
+      // 写盘持有独立句柄，UI dispose 不会影响编码。
+      final cacheImage = image.clone();
+      task.writing = true;
+      unawaited(
+        (() async {
+          try {
+            await cache(cacheImage);
+          } catch (_) {
+            // 缓存失败不重解原文件，也不影响首帧。
+          } finally {
+            cacheImage.dispose();
+            task.writing = false;
+            release();
+          }
+        })(),
+      );
+      return image;
+    })();
+    try {
+      final image = await task.future!;
+      if (generation != _generation) throw const _ThumbnailCancelled();
+      return image.clone();
+    } finally {
+      task.users--;
+      release();
+    }
+  }
+}
+
+class _SharedThumbnailFrame {
+  Future<ui.Image>? future;
+  ui.Image? image;
+  int users = 0;
+  bool writing = false;
+  bool hasVisibleRequest = false;
+  DownloadPriority priority = DownloadPriority.normal;
 }

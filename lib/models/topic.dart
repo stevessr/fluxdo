@@ -1,5 +1,6 @@
 // 帖子数据模型
 import 'package:flutter/foundation.dart' show listEquals;
+
 import '../l10n/s.dart';
 import '../utils/time_utils.dart';
 import '../utils/url_helper.dart';
@@ -308,8 +309,7 @@ class TopicPoster {
     // 内嵌在 poster 里,没有 user_id,也没有顶层 users 表。列表接口则相反
     // (user_id + 顶层 users)。两种形状都要吃下。
     final embeddedUser = json['user'] as Map<String, dynamic>?;
-    final userId =
-        json['user_id'] as int? ?? embeddedUser?['id'] as int? ?? 0;
+    final userId = json['user_id'] as int? ?? embeddedUser?['id'] as int? ?? 0;
     return TopicPoster(
       userId: userId,
       description: json['description'] as String? ?? '',
@@ -635,6 +635,7 @@ class GrantedBadge {
   final String? imageUrl; // 图片 URL（与 icon 二选一）
   final String slug;
   final int badgeTypeId; // 1=Gold, 2=Silver, 3=Bronze
+  final bool showInPostHeader;
 
   const GrantedBadge({
     required this.id,
@@ -644,6 +645,7 @@ class GrantedBadge {
     this.imageUrl,
     required this.slug,
     this.badgeTypeId = 0,
+    this.showInPostHeader = true,
   });
 
   factory GrantedBadge.fromJson(Map<String, dynamic> json) {
@@ -656,7 +658,32 @@ class GrantedBadge {
       imageUrl: badge['image_url'] as String?,
       slug: badge['slug'] as String? ?? '',
       badgeTypeId: badge['badge_type_id'] as int? ?? 0,
+      showInPostHeader:
+          (badge['show_in_post_header'] as bool? ?? true) &&
+          (badge['enabled'] as bool? ?? true),
     );
+  }
+
+  /// 兼容 Discourse 传统平铺数据，以及 Linux.do 新版的分组结构：
+  /// badges_granted: [{badges: [{...}], badge_types: [...], basic_user_badge: {...}}]。
+  /// badge_types / basic_user_badge 是元数据，不应被当成实际徽章。
+  static List<GrantedBadge> fromPostJson(dynamic raw) {
+    if (raw is! List || raw.isEmpty) return const [];
+
+    final result = <GrantedBadge>[];
+    final seenIds = <int>{};
+    for (final entry in raw) {
+      if (entry is! Map<String, dynamic>) continue;
+      final nestedBadges = entry['badges'];
+      final items = nestedBadges is List ? nestedBadges : [entry];
+      for (final item in items) {
+        if (item is! Map<String, dynamic>) continue;
+        final badge = GrantedBadge.fromJson(item);
+        if (badge.id <= 0 || !badge.showInPostHeader) continue;
+        if (seenIds.add(badge.id)) result.add(badge);
+      }
+    }
+    return result;
   }
 }
 
@@ -748,20 +775,33 @@ class ReactionUsersGroup {
 class PostNotice {
   final String type; // "new_user" | "returning_user" | "custom"
   final String? lastPostedAt; // returning_user 类型的上次发帖时间
+  final String? raw; // custom 类型的原始 Markdown
   final String? cooked; // custom 类型的 HTML 内容
 
-  const PostNotice({required this.type, this.lastPostedAt, this.cooked});
+  const PostNotice({
+    required this.type,
+    this.lastPostedAt,
+    this.raw,
+    this.cooked,
+  });
 
   factory PostNotice.fromJson(Map<String, dynamic> json) {
     return PostNotice(
       type: json['type'] as String,
       lastPostedAt: json['last_posted_at'] as String?,
+      raw: json['raw'] as String?,
       cooked: json['cooked'] as String?,
     );
   }
 }
 
 class Post {
+  /// 服务端返回的原始 Post JSON。保留未建模/插件扩展字段，供帖子键值查看器使用。
+  ///
+  /// 这里保存的是解析时的顶层只读快照；后续本地 copyWith 状态更新不会篡改
+  /// 这份服务端原始数据，便于排查真实接口字段。
+  final Map<String, dynamic> rawJson;
+
   final int id;
   final String? name;
   final String username;
@@ -781,12 +821,52 @@ class Post {
   final bool canDelete;
   final bool canRecover;
   final bool canWiki;
+  final bool canPermanentlyDelete;
+  final bool locked;
   final bool bookmarked;
   final int? bookmarkId; // 书签 ID（用于删除书签）
   final String? bookmarkName; // 书签名称
   final DateTime? bookmarkReminderAt; // 书签提醒时间
   final bool read; // 是否已读
   final List<dynamic>? actionsSummary;
+
+  /// Discourse 在 actions_summary[].acted 标记当前用户已执行的操作。
+  /// 联合站点提供的举报类型识别自定义举报，避免误认点赞等操作。
+  int? actedFlagTypeId(Iterable<FlagType> flagTypes) {
+    final flagIds = <int>{
+      3, 4, 6, 7, 8, // Discourse 内置举报类型，包含 notify_user。
+      ...flagTypes.where((type) => type.isFlag).map((type) => type.id),
+    };
+    for (final action in actionsSummary ?? const <dynamic>[]) {
+      if (action is! Map || action['acted'] != true) continue;
+      final id = (action['id'] as num?)?.toInt();
+      if (id != null && flagIds.contains(id)) return id;
+    }
+    return null;
+  }
+
+  /// 成功举报后即时更新状态，保留其它操作和未修改的服务端 JSON 快照。
+  Post withReportedFlag(int flagTypeId) {
+    final actions = List<dynamic>.from(actionsSummary ?? const <dynamic>[]);
+    final index = actions.indexWhere(
+      (action) => action is Map && action['id'] == flagTypeId,
+    );
+    if (index >= 0) {
+      actions[index] = <String, dynamic>{
+        ...(actions[index] as Map).cast<String, dynamic>(),
+        'acted': true,
+        'can_act': false,
+      };
+    } else {
+      actions.add(<String, dynamic>{
+        'id': flagTypeId,
+        'acted': true,
+        'can_act': false,
+      });
+    }
+    return copyWith(actionsSummary: actions);
+  }
+
   final List<LinkCount>? linkCounts; // 链接点击统计
   final List<PostReaction>? reactions; // 回应/表情
   final PostReaction? currentUserReaction; // 当前用户的回应
@@ -843,9 +923,14 @@ class Post {
   final String? userCakedate; // 加入社区的纪念日(年份为真实注册年份)
   final String? userBirthdate; // 生日(年份可能是隐私假值)
 
-  // Linux.do iOS App 帖子来源设备型号（服务端字段 ios_device_name）
+  // Linux.do 当前真实 iOS App 来源字段。
+  final bool viaIosApp;
   final String? iosDeviceName;
 
+  // 旧实验字段，仅保留解析兼容；新发送链路不再使用 mobile_source_*。
+  final String? mobileSourcePlatform;
+  final String? mobileSourceBrand;
+  final String? mobileSourceModel;
   // 用户 ID（用于打赏等功能）
   final int? userId;
 
@@ -918,6 +1003,7 @@ class Post {
   final String? editReason;
 
   Post({
+    this.rawJson = const <String, dynamic>{},
     required this.id,
     this.name,
     required this.username,
@@ -937,6 +1023,8 @@ class Post {
     this.canDelete = false,
     this.canRecover = false,
     this.canWiki = false,
+    this.canPermanentlyDelete = false,
+    this.locked = false,
     this.bookmarked = false,
     this.bookmarkId,
     this.bookmarkName,
@@ -973,7 +1061,11 @@ class Post {
     this.badgesGranted,
     this.userCakedate,
     this.userBirthdate,
+    this.viaIosApp = false,
     this.iosDeviceName,
+    this.mobileSourcePlatform,
+    this.mobileSourceBrand,
+    this.mobileSourceModel,
     this.userId,
     this.moderator = false,
     this.admin = false,
@@ -1003,9 +1095,21 @@ class Post {
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
-    final iosDeviceName = json['ios_device_name']?.toString().trim();
+    final nestedMobileSource = json['mobile_source'];
+    final nested = nestedMobileSource is Map ? nestedMobileSource : null;
+
+    String? readMobileSource(String field) {
+      final value =
+          json['mobile_source_$field'] ??
+          nested?[field] ??
+          nested?['mobile_source_$field'];
+      if (value == null) return null;
+      final text = value.toString().trim();
+      return text.isEmpty ? null : text;
+    }
 
     return Post(
+      rawJson: Map<String, dynamic>.unmodifiable(json),
       id: json['id'] as int,
       name: json['name'] as String?,
       username: json['username'] as String? ?? 'Unknown',
@@ -1031,6 +1135,8 @@ class Post {
       canDelete: json['can_delete'] as bool? ?? false,
       canRecover: json['can_recover'] as bool? ?? false,
       canWiki: json['can_wiki'] as bool? ?? false,
+      canPermanentlyDelete: json['can_permanently_delete'] as bool? ?? false,
+      locked: json['locked'] as bool? ?? false,
       bookmarked: json['bookmarked'] as bool? ?? false,
       bookmarkId: json['bookmark_id'] as int?,
       bookmarkName: normalizeBookmarkName(json['_bookmark_name'] as String?),
@@ -1094,12 +1200,19 @@ class Post {
       userStatus: json['user_status'] != null
           ? UserStatus.fromJson(json['user_status'] as Map<String, dynamic>)
           : null,
-      badgesGranted: (json['badges_granted'] as List<dynamic>?)
-          ?.map((e) => GrantedBadge.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      badgesGranted: GrantedBadge.fromPostJson(json['badges_granted']),
       userCakedate: json['user_cakedate'] as String?,
       userBirthdate: json['user_birthdate'] as String?,
-      iosDeviceName: iosDeviceName?.isNotEmpty == true ? iosDeviceName : null,
+      viaIosApp: json['via_ios_app'] as bool? ?? false,
+      iosDeviceName: (() {
+        final value = json['ios_device_name'];
+        if (value == null) return null;
+        final text = value.toString().trim();
+        return text.isEmpty ? null : text;
+      })(),
+      mobileSourcePlatform: readMobileSource('platform'),
+      mobileSourceBrand: readMobileSource('brand'),
+      mobileSourceModel: readMobileSource('model'),
       userId: json['user_id'] as int?,
       moderator: json['moderator'] as bool? ?? false,
       admin: json['admin'] as bool? ?? false,
@@ -1145,6 +1258,27 @@ class Post {
     );
   }
 
+  /// 设备来源徽章优先使用 Linux.do 当前真实字段 ios_device_name。
+  ///
+  /// mobile_source_* 仅用于兼容早期实验数据。
+  String? get mobileSourceLabel {
+    final iosModel = iosDeviceName?.trim();
+    if (iosModel != null && iosModel.isNotEmpty) return iosModel;
+    final model = mobileSourceModel?.trim();
+    if (model != null && model.isNotEmpty) return model;
+    final brand = mobileSourceBrand?.trim();
+    if (brand != null && brand.isNotEmpty) return brand;
+    final platform = mobileSourcePlatform?.trim();
+    if (platform == null || platform.isEmpty) {
+      return viaIosApp ? 'iOS' : null;
+    }
+    return switch (platform.toLowerCase()) {
+      'ios' => 'iOS',
+      'android' => 'Android',
+      _ => platform,
+    };
+  }
+
   /// 获取头像 URL，优先使用动画头像（GIF）
   String getAvatarUrl({int size = 120}) {
     if (animatedAvatar != null && animatedAvatar!.isNotEmpty) {
@@ -1188,9 +1322,12 @@ class Post {
           canEdit == other.canEdit &&
           canDelete == other.canDelete &&
           canRecover == other.canRecover &&
+          canPermanentlyDelete == other.canPermanentlyDelete &&
+          locked == other.locked &&
           read == other.read &&
           hidden == other.hidden &&
           cookedHidden == other.cookedHidden &&
+          listEquals(actionsSummary, other.actionsSummary) &&
           listEquals(reactions, other.reactions) &&
           currentUserReaction == other.currentUserReaction &&
           listEquals(boosts, other.boosts) &&
@@ -1202,7 +1339,11 @@ class Post {
           wiki == other.wiki &&
           lastWikiEdit == other.lastWikiEdit &&
           editReason == other.editReason &&
-          iosDeviceName == other.iosDeviceName;
+          viaIosApp == other.viaIosApp &&
+          iosDeviceName == other.iosDeviceName &&
+          mobileSourcePlatform == other.mobileSourcePlatform &&
+          mobileSourceBrand == other.mobileSourceBrand &&
+          mobileSourceModel == other.mobileSourceModel;
 
   @override
   int get hashCode => Object.hash(
@@ -1215,11 +1356,15 @@ class Post {
     canBoost,
     version,
     wiki,
+    viaIosApp,
     iosDeviceName,
+    mobileSourceModel,
+    Object.hashAll(actionsSummary ?? const []),
   );
 
   /// 复制并修改部分字段
   Post copyWith({
+    Map<String, dynamic>? rawJson,
     int? id,
     String? name,
     String? username,
@@ -1239,6 +1384,8 @@ class Post {
     bool? canDelete,
     bool? canRecover,
     bool? canWiki,
+    bool? canPermanentlyDelete,
+    bool? locked,
     bool? bookmarked,
     int? bookmarkId,
     String? bookmarkName,
@@ -1278,7 +1425,11 @@ class Post {
     List<GrantedBadge>? badgesGranted,
     String? userCakedate,
     String? userBirthdate,
+    bool? viaIosApp,
     String? iosDeviceName,
+    String? mobileSourcePlatform,
+    String? mobileSourceBrand,
+    String? mobileSourceModel,
     int? userId,
     bool? moderator,
     bool? admin,
@@ -1310,6 +1461,7 @@ class Post {
     bool clearEditReason = false,
   }) {
     return Post(
+      rawJson: rawJson ?? this.rawJson,
       id: id ?? this.id,
       name: name ?? this.name,
       username: username ?? this.username,
@@ -1329,6 +1481,8 @@ class Post {
       canDelete: canDelete ?? this.canDelete,
       canRecover: canRecover ?? this.canRecover,
       canWiki: canWiki ?? this.canWiki,
+      canPermanentlyDelete: canPermanentlyDelete ?? this.canPermanentlyDelete,
+      locked: locked ?? this.locked,
       bookmarked: bookmarked ?? this.bookmarked,
       bookmarkId: bookmarkId ?? this.bookmarkId,
       bookmarkName: clearBookmarkName
@@ -1349,8 +1503,7 @@ class Post {
       postVotingVoteCount: postVotingVoteCount ?? this.postVotingVoteCount,
       postVotingUserVotedDirection: clearPostVotingDirection
           ? null
-          : (postVotingUserVotedDirection ??
-              this.postVotingUserVotedDirection),
+          : (postVotingUserVotedDirection ?? this.postVotingUserVotedDirection),
       postVotingHasVotes: postVotingHasVotes ?? this.postVotingHasVotes,
       postVotingComments: postVotingComments ?? this.postVotingComments,
       postVotingCommentsCount:
@@ -1375,7 +1528,11 @@ class Post {
       badgesGranted: badgesGranted ?? this.badgesGranted,
       userCakedate: userCakedate ?? this.userCakedate,
       userBirthdate: userBirthdate ?? this.userBirthdate,
+      viaIosApp: viaIosApp ?? this.viaIosApp,
       iosDeviceName: iosDeviceName ?? this.iosDeviceName,
+      mobileSourcePlatform: mobileSourcePlatform ?? this.mobileSourcePlatform,
+      mobileSourceBrand: mobileSourceBrand ?? this.mobileSourceBrand,
+      mobileSourceModel: mobileSourceModel ?? this.mobileSourceModel,
       userId: userId ?? this.userId,
       moderator: moderator ?? this.moderator,
       admin: admin ?? this.admin,
@@ -1735,6 +1892,8 @@ class PostStream {
 
     for (int i = 0; i < posts.length; i++) {
       final post = posts[i];
+      // 帖子自身的 badges_granted 更精确，包含显式空列表；不能由话题级数据覆盖。
+      if (post.rawJson.containsKey('badges_granted')) continue;
       final userId = postUserIdMap[post.id];
       if (userId != null) {
         final badgeIds = userBadgeIdsMap[userId];
@@ -1742,6 +1901,7 @@ class PostStream {
           final badges = badgeIds
               .map((id) => badgesMap[id])
               .whereType<GrantedBadge>()
+              .where((badge) => badge.showInPostHeader)
               .toList();
           if (badges.isNotEmpty) {
             posts[i] = post.copyWith(badgesGranted: badges);
@@ -1882,10 +2042,9 @@ class TopicDetail {
 
   // 私信成员与移除权限（来自 details）
   final List<TopicUser> allowedUsers;
-  final List<TopicGroup> allowedGroups;
+  final List<String> allowedGroups;
   final bool canRemoveAllowedUsers;
   final int? canRemoveSelfId;
-  final bool canInviteTo;
 
   // 话题书签相关
   final bool bookmarked; // 话题是否已被书签（Topic 级别）
@@ -1980,7 +2139,6 @@ class TopicDetail {
     this.allowedGroups = const [],
     this.canRemoveAllowedUsers = false,
     this.canRemoveSelfId,
-    this.canInviteTo = false,
     this.bookmarked = false,
     this.bookmarkId,
     this.bookmarkName,
@@ -2187,11 +2345,11 @@ class TopicDetail {
           .toList(growable: false),
       allowedGroups: (details['allowed_groups'] as List<dynamic>? ?? const [])
           .whereType<Map>()
-          .map((group) => TopicGroup.fromJson(Map<String, dynamic>.from(group)))
+          .map((group) => group['name']?.toString().trim() ?? '')
+          .where((name) => name.isNotEmpty)
           .toList(growable: false),
       canRemoveAllowedUsers: details['can_remove_allowed_users'] == true,
       canRemoveSelfId: (details['can_remove_self_id'] as num?)?.toInt(),
-      canInviteTo: details['can_invite_to'] == true,
       bookmarked: topicBookmarked,
       bookmarkId: topicBookmarkId,
       bookmarkName: topicBookmarkName,
@@ -2309,11 +2467,10 @@ class TopicDetail {
     bool? canEdit,
     bool? messageArchived,
     List<TopicUser>? allowedUsers,
-    List<TopicGroup>? allowedGroups,
+    List<String>? allowedGroups,
     bool? canRemoveAllowedUsers,
     int? canRemoveSelfId,
     bool clearCanRemoveSelfId = false,
-    bool? canInviteTo,
     bool? bookmarked,
     int? bookmarkId,
     bool clearBookmarkId = false,
@@ -2367,7 +2524,6 @@ class TopicDetail {
       canRemoveSelfId: clearCanRemoveSelfId
           ? null
           : (canRemoveSelfId ?? this.canRemoveSelfId),
-      canInviteTo: canInviteTo ?? this.canInviteTo,
       bookmarked: bookmarked ?? this.bookmarked,
       bookmarkId: clearBookmarkId ? null : (bookmarkId ?? this.bookmarkId),
       bookmarkName: clearBookmarkName
@@ -2564,7 +2720,11 @@ class TopicListResponse {
 
   final List<Tag> tags;
 
-  TopicListResponse({required this.topics, this.moreTopicsUrl, this.tags = const []});
+  TopicListResponse({
+    required this.topics,
+    this.moreTopicsUrl,
+    this.tags = const [],
+  });
 
   factory TopicListResponse.fromJson(Map<String, dynamic> json) {
     // Parse users map
@@ -2618,7 +2778,9 @@ class TopicListResponse {
           )
           .toList(),
       moreTopicsUrl: moreTopicsUrl,
-      tags: (topicList?['tags'] as List? ?? const []).map(Tag.fromJson).toList(),
+      tags: (topicList?['tags'] as List? ?? const [])
+          .map(Tag.fromJson)
+          .toList(),
     );
   }
 }
@@ -2670,6 +2832,10 @@ class FlagType {
 
   /// 是否适用于帖子
   bool get appliesToPost => appliesTo.contains('Post');
+
+  /// 是否适用于聊天消息
+  bool get appliesToChatMessage =>
+      appliesTo.contains('Chat::Message') || appliesTo.contains('ChatMessage');
 
   /// 默认的举报类型列表（作为后备）
   static List<FlagType> get defaultTypes => [

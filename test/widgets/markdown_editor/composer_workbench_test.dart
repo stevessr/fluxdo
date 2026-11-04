@@ -999,9 +999,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(ImageUploadDialog), findsOneWidget);
-    Navigator.of(tester.element(find.byType(ImageUploadDialog))).pop(
-      ImageUploadResult(path: '/模拟/组内图片.png', originalName: '组内图片.png'),
-    );
+    Navigator.of(tester.element(find.byType(ImageUploadDialog)))
+        .pop(ImageUploadResult(path: '/模拟/组内图片.png', originalName: '组内图片.png'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     // 文件不存在让真实上传入口在本地失败，无需发送网络请求。
@@ -1996,14 +1995,8 @@ void main() {
               width: 640,
               height: 700,
               child: rich
-                  ? RichComposerEditor(
-                      controller: controller,
-                      focusNode: focus,
-                    )
-                  : MarkdownEditor(
-                      controller: controller,
-                      focusNode: focus,
-                    ),
+                  ? RichComposerEditor(controller: controller, focusNode: focus)
+                  : MarkdownEditor(controller: controller, focusNode: focus),
             ),
           ),
           width: 1200,
@@ -2040,9 +2033,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         expect(panel, findsNothing);
         expect(
-          tester.getSize(
-            find.byKey(const ValueKey('composer-keyboard-space')),
-          ).height,
+          tester
+              .getSize(find.byKey(const ValueKey('composer-keyboard-space')))
+              .height,
           24,
         );
         await tester.tap(find.byTooltip(S.current.composer_expandToolbar));

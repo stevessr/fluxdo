@@ -1,15 +1,9 @@
 part of 'discourse_service.dart';
 
-/// 原生用户名/密码登录 — linux.do 流程对齐网页:
-/// 1. (UI 层) 弹 hcaptcha mini webview, 让用户人机验证拿 hcaptcha token
-/// 2. GET /session/csrf (由 RequestHeaderInterceptor 在 POST 前自动触发)
-/// 3. POST /hcaptcha/create.json {token: hcaptchaToken}
-///    → server 写一个 2 分钟 TTL 的 encrypted cookie `h_captcha_temp_id`
-/// 4. POST /session.json {login, password, second_factor_token?}
-///    → server 见 h_captcha_temp_id cookie + verify hcaptcha → 真正登录
+/// 原生用户名/密码登录相关能力。
 ///
-/// 主要解决 iOS 15.7 用户卡 splash 的 Discourse `static {}` (ES2022) 兼容问题:
-/// 不再加载 Discourse Ember bundle, 直接走 native JSON API。
+/// 当前主路径由轻量 WebView 直接访问 Discourse JSON API，并根据服务端响应按需
+/// 处理 Cloudflare、hCaptcha 与二步验证；这里的 dio 方法仅作为兼容兜底。
 mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
   /// 用 hcaptcha token 换 h_captcha_temp_id cookie。
   /// caller 必须先通过 hcaptcha mini webview 让用户人机交互拿到 token。
@@ -47,13 +41,18 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     required String identifier,
     required String password,
     String? secondFactorToken,
+    int secondFactorMethod = 1,
   }) async {
-    final data = <String, String>{'login': identifier, 'password': password};
+    // 与 Discourse 前端保持一致：即使首次尚未填写验证码，也传默认 method=1。
+    // 这样启用 2FA 的账号会返回带能力标志的 invalid_second_factor，
+    // 而不是缺少 method 导致的模糊 invalid_second_factor_method。
+    final data = <String, String>{
+      'login': identifier,
+      'password': password,
+      'second_factor_method': secondFactorMethod.toString(),
+    };
     if (secondFactorToken != null && secondFactorToken.isNotEmpty) {
       data['second_factor_token'] = secondFactorToken;
-      // 1=TOTP, 2=backup code, 3=security key. 第一版只支持 TOTP, backup/key
-      // 引导用户跳 webview 登录兜底。
-      data['second_factor_method'] = '1';
     }
 
     final Response<dynamic> resp;
@@ -87,6 +86,9 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     final reason = body['reason']?.toString();
     if (reason != null) return _parseLoginError(reason, body);
     if (body['error'] != null && body['user'] == null) {
+      if (_hasSecondFactorOptions(body)) {
+        return _secondFactorFailure(body);
+      }
       return LoginResult.error(
         LoginErrorKind.unknown,
         message: body['error']?.toString(),
@@ -98,6 +100,22 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     return const LoginResult.success();
   }
 
+  bool _hasSecondFactorOptions(Map<String, dynamic> body) {
+    return body['totp_enabled'] == true ||
+        body['backup_enabled'] == true ||
+        body['security_key_enabled'] == true;
+  }
+
+  LoginResult _secondFactorFailure(Map<String, dynamic> body) {
+    return LoginResult.error(
+      LoginErrorKind.secondFactorRequired,
+      message: body['error']?.toString(),
+      totpEnabled: body['totp_enabled'] == true,
+      securityKeyEnabled: body['security_key_enabled'] == true,
+      backupEnabled: body['backup_enabled'] == true,
+    );
+  }
+
   LoginResult _parseLoginError(String reason, Map<String, dynamic> body) {
     switch (reason) {
       case 'invalid_second_factor':
@@ -107,14 +125,9 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
       // 语义等同"需要二步验证"——由 caller 弹验证码框后带全参数重发
       // (second_factor_token + second_factor_method=1)。
       case 'invalid_second_factor_method':
+      case 'not_enabled_second_factor_method':
       case 'second_factor':
-        return LoginResult.error(
-          LoginErrorKind.secondFactorRequired,
-          message: body['error']?.toString(),
-          totpEnabled: body['totp_enabled'] == true,
-          securityKeyEnabled: body['security_key_enabled'] == true,
-          backupEnabled: body['backup_enabled'] == true,
-        );
+        return _secondFactorFailure(body);
       case 'invalid_credentials':
         return LoginResult.error(
           LoginErrorKind.invalidCredentials,
@@ -169,6 +182,9 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
     final reason = map['reason']?.toString();
     if (reason != null) return _parseLoginError(reason, map);
     if (map['error'] != null && map['user'] == null) {
+      if (_hasSecondFactorOptions(map)) {
+        return _secondFactorFailure(map);
+      }
       return LoginResult.error(
         LoginErrorKind.unknown,
         message: map['error']?.toString(),
@@ -179,22 +195,70 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
 
   /// 收口对齐 webview_login_page 的 _finalizeLoginBeforeExit + _finalizeLoginBootstrap:
   /// AuthSession.advance → 从 jar 拿 _t → saveUsername/setToken → LoginReadyCoordinator
+  /// →（普通登录时）广播登录成功。
   ///
   /// WebView JS 全流程登录成功后, 由 login_page 在 dialog 已把会话 cookie
   /// syncFromWebView 落 jar 之后显式调用 (public)。dio 版 [loginWithPassword]
   /// 成功路径也复用它。
-  Future<void> finalizeNativeLoginSuccess(String identifier) async {
-    AuthSession().advance();
+  @override
+  Future<void> finalizeNativeLoginSuccess(
+    String identifier, {
+    bool notifyAuthState = true,
+    bool notifyBeforePreload = false,
+    User? confirmedUser,
+  }) async {
+    final loginGeneration = AuthSession().advance();
 
     final token = await _cookieJar.getTToken() ?? '';
     if (token.isEmpty) {
       debugPrint('[DiscourseLogin] 警告: 登录成功但 jar 没拿到 _t');
     }
 
-    await saveUsername(identifier);
-    if (token.isNotEmpty) setToken(token);
+    await saveUsername(identifier, requestGeneration: loginGeneration);
+    if (!AuthSession().isValid(loginGeneration)) {
+      debugPrint('[DiscourseLogin] 登录收尾期间会话已切换，丢弃旧收尾: $identifier');
+      return;
+    }
+    if (token.isEmpty) {
+      // No authenticated state may be published without a committed _t.
+      return;
+    }
+    setToken(token);
     final forceBrowserSessionSync = !WebViewSessionCookieRefreshService.instance
         .hasFreshSyncForToken(token);
+
+    // First clear guest-mode synchronously in onLoginSuccess, then publish
+    // currentUserNotifier. Observers must never see the new user while the
+    // account manager still reports a guest profile.
+    void publishLogin(String committedToken) {
+      if (!AuthSession().isValid(loginGeneration)) return;
+      onLoginSuccess(
+        committedToken,
+        forceBrowserSessionSync: forceBrowserSessionSync,
+        notifyAuthState: notifyAuthState,
+      );
+      if (confirmedUser != null &&
+          confirmedUser.username.toLowerCase() == identifier.toLowerCase()) {
+        currentUserNotifier.value = confirmedUser;
+      }
+    }
+
+    // API-key OTP already established the session and /session/current.json
+    // verified its identity. Do not hold the UI on network preload (up to 8s).
+    // The new generation is committed before announcing the login.
+    if (notifyBeforePreload) {
+      LoginReadyCoordinator(
+        hydrateFromHtml: PreloadedDataService().hydrateFromHtml,
+        refreshPreloadedData: PreloadedDataService().refresh,
+        notifyLoginReady: publishLogin,
+      ).finalizeImmediately(
+        token: token,
+        onRefreshError: (error, _) {
+          debugPrint('[DiscourseLogin] 后台预加载失败(不影响登录): $error');
+        },
+      );
+      return;
+    }
 
     var loginReadyNotified = false;
     try {
@@ -202,11 +266,9 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
             hydrateFromHtml: PreloadedDataService().hydrateFromHtml,
             refreshPreloadedData: PreloadedDataService().refresh,
             notifyLoginReady: (t) {
+              if (!AuthSession().isValid(loginGeneration)) return;
               loginReadyNotified = true;
-              onLoginSuccess(
-                t,
-                forceBrowserSessionSync: forceBrowserSessionSync,
-              );
+              publishLogin(t);
             },
           )
           .finalize(token: token, pageHtml: null)
@@ -215,8 +277,8 @@ mixin _LoginMixin on _DiscourseServiceBase, _AuthMixin {
       debugPrint('[DiscourseLogin] PreloadedData 收尾失败/超时: $e');
     } finally {
       // 兜底广播, 避免 UI 卡在"同步登录中"
-      if (!loginReadyNotified) {
-        onLoginSuccess(token, forceBrowserSessionSync: forceBrowserSessionSync);
+      if (!loginReadyNotified && AuthSession().isValid(loginGeneration)) {
+        publishLogin(token);
       }
     }
   }

@@ -108,10 +108,9 @@ extension _PostFooterBookmarkActions on _PostFooterSectionState {
       bookmarkName: _bookmarkName ?? widget.post.bookmarkName,
       initialName: isEdit ? (_bookmarkName ?? widget.post.bookmarkName) : null,
       bookmarked: _isBookmarked,
-      hasReminder:
-          isEdit
-              ? ((_bookmarkReminderAt ?? widget.post.bookmarkReminderAt) != null)
-              : false,
+      hasReminder: isEdit
+          ? ((_bookmarkReminderAt ?? widget.post.bookmarkReminderAt) != null)
+          : false,
     );
     final result = await showBookmarkEditSheetWithCachedNames(
       context,
@@ -143,5 +142,4 @@ extension _PostFooterBookmarkActions on _PostFooterSectionState {
       });
     }
   }
-
 }

@@ -265,11 +265,10 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
     super.build(context);
     // 市场位于前景时卸载下层图片监听，禁止继续构建/加载订阅网格。
     if (_marketOpen) return const SizedBox.expand();
-    // 已订阅分组含 tab 栏所需的 name/icon,prefs 同步读 —— 首帧就能画,
-    // 不再为了拿这几个字段去拉全市场 288 组的分页索引。
-    final subscribedGroups = ref.watch(subscribedStickerGroupsProvider);
+    final subscribedIds = ref.watch(subscribedStickerIdsProvider);
     _recentSnapshot ??= ref.read(recentStickersProvider);
     final recentStickers = _recentSnapshot!;
+    final groupsAsync = ref.watch(stickerGroupsProvider);
 
     return ClipRect(
       child: Container(
@@ -280,11 +279,37 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
               ? null
               : const BorderRadius.vertical(top: Radius.circular(16)),
         ),
-        child: subscribedGroups.isEmpty
-            ? _buildEmptyState()
-            : _buildContent(subscribedGroups, recentStickers),
+        child: (() {
+          if (subscribedIds.isEmpty) return _buildEmptyState();
+          final allGroups = groupsAsync.value;
+          if (allGroups != null) {
+            return _buildContent(
+              _filterSubscribed(allGroups, subscribedIds),
+              recentStickers,
+            );
+          }
+          return groupsAsync.when(
+            data: (groups) => _buildContent(
+              _filterSubscribed(groups, subscribedIds),
+              recentStickers,
+            ),
+            loading: () => const Center(child: LoadingSpinner()),
+            error: (err, stack) => _buildError(err, stack),
+          );
+        })(),
       ),
     );
+  }
+
+  List<StickerGroup> _filterSubscribed(
+    List<StickerGroup> allGroups,
+    List<String> subscribedIds,
+  ) {
+    final groupMap = {for (final g in allGroups) g.id: g};
+    return subscribedIds
+        .where((id) => groupMap.containsKey(id))
+        .map((id) => groupMap[id]!)
+        .toList();
   }
 
   Widget _buildEmptyState() {
@@ -311,6 +336,67 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildError(Object error, StackTrace stackTrace) {
+    final theme = Theme.of(context);
+    final errorInfo = ErrorUtils.getErrorInfo(error);
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Symbols.error_rounded,
+            size: 48,
+            color: theme.colorScheme.outline,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            S.current.sticker_loadFailed,
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              errorInfo.message,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                onPressed: () => ref.invalidate(stickerGroupsProvider),
+                child: Text(S.current.common_retry),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => _showErrorDetails(error, stackTrace),
+                child: Text(S.current.common_viewDetails),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDetails(Object error, StackTrace stackTrace) {
+    final details = ErrorUtils.getErrorDetails(error, stackTrace);
+    showAppBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ErrorDetailsSheet(details: details),
     );
   }
 

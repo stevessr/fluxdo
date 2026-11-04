@@ -34,8 +34,11 @@ void main() {
       for (final id in visionIds) {
         test('$id → input contains image', () {
           final inferred = ModelCapabilities.infer(_bare(id));
-          expect(inferred.input, contains(Modality.image),
-              reason: '$id should support vision');
+          expect(
+            inferred.input,
+            contains(Modality.image),
+            reason: '$id should support vision',
+          );
         });
       }
 
@@ -49,8 +52,11 @@ void main() {
       for (final id in nonVisionIds) {
         test('$id → input does not contain image', () {
           final inferred = ModelCapabilities.infer(_bare(id));
-          expect(inferred.input, isNot(contains(Modality.image)),
-              reason: '$id should NOT support vision');
+          expect(
+            inferred.input,
+            isNot(contains(Modality.image)),
+            reason: '$id should NOT support vision',
+          );
         });
       }
     });
@@ -76,8 +82,11 @@ void main() {
       for (final id in reasoningIds) {
         test('$id → abilities contain reasoning', () {
           final inferred = ModelCapabilities.infer(_bare(id));
-          expect(inferred.abilities, contains(ModelAbility.reasoning),
-              reason: '$id should support reasoning');
+          expect(
+            inferred.abilities,
+            contains(ModelAbility.reasoning),
+            reason: '$id should support reasoning',
+          );
         });
       }
 
@@ -90,8 +99,11 @@ void main() {
       for (final id in nonReasoningIds) {
         test('$id → abilities do not contain reasoning', () {
           final inferred = ModelCapabilities.infer(_bare(id));
-          expect(inferred.abilities, isNot(contains(ModelAbility.reasoning)),
-              reason: '$id should NOT support reasoning');
+          expect(
+            inferred.abilities,
+            isNot(contains(ModelAbility.reasoning)),
+            reason: '$id should NOT support reasoning',
+          );
         });
       }
     });
@@ -115,8 +127,11 @@ void main() {
       for (final id in imageGenIds) {
         test('$id → output contains image', () {
           final inferred = ModelCapabilities.infer(_bare(id));
-          expect(inferred.output, contains(Modality.image),
-              reason: '$id should output images');
+          expect(
+            inferred.output,
+            contains(Modality.image),
+            reason: '$id should output images',
+          );
         });
       }
     });
@@ -160,14 +175,22 @@ void main() {
           input: const [Modality.text, Modality.image],
           abilities: const [ModelAbility.tool],
         );
-        expect(ModelCapabilities.hasCapability(m, ModelCapability.vision),
-            isTrue);
-        expect(ModelCapabilities.hasCapability(m, ModelCapability.imageOutput),
-            isFalse);
-        expect(ModelCapabilities.hasCapability(m, ModelCapability.tool),
-            isTrue);
-        expect(ModelCapabilities.hasCapability(m, ModelCapability.reasoning),
-            isFalse);
+        expect(
+          ModelCapabilities.hasCapability(m, ModelCapability.vision),
+          isTrue,
+        );
+        expect(
+          ModelCapabilities.hasCapability(m, ModelCapability.imageOutput),
+          isFalse,
+        );
+        expect(
+          ModelCapabilities.hasCapability(m, ModelCapability.tool),
+          isTrue,
+        );
+        expect(
+          ModelCapabilities.hasCapability(m, ModelCapability.reasoning),
+          isFalse,
+        );
       });
 
       test('withCapability toggles + sets capabilitiesUserEdited', () {
@@ -225,10 +248,16 @@ void main() {
         abilities: const [ModelAbility.tool],
       );
       final inferred = ModelCapabilities.infer(user);
-      expect(inferred.input, contains(Modality.image),
-          reason: 'user-set image capability must be preserved');
-      expect(inferred.abilities, contains(ModelAbility.tool),
-          reason: 'user-set tool capability must be preserved');
+      expect(
+        inferred.input,
+        contains(Modality.image),
+        reason: 'user-set image capability must be preserved',
+      );
+      expect(
+        inferred.abilities,
+        contains(ModelAbility.tool),
+        reason: 'user-set tool capability must be preserved',
+      );
     });
 
     test('toJson / fromJson round-trip preserves capabilities', () {

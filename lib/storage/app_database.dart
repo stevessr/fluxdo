@@ -138,9 +138,7 @@ class AppDatabase {
     if (kIsWeb) {
       // Web 暂时不走本地缓存——上层 BookmarksNotifier 在 username 为空时
       // 直接返回空表，这里抛错是为了在被错误地引入到 Web 构建时尽早暴露。
-      throw UnsupportedError(
-        'AppDatabase 暂不支持 Web 平台：书签本地缓存仅在移动端与桌面端启用。',
-      );
+      throw UnsupportedError('AppDatabase 暂不支持 Web 平台：书签本地缓存仅在移动端与桌面端启用。');
     }
     final directory = await getApplicationDocumentsDirectory();
     Hive.init(p.join(directory.path, 'hive'));

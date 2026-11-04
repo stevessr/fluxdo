@@ -27,7 +27,9 @@ class AppErrorHandler {
       }
     }
 
-    ToastService.showError(errorMessage ?? S.current.toast_operationFailedRetry);
+    ToastService.showError(
+      errorMessage ?? S.current.toast_operationFailedRetry,
+    );
     LogWriter.instance.write({
       'timestamp': DateTime.now().toIso8601String(),
       'level': 'error',

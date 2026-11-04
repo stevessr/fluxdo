@@ -34,6 +34,72 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
           onReset: (ref) =>
               ref.read(preferencesProvider.notifier).setContentFontScale(1.0),
         ),
+        CustomModel(
+          id: 'emojiRenderStyle',
+          title: 'Emoji style',
+          builder: (context, ref) {
+            final selected = ref.watch(
+              preferencesProvider.select((p) => p.emojiRenderStyle),
+            );
+            final locale = Localizations.localeOf(context);
+            final isZh = locale.languageCode == 'zh';
+            final traditional = isZh &&
+                const ['HK', 'MO', 'TW'].contains(locale.countryCode);
+            String localized(String zh, String tw, String en) =>
+                isZh ? (traditional ? tw : zh) : en;
+            String label(EmojiRenderStyle style) => switch (style) {
+              EmojiRenderStyle.normal => localized('常规', '一般', 'Normal'),
+              EmojiRenderStyle.animated => localized('动态', '動態', 'Animated'),
+              EmojiRenderStyle.threeD => '3D',
+            };
+            String description(EmojiRenderStyle style) => switch (style) {
+              EmojiRenderStyle.normal => localized(
+                  '使用站点原有表情', '使用網站原有表情', 'Original site emoji'),
+              EmojiRenderStyle.animated => localized(
+                  'Google Noto 动态表情，缺失资源回退常规',
+                  'Google Noto 動態表情，缺失資源回退一般',
+                  'Animated Google Noto emoji; normal fallback'),
+              EmojiRenderStyle.threeD => localized(
+                  'Google Noto 3D 静态表情，缺失资源回退常规',
+                  'Google Noto 3D 靜態表情，缺失資源回退一般',
+                  'Google Noto 3D artwork; normal fallback'),
+            };
+            return ListTile(
+              leading: Icon(
+                Icons.emoji_emotions_outlined,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              title: Text(localized('Emoji 风格', 'Emoji 風格', 'Emoji style')),
+              subtitle: Text(label(selected)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => showModalBottomSheet<void>(
+                context: context,
+                showDragHandle: true,
+                builder: (sheetContext) => SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final style in EmojiRenderStyle.values)
+                        ListTile(
+                          title: Text(label(style)),
+                          subtitle: Text(description(style)),
+                          trailing: selected == style
+                              ? Icon(Icons.check,
+                                  color: Theme.of(sheetContext).colorScheme.primary)
+                              : null,
+                          onTap: () {
+                            ref.read(preferencesProvider.notifier)
+                                .setEmojiRenderStyle(style);
+                            Navigator.pop(sheetContext);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
         SwitchModel(
           id: 'displayPanguSpacing',
           title: l10n.appearance_panguSpacing,
@@ -474,10 +540,7 @@ void _showGestureActionPicker(
       final dialogWidth = math.min(screen.width - 48, 560.0);
       final dialogMaxHeight = math.min(screen.height * 0.85, 640.0);
       return Dialog(
-        insetPadding: const EdgeInsets.symmetric(
-          horizontal: 24,
-          vertical: 24,
-        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
           constraints: BoxConstraints(
@@ -500,13 +563,12 @@ void _showGestureActionPicker(
                 child: GridView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                   shrinkWrap: true,
-                  gridDelegate:
-                      const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 240,
-                        mainAxisExtent: 52,
-                        crossAxisSpacing: 4,
-                        mainAxisSpacing: 4,
-                      ),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 240,
+                    mainAxisExtent: 52,
+                    crossAxisSpacing: 4,
+                    mainAxisSpacing: 4,
+                  ),
                   itemCount: ProgressGestureAction.values.length,
                   itemBuilder: (context, index) {
                     final action = ProgressGestureAction.values[index];

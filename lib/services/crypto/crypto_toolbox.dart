@@ -45,14 +45,14 @@ class CryptoToolbox {
   };
 
   /// 全部算法（注册顺序：编码 → 对称 → 哈希 → RSA → 经典）
-  static List<CryptoAlgorithm> get all =>
-      List.unmodifiable(_registry.values);
+  static List<CryptoAlgorithm> get all => List.unmodifiable(_registry.values);
 
   static CryptoAlgorithm? byId(String id) => _registry[id];
 
   /// 按分类取算法（UI 分组下拉）
   static List<CryptoAlgorithm> algorithmsByCategory(
-      CryptoAlgorithmCategory category) {
+    CryptoAlgorithmCategory category,
+  ) {
     final algorithms = _registry.values
         .where((a) => a.category == category)
         .toList(growable: false);
@@ -69,8 +69,7 @@ class CryptoToolbox {
     return algorithms;
   }
 
-  static int _registryOrder(String id) =>
-      all.indexWhere((a) => a.id == id);
+  static int _registryOrder(String id) => all.indexWhere((a) => a.id == id);
 
   // ---- 加密 ----
 
@@ -101,7 +100,8 @@ class CryptoToolbox {
         if (format == CryptoOutputFormat.openssl) {
           if (!sym.openSslCompatible) {
             throw CryptoException(
-                '${sym.displayName} 不支持 OpenSSL 兼容输出（仅 CBC 系列与 RC4）');
+              '${sym.displayName} 不支持 OpenSSL 兼容输出（仅 CBC 系列与 RC4）',
+            );
           }
           return _openSslEncrypt(sym, plaintext, params);
         }
@@ -110,7 +110,10 @@ class CryptoToolbox {
   }
 
   static String _openSslEncrypt(
-      SymmetricAlgorithm sym, String plaintext, CryptoParams params) {
+    SymmetricAlgorithm sym,
+    String plaintext,
+    CryptoParams params,
+  ) {
     final pw = params.password;
     if (pw == null || pw.isEmpty) {
       throw const CryptoException('请输入加密密码');
@@ -151,12 +154,19 @@ class CryptoToolbox {
         final enc1 = enc1TryParse(ciphertext);
         return algo.decrypt(enc1?.payloadBase64 ?? ciphertext, params);
       case CryptoAlgorithmCategory.symmetric:
-        return _symmetricDecrypt(algo as SymmetricAlgorithm, ciphertext, params);
+        return _symmetricDecrypt(
+          algo as SymmetricAlgorithm,
+          ciphertext,
+          params,
+        );
     }
   }
 
-  static String _symmetricDecrypt(SymmetricAlgorithm sym,
-      String ciphertext, CryptoParams params) {
+  static String _symmetricDecrypt(
+    SymmetricAlgorithm sym,
+    String ciphertext,
+    CryptoParams params,
+  ) {
     // 1. ENC1 自描述
     final enc1 = enc1TryParse(ciphertext);
     if (enc1 != null) {
@@ -178,7 +188,8 @@ class CryptoToolbox {
     if (ossl != null) {
       if (!sym.openSslCompatible) {
         throw CryptoException(
-            'OpenSSL Salted 密文需要 CBC 系列或 RC4 算法（当前: ${sym.displayName}）');
+          'OpenSSL Salted 密文需要 CBC 系列或 RC4 算法（当前: ${sym.displayName}）',
+        );
       }
       final pw = params.password;
       if (pw == null || pw.isEmpty) {
@@ -188,8 +199,12 @@ class CryptoToolbox {
       for (final useSha256 in [true, false]) {
         try {
           final derived = evpBytesToKey(
-              pw, ossl.salt, sym.keyLength, sym.ivLength,
-              useSha256: useSha256);
+            pw,
+            ossl.salt,
+            sym.keyLength,
+            sym.ivLength,
+            useSha256: useSha256,
+          );
           final pt = sym.processBytes(
             Uint8List.fromList(ossl.ciphertext),
             Uint8List.fromList(derived.key),
@@ -219,7 +234,8 @@ class CryptoToolbox {
       case SniffedCipherKind.enc1:
         // 内嵌算法未知时回退默认
         final known =
-            sniffed.algorithmId != null && _registry.containsKey(sniffed.algorithmId);
+            sniffed.algorithmId != null &&
+            _registry.containsKey(sniffed.algorithmId);
         return DecryptSuggestion(
           known ? sniffed.algorithmId : defaultAlgorithmId,
           sniffed.kind,
@@ -236,14 +252,18 @@ class CryptoToolbox {
         final bytes = _tryDecodeBase64(ciphertext);
         if (bytes != null && !looksLikeReadableText(bytes)) {
           return const DecryptSuggestion(
-              defaultAlgorithmId, SniffedCipherKind.plainBase64);
+            defaultAlgorithmId,
+            SniffedCipherKind.plainBase64,
+          );
         }
         return const DecryptSuggestion('base64', SniffedCipherKind.plainBase64);
       case SniffedCipherKind.plainHex:
         final bytes = _tryDecodeHex(ciphertext);
         if (bytes != null && !looksLikeReadableText(bytes)) {
           return const DecryptSuggestion(
-              defaultAlgorithmId, SniffedCipherKind.plainHex);
+            defaultAlgorithmId,
+            SniffedCipherKind.plainHex,
+          );
         }
         return const DecryptSuggestion('hex', SniffedCipherKind.plainHex);
       case SniffedCipherKind.plainBase32:
@@ -257,8 +277,9 @@ class CryptoToolbox {
 
   static Uint8List? _tryDecodeBase64(String text) {
     try {
-      final bytes =
-          base64.decode(normalizeBase64Input(text.replaceAll(RegExp(r'\s'), '')));
+      final bytes = base64.decode(
+        normalizeBase64Input(text.replaceAll(RegExp(r'\s'), '')),
+      );
       return bytes.isEmpty ? null : bytes;
     } catch (_) {
       return null;

@@ -34,12 +34,11 @@ import '../widgets/search/user_content_search_view.dart';
 import 'topics_page.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 
-typedef BookmarksWorkspaceTopicPageBuilder =
-    Widget Function(
-      BuildContext context,
-      BookmarkWorkspaceTopicTab tab,
-      bool parentActive,
-    );
+typedef BookmarksWorkspaceTopicPageBuilder = Widget Function(
+  BuildContext context,
+  BookmarkWorkspaceTopicTab tab,
+  bool parentActive,
+);
 
 /// 我的书签页面
 class BookmarksPage extends ConsumerStatefulWidget {
@@ -911,9 +910,8 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
                   }) {
                     ref
                         .read(
-                          userContentSearchProvider(
-                            SearchInType.bookmarks,
-                          ).notifier,
+                          userContentSearchProvider(SearchInType.bookmarks)
+                              .notifier,
                         )
                         .exitSearchMode();
                     _openWorkspaceTab(

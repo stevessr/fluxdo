@@ -41,7 +41,11 @@ class ThinkingDelta extends AiChatChunk {
 
 /// Token 用量报告，流结束时发送
 class UsageReport extends AiChatChunk {
-  const UsageReport({this.promptTokens, this.responseTokens, this.cachedTokens});
+  const UsageReport({
+    this.promptTokens,
+    this.responseTokens,
+    this.cachedTokens,
+  });
   final int? promptTokens;
   final int? responseTokens;
   final int? cachedTokens;
@@ -91,10 +95,7 @@ class ChatStreamStats {
 ///
 /// 所有 SDK 都基于 `package:http`，通过 [bridgedClient] 注入应用 dio 网络栈。
 class AiChatService {
-  AiChatService({
-    this.bridgedClient,
-    this.enablePartialImages = false,
-  });
+  AiChatService({this.bridgedClient, this.enablePartialImages = false});
 
   /// 可选 http.Client。传 [DioBackedHttpClient] 即可让所有请求复用应用网络栈。
   final http.Client? bridgedClient;
@@ -111,16 +112,20 @@ class AiChatService {
     required List<AiChatMessage> messages,
     String? systemPrompt,
     ThinkingConfig thinkingConfig = const ThinkingConfig(),
+
     /// 仅图像生成路径使用：话题上下文摘要（含标题+正文楼层），
     /// 会被前置拼接到 image prompt 之前，让生成的图与话题相关。
     /// 文本聊天路径忽略此参数（话题上下文走 [messages] 注入）。
     String? imagePromptContext,
+
     /// 仅图像生成路径使用：用户在 PromptPreset 维度面板选择的 aspect。
     /// 取值 '1:1' / '16:9' / '9:16' / '4:3' / '3:4'，null = 用模型默认。
     String? imageAspect,
+
     /// 可取消的 HTTP client。外部 close 后底层 HTTP 连接立即断开，
     /// 不再等 stream 自然结束。未传则 fallback 到 [bridgedClient]。
     http.Client? requestClient,
+
     /// 可选的诊断统计对象,各 _stream 内部会写入 SDK 收到的原始 event 数。
     ChatStreamStats? stats,
   }) {
@@ -379,15 +384,17 @@ class AiChatService {
             );
           } else {
             // 504/502/503 自动重试 3 次（绕过 openai_dart 4.x 对 POST 不重试的限制）
-            final response = await _withServerErrorRetry(() => client.images.edit(
-              o.ImageEditRequest(
-                model: model,
-                prompt: prompt,
-                image: bytes,
-                imageFilename: 'input.${_extFromMime(att.mimeType)}',
-                size: size,
+            final response = await _withServerErrorRetry(
+              () => client.images.edit(
+                o.ImageEditRequest(
+                  model: model,
+                  prompt: prompt,
+                  image: bytes,
+                  imageFilename: 'input.${_extFromMime(att.mimeType)}',
+                  size: size,
+                ),
               ),
-            ));
+            );
             yield* _emitImageResponse(response);
           }
         } else {
@@ -404,9 +411,15 @@ class AiChatService {
               stats: stats,
             );
           } else {
-            final response = await _withServerErrorRetry(() => client.images.generate(
-              o.ImageGenerationRequest(model: model, prompt: prompt, size: size),
-            ));
+            final response = await _withServerErrorRetry(
+              () => client.images.generate(
+                o.ImageGenerationRequest(
+                  model: model,
+                  prompt: prompt,
+                  size: size,
+                ),
+              ),
+            );
             yield* _emitImageResponse(response);
           }
         }
@@ -599,7 +612,8 @@ class AiChatService {
     final imagesDir = Directory(p.join(dir.path, 'ai_generated_images'));
     if (!imagesDir.existsSync()) imagesDir.createSync(recursive: true);
     final ext = _extFromMime(mime);
-    final filename = '${DateTime.now().millisecondsSinceEpoch}_'
+    final filename =
+        '${DateTime.now().millisecondsSinceEpoch}_'
         '${const Uuid().v4().substring(0, 8)}.$ext';
     final file = File(p.join(imagesDir.path, filename));
     await file.writeAsBytes(bytes);
@@ -687,8 +701,11 @@ class AiChatService {
     }
   }
 
-  o.OpenAIClient _createOpenAIClient(String baseUrl, String apiKey,
-      {http.Client? httpClient}) {
+  o.OpenAIClient _createOpenAIClient(
+    String baseUrl,
+    String apiKey, {
+    http.Client? httpClient,
+  }) {
     return o.OpenAIClient(
       config: o.OpenAIConfig(
         authProvider: o.ApiKeyProvider(apiKey),
@@ -829,7 +846,10 @@ class AiChatService {
     try {
       // 复用普通 chat 的消息转换（带附件作为输入图，也支持 image edit 场景）；
       // 但要把最后一条 user 文本替换成增强版 prompt（拼了话题上下文）
-      final messagesWithEnhancedPrompt = _replaceLastUserContent(messages, prompt);
+      final messagesWithEnhancedPrompt = _replaceLastUserContent(
+        messages,
+        prompt,
+      );
       final contents = _toGeminiContents(messagesWithEnhancedPrompt);
       final request = g.GenerateContentRequest(
         contents: contents,
@@ -861,7 +881,9 @@ class AiChatService {
               final cleaned = blob.data.replaceAll(RegExp(r'\s'), '');
               try {
                 final bytes = base64Decode(cleaned);
-                final mime = blob.mimeType.isEmpty ? 'image/png' : blob.mimeType;
+                final mime = blob.mimeType.isEmpty
+                    ? 'image/png'
+                    : blob.mimeType;
                 final localPath = await _saveImageBytes(bytes, mime);
                 yield ImageGenerated(localPath: localPath, mimeType: mime);
               } catch (_) {
@@ -950,8 +972,9 @@ class AiChatService {
       const maxAttempts = 3;
       for (var i = 1; i <= maxAttempts; i++) {
         try {
-          await for (final event
-              in client.createMessageStream(request: request)) {
+          await for (final event in client.createMessageStream(
+            request: request,
+          )) {
             stats?.sdkEvents++;
             switch (event) {
               case final a.MessageStartEvent e:
@@ -1107,9 +1130,7 @@ class AiChatService {
     }
     final base64Data = att.base64Data;
     if (base64Data != null && base64Data.isNotEmpty) {
-      return o.InputContent.imageUrl(
-        'data:${att.mimeType};base64,$base64Data',
-      );
+      return o.InputContent.imageUrl('data:${att.mimeType};base64,$base64Data');
     }
     final localPath = att.localPath;
     if (localPath != null && localPath.isNotEmpty) {
@@ -1171,7 +1192,8 @@ class AiChatService {
   List<a.Message> _toAnthropicMessages(List<AiChatMessage> history) {
     final result = <a.Message>[];
     for (final msg in history) {
-      final isContext = msg.id == 'context-user' || msg.id == 'context-assistant';
+      final isContext =
+          msg.id == 'context-user' || msg.id == 'context-assistant';
       switch (msg.role) {
         case ChatRole.system:
           continue;
@@ -1202,8 +1224,10 @@ class AiChatService {
     return result;
   }
 
-  a.MessageContent _toAnthropicContent(AiChatMessage msg,
-      {bool cache = false}) {
+  a.MessageContent _toAnthropicContent(
+    AiChatMessage msg, {
+    bool cache = false,
+  }) {
     final attachments = msg.attachments;
     if (attachments == null || attachments.isEmpty) {
       if (cache) {
