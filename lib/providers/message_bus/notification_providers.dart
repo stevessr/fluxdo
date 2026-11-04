@@ -87,7 +87,14 @@ class NotificationChannelNotifier extends Notifier<void> {
     // 确保 MessageBus 已 configure（域名配置），避免用主站域名轮询
     ref.watch(messageBusInitProvider);
     final messageBus = ref.watch(messageBusServiceProvider);
-    final currentUser = ref.watch(currentUserProvider).value;
+    // Re-subscribe only when account identity or the authoritative initial position changes.
+    final subscription = ref.watch(
+      currentUserProvider.select((value) {
+        final user = value.value;
+        if (user == null) return null;
+        return (id: user.id, position: user.notificationChannelPosition);
+      }),
+    );
 
     // 清理之前的订阅
     if (_subscribedChannel != null && _callback != null) {
@@ -97,13 +104,13 @@ class NotificationChannelNotifier extends Notifier<void> {
       _callback = null;
     }
 
-    if (currentUser == null) {
+    if (subscription == null) {
       debugPrint('[NotificationChannel] 用户未登录，跳过订阅');
       return;
     }
 
-    final channel = '/notification/${currentUser.id}';
-    final initialMessageId = currentUser.notificationChannelPosition;
+    final channel = '/notification/${subscription.id}';
+    final initialMessageId = subscription.position;
 
     debugPrint(
       '[NotificationChannel] 订阅频道: $channel, 初始 messageId: $initialMessageId',
@@ -223,7 +230,10 @@ class NotificationAlertChannelNotifier extends Notifier<void> {
     // 确保 MessageBus 已 configure（域名配置），避免用主站域名轮询
     ref.watch(messageBusInitProvider);
     final messageBus = ref.watch(messageBusServiceProvider);
-    final currentUser = ref.watch(currentUserProvider).value;
+    // Refreshing profile data must not interrupt the notification-alert subscription.
+    final currentUserId = ref.watch(
+      currentUserProvider.select((value) => value.value?.id),
+    );
 
     // 清理之前的订阅
     if (_subscribedChannel != null && _callback != null) {
@@ -233,13 +243,13 @@ class NotificationAlertChannelNotifier extends Notifier<void> {
       _callback = null;
     }
 
-    if (currentUser == null) {
+    if (currentUserId == null) {
       debugPrint('[NotificationAlert] 用户未登录，跳过订阅');
       return;
     }
 
     // Discourse 官方使用 /notification-alert/{userId} 频道触发桌面通知
-    final channel = '/notification-alert/${currentUser.id}';
+    final channel = '/notification-alert/$currentUserId';
 
     debugPrint('[NotificationAlert] 订阅频道: $channel');
 
