@@ -27,6 +27,7 @@ import '../../models/emoji.dart';
 import '../../models/topic.dart' show FlagType;
 import '../../models/user.dart';
 import '../../providers/chat_providers.dart';
+import '../../providers/download_provider.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
@@ -3001,6 +3002,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
     // 1. 从 uploads 字典列表中提取 HTTP 图像 URL (优先使用 url / full_url / short_path)
     if (message.uploads != null) {
       for (final u in message.uploads!) {
+        if (!_isImageUpload(u)) continue;
         final path =
             u['url'] as String? ??
             u['full_url'] as String? ??
@@ -3062,6 +3064,34 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
     return path.isNotEmpty && cooked.contains(path);
   }
 
+  /// Separate images from downloadable non-image chat attachments.
+  static bool _isImageUpload(Map<String, dynamic> upload) {
+    final mime = (upload['content_type'] ?? upload['mime_type'] ?? '')
+        .toString()
+        .toLowerCase();
+    if (mime.startsWith('image/')) return true;
+    final name =
+        (upload['original_filename'] ??
+                upload['filename'] ??
+                upload['url'] ??
+                upload['full_url'] ??
+                '')
+            .toString()
+            .toLowerCase();
+    return RegExp(r'\.(?:png|jpe?g|gif|webp|avif|bmp|svg)(?:\?.*)?$')
+        .hasMatch(name);
+  }
+
+  static String? _attachmentUrl(Map<String, dynamic> upload) {
+    final value = upload['url'] ?? upload['full_url'] ?? upload['short_path'];
+    if (value is! String ||
+        value.trim().isEmpty ||
+        value.startsWith('upload://')) {
+      return null;
+    }
+    return value;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (message.deleted) {
@@ -3072,6 +3102,11 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
         ? CrossAxisAlignment.end
         : CrossAxisAlignment.start;
     final imageUrls = _extractImageUrls();
+    final fileUploads = (message.uploads ?? const <Map<String, dynamic>>[])
+        .where(
+          (upload) => !_isImageUpload(upload) && _attachmentUrl(upload) != null,
+        )
+        .toList(growable: false);
 
     // 缩略图条只负责 cooked 没渲染的图（对齐 Discourse chat：正文由 cooked
     // 渲染，附件区补 uploads）。cooked 已含的图交给 cooked，避免画两次。
@@ -3324,6 +3359,79 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                       ),
                                     );
                                   }).toList(),
+                                ),
+                              ),
+
+                            // Download non-image uploads with their original filenames.
+                            for (final upload in fileUploads)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Material(
+                                  color: theme.colorScheme.surface.withValues(
+                                    alpha: 0.55,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    onTap: isMultiSelectMode
+                                        ? null
+                                        : () {
+                                            final rawUrl = _attachmentUrl(
+                                              upload,
+                                            );
+                                            if (rawUrl == null) return;
+                                            final originalName =
+                                                (upload['original_filename'] ??
+                                                        upload['filename'])
+                                                    ?.toString();
+                                            ProviderScope.containerOf(
+                                                  context,
+                                                  listen: false,
+                                                )
+                                                .read(downloadProvider.notifier)
+                                                .startDownload(
+                                                  url: UrlHelper.resolveUrl(
+                                                    rawUrl,
+                                                  ),
+                                                  suggestedFilename:
+                                                      originalName
+                                                              ?.isNotEmpty ==
+                                                          true
+                                                      ? originalName
+                                                      : null,
+                                                );
+                                          },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.description_rounded,
+                                            size: 20,
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Flexible(
+                                            child: Text(
+                                              (upload['original_filename'] ??
+                                                      upload['filename'] ??
+                                                      '附件')
+                                                  .toString(),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: theme.textTheme.bodySmall,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
 

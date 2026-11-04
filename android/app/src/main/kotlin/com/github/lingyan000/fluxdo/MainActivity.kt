@@ -200,6 +200,8 @@ open class MainActivity : FlutterActivity() {
         }
         picoVrChannel?.dispose()
         picoVrChannel = PicoVrChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        // Android 11+ messaging shortcuts provide sender avatars for notifications.
+        ConversationShortcutChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "openInBrowser" -> {
