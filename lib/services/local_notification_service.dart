@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../l10n/s.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
+import '../pages/chat/chat_message_page.dart';
 import '../utils/notification_navigation.dart';
 import 'notification_avatar_loader.dart';
 
@@ -109,6 +110,22 @@ class LocalNotificationService {
     final payload = response.payload;
     if (payload == null || payload.isEmpty) return;
 
+    if (payload.startsWith('chat:')) {
+      final channelId = int.tryParse(payload.substring(5));
+      if (channelId == null) return;
+      final page = ChatMessagePage(
+        channelId: channelId,
+        channelTitle: S.current.chat_title,
+      );
+      final context = navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        openNotificationPage(context, page);
+        return;
+      }
+      navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => page));
+      return;
+    }
+
     // payload 格式: "topic:{topicId}[:{postNumber}]" 或
     // "message:{topicId}[:{postNumber}]"(私信,走私信平行视界栈)。
     final isMessage = payload.startsWith('message:');
@@ -165,6 +182,8 @@ class LocalNotificationService {
     int? topicId,
     int? postNumber,
     bool isPrivateMessage = false,
+    int? chatChannelId,
+    NotificationConversation? conversation,
   }) async {
     if (!_initialized) {
       await initialize();
@@ -197,20 +216,26 @@ class LocalNotificationService {
     // 构建 payload 用于点击回调:私信用 message: 前缀,走私信自己的
     // 平行视界栈,不能跟普通话题共用 topic: 前缀(否则左栏会显示信息流)。
     String? payload;
-    if (topicId != null) {
+    if (chatChannelId != null) {
+      payload = 'chat:$chatChannelId';
+    } else if (topicId != null) {
       final prefix = isPrivateMessage ? 'message' : 'topic';
       payload = postNumber != null
           ? '$prefix:$topicId:$postNumber'
           : '$prefix:$topicId';
     }
 
-    await _plugin.show(
-      id: notificationId,
-      title: title,
-      body: body,
-      notificationDetails: details,
-      payload: payload,
-    );
+    try {
+      await _plugin.show(
+        id: notificationId,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payload,
+      );
+    } finally {
+      if (asConversation) await _removeConversationShortcut(conversation.id);
+    }
     debugPrint('[LocalNotification] 已发送: $title, payload=$payload');
   }
 
