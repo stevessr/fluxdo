@@ -10,7 +10,7 @@ permissions:
 jobs:
   merge-main:
     if: >-
-      github.event.head_commit.message == 'ci(merge): validate chat notification port'
+      github.event.head_commit.message == 'ci(merge): verify topic tracking and PM fixes'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
