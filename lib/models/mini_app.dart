@@ -26,14 +26,11 @@ class MiniApp {
     }
 
     final suppliedUrl = _string(data['url']) ?? _string(data['path']);
-    late final Uri candidate;
-    try {
-      candidate = suppliedUrl == null
-          ? site.resolve('/apps/${Uri.encodeComponent(id)}')
-          : site.resolve(suppliedUrl);
-    } on FormatException {
-      return null;
-    }
+    final candidate = suppliedUrl == null
+        ? site.resolve('/apps/${Uri.encodeComponent(id)}')
+        : _resolveUntrustedUrl(site, suppliedUrl);
+    if (candidate == null) return null;
+
     // A directory response cannot launch an arbitrary origin or a non-app path.
     // The app itself may navigate normally within the hosted web container.
     if (candidate.scheme != 'https' ||
@@ -49,12 +46,7 @@ class MiniApp {
         _string(data['icon_url']) ??
         _string(data['iconUrl']) ??
         _string(data['image_url']);
-    Uri? iconUri;
-    try {
-      iconUri = icon == null ? null : site.resolve(icon);
-    } on FormatException {
-      // A bad icon must not prevent a valid app from being listed.
-    }
+    final iconUri = icon == null ? null : _resolveUntrustedUrl(site, icon);
     final iconUrl = iconUri != null && iconUri.scheme == 'https'
         ? iconUri.toString()
         : null;
@@ -70,6 +62,19 @@ class MiniApp {
           ? rawRating
           : int.tryParse(rawRating?.toString() ?? ''),
     );
+  }
+
+  // Uri.resolve percent-encodes lone '%' characters instead of rejecting them.
+  // Validate untrusted URLs before resolution so malformed escapes cannot pass.
+  static final _invalidPercentEscape = RegExp(r'%(?![0-9a-fA-F]{2})');
+
+  static Uri? _resolveUntrustedUrl(Uri site, String value) {
+    if (_invalidPercentEscape.hasMatch(value)) return null;
+    try {
+      return site.resolve(value);
+    } on FormatException {
+      return null;
+    }
   }
 
   static String? _string(Object? value) {
