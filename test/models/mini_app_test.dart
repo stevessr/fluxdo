@@ -64,6 +64,120 @@ void main() {
     expect(result.apps.single.url.queryParameters['from'], 'directory');
   });
 
+
+  test('uses raw page size before filtering, and honors explicit pagination', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'data': {
+          'apps': [
+            {'id': 'safe', 'name': 'Safe'},
+            {'id': 'safe', 'name': 'Duplicate'},
+            {'id': 'unsafe', 'url': 'https://elsewhere.test/apps/unsafe'},
+          ],
+          'pagination': {'has_next': true, 'next_page': 4},
+        },
+      },
+      site: site,
+      requestedPage: 3,
+    );
+    expect(result.apps.map((app) => app.name), ['Safe']);
+    expect(result.rawCount, 3);
+    expect(result.nextPage, 4);
+    expect(result.hasNext, isTrue);
+  });
+
+  test('keeps pagination metadata from the outer data wrapper', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'total': 25,
+        'page': 0,
+        'per_page': 24,
+        'data': {
+          'apps': [
+            {'id': 'wrapped'},
+          ],
+        },
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps.single.id, 'wrapped');
+    expect(result.hasNext, isTrue);
+    expect(result.nextPage, 1);
+  });
+
+  test('honors explicit end even with a full page', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': List.generate(24, (i) => {'id': 'app-$i'}),
+        'has_next': false,
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps, hasLength(24));
+    expect(result.hasNext, isFalse);
+  });
+
+  test('prevents endless loading on an empty response', () {
+    final result = MiniAppDirectory.parse(
+      {'apps': [], 'has_next': true, 'total': 1000},
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.hasNext, isFalse);
+    expect(result.rawCount, 0);
+  });
+
+  test('does not accept insecure icon URLs or malformed map keys', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': [
+          {'id': 'safe', 'icon_url': 'http://example.test/icon.png'},
+          {123: 'strange', 'slug': 'other'},
+        ],
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps, hasLength(2));
+    expect(result.apps.first.iconUrl, isNull);
+  });
+
+  test('skips malformed destinations without losing neighboring apps', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': [
+          {'id': 'broken', 'url': 'https://%invalid/apps/broken'},
+          {'id': 'valid', 'icon_url': 'https://%invalid/icon.png'},
+        ],
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps.map((app) => app.id), ['valid']);
+    expect(result.apps.single.iconUrl, isNull);
+  });
+
+  test('accepts valid encoded URL escapes without weakening URL checks', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': [
+          {'id': 'valid', 'url': '/apps/valid?source=a%20b',
+           'icon_url': '/images/logo%20test.png'},
+          {'id': 'invalid-icon', 'icon_url': '/images/logo%2.png'},
+        ],
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps, hasLength(2));
+    expect(result.apps.first.url.queryParameters['source'], 'a b');
+    expect(result.apps.first.iconUrl,
+        'https://linux.do/images/logo%20test.png');
+    expect(result.apps.last.iconUrl, isNull);
+  });
+
   test('rejects unknown response formats', () {
     expect(
       () =>
