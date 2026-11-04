@@ -1,0 +1,90 @@
+name: Temporary upstream dev integration
+on:
+  push:
+    branches:
+      - merge/upstream-dev-20261104
+
+permissions:
+  contents: write
+
+jobs:
+  merge-main:
+    if: github.event.head_commit.message == 'chore(ci): prepare upstream dev integration runner'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout temporary branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          submodules: false
+
+      - name: Merge fork main with three-way history preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "fluxdo-upstream-merge"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          echo "Before merge: $(git rev-parse HEAD)"
+          echo "Fork main: $(git rev-parse origin/main)"
+          if git merge --no-ff --no-edit -X theirs \
+              -m "merge(upstream): integrate fork main into upstream dev" origin/main; then
+            echo "Clean three-way merge completed."
+          else
+            echo "::warning::Some merge conflicts require explicit resolution. Prefer fork main for conflicting files."
+            mapfile -d '' -t conflicts < <(git diff --name-only -z --diff-filter=U)
+            printf '%s\n' "${conflicts[@]}"
+            if [ "${#conflicts[@]}" -eq 0 ]; then
+              echo "::error::Merge failed with no individually resolvable conflicts."
+              exit 1
+            fi
+            for path in "${conflicts[@]}"; do
+              if git cat-file -e "origin/main:${path}" 2>/dev/null; then
+                git checkout origin/main -- "${path}"
+                git add -- "${path}"
+              else
+                git rm -f -- "${path}"
+              fi
+            done
+            if [ -n "$(git ls-files -u)" ]; then
+              echo "::error::Unresolved git index entries"
+              git ls-files -u
+              exit 1
+            fi
+            git commit -m "merge(upstream): integrate fork main (keep fork files for remaining conflicts)"
+          fi
+          git log -1 --format='%h %p %s'
+          test "$(git rev-list --parents -n 1 HEAD | wc -w)" -ge 3
+          git diff --stat origin/main HEAD | tail -70
+          git push origin HEAD:refs/heads/merge/upstream-dev-20261104
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Resolve dependencies and generate localizations
+        run: |
+          flutter pub get
+          dart run tool/gen_l10n.dart
+
+      - name: Analyze upstream-changed Dart sources
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings \
+            lib/providers/message_bus \
+            lib/providers/chat/chat_notification_alert_provider.dart \
+            lib/services/local_notification_service.dart \
+            lib/services/notification_avatar_loader.dart \
+            lib/services/message_bus_latency_probe.dart \
+            lib/providers/topic_list/topic_list_provider.dart \
+            packages/common_ui/lib/src/predictive_back_cupertino_transitions.dart
+
+      - name: Run upstream-focused regression tests
+        run: |
+          flutter test \
+            test/providers/topic_list_updates_test.dart \
+            test/services/message_bus_latency_probe_test.dart \
+            test/widgets/common/predictive_back_input_diagnostic_test.dart
