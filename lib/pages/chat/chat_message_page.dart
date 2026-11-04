@@ -3070,13 +3070,14 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
         .toString()
         .toLowerCase();
     if (mime.startsWith('image/')) return true;
-    final name = (upload['original_filename'] ??
-            upload['filename'] ??
-            upload['url'] ??
-            upload['full_url'] ??
-            '')
-        .toString()
-        .toLowerCase();
+    final name =
+        (upload['original_filename'] ??
+                upload['filename'] ??
+                upload['url'] ??
+                upload['full_url'] ??
+                '')
+            .toString()
+            .toLowerCase();
     return RegExp(r'\.(?:png|jpe?g|gif|webp|avif|bmp|svg)(?:\?.*)?$')
         .hasMatch(name);
   }
@@ -3102,8 +3103,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
         : CrossAxisAlignment.start;
     final imageUrls = _extractImageUrls();
     final fileUploads = (message.uploads ?? const <Map<String, dynamic>>[])
-        .where((upload) =>
-            !_isImageUpload(upload) && _attachmentUrl(upload) != null)
+        .where(
+          (upload) => !_isImageUpload(upload) && _attachmentUrl(upload) != null,
+        )
         .toList(growable: false);
 
     // 缩略图条只负责 cooked 没渲染的图（对齐 Discourse chat：正文由 cooked
@@ -3365,30 +3367,38 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 6),
                                 child: Material(
-                                  color: theme.colorScheme.surface
-                                      .withValues(alpha: 0.55),
+                                  color: theme.colorScheme.surface.withValues(
+                                    alpha: 0.55,
+                                  ),
                                   borderRadius: BorderRadius.circular(10),
                                   clipBehavior: Clip.antiAlias,
                                   child: InkWell(
                                     onTap: isMultiSelectMode
                                         ? null
                                         : () {
-                                            final rawUrl = _attachmentUrl(upload);
+                                            final rawUrl = _attachmentUrl(
+                                              upload,
+                                            );
                                             if (rawUrl == null) return;
                                             final originalName =
                                                 (upload['original_filename'] ??
                                                         upload['filename'])
                                                     ?.toString();
                                             ProviderScope.containerOf(
-                                              context,
-                                              listen: false,
-                                            ).read(downloadProvider.notifier)
+                                                  context,
+                                                  listen: false,
+                                                )
+                                                .read(downloadProvider.notifier)
                                                 .startDownload(
-                                                  url: UrlHelper.resolveUrl(rawUrl),
+                                                  url: UrlHelper.resolveUrl(
+                                                    rawUrl,
+                                                  ),
                                                   suggestedFilename:
-                                                      originalName?.isNotEmpty == true
-                                                          ? originalName
-                                                          : null,
+                                                      originalName
+                                                              ?.isNotEmpty ==
+                                                          true
+                                                      ? originalName
+                                                      : null,
                                                 );
                                           },
                                     child: Padding(
@@ -3402,7 +3412,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                           Icon(
                                             Icons.description_rounded,
                                             size: 20,
-                                            color: theme.colorScheme.onSurfaceVariant,
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
                                           ),
                                           const SizedBox(width: 8),
                                           Flexible(
