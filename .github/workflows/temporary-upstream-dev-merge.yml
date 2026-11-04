@@ -10,7 +10,7 @@ permissions:
 jobs:
   merge-main:
     if: >-
-      github.event.head_commit.message == 'ci(merge): verify topic tracking and PM fixes'
+      github.event.head_commit.message == 'ci(merge): validate upgraded render integration'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -73,6 +73,19 @@ jobs:
           flutter pub get
           dart run tool/gen_l10n.dart
 
+      - name: Format chat attachment port
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart format lib/pages/chat/chat_message_page.dart
+          git add -- lib/pages/chat/chat_message_page.dart
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "style(merge): format chat attachment integration"
+            git push origin HEAD:refs/heads/merge/upstream-dev-20261104
+          fi
+
       - name: Analyze upstream-changed Dart sources
         run: |
           flutter analyze --no-fatal-infos --no-fatal-warnings \
@@ -80,6 +93,7 @@ jobs:
             lib/providers/chat_notification_alert_provider.dart \
             lib/pages/chat/chat_message_page.dart \
             lib/main.dart \
+            lib/utils/fluxdo_render_callbacks.dart \
             lib/services/local_notification_service.dart \
             lib/services/notification_avatar_loader.dart \
             lib/services/message_bus_latency_probe.dart \
