@@ -10,7 +10,7 @@ permissions:
 jobs:
   merge-main:
     if: >-
-      github.event.head_commit.message == 'ci(merge): verify resolved upstream integration'
+      github.event.head_commit.message == 'ci(merge): validate chat notification port'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -77,7 +77,9 @@ jobs:
         run: |
           flutter analyze --no-fatal-infos --no-fatal-warnings \
             lib/providers/message_bus \
-            lib/providers/chat/chat_notification_alert_provider.dart \
+            lib/providers/chat_notification_alert_provider.dart \
+            lib/pages/chat/chat_message_page.dart \
+            lib/main.dart \
             lib/services/local_notification_service.dart \
             lib/services/notification_avatar_loader.dart \
             lib/services/message_bus_latency_probe.dart \
