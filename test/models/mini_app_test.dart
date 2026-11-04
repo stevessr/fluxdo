@@ -159,6 +159,25 @@ void main() {
     expect(result.apps.single.iconUrl, isNull);
   });
 
+  test('accepts valid encoded URL escapes without weakening URL checks', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': [
+          {'id': 'valid', 'url': '/apps/valid?source=a%20b',
+           'icon_url': '/images/logo%20test.png'},
+          {'id': 'invalid-icon', 'icon_url': '/images/logo%2.png'},
+        ],
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps, hasLength(2));
+    expect(result.apps.first.url.queryParameters['source'], 'a b');
+    expect(result.apps.first.iconUrl,
+        'https://linux.do/images/logo%20test.png');
+    expect(result.apps.last.iconUrl, isNull);
+  });
+
   test('rejects unknown response formats', () {
     expect(
       () =>
