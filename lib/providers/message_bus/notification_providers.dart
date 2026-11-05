@@ -117,6 +117,8 @@ class NotificationChannelNotifier extends Notifier<void> {
     );
 
     void onMessage(MessageBusMessage message) {
+      // Ignore queued callbacks from the previous account during switching.
+      if (ref.read(currentUserProvider).value?.id != subscription.id) return;
       final data = message.data;
       if (data is Map<String, dynamic>) {
         final allUnreadCount = data['all_unread_notifications_count'] as int?;
@@ -145,8 +147,8 @@ class NotificationChannelNotifier extends Notifier<void> {
         // Count-only and recent-only events need a quiet server reconciliation.
         if (ref.exists(notificationListProvider)) {
           final historyState = ref.read(notificationListProvider);
+          final notifier = ref.read(notificationListProvider.notifier);
           if (historyState.hasValue) {
-            final notifier = ref.read(notificationListProvider.notifier);
             DiscourseNotification? latest;
             final last = data['last_notification'];
             if (last is Map<String, dynamic>) {
@@ -183,6 +185,10 @@ class NotificationChannelNotifier extends Notifier<void> {
             if (latest == null || historyState.isLoading) {
               notifier.scheduleRealtimeSync();
             }
+          } else {
+            // A push may arrive while the first history request is loading.
+            // Reconcile after it completes instead of silently losing it.
+            notifier.scheduleRealtimeSync();
           }
         }
 
