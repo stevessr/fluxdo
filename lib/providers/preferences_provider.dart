@@ -251,6 +251,7 @@ class AppPreferences {
   final bool showSuggestedTopics;
 
   /// 从首页打开话题时默认保留为可切换的 Tab。
+  /// 只影响默认打开行为；显式开启的 Tab 会话在最后一个标签关闭后结束。
   final bool openTopicsInTabsByDefault;
 
   /// 默认使用树形视图

@@ -1636,6 +1636,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     ];
   }
 
+  /// 将当前话题移入首页 Tab 工作区，并保留当前浏览楼层。
   void _openTopicInTab(TopicDetail detail) {
     final home = ref.read(selectedTopicProvider);
     final isHomePane =
