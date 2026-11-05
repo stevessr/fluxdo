@@ -45,6 +45,7 @@ import '../../providers/preferences_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../reading_settings_page.dart';
 import '../../providers/selected_topic_provider.dart';
+import '../../navigation/nav_action_bus.dart';
 import '../../providers/discourse_providers.dart';
 import '../../providers/message_bus_providers.dart';
 import '../../providers/pinned_categories_provider.dart';
@@ -1635,6 +1636,35 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     ];
   }
 
+  /// 将当前话题移入首页 Tab 工作区，并保留当前浏览楼层。
+  void _openTopicInTab(TopicDetail detail) {
+    final home = ref.read(selectedTopicProvider);
+    final isHomePane =
+        widget.embeddedMode &&
+        (widget.stackProvider == null ||
+            widget.stackProvider == selectedTopicProvider);
+    if (isHomePane && home.topEntry?.topicId == widget.topicId) {
+      // 当前详情已在首页栈内：切换模式而不是复制同一个页面。
+      ref.read(selectedTopicProvider.notifier).enableTabMode();
+      return;
+    }
+    ref
+        .read(selectedTopicProvider.notifier)
+        .openTopicTab(
+          topicId: widget.topicId,
+          initialTitle: detail.title,
+          scrollToPostNumber: _resolvedViewportPostNumber,
+        );
+    ref.requestNavDestination(NavEntryIds.home);
+    if (!widget.embeddedMode) {
+      // 全屏路由回到所属首页，由首页的 Tab 显示新话题。
+      final route = ModalRoute.of(context);
+      if (route?.isCurrent == true && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
   Future<void> _openTopicInNativeWindow() async {
     final opened = await PicoVrService.instance.openNewWindow(
       topicId: widget.topicId,
@@ -1961,6 +1991,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           onExport: _showExportSheet,
           onOpenInBrowser: _openInBrowser,
           onOpenInNewWindow: () => unawaited(_openTopicInNativeWindow()),
+          onOpenInTab: () => _openTopicInTab(detail),
           onFilter: _showFilterSheet,
           onReadingSettings: () {
             Navigator.push(
@@ -2042,6 +2073,27 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             ],
           ),
         ),
+        if (!detail.isPrivateMessage)
+          PopupMenuItem(
+            key: const ValueKey('topic-open-in-tab'),
+            value: 'open_in_tab',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.tab_rounded,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  Localizations.localeOf(context).languageCode == 'zh'
+                      ? '在 Tab 中打开'
+                      : 'Open in tab',
+                ),
+              ],
+            ),
+          ),
         if (showNewWindow)
           PopupMenuItem(
             key: const ValueKey('topic-open-native-window'),

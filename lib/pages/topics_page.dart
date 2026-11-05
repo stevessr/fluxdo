@@ -2643,7 +2643,18 @@ class _TopicListState extends ConsumerState<_TopicList>
     final scrollToPostNumber = ref.read(preferencesProvider).defaultNestedView
         ? null
         : topic.lastReadPostNumber;
-    // 强制用 Navigator push 打开（而非 Master-Detail 内选中）
+    if (ref.read(preferencesProvider).openTopicsInTabsByDefault ||
+        ref.read(selectedTopicProvider).tabMode) {
+      ref
+          .read(selectedTopicProvider.notifier)
+          .openTopicTab(
+            topicId: topic.id,
+            initialTitle: topic.title,
+            scrollToPostNumber: scrollToPostNumber,
+          );
+      return;
+    }
+    // 关闭标签模式时保持原来的全屏导航。
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => TopicDetailPage(
@@ -2760,6 +2771,17 @@ class _TopicListState extends ConsumerState<_TopicList>
     final scrollToPostNumber = ref.read(preferencesProvider).defaultNestedView
         ? null
         : topic.lastReadPostNumber;
+    if (ref.read(preferencesProvider).openTopicsInTabsByDefault ||
+        ref.read(selectedTopicProvider).tabMode) {
+      ref
+          .read(selectedTopicProvider.notifier)
+          .openTopicTab(
+            topicId: topic.id,
+            initialTitle: topic.title,
+            scrollToPostNumber: scrollToPostNumber,
+          );
+      return;
+    }
     final canShowDetailPane = MasterDetailLayout.canShowBothPanesFor(context);
 
     if (canShowDetailPane) {

@@ -1,0 +1,88 @@
+name: Topic Tabs Regression
+
+on:
+  pull_request:
+    paths:
+      - 'lib/main.dart'
+      - 'lib/pages/topic_detail_page/topic_detail_page.dart'
+      - 'lib/pages/topic_detail_page/topic_more_menu_actions.dart'
+      - 'lib/pages/topics_page.dart'
+      - 'lib/pages/topics_screen.dart'
+      - 'lib/providers/preferences_provider.dart'
+      - 'lib/providers/selected_topic_provider.dart'
+      - 'lib/settings/definitions/custom_settings_defs.dart'
+      - 'lib/widgets/layout/pico_parallel_tabs.dart'
+      - 'lib/widgets/layout/pane_projection_back_scope.dart'
+      - 'test/pages/topic_detail_page/topic_more_menu_actions_test.dart'
+      - 'test/providers/preferences_provider_test.dart'
+      - 'test/providers/selected_topic_provider_test.dart'
+      - 'test/widgets/layout/pane_projection_test.dart'
+      - '.github/workflows/topic-tabs-pr-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: topic-tabs-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs assets/images/llm
+      - name: Resolve dependencies and generate localizations
+        run: |
+          flutter pub get
+          dart run tool/gen_l10n.dart
+      - name: Check formatting
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/main.dart \
+            lib/pages/topic_detail_page/topic_detail_page.dart \
+            lib/pages/topic_detail_page/topic_more_menu_actions.dart \
+            lib/pages/topics_page.dart \
+            lib/pages/topics_screen.dart \
+            lib/providers/preferences_provider.dart \
+            lib/providers/selected_topic_provider.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            lib/widgets/layout/pico_parallel_tabs.dart \
+            lib/widgets/layout/pane_projection_back_scope.dart \
+            test/pages/topic_detail_page/topic_more_menu_actions_test.dart \
+            test/providers/preferences_provider_test.dart \
+            test/providers/selected_topic_provider_test.dart \
+            test/widgets/layout/pane_projection_test.dart
+      - name: Analyze tab navigation implementation
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings \
+            lib/main.dart \
+            lib/pages/topic_detail_page/topic_detail_page.dart \
+            lib/pages/topic_detail_page/topic_more_menu_actions.dart \
+            lib/pages/topics_page.dart \
+            lib/pages/topics_screen.dart \
+            lib/providers/preferences_provider.dart \
+            lib/providers/selected_topic_provider.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            lib/widgets/layout/pico_parallel_tabs.dart \
+            lib/widgets/layout/pane_projection_back_scope.dart \
+            test/pages/topic_detail_page/topic_more_menu_actions_test.dart \
+            test/providers/preferences_provider_test.dart \
+            test/providers/selected_topic_provider_test.dart \
+            test/widgets/layout/pane_projection_test.dart
+      - name: Run tab navigation regression tests
+        run: |
+          flutter test \
+            test/pages/topic_detail_page/topic_more_menu_actions_test.dart \
+            test/providers/preferences_provider_test.dart \
+            test/providers/selected_topic_provider_test.dart \
+            test/widgets/layout/pane_projection_test.dart

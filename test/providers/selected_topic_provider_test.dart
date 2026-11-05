@@ -145,4 +145,73 @@ void main() {
     expect(notifier.state, same(unchanged));
   });
 
+  test('独立 Tab 打开、复用、关闭并保留稳定实例', () {
+    final notifier = SelectedTopicNotifier()
+      ..select(topicId: 1, instanceId: 'first')
+      ..enableTabMode()
+      ..openTopicTab(topicId: 2, instanceId: 'second');
+
+    expect(notifier.state.tabMode, isTrue);
+    expect(notifier.state.stack, hasLength(2));
+
+    notifier.openTopicTab(topicId: 1);
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.instanceId, 'first');
+
+    notifier.closeTab(1);
+    expect(notifier.state.topicId, 2);
+    expect(notifier.state.tabMode, isTrue);
+
+    notifier.select(topicId: 3);
+    expect(notifier.state.tabMode, isFalse);
+    expect(notifier.state.stack, hasLength(1));
+  });
+
+  test('切回信息流不会销毁 Tab，重新激活后恢复详情', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1, instanceId: 'first')
+      ..openTopicTab(topicId: 2, instanceId: 'second');
+
+    notifier.showFeed();
+    expect(notifier.state.showingFeed, isTrue);
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.instanceId, 'second');
+
+    notifier.activateTab(0);
+    expect(notifier.state.showingFeed, isFalse);
+    expect(notifier.state.topEntry?.instanceId, 'first');
+    expect(notifier.state.stack, hasLength(2));
+  });
+
+  test('信息流可见时关闭背景 Tab 不会切回详情', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1)
+      ..openTopicTab(topicId: 2)
+      ..showFeed()
+      ..closeTab(0);
+
+    expect(notifier.state.showingFeed, isTrue);
+    expect(notifier.state.stack, hasLength(1));
+    expect(notifier.state.topicId, 2);
+  });
+
+  test('关闭最后一个 Tab 后回到信息流并保留 Tab 模式', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1)
+      ..closeTab(0);
+
+    expect(notifier.state.tabMode, isFalse);
+    expect(notifier.state.showingFeed, isFalse);
+    expect(notifier.state.stack, isEmpty);
+  });
+
+  test('Tab 模式压栈和返回不会被静默关闭', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1)
+      ..push(topicId: 2)
+      ..pop();
+
+    expect(notifier.state.tabMode, isTrue);
+    expect(notifier.state.topicId, 1);
+  });
 }

@@ -1637,9 +1637,7 @@ class _MainPageState extends ConsumerState<MainPage>
     // of a guest session. Rendering guest navigation here can remove private
     // tabs, reset the selected destination and flash anonymous account UI.
     if (user == null && currentUserAsync.isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (user == null && currentUserAsync.hasError) {
       return Scaffold(
@@ -1723,7 +1721,8 @@ class _MainPageState extends ConsumerState<MainPage>
       (e) => e.id == NavEntryIds.notifications,
     );
     final activeEntryId = pageEntries[safePageIndex].id;
-    final topicParallelStacked = ref.watch(selectedTopicProvider).isStacked;
+    final topicState = ref.watch(selectedTopicProvider);
+    final topicParallelStacked = topicState.isStacked && !topicState.tabMode;
     final messageParallelStacked = ref.watch(selectedMessageProvider).isStacked;
     final seekingParallelStacked = ref.watch(selectedSeekingProvider).isStacked;
     final hideNavigationRail =
