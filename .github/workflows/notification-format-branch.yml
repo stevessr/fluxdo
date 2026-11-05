@@ -1,0 +1,37 @@
+name: Format notification feature branch
+on:
+  push:
+    branches:
+      - feat/notification-live-sidebar-20261105
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: notification-format-feature
+  cancel-in-progress: true
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/notification-live-sidebar-20261105
+          persist-credentials: true
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Format changed Dart files
+        run: |
+          dart format lib/pages/notifications_page.dart lib/providers/notification_list_provider.dart lib/providers/message_bus/notification_providers.dart test/providers/notification_list_realtime_test.dart
+          git diff --check
+          if ! git diff --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add lib/pages/notifications_page.dart lib/providers/notification_list_provider.dart lib/providers/message_bus/notification_providers.dart test/providers/notification_list_realtime_test.dart
+            git commit -m 'style: dart format refined notification sync'
+            git push origin HEAD:feat/notification-live-sidebar-20261105
+          fi
