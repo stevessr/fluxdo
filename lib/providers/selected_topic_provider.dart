@@ -450,8 +450,8 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     final panes = [...state.stack]..removeAt(index);
     state = SelectedTopicState(
       stack: panes,
-      tabMode: state.tabMode,
-      showingFeed: state.tabMode && panes.isEmpty ? true : state.showingFeed,
+      tabMode: state.tabMode && panes.isNotEmpty,
+      showingFeed: false,
     );
   }
 
@@ -459,8 +459,8 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   void pop() {
     if (state.stack.isEmpty) return;
     state = SelectedTopicState(
-      tabMode: state.tabMode,
-      showingFeed: state.tabMode && state.stack.length == 1,
+      tabMode: state.tabMode && state.stack.length > 1,
+      showingFeed: false,
       stack: state.stack.sublist(0, state.stack.length - 1),
     );
   }
