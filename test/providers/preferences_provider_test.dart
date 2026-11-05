@@ -177,9 +177,13 @@ void main() {
   test('默认 Tab 开关初始关闭，更新后持久化', () async {
     final container = await _createContainer();
     addTearDown(container.dispose);
-    expect(container.read(preferencesProvider).openTopicsInTabsByDefault, isFalse);
+    expect(
+      container.read(preferencesProvider).openTopicsInTabsByDefault,
+      isFalse,
+    );
 
-    await container.read(preferencesProvider.notifier)
+    await container
+        .read(preferencesProvider.notifier)
         .setOpenTopicsInTabsByDefault(true);
     final prefs = container.read(sharedPreferencesProvider);
     expect(prefs.getBool('pref_open_topics_in_tabs_by_default'), isTrue);
