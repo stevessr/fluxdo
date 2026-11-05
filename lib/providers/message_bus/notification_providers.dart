@@ -117,6 +117,8 @@ class NotificationChannelNotifier extends Notifier<void> {
     );
 
     void onMessage(MessageBusMessage message) {
+      // Ignore queued callbacks from the previous account during switching.
+      if (ref.read(currentUserProvider).value?.id != subscription.id) return;
       final data = message.data;
       if (data is Map<String, dynamic>) {
         final allUnreadCount = data['all_unread_notifications_count'] as int?;
@@ -139,6 +141,61 @@ class NotificationChannelNotifier extends Notifier<void> {
                 unread: unreadCount,
                 highPriority: unreadHighPriority,
               );
+        }
+
+        // Forward the same event to the full history page only when mounted.
+        // Count-only and recent-only events need a quiet server reconciliation.
+        if (ref.exists(notificationListProvider)) {
+          final historyState = ref.read(notificationListProvider);
+          final notifier = ref.read(notificationListProvider.notifier);
+          if (historyState.hasValue) {
+            DiscourseNotification? latest;
+            final last = data['last_notification'];
+            if (last is Map<String, dynamic>) {
+              final raw = last['notification'];
+              if (raw is Map<String, dynamic>) {
+                try {
+                  latest = DiscourseNotification.fromJson(raw);
+                  if (latest.userId != subscription.id) {
+                    latest = null;
+                  }
+                } catch (_) {
+                  // Some events contain only a counter or a partial payload.
+                }
+              }
+            }
+            final statuses = <int, bool>{};
+            final recent = data['recent'];
+            if (recent is List) {
+              for (final entry in recent) {
+                if (entry is List &&
+                    entry.length >= 2 &&
+                    entry[0] is int &&
+                    entry[1] is bool) {
+                  statuses[entry[0] as int] = entry[1] as bool;
+                }
+              }
+            }
+            final loadedIds = historyState.value!
+                .map((notification) => notification.id)
+                .toSet();
+            final unseenRecentId = statuses.keys.any(
+              (id) => !loadedIds.contains(id) && id != latest?.id,
+            );
+            notifier.applyRealtimeUpdate(
+              latest: latest,
+              readStatuses: statuses,
+            );
+            // A single last_notification may not cover all recent IDs after
+            // a reconnect. Reconcile without changing the visible selection.
+            if (latest == null || historyState.isLoading || unseenRecentId) {
+              notifier.scheduleRealtimeSync();
+            }
+          } else {
+            // A push may arrive while the first history request is loading.
+            // Reconcile after it completes instead of silently losing it.
+            notifier.scheduleRealtimeSync();
+          }
         }
 
         // 仅在通知列表已加载（面板已打开过）时做增量更新，

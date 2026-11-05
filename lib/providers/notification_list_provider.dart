@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/notification.dart';
@@ -27,6 +29,9 @@ class NotificationListNotifier
   static const int _historyPageSize = 60;
   // 稀有类型最多每次扫描四个历史页，避免触底后请求风暴。
   static const int _maxHistoryPagesPerLoad = 4;
+
+  Timer? _realtimeSyncTimer;
+  final Set<int> _seenRealtimeIds = <int>{};
 
   int _totalRows = 0;
   int _historyOffset = 0;
@@ -99,6 +104,8 @@ class NotificationListNotifier
   @override
   Future<List<DiscourseNotification>> build() async {
     final generation = ++_refreshGeneration;
+    ref.onDispose(() => _realtimeSyncTimer?.cancel());
+    _seenRealtimeIds.clear();
     resetPagingState();
     final result = await _fetchFirstPage(category: _category, filter: _filter);
     if (generation != _refreshGeneration) {
@@ -133,6 +140,9 @@ class NotificationListNotifier
     final generation = ++_refreshGeneration;
     final category = _category;
     final filter = _filter;
+    _realtimeSyncTimer?.cancel();
+    _realtimeSyncTimer = null;
+    _seenRealtimeIds.clear();
     resetPagingState();
     state = const AsyncLoading<List<DiscourseNotification>>();
     try {
@@ -145,6 +155,155 @@ class NotificationListNotifier
     } catch (error, stackTrace) {
       if (generation != _refreshGeneration) return;
       state = AsyncValue.error(error, stackTrace);
+    }
+  }
+
+  /// Apply MessageBus updates to the visible history without rebuilding its pages.
+  ///
+  /// The recent notifications panel has its own provider; the full history
+  /// page must receive the same events while it is mounted. Never instantiate
+  /// this auto-dispose notifier merely because a background event arrived.
+  void applyRealtimeUpdate({
+    DiscourseNotification? latest,
+    Map<int, bool> readStatuses = const <int, bool>{},
+  }) {
+    if (latest == null && readStatuses.isEmpty) return;
+    final current = state.value;
+    // A fresh page request will provide current data. If the push overtakes
+    // that response, a silent reconciliation will recover the missing item.
+    if (current == null || state.isLoading) {
+      scheduleRealtimeSync();
+      return;
+    }
+
+    final seen = current.any((item) => item.id == latest?.id);
+    final isNewEvent = latest != null && _seenRealtimeIds.add(latest.id);
+    if (_seenRealtimeIds.length > 256) {
+      _seenRealtimeIds.clear();
+      if (latest != null) _seenRealtimeIds.add(latest.id);
+    }
+
+    final next = <DiscourseNotification>[];
+    var changed = false;
+    var readFilteredSetChanged = false;
+    for (final old in current) {
+      var item = old;
+      if (latest != null && old.id == latest.id) {
+        // A repeated last_notification may contain the stale unread flag.
+        // Only an explicit recent status can reverse an already-read item.
+        item = latest.copyWith(read: old.read || latest.read);
+      }
+      final read = readStatuses[item.id];
+      if (read != null && read != item.read) {
+        item = item.copyWith(read: read);
+      }
+      if (_filter != NotificationReadFilter.all &&
+          _matchesReadFilter(old, _filter) !=
+              _matchesReadFilter(item, _filter)) {
+        readFilteredSetChanged = true;
+      }
+      if (!_matchesReadFilter(item, _filter)) {
+        changed = true;
+        continue;
+      }
+      next.add(item);
+      if (!identical(item, old)) changed = true;
+    }
+
+    if (latest != null && !seen) {
+      var item = latest;
+      final read = readStatuses[item.id];
+      if (read != null && read != item.read) {
+        item = item.copyWith(read: read);
+      }
+      if (_category.matches(item) && _matchesReadFilter(item, _filter)) {
+        next.add(item);
+        changed = true;
+      }
+    }
+
+    // MessageBus does not carry the server's historical offset. It may
+    // replay messages from before our last fetch, or remove read-filtered
+    // rows at arbitrary positions. Rewind rather than guessing an offset
+    // and silently skipping older notifications on the next load.
+    final cursorRewound = (isNewEvent && !seen) || readFilteredSetChanged;
+    if (cursorRewound) {
+      _historyOffset = 0;
+      _totalRows = 0;
+      _needsManualLoadMore = false;
+      resetPagingState(hasMore: true);
+    }
+
+    if (!changed && !cursorRewound) return;
+    next.sort((a, b) {
+      final byTime = b.createdAt.compareTo(a.createdAt);
+      return byTime != 0 ? byTime : b.id.compareTo(a.id);
+    });
+    ++_refreshGeneration;
+    state = AsyncValue.data(next);
+  }
+
+  /// Some MessageBus messages carry only counts/recent IDs, without a complete
+  /// last_notification. Reconcile the first page quietly and coalesce bursts,
+  /// keeping previously loaded history and the user's scroll position.
+  void scheduleRealtimeSync() {
+    _realtimeSyncTimer?.cancel();
+    _realtimeSyncTimer = Timer(const Duration(milliseconds: 450), () {
+      _realtimeSyncTimer = null;
+      unawaited(_syncLatestSilently());
+    });
+  }
+
+  Future<void> _syncLatestSilently() async {
+    if (!ref.mounted) return;
+    if (state.isLoading) {
+      scheduleRealtimeSync();
+      return;
+    }
+    final current = state.value;
+    if (current == null) return;
+    final generation = _refreshGeneration;
+    final category = _category;
+    final filter = _filter;
+    try {
+      final result = await _fetchFirstPage(category: category, filter: filter);
+      if (!ref.mounted || generation != _refreshGeneration || state.isLoading) {
+        return;
+      }
+      final fresh = result.page.items;
+      final freshIds = fresh.map((n) => n.id).toSet();
+      final oldestFresh = fresh.isEmpty ? null : fresh.last.createdAt;
+      final olderCached = current.where((item) {
+        if (freshIds.contains(item.id)) return false;
+        // Records missing from the refreshed first page must not survive
+        // inside that page's time window (for example after being read on
+        // another device). Keep genuinely older pages for scroll stability.
+        if (category == NotificationCategory.all && !result.page.hasMore) {
+          return false;
+        }
+        return _matchesReadFilter(item, filter) &&
+            (oldestFresh == null || item.createdAt.isBefore(oldestFresh));
+      });
+      final merged = <DiscourseNotification>[...fresh, ...olderCached]
+        ..sort((a, b) {
+          final byTime = b.createdAt.compareTo(a.createdAt);
+          return byTime != 0 ? byTime : b.id.compareTo(a.id);
+        });
+
+      // The filtered recent endpoint has no historical raw offset. Start
+      // scanning again at the beginning and dedupe against cached pages
+      // rather than guessing where new rows landed in the raw history.
+      _historyOffset = result.historyOffset;
+      _totalRows = result.totalRows;
+      _needsManualLoadMore = false;
+      resetPagingState(hasMore: result.page.hasMore);
+      for (final item in fresh) {
+        _seenRealtimeIds.add(item.id);
+      }
+      state = AsyncValue.data(merged);
+    } catch (_) {
+      // A dropped push must not replace an otherwise usable list with an
+      // error. Pull-to-refresh remains available if the connection is down.
     }
   }
 

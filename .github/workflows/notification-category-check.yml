@@ -6,12 +6,14 @@ on:
       - 'lib/models/notification_category.dart'
       - 'lib/pages/notifications_page.dart'
       - 'lib/providers/notification_list_provider.dart'
+      - 'lib/providers/message_bus/notification_providers.dart'
       - 'lib/utils/paged_async_notifier.dart'
       - 'lib/services/discourse/_notifications.dart'
       - 'lib/l10n/modules/notificationFilter/**'
       - 'test/models/notification_category_test.dart'
       - 'test/providers/notification_list_category_switch_test.dart'
       - 'test/providers/notification_list_pagination_test.dart'
+      - 'test/providers/notification_list_realtime_test.dart'
       - 'test/utils/paged_async_notifier_test.dart'
       - 'test/services/discourse_notification_categories_test.dart'
       - '.github/workflows/notification-category-check.yml'
@@ -53,10 +55,12 @@ jobs:
             lib/models/notification_category.dart \
             lib/pages/notifications_page.dart \
             lib/providers/notification_list_provider.dart \
+            lib/providers/message_bus/notification_providers.dart \
             lib/utils/paged_async_notifier.dart \
             test/models/notification_category_test.dart \
             test/providers/notification_list_category_switch_test.dart \
             test/providers/notification_list_pagination_test.dart \
+            test/providers/notification_list_realtime_test.dart \
             test/utils/paged_async_notifier_test.dart \
             test/services/discourse_notification_categories_test.dart
           git diff --check
@@ -64,10 +68,12 @@ jobs:
             lib/models/notification_category.dart \
             lib/pages/notifications_page.dart \
             lib/providers/notification_list_provider.dart \
+            lib/providers/message_bus/notification_providers.dart \
             lib/utils/paged_async_notifier.dart \
             test/models/notification_category_test.dart \
             test/providers/notification_list_category_switch_test.dart \
             test/providers/notification_list_pagination_test.dart \
+            test/providers/notification_list_realtime_test.dart \
             test/utils/paged_async_notifier_test.dart \
             test/services/discourse_notification_categories_test.dart
 
@@ -77,17 +83,20 @@ jobs:
           lib/models/notification_category.dart
           lib/pages/notifications_page.dart
           lib/providers/notification_list_provider.dart
+          lib/providers/message_bus/notification_providers.dart
           lib/utils/paged_async_notifier.dart
           test/models/notification_category_test.dart
           test/providers/notification_list_category_switch_test.dart
           test/providers/notification_list_pagination_test.dart
+          test/providers/notification_list_realtime_test.dart
           test/utils/paged_async_notifier_test.dart
           test/services/discourse_notification_categories_test.dart
 
-      - name: Test separate mentions and replies
+      - name: Test notification categories, pagination and realtime updates
         run: >-
           flutter test
           test/models/notification_category_test.dart
           test/providers/notification_list_category_switch_test.dart
           test/providers/notification_list_pagination_test.dart
+          test/providers/notification_list_realtime_test.dart
           test/services/discourse_notification_categories_test.dart
