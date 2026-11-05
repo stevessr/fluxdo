@@ -41,73 +41,73 @@ class PicoParallelTabs extends StatelessWidget {
   }
 
   Widget _buildTabBar(BuildContext context) {
-        final colors = Theme.of(context).colorScheme;
-        final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    final colors = Theme.of(context).colorScheme;
+    final chinese = Localizations.localeOf(context).languageCode == 'zh';
     return Container(
-          key: const ValueKey('pico-parallel-tabs'),
-          height: 48,
-          decoration: BoxDecoration(
-            color: colors.surface,
-            border: Border(
-              bottom: BorderSide(color: colors.outlineVariant),
+      key: const ValueKey('pico-parallel-tabs'),
+      height: 48,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(
+          bottom: BorderSide(color: colors.outlineVariant),
+        ),
+      ),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Icon(
+              Icons.tab_rounded,
+              size: 20,
+              color: colors.onSurfaceVariant,
             ),
           ),
-          child: Row(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Icon(
-                  Icons.tab_rounded,
-                  size: 20,
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-              Expanded(
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  itemCount: selected.stack.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 6),
-                  itemBuilder: (context, index) {
-                    final entry = selected.stack[index];
-                    final active = index == selected.stack.length - 1;
-                    final label = switch (entry.kind) {
-                      PaneKind.topic =>
-                        entry.initialTitle?.trim().isNotEmpty == true
-                            ? entry.initialTitle!
-                            : (chinese
-                                ? '话题 #${entry.topicId}'
-                                : 'Topic #${entry.topicId}'),
-                      PaneKind.profile => '@${entry.username}',
-                      PaneKind.settings => chinese ? '设置' : 'Settings',
-                    };
-                    return Center(
-                      child: InputChip(
-                        key: ValueKey('pico-pane-tab-$index'),
-                        selected: active,
-                        showCheckmark: false,
-                        tooltip: label,
-                        label: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 180),
-                          child: Text(
-                            label,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                        onPressed: () => onActivate(index),
-                        onDeleted: () => onClose(index),
-                        deleteButtonTooltipMessage: chinese
-                            ? '关闭标签'
-                            : 'Close tab',
-                        visualDensity: VisualDensity.compact,
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: selected.stack.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 6),
+              itemBuilder: (context, index) {
+                final entry = selected.stack[index];
+                final active = index == selected.stack.length - 1;
+                final label = switch (entry.kind) {
+                  PaneKind.topic =>
+                    entry.initialTitle?.trim().isNotEmpty == true
+                        ? entry.initialTitle!
+                        : (chinese
+                            ? '话题 #${entry.topicId}'
+                            : 'Topic #${entry.topicId}'),
+                  PaneKind.profile => '@${entry.username}',
+                  PaneKind.settings => chinese ? '设置' : 'Settings',
+                };
+                return Center(
+                  child: InputChip(
+                    key: ValueKey('pico-pane-tab-$index'),
+                    selected: active,
+                    showCheckmark: false,
+                    tooltip: label,
+                    label: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 180),
+                      child: Text(
+                        label,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
-                    );
-                  },
-                ),
-              ),
-            ],
+                    ),
+                    onPressed: () => onActivate(index),
+                    onDeleted: () => onClose(index),
+                    deleteButtonTooltipMessage: chinese
+                        ? '关闭标签'
+                        : 'Close tab',
+                    visualDensity: VisualDensity.compact,
+                  ),
+                );
+              },
+            ),
           ),
-        );
+        ],
+      ),
+    );
   }
 }
