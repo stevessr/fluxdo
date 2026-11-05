@@ -145,4 +145,36 @@ void main() {
     expect(notifier.state, same(unchanged));
   });
 
+  test('独立 Tab 打开、复用、关闭并保留稳定实例', () {
+    final notifier = SelectedTopicNotifier()
+      ..select(topicId: 1, instanceId: 'first')
+      ..enableTabMode()
+      ..openTopicTab(topicId: 2, instanceId: 'second');
+
+    expect(notifier.state.tabMode, isTrue);
+    expect(notifier.state.stack, hasLength(2));
+
+    notifier.openTopicTab(topicId: 1);
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.instanceId, 'first');
+
+    notifier.closeTab(1);
+    expect(notifier.state.topicId, 2);
+    expect(notifier.state.tabMode, isTrue);
+
+    notifier.select(topicId: 3);
+    expect(notifier.state.tabMode, isFalse);
+    expect(notifier.state.stack, hasLength(1));
+  });
+
+  test('Tab 模式压栈和返回不会被静默关闭', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1)
+      ..push(topicId: 2)
+      ..pop();
+
+    expect(notifier.state.tabMode, isTrue);
+    expect(notifier.state.topicId, 1);
+  });
+
 }
