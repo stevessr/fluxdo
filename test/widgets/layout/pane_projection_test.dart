@@ -25,7 +25,7 @@ void main() {
                 // 默认空态组件要查 l10n(TranslationProvider),测试环境
                 // 没有翻译树,给显式空态绕开。
                 emptyDetail: const SizedBox.shrink(),
-                detail: selected.hasSelection
+                detail: selected.hasSelection && !selected.showingFeed
                     ? Scaffold(
                         body: Text(
                           '${selected.kind?.name}:'
@@ -71,6 +71,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('列表页'), findsOneWidget);
     expect(container.read(selectedSeekingProvider).stack, isEmpty);
+  });
+
+  testWidgets('Tab 模式切回信息流时不再拦截系统返回', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(500, 800);
+    addTearDown(tester.view.reset);
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container.read(selectedSeekingProvider.notifier)
+      ..openTopicTab(topicId: 42)
+      ..showFeed();
+
+    await tester.pumpWidget(buildHost(container));
+    await tester.pumpAndSettle();
+
+    expect(find.text('列表页'), findsOneWidget);
+    expect(find.text('topic:42'), findsNothing);
+    expect(container.read(selectedSeekingProvider).stack, hasLength(1));
+    expect(container.read(selectedSeekingProvider).showingFeed, isTrue);
   });
 
   testWidgets('宽窄往返=同树重排,栈原样保留', (tester) async {
