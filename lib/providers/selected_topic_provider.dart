@@ -429,7 +429,8 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   /// PICO 平行视界标签：激活某层时移到末尾，保留其余层和稳定
   /// instanceId；区别于 back/pop，不会丢掉其它已打开的内容。
   void activateTab(int index) {
-    if (index < 0 || index >= state.stack.length ||
+    if (index < 0 ||
+        index >= state.stack.length ||
         index == state.stack.length - 1) {
       return;
     }
@@ -450,7 +451,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     state = SelectedTopicState(
       stack: panes,
       tabMode: state.tabMode,
-      showingFeed: panes.isEmpty ? true : state.showingFeed,
+      showingFeed: state.tabMode && panes.isEmpty ? true : state.showingFeed,
     );
   }
 
@@ -459,9 +460,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     if (state.stack.isEmpty) return;
     state = SelectedTopicState(
       tabMode: state.tabMode,
-      showingFeed: state.tabMode && state.stack.length == 1
-          ? true
-          : false,
+      showingFeed: state.tabMode && state.stack.length == 1,
       stack: state.stack.sublist(0, state.stack.length - 1),
     );
   }
