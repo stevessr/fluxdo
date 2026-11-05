@@ -176,13 +176,19 @@ class NotificationChannelNotifier extends Notifier<void> {
                 }
               }
             }
+            final loadedIds = historyState.value!
+                .map((notification) => notification.id)
+                .toSet();
+            final unseenRecentId = statuses.keys.any(
+              (id) => !loadedIds.contains(id) && id != latest?.id,
+            );
             notifier.applyRealtimeUpdate(
               latest: latest,
               readStatuses: statuses,
             );
-            // Reconcile whenever the event lacks the complete notification,
-            // or a history page is currently in flight.
-            if (latest == null || historyState.isLoading) {
+            // A single last_notification may not cover all recent IDs after
+            // a reconnect. Reconcile without changing the visible selection.
+            if (latest == null || historyState.isLoading || unseenRecentId) {
               notifier.scheduleRealtimeSync();
             }
           } else {
