@@ -23,7 +23,7 @@
   "error_networkUnavailable": "網絡不可用",
   "error_openNetworkSettings": "網絡設置",
   "error_notFound": "內容不存在",
-  "error_notFoundOrDeleted": "內容不存在或已被刪除",
+  "error_notFoundOrDeleted": "內容不存在、無法存取或連結已失效",
   "error_notLoggedInNoUsername": "未登錄或無法獲取用户名",
   "error_providerDisposed": "Provider 已銷燬",
   "error_rateLimited": "請求過於頻繁",
