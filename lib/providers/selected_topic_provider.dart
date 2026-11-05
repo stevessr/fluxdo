@@ -115,7 +115,6 @@ class SelectedTopicState {
 class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   SelectedTopicNotifier() : super(const SelectedTopicState());
 
-  /// 从列表选中话题：清空栈重新开始（点了另一个话题，不是内部链接跳转）。
   /// 在首页的独立 Tab 中打开话题，已打开的同一话题只激活，不再复制。
   void openTopicTab({
     required int topicId,
@@ -147,6 +146,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     state = SelectedTopicState(stack: state.stack, tabMode: true);
   }
 
+  /// 从列表直接选中话题：退出独立 Tab 模式，恢复普通导航。
   void select({
     required int topicId,
     String? initialTitle,
@@ -413,6 +413,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   void pop() {
     if (state.stack.isEmpty) return;
     state = SelectedTopicState(
+      tabMode: state.tabMode,
       stack: state.stack.sublist(0, state.stack.length - 1),
     );
   }
