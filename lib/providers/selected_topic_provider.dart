@@ -449,7 +449,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     state = SelectedTopicState(
       stack: panes,
       tabMode: state.tabMode && panes.isNotEmpty,
-      showingFeed: false,
+      showingFeed: panes.isEmpty ? false : state.showingFeed,
     );
   }
 
