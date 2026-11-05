@@ -1,0 +1,29 @@
+name: NSH Rust native host unit tests
+
+on:
+  push:
+    branches: [migration/nsh-full-ui]
+    paths:
+      - 'nsh/native/**'
+      - '.github/workflows/nsh-rust-host-tests.yml'
+  pull_request:
+    paths:
+      - 'nsh/native/**'
+      - '.github/workflows/nsh-rust-host-tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: nsh-rust-host-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust native bootstrap unit tests
+        run: cargo test --manifest-path nsh/native/Cargo.toml --lib

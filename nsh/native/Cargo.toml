@@ -1,0 +1,13 @@
+[package]
+name = "fluxdo-nsh-host"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+nsh-core = "=0.1.1"
+serde_json = "1"

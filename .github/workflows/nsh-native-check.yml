@@ -1,0 +1,48 @@
+name: NSH native type check
+
+on:
+  push:
+    branches:
+      - migration/nsh-full-ui
+    paths:
+      - 'nsh/**'
+      - '.github/workflows/nsh-native-check.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: nsh-native-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  native-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official NSH CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --retry 3 --fail --location --silent --show-error https://nsh.dev/install.sh -o /tmp/nsh-install.sh
+          sh /tmp/nsh-install.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Check NSH TSX types
+        shell: bash
+        run: |
+          set -euo pipefail
+          nsh --version
+          nsh check nsh/App.tsx
+      - name: Headless native render (mobile and desktop)
+        shell: bash
+        run: |
+          set -euo pipefail
+          nsh trace nsh/App.tsx --taps 0 --wait 350 --width 390 --height 844 > /tmp/nsh-mobile-trace.log 2>&1 || { cat /tmp/nsh-mobile-trace.log; exit 1; }
+          nsh trace nsh/App.tsx --taps 0 --wait 350 --width 1200 --height 800 > /tmp/nsh-desktop-trace.log 2>&1 || { cat /tmp/nsh-desktop-trace.log; exit 1; }
+          if grep -E '^ *error' /tmp/nsh-mobile-trace.log /tmp/nsh-desktop-trace.log; then
+            echo "NSH emitted an error during native trace"
+            exit 1
+          fi
+          echo "Mobile and desktop initial native frames traced"
