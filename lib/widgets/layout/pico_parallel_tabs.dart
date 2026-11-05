@@ -21,9 +21,12 @@ class PicoParallelTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (selected.stack.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    if (selected.tabMode) return _buildTabBar(context);
     if (defaultTargetPlatform != TargetPlatform.android ||
-        MediaQuery.orientationOf(context) != Orientation.landscape ||
-        selected.stack.isEmpty) {
+        MediaQuery.orientationOf(context) != Orientation.landscape) {
       return const SizedBox.shrink();
     }
     return FutureBuilder<PicoVrCapabilities>(
@@ -32,9 +35,15 @@ class PicoParallelTabs extends StatelessWidget {
         if (snapshot.data?.isPico != true) {
           return const SizedBox.shrink();
         }
+        return _buildTabBar(context);
+      },
+    );
+  }
+
+  Widget _buildTabBar(BuildContext context) {
         final colors = Theme.of(context).colorScheme;
         final chinese = Localizations.localeOf(context).languageCode == 'zh';
-        return Container(
+    return Container(
           key: const ValueKey('pico-parallel-tabs'),
           height: 48,
           decoration: BoxDecoration(
@@ -100,7 +109,5 @@ class PicoParallelTabs extends StatelessWidget {
             ],
           ),
         );
-      },
-    );
   }
 }
