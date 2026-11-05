@@ -1,0 +1,142 @@
+name: Versioned static asset packs
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'assets/**'
+      - 'lib/services/assets/**'
+      - 'lib/services/discourse_cook_service.dart'
+      - 'lib/services/stevessr_character_assets.dart'
+      - 'lib/services/webview_settings.dart'
+      - 'lib/providers/theme_provider.dart'
+      - 'lib/main.dart'
+      - 'lib/pages/static_asset_pack_manager_page.dart'
+      - 'lib/services/assets/asset_pack_import.dart'
+      - 'test/services/asset_pack_import_test.dart'
+      - 'lib/pages/settings_page.dart'
+      - 'test/pages/static_asset_pack_manager_page_test.dart'
+      - 'test/services/static_asset_packs_test.dart'
+      - 'scripts/ci/asset_packs.py'
+      - 'scripts/ci/prepare_android_static_resources.py'
+      - 'scripts/ci/tests/test_asset_android_stage.py'
+      - 'scripts/ci/tests/test_asset_manifest_contract.py'
+      - 'scripts/ci/sign_asset_catalog.py'
+      - 'scripts/ci/tests/test_asset_catalog_signature.py'
+      - 'lib/services/assets/signed_asset_catalog.dart'
+      - 'pubspec.yaml'
+      - 'scripts/ci/tests/test_asset_packs.py'
+      - '.github/workflows/asset-packs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/**'
+      - 'scripts/ci/asset_packs.py'
+      - 'scripts/ci/tests/test_asset_packs.py'
+
+permissions:
+  contents: read
+
+jobs:
+  packs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Flutter for generated character assets on manual export
+        if: github.event_name == 'workflow_dispatch'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Generate optional character assets for complete export
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          flutter pub get
+          dart run tool/gen_avatar_deltas.dart
+      - name: Unit tests
+        run: python3 -m unittest discover -s scripts/ci/tests -p 'test_asset_*.py' -v
+      - name: Build pack artifacts
+        run: python3 scripts/ci/asset_packs.py build --root . --out build/asset-packs --release-sequence ${{ github.run_number }}
+      - name: Verify pack hashes
+        run: python3 scripts/ci/asset_packs.py verify --catalog build/asset-packs/catalog.json
+      - name: Require all character packs in manual export
+        if: github.event_name == 'workflow_dispatch'
+        run: python3 -c "import json; p=json.load(open('build/asset-packs/catalog.json')); assert not p['skippedGenerated'], p['skippedGenerated']"
+      - name: Sign catalog using repository release secret
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ASSET_SIGNING_PEM: ${{ secrets.FLUXDO_ASSET_CATALOG_ED25519_PRIVATE_KEY_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$ASSET_SIGNING_PEM" || { echo "::error::Missing Ed25519 publishing key secret"; exit 1; }
+          umask 077
+          key="$RUNNER_TEMP/asset-catalog-key.pem"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$ASSET_SIGNING_PEM" > "$key"
+          python3 scripts/ci/sign_asset_catalog.py sign --catalog build/asset-packs/catalog.json --key "$key" --signature build/asset-packs/catalog.sig
+          openssl pkey -in "$key" -pubout -out "$RUNNER_TEMP/asset-catalog-public.pem"
+          python3 scripts/ci/sign_asset_catalog.py verify --catalog build/asset-packs/catalog.json --key "$RUNNER_TEMP/asset-catalog-public.pem" --signature build/asset-packs/catalog.sig
+      - name: Export resource packs
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fluxdo-static-asset-packs
+          path: build/asset-packs/
+          if-no-files-found: error
+          retention-days: 14
+
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Prepare generated asset directory
+        run: mkdir -p assets/certs
+      - name: Install Flutter dependencies
+        run: flutter pub get
+      - name: Generate Flutter translations
+        run: dart run tool/gen_l10n.dart
+      - name: Analyze optional asset runtime
+        run: >-
+          flutter analyze
+          lib/services/assets/static_asset_packs.dart
+          lib/services/assets/asset_pack_import.dart
+          test/services/asset_pack_import_test.dart
+          lib/services/assets/signed_asset_catalog.dart
+          test/services/signed_asset_catalog_test.dart
+          lib/services/assets/static_asset_pack_backend_stub.dart
+          lib/services/assets/static_asset_pack_backend_io.dart
+          lib/services/discourse_cook_service.dart
+          lib/services/cook/cook_js_engine_io.dart
+          lib/services/cook/cook_js_engine_stub.dart
+          lib/services/stevessr_character_assets.dart
+          lib/services/assets/optional_font_loader.dart
+          lib/services/webview_settings.dart
+          lib/providers/theme_provider.dart
+          lib/main.dart
+          lib/pages/static_asset_pack_manager_page.dart
+          lib/pages/settings_page.dart
+          test/services/static_asset_packs_test.dart
+          test/pages/static_asset_pack_manager_page_test.dart
+      - name: Build real Python Cook pack fixture
+        run: python3 scripts/ci/asset_packs.py build --root . --out test/fixtures/generated_asset_packs --only render-cook
+      - name: Verify fixture is available
+        run: test -f test/fixtures/generated_asset_packs/catalog.json
+      - name: Sign test catalog with disposable Ed25519 key
+        run: |
+          set -euo pipefail
+          out=test/fixtures/generated_asset_packs
+          openssl genpkey -algorithm Ed25519 -out "$out/ci-test-private.pem"
+          openssl pkey -in "$out/ci-test-private.pem" -pubout -outform DER -out "$out/ci-test-public.der"
+          python3 scripts/ci/sign_asset_catalog.py sign --catalog "$out/catalog.json" --key "$out/ci-test-private.pem" --signature "$out/catalog.sig"
+      - name: Test lifecycle and Python-Dart ZIP interoperability
+        run: |
+          key=$(tail -c 32 test/fixtures/generated_asset_packs/ci-test-public.der | base64 -w0)
+          flutter test --dart-define=FLUXDO_ASSET_CATALOG_ED25519_PUBKEY_B64="$key" test/services/static_asset_packs_test.dart test/services/asset_pack_import_test.dart test/services/signed_asset_catalog_test.dart test/services/discourse_cook_service_test.dart test/pages/static_asset_pack_manager_page_test.dart

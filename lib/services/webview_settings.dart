@@ -5,11 +5,11 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../constants.dart';
+import 'assets/static_asset_packs.dart';
 import 'eruda_settings_service.dart';
 import 'log/log_writer.dart';
 import 'network/doh/network_settings_service.dart';
@@ -191,15 +191,30 @@ class WebViewSettings {
   static const _polyfillAssetPath = 'assets/polyfill/compat-polyfill.js';
   static UnmodifiableListView<UserScript>? _compatPolyfillScripts;
   static bool _polyfillLoadAttempted = false;
+  static int _polyfillGeneration = 0;
+  static StreamSubscription<String>? _polyfillSubscription;
+
+  static void _watchPolyfillPack() {
+    _polyfillSubscription ??= StaticAssetPacks.changes.listen((id) {
+      if (id != 'render-polyfill') return;
+      _polyfillGeneration++;
+      _polyfillLoadAttempted = false;
+      unawaited(preloadPolyfill());
+    });
+  }
 
   /// 启动期调用一次（main.dart 并行初始化阶段），把 asset 内容读入内存。
   /// 加载失败不抛错，只打日志 —— polyfill 缺失最坏只影响老平台兼容性，
   /// 不应让整个 app 启动失败。
   static Future<void> preloadPolyfill() async {
+    _watchPolyfillPack();
     if (_polyfillLoadAttempted) return;
     _polyfillLoadAttempted = true;
+    final generation = _polyfillGeneration;
     try {
-      final source = await rootBundle.loadString(_polyfillAssetPath);
+      final source = await StaticAssetPacks.loadString(_polyfillAssetPath);
+      // 安装与初始化同时发生时，旧结果不能覆盖新版本。
+      if (generation != _polyfillGeneration) return;
       _compatPolyfillScripts = UnmodifiableListView([
         UserScript(
           source: source,
@@ -216,6 +231,7 @@ class WebViewSettings {
         ),
       ]);
     } catch (e) {
+      if (generation != _polyfillGeneration) return;
       debugPrint(
         '[WebViewSettings] 加载 compat polyfill asset 失败: $e。'
         '请确认已运行 `cd tools/polyfill-bundle && pnpm build`。',

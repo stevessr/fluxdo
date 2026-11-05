@@ -10,6 +10,8 @@ const bool cookJsSupported = false;
 class CookJsEngine {
   CookJsEngine();
 
+  void dispose() {}
+
   String? evaluate(String code, {void Function(String error)? onError}) {
     onError?.call('cook JS engine is not supported on this platform');
     return null;
