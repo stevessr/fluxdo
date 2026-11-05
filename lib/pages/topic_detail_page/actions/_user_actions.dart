@@ -43,6 +43,14 @@ extension _UserActions on _TopicDetailPageState {
     final params = _params;
     final notifier = ref.read(topicDetailProvider(params).notifier);
     final detail = ref.read(topicDetailProvider(params)).value;
+    if (detail?.closed == true) {
+      ToastService.showInfo(
+        detail!.isPrivateMessage
+            ? '该私信已关闭，无法继续回复'
+            : '该话题已关闭，无法继续回复',
+      );
+      return;
+    }
     final wasAtBottom = !notifier.hasMoreAfter;
 
     // 预加载草稿：在点击回复时就发起请求，利用 BottomSheet 动画时间并行加载

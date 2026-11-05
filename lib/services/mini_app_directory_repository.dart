@@ -21,8 +21,12 @@ class MiniAppDirectoryRepository {
 
   Future<MiniAppDirectory> fetchPage(int page) async {
     if (page < 0) throw ArgumentError.value(page, 'page');
+    MiniAppDirectory? primary;
     try {
-      return await _fetch(_preferredPath, page);
+      primary = await _fetch(_preferredPath, page);
+      // Some plugins answer with an empty placeholder at one endpoint, while
+      // the other endpoint holds the real directory.
+      if (page != 0 || primary.apps.isNotEmpty) return primary;
     } on DioException catch (error) {
       if (error.response?.statusCode != 404 &&
           error.response?.statusCode != 405) {
@@ -33,9 +37,23 @@ class MiniAppDirectoryRepository {
     final alternative = _preferredPath == _directoryPath
         ? _legacyPath
         : _directoryPath;
-    final directory = await _fetch(alternative, page);
-    _preferredPath = alternative;
-    return directory;
+    try {
+      final directory = await _fetch(alternative, page);
+      if (primary == null || directory.apps.isNotEmpty) {
+        _preferredPath = alternative;
+        return directory;
+      }
+      return primary;
+    } on DioException catch (error) {
+      // An empty but valid primary response must not become an error only
+      // because an optional legacy endpoint is absent.
+      if (primary != null &&
+          (error.response?.statusCode == 404 ||
+              error.response?.statusCode == 405)) {
+        return primary;
+      }
+      rethrow;
+    }
   }
 
   Future<MiniAppDirectory> _fetch(String path, int page) async {

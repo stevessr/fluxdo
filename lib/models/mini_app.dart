@@ -19,11 +19,21 @@ class MiniApp {
   static MiniApp? tryParse(Object? raw, {required Uri site}) {
     if (raw is! Map) return null;
     final data = raw;
+    // A site may return both a UUID and a human-readable slug.
+    // Prefer the stable ID for deduplication while accepting either URL.
     final id =
-        _string(data['slug']) ?? _string(data['id']) ?? _string(data['uuid']);
+        _string(data['id']) ?? _string(data['uuid']) ?? _string(data['slug']);
+    final slug = _string(data['slug']);
+    final uuid = _string(data['uuid']);
     if (id == null || !RegExp(r'^[a-zA-Z0-9_-]{1,128}$').hasMatch(id)) {
       return null;
     }
+
+    final identifiers = <String>{
+      id,
+      if (slug != null) slug,
+      if (uuid != null) uuid,
+    };
 
     final suppliedUrl = _string(data['url']) ?? _string(data['path']);
     final candidate = suppliedUrl == null
@@ -38,7 +48,7 @@ class MiniApp {
         candidate.port != site.port ||
         candidate.pathSegments.length < 2 ||
         candidate.pathSegments[0] != 'apps' ||
-        candidate.pathSegments[1] != id) {
+        !identifiers.contains(candidate.pathSegments[1])) {
       return null;
     }
 
@@ -208,8 +218,18 @@ class MiniAppDirectory {
   }
 
   static List? _rows(Map envelope) {
-    for (final key in ['apps', 'applications', 'items', 'results']) {
+    for (final key in [
+      'apps', 'applications', 'mini_apps', 'items', 'results', 'entries',
+    ]) {
       if (envelope[key] is List) return envelope[key] as List;
+    }
+    // Real directories can be nested one level under a plugin envelope.
+    for (final key in ['directory', 'apps', 'data', 'result']) {
+      final nested = envelope[key];
+      if (nested is Map) {
+        final rows = _rows(nested);
+        if (rows != null) return rows;
+      }
     }
     return null;
   }

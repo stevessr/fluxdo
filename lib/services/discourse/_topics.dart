@@ -268,17 +268,31 @@ mixin _TopicsMixin on _DiscourseServiceBase {
             },
           )
         : null;
-    final response = await _dio.get<String>(
-      path,
-      queryParameters: queryParams.isNotEmpty ? queryParams : null,
-      options: (options ?? Options()).copyWith(
-        responseType: ResponseType.plain,
-      ),
-    );
+    Future<String> fetchBody(String requestPath) async {
+      final response = await _dio.get<String>(
+        requestPath,
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+        options: (options ?? Options()).copyWith(
+          responseType: ResponseType.plain,
+        ),
+      );
+      return response.data!;
+    }
+
+    late final String body;
+    try {
+      body = await fetchBody(path);
+    } on DioException catch (error) {
+      // A stale last-read floor may 404 while the topic itself is still
+      // readable, including server-closed private messages. Don't mistake
+      // this for a deleted conversation; retry the canonical URL once.
+      if (postNumber == null || error.response?.statusCode != 404) rethrow;
+      body = await fetchBody('/t/$id.json');
+    }
     // isolate 内 jsonDecode + fromJson:大话题响应几百 KB~几 MB,主线程
     // 解析实测把 DartIsolate::HandleMessage 顶到 46~56ms(滚动/进话题时
     // 直接掉帧)。结果对象经 Isolate.exit 转移,回传零拷贝。
-    return compute(_parseTopicDetailJson, response.data!);
+    return compute(_parseTopicDetailJson, body);
   }
 
   /// 通过 slug 获取话题详情（返回真实的 topic ID）

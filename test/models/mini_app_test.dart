@@ -32,6 +32,40 @@ void main() {
     expect(result.page, 0);
   });
 
+  test('keeps UUID app id when the destination uses its slug', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': [
+          {
+            'id': '01a19674-905b-7246-99ff-2f5e270a3f8f',
+            'slug': 'nice-app',
+            'url': '/apps/nice-app?source=directory',
+            'name': 'App',
+          },
+        ],
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps.single.id, '01a19674-905b-7246-99ff-2f5e270a3f8f');
+    expect(result.apps.single.url.path, '/apps/nice-app');
+  });
+
+  test('reads nested mini_apps', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'directory': {
+          'mini_apps': [
+            {'uuid': 'uuid-app', 'name': 'Nested app'},
+          ],
+        },
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps.single.name, 'Nested app');
+  });
+
   test('accepts legacy array format', () {
     final result = MiniAppDirectory.parse(
       [
