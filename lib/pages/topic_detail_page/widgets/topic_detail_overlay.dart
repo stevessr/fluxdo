@@ -155,8 +155,28 @@ class TopicDetailOverlay extends StatelessWidget {
             child: child!,
           ),
         ),
+        // Closed is the server's topic state, not a hard-coded floor limit
+        // and not a deletion. Keep the conversation readable.
+        if (isLoggedIn && detail.closed)
+          Positioned(
+            key: const ValueKey('topic-closed-notice'),
+            right: 16,
+            bottom: 16 + bottomPadding,
+            child: Chip(
+              avatar: const Icon(Symbols.lock_rounded, size: 18),
+              label: Text(
+                detail.isPrivateMessage
+                    ? (Localizations.localeOf(context).languageCode == 'zh'
+                        ? '私信已关闭'
+                        : 'Message closed')
+                    : (Localizations.localeOf(context).languageCode == 'zh'
+                        ? '话题已关闭'
+                        : 'Topic closed'),
+              ),
+            ),
+          ),
         // 悬浮回复按钮
-        if (isLoggedIn)
+        if (isLoggedIn && !detail.closed)
           ValueListenableBuilder<bool>(
             valueListenable: showBottomBarListenable,
             child: FloatingActionButton(

@@ -68,6 +68,54 @@ void main() {
     ]);
   });
 
+  test('probes alternative when the first successful page is empty', () async {
+    final calls = <String>[];
+    final repository = MiniAppDirectoryRepository(
+      dio: fakeDio(
+        calls: calls,
+        respond: (options) => Response(
+          requestOptions: options,
+          statusCode: 200,
+          data: options.uri.path == '/apps.json'
+              ? {
+                  'apps': [
+                    {'id': 'real-app'},
+                  ],
+                  'has_next': false,
+                }
+              : {'apps': []},
+        ),
+      ),
+      site: site,
+    );
+    final result = await repository.fetchPage(0);
+    expect(result.apps.single.id, 'real-app');
+    expect(calls, [
+      '/apps/directory.json?page=0',
+      '/apps.json?page=0',
+    ]);
+  });
+
+  test('empty directory survives 404 on optional alternative', () async {
+    final calls = <String>[];
+    final repository = MiniAppDirectoryRepository(
+      dio: fakeDio(
+        calls: calls,
+        respond: (options) => Response(
+          requestOptions: options,
+          statusCode: options.uri.path == '/apps.json' ? 404 : 200,
+          data: {'apps': []},
+        ),
+      ),
+      site: site,
+    );
+    expect((await repository.fetchPage(0)).apps, isEmpty);
+    expect(calls, [
+      '/apps/directory.json?page=0',
+      '/apps.json?page=0',
+    ]);
+  });
+
   test('never falls back on authorization or rate limit failures', () async {
     for (final status in [401, 403, 429]) {
       final calls = <String>[];
