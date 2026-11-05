@@ -137,18 +137,16 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
       final pane = tabs.removeAt(existing);
       tabs.add(pane);
     } else {
-      tabs.add(PaneEntry.topic(
-        topicId: topicId,
-        initialTitle: initialTitle,
-        scrollToPostNumber: scrollToPostNumber,
-        instanceId: instanceId ?? const Uuid().v4(),
-      ));
+      tabs.add(
+        PaneEntry.topic(
+          topicId: topicId,
+          initialTitle: initialTitle,
+          scrollToPostNumber: scrollToPostNumber,
+          instanceId: instanceId ?? const Uuid().v4(),
+        ),
+      );
     }
-    state = SelectedTopicState(
-      stack: tabs,
-      tabMode: true,
-      showingFeed: false,
-    );
+    state = SelectedTopicState(stack: tabs, tabMode: true, showingFeed: false);
   }
 
   /// 将当前导航栈转为独立标签页；不复制当前话题的 provider 实例。

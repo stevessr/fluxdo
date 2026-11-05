@@ -202,5 +202,4 @@ void main() {
     expect(notifier.state.tabMode, isTrue);
     expect(notifier.state.topicId, 1);
   });
-
 }

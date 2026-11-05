@@ -48,9 +48,7 @@ class PicoParallelTabs extends StatelessWidget {
       height: 48,
       decoration: BoxDecoration(
         color: colors.surface,
-        border: Border(
-          bottom: BorderSide(color: colors.outlineVariant),
-        ),
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
       ),
       child: Row(
         children: [
@@ -76,8 +74,8 @@ class PicoParallelTabs extends StatelessWidget {
                     entry.initialTitle?.trim().isNotEmpty == true
                         ? entry.initialTitle!
                         : (chinese
-                            ? '话题 #${entry.topicId}'
-                            : 'Topic #${entry.topicId}'),
+                              ? '话题 #${entry.topicId}'
+                              : 'Topic #${entry.topicId}'),
                   PaneKind.profile => '@${entry.username}',
                   PaneKind.settings => chinese ? '设置' : 'Settings',
                 };
@@ -97,9 +95,7 @@ class PicoParallelTabs extends StatelessWidget {
                     ),
                     onPressed: () => onActivate(index),
                     onDeleted: () => onClose(index),
-                    deleteButtonTooltipMessage: chinese
-                        ? '关闭标签'
-                        : 'Close tab',
+                    deleteButtonTooltipMessage: chinese ? '关闭标签' : 'Close tab',
                     visualDensity: VisualDensity.compact,
                   ),
                 );

@@ -1638,7 +1638,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
 
   void _openTopicInTab(TopicDetail detail) {
     final home = ref.read(selectedTopicProvider);
-    final isHomePane = widget.embeddedMode &&
+    final isHomePane =
+        widget.embeddedMode &&
         (widget.stackProvider == null ||
             widget.stackProvider == selectedTopicProvider);
     if (isHomePane && home.topEntry?.topicId == widget.topicId) {
@@ -1646,11 +1647,13 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       ref.read(selectedTopicProvider.notifier).enableTabMode();
       return;
     }
-    ref.read(selectedTopicProvider.notifier).openTopicTab(
-      topicId: widget.topicId,
-      initialTitle: detail.title,
-      scrollToPostNumber: _resolvedViewportPostNumber,
-    );
+    ref
+        .read(selectedTopicProvider.notifier)
+        .openTopicTab(
+          topicId: widget.topicId,
+          initialTitle: detail.title,
+          scrollToPostNumber: _resolvedViewportPostNumber,
+        );
     ref.requestNavDestination(NavEntryIds.home);
     if (!widget.embeddedMode) {
       // 全屏路由回到所属首页，由首页的 Tab 显示新话题。
@@ -2082,9 +2085,11 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
                   color: Theme.of(context).colorScheme.onSurface,
                 ),
                 const SizedBox(width: 12),
-                Text(Localizations.localeOf(context).languageCode == 'zh'
-                    ? '在 Tab 中打开'
-                    : 'Open in tab'),
+                Text(
+                  Localizations.localeOf(context).languageCode == 'zh'
+                      ? '在 Tab 中打开'
+                      : 'Open in tab',
+                ),
               ],
             ),
           ),

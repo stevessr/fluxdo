@@ -2645,11 +2645,13 @@ class _TopicListState extends ConsumerState<_TopicList>
         : topic.lastReadPostNumber;
     if (ref.read(preferencesProvider).openTopicsInTabsByDefault ||
         ref.read(selectedTopicProvider).tabMode) {
-      ref.read(selectedTopicProvider.notifier).openTopicTab(
-        topicId: topic.id,
-        initialTitle: topic.title,
-        scrollToPostNumber: scrollToPostNumber,
-      );
+      ref
+          .read(selectedTopicProvider.notifier)
+          .openTopicTab(
+            topicId: topic.id,
+            initialTitle: topic.title,
+            scrollToPostNumber: scrollToPostNumber,
+          );
       return;
     }
     // 关闭标签模式时保持原来的全屏导航。
@@ -2771,11 +2773,13 @@ class _TopicListState extends ConsumerState<_TopicList>
         : topic.lastReadPostNumber;
     if (ref.read(preferencesProvider).openTopicsInTabsByDefault ||
         ref.read(selectedTopicProvider).tabMode) {
-      ref.read(selectedTopicProvider.notifier).openTopicTab(
-        topicId: topic.id,
-        initialTitle: topic.title,
-        scrollToPostNumber: scrollToPostNumber,
-      );
+      ref
+          .read(selectedTopicProvider.notifier)
+          .openTopicTab(
+            topicId: topic.id,
+            initialTitle: topic.title,
+            scrollToPostNumber: scrollToPostNumber,
+          );
       return;
     }
     final canShowDetailPane = MasterDetailLayout.canShowBothPanesFor(context);

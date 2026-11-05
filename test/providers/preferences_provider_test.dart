@@ -188,11 +188,13 @@ void main() {
     final prefs = container.read(sharedPreferencesProvider);
     expect(prefs.getBool('pref_open_topics_in_tabs_by_default'), isTrue);
 
-    final restored = ProviderContainer(overrides: [
-      sharedPreferencesProvider.overrideWithValue(prefs),
-    ]);
+    final restored = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
     addTearDown(restored.dispose);
-    expect(restored.read(preferencesProvider).openTopicsInTabsByDefault, isTrue);
+    expect(
+      restored.read(preferencesProvider).openTopicsInTabsByDefault,
+      isTrue,
+    );
   });
-
 }
