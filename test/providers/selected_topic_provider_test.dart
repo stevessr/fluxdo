@@ -167,6 +167,32 @@ void main() {
     expect(notifier.state.stack, hasLength(1));
   });
 
+  test('切回信息流不会销毁 Tab，重新激活后恢复详情', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1, instanceId: 'first')
+      ..openTopicTab(topicId: 2, instanceId: 'second');
+
+    notifier.showFeed();
+    expect(notifier.state.showingFeed, isTrue);
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.instanceId, 'second');
+
+    notifier.activateTab(0);
+    expect(notifier.state.showingFeed, isFalse);
+    expect(notifier.state.topEntry?.instanceId, 'first');
+    expect(notifier.state.stack, hasLength(2));
+  });
+
+  test('关闭最后一个 Tab 后回到信息流并保留 Tab 模式', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1)
+      ..closeTab(0);
+
+    expect(notifier.state.tabMode, isTrue);
+    expect(notifier.state.showingFeed, isTrue);
+    expect(notifier.state.stack, isEmpty);
+  });
+
   test('Tab 模式压栈和返回不会被静默关闭', () {
     final notifier = SelectedTopicNotifier()
       ..openTopicTab(topicId: 1)
