@@ -8,6 +8,7 @@ import '../models/search_filter.dart';
 import '../models/category.dart';
 import '../navigation/nav_action_bus.dart';
 import '../providers/selected_topic_provider.dart';
+import '../providers/preferences_provider.dart';
 import '../providers/shortcut_provider.dart';
 import '../providers/discourse_providers.dart';
 import '../utils/platform_utils.dart';
@@ -98,10 +99,12 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       return;
     }
     final notifier = ref.read(selectedTopicProvider.notifier);
-    if (projecting) {
-      notifier.clear();
-    } else {
-      notifier.collapseToTop();
+    if (!state.tabMode) {
+      if (projecting) {
+        notifier.clear();
+      } else {
+        notifier.collapseToTop();
+      }
     }
     if (mounted) {
       setState(() {
@@ -117,7 +120,7 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   Widget build(BuildContext context) {
     final selectedTopic = ref.watch(selectedTopicProvider);
     // 左栏本质是不是"列表"（信息流）——决定给窄栏还是对半分
-    _masterIsListLike = !selectedTopic.isStacked;
+    _masterIsListLike = !selectedTopic.isStacked || selectedTopic.tabMode;
     final user = ref.watch(currentUserProvider).value;
 
     // 左侧导航栏的板块快捷入口位于平行视界布局之外。切换板块时除了让
@@ -203,7 +206,7 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                 projectDetailWhenNarrow: true,
                 // 胶片带:列表也在带上,压栈时被顶出左侧、倒二层格顶上左栏
                 // (旧"上一层预览"形态,由容器统一承担,预览格 State 全保)。
-                pinMaster: false,
+                pinMaster: selectedTopic.tabMode,
                 master: _wrapPaneTap(
                   ActivePane.master,
                   _buildMasterPane(selectedTopic),
@@ -296,7 +299,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
     final notifier = ref.read(selectedTopicProvider.notifier);
     // 投影态下"回信息流"必须整栈清空:collapseToTop 对单层栈是 no-op,
     // 投影会继续盖着列表。宽屏保留右栏基础层(仅收深层)语义不变。
-    if (ref.read(selectedTopicProvider).hasSelection &&
+    if (ref.read(selectedTopicProvider).tabMode) {
+      // Tab 模式保留正在阅读的标签，只切换左侧信息流。
+    } else if (ref.read(selectedTopicProvider).hasSelection &&
         !MasterDetailLayout.canShowBothPanesFor(context)) {
       notifier.clear();
     } else {
@@ -311,7 +316,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   }
 
   void _showCategory(Category category) {
-    ref.read(selectedTopicProvider.notifier).collapseToTop();
+    if (!ref.read(selectedTopicProvider).tabMode) {
+      ref.read(selectedTopicProvider.notifier).collapseToTop();
+    }
     setState(() {
       _showEmbeddedSearch = false;
       _embeddedSearchFilter = null;
@@ -321,7 +328,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   }
 
   void _showTag(String tag) {
-    ref.read(selectedTopicProvider.notifier).collapseToTop();
+    if (!ref.read(selectedTopicProvider).tabMode) {
+      ref.read(selectedTopicProvider.notifier).collapseToTop();
+    }
     setState(() {
       _showEmbeddedSearch = false;
       _embeddedSearchFilter = null;
@@ -411,7 +420,10 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       ref.invalidate(topicListProvider(null));
 
       final canShowDetailPane = MasterDetailLayout.canShowBothPanesFor(context);
-      if (canShowDetailPane) {
+      if (ref.read(preferencesProvider).openTopicsInTabsByDefault ||
+          ref.read(selectedTopicProvider).tabMode) {
+        ref.read(selectedTopicProvider.notifier).openTopicTab(topicId: topicId);
+      } else if (canShowDetailPane) {
         // 双栏模式：选中新话题，在右侧详情面板显示
         ref.read(selectedTopicProvider.notifier).select(topicId: topicId);
       } else {
