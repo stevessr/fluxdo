@@ -1725,7 +1725,7 @@ class _MainPageState extends ConsumerState<MainPage>
     final activeEntryId = pageEntries[safePageIndex].id;
     final topicState = ref.watch(selectedTopicProvider);
     final topicParallelStacked =
-        topicState.isStacked && !topicState.showingFeed;
+        topicState.isStacked && !topicState.tabMode;
     final messageParallelStacked = ref.watch(selectedMessageProvider).isStacked;
     final seekingParallelStacked = ref.watch(selectedSeekingProvider).isStacked;
     final hideNavigationRail =
