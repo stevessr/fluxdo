@@ -278,21 +278,17 @@ class NotificationListNotifier
         // Records missing from the refreshed first page must not survive
         // inside that page's time window (for example after being read on
         // another device). Keep genuinely older pages for scroll stability.
-        if (category == NotificationCategory.all &&
-            !result.page.hasMore) {
+        if (category == NotificationCategory.all && !result.page.hasMore) {
           return false;
         }
         return _matchesReadFilter(item, filter) &&
-            (oldestFresh == null ||
-                item.createdAt.isBefore(oldestFresh));
+            (oldestFresh == null || item.createdAt.isBefore(oldestFresh));
       });
-      final merged = <DiscourseNotification>[
-        ...fresh,
-        ...olderCached,
-      ]..sort((a, b) {
-        final byTime = b.createdAt.compareTo(a.createdAt);
-        return byTime != 0 ? byTime : b.id.compareTo(a.id);
-      });
+      final merged = <DiscourseNotification>[...fresh, ...olderCached]
+        ..sort((a, b) {
+          final byTime = b.createdAt.compareTo(a.createdAt);
+          return byTime != 0 ? byTime : b.id.compareTo(a.id);
+        });
 
       // The filtered recent endpoint has no historical raw offset. Start
       // scanning again at the beginning and dedupe against cached pages
