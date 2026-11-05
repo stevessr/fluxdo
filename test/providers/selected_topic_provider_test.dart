@@ -183,6 +183,18 @@ void main() {
     expect(notifier.state.stack, hasLength(2));
   });
 
+  test('信息流可见时关闭背景 Tab 不会切回详情', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1)
+      ..openTopicTab(topicId: 2)
+      ..showFeed()
+      ..closeTab(0);
+
+    expect(notifier.state.showingFeed, isTrue);
+    expect(notifier.state.stack, hasLength(1));
+    expect(notifier.state.topicId, 2);
+  });
+
   test('关闭最后一个 Tab 后回到信息流并保留 Tab 模式', () {
     final notifier = SelectedTopicNotifier()
       ..openTopicTab(topicId: 1)
