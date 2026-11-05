@@ -133,4 +133,25 @@ void main() {
     expect(nativeWindowOpened, 1);
   });
 
+  test('open_in_tab 分发到独立标签动作', () {
+    var opened = 0;
+    handleTopicDetailMoreMenuSelection(
+      'open_in_tab',
+      onEditTopic: () => fail('unexpected'),
+      onBookmark: () => fail('unexpected'),
+      onReadLater: () => fail('unexpected'),
+      onSubscribe: () => fail('unexpected'),
+      onMarkUnread: () => fail('unexpected'),
+      onMarkUnreadAll: () => fail('unexpected'),
+      onShareLink: () => fail('unexpected'),
+      onShareImage: () => fail('unexpected'),
+      onExport: () => fail('unexpected'),
+      onOpenInBrowser: () => fail('unexpected'),
+      onOpenInTab: () => opened++,
+      onFilter: () => fail('unexpected'),
+      onReadingSettings: () => fail('unexpected'),
+    );
+    expect(opened, 1);
+  });
+
 }
