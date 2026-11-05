@@ -50,6 +50,12 @@ class UserApiKeyService {
   /// 跨设备扫码专用 client_id(与浏览器授权 client 隔离)。
   /// 稳定复用,使服务端 create 时 destroy_all 只清掉上一枚分享 key。
   static const _keyQrClientId = 'user_api_key_qr_client_id';
+  // Stable, isolated client for short-lived DeviceAuth keys. Reusing it avoids
+  // creating a new Discourse API client row for every retry.
+  static const _keyDeviceClientId = 'user_api_key_device_client_id';
+
+  /// Separately scoped device credential. This is NOT a Cookie session.
+  static const _keyDeviceGrant = 'user_api_key_device_grant';
   // nonce 持久化:跨重启存活。冷启动 getInitialLink 会重放上次的
   // auth_redirect 深链,内存态 nonce 会丢失导致每次重启误报"回调解析失败"。
   static const _keyPendingNonce = 'user_api_key_pending_nonce';
@@ -132,10 +138,7 @@ class UserApiKeyService {
 
   /// 授权登录收口后的"用完即焚":scopes 无 write(本地无自愈价值)时
   /// 撤销并清除刚拿到的 key,不给服务端留永久零权限凭据。
-  Future<void> burnAfterLoginIfUseless(
-    Dio dio, {
-    String? expectedKey,
-  }) async {
+  Future<void> burnAfterLoginIfUseless(Dio dio, {String? expectedKey}) async {
     if (keyWorthKeeping) return;
     final key = await readApiKey();
     if (key == null || key.isEmpty) return;
@@ -165,6 +168,71 @@ class UserApiKeyService {
       await _storage.write(key: _keyQrClientId, value: clientId);
     }
     return clientId;
+  }
+
+  /// Client ID only for DeviceAuth: never share it with browser or QR flows.
+  Future<String> ensureDeviceClientId() async {
+    var clientId = await _storage.read(key: _keyDeviceClientId);
+    if (clientId == null || clientId.isEmpty) {
+      clientId = const Uuid().v4();
+      await _storage.write(key: _keyDeviceClientId, value: clientId);
+    }
+    return clientId;
+  }
+
+  /// Persist a verified native device grant independently of browser keys.
+  Future<void> persistDeviceAuthorization({
+    required String apiKey,
+    required String clientId,
+    required String username,
+    DateTime? expiresAt,
+  }) async {
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(apiKey) ||
+        clientId.isEmpty ||
+        username.isEmpty) {
+      throw ArgumentError('无效的设备 API 授权信息');
+    }
+    await _storage.write(
+      key: _keyDeviceGrant,
+      value: jsonEncode({
+        'key': apiKey,
+        'client_id': clientId,
+        'username': username,
+        'expires_at': expiresAt?.toUtc().toIso8601String(),
+      }),
+    );
+  }
+
+  /// Return only active credentials; never expose an expired native grant.
+  Future<Map<String, String>?> readDeviceAuthorization() async {
+    final raw = await _storage.read(key: _keyDeviceGrant);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final data = jsonDecode(raw);
+      if (data is! Map) return null;
+      final expires = DateTime.tryParse(data['expires_at']?.toString() ?? '');
+      if (expires != null && !expires.isAfter(DateTime.now())) return null;
+      final key = data['key']?.toString() ?? '';
+      final client = data['client_id']?.toString() ?? '';
+      final username = data['username']?.toString() ?? '';
+      if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(key) ||
+          client.isEmpty ||
+          username.isEmpty) {
+        return null;
+      }
+      return {'key': key, 'client_id': client, 'username': username};
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Clear a single matching device grant without touching browser login.
+  Future<void> clearDeviceAuthorization({String? expectedKey}) async {
+    if (expectedKey != null) {
+      final credential = await readDeviceAuthorization();
+      if (credential?['key'] != expectedKey) return;
+    }
+    await _storage.delete(key: _keyDeviceGrant);
   }
 
   // ---------- RSA ----------
@@ -498,20 +566,52 @@ class UserApiKeyService {
     return (ok: true, otp: otp, stale: false);
   }
 
+  /// Decode and nonce-check a one-time device grant without persisting its
+  /// high-privilege API key into the normal browser-login credential slot.
+  Future<Map<String, dynamic>?> decryptDeviceAuthorizationPayload(
+    String encrypted, {
+    required String expectedNonce,
+  }) async {
+    final text = await _decrypt(encrypted);
+    if (text == null) return null;
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['nonce'] != expectedNonce) {
+        return null;
+      }
+      return decoded;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ---------- OTP 补发与兑换 ----------
 
   /// 用 API key 静默补发 OTP。
   /// 服务端 302 到 auth_redirect?oneTimePassword=<加密>,从 Location 头解析。
-  Future<String?> requestOtp(Dio dio, {int? requestGeneration}) async {
+  Future<String?> requestOtp(
+    Dio dio, {
+    int? requestGeneration,
+    String? overrideApiKey,
+    String? overrideClientId,
+  }) async {
     final generation = requestGeneration ?? AuthSession().generation;
     bool isCurrent() => AuthSession().isValid(generation);
 
-    final apiKey = await readApiKey();
+    final apiKey = overrideApiKey ?? await readApiKey();
     if (!isCurrent()) return null;
     if (apiKey == null || apiKey.isEmpty) return null;
     final publicKeyPem = await ensurePublicKeyPem();
     if (!isCurrent()) return null;
 
+    final otpHeaders = <String, String>{'User-Api-Key': apiKey};
+    if (overrideClientId != null) {
+      otpHeaders['User-Api-Client-Id'] = overrideClientId;
+    }
+    if (overrideApiKey != null) {
+      otpHeaders['Cookie'] = '';
+    }
     try {
       final response = await dio.post(
         '/user-api-key/otp',
@@ -521,19 +621,30 @@ class UserApiKeyService {
           'application_name': applicationName,
         },
         options: Options(
-          headers: {'User-Api-Key': apiKey},
+          headers: otpHeaders,
           contentType: Headers.formUrlEncodedContentType,
           followRedirects: false,
           validateStatus: (status) =>
               status != null && (status < 400 || status == 302),
           // 带 User-Api-Key 的请求服务端豁免 CSRF;且此请求发生在会话
           // 疑似失效期间,必须跳过 auth 信号上报避免自我干扰
-          extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+          extra: {
+            'skipAuthCheck': true,
+            'skipCsrf': true,
+            'skipSessionStateSync': true,
+            'noRecovery': true,
+            if (overrideApiKey != null) 'skipCookieManager': true,
+          },
         ),
       );
 
       if (!isCurrent()) return null;
-      final location = response.headers.value('location');
+      // HTML requests return a 302 Location; JSON clients may receive
+      // {redirect_url: ...}. Both contain the same encrypted OTP.
+      var location = response.headers.value('location');
+      if ((location == null || location.isEmpty) && response.data is Map) {
+        location = (response.data as Map)['redirect_url']?.toString();
+      }
       if (location == null || location.isEmpty) {
         _log(
           'warning',
@@ -562,10 +673,10 @@ class UserApiKeyService {
       if (!isCurrent()) return null;
       // 403 = key 已撤销 / scope 不足 / 用户组不满足,key 已不可用则清除
       if (status == 403) {
-        _log('warning', 'otp_request_rejected', 'OTP 补发被拒(403),清除本地 key', {
+        _log('warning', 'otp_request_rejected', 'OTP 补发被拒(403)', {
           'statusCode': status,
         });
-        await clearKey();
+        if (overrideApiKey == null) await clearKey();
       } else {
         _log('warning', 'otp_request_failed', 'OTP 补发请求失败', {
           'statusCode': status,

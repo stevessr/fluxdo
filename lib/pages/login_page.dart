@@ -20,6 +20,7 @@ import '../widgets/common/floating_logo.dart';
 
 import 'package:m3e_ui/m3e_ui.dart';
 
+import 'device_login_page.dart';
 import 'qr_login_scan_page.dart';
 import 'webview_login_page.dart';
 
@@ -488,6 +489,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
+          onPressed: _loginWithDevice,
+          icon: const Icon(Symbols.phonelink_lock_rounded, size: 20),
+          label: const Text('使用设备授权码登录'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 52),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+            ),
+            side: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
           onPressed: _browserAuthLaunching ? null : _loginWithBrowserAuth,
           icon: _browserAuthLaunching
               ? const SizedBox(
@@ -532,6 +548,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         ),
       ],
     );
+  }
+
+  Future<void> _loginWithDevice() async {
+    final result = await Navigator.of(context).push<DeviceLoginResult>(
+      MaterialPageRoute(builder: (_) => const DeviceLoginPage()),
+    );
+    if (!mounted) return;
+    if (result == DeviceLoginResult.success) {
+      Navigator.of(context).pop(true);
+    } else if (result == DeviceLoginResult.keyAuthorized) {
+      ToastService.showSuccess('只读 API Key 已授权；未建立 Cookie 登录会话');
+    } else if (result == DeviceLoginResult.useBrowser) {
+      await _loginWithBrowserAuth();
+    }
   }
 
   /// 扫码登录:跳转扫码页,成功后 pop 登录页
