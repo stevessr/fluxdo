@@ -252,22 +252,21 @@ class NotificationListNotifier
     final filter = _filter;
     try {
       final result = await _fetchFirstPage(category: category, filter: filter);
-      if (!ref.mounted ||
-          generation != _refreshGeneration ||
-          state.isLoading) {
+      if (!ref.mounted || generation != _refreshGeneration || state.isLoading) {
         return;
       }
       final fresh = result.page.items;
       final existingIds = current.map((n) => n.id).toSet();
       final freshIds = fresh.map((n) => n.id).toSet();
       final additions = fresh.where((n) => !existingIds.contains(n.id)).length;
-      final merged = <DiscourseNotification>[
-        ...fresh,
-        ...current.where((n) => !freshIds.contains(n.id)),
-      ]..sort((a, b) {
-        final byTime = b.createdAt.compareTo(a.createdAt);
-        return byTime != 0 ? byTime : b.id.compareTo(a.id);
-      });
+      final merged =
+          <DiscourseNotification>[
+            ...fresh,
+            ...current.where((n) => !freshIds.contains(n.id)),
+          ]..sort((a, b) {
+            final byTime = b.createdAt.compareTo(a.createdAt);
+            return byTime != 0 ? byTime : b.id.compareTo(a.id);
+          });
 
       // History offsets shift when newer rows arrive. Do not reset the
       // history cursor or discard pages already loaded by the user.

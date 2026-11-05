@@ -19,7 +19,10 @@ Map<String, dynamic> _notification(
   'data': <String, dynamic>{},
 };
 
-Map<String, dynamic> _response(List<Map<String, dynamic>> items, {int total = 0}) => {
+Map<String, dynamic> _response(
+  List<Map<String, dynamic>> items, {
+  int total = 0,
+}) => {
   'notifications': items,
   'total_rows_notifications': total,
   'seen_notification_id': 0,
@@ -30,14 +33,18 @@ void main() {
 
   test('live push updates history without resetting pagination or duplicating rows', () async {
     final service = DiscourseService();
-    final interceptor = InterceptorsWrapper(onRequest: (options, handler) {
-      handler.resolve(Response(
-        requestOptions: options,
-        data: _response([
-          _notification(10, NotificationType.replied),
-        ], total: 120),
-      ));
-    });
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        handler.resolve(
+          Response(
+            requestOptions: options,
+            data: _response([
+              _notification(10, NotificationType.replied),
+            ], total: 120),
+          ),
+        );
+      },
+    );
     service.dio.interceptors.insert(0, interceptor);
     addTearDown(() => service.dio.interceptors.remove(interceptor));
 
@@ -50,49 +57,75 @@ void main() {
     final notifier = container.read(notificationListProvider.notifier);
     expect(notifier.historyOffset, 60);
 
-    final pushed = DiscourseNotification.fromJson(_notification(11, NotificationType.mentioned));
+    final pushed = DiscourseNotification.fromJson(
+      _notification(11, NotificationType.mentioned),
+    );
     notifier.applyRealtimeUpdate(latest: pushed);
     notifier.applyRealtimeUpdate(latest: pushed);
-    expect(container.read(notificationListProvider).value!.map((n) => n.id), [11, 10]);
+    expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+      11,
+      10,
+    ]);
     expect(notifier.historyOffset, 61);
 
     notifier.applyRealtimeUpdate(readStatuses: {11: true});
     expect(container.read(notificationListProvider).value!.first.read, isTrue);
   });
 
-  test('unread category respects type and removes notifications marked read', () async {
-    final service = DiscourseService();
-    final interceptor = InterceptorsWrapper(onRequest: (options, handler) {
-      handler.resolve(Response(
-        requestOptions: options,
-        data: _response([
-          _notification(20, NotificationType.mentioned),
-        ], total: 1),
-      ));
-    });
-    service.dio.interceptors.insert(0, interceptor);
-    addTearDown(() => service.dio.interceptors.remove(interceptor));
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
-    final subscription = container.listen(notificationListProvider, (_, _) {});
-    addTearDown(subscription.close);
-    await container.read(notificationListProvider.future);
+  test(
+    'unread category respects type and removes notifications marked read',
+    () async {
+      final service = DiscourseService();
+      final interceptor = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              data: _response([
+                _notification(20, NotificationType.mentioned),
+              ], total: 1),
+            ),
+          );
+        },
+      );
+      service.dio.interceptors.insert(0, interceptor);
+      addTearDown(() => service.dio.interceptors.remove(interceptor));
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final subscription = container.listen(
+        notificationListProvider,
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      await container.read(notificationListProvider.future);
 
-    final notifier = container.read(notificationListProvider.notifier);
-    await notifier.setCategory(NotificationCategory.mentions);
-    await notifier.setFilter(NotificationReadFilter.unread);
+      final notifier = container.read(notificationListProvider.notifier);
+      await notifier.setCategory(NotificationCategory.mentions);
+      await notifier.setFilter(NotificationReadFilter.unread);
 
-    notifier.applyRealtimeUpdate(
-      latest: DiscourseNotification.fromJson(_notification(21, NotificationType.replied)),
-    );
-    expect(container.read(notificationListProvider).value!.map((n) => n.id), [20]);
+      notifier.applyRealtimeUpdate(
+        latest: DiscourseNotification.fromJson(
+          _notification(21, NotificationType.replied),
+        ),
+      );
+      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+        20,
+      ]);
 
-    notifier.applyRealtimeUpdate(
-      latest: DiscourseNotification.fromJson(_notification(22, NotificationType.mentioned)),
-    );
-    expect(container.read(notificationListProvider).value!.map((n) => n.id), [22, 20]);
+      notifier.applyRealtimeUpdate(
+        latest: DiscourseNotification.fromJson(
+          _notification(22, NotificationType.mentioned),
+        ),
+      );
+      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+        22,
+        20,
+      ]);
 
-    notifier.applyRealtimeUpdate(readStatuses: {22: true});
-    expect(container.read(notificationListProvider).value!.map((n) => n.id), [20]);
-  });
+      notifier.applyRealtimeUpdate(readStatuses: {22: true});
+      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+        20,
+      ]);
+    },
+  );
 }

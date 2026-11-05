@@ -166,8 +166,10 @@ class NotificationChannelNotifier extends Notifier<void> {
             final recent = data['recent'];
             if (recent is List) {
               for (final entry in recent) {
-                if (entry is List && entry.length >= 2 &&
-                    entry[0] is int && entry[1] is bool) {
+                if (entry is List &&
+                    entry.length >= 2 &&
+                    entry[0] is int &&
+                    entry[1] is bool) {
                   statuses[entry[0] as int] = entry[1] as bool;
                 }
               }
