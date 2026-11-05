@@ -141,6 +141,49 @@ class NotificationChannelNotifier extends Notifier<void> {
               );
         }
 
+        // Forward the same event to the full history page only when mounted.
+        // Count-only and recent-only events need a quiet server reconciliation.
+        if (ref.exists(notificationListProvider)) {
+          final historyState = ref.read(notificationListProvider);
+          if (historyState.hasValue) {
+            final notifier = ref.read(notificationListProvider.notifier);
+            DiscourseNotification? latest;
+            final last = data['last_notification'];
+            if (last is Map<String, dynamic>) {
+              final raw = last['notification'];
+              if (raw is Map<String, dynamic>) {
+                try {
+                  latest = DiscourseNotification.fromJson(raw);
+                  if (latest.userId != subscription.id) {
+                    latest = null;
+                  }
+                } catch (_) {
+                  // Some events contain only a counter or a partial payload.
+                }
+              }
+            }
+            final statuses = <int, bool>{};
+            final recent = data['recent'];
+            if (recent is List) {
+              for (final entry in recent) {
+                if (entry is List && entry.length >= 2 &&
+                    entry[0] is int && entry[1] is bool) {
+                  statuses[entry[0] as int] = entry[1] as bool;
+                }
+              }
+            }
+            notifier.applyRealtimeUpdate(
+              latest: latest,
+              readStatuses: statuses,
+            );
+            // Reconcile whenever the event lacks the complete notification,
+            // or a history page is currently in flight.
+            if (latest == null || historyState.isLoading) {
+              notifier.scheduleRealtimeSync();
+            }
+          }
+        }
+
         // 仅在通知列表已加载（面板已打开过）时做增量更新，
         // 避免 ref.read() 意外触发 build() 发起 API 请求
         if (ref.exists(recentNotificationsProvider)) {
