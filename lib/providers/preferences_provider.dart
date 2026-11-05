@@ -250,6 +250,9 @@ class AppPreferences {
   /// 帖子流末尾显示推荐话题（相关话题 / 建议话题），默认开启，对齐网页版
   final bool showSuggestedTopics;
 
+  /// 从首页打开话题时默认保留为可切换的 Tab。
+  final bool openTopicsInTabsByDefault;
+
   /// 默认使用树形视图
   final bool defaultNestedView;
 
@@ -365,6 +368,7 @@ class AppPreferences {
     this.adaptiveSignatureFrameRate = true,
     this.boostDanmaku = false,
     this.showSuggestedTopics = true,
+    this.openTopicsInTabsByDefault = false,
     this.defaultNestedView = false,
     this.nestedLineStyle = NestedLineStyle.auto,
     this.bookmarksOpenMode = BookmarksOpenMode.defaultRoute,
@@ -433,6 +437,7 @@ class AppPreferences {
     bool? adaptiveSignatureFrameRate,
     bool? boostDanmaku,
     bool? showSuggestedTopics,
+    bool? openTopicsInTabsByDefault,
     bool? defaultNestedView,
     NestedLineStyle? nestedLineStyle,
     BookmarksOpenMode? bookmarksOpenMode,
@@ -515,6 +520,8 @@ class AppPreferences {
           adaptiveSignatureFrameRate ?? this.adaptiveSignatureFrameRate,
       boostDanmaku: boostDanmaku ?? this.boostDanmaku,
       showSuggestedTopics: showSuggestedTopics ?? this.showSuggestedTopics,
+      openTopicsInTabsByDefault:
+          openTopicsInTabsByDefault ?? this.openTopicsInTabsByDefault,
       defaultNestedView: defaultNestedView ?? this.defaultNestedView,
       nestedLineStyle: nestedLineStyle ?? this.nestedLineStyle,
       bookmarksOpenMode: bookmarksOpenMode ?? this.bookmarksOpenMode,
@@ -609,6 +616,8 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
       'pref_adaptive_signature_frame_rate';
   static const String _boostDanmakuKey = 'pref_boost_danmaku';
   static const String _showSuggestedTopicsKey = 'pref_show_suggested_topics';
+  static const String _openTopicsInTabsByDefaultKey =
+      'pref_open_topics_in_tabs_by_default';
   static const String _defaultNestedViewKey = 'pref_default_nested_view';
   static const String _nestedLineStyleKey = 'pref_nested_line_style';
   static const String _bookmarksOpenModeKey = 'pref_bookmarks_open_mode';
@@ -704,6 +713,8 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
               _prefs.getBool(_adaptiveSignatureFrameRateKey) ?? true,
           boostDanmaku: _prefs.getBool(_boostDanmakuKey) ?? false,
           showSuggestedTopics: _prefs.getBool(_showSuggestedTopicsKey) ?? true,
+          openTopicsInTabsByDefault:
+              _prefs.getBool(_openTopicsInTabsByDefaultKey) ?? false,
           defaultNestedView: _prefs.getBool(_defaultNestedViewKey) ?? false,
           nestedLineStyle: NestedLineStyle.fromString(
             _prefs.getString(_nestedLineStyleKey),
@@ -1059,6 +1070,12 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
     if (state.showSuggestedTopics == enabled) return;
     state = state.copyWith(showSuggestedTopics: enabled);
     await _prefs.setBool(_showSuggestedTopicsKey, enabled);
+  }
+
+  Future<void> setOpenTopicsInTabsByDefault(bool enabled) async {
+    if (state.openTopicsInTabsByDefault == enabled) return;
+    state = state.copyWith(openTopicsInTabsByDefault: enabled);
+    await _prefs.setBool(_openTopicsInTabsByDefaultKey, enabled);
   }
 
   Future<void> setDefaultNestedView(bool enabled) async {
