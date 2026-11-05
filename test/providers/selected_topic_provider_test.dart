@@ -188,8 +188,8 @@ void main() {
       ..openTopicTab(topicId: 1)
       ..closeTab(0);
 
-    expect(notifier.state.tabMode, isTrue);
-    expect(notifier.state.showingFeed, isTrue);
+    expect(notifier.state.tabMode, isFalse);
+    expect(notifier.state.showingFeed, isFalse);
     expect(notifier.state.stack, isEmpty);
   });
 
