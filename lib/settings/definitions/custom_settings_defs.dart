@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/mobile_post_source_preferences.dart';
+import '../../providers/preferences_provider.dart';
 import '../../providers/preload_cache_preferences.dart';
 import '../../providers/quick_reading_preferences.dart';
 import '../../services/mobile_post_source_service.dart';
@@ -59,6 +60,17 @@ List<SettingsGroup> buildCustomSettingsGroups(BuildContext context) {
       title: copy.readingGroupTitle,
       icon: Symbols.auto_stories_rounded,
       items: [
+        SwitchModel(
+          id: 'openTopicsInTabsByDefault',
+          title: copy.openTopicsInTabsTitle,
+          subtitle: copy.openTopicsInTabsDescription,
+          icon: Icons.tab_rounded,
+          getValue: (ref) =>
+              ref.watch(preferencesProvider).openTopicsInTabsByDefault,
+          onChanged: (ref, value) => ref
+              .read(preferencesProvider.notifier)
+              .setOpenTopicsInTabsByDefault(value),
+        ),
         SwitchModel(
           id: 'quickReading',
           title: copy.quickReadingTitle,
@@ -195,6 +207,8 @@ class _CustomSettingsCopy {
     required this.preloadCacheCleared,
     required this.preloadCacheClearFailed,
     required this.readingGroupTitle,
+    required this.openTopicsInTabsTitle,
+    required this.openTopicsInTabsDescription,
     required this.quickReadingTitle,
     required this.quickReadingDescription,
     required this.mobileSourceGroupTitle,
@@ -222,6 +236,8 @@ class _CustomSettingsCopy {
   final String preloadCacheCleared;
   final String preloadCacheClearFailed;
   final String readingGroupTitle;
+  final String openTopicsInTabsTitle;
+  final String openTopicsInTabsDescription;
   final String quickReadingTitle;
   final String quickReadingDescription;
   final String mobileSourceGroupTitle;
@@ -262,6 +278,8 @@ class _CustomSettingsCopy {
     preloadCacheCleared: '已清理所有账号的预加载缓存。',
     preloadCacheClearFailed: '清理预加载缓存失败。',
     readingGroupTitle: '阅读增强',
+    openTopicsInTabsTitle: '默认在 Tab 中打开话题',
+    openTopicsInTabsDescription: '从首页打开话题时保留已有标签，支持切换和关闭；关闭后恢复原来的打开方式。',
     quickReadingTitle: '快速阅读',
     quickReadingDescription: '进入话题时立即上报当前所有未读楼层；超过 2000 个楼层时按每批 2000 个分批发送。',
     mobileSourceGroupTitle: '发帖来源（实验性）',
@@ -292,6 +310,8 @@ class _CustomSettingsCopy {
     preloadCacheCleared: '已清理所有帳號的預載入快取。',
     preloadCacheClearFailed: '清理預載入快取失敗。',
     readingGroupTitle: '閱讀增強',
+    openTopicsInTabsTitle: '預設在 Tab 中開啟話題',
+    openTopicsInTabsDescription: '從首頁開啟話題時保留既有分頁，支援切換和關閉；停用後恢復原來的開啟方式。',
     quickReadingTitle: '快速閱讀',
     quickReadingDescription: '進入話題時立即上報目前所有未讀樓層；超過 2000 個樓層時按每批 2000 個分批傳送。',
     mobileSourceGroupTitle: '發帖來源（實驗性）',
@@ -321,6 +341,8 @@ class _CustomSettingsCopy {
     preloadCacheCleared: 'Preload cache cleared for all accounts.',
     preloadCacheClearFailed: 'Failed to clear preload cache.',
     readingGroupTitle: 'Reading enhancements',
+    openTopicsInTabsTitle: 'Open topics in tabs by default',
+    openTopicsInTabsDescription: 'Keep existing tabs when opening a topic from Home. Turn off to restore the original navigation.',
     quickReadingTitle: 'Quick reading',
     quickReadingDescription: 'Immediately reports every currently unread post when entering a topic. More than 2,000 posts are sent in batches of 2,000.',
     mobileSourceGroupTitle: 'Post source (experimental)',
