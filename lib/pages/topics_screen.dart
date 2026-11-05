@@ -154,7 +154,7 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       if (_showEmbeddedSearch ||
           _leftCategory != null ||
           _leftTag != null ||
-          selectedTopic.isStacked ||
+          (selectedTopic.isStacked && !selectedTopic.showingFeed) ||
           (selectedTopic.tabMode && !selectedTopic.showingFeed) ||
           projecting) {
         _showFeed();
