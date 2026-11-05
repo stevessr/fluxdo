@@ -226,14 +226,15 @@ class NotificationListNotifier
     // replay messages from before our last fetch, or remove read-filtered
     // rows at arbitrary positions. Rewind rather than guessing an offset
     // and silently skipping older notifications on the next load.
-    if ((isNewEvent && !seen) || readFilteredSetChanged) {
+    final cursorRewound = (isNewEvent && !seen) || readFilteredSetChanged;
+    if (cursorRewound) {
       _historyOffset = 0;
       _totalRows = 0;
       _needsManualLoadMore = false;
       resetPagingState(hasMore: true);
     }
 
-    if (!changed) return;
+    if (!changed && !cursorRewound) return;
     next.sort((a, b) {
       final byTime = b.createdAt.compareTo(a.createdAt);
       return byTime != 0 ? byTime : b.id.compareTo(a.id);
