@@ -90,7 +90,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
     // 不清就会"点了板块没反应"(列表在投影底下换好了但看不见)——
     // 投影态下切板块语义就是回列表,整栈清空。
     final projecting =
-        state.hasSelection && !MasterDetailLayout.canShowBothPanesFor(context);
+        state.hasSelection &&
+        !state.showingFeed &&
+        !MasterDetailLayout.canShowBothPanesFor(context);
     if (!state.isStacked &&
         !projecting &&
         !_showEmbeddedSearch &&
@@ -99,7 +101,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       return;
     }
     final notifier = ref.read(selectedTopicProvider.notifier);
-    if (!state.tabMode) {
+    if (state.tabMode) {
+      notifier.showFeed();
+    } else {
       if (projecting) {
         notifier.clear();
       } else {
@@ -145,11 +149,13 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       // 投影态(窄屏详情全宽盖着列表)下点"首页"=回列表,与压栈态同语义
       final projecting =
           selectedTopic.hasSelection &&
+          !selectedTopic.showingFeed &&
           !MasterDetailLayout.canShowBothPanesFor(context);
       if (_showEmbeddedSearch ||
           _leftCategory != null ||
           _leftTag != null ||
           selectedTopic.isStacked ||
+          (selectedTopic.tabMode && !selectedTopic.showingFeed) ||
           projecting) {
         _showFeed();
         return;
@@ -168,7 +174,10 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
 
     // ESC 语义:栈非空(宽屏右栏开着/窄屏投影着)都让分发落 detail scope
     // (关右栏/关投影);栈空才注册 maybePop 关整页。
-    _escBinding.sync(context, paneOpen: selectedTopic.hasSelection);
+    _escBinding.sync(
+      context,
+      paneOpen: selectedTopic.hasSelection && !selectedTopic.showingFeed,
+    );
 
     // 统一使用 MasterDetailLayout 处理所有情况
     // 手机/平板单栏：只显示 master;栈非空时 detail 在本页体内全宽投影
@@ -211,10 +220,12 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                   ActivePane.master,
                   _buildMasterPane(selectedTopic),
                 ),
-                panes: [
-                  for (var i = 0; i < selectedTopic.stack.length; i++)
-                    _buildPaneCell(selectedTopic, i),
-                ],
+                panes: selectedTopic.showingFeed
+                    ? const []
+                    : [
+                        for (var i = 0; i < selectedTopic.stack.length; i++)
+                          _buildPaneCell(selectedTopic, i),
+                      ],
                 // 压栈时 master 显示的是话题预览（不可交互，见
                 // TopicDetailPage.truncateOnPush 注释），不是列表——"新建话题"这个
                 // FAB 只在 master 真的是列表时才有意义，之前没跟着切换，压栈后
@@ -224,7 +235,8 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                   canCreate: user != null,
                   isActive:
                       widget.isActive &&
-                      !selectedTopic.isStacked &&
+                      (!selectedTopic.isStacked ||
+                          selectedTopic.showingFeed) &&
                       !_showEmbeddedSearch &&
                       (!selectedTopic.hasSelection ||
                           MasterDetailLayout.canShowBothPanesFor(context)),
@@ -300,7 +312,8 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
     // 投影态下"回信息流"必须整栈清空:collapseToTop 对单层栈是 no-op,
     // 投影会继续盖着列表。宽屏保留右栏基础层(仅收深层)语义不变。
     if (ref.read(selectedTopicProvider).tabMode) {
-      // Tab 模式保留正在阅读的标签，只切换左侧信息流。
+      // 保留已打开的 Tab，只将可见区域切回信息流。
+      notifier.showFeed();
     } else if (ref.read(selectedTopicProvider).hasSelection &&
         !MasterDetailLayout.canShowBothPanesFor(context)) {
       notifier.clear();
@@ -316,7 +329,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   }
 
   void _showCategory(Category category) {
-    if (!ref.read(selectedTopicProvider).tabMode) {
+    if (ref.read(selectedTopicProvider).tabMode) {
+      ref.read(selectedTopicProvider.notifier).showFeed();
+    } else {
       ref.read(selectedTopicProvider.notifier).collapseToTop();
     }
     setState(() {
@@ -328,7 +343,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   }
 
   void _showTag(String tag) {
-    if (!ref.read(selectedTopicProvider).tabMode) {
+    if (ref.read(selectedTopicProvider).tabMode) {
+      ref.read(selectedTopicProvider.notifier).showFeed();
+    } else {
       ref.read(selectedTopicProvider.notifier).collapseToTop();
     }
     setState(() {
