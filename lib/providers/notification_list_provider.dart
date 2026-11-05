@@ -140,6 +140,8 @@ class NotificationListNotifier
     final generation = ++_refreshGeneration;
     final category = _category;
     final filter = _filter;
+    _realtimeSyncTimer?.cancel();
+    _realtimeSyncTimer = null;
     _seenRealtimeIds.clear();
     resetPagingState();
     state = const AsyncLoading<List<DiscourseNotification>>();
@@ -183,11 +185,22 @@ class NotificationListNotifier
 
     final next = <DiscourseNotification>[];
     var changed = false;
+    var readFilteredSetChanged = false;
     for (final old in current) {
-      var item = latest != null && old.id == latest.id ? latest : old;
+      var item = old;
+      if (latest != null && old.id == latest.id) {
+        // A repeated last_notification may contain the stale unread flag.
+        // Only an explicit recent status can reverse an already-read item.
+        item = latest.copyWith(read: old.read || latest.read);
+      }
       final read = readStatuses[item.id];
       if (read != null && read != item.read) {
         item = item.copyWith(read: read);
+      }
+      if (_filter != NotificationReadFilter.all &&
+          _matchesReadFilter(old, _filter) !=
+              _matchesReadFilter(item, _filter)) {
+        readFilteredSetChanged = true;
       }
       if (!_matchesReadFilter(item, _filter)) {
         changed = true;
@@ -209,14 +222,15 @@ class NotificationListNotifier
       }
     }
 
-    // The history endpoint's offset counts *all* types in its read-filtered
-    // dataset, not just entries displayed in the selected category.
-    if (isNewEvent &&
-        !seen &&
-        _historyOffset > 0 &&
-        _matchesReadFilter(latest, _filter)) {
-      _historyOffset++;
-      if (_totalRows > 0) _totalRows++;
+    // MessageBus does not carry the server's historical offset. It may
+    // replay messages from before our last fetch, or remove read-filtered
+    // rows at arbitrary positions. Rewind rather than guessing an offset
+    // and silently skipping older notifications on the next load.
+    if ((isNewEvent && !seen) || readFilteredSetChanged) {
+      _historyOffset = 0;
+      _totalRows = 0;
+      _needsManualLoadMore = false;
+      resetPagingState(hasMore: true);
     }
 
     if (!changed) return;
@@ -256,26 +270,36 @@ class NotificationListNotifier
         return;
       }
       final fresh = result.page.items;
-      final existingIds = current.map((n) => n.id).toSet();
       final freshIds = fresh.map((n) => n.id).toSet();
-      final additions = fresh.where((n) => !existingIds.contains(n.id)).length;
-      final merged =
-          <DiscourseNotification>[
-            ...fresh,
-            ...current.where((n) => !freshIds.contains(n.id)),
-          ]..sort((a, b) {
-            final byTime = b.createdAt.compareTo(a.createdAt);
-            return byTime != 0 ? byTime : b.id.compareTo(a.id);
-          });
+      final oldestFresh = fresh.isEmpty ? null : fresh.last.createdAt;
+      final olderCached = current.where((item) {
+        if (freshIds.contains(item.id)) return false;
+        // Records missing from the refreshed first page must not survive
+        // inside that page's time window (for example after being read on
+        // another device). Keep genuinely older pages for scroll stability.
+        if (category == NotificationCategory.all &&
+            !result.page.hasMore) {
+          return false;
+        }
+        return _matchesReadFilter(item, filter) &&
+            (oldestFresh == null ||
+                item.createdAt.isBefore(oldestFresh));
+      });
+      final merged = <DiscourseNotification>[
+        ...fresh,
+        ...olderCached,
+      ]..sort((a, b) {
+        final byTime = b.createdAt.compareTo(a.createdAt);
+        return byTime != 0 ? byTime : b.id.compareTo(a.id);
+      });
 
-      // History offsets shift when newer rows arrive. Do not reset the
-      // history cursor or discard pages already loaded by the user.
-      if (_historyOffset > 0) _historyOffset += additions;
-      if (category == NotificationCategory.all) {
-        _totalRows = result.totalRows;
-      } else if (_totalRows > 0) {
-        _totalRows += additions;
-      }
+      // The filtered recent endpoint has no historical raw offset. Start
+      // scanning again at the beginning and dedupe against cached pages
+      // rather than guessing where new rows landed in the raw history.
+      _historyOffset = result.historyOffset;
+      _totalRows = result.totalRows;
+      _needsManualLoadMore = false;
+      resetPagingState(hasMore: result.page.hasMore);
       for (final item in fresh) {
         _seenRealtimeIds.add(item.id);
       }
