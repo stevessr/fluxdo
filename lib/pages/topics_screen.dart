@@ -239,6 +239,7 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                           selectedTopic.showingFeed) &&
                       !_showEmbeddedSearch &&
                       (!selectedTopic.hasSelection ||
+                          selectedTopic.showingFeed ||
                           MasterDetailLayout.canShowBothPanesFor(context)),
                   onRefresh: () {
                     ref.read(scrollToTopProvider.notifier).trigger();
