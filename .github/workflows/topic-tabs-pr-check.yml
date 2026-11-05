@@ -20,7 +20,7 @@ on:
       - '.github/workflows/topic-tabs-pr-check.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: topic-tabs-pr-${{ github.event.pull_request.number || github.ref }}
@@ -33,6 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           submodules: recursive
       - uses: subosito/flutter-action@v2
         with:
@@ -44,9 +45,9 @@ jobs:
         run: |
           flutter pub get
           dart run tool/gen_l10n.dart
-      - name: Check formatting
+      - name: Format changed Dart files
         run: |
-          dart format --output=none --set-exit-if-changed \
+          dart format \
             lib/main.dart \
             lib/pages/topic_detail_page/topic_detail_page.dart \
             lib/pages/topic_detail_page/topic_more_menu_actions.dart \
@@ -61,6 +62,33 @@ jobs:
             test/providers/preferences_provider_test.dart \
             test/providers/selected_topic_provider_test.dart \
             test/widgets/layout/pane_projection_test.dart
+      - name: Commit formatter output
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo "Dart files are already formatted."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            lib/main.dart \
+            lib/pages/topic_detail_page/topic_detail_page.dart \
+            lib/pages/topic_detail_page/topic_more_menu_actions.dart \
+            lib/pages/topics_page.dart \
+            lib/pages/topics_screen.dart \
+            lib/providers/preferences_provider.dart \
+            lib/providers/selected_topic_provider.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            lib/widgets/layout/pico_parallel_tabs.dart \
+            lib/widgets/layout/pane_projection_back_scope.dart \
+            test/pages/topic_detail_page/topic_more_menu_actions_test.dart \
+            test/providers/preferences_provider_test.dart \
+            test/providers/selected_topic_provider_test.dart \
+            test/widgets/layout/pane_projection_test.dart
+          git commit -m "style: format topic tab navigation changes"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
       - name: Analyze tab navigation implementation
         run: |
           flutter analyze --no-fatal-infos --no-fatal-warnings \
