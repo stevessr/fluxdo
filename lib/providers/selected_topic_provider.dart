@@ -84,12 +84,19 @@ class PaneEntry {
 /// - 关闭当前层：[SelectedTopicNotifier.pop] 退回上一层，栈空后等效于
 ///   [SelectedTopicNotifier.clear]（列表区域恢复显示）。
 class SelectedTopicState {
-  const SelectedTopicState({this.stack = const [], this.tabMode = false});
+  const SelectedTopicState({
+    this.stack = const [],
+    this.tabMode = false,
+    this.showingFeed = false,
+  });
 
   final List<PaneEntry> stack;
 
   /// 独立标签页模式；与普通的平行视界返回历史区分。
   final bool tabMode;
+
+  /// Tab 模式下显示首页信息流，但保留所有已打开标签。
+  final bool showingFeed;
 
   PaneEntry? get _top => stack.isEmpty ? null : stack.last;
 
@@ -137,13 +144,31 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
         instanceId: instanceId ?? const Uuid().v4(),
       ));
     }
-    state = SelectedTopicState(stack: tabs, tabMode: true);
+    state = SelectedTopicState(
+      stack: tabs,
+      tabMode: true,
+      showingFeed: false,
+    );
   }
 
   /// 将当前导航栈转为独立标签页；不复制当前话题的 provider 实例。
   void enableTabMode() {
     if (state.tabMode || state.stack.isEmpty) return;
-    state = SelectedTopicState(stack: state.stack, tabMode: true);
+    state = SelectedTopicState(
+      stack: state.stack,
+      tabMode: true,
+      showingFeed: false,
+    );
+  }
+
+  /// 在 Tab 模式下显示首页信息流，不销毁任何已打开的话题。
+  void showFeed() {
+    if (!state.tabMode || state.showingFeed || state.stack.isEmpty) return;
+    state = SelectedTopicState(
+      stack: state.stack,
+      tabMode: true,
+      showingFeed: true,
+    );
   }
 
   /// 从列表直接选中话题：退出独立 Tab 模式，恢复普通导航。
@@ -203,6 +228,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   }) {
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: false,
       stack: [
         ...state.stack,
         PaneEntry.topic(
@@ -244,6 +270,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     }
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: false,
       stack: [
         ...state.stack.take(state.stack.length - 1),
         PaneEntry.topic(
@@ -281,6 +308,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     }
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: false,
       stack: [
         ...state.stack.take(state.stack.length - 1),
         PaneEntry.topic(
@@ -315,6 +343,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
 
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: false,
       stack: [
         ...state.stack.take(state.stack.length - 1),
         PaneEntry.topic(
@@ -337,6 +366,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   void pushProfile(String username) {
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: false,
       stack: [
         ...state.stack,
         PaneEntry.profile(username: username),
@@ -346,13 +376,18 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
 
   /// 从搜索结果直接选择用户资料：清空旧搜索详情栈，以该资料作为第一层。
   void selectProfile(String username) {
-    state = SelectedTopicState(stack: [PaneEntry.profile(username: username)], tabMode: state.tabMode);
+    state = SelectedTopicState(
+      stack: [PaneEntry.profile(username: username)],
+      tabMode: state.tabMode,
+      showingFeed: false,
+    );
   }
 
   /// 打开设置：压栈，保留之前的层。
   void pushSettings() {
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: false,
       stack: [...state.stack, const PaneEntry.settings()],
     );
   }
@@ -366,6 +401,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     }
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: false,
       stack: [
         ...state.stack.take(state.stack.length - 1),
         PaneEntry.profile(username: username),
@@ -382,6 +418,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     }
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: false,
       stack: [
         ...state.stack.take(state.stack.length - 1),
         const PaneEntry.settings(),
@@ -399,14 +436,22 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     final panes = [...state.stack];
     final active = panes.removeAt(index);
     panes.add(active);
-    state = SelectedTopicState(stack: panes, tabMode: state.tabMode);
+    state = SelectedTopicState(
+      stack: panes,
+      tabMode: state.tabMode,
+      showingFeed: false,
+    );
   }
 
   /// 关闭单个标签。关闭背景层不影响当前页；关闭栈顶则回到上一层。
   void closeTab(int index) {
     if (index < 0 || index >= state.stack.length) return;
     final panes = [...state.stack]..removeAt(index);
-    state = SelectedTopicState(stack: panes, tabMode: state.tabMode);
+    state = SelectedTopicState(
+      stack: panes,
+      tabMode: state.tabMode,
+      showingFeed: panes.isEmpty ? true : state.showingFeed,
+    );
   }
 
   /// 关闭当前层，退回上一层。栈已空时是 no-op。
@@ -414,6 +459,9 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     if (state.stack.isEmpty) return;
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: state.tabMode && state.stack.length == 1
+          ? true
+          : false,
       stack: state.stack.sublist(0, state.stack.length - 1),
     );
   }
@@ -424,7 +472,11 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   void collapseToTop() {
     final top = state.topEntry;
     if (top == null || state.stack.length == 1) return;
-    state = SelectedTopicState(stack: [top], tabMode: state.tabMode);
+    state = SelectedTopicState(
+      stack: [top],
+      tabMode: state.tabMode,
+      showingFeed: state.showingFeed,
+    );
   }
 
   /// 消费掉栈顶的"自动打开回复框"意图。
@@ -440,6 +492,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     if (!top.autoOpenReply && top.autoReplyToPostNumber == null) return;
     state = SelectedTopicState(
       tabMode: state.tabMode,
+      showingFeed: false,
       stack: [
         ...state.stack.take(state.stack.length - 1),
         PaneEntry.topic(
