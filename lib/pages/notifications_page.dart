@@ -3,6 +3,7 @@ import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/notification_category.dart';
+import '../utils/responsive.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/preferences_provider.dart';
 import '../utils/load_more_coordinator.dart';
@@ -198,7 +199,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         .watch(systemUserAvatarTemplateProvider)
         .value;
 
-    return Scaffold(
+    // Use this pane's actual constraints, not the physical display width.
+    // A notification page nested inside a narrow parallel pane stays compact.
+    return LayoutBuilder(builder: (context, constraints) {
+      final showCategoryRail = constraints.maxWidth >=
+          PaneBreakpoints.masterWidth + PaneBreakpoints.minDetailWidth;
+      return Scaffold(
       appBar: AppBar(
         title: Text(context.l10n.common_notification),
         centerTitle: true,
@@ -213,26 +219,66 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           ),
         ],
       ),
-      body: Column(
+      body: Row(
         children: [
-          SizedBox(
-            height: 52,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-              itemCount: NotificationCategory.values.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final category = NotificationCategory.values[index];
-                return ChoiceChip(
-                  avatar: Icon(_categoryIcon(category), size: 18),
-                  label: Text(_categoryLabel(context, category)),
-                  selected: _category == category,
-                  onSelected: (_) => _setCategory(category),
-                );
-              },
+          if (showCategoryRail) ...[
+            SizedBox(
+              width: 216,
+              child: Material(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                child: SafeArea(
+                  top: false,
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 16,
+                    ),
+                    children: [
+                      for (final category in NotificationCategory.values)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(_categoryIcon(category)),
+                            title: Text(_categoryLabel(context, category)),
+                            selected: _category == category,
+                            selectedTileColor: Theme.of(context)
+                                .colorScheme.secondaryContainer,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            onTap: () => _setCategory(category),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
+            const VerticalDivider(width: 1, thickness: 1),
+          ],
+          Expanded(
+            child: Column(
+        children: [
+          if (!showCategoryRail)
+            SizedBox(
+              height: 52,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                itemCount: NotificationCategory.values.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final category = NotificationCategory.values[index];
+                  return ChoiceChip(
+                    avatar: Icon(_categoryIcon(category), size: 18),
+                    label: Text(_categoryLabel(context, category)),
+                    selected: _category == category,
+                    onSelected: (_) => _setCategory(category),
+                  );
+                },
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Align(
@@ -361,6 +407,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           ),
         ],
       ),
+          ),
+        ],
+      ),
     );
+    });
   }
 }
