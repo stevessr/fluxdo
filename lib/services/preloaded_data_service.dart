@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../utils/avatar_url.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -564,6 +565,7 @@ class PreloadedDataService {
     _loadedFromPersistentCache = false;
     _currentUser = null;
     _siteSettings = null;
+    AvatarUrl.configure(null);
     _site = null;
     _topicListData = null;
     _cachedTopicListResponse = null;
@@ -601,6 +603,7 @@ class PreloadedDataService {
   }) {
     _currentUser = currentUser;
     _siteSettings = siteSettings;
+    AvatarUrl.configure(siteSettings?['avatar_sizes']);
     _loaded = markLoaded;
   }
 
@@ -1083,6 +1086,7 @@ class PreloadedDataService {
 
       if (hydrated.containsKey('siteSettings')) {
         _siteSettings = hydrated['siteSettings'] as Map<String, dynamic>;
+        AvatarUrl.configure(_siteSettings?['avatar_sizes']);
 
         final reactionsStr =
             _siteSettings?['discourse_reactions_enabled_reactions'] as String?;

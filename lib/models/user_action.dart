@@ -1,4 +1,5 @@
 // 用户操作记录
+import 'package:fluxdo/utils/avatar_url.dart';
 import '../utils/time_utils.dart';
 
 /// 用户操作类型
@@ -56,7 +57,7 @@ class UserAction {
 
   String getAvatarUrl({int size = 120}) {
     if (avatarTemplate == null) return '';
-    return avatarTemplate!.replaceAll('{size}', '$size');
+    return AvatarUrl.resolve(avatarTemplate!, size: size);
   }
 }
 

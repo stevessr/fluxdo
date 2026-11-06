@@ -1,3 +1,4 @@
+import 'package:fluxdo/utils/avatar_url.dart';
 import '../l10n/s.dart';
 import '../utils/time_utils.dart';
 import '../utils/url_helper.dart';
@@ -456,7 +457,7 @@ class User {
       return UrlHelper.resolveUrlWithCdn(animatedAvatar!);
     }
     if (avatarTemplate == null) return '';
-    final template = avatarTemplate!.replaceAll('{size}', size.toString());
+    final template = AvatarUrl.resolve(avatarTemplate!, size: size);
     return UrlHelper.resolveUrlWithCdn(template);
   }
 }
@@ -753,7 +754,7 @@ class SummaryUserWithCount {
 
   String getAvatarUrl({int size = 120}) {
     if (avatarTemplate == null) return '';
-    final template = avatarTemplate!.replaceAll('{size}', '$size');
+    final template = AvatarUrl.resolve(avatarTemplate!, size: size);
     return UrlHelper.resolveUrlWithCdn(template);
   }
 }
@@ -829,7 +830,7 @@ class FollowUser {
 
   String getAvatarUrl({int size = 96}) {
     if (avatarTemplate == null) return '';
-    final template = avatarTemplate!.replaceAll('{size}', size.toString());
+    final template = AvatarUrl.resolve(avatarTemplate!, size: size);
     return UrlHelper.resolveUrlWithCdn(template);
   }
 }
