@@ -231,6 +231,19 @@ class _NavigationRailItem extends StatelessWidget {
         ? colorScheme.onSecondaryContainer
         : colorScheme.onSurfaceVariant;
 
+    // Anchor the switcher to the visible rail icon, not its full row.
+    // Otherwise parallel view falls back to the root overlay's bottom-right.
+    BuildContext? iconContext;
+    Widget anchoredIcon() => Builder(
+      builder: (anchorContext) {
+        iconContext = anchorContext;
+        return IconTheme(
+          data: IconThemeData(color: iconColor, size: 24),
+          child: icon,
+        );
+      },
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Material(
@@ -239,17 +252,19 @@ class _NavigationRailItem extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
-          onLongPress: onLongPress,
+          onLongPress: onLongPress == null
+              ? null
+              : () {
+                  _recordAccountQuickSwitcherAnchor(iconContext ?? context);
+                  onLongPress!();
+                },
           child: SizedBox(
             height: 56,
             child: extended
                 ? Row(
                     children: [
                       const SizedBox(width: 16),
-                      IconTheme(
-                        data: IconThemeData(color: iconColor, size: 24),
-                        child: icon,
-                      ),
+                      anchoredIcon(),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -265,10 +280,7 @@ class _NavigationRailItem extends StatelessWidget {
                     ],
                   )
                 : Center(
-                    child: IconTheme(
-                      data: IconThemeData(color: iconColor, size: 24),
-                      child: icon,
-                    ),
+                    child: anchoredIcon(),
                   ),
           ),
         ),
