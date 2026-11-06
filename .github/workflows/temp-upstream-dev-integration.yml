@@ -1,0 +1,31 @@
+name: Temporary upstream dev integration
+on:
+  push:
+    branches:
+      - sync/upstream-dev-20261106
+permissions:
+  contents: write
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Merge main into upstream-derived temporary branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge --no-edit -X theirs origin/main
+          git diff --check origin/main...HEAD
+          if git grep -n -E '^(<<<<<<< |=======|>>>>>>> )' -- '*.dart'; then
+            echo "Unresolved merge markers detected"; exit 1
+          fi
+          git rm .github/workflows/temp-upstream-dev-integration.yml
+          git commit -m "chore: remove temporary integration workflow"
+          git push origin HEAD:sync/upstream-dev-20261106
