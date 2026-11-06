@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/widgets/layout/adaptive_navigation.dart';
+import 'package:fluxdo/widgets/user/account_quick_switcher_trigger_state.dart';
 
 void main() {
   testWidgets(
@@ -68,4 +69,57 @@ void main() {
       expect(railBottom - bookmarksBottom, lessThanOrEqualTo(32));
     },
   );
+  for (final extended in [false, true]) {
+    testWidgets('rail profile long press anchors to its icon (extended=$extended)',
+        (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(900, 700);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(AccountQuickSwitcherTriggerState.clear);
+
+      var invoked = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.centerLeft,
+              child: AdaptiveNavigationRail(
+                selectedIndex: 0,
+                onDestinationSelected: (_) {},
+                extended: extended,
+                topDestinationCount: 1,
+                destinations: [
+                  const AdaptiveDestination(
+                    id: 'home',
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home),
+                    label: 'Home',
+                  ),
+                  AdaptiveDestination(
+                    id: 'profile',
+                    icon: const Icon(Icons.person_outline),
+                    selectedIcon: const Icon(Icons.person),
+                    label: 'Profile',
+                    onLongPress: () => invoked++,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final profileIcon = find.byIcon(Icons.person_outline);
+      final expectedCenter = tester.getCenter(profileIcon);
+      await tester.longPress(profileIcon);
+      expect(invoked, 1);
+      final anchor = AccountQuickSwitcherTriggerState.takeAnchor();
+      expect(anchor, isNotNull);
+      expect((anchor! - expectedCenter).distance, lessThan(1.0));
+      // A rail icon lives at the left edge, not the bottom-right corner.
+      expect(anchor.dx, lessThan(200));
+    });
+  }
+
 }
