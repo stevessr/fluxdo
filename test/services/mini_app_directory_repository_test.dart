@@ -5,189 +5,68 @@ import 'package:fluxdo/services/mini_app_directory_repository.dart';
 void main() {
   final site = Uri.parse('https://linux.do');
 
-  Dio fakeDio({
-    required List<String> calls,
-    required Response<dynamic> Function(RequestOptions) respond,
-  }) {
+  test('uses official directory endpoint, sort, search and zero-based paging', () async {
+    final calls = <Uri>[];
     final dio = Dio();
-    dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          calls.add('${options.uri.path}?page=${options.queryParameters['page']}');
-          final response = respond(options);
-          if ((response.statusCode ?? 0) >= 400) {
-            handler.reject(
-              DioException(
-                requestOptions: options,
-                response: response,
-                type: DioExceptionType.badResponse,
-              ),
-            );
-          } else {
-            handler.resolve(response);
-          }
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      calls.add(options.uri);
+      handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 200,
+        data: {
+          'apps': [
+            {
+              'app_id': '01a19674-905b-7246-99ff-2f5e270a3f8f',
+              'name': '能力测试',
+              'rating_average': 5.0,
+              'rating_count': 1,
+              'usage_count': 3098,
+              'author': {'username': 'neo'},
+            },
+          ],
+          'page': options.queryParameters['page'],
+          'total': 25,
+          'per_page': 24,
         },
-      ),
-    );
-    return dio;
-  }
-
-  test('falls back on 404 then reuses the working endpoint for next pages', () async {
-    final calls = <String>[];
-    final repository = MiniAppDirectoryRepository(
-      dio: fakeDio(
-        calls: calls,
-        respond: (options) => Response(
-          requestOptions: options,
-          statusCode: options.uri.path == '/apps/directory.json' ? 404 : 200,
-          data: options.uri.path == '/apps.json'
-              ? {
-                  'apps': [
-                    {'id': 'app-${options.queryParameters['page']}'},
-                  ],
-                  'page': options.queryParameters['page'],
-                  'per_page': 24,
-                  'total': 48,
-                }
-              : null,
-        ),
-      ),
-      site: site,
-    );
-
+      ));
+    }));
+    final repository = MiniAppDirectoryRepository(dio: dio, site: site);
     final first = await repository.fetchPage(0);
-    final second = await repository.fetchPage(1);
-    expect(first.apps.single.id, 'app-0');
+    expect(first.apps.single.name, '能力测试');
+    expect(first.apps.single.ratingAverage, 5.0);
+    expect(first.apps.single.usageCount, 3098);
+    expect(first.apps.single.authorName, 'neo');
     expect(first.hasNext, isTrue);
-    expect(second.apps.single.id, 'app-1');
-    expect(second.hasNext, isFalse);
-    expect(calls, [
-      '/apps/directory.json?page=0',
-      '/apps.json?page=0',
-      '/apps.json?page=1',
+    await repository.fetchPage(1, sort: 'latest', query: '能力');
+    await repository.fetchPage(0, sort: 'rating');
+    await repository.fetchPage(0, sort: 'used');
+    expect(calls.map((uri) => uri.path).toSet(), {
+      '/mini-app-api/apps.json',
+    });
+    expect(calls.map((uri) => uri.queryParameters), [
+      {'sort': 'hot', 'q': '', 'page': '0'},
+      {'sort': 'latest', 'q': '能力', 'page': '1'},
+      {'sort': 'rating', 'q': '', 'page': '0'},
+      {'sort': 'used', 'q': '', 'page': '0'},
     ]);
   });
 
-  test('probes alternative when the first successful page is empty', () async {
-    final calls = <String>[];
-    final repository = MiniAppDirectoryRepository(
-      dio: fakeDio(
-        calls: calls,
-        respond: (options) => Response(
-          requestOptions: options,
-          statusCode: 200,
-          data: options.uri.path == '/apps.json'
-              ? {
-                  'apps': [
-                    {'id': 'real-app'},
-                  ],
-                  'has_next': false,
-                }
-              : {'apps': []},
-        ),
-      ),
-      site: site,
-    );
-    final result = await repository.fetchPage(0);
-    expect(result.apps.single.id, 'real-app');
-    expect(calls, [
-      '/apps/directory.json?page=0',
-      '/apps.json?page=0',
-    ]);
+  test('rejects invalid sort and page without a network request', () async {
+    final repository = MiniAppDirectoryRepository(dio: Dio(), site: site);
+    await expectLater(repository.fetchPage(-1), throwsArgumentError);
+    await expectLater(repository.fetchPage(0, sort: 'invalid'), throwsArgumentError);
   });
 
-  test('empty directory survives 404 on optional alternative', () async {
-    final calls = <String>[];
-    final repository = MiniAppDirectoryRepository(
-      dio: fakeDio(
-        calls: calls,
-        respond: (options) => Response(
-          requestOptions: options,
-          statusCode: options.uri.path == '/apps.json' ? 404 : 200,
-          data: {'apps': []},
-        ),
-      ),
-      site: site,
-    );
-    expect((await repository.fetchPage(0)).apps, isEmpty);
-    expect(calls, [
-      '/apps/directory.json?page=0',
-      '/apps.json?page=0',
-    ]);
-  });
-
-  test('never falls back on authorization or rate limit failures', () async {
-    for (final status in [401, 403, 429]) {
-      final calls = <String>[];
-      final repository = MiniAppDirectoryRepository(
-        dio: fakeDio(
-          calls: calls,
-          respond: (options) => Response(
-            requestOptions: options,
-            statusCode: status,
-          ),
-        ),
-        site: site,
-      );
-
-      await expectLater(
-        repository.fetchPage(0),
-        throwsA(
-          isA<DioException>().having(
-            (error) => error.response?.statusCode,
-            'status',
-            status,
-          ),
-        ),
-      );
-      expect(calls, ['/apps/directory.json?page=0']);
-    }
-  });
-
-  test('does not treat a 200 challenge HTML page as an empty directory', () async {
-    final calls = <String>[];
-    final repository = MiniAppDirectoryRepository(
-      dio: fakeDio(
-        calls: calls,
-        respond: (options) => Response(
-          requestOptions: options,
-          statusCode: 200,
-          data: '<html>Challenge</html>',
-        ),
-      ),
-      site: site,
-    );
+  test('rejects HTML challenges instead of showing an empty directory', () async {
+    final dio = Dio();
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 200,
+        data: '<html>Challenge</html>',
+      ));
+    }));
+    final repository = MiniAppDirectoryRepository(dio: dio, site: site);
     await expectLater(repository.fetchPage(0), throwsFormatException);
-    expect(calls, ['/apps/directory.json?page=0']);
-  });
-
-  test('switches back if the cached legacy path is later removed', () async {
-    final calls = <String>[];
-    var legacyOnly = true;
-    final repository = MiniAppDirectoryRepository(
-      dio: fakeDio(
-        calls: calls,
-        respond: (options) {
-          final legacy = options.uri.path == '/apps.json';
-          final available = legacyOnly ? legacy : !legacy;
-          return Response(
-            requestOptions: options,
-            statusCode: available ? 200 : 404,
-            data: available ? {'apps': []} : null,
-          );
-        },
-      ),
-      site: site,
-    );
-
-    await repository.fetchPage(0);
-    legacyOnly = false;
-    await repository.fetchPage(0);
-    expect(calls, [
-      '/apps/directory.json?page=0',
-      '/apps.json?page=0',
-      '/apps.json?page=0',
-      '/apps/directory.json?page=0',
-    ]);
   });
 }

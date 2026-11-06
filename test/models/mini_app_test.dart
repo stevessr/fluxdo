@@ -4,6 +4,40 @@ import 'package:fluxdo/models/mini_app.dart';
 void main() {
   final site = Uri.parse('https://linux.do');
 
+  test('parses official mini-app-api app_id and catalog metadata', () {
+    final result = MiniAppDirectory.parse(
+      {
+        'apps': [
+          {
+            'app_id': '01a19674-905b-7246-99ff-2f5e270a3f8f',
+            'name': '能力测试',
+            'rating_average': 5.0,
+            'rating_count': 1,
+            'usage_count': 3098,
+            'author': {'name': 'Neo', 'username': 'neo'},
+          },
+        ],
+        'page': 0,
+        'total': 31,
+        'per_page': 24,
+        'sort': 'used',
+        'query': '',
+      },
+      site: site,
+      requestedPage: 0,
+    );
+    expect(result.apps, hasLength(1));
+    final app = result.apps.single;
+    expect(app.id, '01a19674-905b-7246-99ff-2f5e270a3f8f');
+    expect(app.url.toString(),
+        'https://linux.do/apps/01a19674-905b-7246-99ff-2f5e270a3f8f');
+    expect(app.ratingAverage, 5.0);
+    expect(app.ratingCount, 1);
+    expect(app.usageCount, 3098);
+    expect(app.authorName, 'Neo');
+    expect(result.hasNext, isTrue);
+  });
+
   test('parses paginated mini-app directory responses', () {
     final result = MiniAppDirectory.parse(
       {

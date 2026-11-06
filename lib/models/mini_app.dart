@@ -7,6 +7,10 @@ class MiniApp {
     this.description = '',
     this.iconUrl,
     this.ageRating,
+    this.ratingAverage,
+    this.ratingCount,
+    this.usageCount,
+    this.authorName,
   });
 
   final String id;
@@ -15,6 +19,10 @@ class MiniApp {
   final String description;
   final String? iconUrl;
   final int? ageRating;
+  final double? ratingAverage;
+  final int? ratingCount;
+  final int? usageCount;
+  final String? authorName;
 
   static MiniApp? tryParse(Object? raw, {required Uri site}) {
     if (raw is! Map) return null;
@@ -22,7 +30,10 @@ class MiniApp {
     // A site may return both a UUID and a human-readable slug.
     // Prefer the stable ID for deduplication while accepting either URL.
     final id =
-        _string(data['id']) ?? _string(data['uuid']) ?? _string(data['slug']);
+        _string(data['app_id']) ??
+        _string(data['id']) ??
+        _string(data['uuid']) ??
+        _string(data['slug']);
     final slug = _string(data['slug']);
     final uuid = _string(data['uuid']);
     if (id == null || !RegExp(r'^[a-zA-Z0-9_-]{1,128}$').hasMatch(id)) {
@@ -61,6 +72,10 @@ class MiniApp {
         ? iconUri.toString()
         : null;
     final rawRating = data['age_rating'];
+    final author = data['author'];
+    final authorName = author is Map
+        ? _string(author['name']) ?? _string(author['username'])
+        : null;
     return MiniApp(
       id: id,
       name: _string(data['name']) ?? _string(data['title']) ?? id,
@@ -68,9 +83,11 @@ class MiniApp {
           _string(data['description']) ?? _string(data['summary']) ?? '',
       url: candidate,
       iconUrl: iconUrl,
-      ageRating: rawRating is int
-          ? rawRating
-          : int.tryParse(rawRating?.toString() ?? ''),
+      ageRating: _integer(rawRating),
+      ratingAverage: _decimal(data['rating_average']),
+      ratingCount: _integer(data['rating_count']),
+      usageCount: _integer(data['usage_count']),
+      authorName: authorName,
     );
   }
 
@@ -85,6 +102,21 @@ class MiniApp {
     } on FormatException {
       return null;
     }
+  }
+
+  static int? _integer(Object? value) {
+    if (value is int) return value;
+    if (value is num && value.isFinite && value == value.toInt()) {
+      return value.toInt();
+    }
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  static double? _decimal(Object? value) {
+    final result = value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString() ?? '');
+    return result != null && result.isFinite ? result : null;
   }
 
   static String? _string(Object? value) {
@@ -233,4 +265,16 @@ class MiniAppDirectory {
     }
     return null;
   }
+}
+
+
+// 官方 Mini App 目录的服务端排序参数。
+enum MiniAppSort {
+  hot('hot'),
+  latest('latest'),
+  rating('rating'),
+  used('used');
+
+  const MiniAppSort(this.apiValue);
+  final String apiValue;
 }
