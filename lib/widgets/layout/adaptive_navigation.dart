@@ -228,6 +228,20 @@ class _NavigationRailItem extends StatelessWidget {
         ? colorScheme.onSecondaryContainer
         : colorScheme.onSurfaceVariant;
 
+    // Capture the actual icon instead of the full rail item. In parallel
+    // view the rail is at the left edge; without an anchor the radial overlay
+    // falls back to the bottom-right corner of the whole window.
+    BuildContext? iconContext;
+    Widget anchoredIcon() => Builder(
+      builder: (anchorContext) {
+        iconContext = anchorContext;
+        return IconTheme(
+          data: IconThemeData(color: iconColor, size: 24),
+          child: icon,
+        );
+      },
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Material(
@@ -236,17 +250,19 @@ class _NavigationRailItem extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
-          onLongPress: onLongPress,
+          onLongPress: onLongPress == null
+              ? null
+              : () {
+                  _recordAccountQuickSwitcherAnchor(iconContext ?? context);
+                  onLongPress!();
+                },
           child: SizedBox(
             height: 56,
             child: extended
                 ? Row(
                     children: [
                       const SizedBox(width: 16),
-                      IconTheme(
-                        data: IconThemeData(color: iconColor, size: 24),
-                        child: icon,
-                      ),
+                      anchoredIcon(),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -262,10 +278,7 @@ class _NavigationRailItem extends StatelessWidget {
                     ],
                   )
                 : Center(
-                    child: IconTheme(
-                      data: IconThemeData(color: iconColor, size: 24),
-                      child: icon,
-                    ),
+                    child: anchoredIcon(),
                   ),
           ),
         ),
