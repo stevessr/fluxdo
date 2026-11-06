@@ -7,6 +7,7 @@ import '../constants.dart';
 import '../models/mini_app.dart';
 import '../services/discourse/discourse_service.dart';
 import '../services/mini_app_directory_repository.dart';
+import 'mini_app_runtime_page.dart';
 import 'webview_page.dart';
 
 /// Native directory for site-hosted mini apps. Execution stays in the website:
@@ -347,10 +348,10 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () => WebViewPage.open(
-                              context,
-                              app.url.toString(),
-                              title: app.name,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => MiniAppRuntimePage(app: app),
+                              ),
                             ),
                           ),
                         );
