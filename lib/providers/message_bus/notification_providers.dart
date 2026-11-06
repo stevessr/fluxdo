@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../l10n/s.dart';
 import '../../services/message_bus_service.dart';
 import '../../services/local_notification_service.dart';
@@ -71,8 +72,8 @@ class NotificationCountNotifier extends Notifier<NotificationCountState> {
 
 final notificationCountStateProvider =
     NotifierProvider<NotificationCountNotifier, NotificationCountState>(() {
-  return NotificationCountNotifier();
-});
+      return NotificationCountNotifier();
+    });
 
 /// 通知频道监听器
 /// 当收到通知消息时更新计数并刷新通知列表
@@ -86,9 +87,7 @@ class NotificationChannelNotifier extends Notifier<void> {
     // 确保 MessageBus 已 configure（域名配置），避免用主站域名轮询
     ref.watch(messageBusInitProvider);
     final messageBus = ref.watch(messageBusServiceProvider);
-    // 只认身份与起始位点：整份 watch 会在每次 currentUser 刷新时重订，
-    // 位点倒回预加载值重放积压。缓存用户的位点是 -1，preloaded 到达后
-    // 位点变化会触发一次重订补上空窗，这是唯一需要的重订。
+    // Re-subscribe only when account identity or the authoritative initial position changes.
     final subscription = ref.watch(
       currentUserProvider.select((value) {
         final user = value.value;
@@ -112,25 +111,91 @@ class NotificationChannelNotifier extends Notifier<void> {
 
     final channel = '/notification/${subscription.id}';
     final initialMessageId = subscription.position;
-    
-    debugPrint('[NotificationChannel] 订阅频道: $channel, 初始 messageId: $initialMessageId');
-    
+
+    debugPrint(
+      '[NotificationChannel] 订阅频道: $channel, 初始 messageId: $initialMessageId',
+    );
+
     void onMessage(MessageBusMessage message) {
+      // Ignore queued callbacks from the previous account during switching.
+      if (ref.read(currentUserProvider).value?.id != subscription.id) return;
       final data = message.data;
       if (data is Map<String, dynamic>) {
         final allUnreadCount = data['all_unread_notifications_count'] as int?;
         final unreadCount = data['unread_notifications'] as int?;
-        final unreadHighPriority = data['unread_high_priority_notifications'] as int?;
+        final unreadHighPriority =
+            data['unread_high_priority_notifications'] as int?;
 
-        debugPrint('[Notification] 计数更新: allUnread=$allUnreadCount, unread=$unreadCount, highPriority=$unreadHighPriority');
+        debugPrint(
+          '[Notification] 计数更新: allUnread=$allUnreadCount, unread=$unreadCount, highPriority=$unreadHighPriority',
+        );
 
         // 更新通知计数
-        if (allUnreadCount != null || unreadCount != null || unreadHighPriority != null) {
-          ref.read(notificationCountStateProvider.notifier).update(
-            allUnread: allUnreadCount,
-            unread: unreadCount,
-            highPriority: unreadHighPriority,
-          );
+        if (allUnreadCount != null ||
+            unreadCount != null ||
+            unreadHighPriority != null) {
+          ref
+              .read(notificationCountStateProvider.notifier)
+              .update(
+                allUnread: allUnreadCount,
+                unread: unreadCount,
+                highPriority: unreadHighPriority,
+              );
+        }
+
+        // Forward the same event to the full history page only when mounted.
+        // Count-only and recent-only events need a quiet server reconciliation.
+        if (ref.exists(notificationListProvider)) {
+          final historyState = ref.read(notificationListProvider);
+          final notifier = ref.read(notificationListProvider.notifier);
+          if (historyState.hasValue) {
+            DiscourseNotification? latest;
+            final last = data['last_notification'];
+            if (last is Map<String, dynamic>) {
+              final raw = last['notification'];
+              if (raw is Map<String, dynamic>) {
+                try {
+                  latest = DiscourseNotification.fromJson(raw);
+                  if (latest.userId != subscription.id) {
+                    latest = null;
+                  }
+                } catch (_) {
+                  // Some events contain only a counter or a partial payload.
+                }
+              }
+            }
+            final statuses = <int, bool>{};
+            final recent = data['recent'];
+            if (recent is List) {
+              for (final entry in recent) {
+                if (entry is List &&
+                    entry.length >= 2 &&
+                    entry[0] is int &&
+                    entry[1] is bool) {
+                  statuses[entry[0] as int] = entry[1] as bool;
+                }
+              }
+            }
+            final loadedIds = historyState.value!
+                .map((notification) => notification.id)
+                .toSet();
+            final unseenRecentId = statuses.keys.any(
+              (id) => !loadedIds.contains(id) && id != latest?.id,
+            );
+            notifier.applyRealtimeUpdate(
+              latest: latest,
+              readStatuses: statuses,
+            );
+            // A single last_notification may not cover all recent IDs after
+            // a reconnect. Reconcile without changing the visible selection.
+            if (latest == null || historyState.isLoading || unseenRecentId) {
+              notifier.scheduleRealtimeSync();
+            }
+          } else {
+            // A push may arrive while the first history request is loading.
+            // Reconcile after it completes instead of silently losing it.
+            notifier.scheduleRealtimeSync();
+          }
         }
 
         // 仅在通知列表已加载（面板已打开过）时做增量更新，
@@ -138,7 +203,9 @@ class NotificationChannelNotifier extends Notifier<void> {
         if (ref.exists(recentNotificationsProvider)) {
           final recentState = ref.read(recentNotificationsProvider);
           if (recentState.hasValue) {
-            final recentNotifier = ref.read(recentNotificationsProvider.notifier);
+            final recentNotifier = ref.read(
+              recentNotificationsProvider.notifier,
+            );
 
             // 如果有新通知，从 last_notification 中提取并添加到列表
             final lastNotification = data['last_notification'];
@@ -146,7 +213,9 @@ class NotificationChannelNotifier extends Notifier<void> {
               final notification = lastNotification['notification'];
               if (notification is Map<String, dynamic>) {
                 try {
-                  final newNotification = DiscourseNotification.fromJson(notification);
+                  final newNotification = DiscourseNotification.fromJson(
+                    notification,
+                  );
                   final blockedUsernames = ref
                       .read(preferencesProvider)
                       .normalizedBlockedUsernames;
@@ -154,7 +223,9 @@ class NotificationChannelNotifier extends Notifier<void> {
                     newNotification,
                     blockedUsernames,
                   )) {
-                    debugPrint('[Notification] 添加新通知到列表: id=${newNotification.id}');
+                    debugPrint(
+                      '[Notification] 添加新通知到列表: id=${newNotification.id}',
+                    );
                     recentNotifier.addNotification(newNotification);
                   }
                 } catch (e) {
@@ -183,15 +254,14 @@ class NotificationChannelNotifier extends Notifier<void> {
             }
           }
         }
-
       }
     }
-    
+
     _subscribedChannel = channel;
     _callback = onMessage;
-    
+
     messageBus.subscribeWithMessageId(channel, onMessage, initialMessageId);
-    
+
     ref.onDispose(() {
       if (_subscribedChannel != null && _callback != null) {
         debugPrint('[NotificationChannel] 取消订阅频道: $_subscribedChannel');
@@ -201,9 +271,10 @@ class NotificationChannelNotifier extends Notifier<void> {
   }
 }
 
-final notificationChannelProvider = NotifierProvider<NotificationChannelNotifier, void>(
-  NotificationChannelNotifier.new,
-);
+final notificationChannelProvider =
+    NotifierProvider<NotificationChannelNotifier, void>(
+      NotificationChannelNotifier.new,
+    );
 
 /// 通知提醒频道监听器（复刻 Discourse 官方实现）
 /// 订阅 /notification-alert/{userId} 频道，用于触发系统通知
@@ -216,12 +287,11 @@ class NotificationAlertChannelNotifier extends Notifier<void> {
     // 确保 MessageBus 已 configure（域名配置），避免用主站域名轮询
     ref.watch(messageBusInitProvider);
     final messageBus = ref.watch(messageBusServiceProvider);
-    // 只认身份（同 NotificationChannelNotifier）：重订会以 -1 起订，
-    // 退订到重订之间到达的提醒直接丢失，系统通知就漏了
+    // Refreshing profile data must not interrupt the notification-alert subscription.
     final currentUserId = ref.watch(
       currentUserProvider.select((value) => value.value?.id),
     );
-    
+
     // 清理之前的订阅
     if (_subscribedChannel != null && _callback != null) {
       debugPrint('[NotificationAlert] 清理旧订阅: $_subscribedChannel');
@@ -229,21 +299,21 @@ class NotificationAlertChannelNotifier extends Notifier<void> {
       _subscribedChannel = null;
       _callback = null;
     }
-    
+
     if (currentUserId == null) {
       debugPrint('[NotificationAlert] 用户未登录，跳过订阅');
       return;
     }
-    
+
     // Discourse 官方使用 /notification-alert/{userId} 频道触发桌面通知
     final channel = '/notification-alert/$currentUserId';
-    
+
     debugPrint('[NotificationAlert] 订阅频道: $channel');
-    
+
     void onAlert(MessageBusMessage message) {
       final data = message.data;
       debugPrint('[NotificationAlert] 收到提醒: $data');
-      
+
       if (data is Map<String, dynamic>) {
         // Discourse payload 格式:
         // {
@@ -288,7 +358,9 @@ class NotificationAlertChannelNotifier extends Notifier<void> {
           body = username;
         }
 
-        debugPrint('[NotificationAlert] 发送系统通知: title=$title, body=$body, topicId=$topicId, postNumber=$postNumber');
+        debugPrint(
+          '[NotificationAlert] 发送系统通知: title=$title, body=$body, topicId=$topicId, postNumber=$postNumber',
+        );
 
         final parsedType = notificationType != null
             ? NotificationType.fromId(notificationType)
@@ -317,12 +389,12 @@ class NotificationAlertChannelNotifier extends Notifier<void> {
         );
       }
     }
-    
+
     _subscribedChannel = channel;
     _callback = onAlert;
-    
+
     messageBus.subscribe(channel, onAlert);
-    
+
     ref.onDispose(() {
       if (_subscribedChannel != null && _callback != null) {
         debugPrint('[NotificationAlert] 取消订阅频道: $_subscribedChannel');
@@ -330,7 +402,7 @@ class NotificationAlertChannelNotifier extends Notifier<void> {
       }
     });
   }
-  
+
   /// 获取通知类型标签
   String _getNotificationTypeLabel(int? type) {
     if (type == null) return S.current.notification_newNotification;
@@ -339,6 +411,7 @@ class NotificationAlertChannelNotifier extends Notifier<void> {
   }
 }
 
-final notificationAlertChannelProvider = NotifierProvider<NotificationAlertChannelNotifier, void>(
-  NotificationAlertChannelNotifier.new,
-);
+final notificationAlertChannelProvider =
+    NotifierProvider<NotificationAlertChannelNotifier, void>(
+      NotificationAlertChannelNotifier.new,
+    );

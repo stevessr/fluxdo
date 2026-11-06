@@ -1,4 +1,5 @@
 import 'dart:async';
+
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/legacy.dart';
 
@@ -35,9 +36,9 @@ class ApkUpdateNotifier extends StateNotifier<ApkUpdateState> {
   ApkUpdateNotifier({
     ApkDownloadService? service,
     LocalNotificationService? notification,
-  })  : _service = service ?? ApkDownloadService(),
-        _notification = notification ?? LocalNotificationService(),
-        super(const ApkUpdateState());
+  }) : _service = service ?? ApkDownloadService(),
+       _notification = notification ?? LocalNotificationService(),
+       super(const ApkUpdateState());
 
   final ApkDownloadService _service;
   final LocalNotificationService _notification;
@@ -54,18 +55,20 @@ class ApkUpdateNotifier extends StateNotifier<ApkUpdateState> {
     _resetNotificationCache();
     state = ApkUpdateState(asset: asset);
 
-    _sub = _service.downloadAndInstall(asset).listen(
-      (progress) => _emit(progress, asset),
-      onError: (Object error, StackTrace _) {
-        _emit(
-          ApkDownloadProgress(
-            status: ApkDownloadStatus.error,
-            error: error.toString(),
-          ),
-          asset,
+    _sub = _service
+        .downloadAndInstall(asset)
+        .listen(
+          (progress) => _emit(progress, asset),
+          onError: (Object error, StackTrace _) {
+            _emit(
+              ApkDownloadProgress(
+                status: ApkDownloadStatus.error,
+                error: error.toString(),
+              ),
+              asset,
+            );
+          },
         );
-      },
-    );
   }
 
   /// 用户主动取消：关闭通知、清空状态
@@ -127,9 +130,7 @@ class ApkUpdateNotifier extends StateNotifier<ApkUpdateState> {
 
       case ApkDownloadStatus.error:
         _lastNotifiedStatus = s;
-        unawaited(
-          _notification.cancelNotification(apkUpdateNotificationId),
-        );
+        unawaited(_notification.cancelNotification(apkUpdateNotificationId));
         return;
 
       case ApkDownloadStatus.verifying:
@@ -173,5 +174,5 @@ class ApkUpdateNotifier extends StateNotifier<ApkUpdateState> {
 
 final apkUpdateProvider =
     StateNotifierProvider<ApkUpdateNotifier, ApkUpdateState>((ref) {
-  return ApkUpdateNotifier();
-});
+      return ApkUpdateNotifier();
+    });

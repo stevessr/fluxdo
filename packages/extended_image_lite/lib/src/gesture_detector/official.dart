@@ -579,12 +579,12 @@ sealed class _DragGestureRecognizer extends OneSequenceGestureRecognizer {
     required _DragDirection axis,
     required Offset localDelta,
   }) {
-    final bool positive =
-        axis == _DragDirection.horizontal
-            ? localDelta.dx > 0
-            : localDelta.dy > 0;
-    final double delta =
-        axis == _DragDirection.horizontal ? localDelta.dx : localDelta.dy;
+    final bool positive = axis == _DragDirection.horizontal
+        ? localDelta.dx > 0
+        : localDelta.dy > 0;
+    final double delta = axis == _DragDirection.horizontal
+        ? localDelta.dx
+        : localDelta.dy;
     final int? maxSumDeltaPointer = _getMaxSumDeltaPointer(
       positive: positive,
       axis: axis,
@@ -624,8 +624,9 @@ sealed class _DragGestureRecognizer extends OneSequenceGestureRecognizer {
     required _DragDirection axis,
     required Offset localDelta,
   }) {
-    final double delta =
-        axis == _DragDirection.horizontal ? localDelta.dx : localDelta.dy;
+    final double delta = axis == _DragDirection.horizontal
+        ? localDelta.dx
+        : localDelta.dy;
     final int pointerCount = _acceptedActivePointers.length;
     assert(pointerCount >= 1);
 
@@ -661,23 +662,19 @@ sealed class _DragGestureRecognizer extends OneSequenceGestureRecognizer {
     }
     if ((event is PointerMoveEvent || event is PointerPanZoomUpdateEvent) &&
         _shouldTrackMoveEvent(event.pointer)) {
-      final Offset delta =
-          (event is PointerMoveEvent)
-              ? event.delta
-              : (event as PointerPanZoomUpdateEvent).panDelta;
-      final Offset localDelta =
-          (event is PointerMoveEvent)
-              ? event.localDelta
-              : (event as PointerPanZoomUpdateEvent).localPanDelta;
-      final Offset position =
-          (event is PointerMoveEvent)
-              ? event.position
-              : (event.position + (event as PointerPanZoomUpdateEvent).pan);
-      final Offset localPosition =
-          (event is PointerMoveEvent)
-              ? event.localPosition
-              : (event.localPosition +
-                  (event as PointerPanZoomUpdateEvent).localPan);
+      final Offset delta = (event is PointerMoveEvent)
+          ? event.delta
+          : (event as PointerPanZoomUpdateEvent).panDelta;
+      final Offset localDelta = (event is PointerMoveEvent)
+          ? event.localDelta
+          : (event as PointerPanZoomUpdateEvent).localPanDelta;
+      final Offset position = (event is PointerMoveEvent)
+          ? event.position
+          : (event.position + (event as PointerPanZoomUpdateEvent).pan);
+      final Offset localPosition = (event is PointerMoveEvent)
+          ? event.localPosition
+          : (event.localPosition +
+                (event as PointerPanZoomUpdateEvent).localPan);
       _lastPosition = OffsetPair(local: localPosition, global: position);
       final Offset resolvedDelta = _resolveLocalDeltaForMultitouch(
         event.pointer,
@@ -689,10 +686,9 @@ sealed class _DragGestureRecognizer extends OneSequenceGestureRecognizer {
           _lastPendingEventTimestamp = event.timeStamp;
           _lastTransform = event.transform;
           final Offset movedLocally = _getDeltaForDetails(localDelta);
-          final Matrix4? localToGlobalTransform =
-              event.transform == null
-                  ? null
-                  : Matrix4.tryInvert(event.transform!);
+          final Matrix4? localToGlobalTransform = event.transform == null
+              ? null
+              : Matrix4.tryInvert(event.transform!);
           _globalDistanceMoved +=
               PointerEvent.transformDeltaViaPositions(
                 transform: localToGlobalTransform,
@@ -783,10 +779,9 @@ sealed class _DragGestureRecognizer extends OneSequenceGestureRecognizer {
 
     _moveDeltaBeforeFrame.remove(pointer);
     if (_activePointer == pointer) {
-      _activePointer =
-          _acceptedActivePointers.isNotEmpty
-              ? _acceptedActivePointers.first
-              : null;
+      _activePointer = _acceptedActivePointers.isNotEmpty
+          ? _acceptedActivePointers.first
+          : null;
     }
   }
 
@@ -821,8 +816,9 @@ sealed class _DragGestureRecognizer extends OneSequenceGestureRecognizer {
     _lastTransform = null;
     _checkStart(timestamp, pointer);
     if (localUpdateDelta != Offset.zero && onUpdate != null) {
-      final Matrix4? localToGlobal =
-          transform != null ? Matrix4.tryInvert(transform) : null;
+      final Matrix4? localToGlobal = transform != null
+          ? Matrix4.tryInvert(transform)
+          : null;
       final Offset correctedLocalPosition =
           _initialPosition.local + localUpdateDelta;
       final Offset globalUpdateDelta = PointerEvent.transformDeltaViaPositions(
@@ -895,10 +891,9 @@ sealed class _DragGestureRecognizer extends OneSequenceGestureRecognizer {
       debugReport = () => 'Could not estimate velocity.';
     } else {
       details = considerFling(estimate, tracker.kind);
-      debugReport =
-          (details != null)
-              ? () => '$estimate; fling at ${details!.velocity}.'
-              : () => '$estimate; judged to not be a fling.';
+      debugReport = (details != null)
+          ? () => '$estimate; fling at ${details!.velocity}.'
+          : () => '$estimate; judged to not be a fling.';
     }
     details ??= DragEndDetails(
       primaryVelocity: 0.0,

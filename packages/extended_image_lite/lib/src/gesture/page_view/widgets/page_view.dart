@@ -327,15 +327,18 @@ class _GesturePageViewState extends State<GesturePageView> {
   @override
   Widget build(BuildContext context) {
     final AxisDirection axisDirection = _getDirection(context);
-    final ScrollPhysics physics = _ForceImplicitScrollPhysics(
-      allowImplicitScrolling: widget.allowImplicitScrolling,
-    ).applyTo(
-      widget.pageSnapping
-          ? _kPagePhysics.applyTo(
-            widget.physics ?? widget.scrollBehavior?.getScrollPhysics(context),
-          )
-          : widget.physics ?? widget.scrollBehavior?.getScrollPhysics(context),
-    );
+    final ScrollPhysics physics =
+        _ForceImplicitScrollPhysics(
+          allowImplicitScrolling: widget.allowImplicitScrolling,
+        ).applyTo(
+          widget.pageSnapping
+              ? _kPagePhysics.applyTo(
+                  widget.physics ??
+                      widget.scrollBehavior?.getScrollPhysics(context),
+                )
+              : widget.physics ??
+                    widget.scrollBehavior?.getScrollPhysics(context),
+        );
 
     return NotificationListener<ScrollNotification>(
       onNotification: (ScrollNotification notification) {

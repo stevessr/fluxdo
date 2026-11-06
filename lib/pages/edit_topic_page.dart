@@ -651,10 +651,7 @@ class _EditTopicPageState extends ConsumerState<EditTopicPage> {
               top: 0,
               left: 0,
               right: 0,
-              child: ComposerTopFade(
-                height: _topChromeInset,
-                statusBarHeight: MediaQuery.viewPaddingOf(context).top,
-              ),
+              child: ComposerTopFade(height: _topChromeInset),
             ),
           ],
         ),
@@ -672,11 +669,7 @@ class _EditTopicPageState extends ConsumerState<EditTopicPage> {
             if (!_isSubmitting && !_isLoadingContent) _submit();
           },
       },
-      child: ComposerChromeScope(
-        controller: _chrome,
-        topInset: _topChromeInset,
-        child: page,
-      ),
+      child: ComposerChromeScope(controller: _chrome, child: page),
     );
   }
 
@@ -896,6 +889,7 @@ class _EditTopicPageState extends ConsumerState<EditTopicPage> {
                                     minimumLength: _minContentLength,
                                   ),
                                   controller: _contentController,
+                                  enableStevessr: true,
                                   focusNode: _contentFocusNode,
                                   hintText:
                                       context.l10n.createTopic_contentHint,

@@ -189,9 +189,8 @@ class _StickerMarketSheetState extends ConsumerState<StickerMarketSheet> {
     );
   }
 
-  /// 分类 chips（横向滚动）。topics.json 取不到（旧版服务端 / 请求失败）或
-  /// 全部是空分类时整行不占位，此时只剩「全部」的浏览行为；totalGroups == 0
-  /// 的空分类不展示（点了只会看到空列表）。
+  /// 分类 chips（横向滚动）。索引无 topics（旧版数据）或全部为空分类时
+  /// 整行不占位；totalGroups == 0 的空分类不展示（点了只会看到空列表）。
   Widget _buildTopicChips(AsyncValue<List<StickerMarketTopic>> topicsAsync) {
     final theme = Theme.of(context);
     final topics = (topicsAsync.value ?? const <StickerMarketTopic>[])
@@ -314,7 +313,6 @@ class _StickerMarketSheetState extends ConsumerState<StickerMarketSheet> {
 
     final notifier = ref.read(marketGroupsProvider.notifier);
     final itemCount = groups.length + 1;
-
     return ListView.builder(
       controller: _scrollController,
       // 外壳走 expandToFill、不叠加键盘内边距，键盘弹出时底部由列表自己让位
@@ -358,18 +356,15 @@ class _StickerGroupTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isSubscribed = ref.watch(
-      subscribedStickerGroupsProvider.select(
-        (groups) => groups.any((g) => g.id == group.id),
-      ),
+      subscribedStickerIdsProvider.select((ids) => ids.contains(group.id)),
     );
 
     void onToggle() async {
-      final notifier = ref.read(subscribedStickerGroupsProvider.notifier);
+      final notifier = ref.read(subscribedStickerIdsProvider.notifier);
       if (isSubscribed) {
         await notifier.unsubscribe(group.id);
       } else {
-        // 整个 group 一起交出去:name/icon 就地落盘，表情面板首帧不用再回网络
-        await notifier.subscribe(group);
+        await notifier.subscribe(group.id);
       }
     }
 

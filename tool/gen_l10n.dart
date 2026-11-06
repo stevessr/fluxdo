@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '_workspace_cli.dart';
 import 'gen_slang_compat.dart' as compat;
+
 import 'package:slang/src/builder/builder/slang_file_collection_builder.dart';
 import 'package:slang/src/runner/generate.dart';
 

@@ -14,8 +14,13 @@ import 'package:fluxdo/widgets/markdown_editor/sticker_market_sheet.dart';
 
 class _Service extends StickerMarketService {
   _Service(super.prefs);
+
   @override
   Future<List<StickerMarketTopic>> getTopics() async => [];
+
+  @override
+  Future<List<StickerGroup>> getAllGroups() async => const [];
+
   @override
   Future<(List<StickerGroup>, int)> getGroupsPageWithMeta(
     int page, {

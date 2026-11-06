@@ -75,10 +75,9 @@ class ExtendedImageSlidePageState extends State<ExtendedImageSlidePage>
   Animation<double>? _backScaleAnimation;
   Animation<double>? get backScaleAnimation => _backScaleAnimation;
   Offset _offset = Offset.zero;
-  Offset get offset =>
-      _backAnimationController.isAnimating
-          ? _backOffsetAnimation!.value
-          : _offset;
+  Offset get offset => _backAnimationController.isAnimating
+      ? _backOffsetAnimation!.value
+      : _offset;
   double _scale = 1.0;
   double get scale =>
       _backAnimationController.isAnimating ? backScaleAnimation!.value : _scale;

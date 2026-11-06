@@ -87,6 +87,14 @@
   "post_flagFailed": "Report failed, please retry",
   "post_flagMessageUser": "Message @{username}",
   "post_flagNotifyModerators": "Notify moderators privately",
+  "post_flaggedAs": "Flagged as {reason}",
+  "@post_flaggedAs": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "post_flagSubmitted": "Report submitted",
   "post_flagTitle": "Report post",
   "post_generateShareImage": "Generate share image",
@@ -114,6 +122,16 @@
   "post_replySentAction": "View",
   "post_replyTo": "Reply to",
   "post_replyToTopic": "Reply to topic",
+  "post_replyAsNewTopic": "Reply as linked Topic",
+  "post_replyAsNewPrivateMessage": "Reply as new message to the same recipients",
+  "post_continueDiscussion": "Continuing the discussion from {postLink}:",
+  "@post_continueDiscussion": {
+    "placeholders": {
+      "postLink": {
+        "type": "String"
+      }
+    }
+  },
   "post_replyToUser": "Reply to @{username}",
   "post_returningUserNotice": "Welcome back {username} — their last post was {timeText}.",
   "pm_recipientHint": "Search users or groups",

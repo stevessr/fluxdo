@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/profile_stats_config.dart';
 import 'theme_provider.dart'; // sharedPreferencesProvider
 
@@ -40,10 +42,7 @@ class ProfileStatsConfigNotifier extends Notifier<ProfileStatsConfig> {
     final compatible = state.enabledStats
         .where((s) => isStatCompatible(s, source))
         .toList();
-    update(state.copyWith(
-      dataSource: source,
-      enabledStats: compatible,
-    ));
+    update(state.copyWith(dataSource: source, enabledStats: compatible));
   }
 
   void setEnabledStats(List<ProfileStatType> stats) {
@@ -52,16 +51,16 @@ class ProfileStatsConfigNotifier extends Notifier<ProfileStatsConfig> {
 
   void addStat(ProfileStatType stat) {
     if (!state.enabledStats.contains(stat)) {
-      update(state.copyWith(
-        enabledStats: [...state.enabledStats, stat],
-      ));
+      update(state.copyWith(enabledStats: [...state.enabledStats, stat]));
     }
   }
 
   void removeStat(ProfileStatType stat) {
-    update(state.copyWith(
-      enabledStats: state.enabledStats.where((s) => s != stat).toList(),
-    ));
+    update(
+      state.copyWith(
+        enabledStats: state.enabledStats.where((s) => s != stat).toList(),
+      ),
+    );
   }
 
   void reorderStats(int oldIndex, int newIndex) {
@@ -84,5 +83,5 @@ class ProfileStatsConfigNotifier extends Notifier<ProfileStatsConfig> {
 
 final profileStatsConfigProvider =
     NotifierProvider<ProfileStatsConfigNotifier, ProfileStatsConfig>(
-  ProfileStatsConfigNotifier.new,
-);
+      ProfileStatsConfigNotifier.new,
+    );

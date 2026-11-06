@@ -90,9 +90,8 @@ class ClipboardTopicLinkSnackContent extends StatelessWidget {
                   ),
                   IconButton(
                     onPressed: onDismiss,
-                    tooltip: MaterialLocalizations.of(
-                      context,
-                    ).closeButtonTooltip,
+                    tooltip: MaterialLocalizations.of(context)
+                        .closeButtonTooltip,
                     icon: const Icon(Symbols.close_rounded),
                     iconSize: 20,
                     style: IconButton.styleFrom(

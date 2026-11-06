@@ -13,6 +13,7 @@ import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageProvider;
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart' as acrylic;
+
 import 'pages/topics_page.dart';
 import 'pages/data_management_page.dart';
 import 'providers/discourse_providers.dart';
@@ -20,18 +21,19 @@ import 'providers/selected_topic_provider.dart';
 import 'providers/locale_provider.dart';
 import 'widgets/ai/builtin_presets_factory.dart';
 import 'providers/message_bus_providers.dart';
-import 'providers/chat/chat_notification_alert_provider.dart';
+import 'providers/chat_notification_alert_provider.dart';
 import 'services/auth_issue_notice_service.dart';
 import 'services/crash_context_reporter.dart';
 import 'providers/app_state_refresher.dart';
 import 'services/highlighter_service.dart';
 import 'widgets/common/notification_icon_button.dart';
-import 'widgets/common/app_glass_settings.dart';
-import 'widgets/common/anchor_guard_sliver.dart';
+import 'widgets/user/account_switcher_sheet.dart';
 import 'widgets/common/fullscreen_swipe_back.dart';
+
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+
 import 'services/network/cookie/csrf_token_service.dart';
 import 'services/network/system_proxy_service.dart';
 import 'services/network/cookie/cookie_devtools_extension.dart';
@@ -39,11 +41,14 @@ import 'services/network/cookie/cookie_jar_service.dart';
 import 'services/network/cookie/cookie_store_observer.dart';
 import 'services/network/adapters/cronet_fallback_service.dart';
 import 'services/local_notification_service.dart';
+import 'services/account_manager.dart';
 import 'services/data_management/cache_size_service.dart';
 import 'services/discourse_cache_manager.dart';
 import 'services/render_backend_service.dart';
 import 'services/toast_service.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import 'l10n/s.dart';
 
 import 'services/network/doh/network_settings_service.dart';
@@ -51,18 +56,24 @@ import 'services/network/proxy/proxy_settings_service.dart';
 import 'services/network/rhttp/rhttp_settings_service.dart';
 import 'services/network/webview/webview_adapter_settings_service.dart';
 import 'services/eruda_settings_service.dart';
+
 import 'package:rhttp/rhttp.dart' as rhttp;
+
 import 'services/network/vpn_auto_toggle_service.dart';
+import 'services/network/vpn_bypass_service.dart';
 import 'services/network/doh_proxy/proxy_certificate.dart';
 import 'services/cf_challenge_logger.dart';
 import 'services/browser_trust_coordinator.dart';
 import 'services/update_service.dart';
 import 'services/update_checker_helper.dart';
+
 import 'package:fluxdo_render/fluxdo_render.dart'
-    show FlattenCache, FoldShiftHook, ParagraphLayoutCache;
+    show FlattenCache, ParagraphLayoutCache;
 
 import 'services/clipboard_topic_link_service.dart';
 import 'services/deep_link_service.dart';
+import 'services/pico_vr_service.dart';
+import 'pages/topic_detail_page/topic_detail_page.dart';
 import 'services/windows_protocol_registrar_stub.dart'
     if (dart.library.ffi) 'services/windows_protocol_registrar_io.dart';
 import 'services/background/background_notification_service.dart';
@@ -74,8 +85,6 @@ import 'services/log/log_writer.dart';
 import 'services/download_service.dart';
 import 'services/migration_service.dart';
 import 'services/navigation/app_route_observer.dart';
-import 'services/navigation/back_exit_guard.dart';
-import 'services/navigation/keyboard_focus_guard.dart';
 import 'services/window_state_service.dart';
 import 'services/webview_settings.dart';
 import 'services/windows_webview_environment_service.dart';
@@ -85,7 +94,6 @@ import 'constants.dart';
 import 'providers/connectivity_provider.dart';
 import 'utils/dialog_utils.dart';
 import 'utils/frame_jank_monitor.dart';
-import 'utils/hashtag_handlers.dart';
 import 'utils/image_decode_gate.dart';
 import 'widgets/post/post_item/render_parse_cache.dart';
 import 'utils/scroll_busy_signal.dart';
@@ -95,21 +103,22 @@ import 'utils/time_utils.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_model_manager/ai_model_manager.dart';
+
 import 'services/app_logger.dart';
 import 'services/network/adapters/platform_adapter.dart';
 import 'providers/preferences_provider.dart';
 import 'providers/theme_provider.dart';
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:video_player_media_kit/video_player_media_kit.dart';
+
 import 'services/audio/just_audio_gst.dart';
 import 'widgets/preheat_gate.dart';
 import 'widgets/onboarding_gate.dart';
 import 'widgets/layout/adaptive_scaffold.dart';
 import 'widgets/layout/adaptive_navigation.dart';
-import 'widgets/esc_fallback_observer.dart';
 import 'widgets/layout/master_detail_layout.dart';
-import 'widgets/layout/pane_projection_back_scope.dart';
 import 'widgets/notification/notification_quick_panel.dart';
 import 'widgets/topic/category_drawer.dart' show CategoryDrawerHost;
 import 'widgets/read_later/read_later_bubble.dart';
@@ -285,6 +294,7 @@ Future<void> main() async {
   }
   final results = await Future.wait(futures);
   final prefs = results[0] as SharedPreferences;
+  await VpnBypassService.instance.initialize(prefs);
   await AuthIssueNoticeService.instance.initialize(prefs);
 
   // release 下按设置开关启用性能监控(debug/profile 已在上方无条件启用)
@@ -301,9 +311,7 @@ Future<void> main() async {
   // Android 由 WV onLoadStop 等 hook 主动调 notifyExternalChange()。
   CookieStoreObserver.instance.attach();
 
-  // 桌面平台：三端 runner 均隐藏启动（macOS 在 MainFlutterWindow 首次
-  // order 时隐藏，Windows/Linux 由 runner 创建隐藏窗口），正常冷启动都
-  // 走下方 else 分支：首帧光栅化后恢复窗口状态再显示，避免默认位置闪烁。
+  // 桌面平台：恢复窗口状态后再显示，避免默认位置闪烁
   if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
     await acrylic.Window.setEffect(
       effect: Platform.isMacOS
@@ -318,15 +326,7 @@ Future<void> main() async {
     // MainPage 尚未挂载的阶段也能正常响应窗口关闭
     WindowStateService.instance.startListening();
     if (isVisible) {
-      // 窗口已可见（热重启，或原生隐藏启动未生效的兜底路径）：
-      // macOS 走 restore() 读取并应用保存的窗口状态——attach() 只刷新
-      // 最大化缓存不读状态文件，曾导致 macOS 冷启动永远回到 XIB 默认
-      // 位置；Windows/Linux 可见说明状态已恢复过，attach 即可。
-      if (Platform.isMacOS) {
-        await WindowStateService.instance.restore(prefs);
-      } else {
-        await WindowStateService.instance.attach(prefs);
-      }
+      await WindowStateService.instance.attach(prefs);
       if (Platform.isLinux) {
         await windowManager.focus();
       }
@@ -351,6 +351,17 @@ Future<void> main() async {
 
   // 数据迁移：在所有依赖 prefs 的网络相关服务启动之前执行
   await MigrationService.runAll(prefs);
+
+  // CookieJar 不会将无 Expires/Max-Age 的 _t session cookie 持久化。
+  // 账号快照存放于系统安全存储；网络预热之前先尝试从快照恢复缺失的
+  // 原生会话，随后由 currentUserProvider 完成服务端身份确认。
+  if (!MigrationService.requiresRelogin) {
+    try {
+      await AccountManager().restoreColdStartSessionIfMissing();
+    } catch (e) {
+      debugPrint('[Main] 冷启动会话快照恢复失败(继续): $e');
+    }
+  }
 
   // 阶段 2：依赖 prefs 的步骤并行
   final crashlyticsEnabled = prefs.getBool('pref_crashlytics') ?? true;
@@ -472,15 +483,6 @@ Future<void> main() async {
     await MigrationService.purgeTrash();
     await BlobImageCache.sweep(prefs);
   }());
-
-  // 注入 hashtag 药丸的图标解析与点击导航(fluxdo_render 注入点)
-  installHashtagHandlers();
-
-  // 折叠块(details/callout)展开动画帧武装滚动锚定哨兵:center 双向
-  // 列表的 reverse 半场里子项向上生长,不锚定的话点击展开会把头部顶出
-  // 视口(视觉 = 跳到内容底部)。forward 半场锚位移为 0,修正自动
-  // no-op,"展开再收起逐像素复原"不受影响。
-  FoldShiftHook.onFrame = AnchorGuardSliver.arm;
 
   // 注入 AI 模型管理包的消息提示实现
   AiToastDelegate.configure((message, {type = AiToastType.info}) {
@@ -776,17 +778,7 @@ class MainApp extends ConsumerWidget {
               scrollBehavior: const DesktopScrollInteractionBehavior(),
               navigatorKey: navigatorKey,
               // JankNavObserver 给 [JANK] 日志加导航归因(debug/profile 观测用)
-              // KeyboardFocusGuard 压掉浮层关闭后键盘自弹(移动端)
-              // EscFallbackObserver 登记全屏页,桌面 ESC 路由级自动兜底
-              navigatorObservers: [
-                appRouteObserver,
-                keyboardFocusGuard,
-                JankNavObserver(),
-                EscFallbackObserver(),
-                // 崩溃/ANR 现场带上当前页面与最近导航轨迹(Crashlytics
-                // custom keys);未开启崩溃采集时内部 no-op。
-                CrashContextNavObserver(),
-              ],
+              navigatorObservers: [appRouteObserver, JankNavObserver()],
               title: 'FluxDO',
               locale: TranslationProvider.of(context).flutterLocale,
               localizationsDelegates: const [
@@ -932,7 +924,7 @@ class MainApp extends ConsumerWidget {
                   }
                 }
 
-                return AppGlassSettings(child: result);
+                return result;
               },
               home: const OnboardingGate(child: PreheatGate(child: MainPage())),
             ),
@@ -976,7 +968,8 @@ class _MainPageState extends ConsumerState<MainPage>
   ProviderSubscription<void>? _messageBusSub;
   ProviderSubscription<void>? _notificationChannelSub;
   ProviderSubscription<void>? _notificationAlertChannelSub;
-  ProviderSubscription<void>? _chatAlertChannelSub;
+  ProviderSubscription<void>? _chatNotificationAlertSub;
+
   ProviderSubscription<void>? _logoutChannelSub;
   ProviderSubscription<bool>? _siteReadOnlySub;
   ProviderSubscription<PmIncomingState>? _pmTrackingSub;
@@ -985,6 +978,7 @@ class _MainPageState extends ConsumerState<MainPage>
   ProviderSubscription<int?>? _userDraftCountSub;
   ProviderSubscription<ReviewableCountsState>? _reviewableCountsSub;
   ProviderSubscription<void>? _siteChangesSub;
+
   ProviderSubscription<AsyncValue<bool>>? _connectivitySub;
   bool _messageBusInitialized = false;
   int? _lastTappedIndex;
@@ -992,7 +986,7 @@ class _MainPageState extends ConsumerState<MainPage>
   Timer? _pendingSingleTap;
   List<NavEntry> _lastResolvedEntries = const [];
   Timer? _resumeDebounceTimer;
-  final BackExitGuard _backExitGuard = BackExitGuard();
+  DateTime? _lastBackPressTime;
   bool _clipboardCheckInFlight = false;
 
   // 不能是 const，需要传入 isActive
@@ -1015,11 +1009,16 @@ class _MainPageState extends ConsumerState<MainPage>
 
       // 初始化 Deep Link 服务
       DeepLinkService.instance.initialize(context);
+      // Secondary native Android tasks carry a one-shot, per-Activity topic
+      // request. MainPage is mounted only after onboarding/preheat is ready.
+      unawaited(_consumePicoLaunchRequest());
       unawaited(
         _runStartupUiTasks().catchError((Object e, StackTrace s) {
           debugPrint('[MainPage] 启动 UI 任务失败: $e\n$s');
         }),
       );
+      // 多账号后台快照:周期固化当前会话的 _t,防止切走的账号过期
+      AccountManager().ensureAutoSnapshot();
     });
     // 监听登录失效事件
     _authErrorSub = ref.listenManual<AsyncValue<String>>(authErrorProvider, (
@@ -1028,16 +1027,13 @@ class _MainPageState extends ConsumerState<MainPage>
     ) {
       next.whenData((message) => _handleAuthError(message));
     });
-
     // 站点只读模式：/site/read-only 是公开频道，匿名也能收，
     // 所以不放进下面那个以登录为前提的订阅块
     _siteReadOnlySub?.close();
     _siteReadOnlySub = ref.listenManual<bool>(siteReadOnlyProvider, (_, _) {});
-
     // 分类/站点设置变更同样是公开频道，匿名也需要跟进
     _siteChangesSub?.close();
     _siteChangesSub = ref.listenManual<void>(siteChangesProvider, (_, _) {});
-
     // 初始化连通性检测服务
     ConnectivityService().init();
 
@@ -1055,17 +1051,16 @@ class _MainPageState extends ConsumerState<MainPage>
       }
     });
 
-    // 提前捕获 container:登录成功广播可能落在本元素 deactivate/重挂载
-    // 窗口内,届时 containerOf(context) 会抛错把刷新链掐死(登录后无
-    // 登录态)。container 与根 ProviderScope 同生命周期,不受元素影响。
-    final appContainer = ProviderScope.containerOf(context, listen: false);
     _authStateSub = ref.listenManual<AsyncValue<void>>(authStateProvider, (
       _,
       next,
     ) {
       next.whenData((_) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          AppStateRefresher.refreshAll(appContainer);
+          if (!mounted) return;
+          AppStateRefresher.refreshAll(
+            ProviderScope.containerOf(context, listen: false),
+          );
         });
       });
     });
@@ -1099,11 +1094,12 @@ class _MainPageState extends ConsumerState<MainPage>
             notificationAlertChannelProvider,
             (_, _) {},
           );
-          _chatAlertChannelSub?.close();
-          _chatAlertChannelSub = ref.listenManual<void>(
+          _chatNotificationAlertSub?.close();
+          _chatNotificationAlertSub = ref.listenManual<void>(
             chatNotificationAlertProvider,
             (_, _) {},
           );
+
           _logoutChannelSub?.close();
           _logoutChannelSub = ref.listenManual<void>(
             logoutChannelProvider,
@@ -1143,8 +1139,9 @@ class _MainPageState extends ConsumerState<MainPage>
         _notificationChannelSub = null;
         _notificationAlertChannelSub?.close();
         _notificationAlertChannelSub = null;
-        _chatAlertChannelSub?.close();
-        _chatAlertChannelSub = null;
+        _chatNotificationAlertSub?.close();
+        _chatNotificationAlertSub = null;
+
         _logoutChannelSub?.close();
         _logoutChannelSub = null;
         _pmTrackingSub?.close();
@@ -1176,7 +1173,6 @@ class _MainPageState extends ConsumerState<MainPage>
     if (Platform.isAndroid) {
       await _showCrashlyticsNotice();
       if (!mounted) return;
-
       // 疑似 Mali/Vulkan 渲染崩溃时建议开启兼容模式。
       // 放在数据收集告知之后：那个是必须先看到的一次性声明。
       await _maybeSuggestRenderCompatMode();
@@ -1193,11 +1189,8 @@ class _MainPageState extends ConsumerState<MainPage>
   Future<void> _maybeSuggestRenderCompatMode() async {
     // 已经开着了就不用建议了（原生侧也会做这个判断，这里是快速短路）
     if (ref.read(preferencesProvider).renderGlesBackend) return;
-
-    final shouldSuggest =
-        await RenderBackendService.shouldSuggestCompatMode();
+    final shouldSuggest = await RenderBackendService.shouldSuggestCompatMode();
     if (!shouldSuggest || !mounted) return;
-
     final enable = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1215,11 +1208,8 @@ class _MainPageState extends ConsumerState<MainPage>
         ],
       ),
     );
-
     if (enable == true) {
-      await ref
-          .read(preferencesProvider.notifier)
-          .setRenderGlesBackend(true);
+      await ref.read(preferencesProvider.notifier).setRenderGlesBackend(true);
       if (!mounted) return;
       await showAppDialog<void>(
         context: context,
@@ -1238,6 +1228,19 @@ class _MainPageState extends ConsumerState<MainPage>
       // 明确拒绝（含点遮罩关闭）后不再自动弹窗
       await RenderBackendService.dismissSuggestion();
     }
+  }
+
+  Future<void> _consumePicoLaunchRequest() async {
+    final request = await PicoVrService.instance.consumeLaunchRequest();
+    if (!mounted || request == null) return;
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TopicDetailPage(
+          topicId: request.topicId,
+          scrollToPostNumber: request.postNumber,
+        ),
+      ),
+    );
   }
 
   Future<void> _showCrashlyticsNotice() async {
@@ -1376,7 +1379,8 @@ class _MainPageState extends ConsumerState<MainPage>
     _messageBusSub?.close();
     _notificationChannelSub?.close();
     _notificationAlertChannelSub?.close();
-    _chatAlertChannelSub?.close();
+    _chatNotificationAlertSub?.close();
+
     _logoutChannelSub?.close();
     _siteReadOnlySub?.close();
     _pmTrackingSub?.close();
@@ -1385,6 +1389,7 @@ class _MainPageState extends ConsumerState<MainPage>
     _userDraftCountSub?.close();
     _reviewableCountsSub?.close();
     _siteChangesSub?.close();
+
     _connectivitySub?.close();
     super.dispose();
   }
@@ -1403,6 +1408,9 @@ class _MainPageState extends ConsumerState<MainPage>
     }
 
     if (state == AppLifecycleState.hidden) {
+      // 多账号快照:hidden 比 paused 早,赶在系统挂起 isolate 前把最新 _t
+      // 固化下来(尽力而为,失败静默)
+      unawaited(AccountManager().syncCurrentAccount());
       // hidden 比 paused 更早触发，在系统挂起 Dart isolate 之前启动前台服务
       // 取消待执行的 resume 操作（防止配置变更等假 resume）
       _resumeDebounceTimer?.cancel();
@@ -1597,9 +1605,8 @@ class _MainPageState extends ConsumerState<MainPage>
       navigatorKey.currentState?.popUntil((route) => route.isFirst);
     }
     if (mounted && action == _AuthErrorDialogAction.clearData) {
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const DataManagementPage()));
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const DataManagementPage()));
     }
   }
 
@@ -1625,6 +1632,24 @@ class _MainPageState extends ConsumerState<MainPage>
     // 监听当前用户状态
     final currentUserAsync = ref.watch(currentUserProvider);
     final user = currentUserAsync.value;
+
+    // While the persisted identity is being resolved, null is not evidence
+    // of a guest session. Rendering guest navigation here can remove private
+    // tabs, reset the selected destination and flash anonymous account UI.
+    if (user == null && currentUserAsync.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (user == null && currentUserAsync.hasError) {
+      return Scaffold(
+        body: Center(
+          child: FilledButton.icon(
+            onPressed: () => ref.invalidate(currentUserProvider),
+            icon: const Icon(Icons.refresh),
+            label: Text(S.current.preheat_retryConnection),
+          ),
+        ),
+      );
+    }
 
     // 从偏好读取底栏布局，按注册表解析为 entry 列表（含所有 kind）
     final bottomNavIds = ref.watch(
@@ -1681,6 +1706,10 @@ class _MainPageState extends ConsumerState<MainPage>
               // 同一 IconData 用 fill:1 表达选中态，避免不同字形错位
               : Icon(e.selectedIconData, fill: 1),
           label: e.label(context),
+          // 长按「我的」：快速切换账号（profile 仅登录态可见，无需再判空）
+          onLongPress: e.id == NavEntryIds.profile
+              ? () => unawaited(AccountSwitcherSheet.show(context))
+              : null,
         ),
     ];
 
@@ -1691,90 +1720,67 @@ class _MainPageState extends ConsumerState<MainPage>
     final hasNotificationEntry = entries.any(
       (e) => e.id == NavEntryIds.notifications,
     );
-    // 深层平行视界隐藏 Rail 的旧联动已砍:抽掉 72px 侧栏 = 内容区
-    // 瞬间变宽,这发生在布局动画体系之外,快照底板盖不住,是压/退栈
-    // "必闪"的外部几何跳变源(还会触发编排撞帧取消)。Rail 恒定,
-    // 栏宽恒定,层间过渡才是纯内容平移(iPad 三栏同款前提)。
-    const hideNavigationRail = false;
-    final exitOnSingleBack = ref.watch(
-      preferencesProvider.select((preferences) => preferences.exitOnSingleBack),
-    );
-    final requireDoubleBackToExit = Platform.isAndroid && !exitOnSingleBack;
-    final routeCanPopInternally = ModalRoute.canPopOf(context) ?? false;
+    final activeEntryId = pageEntries[safePageIndex].id;
+    final topicState = ref.watch(selectedTopicProvider);
+    final topicParallelStacked = topicState.isStacked && !topicState.tabMode;
+    final messageParallelStacked = ref.watch(selectedMessageProvider).isStacked;
+    final seekingParallelStacked = ref.watch(selectedSeekingProvider).isStacked;
+    final hideNavigationRail =
+        (activeEntryId == NavEntryIds.home && topicParallelStacked) ||
+        (activeEntryId == NavEntryIds.messages && messageParallelStacked) ||
+        (activeEntryId == NavEntryIds.seeking && seekingParallelStacked);
 
-    // 首页的 FAB 由 TopicsScreen 内部处理，避免切换时闪烁。
-    // 单次退出模式允许系统处理 bubble 以支持预测式退出；双击退出模式
-    // 则拦截根路由的第一次返回。面板在两种模式下都拥有更高优先级。
-    Widget page = ValueListenableBuilder<bool>(
-      valueListenable: NotificationQuickPanel.visible,
-      builder: (context, notificationPanelVisible, _) =>
-          ValueListenableBuilder<bool>(
-        // 平行视界投影态(窄屏详情全宽盖在 tab 体内)开着时返回由
-        // PaneProjectionBackScope 消费,根层完全让位:不弹退出 toast。
-        valueListenable: PaneProjectionBackScope.hasActiveProjection,
-        builder: (context, paneProjectionOpen, _) => PopScope(
-          canPop:
-              routeCanPopInternally ||
-              (!notificationPanelVisible &&
-                  !paneProjectionOpen &&
-                  !requireDoubleBackToExit),
-          onPopInvokedWithResult: (bool didPop, dynamic result) {
-            if (didPop) return;
-            // 分类侧栏通过 LocalHistoryEntry 消费返回；这里保留兜底，覆盖
-            // 抽屉正在收尾动画等 LocalHistory 尚未同步的短暂状态。
-            if (CategoryDrawerHost.isOpen) {
-              CategoryDrawerHost.close();
-              return;
-            }
-            if (NotificationQuickPanel.isVisible) {
-              NotificationQuickPanel.dismiss();
-              return;
-            }
-            // 投影态:PaneProjectionBackScope 的 PopEntry 自己消费本次
-            // 返回(关投影层),根层不做双击退出。
-            if (PaneProjectionBackScope.hasActiveProjection.value) {
-              return;
-            }
-            if (requireDoubleBackToExit) {
-              if (_backExitGuard.shouldExit()) {
-                SystemNavigator.pop();
-              } else {
-                ToastService.showInfo(S.current.toast_pressAgainToExit);
-              }
-            }
-          },
-          child: AdaptiveScaffold(
-            selectedIndex: selectedBottomIndex,
-            onDestinationSelected: _onDestinationSelected,
-            destinations: destinations,
-            railBottomLeading: (user != null && !hasNotificationEntry)
-                ? const NotificationIconButton()
-                : null,
-            hideNavigationRail: hideNavigationRail,
-            // 投影态底栏隐藏:详情全宽盖在 tab 体内,底栏还留着会像
-            // "详情页悬在 tab 骨架上";合成路由时代盖住一切,投影态
-            // 用显式谓词达成同样观感。
-            hideBottomNavigation: paneProjectionOpen,
-            body: IndexedStack(
-              index: safePageIndex,
-              children: [
-                for (int i = 0; i < pageEntries.length; i++)
-                  KeyedSubtree(
-                    key: ValueKey('nav-entry-${pageEntries[i].id}'),
-                    child: TickerMode(
-                      enabled: safePageIndex == i,
-                      child: ExcludeFocus(
-                        excluding: safePageIndex != i,
-                        child: pageEntries[i].pageBuilder!(
-                          context,
-                          safePageIndex == i,
-                        ),
-                      ),
+    // 首页的 FAB 由 TopicsScreen 内部处理，避免切换时闪烁
+    Widget page = PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+        // 分类侧栏开着：返回=关抽屉。抽屉自身的 LocalHistoryEntry 在
+        // 根路由 canPop:false 下不生效（PopScope 的 doNotPop 判定
+        // 优先于 LocalHistoryRoute 的内部消费），只能在这里兜底。
+        if (CategoryDrawerHost.isOpen) {
+          CategoryDrawerHost.close();
+          return;
+        }
+        if (NotificationQuickPanel.isVisible) {
+          NotificationQuickPanel.dismiss();
+          return;
+        }
+        final now = DateTime.now();
+        if (_lastBackPressTime != null &&
+            now.difference(_lastBackPressTime!).inMilliseconds < 2000) {
+          SystemNavigator.pop();
+        } else {
+          _lastBackPressTime = now;
+          ToastService.showInfo(S.current.toast_pressAgainToExit);
+        }
+      },
+      child: AdaptiveScaffold(
+        selectedIndex: selectedBottomIndex,
+        onDestinationSelected: _onDestinationSelected,
+        destinations: destinations,
+        railBottomLeading: (user != null && !hasNotificationEntry)
+            ? const NotificationIconButton()
+            : null,
+        hideNavigationRail: hideNavigationRail,
+        body: IndexedStack(
+          index: safePageIndex,
+          children: [
+            for (int i = 0; i < pageEntries.length; i++)
+              KeyedSubtree(
+                key: ValueKey('nav-entry-${pageEntries[i].id}'),
+                child: TickerMode(
+                  enabled: safePageIndex == i,
+                  child: ExcludeFocus(
+                    excluding: safePageIndex != i,
+                    child: pageEntries[i].pageBuilder!(
+                      context,
+                      safePageIndex == i,
                     ),
                   ),
-              ],
-            ),
-          ),
+                ),
+              ),
+          ],
         ),
       ),
     );

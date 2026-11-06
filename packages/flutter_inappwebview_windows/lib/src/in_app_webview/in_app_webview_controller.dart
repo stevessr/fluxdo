@@ -885,9 +885,8 @@ class WindowsInAppWebViewController extends PlatformInAppWebViewController
               jsAlertRequest,
             ))?.toMap();
           else
-            return (await _inAppBrowserEventHandler!.onJsAlert(
-              jsAlertRequest,
-            ))?.toMap();
+            return (await _inAppBrowserEventHandler!.onJsAlert(jsAlertRequest))
+                ?.toMap();
         }
         break;
       case "onJsConfirm":
@@ -1767,9 +1766,8 @@ class WindowsInAppWebViewController extends PlatformInAppWebViewController
               _controllerFromPlatform,
               request,
             ))?.toMap();
-          return (await _inAppBrowserEventHandler!.onSaveAsUIShowing(
-            request,
-          ))?.toMap();
+          return (await _inAppBrowserEventHandler!.onSaveAsUIShowing(request))
+              ?.toMap();
         }
         break;
       case "onSaveFileSecurityCheckStarting":
@@ -1934,9 +1932,8 @@ class WindowsInAppWebViewController extends PlatformInAppWebViewController
                 );
               else
                 return jsonEncode(
-                  (await _inAppBrowserEventHandler!.onAjaxProgress(
-                    request,
-                  ))?.toNativeValue(),
+                  (await _inAppBrowserEventHandler!.onAjaxProgress(request))
+                      ?.toNativeValue(),
                 );
             }
             return null;

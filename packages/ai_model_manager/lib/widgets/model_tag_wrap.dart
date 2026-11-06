@@ -18,28 +18,30 @@ class ModelTagWrap extends StatelessWidget {
     final chips = <Widget>[];
 
     // IO 模态 pill：输入 icon → 输出 icon
-    chips.add(
-      _buildIoPill(context, cs, isDark),
-    );
+    chips.add(_buildIoPill(context, cs, isDark));
 
     // 能力 pill
     if (model.abilities.contains(ModelAbility.tool)) {
-      chips.add(_buildAbilityPill(
-        context,
-        icon: Symbols.handyman_rounded,
-        label: AiL10n.current.modelDetailToolAbility,
-        color: cs.primary,
-        isDark: isDark,
-      ));
+      chips.add(
+        _buildAbilityPill(
+          context,
+          icon: Symbols.handyman_rounded,
+          label: AiL10n.current.modelDetailToolAbility,
+          color: cs.primary,
+          isDark: isDark,
+        ),
+      );
     }
     if (model.abilities.contains(ModelAbility.reasoning)) {
-      chips.add(_buildAbilityPill(
-        context,
-        icon: Symbols.psychology_rounded,
-        label: AiL10n.current.modelDetailReasoningAbility,
-        color: cs.secondary,
-        isDark: isDark,
-      ));
+      chips.add(
+        _buildAbilityPill(
+          context,
+          icon: Symbols.psychology_rounded,
+          label: AiL10n.current.modelDetailReasoningAbility,
+          color: cs.secondary,
+          isDark: isDark,
+        ),
+      );
     }
 
     if (chips.isEmpty) return const SizedBox.shrink();
@@ -55,18 +57,23 @@ class ModelTagWrap extends StatelessWidget {
   Widget _buildIoPill(BuildContext context, ColorScheme cs, bool isDark) {
     final color = cs.tertiary;
     final inputMods = model.input.isEmpty ? const [Modality.text] : model.input;
-    final outputMods =
-        model.output.isEmpty ? const [Modality.text] : model.output;
+    final outputMods = model.output.isEmpty
+        ? const [Modality.text]
+        : model.output;
 
     final inputLabel = inputMods
-        .map((m) => m == Modality.text
-            ? AiL10n.current.modelDetailTextMode
-            : AiL10n.current.modelDetailImageMode)
+        .map(
+          (m) => m == Modality.text
+              ? AiL10n.current.modelDetailTextMode
+              : AiL10n.current.modelDetailImageMode,
+        )
         .join(', ');
     final outputLabel = outputMods
-        .map((m) => m == Modality.text
-            ? AiL10n.current.modelDetailTextMode
-            : AiL10n.current.modelDetailImageMode)
+        .map(
+          (m) => m == Modality.text
+              ? AiL10n.current.modelDetailTextMode
+              : AiL10n.current.modelDetailImageMode,
+        )
         .join(', ');
     final tooltip = '$inputLabel → $outputLabel';
 
@@ -98,9 +105,7 @@ class ModelTagWrap extends StatelessWidget {
                           ? Symbols.text_fields_rounded
                           : Symbols.image_rounded,
                       size: 12,
-                      color: isDark
-                          ? color
-                          : color.withValues(alpha: 0.9),
+                      color: isDark ? color : color.withValues(alpha: 0.9),
                     ),
                   ),
                 Icon(
@@ -116,9 +121,7 @@ class ModelTagWrap extends StatelessWidget {
                           ? Symbols.text_fields_rounded
                           : Symbols.image_rounded,
                       size: 12,
-                      color: isDark
-                          ? color
-                          : color.withValues(alpha: 0.9),
+                      color: isDark ? color : color.withValues(alpha: 0.9),
                     ),
                   ),
               ],

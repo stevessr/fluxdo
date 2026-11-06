@@ -14,10 +14,8 @@ PredictiveBackEvent _gesture(double progress) => PredictiveBackEvent.fromMap({
   'swipeEdge': 0,
 });
 
-PredictiveBackEvent _button() => PredictiveBackEvent.fromMap({
-  'progress': 0.0,
-  'swipeEdge': 0,
-});
+PredictiveBackEvent _button() =>
+    PredictiveBackEvent.fromMap({'progress': 0.0, 'swipeEdge': 0});
 
 class _Harness {
   bool enabled = true;

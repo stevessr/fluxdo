@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+
 import '../l10n/ai_l10n.dart';
 import '../models/ai_provider.dart';
 import '../utils/api_host_formatter.dart';
@@ -10,7 +11,7 @@ class AiProviderApiService {
   final HttpClientAdapter Function()? _adapterFactory;
 
   AiProviderApiService({HttpClientAdapter Function()? adapterFactory})
-      : _adapterFactory = adapterFactory;
+    : _adapterFactory = adapterFactory;
 
   /// 从 DioException 中提取用户友好的错误信息
   static String friendlyError(Object error) {
@@ -72,10 +73,12 @@ class AiProviderApiService {
   ];
 
   Dio _createDio() {
-    final dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
-    ));
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+      ),
+    );
     if (_adapterFactory != null) {
       dio.httpClientAdapter = _adapterFactory();
     }
@@ -100,7 +103,9 @@ class AiProviderApiService {
   }
 
   Future<List<AiModel>> _fetchOpenAiModels(
-      String baseUrl, String apiKey) async {
+    String baseUrl,
+    String apiKey,
+  ) async {
     final dio = _createDio();
     try {
       final url = '${ApiHostFormatter.format(baseUrl)}/models';
@@ -123,17 +128,16 @@ class AiProviderApiService {
   }
 
   Future<List<AiModel>> _fetchGeminiModels(
-      String baseUrl, String apiKey) async {
+    String baseUrl,
+    String apiKey,
+  ) async {
     final dio = _createDio();
     try {
       // Gemini 直连端点是 /v1beta/models;baseUrl 由用户配,可能带
       // /v1beta、可能不带。format(apiVersion: 'v1beta') 自动补齐。
       final url =
           '${ApiHostFormatter.format(baseUrl, apiVersion: 'v1beta')}/models';
-      final response = await dio.get(
-        url,
-        queryParameters: {'key': apiKey},
-      );
+      final response = await dio.get(url, queryParameters: {'key': apiKey});
       final data = response.data as Map<String, dynamic>;
       final list = data['models'] as List<dynamic>? ?? [];
       final models = list.map((item) {
@@ -173,28 +177,28 @@ class AiProviderApiService {
             data: {
               'model': modelId,
               'messages': [
-                {'role': 'user', 'content': 'hi'}
+                {'role': 'user', 'content': 'hi'},
               ],
               'max_tokens': 1,
             },
-            options: Options(headers: {
-              'Authorization': 'Bearer $apiKey',
-              'Content-Type': 'application/json',
-            }),
+            options: Options(
+              headers: {
+                'Authorization': 'Bearer $apiKey',
+                'Content-Type': 'application/json',
+              },
+            ),
           );
 
         case AiProviderType.openaiResponse:
           await dio.post(
             '$openAiUrl/responses',
-            data: {
-              'model': modelId,
-              'input': 'hi',
-              'max_output_tokens': 1,
-            },
-            options: Options(headers: {
-              'Authorization': 'Bearer $apiKey',
-              'Content-Type': 'application/json',
-            }),
+            data: {'model': modelId, 'input': 'hi', 'max_output_tokens': 1},
+            options: Options(
+              headers: {
+                'Authorization': 'Bearer $apiKey',
+                'Content-Type': 'application/json',
+              },
+            ),
           );
 
         case AiProviderType.gemini:
@@ -205,15 +209,13 @@ class AiProviderApiService {
               'contents': [
                 {
                   'parts': [
-                    {'text': 'hi'}
-                  ]
-                }
+                    {'text': 'hi'},
+                  ],
+                },
               ],
               'generationConfig': {'maxOutputTokens': 1},
             },
-            options: Options(headers: {
-              'Content-Type': 'application/json',
-            }),
+            options: Options(headers: {'Content-Type': 'application/json'}),
           );
 
         case AiProviderType.anthropic:
@@ -223,14 +225,16 @@ class AiProviderApiService {
               'model': modelId,
               'max_tokens': 1,
               'messages': [
-                {'role': 'user', 'content': 'hi'}
+                {'role': 'user', 'content': 'hi'},
               ],
             },
-            options: Options(headers: {
-              'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01',
-              'Content-Type': 'application/json',
-            }),
+            options: Options(
+              headers: {
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'Content-Type': 'application/json',
+              },
+            ),
           );
       }
       return null; // 成功

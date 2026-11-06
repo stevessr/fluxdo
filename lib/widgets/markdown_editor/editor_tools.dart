@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../../../l10n/s.dart';
+import '../../services/stevessr_composer_service.dart';
 import 'markdown_toolbar.dart';
 
 /// 编辑器工具定义
@@ -27,7 +28,7 @@ class EditorTool {
 
   /// 二级弹出菜单选中回调
   final void Function(MarkdownToolbarState toolbar, String value)?
-      onMenuSelected;
+  onMenuSelected;
 
   const EditorTool({
     required this.id,
@@ -37,15 +38,36 @@ class EditorTool {
     this.menuItems,
     this.onMenuSelected,
   }) : assert(
-          (action != null) != (menuItems != null && onMenuSelected != null),
-          '普通工具提供 action，菜单工具提供 menuItems + onMenuSelected',
-        );
+         (action != null) != (menuItems != null && onMenuSelected != null),
+         '普通工具提供 action，菜单工具提供 menuItems + onMenuSelected',
+       );
 
   bool get hasMenu => menuItems != null;
 }
 
 /// 图片上传工具的 id（工具栏对其特殊渲染上传进度）
 const String kEditorToolImage = 'image';
+
+/// StevesSR 本身由 MarkdownEditor 的工具面板注册；这里额外提供一个
+/// 只给收起态快捷栏解析的桥接项。这样不会在「更多工具」里重复出现两次，
+/// 同时能复用同一套生成、上传与 Markdown 插入链路。
+final EditorTool _stevessrQuickTool = EditorTool(
+  id: 'stevessr',
+  icon: const Icon(Icons.auto_awesome_rounded),
+  label: (_) => S.current.stevessr.insert,
+  action: (toolbar) async {
+    final selection = toolbar.widget.controller.selection;
+    final generated = await StevessrComposerService.openAndUpload(
+      toolbar.context,
+    );
+    if (!toolbar.mounted || generated == null) return;
+    if (selection.isValid &&
+        selection.end <= toolbar.widget.controller.text.length) {
+      toolbar.widget.controller.selection = selection;
+    }
+    toolbar.insertUploadedImage(generated.upload);
+  },
+);
 
 /// 全部编辑器工具（顺序即面板网格与工具栏外显顺序）
 final List<EditorTool> editorTools = [
@@ -54,6 +76,12 @@ final List<EditorTool> editorTools = [
     icon: const FaIcon(FontAwesomeIcons.image),
     label: (s) => s.toolPanel_image,
     action: (t) => t.pickAndUploadImages(),
+  ),
+  EditorTool(
+    id: 'longImage',
+    icon: const FaIcon(FontAwesomeIcons.scissors),
+    label: (s) => s.imageUpload_longImageTool,
+    action: (t) => t.pickAndUploadLongImage(),
   ),
   EditorTool(
     id: 'attachment',
@@ -94,21 +122,35 @@ final List<EditorTool> editorTools = [
     id: 'bold',
     icon: const FaIcon(FontAwesomeIcons.bold),
     label: (s) => s.toolPanel_bold,
-    action: (t) => t.wrapSelection('**', '**',
-        placeholder: S.current.toolbar_boldPlaceholder),
+    action: (t) => t.wrapSelection(
+      '**',
+      '**',
+      placeholder: S.current.toolbar_boldPlaceholder,
+    ),
   ),
   EditorTool(
     id: 'italic',
     icon: const FaIcon(FontAwesomeIcons.italic),
     label: (s) => s.toolPanel_italic,
-    action: (t) =>
-        t.wrapSelection('*', '*', placeholder: S.current.toolbar_italicPlaceholder),
+    action: (t) => t.wrapSelection(
+      '*',
+      '*',
+      placeholder: S.current.toolbar_italicPlaceholder,
+    ),
   ),
   EditorTool(
     id: 'strikethrough',
     icon: const FaIcon(FontAwesomeIcons.strikethrough),
     label: (s) => s.toolPanel_strikethrough,
     action: (t) => t.insertStrikethrough(),
+  ),
+  // 文字颜色:[color=#xxx] BBCode 填入(选色面板与富 composer 共用;
+  // 服务端由 discourse-bbcode-color 插件渲染)
+  EditorTool(
+    id: 'color',
+    icon: const FaIcon(FontAwesomeIcons.palette),
+    label: (s) => '文字颜色',
+    action: (t) => t.insertColor(t.context),
   ),
   EditorTool(
     id: 'bulletList',
@@ -232,8 +274,21 @@ final List<EditorTool> editorTools = [
   ),
 ];
 
-/// 按注册表顺序过滤出外显工具
+/// 按注册表顺序过滤出外显工具。
+///
+/// StevesSR 是回复/发帖 composer 的一等快捷入口：即使用户的旧偏好列表
+/// 保存于该功能加入之前，也要补进快捷栏，避免新 action 永远被旧配置吞掉。
 List<EditorTool> resolveVisibleTools(List<String> ids) {
-  final byId = {for (final tool in editorTools) tool.id: tool};
-  return [for (final id in ids.toSet()) if (byId[id] != null) byId[id]!];
+  final byId = {
+    for (final tool in editorTools) tool.id: tool,
+    _stevessrQuickTool.id: _stevessrQuickTool,
+  };
+  final resolved = [
+    for (final id in ids.toSet())
+      if (byId[id] != null) byId[id]!,
+  ];
+  if (!resolved.any((tool) => tool.id == _stevessrQuickTool.id)) {
+    resolved.add(_stevessrQuickTool);
+  }
+  return resolved;
 }

@@ -12,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../navigation/nav_action_bus.dart';
 import '../../providers/preferences_provider.dart';
 import '../../utils/platform_utils.dart';
+import '../user/account_quick_switcher_trigger_state.dart';
 
 /// 导航目标项配置
 class AdaptiveDestination {
@@ -20,6 +21,7 @@ class AdaptiveDestination {
     required this.icon,
     required this.selectedIcon,
     required this.label,
+    this.onLongPress,
   });
 
   /// 稳定 id（home / profile / notifications / ...），用于 NavActionBus 定向派发
@@ -28,6 +30,24 @@ class AdaptiveDestination {
   final Widget icon;
   final Widget selectedIcon;
   final String label;
+
+  /// 可选长按动作（如「我的」长按弹账号切换面板）。null 时无长按手势。
+  final VoidCallback? onLongPress;
+}
+
+void _recordAccountQuickSwitcherAnchor(
+  BuildContext context, [
+  Offset? fallback,
+]) {
+  AccountQuickSwitcherTriggerState.clear();
+  final renderObject = context.findRenderObject();
+  if (renderObject is RenderBox && renderObject.hasSize) {
+    AccountQuickSwitcherTriggerState.setAnchor(
+      renderObject.localToGlobal(renderObject.size.center(Offset.zero)),
+    );
+  } else if (fallback != null) {
+    AccountQuickSwitcherTriggerState.setAnchor(fallback);
+  }
 }
 
 /// 侧边导航栏组件 (平板/桌面)
@@ -107,6 +127,7 @@ class AdaptiveNavigationRail extends StatelessWidget {
                 extended: extended,
                 colorScheme: colorScheme,
                 onTap: () => onDestinationSelected(index),
+                onLongPress: dest.onLongPress,
               );
             }),
             if (categoryShortcuts != null)
@@ -139,6 +160,7 @@ class AdaptiveNavigationRail extends StatelessWidget {
                 extended: extended,
                 colorScheme: colorScheme,
                 onTap: () => onDestinationSelected(index),
+                onLongPress: dest.onLongPress,
               );
             }),
             // 底部导航项
@@ -159,6 +181,7 @@ class AdaptiveNavigationRail extends StatelessWidget {
                 extended: extended,
                 colorScheme: colorScheme,
                 onTap: () => onDestinationSelected(index),
+                onLongPress: dest.onLongPress,
               );
             }),
             const SizedBox(height: 16),
@@ -188,6 +211,7 @@ class _NavigationRailItem extends StatelessWidget {
     required this.extended,
     required this.colorScheme,
     required this.onTap,
+    this.onLongPress,
   });
 
   final Widget icon;
@@ -196,6 +220,7 @@ class _NavigationRailItem extends StatelessWidget {
   final bool extended;
   final ColorScheme colorScheme;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -206,6 +231,19 @@ class _NavigationRailItem extends StatelessWidget {
         ? colorScheme.onSecondaryContainer
         : colorScheme.onSurfaceVariant;
 
+    // Anchor the switcher to the visible rail icon, not its full row.
+    // Otherwise parallel view falls back to the root overlay's bottom-right.
+    BuildContext? iconContext;
+    Widget anchoredIcon() => Builder(
+      builder: (anchorContext) {
+        iconContext = anchorContext;
+        return IconTheme(
+          data: IconThemeData(color: iconColor, size: 24),
+          child: icon,
+        );
+      },
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Material(
@@ -214,16 +252,19 @@ class _NavigationRailItem extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
+          onLongPress: onLongPress == null
+              ? null
+              : () {
+                  _recordAccountQuickSwitcherAnchor(iconContext ?? context);
+                  onLongPress!();
+                },
           child: SizedBox(
             height: 56,
             child: extended
                 ? Row(
                     children: [
                       const SizedBox(width: 16),
-                      IconTheme(
-                        data: IconThemeData(color: iconColor, size: 24),
-                        child: icon,
-                      ),
+                      anchoredIcon(),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -239,10 +280,7 @@ class _NavigationRailItem extends StatelessWidget {
                     ],
                   )
                 : Center(
-                    child: IconTheme(
-                      data: IconThemeData(color: iconColor, size: 24),
-                      child: icon,
-                    ),
+                    child: anchoredIcon(),
                   ),
           ),
         ),
@@ -401,11 +439,30 @@ class _AdaptiveBottomNavigationState
           ? NavigationDestinationLabelBehavior.alwaysHide
           : null,
       destinations: widget.destinations.map((d) {
+        // NavigationDestination 不暴露长按：把手势包在图标上（图标占
+        // 条目上半部，长按命中足够；点按仍由内部 InkWell 处理）。
+        Widget maybeLongPress(Widget child) {
+          final callback = d.onLongPress;
+          if (callback == null) return child;
+          return Builder(
+            builder: (triggerContext) => GestureDetector(
+              onLongPressStart: (details) {
+                _recordAccountQuickSwitcherAnchor(
+                  triggerContext,
+                  details.globalPosition,
+                );
+                callback();
+              },
+              behavior: HitTestBehavior.translucent,
+              child: child,
+            ),
+          );
+        }
+
         return NavigationDestination(
-          icon: d.icon,
-          selectedIcon: _ActiveDestinationIcon(
-            dest: d,
-            defaultIcon: d.selectedIcon,
+          icon: maybeLongPress(d.icon),
+          selectedIcon: maybeLongPress(
+            _ActiveDestinationIcon(dest: d, defaultIcon: d.selectedIcon),
           ),
           label: d.label,
         );
@@ -514,9 +571,8 @@ abstract final class _CapsuleMetrics {
   /// 行高补偿。缩放 ≤1 时恒为基准值，不影响默认观感。
   static double itemHeight(BuildContext context, {required bool labelless}) {
     if (labelless) return itemHeightLabelless;
-    final scaled = MediaQuery.textScalerOf(
-      context,
-    ).scale(labelSize * labelHeight);
+    final scaled = MediaQuery.textScalerOf(context)
+        .scale(labelSize * labelHeight);
     final natural = iconTop + iconSize + iconGap + scaled + labelBottom;
     return math.max(itemHeightLabeled, natural);
   }
@@ -813,6 +869,7 @@ class _CapsuleNavBarState extends State<_CapsuleNavBar>
                             selected: i == widget.selectedIndex,
                             labelless: widget.labelless,
                             onTap: () => widget.onDestinationSelected(i),
+                            onLongPress: widget.destinations[i].onLongPress,
                           ),
                         ),
                     ],
@@ -838,12 +895,14 @@ class _CapsuleNavItem extends StatelessWidget {
     required this.selected,
     required this.labelless,
     required this.onTap,
+    this.onLongPress,
   });
 
   final AdaptiveDestination dest;
   final bool selected;
   final bool labelless;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -870,6 +929,12 @@ class _CapsuleNavItem extends StatelessWidget {
           // 墨水跟随 pill 的 stadium 造型（pill 铺满整个条目）
           customBorder: const StadiumBorder(),
           onTap: onTap,
+          onLongPress: onLongPress == null
+              ? null
+              : () {
+                  _recordAccountQuickSwitcherAnchor(context);
+                  onLongPress!();
+                },
           child: labelless
               // 无字态：图标在条目内居中
               ? Center(child: icon)

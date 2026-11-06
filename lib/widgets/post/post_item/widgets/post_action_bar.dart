@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
+
 import '../../../../l10n/s.dart';
 import '../../../../models/topic.dart';
 import '../../../../services/discourse_cache_manager.dart';
@@ -97,25 +98,29 @@ class _PostActionBarState extends State<PostActionBar>
   late final AnimationController _bounce;
   late final Animation<double> _bounceScale = TweenSequence<double>([
     TweenSequenceItem(
-      tween: Tween(begin: 1.0, end: 1.1)
-          .chain(CurveTween(curve: Curves.easeOutCubic)),
+      tween: Tween(
+        begin: 1.0,
+        end: 1.1,
+      ).chain(CurveTween(curve: Curves.easeOutCubic)),
       weight: 35,
     ),
     TweenSequenceItem(
-      tween: Tween(begin: 1.1, end: 1.0)
-          .chain(CurveTween(curve: Curves.easeOutCubic)),
+      tween: Tween(
+        begin: 1.1,
+        end: 1.0,
+      ).chain(CurveTween(curve: Curves.easeOutCubic)),
       weight: 65,
     ),
   ]).animate(_bounce);
 
   late final ReactionPickerController _pickerController =
       ReactionPickerController(
-    vsync: this,
-    onReactionSelected: (id) {
-      widget.onReactionSelected(id);
-      _bounce.forward(from: 0);
-    },
-  );
+        vsync: this,
+        onReactionSelected: (id) {
+          widget.onReactionSelected(id);
+          _bounce.forward(from: 0);
+        },
+      );
 
   @override
   void initState() {
@@ -155,11 +160,15 @@ class _PostActionBarState extends State<PostActionBar>
   /// 以 like 按钮为锚点打开 picker。
   /// 按钮未布局或站点没有启用任何 reaction 时返回 false。
   bool _openPicker(ReactionPickerMode mode) {
-    final box = widget.likeButtonKey.currentContext?.findRenderObject()
-        as RenderBox?;
+    final box =
+        widget.likeButtonKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return false;
     final reactions = DiscourseService().enabledReactionsSync;
     if (reactions.isEmpty) return false;
+    // An earlier catalog fetch may have failed (offline/CF). Opening the
+    // picker retries in the background and refreshes its already-visible
+    // emoji cells as soon as the server URLs are available.
+    EmojiHandler().ensureCatalogLoaded().ignore();
     _pickerController.open(
       context: context,
       buttonRect: box.localToGlobal(Offset.zero) & box.size,
@@ -190,8 +199,8 @@ class _PostActionBarState extends State<PostActionBar>
   /// 长按胜出后 Tap 识别器已被竞技场拒绝,onTap 不会再触发,无需去重。
   /// 桌面端 picker 由 hover 触发,不注册长按避免两条路径打架。
   Map<Type, GestureRecognizerFactory> _touchGestures(VoidCallback onTap) => {
-        TapGestureRecognizer:
-            GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+    TapGestureRecognizer:
+        GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
           TapGestureRecognizer.new,
           (instance) {
             instance.onTap = onTap;
@@ -202,9 +211,9 @@ class _PostActionBarState extends State<PostActionBar>
             }
           },
         ),
-        if (!PlatformUtils.isDesktop)
-          LongPressGestureRecognizer:
-              GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+    if (!PlatformUtils.isDesktop)
+      LongPressGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
             () => LongPressGestureRecognizer(
               duration: kReactionPickerLongPressDuration,
             ),
@@ -216,7 +225,7 @@ class _PostActionBarState extends State<PostActionBar>
               instance.onLongPressCancel = _pickerController.close;
             },
           ),
-      };
+  };
 
   /// 桌面端 hover:300ms 延迟后打开
   void _onHoverEnter() {
@@ -249,10 +258,7 @@ class _PostActionBarState extends State<PostActionBar>
           widget.leadingSlot!,
           const SizedBox(width: 8),
         ],
-        if (leftButton != null) ...[
-          leftButton,
-          const SizedBox(width: 12),
-        ],
+        if (leftButton != null) ...[leftButton, const SizedBox(width: 12)],
         Expanded(
           child: Wrap(
             alignment: WrapAlignment.end,
@@ -280,8 +286,12 @@ class _PostActionBarState extends State<PostActionBar>
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: showReplies
-                      ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
-                      : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      ? theme.colorScheme.primaryContainer.withValues(
+                          alpha: 0.3,
+                        )
+                      : theme.colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.3,
+                        ),
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: showReplies
@@ -345,37 +355,43 @@ class _PostActionBarState extends State<PostActionBar>
     final isPvAnswer = widget.isPostVotingTopic && widget.post.postNumber != 1;
     final pvLikesOnAnswers =
         PreloadedDataService()
-                .siteSettingsSync?['post_voting_enable_likes_on_answers'] ==
-            true;
+            .siteSettingsSync?['post_voting_enable_likes_on_answers'] ==
+        true;
     if (!widget.isGuest) {
       final hideLike = isPvAnswer && !pvLikesOnAnswers;
       if ((!widget.isOwnPost || widget.reactions.isNotEmpty) && !hideLike) {
         actions.add(_buildLikeReactionArea(theme));
       }
       if (!widget.isOwnPost && widget.canBoost && !widget.hasBoosts) {
-        actions.add(_iconCircle(
-          theme,
-          tooltip: 'Boost',
-          icon: Symbols.rocket_launch_rounded,
-          onTap: widget.onAddBoost,
-        ));
+        actions.add(
+          _iconCircle(
+            theme,
+            tooltip: 'Boost',
+            icon: Symbols.rocket_launch_rounded,
+            onTap: widget.onAddBoost,
+          ),
+        );
       }
       if (!isPvAnswer) {
-        actions.add(_iconCircle(
-          theme,
-          tooltip: widget.isPostVotingTopic
-              ? S.current.postVoting_answer
-              : context.l10n.common_reply,
-          icon: Symbols.reply_rounded,
-          onTap: widget.onReply,
-        ));
+        actions.add(
+          _iconCircle(
+            theme,
+            tooltip: widget.isPostVotingTopic
+                ? S.current.postVoting_answer
+                : context.l10n.common_reply,
+            icon: Symbols.reply_rounded,
+            onTap: widget.onReply,
+          ),
+        );
       }
     }
-    actions.add(_iconCircle(
-      theme,
-      icon: Symbols.more_horiz_rounded,
-      onTap: widget.onShowMoreMenu,
-    ));
+    actions.add(
+      _iconCircle(
+        theme,
+        icon: Symbols.more_horiz_rounded,
+        onTap: widget.onShowMoreMenu,
+      ),
+    );
     return actions;
   }
 
@@ -391,15 +407,12 @@ class _PostActionBarState extends State<PostActionBar>
         height: 36,
         width: 36,
         decoration: BoxDecoration(
-          color:
-              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.3,
+          ),
           shape: BoxShape.circle,
         ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
+        child: Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
       ),
     );
     // Tooltip(OverlayPortal + 手势 + MouseRegion)单个构建 ~0.8ms,
@@ -416,30 +429,35 @@ class _PostActionBarState extends State<PostActionBar>
   /// 描边沿表情自身轮廓（贴纸效果）：把表情染成底色后向四周偏移绘制在底层，
   /// 再叠原图，避免圆形底盘的生硬感。
   Widget _buildReactionStack(ThemeData theme) {
-    final shown = widget.reactions.take(3).toList();
-    const double size = 16;
-    const double step = 11; // 相邻表情的水平偏移
-    return SizedBox(
-      width: size + (shown.length - 1) * step,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // 倒序绘制，让靠前的表情盖在上层
-          for (var i = shown.length - 1; i >= 0; i--)
-            Positioned(
-              left: i * step,
-              child: _OutlinedEmoji(
-                image: emojiImageProvider(_getEmojiUrl(shown[i].id)),
-                // 描边的作用是「咬掉」压在下面的表情一圈，
-                // 最下层没有压着任何表情，无需描边
-                outlineColor:
-                    i == shown.length - 1 ? null : theme.colorScheme.surface,
-                size: size,
-              ),
-            ),
-        ],
-      ),
+    return AnimatedBuilder(
+      animation: EmojiHandler(),
+      builder: (context, _) {
+        final shown = widget.reactions.take(3).toList();
+        const double size = 16;
+        const double step = 11; // 相邻表情的水平偏移
+        return SizedBox(
+          width: size + (shown.length - 1) * step,
+          height: size,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // 倒序绘制，让靠前的表情盖在上层
+              for (var i = shown.length - 1; i >= 0; i--)
+                Positioned(
+                  left: i * step,
+                  child: _OutlinedEmoji(
+                    image: emojiImageProvider(_getEmojiUrl(shown[i].id)),
+                    // 最下层没有压着任何表情，无需描边
+                    outlineColor: i == shown.length - 1
+                        ? null
+                        : theme.colorScheme.surface,
+                    size: size,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -504,12 +522,17 @@ class _PostActionBarState extends State<PostActionBar>
       ),
       alignment: Alignment.center,
       child: widget.currentUserReaction != null
-          ? Image(
-              image:
-                  emojiImageProvider(_getEmojiUrl(widget.currentUserReaction!.id)),
-              width: 20,
-              height: 20,
-              errorBuilder: (_, _, _) => const Icon(Symbols.favorite_rounded, size: 20),
+          ? AnimatedBuilder(
+              animation: EmojiHandler(),
+              builder: (context, _) => Image(
+                image: emojiImageProvider(
+                  _getEmojiUrl(widget.currentUserReaction!.id),
+                ),
+                width: 20,
+                height: 20,
+                errorBuilder: (_, _, _) =>
+                    const Icon(Symbols.favorite_rounded, size: 20),
+              ),
             )
           : Icon(
               Symbols.favorite_rounded,
@@ -545,10 +568,7 @@ class _PostActionBarState extends State<PostActionBar>
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          ?reactionStack,
-          likeButton,
-        ],
+        children: [?reactionStack, likeButton],
       ),
     );
 

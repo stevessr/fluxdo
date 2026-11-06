@@ -24,6 +24,11 @@ class PendingPost {
   final int? topicId;
 
   final int? categoryId;
+
+  /// Discourse 官方 PendingPostSerializer 当前不返回标签；这里保留兼容解析，
+  /// 便于兼容自定义实例或未来 serializer 扩展。
+  final List<String>? tags;
+
   final DateTime? createdAt;
 
   const PendingPost({
@@ -32,6 +37,7 @@ class PendingPost {
     this.title,
     this.topicId,
     this.categoryId,
+    this.tags,
     this.createdAt,
   });
 
@@ -45,9 +51,29 @@ class PendingPost {
       title: json['title'] as String?,
       topicId: json['topic_id'] as int?,
       categoryId: json['category_id'] as int?,
+      tags: _parsePendingTagNames(json['tags']),
       createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
     );
   }
+}
+
+List<String>? _parsePendingTagNames(dynamic value) {
+  if (value is! List) return null;
+
+  final result = <String>[];
+  for (final item in value) {
+    String? name;
+    if (item is String) {
+      name = item;
+    } else if (item is Map) {
+      name = item['name']?.toString();
+    }
+
+    if (name != null && name.isNotEmpty) {
+      result.add(name);
+    }
+  }
+  return result;
 }
 
 /// 待审回复的「回复目标楼层」会话级补记(reviewableId → replyToPostNumber)。

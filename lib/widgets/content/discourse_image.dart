@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../services/discourse/discourse_service.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../pages/image_viewer_page.dart';
@@ -157,10 +158,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
 
     // Lightbox(无 heroTag:纯点击打开,无飞行)
     if (widget.enableLightbox && !_isSvg) {
-      return GestureDetector(
-        onTap: _openLightbox,
-        child: imageWidget,
-      );
+      return GestureDetector(onTap: _openLightbox, child: imageWidget);
     }
 
     return imageWidget;
@@ -197,11 +195,10 @@ class _DiscourseImageState extends State<DiscourseImage> {
         : _kMaxDecodeHeight;
 
     return Image(
-      image: ResizeImage(
-        discourseImageProvider(_resolvedUrl!),
-        width: cacheWidth,
-        height: cacheHeight,
-        policy: ResizeImagePolicy.fit,
+      image: sharedImageProvider(
+        _resolvedUrl!,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
       ),
       width: widget.width,
       height: widget.height,
@@ -300,7 +297,9 @@ class _DiscourseImageState extends State<DiscourseImage> {
       _resolvedUrl!,
       heroTag: widget.heroTag,
       thumbnailUrl: _resolvedUrl,
-      galleryImages: widget.galleryImages.isNotEmpty ? widget.galleryImages : null,
+      galleryImages: widget.galleryImages.isNotEmpty
+          ? widget.galleryImages
+          : null,
       initialIndex: widget.initialIndex,
       enableShare: true,
       // 与源端同源:_viewerStyle 一处给出,两侧不可能不一致
@@ -309,5 +308,4 @@ class _DiscourseImageState extends State<DiscourseImage> {
       heroSourceCircular: args.circular,
     );
   }
-
 }

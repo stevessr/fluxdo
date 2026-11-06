@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_icons/app_icons.dart';
+
 import '../l10n/s.dart';
 import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
 import '../pages/badge_page.dart';
-import '../pages/chat/channel/chat_channel_page.dart';
+import '../pages/chat/chat_message_page.dart';
+import '../pages/reaction_notification_target_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page.dart';
 import '../services/local_notification_service.dart';
@@ -84,24 +86,40 @@ Widget? _notificationTargetPage(
         initialRevisionNumber: notification.data.revisionNumber,
       );
 
+    case NotificationType.reaction:
+      // discourse-reactions 会把同一用户对多条帖子的 reaction 合并；
+      // consolidated 通知没有顶层 topic_id/post_number，但仍保留
+      // data.original_post_id。交给专用页面按 post id 回查真实落点，
+      // 私信与普通话题都能精确跳到被 reaction 的帖子。
+      if (notification.topicId == null &&
+          int.tryParse(notification.data.originalPostId ?? '') == null) {
+        return null;
+      }
+      return ReactionNotificationTargetPage(notification: notification);
+
     case NotificationType.chatMention:
     case NotificationType.chatMessage:
     case NotificationType.chatInvitation:
     case NotificationType.chatGroupMention:
     case NotificationType.chatQuotedPost:
     case NotificationType.chatWatchedThread:
-      // Chat 通知直达聊天窗;payload 带 chat_channel_id(源码
-      // notify_mentioned/notify_watching 均写入)
+      // 聊天通知：打开频道并定位到具体消息
       final channelId = notification.data.chatChannelId;
-      if (channelId == null) return null;
-      return ChatChannelPage(
+      if (channelId == null) {
+        if (notification.topicId == null) return null;
+        return TopicDetailPage(
+          topicId: notification.topicId!,
+          scrollToPostNumber: notification.postNumber,
+        );
+      }
+      return ChatMessagePage(
         channelId: channelId,
-        // 带消息 id 时锚点定位到那条消息并高亮
-        initialMessageId: notification.data.chatMessageId,
+        channelTitle: notification.data.topicTitle ?? S.current.chat_title,
+        targetMessageId: notification.data.chatMessageId,
       );
 
     default:
-      // privateMessage/posted/liked/reaction 等所有话题类落点
+      // privateMessage/posted/liked 等所有话题类落点
       if (notification.topicId == null) return null;
       return TopicDetailPage(
         topicId: notification.topicId!,
@@ -245,8 +263,7 @@ class _NotificationPagerDialogState extends State<_NotificationPagerDialog>
     final notification = widget.playlist[_index];
     final hasMultiple = widget.playlist.length > 1;
     // 常驻侧栏需要 880(内容) + 332(列表) + 页边距的空间
-    final useSidebar =
-        hasMultiple && MediaQuery.sizeOf(context).width >= 1240;
+    final useSidebar = hasMultiple && MediaQuery.sizeOf(context).width >= 1240;
 
     final list = _NotificationPagerList(
       playlist: widget.playlist,
@@ -377,11 +394,8 @@ class _NotificationPagerListState extends State<_NotificationPagerList> {
   static const double _estimatedItemExtent = 88;
 
   late final ScrollController _scrollController = ScrollController(
-    initialScrollOffset:
-        (widget.currentIndex * _estimatedItemExtent - 120).clamp(
-          0,
-          double.infinity,
-        ),
+    initialScrollOffset: (widget.currentIndex * _estimatedItemExtent - 120)
+        .clamp(0, double.infinity),
   );
 
   @override

@@ -109,27 +109,21 @@ void main() {
   group('TopicPluginContext.readInt', () {
     test('解析数字与数字字符串，其他返回 null', () {
       expect(
-        const TopicPluginContext(topicJson: {'reply_cost': 3}).readInt(
-          'reply_cost',
-        ),
+        const TopicPluginContext(topicJson: {'reply_cost': 3})
+            .readInt('reply_cost'),
         3,
       );
       expect(
-        const TopicPluginContext(topicJson: {'reply_cost': '4'}).readInt(
-          'reply_cost',
-        ),
+        const TopicPluginContext(topicJson: {'reply_cost': '4'})
+            .readInt('reply_cost'),
         4,
       );
       expect(
-        const TopicPluginContext(topicJson: {'reply_cost': 'abc'}).readInt(
-          'reply_cost',
-        ),
+        const TopicPluginContext(topicJson: {'reply_cost': 'abc'})
+            .readInt('reply_cost'),
         isNull,
       );
-      expect(
-        const TopicPluginContext().readInt('reply_cost'),
-        isNull,
-      );
+      expect(const TopicPluginContext().readInt('reply_cost'), isNull);
     });
   });
 
@@ -200,10 +194,7 @@ void main() {
     tearDown(PluginRegistry.resetOverride);
 
     test('linux.do 默认注册了回复扣积分插件', () {
-      expect(
-        PluginRegistry.plugins.whereType<ReplyCostPlugin>(),
-        isNotEmpty,
-      );
+      expect(PluginRegistry.plugins.whereType<ReplyCostPlugin>(), isNotEmpty);
     });
 
     testWidgets('任一插件否决即中止，后续插件不再执行', (tester) async {

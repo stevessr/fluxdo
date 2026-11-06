@@ -24,18 +24,19 @@ class PromptDimension {
   final bool required;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'label': label,
-        'required': required,
-        'options': options.map((e) => e.toJson()).toList(),
-      };
+    'id': id,
+    'label': label,
+    'required': required,
+    'options': options.map((e) => e.toJson()).toList(),
+  };
 
   factory PromptDimension.fromJson(Map<String, dynamic> json) {
     return PromptDimension(
       id: json['id'] as String,
       label: json['label'] as String,
       required: json['required'] as bool? ?? false,
-      options: (json['options'] as List<dynamic>?)
+      options:
+          (json['options'] as List<dynamic>?)
               ?.map((e) => DimensionOption.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
@@ -68,11 +69,11 @@ class DimensionOption {
   final String? iconRaw;
 
   Map<String, dynamic> toJson() => {
-        'value': value,
-        'label': label,
-        'promptFragment': promptFragment,
-        if (iconRaw != null) 'iconRaw': iconRaw,
-      };
+    'value': value,
+    'label': label,
+    'promptFragment': promptFragment,
+    if (iconRaw != null) 'iconRaw': iconRaw,
+  };
 
   factory DimensionOption.fromJson(Map<String, dynamic> json) {
     return DimensionOption(

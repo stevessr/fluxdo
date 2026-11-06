@@ -31,8 +31,10 @@ class PagedPage<T> {
 }
 
 typedef PagedRefreshLoader<T> = Future<PagedPage<T>> Function();
-typedef PagedLoadMoreLoader<T> =
-    Future<PagedPage<T>> Function(List<T> currentItems, int nextPage);
+typedef PagedLoadMoreLoader<T> = Future<PagedPage<T>> Function(
+  List<T> currentItems,
+  int nextPage,
+);
 
 /// Shared paging state for `AsyncNotifier<List<T>>` providers.
 ///
@@ -74,7 +76,10 @@ mixin PagedAsyncNotifierMixin<T> on AsyncNotifier<List<T>> {
     });
   }
 
-  Future<void> runPagedLoadMore(PagedLoadMoreLoader<T> loadPage) async {
+  Future<void> runPagedLoadMore(
+    PagedLoadMoreLoader<T> loadPage, {
+    bool Function()? isCurrent,
+  }) async {
     if (_isLoadMoreFailed || !_hasMore || state.isLoading) return;
     final currentItems = state.value;
     if (currentItems == null) return;
@@ -87,12 +92,16 @@ mixin PagedAsyncNotifierMixin<T> on AsyncNotifier<List<T>> {
 
     try {
       final page = await loadPage(currentItems, nextPage);
+      // A refresh or tab switch may have started while the request was pending.
+      // Never publish an old page (or an old error) into the new selection.
+      if (isCurrent != null && !isCurrent()) return;
       _hasMore = page.hasMore;
       if (page.advancePage) {
         _page = nextPage;
       }
       state = AsyncValue.data(page.items);
     } catch (_) {
+      if (isCurrent != null && !isCurrent()) return;
       _isLoadMoreFailed = true;
       state = AsyncValue.data(currentItems);
     }

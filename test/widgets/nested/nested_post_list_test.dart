@@ -16,6 +16,7 @@ import 'package:fluxdo/providers/category_provider.dart';
 import 'package:fluxdo/widgets/nested/nested_post_card.dart';
 import 'package:fluxdo/models/category.dart';
 import 'package:fluxdo/services/local_notification_service.dart';
+import 'package:fluxdo/services/preloaded_data_service.dart';
 
 Post _post(int number, {bool long = false}) => Post(
   id: number,
@@ -63,6 +64,10 @@ Future<void> _pump(
   _Nested? notifier,
 }) async {
   SharedPreferences.setMockInitialValues({});
+  final preloaded = PreloadedDataService();
+  preloaded.reset();
+  preloaded.debugSeed(markLoaded: true);
+  addTearDown(preloaded.reset);
   final prefs = await SharedPreferences.getInstance();
   final store = NestedReadingStore(prefs, 'test');
   await tester.binding.setSurfaceSize(size);

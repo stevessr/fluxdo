@@ -20,21 +20,31 @@ mixin _UsersMixin on _DiscourseServiceBase {
 
   /// 获取缓存的用户名
   Future<String?> getUsername() async {
-    if (_username != null && _username!.isNotEmpty) return _username;
-
-    _username = await _storage.read(key: DiscourseService._usernameKey);
+    final generation = AuthSession().generation;
+    // 添加账号期间使用隐藏 guest profile。即使旧平台 cookie 或 preload
+    // 尚未完全清掉，也不能把上一账号重新当成当前身份返回给草稿/私信等调用方。
+    if (await AccountManager().isGuestSession()) {
+      if (AuthSession().isValid(generation)) _username = null;
+      return null;
+    }
+    // 内存 username 可能来自上一代会话；以持久化 identity 为准，避免
+    // 旧请求恢复 preload 后又把旧账号写回当前状态。
+    final storedUsername = await _storage.read(
+      key: DiscourseService._usernameKey,
+    );
+    if (!AuthSession().isValid(generation)) return null;
+    _username = storedUsername;
     if (_username != null && _username!.isNotEmpty) return _username;
 
     try {
       final preloaded = PreloadedDataService();
       final currentUser = await preloaded.getCurrentUser();
+      if (!AuthSession().isValid(generation)) return null;
       if (currentUser != null && currentUser['username'] != null) {
-        _username = currentUser['username'] as String;
-        await _storage.write(
-          key: DiscourseService._usernameKey,
-          value: _username!,
-        );
-        return _username;
+        final username = currentUser['username'] as String;
+        await saveUsername(username, requestGeneration: generation);
+        if (!AuthSession().isValid(generation)) return null;
+        return username;
       }
     } catch (e) {
       debugPrint('[DIO] Failed to get username from preloaded: $e');
@@ -45,24 +55,34 @@ mixin _UsersMixin on _DiscourseServiceBase {
 
   /// 获取用户信息
   Future<User> getUser(String username, {bool isSilent = false}) async {
-    final activeRequest = _activeUserRequests[username];
+    final generation = AuthSession().generation;
+    final requestKey = '$generation:$username';
+    final activeRequest = _activeUserRequests[requestKey];
     if (activeRequest != null) return activeRequest;
 
     late final Future<User> request;
-    request = _fetchUser(username, isSilent: isSilent).whenComplete(() {
-      if (identical(_activeUserRequests[username], request)) {
-        _activeUserRequests.remove(username);
-      }
-    });
-    _activeUserRequests[username] = request;
+    request = _fetchUser(username, isSilent: isSilent, generation: generation)
+        .whenComplete(() {
+          if (identical(_activeUserRequests[requestKey], request)) {
+            _activeUserRequests.remove(requestKey);
+          }
+        });
+    _activeUserRequests[requestKey] = request;
     return request;
   }
 
-  Future<User> _fetchUser(String username, {required bool isSilent}) async {
+  Future<User> _fetchUser(
+    String username, {
+    required bool isSilent,
+    required int generation,
+  }) async {
     final response = await _dio.get(
       '/u/$username.json',
       options: _userRequestOptions(isSilent),
     );
+    if (!AuthSession().isValid(generation)) {
+      throw StateError('当前会话已切换，丢弃旧用户响应');
+    }
     final data = response.data as Map<String, dynamic>;
     return User.fromJson(data['user'] ?? data);
   }
@@ -93,19 +113,29 @@ mixin _UsersMixin on _DiscourseServiceBase {
 
   /// 从预加载数据获取当前用户
   Future<User?> getPreloadedCurrentUser() async {
+    final generation = AuthSession().generation;
+    if (await AccountManager().isGuestSession()) return null;
     try {
       final preloaded = PreloadedDataService();
       final currentUserData = await preloaded.getCurrentUser();
+      final storedUsername = await _storage.read(
+        key: DiscourseService._usernameKey,
+      );
+      if (!AuthSession().isValid(generation)) return null;
       if (currentUserData != null) {
         final user = User.fromJson(currentUserData);
-        currentUserNotifier.value = user;
-        if (user.username.isNotEmpty) {
-          _username = user.username;
-          await _storage.write(
-            key: DiscourseService._usernameKey,
-            value: _username!,
-          );
+        if (storedUsername == null ||
+            storedUsername.isEmpty ||
+            user.username != storedUsername) {
+          return null;
         }
+        if (user.username.isNotEmpty) {
+          await saveUsername(user.username, requestGeneration: generation);
+          if (!AuthSession().isValid(generation)) return null;
+          _username = user.username;
+        }
+        if (!AuthSession().isValid(generation)) return null;
+        currentUserNotifier.value = user;
         return user;
       }
     } catch (e) {
@@ -117,10 +147,15 @@ mixin _UsersMixin on _DiscourseServiceBase {
   /// 获取当前用户信息
   /// 网络错误时会抛出异常，由调用方决定如何处理
   Future<User?> getCurrentUser() async {
+    final generation = AuthSession().generation;
     final username = await getUsername();
-    if (username == null) return null;
+    if (!AuthSession().isValid(generation) || username == null) return null;
 
     final user = await getUser(username);
+    if (!AuthSession().isValid(generation) ||
+        await _storage.read(key: DiscourseService._usernameKey) != username) {
+      return null;
+    }
     currentUserNotifier.value = user;
     return user;
   }
@@ -139,21 +174,34 @@ mixin _UsersMixin on _DiscourseServiceBase {
       return _cachedUserSummary!;
     }
 
-    final activeRequest = _activeUserSummaryRequests[username];
+    final generation = AuthSession().generation;
+    final requestKey = '$generation:$username';
+    final activeRequest = _activeUserSummaryRequests[requestKey];
     if (activeRequest != null) return activeRequest;
 
     late final Future<UserSummary> request;
-    request = _fetchUserSummary(username).whenComplete(() {
-      if (identical(_activeUserSummaryRequests[username], request)) {
-        _activeUserSummaryRequests.remove(username);
-      }
-    });
-    _activeUserSummaryRequests[username] = request;
+    request = _fetchUserSummary(username, generation: generation).whenComplete(
+      () {
+        if (identical(_activeUserSummaryRequests[requestKey], request)) {
+          _activeUserSummaryRequests.remove(requestKey);
+        }
+      },
+    );
+    _activeUserSummaryRequests[requestKey] = request;
     return request;
   }
 
-  Future<UserSummary> _fetchUserSummary(String username) async {
+  Future<UserSummary> _fetchUserSummary(
+    String username, {
+    required int generation,
+  }) async {
     final response = await _dio.get('/u/$username/summary.json');
+    // summary.json can be requested for any public profile.  The requested
+    // username therefore must not be compared with the logged-in username;
+    // only invalidate a response that crossed an account/session boundary.
+    if (!AuthSession().isValid(generation)) {
+      throw StateError('当前会话已切换，丢弃旧用户统计响应');
+    }
     final summary = UserSummary.fromJson(response.data);
 
     _cachedUserSummary = summary;
@@ -227,6 +275,25 @@ mixin _UsersMixin on _DiscourseServiceBase {
     final response = await _dio.get(
       '/topics/voted-by/$username.json',
       queryParameters: page > 0 ? {'page': page} : null,
+    );
+    return TopicListResponse.fromJson(response.data);
+  }
+
+  /// 获取用户作品集话题。
+  ///
+  /// LINUX DO 的作品集由用户创建的话题中带有「作品集」标签的内容组成，
+  /// 与网页端作品集主题组件使用相同的 created-by + tags 筛选语义。
+  Future<TopicListResponse> getUserPortfolioTopics(
+    String username, {
+    int page = 0,
+  }) async {
+    final queryParameters = <String, dynamic>{'tags': '作品集'};
+    if (page > 0) {
+      queryParameters['page'] = page;
+    }
+    final response = await _dio.get(
+      '/topics/created-by/$username.json',
+      queryParameters: queryParameters,
     );
     return TopicListResponse.fromJson(response.data);
   }
@@ -348,10 +415,7 @@ mixin _UsersMixin on _DiscourseServiceBase {
 
   /// 拉书签接口并返回原始 JSON map，给本地缓存对账层使用——
   /// 需要保留每条书签自身的 updated_at 等字段，无法通过 [TopicListResponse] 转回。
-  Future<Map<String, dynamic>> getUserBookmarksRaw({
-    int page = 0,
-    int? limit,
-  }) {
+  Future<Map<String, dynamic>> getUserBookmarksRaw({int page = 0, int? limit}) {
     return _getUserBookmarksRaw(page: page, limit: limit);
   }
 
@@ -503,5 +567,152 @@ mixin _UsersMixin on _DiscourseServiceBase {
       },
     );
     return InviteLinkResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// 更新当前用户创建的邀请，参数与 Discourse InvitesController#update 对齐。
+  Future<InviteLinkResponse> updateInvite(
+    int inviteId, {
+    String? email,
+    String? description,
+    String? domain,
+    String? customMessage,
+    int? maxRedemptionsAllowed,
+    int? topicId,
+    bool clearTopic = false,
+    List<int>? groupIds,
+    List<String>? groupNames,
+    DateTime? expiresAt,
+    bool? sendEmail,
+    bool? inviteToTopic,
+    bool? skipEmail,
+  }) async {
+    if (clearTopic && topicId != null) {
+      throw ArgumentError('clearTopic and topicId cannot both be set');
+    }
+    try {
+      final response = await _dio.put(
+        '/invites/$inviteId.json',
+        data: {
+          if (email != null) 'email': email,
+          if (description != null) 'description': description,
+          if (domain != null) 'domain': domain,
+          if (customMessage != null) 'custom_message': customMessage,
+          if (maxRedemptionsAllowed != null)
+            'max_redemptions_allowed': maxRedemptionsAllowed,
+          if (clearTopic) 'topic_id': null,
+          if (topicId != null) 'topic_id': topicId,
+          if (groupIds != null) 'group_ids': groupIds,
+          if (groupNames != null) 'group_names': groupNames,
+          if (expiresAt != null)
+            'expires_at': expiresAt.toUtc().toIso8601String(),
+          if (sendEmail != null) 'send_email': sendEmail,
+          if (inviteToTopic != null) 'invite_to_topic': inviteToTopic,
+          if (skipEmail != null) 'skip_email': skipEmail,
+        },
+      );
+      return InviteLinkResponse.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> deleteInvite(int inviteId) async {
+    try {
+      await _dio.delete('/invites/$inviteId.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> resendInvite(String email) async {
+    try {
+      await _dio.post(
+        '/invites/reinvite.json',
+        data: {'email': email.trim()},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> resendAllInvites() async {
+    try {
+      await _dio.post('/invites/reinvite-all.json');
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  Future<void> destroyAllExpiredInvites({String? username}) async {
+    final target = username ?? await getUsername();
+    if (target == null || target.isEmpty) {
+      throw Exception(S.current.error_notLoggedInNoUsername);
+    }
+    try {
+      await _dio.post(
+        '/invites/destroy-all-expired.json',
+        data: {'username': target},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 批量创建邮件邀请；返回成功/失败明细，由 UI 决定如何展示部分成功。
+  Future<Map<String, dynamic>> createMultipleInvites({
+    required List<String> emails,
+    String? description,
+    String? domain,
+    String? customMessage,
+    int? maxRedemptionsAllowed,
+    int? topicId,
+    List<int>? groupIds,
+    List<String>? groupNames,
+    DateTime? expiresAt,
+    bool? inviteToTopic,
+    bool? skipEmail,
+  }) async {
+    final normalized = emails
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalized.isEmpty) {
+      return const <String, dynamic>{
+        'num_successfully_created_invitations': 0,
+        'num_failed_invitations': 0,
+      };
+    }
+
+    try {
+      final response = await _dio.post(
+        '/invites/create-multiple.json',
+        data: {
+          'email': normalized,
+          if (description != null && description.trim().isNotEmpty)
+            'description': description.trim(),
+          if (domain != null && domain.trim().isNotEmpty)
+            'domain': domain.trim(),
+          if (customMessage != null && customMessage.trim().isNotEmpty)
+            'custom_message': customMessage.trim(),
+          if (maxRedemptionsAllowed != null)
+            'max_redemptions_allowed': maxRedemptionsAllowed,
+          if (topicId != null) 'topic_id': topicId,
+          if (groupIds != null) 'group_ids': groupIds,
+          if (groupNames != null) 'group_names': groupNames,
+          if (expiresAt != null)
+            'expires_at': expiresAt.toUtc().toIso8601String(),
+          if (inviteToTopic != null) 'invite_to_topic': inviteToTopic,
+          if (skipEmail != null) 'skip_email': skipEmail,
+        },
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
   }
 }

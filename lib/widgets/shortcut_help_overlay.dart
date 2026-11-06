@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../l10n/s.dart';
 import '../models/shortcut_binding.dart';
 import '../providers/shortcut_provider.dart';
@@ -484,12 +485,11 @@ List<_ShortcutEntry> _filterEntries(
   return List.unmodifiable(
     entries.where((entry) {
       final actionLabel = entry.label.toLowerCase();
-      final keyLabel = ShortcutBinding.formatActivator(
-        entry.activator,
-      ).toLowerCase();
-      final keyParts = ShortcutBinding.formatActivatorParts(
-        entry.activator,
-      ).join(' ').toLowerCase();
+      final keyLabel = ShortcutBinding.formatActivator(entry.activator)
+          .toLowerCase();
+      final keyParts = ShortcutBinding.formatActivatorParts(entry.activator)
+          .join(' ')
+          .toLowerCase();
       return actionLabel.contains(query) ||
           keyLabel.contains(query) ||
           keyParts.contains(query);

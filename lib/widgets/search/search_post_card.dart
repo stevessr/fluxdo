@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../models/category.dart';
 import '../../models/search_result.dart';
 import '../../providers/category_provider.dart';

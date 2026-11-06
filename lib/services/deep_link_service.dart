@@ -1,7 +1,11 @@
 import 'dart:async';
+
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+
 import '../pages/topic_detail_page/topic_detail_page.dart';
+import '../pages/boards_page.dart';
+import '../pages/mini_apps_page.dart';
 import '../pages/user_profile_page.dart';
 import '../pages/webview_login_page.dart';
 import '../pages/webview_page.dart';
@@ -98,7 +102,12 @@ class DeepLinkService {
     _lastHandledUri = uri;
     _lastHandledTime = now;
 
-    debugPrint('DeepLinkService: 收到链接 $url');
+    // 回调参数含加密凭证和一次性 OTP，不应输出完整 URL。
+    if (UserApiKeyService().isAuthRedirect(uri)) {
+      debugPrint('DeepLinkService: 收到浏览器授权回调');
+    } else {
+      debugPrint('DeepLinkService: 收到链接 $url');
+    }
 
     // 浏览器授权登录回调:discourse://auth_redirect?payload=...
     // (discourse:// 是站点 auth_redirect 默认白名单 scheme,App 已注册)
@@ -110,6 +119,34 @@ class DeepLinkService {
     // 自定义 scheme (fluxdo://...)
     if (uri.scheme == 'fluxdo') {
       _handleCustomScheme(context, uri);
+      return;
+    }
+
+    // Route /apps/directory into the native catalogue, and preserve
+    // /apps/:id as the hosted interactive app (with WebView cookie priming).
+    if (uri.host == 'linux.do' &&
+        DiscourseUrlParser.isMiniAppsDirectory(uri.path)) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const MiniAppsPage()));
+      return;
+    }
+    if (uri.host == 'linux.do' &&
+        DiscourseUrlParser.parseMiniApp(uri.path) != null) {
+      WebViewPage.open(context, url, title: '站内应用');
+      return;
+    }
+
+    // discourse-boards 原生看板。
+    final boardInfo = DiscourseUrlParser.parseBoard(uri.path);
+    if (boardInfo != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BoardDetailPage(
+            boardId: boardInfo.boardId,
+            initialCardId: boardInfo.cardId,
+          ),
+        ),
+      );
       return;
     }
 

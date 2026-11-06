@@ -861,6 +861,7 @@ class _ToastBadge extends StatelessWidget {
 class _BadgePainter extends CustomPainter {
   _BadgePainter({required this.color, required this.petal});
 
+
   final Color color;
   final bool petal;
 
@@ -991,10 +992,7 @@ class _CheckmarkPainter extends CustomPainter {
   final double progress;
   final Color color;
 
-  _CheckmarkPainter({
-    required this.progress,
-    required this.color,
-  });
+  _CheckmarkPainter({required this.progress, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1030,8 +1028,7 @@ class _CheckmarkPainter extends CustomPainter {
       path.lineTo(mid.dx, mid.dy);
       // Draw second segment (the long tail upwards)
       final remainingLength = currentLength - pathLength1;
-      final currentEnd =
-          Offset.lerp(mid, end, remainingLength / pathLength2)!;
+      final currentEnd = Offset.lerp(mid, end, remainingLength / pathLength2)!;
       path.lineTo(currentEnd.dx, currentEnd.dy);
     }
 

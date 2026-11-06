@@ -2,7 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:html/parser.dart' as html_parser;
 
+import 'auth_session.dart';
 import 'network/discourse_dio.dart';
+import 'network/exceptions/oauth_exception.dart';
 import 'oauth_session_client.dart';
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
@@ -34,7 +36,15 @@ class CdkOAuthService {
     return response.data['data'] as String;
   }
 
-  Future<void> callback(String code, String state) async {
+  Future<void> callback(
+    String code,
+    String state, {
+    int? requestGeneration,
+  }) async {
+    if (requestGeneration != null &&
+        !AuthSession().isValid(requestGeneration)) {
+      return;
+    }
     // X-Requested-With: XMLHttpRequest 是 cdk.linux.do CSRF 校验的唯一依据,
     // 缺这个头服务端直接 403 "CSRF 验证失败"。
     // 实测最小集 = cookie + UA + content-type + X-Requested-With。
@@ -46,6 +56,10 @@ class CdkOAuthService {
         extra: {'skipCsrf': true},
       ),
     );
+    if (requestGeneration != null &&
+        !AuthSession().isValid(requestGeneration)) {
+      return;
+    }
   }
 
   Future<void> logout() async {
@@ -60,21 +74,43 @@ class CdkOAuthService {
   Future<bool> reauthorize(BuildContext context) => authorize(context);
 
   Future<CdkUserInfo?> getUserInfo({String? expectedUsername}) async {
-    final data = await _session.getUserInfo(expectedUsername: expectedUsername);
-    return CdkUserInfo.fromJson(data);
+    final generation = AuthSession().generation;
+    try {
+      final response = await _dio.get(
+        '$baseUrl/api/v1/oauth/user-info',
+        options: Options(extra: {'skipCsrf': true, 'showErrorToast': false}),
+      );
+      final cdkData = response.data['data'];
+      if (!AuthSession().isValid(generation)) return null;
+      final info = CdkUserInfo.fromJson(cdkData);
+      // 跨账号保护：服务端返回的不是期望账号时按无效数据处理。
+      if (expectedUsername != null && info.username != expectedUsername) {
+        return null;
+      }
+      return info;
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 401 || statusCode == 403) {
+        throw OAuthExpiredException(serviceName: 'CDK', statusCode: statusCode);
+      }
+      rethrow;
+    }
   }
 
   Future<bool> authorize(BuildContext context) async {
     cancelPendingRequests();
+    final generation = AuthSession().generation;
     final String authUrl;
     try {
       authUrl = await getAuthUrl();
     } on DioException {
       throw Exception(S.current.oauth_getAuthUrlFailed);
     }
+    if (!AuthSession().isValid(generation)) return false;
 
     // step1 → step2: 模拟"业务页加载完成 → 跳转到 OAuth 同意页"的导航延迟
     await OAuthFlowHelper.humanGap(minMs: 800, maxMs: 1500);
+    if (!AuthSession().isValid(generation)) return false;
 
     final Response response;
     try {
@@ -89,6 +125,7 @@ class CdkOAuthService {
     } on DioException {
       throw Exception(S.current.oauth_networkError);
     }
+    if (!AuthSession().isValid(generation)) return false;
 
     final document = html_parser.parse(response.data);
     final approveLink = document
@@ -105,8 +142,10 @@ class CdkOAuthService {
       barrierDismissible: false,
       builder: (context) => _AuthDialog(
         onApprove: () async {
+          if (!AuthSession().isValid(generation)) return false;
           // 用户点击同意 → 浏览器发起 approve 请求, 模拟手指反应 + 浏览器导航延迟
           await OAuthFlowHelper.humanGap(minMs: 600, maxMs: 1200);
+          if (!AuthSession().isValid(generation)) return false;
 
           final approveResponse = await _dio.get(
             'https://connect.linux.do$approveLink',
@@ -120,6 +159,7 @@ class CdkOAuthService {
               },
             ),
           );
+          if (!AuthSession().isValid(generation)) return false;
 
           final location = approveResponse.headers.value('location');
           if (location == null) {
@@ -137,7 +177,7 @@ class CdkOAuthService {
           // approve → callback: 浏览器跳回业务方 + 业务方 JS 提交 code 的延迟
           await OAuthFlowHelper.humanGap(minMs: 400, maxMs: 900);
 
-          await callback(code, state);
+          await callback(code, state, requestGeneration: generation);
           return true;
         },
       ),

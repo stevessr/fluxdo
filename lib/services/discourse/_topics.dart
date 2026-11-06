@@ -15,10 +15,17 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
     // Isolate.exit 转移,回传零拷贝
-    return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
+    return compute(
+      _parseTopicListResponse,
+      response.data as Map<String, dynamic>,
+    );
   }
 
-  Future<TopicListResponse> getLatestTopics({int page = 0, String? order, bool? ascending}) async {
+  Future<TopicListResponse> getLatestTopics({
+    int page = 0,
+    String? order,
+    bool? ascending,
+  }) async {
     if (page == 0 && order == null) {
       final preloaded = PreloadedDataService();
       final preloadedList = await preloaded.getInitialTopicList();
@@ -39,7 +46,10 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
     // Isolate.exit 转移,回传零拷贝
-    return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
+    return compute(
+      _parseTopicListResponse,
+      response.data as Map<String, dynamic>,
+    );
   }
 
   /// 获取话题列表（支持分类和标签筛选）
@@ -84,7 +94,8 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     if (categoryId != null && categorySlug != null) {
       // 分类路径，标签通过 tags[] 查询参数传递
       if (parentCategorySlug != null) {
-        path = '/c/$parentCategorySlug/$categorySlug/$categoryId/l/$filter.json';
+        path =
+            '/c/$parentCategorySlug/$categorySlug/$categoryId/l/$filter.json';
       } else {
         path = '/c/$categorySlug/$categoryId/l/$filter.json';
       }
@@ -92,24 +103,52 @@ mixin _TopicsMixin on _DiscourseServiceBase {
         queryParams['tags[]'] = tags;
       }
     } else if (tags != null && tags.isNotEmpty) {
-      // 纯标签筛选：单标签用路径，多标签用第一个标签路径 + 其余标签查询参数
-      path = '/tag/${tags.first}/l/$filter.json';
-      if (tags.length > 1) {
-        queryParams['tags[]'] = tags.skip(1).toList();
+      // 对齐 Discourse 当前标签路由：
+      // - 单标签继续使用 /tag/:name/l/:filter
+      // - 多标签 latest 使用官方 canonical /tags/intersection/a/b.json
+      // - intersection 路由本身固定 show_latest；top/new 等过滤继续使用
+      //   tags[] + match_all_tags，由 TagsController#build_topic_list_options 处理。
+      final normalizedTags = tags
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty)
+          .toList(growable: false);
+      if (normalizedTags.isEmpty) {
+        path = '/$filter.json';
+      } else if (normalizedTags.length == 1) {
+        path =
+            '/tag/${Uri.encodeComponent(normalizedTags.first)}/l/$filter.json';
+      } else if (filter == 'latest') {
+        final encoded = normalizedTags.map(Uri.encodeComponent).join('/');
+        path = '/tags/intersection/$encoded.json';
+      } else {
+        path =
+            '/tag/${Uri.encodeComponent(normalizedTags.first)}/l/$filter.json';
+        queryParams['tags[]'] = normalizedTags.skip(1).toList();
         queryParams['match_all_tags'] = 'true';
       }
     } else {
       path = '/$filter.json';
     }
 
-    final response = await _dio.get(path, queryParameters: queryParams.isNotEmpty ? queryParams : null);
+    final response = await _dio.get(
+      path,
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+    );
     // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
     // Isolate.exit 转移,回传零拷贝
-    return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
+    return compute(
+      _parseTopicListResponse,
+      response.data as Map<String, dynamic>,
+    );
   }
 
-  Future<TopicListResponse> getNewTopics({int page = 0, String? order, bool? ascending, String? subset}) async {
+  Future<TopicListResponse> getNewTopics({
+    int page = 0,
+    String? order,
+    bool? ascending,
+    String? subset,
+  }) async {
     final queryParams = <String, dynamic>{};
     if (page > 0) queryParams['page'] = page;
     if (order != null) queryParams['order'] = order;
@@ -123,10 +162,17 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
     // Isolate.exit 转移,回传零拷贝
-    return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
+    return compute(
+      _parseTopicListResponse,
+      response.data as Map<String, dynamic>,
+    );
   }
 
-  Future<TopicListResponse> getUnreadTopics({int page = 0, String? order, bool? ascending}) async {
+  Future<TopicListResponse> getUnreadTopics({
+    int page = 0,
+    String? order,
+    bool? ascending,
+  }) async {
     final queryParams = <String, dynamic>{};
     if (page > 0) queryParams['page'] = page;
     if (order != null) queryParams['order'] = order;
@@ -139,10 +185,17 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
     // Isolate.exit 转移,回传零拷贝
-    return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
+    return compute(
+      _parseTopicListResponse,
+      response.data as Map<String, dynamic>,
+    );
   }
 
-  Future<TopicListResponse> getUnseenTopics({int page = 0, String? order, bool? ascending}) async {
+  Future<TopicListResponse> getUnseenTopics({
+    int page = 0,
+    String? order,
+    bool? ascending,
+  }) async {
     final queryParams = <String, dynamic>{};
     if (page > 0) queryParams['page'] = page;
     if (order != null) queryParams['order'] = order;
@@ -155,10 +208,17 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
     // Isolate.exit 转移,回传零拷贝
-    return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
+    return compute(
+      _parseTopicListResponse,
+      response.data as Map<String, dynamic>,
+    );
   }
 
-  Future<TopicListResponse> getHotTopics({int page = 0, String? order, bool? ascending}) async {
+  Future<TopicListResponse> getHotTopics({
+    int page = 0,
+    String? order,
+    bool? ascending,
+  }) async {
     final queryParams = <String, dynamic>{};
     if (page > 0) queryParams['page'] = page;
     if (order != null) queryParams['order'] = order;
@@ -171,11 +231,21 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
     // Isolate.exit 转移,回传零拷贝
-    return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
+    return compute(
+      _parseTopicListResponse,
+      response.data as Map<String, dynamic>,
+    );
   }
 
   /// 获取话题详情
-  Future<TopicDetail> getTopicDetail(int id, {int? postNumber, bool trackVisit = false, String? filter, String? usernameFilters, bool filterTopLevelReplies = false}) async {
+  Future<TopicDetail> getTopicDetail(
+    int id, {
+    int? postNumber,
+    bool trackVisit = false,
+    String? filter,
+    String? usernameFilters,
+    bool filterTopLevelReplies = false,
+  }) async {
     final path = postNumber != null ? '/t/$id/$postNumber.json' : '/t/$id.json';
     final queryParams = <String, dynamic>{};
     if (trackVisit) {
@@ -191,41 +261,63 @@ mixin _TopicsMixin on _DiscourseServiceBase {
       queryParams['filter_top_level_replies'] = true;
     }
     final options = trackVisit
-        ? Options(headers: {
-            'Discourse-Track-View': '1',
-            'Discourse-Track-View-Topic-Id': '$id',
-          })
+        ? Options(
+            headers: {
+              'Discourse-Track-View': '1',
+              'Discourse-Track-View-Topic-Id': '$id',
+            },
+          )
         : null;
-    final response = await _dio.get<String>(
-      path,
-      queryParameters: queryParams.isNotEmpty ? queryParams : null,
-      options: (options ?? Options())
-          .copyWith(responseType: ResponseType.plain),
-    );
+    Future<String> fetchBody(String requestPath) async {
+      final response = await _dio.get<String>(
+        requestPath,
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+        options: (options ?? Options()).copyWith(
+          responseType: ResponseType.plain,
+        ),
+      );
+      return response.data!;
+    }
+
+    late final String body;
+    try {
+      body = await fetchBody(path);
+    } on DioException catch (error) {
+      // A stale last-read floor may 404 while the topic itself is still
+      // readable, including server-closed private messages. Don't mistake
+      // this for a deleted conversation; retry the canonical URL once.
+      if (postNumber == null || error.response?.statusCode != 404) rethrow;
+      body = await fetchBody('/t/$id.json');
+    }
     // isolate 内 jsonDecode + fromJson:大话题响应几百 KB~几 MB,主线程
     // 解析实测把 DartIsolate::HandleMessage 顶到 46~56ms(滚动/进话题时
     // 直接掉帧)。结果对象经 Isolate.exit 转移,回传零拷贝。
-    return compute(_parseTopicDetailJson, response.data!);
+    return compute(_parseTopicDetailJson, body);
   }
 
   /// 通过 slug 获取话题详情（返回真实的 topic ID）
-  Future<TopicDetail> getTopicDetailBySlug(String slug, {int? postNumber, bool trackVisit = false}) async {
-    final path = postNumber != null ? '/t/$slug/$postNumber.json' : '/t/$slug.json';
+  Future<TopicDetail> getTopicDetailBySlug(
+    String slug, {
+    int? postNumber,
+    bool trackVisit = false,
+  }) async {
+    final path = postNumber != null
+        ? '/t/$slug/$postNumber.json'
+        : '/t/$slug.json';
     final queryParams = <String, dynamic>{};
     if (trackVisit) {
       queryParams['track_visit'] = true;
     }
     // 通过 slug 获取时无法提前知道 topic_id，仅设置 Track-View 头
     final options = trackVisit
-        ? Options(headers: {
-            'Discourse-Track-View': '1',
-          })
+        ? Options(headers: {'Discourse-Track-View': '1'})
         : null;
     final response = await _dio.get<String>(
       path,
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
-      options: (options ?? Options())
-          .copyWith(responseType: ResponseType.plain),
+      options: (options ?? Options()).copyWith(
+        responseType: ResponseType.plain,
+      ),
     );
     return compute(_parseTopicDetailJson, response.data!);
   }
@@ -235,7 +327,11 @@ mixin _TopicsMixin on _DiscourseServiceBase {
   /// [includeSuggested] 对齐网页版 post-stream 的 `include_suggested`:话题
   /// 详情首屏未到末尾时服务端不下发推荐话题,靠翻页请求补一次(已拿到就别
   /// 再要,服务端每次都要多跑一轮 TopicQuery)。
-  Future<PostStream> getPosts(int topicId, List<int> postIds, {bool includeSuggested = false}) async {
+  Future<PostStream> getPosts(
+    int topicId,
+    List<int> postIds, {
+    bool includeSuggested = false,
+  }) async {
     final response = await _dio.get<String>(
       '/t/$topicId/posts.json',
       queryParameters: {
@@ -248,7 +344,12 @@ mixin _TopicsMixin on _DiscourseServiceBase {
   }
 
   /// 按帖子编号获取帖子
-  Future<PostStream> getPostsByNumber(int topicId, {required int postNumber, required bool asc, bool includeSuggested = false}) async {
+  Future<PostStream> getPostsByNumber(
+    int topicId, {
+    required int postNumber,
+    required bool asc,
+    bool includeSuggested = false,
+  }) async {
     final response = await _dio.get<String>(
       '/t/$topicId/posts.json',
       queryParameters: {
@@ -266,7 +367,10 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
     // Isolate.exit 转移,回传零拷贝
-    return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
+    return compute(
+      _parseTopicListResponse,
+      response.data as Map<String, dynamic>,
+    );
   }
 
   Future<TopicListResponse> getCategoryTopics(String categorySlug) async {
@@ -274,7 +378,10 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     // isolate 内构造(jsonDecode 已由 BackgroundTransformer 移出主线程,
     // 几十个 Topic 对象的 fromJson 构造同样不便宜):返回值经
     // Isolate.exit 转移,回传零拷贝
-    return compute(_parseTopicListResponse, response.data as Map<String, dynamic>);
+    return compute(
+      _parseTopicListResponse,
+      response.data as Map<String, dynamic>,
+    );
   }
 
   /// 创建话题
@@ -325,20 +432,37 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     final respData = response.data;
     if (respData is Map) {
       final target = respData['target'];
-      final sequence = (target is Map ? target['draft_sequence'] : null) ??
+      final sequence =
+          (target is Map ? target['draft_sequence'] : null) ??
           respData['draft_sequence'];
       if (sequence is int) onDraftSequence?.call(sequence);
     }
 
-    // 帖子进入审核队列
+    // 帖子进入审核队列。Discourse 官方 pending serializer 不返回 payload.tags，
+    // 因此趁这里仍持有提交参数，用 reviewable id 持久化标签，供撤回重编辑恢复。
     if (respData is Map && respData['action'] == 'enqueued') {
+      final pendingPost = _parsePendingPost(respData['pending_post']);
+      if (pendingPost != null) {
+        final username =
+            _username ?? await AccountManager().getCurrentUsername();
+        if (username != null && username.isNotEmpty) {
+          await PendingReviewContextStore.recordTopicTags(
+            site: AppConstants.baseUrl,
+            username: username,
+            reviewableId: pendingPost.id,
+            tags: tags ?? const <String>[],
+          );
+        }
+      }
       throw PostEnqueuedException(
         pendingCount: respData['pending_count'] as int? ?? 0,
-        pendingPost: _parsePendingPost(respData['pending_post']),
+        pendingPost: pendingPost,
       );
     }
 
-    if (respData is Map && respData.containsKey('post') && respData['post']['topic_id'] != null) {
+    if (respData is Map &&
+        respData.containsKey('post') &&
+        respData['post']['topic_id'] != null) {
       return respData['post']['topic_id'] as int;
     }
 
@@ -384,10 +508,7 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     if (categoryId != null) {
       data['category_id'] = categoryId;
     }
-    await _dio.put(
-      '/topics/bulk.json',
-      data: data,
-    );
+    await _dio.put('/topics/bulk.json', data: data);
   }
 
   /// 标记话题为未读（对齐官方 deferTopic:DELETE /t/:id/timings?last=1,
@@ -400,13 +521,68 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     );
   }
 
+  /// 取消当前用户看到的置顶状态。
+  ///
+  /// 对齐 Discourse core 的 PUT /t/:id/clear-pin.json：只写当前用户的
+  /// TopicUser.cleared_pinned_at，不会替管理员把全站/分类置顶一起撤掉。
+  Future<void> clearTopicPin(int topicId) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/clear-pin.json',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
   /// 设置话题订阅级别
-  Future<void> setTopicNotificationLevel(int topicId, TopicNotificationLevel level) async {
+  Future<void> setTopicNotificationLevel(
+    int topicId,
+    TopicNotificationLevel level,
+  ) async {
     await _dio.post(
       '/t/$topicId/notifications',
       data: {'notification_level': level.value},
       options: Options(contentType: Headers.formUrlEncodedContentType),
     );
+  }
+
+  /// 归档私信
+  Future<void> archivePrivateMessage(int topicId) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/archive-message.json',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 将私信移回收件箱（取消归档）
+  Future<void> movePrivateMessageToInbox(int topicId) async {
+    try {
+      await _dio.put(
+        '/t/$topicId/move-to-inbox.json',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 邀请用户加入私信
+  Future<void> inviteToPrivateMessage(int topicId, String username) async {
+    try {
+      await _dio.post(
+        '/t/$topicId/invite.json',
+        data: {'user': username},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
   }
 
   /// 将用户移出私信；移除自己时等价于退出该私信。
@@ -438,11 +614,7 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     }
   }
 
-  /// 邀请用户加入私信（POST /t/:id/invite）。
-  ///
-  /// 成功时服务端回 BasicUserSerializer（root 为 `user`），据此可直接把新
-  /// 成员并入本地名单，无需整帖重载；用户是邮箱邀请等无 user 返回的情况
-  /// 则回 null。
+  /// 邀请用户加入私信，并返回服务端回传的成员信息（若有）。
   Future<TopicUser?> invitePrivateMessageUser(
     int topicId,
     String username,
@@ -471,28 +643,6 @@ mixin _TopicsMixin on _DiscourseServiceBase {
         data: {'group': groupName},
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
-    } on DioException catch (e) {
-      _throwApiError(e);
-    }
-  }
-
-  /// 归档私信（PUT /t/:id/archive-message）。
-  ///
-  /// 服务端同时处理个人归档与「当前用户所属、且在本私信收件人里」的群组
-  /// 归档；群组私信会回 `{group_name: ...}` 用于定位群组收件箱，本项目私信
-  /// 页只有收件箱/已发送/归档三档，没有群组收件箱，故不取该返回值。
-  Future<void> archivePrivateMessage(int topicId) async {
-    try {
-      await _dio.put('/t/$topicId/archive-message.json');
-    } on DioException catch (e) {
-      _throwApiError(e);
-    }
-  }
-
-  /// 将已归档私信移回收件箱（PUT /t/:id/move-to-inbox）。
-  Future<void> movePrivateMessageToInbox(int topicId) async {
-    try {
-      await _dio.put('/t/$topicId/move-to-inbox.json');
     } on DioException catch (e) {
       _throwApiError(e);
     }

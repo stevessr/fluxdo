@@ -1,0 +1,84 @@
+name: TEMP PR132 HTTPS Verification
+
+# Temporary manual-only validation launcher on the default branch.
+# Remove once PR #132 passes and is merged.
+on:
+  workflow_dispatch:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # Only the owner can request this PR-specific, secret-free validation.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 132 &&
+       github.event.comment.user.login == 'stevessr' &&
+       github.event.comment.body == '/verify-https-132')
+    name: HTTPS ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [format, analyze, test]
+    steps:
+      - name: Checkout PR #132 head
+        uses: actions/checkout@v4
+        with:
+          ref: feat/https-advanced-security-20261013
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Identify tested PR branch revision
+        run: |
+          echo "PR132_TESTED_HEAD=$(git rev-parse HEAD)"
+          git log -1 --format='Commit: %H%nSubject: %s'
+
+      - name: Setup pinned Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs assets/images/llm
+
+      - name: Restore locked dependencies
+        if: matrix.task != 'format'
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate localization
+        if: matrix.task != 'format'
+        run: dart run tool/gen_l10n.dart
+
+      - name: Strict Dart formatting
+        if: matrix.task == 'format'
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/services/network/discourse_dio.dart \
+            lib/services/network/adapters/platform_adapter.dart \
+            lib/services/network/adapters/rhttp_adapter.dart \
+            lib/services/network/interceptors/https_security_interceptor.dart \
+            lib/services/network/interceptors/redirect_interceptor.dart \
+            lib/services/network/flux_request_spec.dart \
+            lib/services/network/cookie/app_cookie_manager.dart \
+            lib/services/network/interceptors/network_log_interceptor.dart \
+            test/services/network/adapters/rhttp_adapter_test.dart \
+            test/services/network/interceptors/https_security_interceptor_test.dart \
+            test/services/network/interceptors/redirect_interceptor_test.dart \
+            test/services/network/cookie/app_cookie_manager_test.dart \
+            test/services/network/request_tag_logging_test.dart
+          git diff --check
+
+      - name: Static analysis
+        if: matrix.task == 'analyze'
+        run: flutter analyze lib/services/network test/services/network
+
+      - name: Network regression tests
+        if: matrix.task == 'test'
+        run: dart tool/flutterw.dart test test/services/network

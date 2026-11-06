@@ -110,9 +110,9 @@ class NetworkLogInterceptor extends Interceptor {
         options.headers[HttpHeaders.cookieHeader]?.toString() ??
         options.headers['Cookie']?.toString() ??
         '';
-    final sentT = RegExp(
-      r'(?:^|;\s*)_t=([^;]*)',
-    ).firstMatch(cookieHeader)?.group(1);
+    final sentT = RegExp(r'(?:^|;\s*)_t=([^;]*)')
+        .firstMatch(cookieHeader)
+        ?.group(1);
 
     final csrfState = csrfHeader == null
         ? 'missing'
@@ -135,9 +135,8 @@ class NetworkLogInterceptor extends Interceptor {
       'sentCookieLen': cookieHeader.length,
       'sentHasT': sentT != null && sentT.isNotEmpty,
       'sentTLen': sentT?.isNotEmpty == true ? sentT!.length : null,
-      'sentHasForumSession': RegExp(
-        r'(?:^|;\s*)_forum_session=',
-      ).hasMatch(cookieHeader),
+      'sentHasForumSession': RegExp(r'(?:^|;\s*)_forum_session=')
+          .hasMatch(cookieHeader),
     };
   }
 }

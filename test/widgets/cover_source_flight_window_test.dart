@@ -23,8 +23,7 @@ void main() {
   const img = ui.Size(240, 320); // 图片:aspect 0.75
   const imgRect = Rect.fromLTWH(0, 0, 240, 320);
 
-  setUp(() =>
-      HeroVisibilityController.instance.setExitVisibleFraction(null));
+  setUp(() => HeroVisibilityController.instance.setExitVisibleFraction(null));
   tearDown(() {
     HeroVisibilityController.instance.setExitVisibleFraction(null);
     CoverContainFlightImage.debugLastSrc = null;
@@ -60,9 +59,7 @@ void main() {
     return CoverContainFlightImage.debugLastSrc!;
   }
 
-  testWidgets('源端比例==图片比例:全程取全图,任何飞行盒子下都不裁', (
-    tester,
-  ) async {
+  testWidgets('源端比例==图片比例:全程取全图,任何飞行盒子下都不裁', (tester) async {
     // 气泡未撞 clamp 的场景:sourceAspect = 图片比例 0.75。
     // 途中喂几个**失配**的飞行盒子(屏幕比例、方形…),src 必须恒为全图。
     for (final box in const [
@@ -72,12 +69,7 @@ void main() {
       Size(500, 300), // 极端失配:扁盒子
     ]) {
       for (final t in const [0.0, 0.25, 0.5, 0.75, 1.0]) {
-        final src = await srcAt(
-          tester,
-          box: box,
-          t: t,
-          sourceAspect: 0.75,
-        );
+        final src = await srcAt(tester, box: box, t: t, sourceAspect: 0.75);
         expect(
           src,
           imgRect,
@@ -87,9 +79,7 @@ void main() {
     }
   });
 
-  testWidgets('源端比例≠图片比例(气泡撞 clamp):贴源端确按源端比例裁,不受飞行盒子影响', (
-    tester,
-  ) async {
+  testWidgets('源端比例≠图片比例(气泡撞 clamp):贴源端确按源端比例裁,不受飞行盒子影响', (tester) async {
     // 图片很高(0.5),气泡撞 clamp 后盒子 0.75 → 贴源端应纵向裁:满宽、裁高。
     const tall = ui.Size(300, 600); // aspect 0.5
     final ctrl = AnimationController(vsync: tester);
@@ -134,10 +124,9 @@ void main() {
     // 画布 400x700(屏幕比例)、图 240x320:cover 裁窗 = 满高、裁宽。
     const size = Size(400, 700);
     const imgW = 240.0, imgH = 320.0;
-    final coverScale =
-        (size.width / imgW) > (size.height / imgH)
-            ? size.width / imgW
-            : size.height / imgH;
+    final coverScale = (size.width / imgW) > (size.height / imgH)
+        ? size.width / imgW
+        : size.height / imgH;
     final winW = size.width / coverScale;
     final winH = size.height / coverScale;
     // 结论:旧算式在此盒子下 winW < imgW(被裁),故中间帧不完整。

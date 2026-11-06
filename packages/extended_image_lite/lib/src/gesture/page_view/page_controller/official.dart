@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -246,10 +247,10 @@ class _PagePosition extends ScrollPositionWithSingleContext
     return !hasPixels || !hasContentDimensions
         ? null
         : _cachedPage ??
-            getPageFromPixels(
-              clampDouble(pixels, minScrollExtent, maxScrollExtent),
-              viewportDimension,
-            );
+              getPageFromPixels(
+                clampDouble(pixels, minScrollExtent, maxScrollExtent),
+                viewportDimension,
+              );
   }
 
   @override
@@ -263,11 +264,9 @@ class _PagePosition extends ScrollPositionWithSingleContext
   @override
   void restoreScrollOffset() {
     if (!hasPixels) {
-      final double? value =
-          PageStorage.maybeOf(
-                context.storageContext,
-              )?.readState(context.storageContext)
-              as double?;
+      final double? value = PageStorage.maybeOf(
+        context.storageContext,
+      )?.readState(context.storageContext) as double?;
       if (value != null) {
         _pageToUseOnStartup = value;
       }

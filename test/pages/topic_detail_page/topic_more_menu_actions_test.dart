@@ -18,6 +18,7 @@ void main() {
       onShareImage: () => fail('不应触发'),
       onExport: () => fail('不应触发'),
       onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => fail('不应触发'),
       onFilter: () => fail('不应触发'),
       onReadingSettings: () => fail('不应触发'),
       onToggleArchiveMessage: () => toggled++,
@@ -39,9 +40,31 @@ void main() {
       onShareImage: () => fail('不应触发'),
       onExport: () => fail('不应触发'),
       onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => fail('不应触发'),
       onFilter: () => fail('不应触发'),
       onReadingSettings: () => fail('不应触发'),
     );
+  });
+
+  test('open_in_built_in_browser 分发到内置浏览器回调', () {
+    var opened = 0;
+    handleTopicDetailMoreMenuSelection(
+      'open_in_built_in_browser',
+      onEditTopic: () => fail('不应触发'),
+      onBookmark: () => fail('不应触发'),
+      onReadLater: () => fail('不应触发'),
+      onSubscribe: () => fail('不应触发'),
+      onMarkUnread: () => fail('不应触发'),
+      onMarkUnreadAll: () => fail('不应触发'),
+      onShareLink: () => fail('不应触发'),
+      onShareImage: () => fail('不应触发'),
+      onExport: () => fail('不应触发'),
+      onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => opened++,
+      onFilter: () => fail('不应触发'),
+      onReadingSettings: () => fail('不应触发'),
+    );
+    expect(opened, 1);
   });
 
   test('其它菜单项不会误触归档', () {
@@ -59,11 +82,75 @@ void main() {
       onShareImage: () => fail('不应触发'),
       onExport: () => exported++,
       onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => fail('不应触发'),
       onFilter: () => fail('不应触发'),
       onReadingSettings: () => fail('不应触发'),
       onToggleArchiveMessage: () => toggled++,
     );
     expect(exported, 1);
     expect(toggled, 0);
+  });
+
+  test('add_to_board 只触发看板操作', () {
+    var boardsOpened = 0;
+    handleTopicDetailMoreMenuSelection(
+      'add_to_board',
+      onEditTopic: () => fail('不应触发'),
+      onAddToBoard: () => boardsOpened++,
+      onBookmark: () => fail('不应触发'),
+      onReadLater: () => fail('不应触发'),
+      onSubscribe: () => fail('不应触发'),
+      onMarkUnread: () => fail('不应触发'),
+      onMarkUnreadAll: () => fail('不应触发'),
+      onShareLink: () => fail('不应触发'),
+      onShareImage: () => fail('不应触发'),
+      onExport: () => fail('不应触发'),
+      onOpenInBrowser: () => fail('不应触发'),
+      onOpenInBuiltInBrowser: () => fail('不应触发'),
+      onFilter: () => fail('不应触发'),
+      onReadingSettings: () => fail('不应触发'),
+    );
+    expect(boardsOpened, 1);
+  });
+  test('open_in_new_window 只分发新原生窗口动作', () {
+    var nativeWindowOpened = 0;
+    handleTopicDetailMoreMenuSelection(
+      'open_in_new_window',
+      onEditTopic: () => fail('不应触发'),
+      onBookmark: () => fail('不应触发'),
+      onReadLater: () => fail('不应触发'),
+      onSubscribe: () => fail('不应触发'),
+      onMarkUnread: () => fail('不应触发'),
+      onMarkUnreadAll: () => fail('不应触发'),
+      onShareLink: () => fail('不应触发'),
+      onShareImage: () => fail('不应触发'),
+      onExport: () => fail('不应触发'),
+      onOpenInBrowser: () => fail('不应触发'),
+      onOpenInNewWindow: () => nativeWindowOpened++,
+      onFilter: () => fail('不应触发'),
+      onReadingSettings: () => fail('不应触发'),
+    );
+    expect(nativeWindowOpened, 1);
+  });
+
+  test('open_in_tab 分发到独立标签动作', () {
+    var opened = 0;
+    handleTopicDetailMoreMenuSelection(
+      'open_in_tab',
+      onEditTopic: () => fail('unexpected'),
+      onBookmark: () => fail('unexpected'),
+      onReadLater: () => fail('unexpected'),
+      onSubscribe: () => fail('unexpected'),
+      onMarkUnread: () => fail('unexpected'),
+      onMarkUnreadAll: () => fail('unexpected'),
+      onShareLink: () => fail('unexpected'),
+      onShareImage: () => fail('unexpected'),
+      onExport: () => fail('unexpected'),
+      onOpenInBrowser: () => fail('unexpected'),
+      onOpenInTab: () => opened++,
+      onFilter: () => fail('unexpected'),
+      onReadingSettings: () => fail('unexpected'),
+    );
+    expect(opened, 1);
   });
 }

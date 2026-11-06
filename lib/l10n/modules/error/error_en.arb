@@ -23,7 +23,7 @@
   "error_networkUnavailable": "Network unavailable",
   "error_openNetworkSettings": "Network Settings",
   "error_notFound": "Not found",
-  "error_notFoundOrDeleted": "Content not found or deleted",
+  "error_notFoundOrDeleted": "Content not found, inaccessible, or link expired",
   "error_notLoggedInNoUsername": "Not logged in or cannot get username",
   "error_providerDisposed": "Provider disposed",
   "error_rateLimited": "Too many requests",

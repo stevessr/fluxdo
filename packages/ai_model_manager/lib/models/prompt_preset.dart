@@ -100,8 +100,7 @@ class PromptPreset {
       name: name ?? this.name,
       iconRaw: iconRaw ?? this.iconRaw,
       promptTemplate: promptTemplate ?? this.promptTemplate,
-      aspectRatio:
-          clearAspectRatio ? null : (aspectRatio ?? this.aspectRatio),
+      aspectRatio: clearAspectRatio ? null : (aspectRatio ?? this.aspectRatio),
       tags: tags ?? this.tags,
       pinned: pinned ?? this.pinned,
       sortOrder: sortOrder ?? this.sortOrder,
@@ -115,22 +114,22 @@ class PromptPreset {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type.toJson(),
-        'name': name,
-        'iconRaw': iconRaw,
-        'promptTemplate': promptTemplate,
-        if (aspectRatio != null) 'aspectRatio': aspectRatio,
-        if (tags.isNotEmpty) 'tags': tags,
-        'pinned': pinned,
-        'sortOrder': sortOrder,
-        'builtIn': builtIn,
-        'hidden': hidden,
-        if (dimensions != null)
-          'dimensions': dimensions!.map((e) => e.toJson()).toList(),
-        if (defaultDimensionValues != null)
-          'defaultDimensionValues': defaultDimensionValues,
-      };
+    'id': id,
+    'type': type.toJson(),
+    'name': name,
+    'iconRaw': iconRaw,
+    'promptTemplate': promptTemplate,
+    if (aspectRatio != null) 'aspectRatio': aspectRatio,
+    if (tags.isNotEmpty) 'tags': tags,
+    'pinned': pinned,
+    'sortOrder': sortOrder,
+    'builtIn': builtIn,
+    'hidden': hidden,
+    if (dimensions != null)
+      'dimensions': dimensions!.map((e) => e.toJson()).toList(),
+    if (defaultDimensionValues != null)
+      'defaultDimensionValues': defaultDimensionValues,
+  };
 
   factory PromptPreset.fromJson(Map<String, dynamic> json) {
     return PromptPreset(
@@ -149,8 +148,9 @@ class PromptPreset {
           ?.map((e) => PromptDimension.fromJson(e as Map<String, dynamic>))
           .toList(),
       defaultDimensionValues:
-          (json['defaultDimensionValues'] as Map<String, dynamic>?)
-              ?.map((k, v) => MapEntry(k, v as String)),
+          (json['defaultDimensionValues'] as Map<String, dynamic>?)?.map(
+            (k, v) => MapEntry(k, v as String),
+          ),
     );
   }
 }
@@ -188,13 +188,13 @@ class PresetCustomization {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        if (pinned != null) 'pinned': pinned,
-        if (hidden != null) 'hidden': hidden,
-        if (sortOrder != null) 'sortOrder': sortOrder,
-        if (dimensionValues != null) 'dimensionValues': dimensionValues,
-        if (aspectRatio != null) 'aspectRatio': aspectRatio,
-      };
+    'id': id,
+    if (pinned != null) 'pinned': pinned,
+    if (hidden != null) 'hidden': hidden,
+    if (sortOrder != null) 'sortOrder': sortOrder,
+    if (dimensionValues != null) 'dimensionValues': dimensionValues,
+    if (aspectRatio != null) 'aspectRatio': aspectRatio,
+  };
 
   factory PresetCustomization.fromJson(Map<String, dynamic> json) {
     return PresetCustomization(
@@ -202,19 +202,16 @@ class PresetCustomization {
       pinned: json['pinned'] as bool?,
       hidden: json['hidden'] as bool?,
       sortOrder: (json['sortOrder'] as num?)?.toInt(),
-      dimensionValues: (json['dimensionValues'] as Map<String, dynamic>?)
-          ?.map((k, v) => MapEntry(k, v as String)),
+      dimensionValues: (json['dimensionValues'] as Map<String, dynamic>?)?.map(
+        (k, v) => MapEntry(k, v as String),
+      ),
       aspectRatio: json['aspectRatio'] as String?,
     );
   }
 }
 
 /// 工具：把 preset.promptTemplate 中的占位符替换为实际值
-String renderPromptTemplate(
-  String template, {
-  String? title,
-  String? context,
-}) {
+String renderPromptTemplate(String template, {String? title, String? context}) {
   var out = template;
   if (title != null) out = out.replaceAll('{title}', title);
   if (context != null) out = out.replaceAll('{context}', context);
@@ -240,11 +237,8 @@ String appendDimensionFragments(
     if (value == null) continue;
     final option = dim.options.firstWhere(
       (o) => o.value == value,
-      orElse: () => const DimensionOption(
-        value: '',
-        label: '',
-        promptFragment: '',
-      ),
+      orElse: () =>
+          const DimensionOption(value: '', label: '', promptFragment: ''),
     );
     if (option.promptFragment.isNotEmpty) {
       fragments.add(option.promptFragment);

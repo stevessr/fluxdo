@@ -3,7 +3,11 @@ import 'dart:io' as io;
 import 'canonical_cookie.dart';
 
 class SetCookieParser {
-  static CanonicalCookie parse(String header, {required Uri uri, CookieSource source = CookieSource.setCookieHeader}) {
+  static CanonicalCookie parse(
+    String header, {
+    required Uri uri,
+    CookieSource source = CookieSource.setCookieHeader,
+  }) {
     final parts = header.split(';');
     if (parts.isEmpty) {
       throw FormatException('Invalid Set-Cookie header: ');
@@ -36,8 +40,12 @@ class SetCookieParser {
       final attribute = rawAttribute.trim();
       if (attribute.isEmpty) continue;
       final index = attribute.indexOf('=');
-      final key = (index == -1 ? attribute : attribute.substring(0, index)).trim().toLowerCase();
-      final attrValue = index == -1 ? '' : attribute.substring(index + 1).trim();
+      final key = (index == -1 ? attribute : attribute.substring(0, index))
+          .trim()
+          .toLowerCase();
+      final attrValue = index == -1
+          ? ''
+          : attribute.substring(index + 1).trim();
 
       switch (key) {
         case 'domain':
@@ -84,8 +92,9 @@ class SetCookieParser {
       }
     }
 
-    final normalizedDomain =
-        domain == null || domain.isEmpty ? uri.host : domain;
+    final normalizedDomain = domain == null || domain.isEmpty
+        ? uri.host
+        : domain;
 
     return CanonicalCookie(
       name: name,
@@ -111,11 +120,15 @@ class SetCookieParser {
     );
   }
 
-  static CanonicalCookie fromIoCookie(io.Cookie cookie, {required Uri uri, CookieSource source = CookieSource.dioResponse}) {
+  static CanonicalCookie fromIoCookie(
+    io.Cookie cookie, {
+    required Uri uri,
+    CookieSource source = CookieSource.dioResponse,
+  }) {
     final normalizedDomain =
         cookie.domain == null || cookie.domain!.trim().isEmpty
-            ? uri.host
-            : cookie.domain;
+        ? uri.host
+        : cookie.domain;
 
     return CanonicalCookie(
       name: cookie.name,

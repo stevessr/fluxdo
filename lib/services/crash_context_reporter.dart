@@ -15,8 +15,9 @@ import 'package:flutter/widgets.dart';
 class CrashContextReporter {
   CrashContextReporter._();
 
-  static const MethodChannel _channel =
-      MethodChannel('com.github.lingyan000.fluxdo/crashlytics');
+  static const MethodChannel _channel = MethodChannel(
+    'com.github.lingyan000.fluxdo/crashlytics',
+  );
 
   /// 最近的导航轨迹(最新在末尾),给现场一点"怎么走到这儿"的上下文。
   static final List<String> _trail = [];
@@ -42,14 +43,16 @@ class CrashContextReporter {
   static void _send(String current) {
     if (!_enabled) return;
     // fire-and-forget:上报失败不能影响导航
-    _channel.invokeMethod<void>('setCrashContext', {
-      'route': current,
-      'routeTrail': _trail.join(' > '),
-    }).catchError((Object e) {
-      if (kDebugMode) {
-        debugPrint('[CrashContext] 同步失败: $e');
-      }
-    });
+    _channel
+        .invokeMethod<void>('setCrashContext', {
+          'route': current,
+          'routeTrail': _trail.join(' > '),
+        })
+        .catchError((Object e) {
+          if (kDebugMode) {
+            debugPrint('[CrashContext] 同步失败: $e');
+          }
+        });
   }
 }
 

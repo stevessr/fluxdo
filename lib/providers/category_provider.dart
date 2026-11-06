@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/legacy.dart';
+
 import '../models/category.dart';
 import '../models/tag_search_result.dart';
 import '../models/topic.dart';
@@ -70,9 +71,8 @@ final activeSidebarCategoryIdProvider = StateProvider<int?>((ref) => null);
 /// 去重）不同，**重选当前板块**也必须触发——首页靠它把深层平行视界收回
 /// 板块列表。nonce 单调递增保证连续点同一板块也能被 ref.listen 捕获
 /// （同 NavActionEvent 的做法）。
-final sidebarCategoryTapProvider = StateProvider<({int categoryId, int nonce})?>(
-  (ref) => null,
-);
+final sidebarCategoryTapProvider =
+    StateProvider<({int categoryId, int nonce})?>((ref) => null);
 
 /// 热门标签列表 Provider
 final tagsProvider = FutureProvider<List<String>>((ref) async {

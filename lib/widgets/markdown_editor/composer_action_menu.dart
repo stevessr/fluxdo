@@ -1,6 +1,8 @@
 import 'dart:math' as math;
+
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
+
 import 'composer_object_surface.dart';
 import 'composer_menu_placement.dart';
 

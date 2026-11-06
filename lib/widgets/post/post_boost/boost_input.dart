@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../l10n/s.dart';
 import '../../../models/emoji.dart';
 import '../../../utils/emoji_shortcodes.dart';

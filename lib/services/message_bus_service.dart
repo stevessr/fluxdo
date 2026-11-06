@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+
 import '../constants.dart';
 import '../utils/client_id_generator.dart';
 import '../utils/scroll_busy_signal.dart';
@@ -87,7 +89,9 @@ class MessageBusService {
   static const Duration _minPollInterval = Duration(milliseconds: 100);
   static const Duration _maxPollInterval = Duration(minutes: 3);
   static const Duration _defaultCallbackInterval = Duration(seconds: 3);
-  static const Duration _defaultBackgroundCallbackInterval = Duration(seconds: 60);
+  static const Duration _defaultBackgroundCallbackInterval = Duration(
+    seconds: 60,
+  );
   static const Duration _firstChunkTimeout = Duration(seconds: 3);
   static const int _retryChunkedAfterRequests = 30;
   static const int _minRateLimitedSeconds = 15;
@@ -107,8 +111,8 @@ class MessageBusService {
   String get clientId => _clientId;
 
   MessageBusService._internal()
-      : _clientId = ClientIdGenerator.generate(),
-        _dio = _createPollingDio();
+    : _clientId = ClientIdGenerator.generate(),
+      _dio = _createPollingDio();
 
   /// 当前前台/后台轮询间隔(从 PreloadedDataService 读取站点设置)
   Duration get _callbackInterval {
@@ -145,12 +149,16 @@ class MessageBusService {
 
   /// 配置 MessageBus 独立域名(登录后从预加载数据获取)
   void configure({String? baseUrl, String? sharedSessionKey}) {
-    final changed = _baseUrl != baseUrl || _sharedSessionKey != sharedSessionKey;
+    final changed =
+        _baseUrl != baseUrl || _sharedSessionKey != sharedSessionKey;
     _baseUrl = baseUrl;
     _sharedSessionKey = sharedSessionKey;
 
     if (changed && baseUrl != null) {
-      _dio = _createPollingDio(baseUrl: baseUrl, sharedSessionKey: sharedSessionKey);
+      _dio = _createPollingDio(
+        baseUrl: baseUrl,
+        sharedSessionKey: sharedSessionKey,
+      );
       debugPrint('[MessageBus] 配置独立域名: $baseUrl');
     } else if (changed && baseUrl == null) {
       _dio = _createPollingDio(sharedSessionKey: sharedSessionKey);
@@ -158,10 +166,7 @@ class MessageBusService {
     }
   }
 
-  static Dio _createPollingDio({
-    String? baseUrl,
-    String? sharedSessionKey,
-  }) {
+  static Dio _createPollingDio({String? baseUrl, String? sharedSessionKey}) {
     return DiscourseDio.create(
       receiveTimeout: const Duration(seconds: 60),
       defaultHeaders: {
@@ -199,7 +204,11 @@ class MessageBusService {
   }
 
   /// 订阅频道
-  void subscribe(String channel, MessageBusCallback callback, {int lastMessageId = -1}) {
+  void subscribe(
+    String channel,
+    MessageBusCallback callback, {
+    int lastMessageId = -1,
+  }) {
     if (!_subscriptions.containsKey(channel)) {
       _subscriptions[channel] = _ChannelSubscription(
         channel: channel,
@@ -236,7 +245,11 @@ class MessageBusService {
   }
 
   /// 使用指定的 messageId 订阅
-  void subscribeWithMessageId(String channel, MessageBusCallback callback, int messageId) {
+  void subscribeWithMessageId(
+    String channel,
+    MessageBusCallback callback,
+    int messageId,
+  ) {
     if (_subscriptions.containsKey(channel)) {
       _subscriptions[channel]!.callbacks.add(callback);
       if (messageId > _subscriptions[channel]!.lastMessageId) {
@@ -321,7 +334,9 @@ class MessageBusService {
 
   /// 执行长轮询
   Future<void> _poll(int generation) async {
-    while (!_shouldStop && _subscriptions.isNotEmpty && generation == _pollGeneration) {
+    while (!_shouldStop &&
+        _subscriptions.isNotEmpty &&
+        generation == _pollGeneration) {
       _currentCancelToken = CancelToken();
       final cancelToken = _currentCancelToken!;
       final startedAt = DateTime.now();
@@ -351,9 +366,7 @@ class MessageBusService {
           '[MessageBus] 发起轮询 (seq=$_totalPollCalls, chunked=$useChunked, bg=$_backgroundMode): $payload',
         );
 
-        final extraHeaders = <String, dynamic>{
-          'X-SILENCE-LOGGER': 'true',
-        };
+        final extraHeaders = <String, dynamic>{'X-SILENCE-LOGGER': 'true'};
         if (_sharedSessionKey != null) {
           extraHeaders['X-Shared-Session-Key'] = _sharedSessionKey;
         }
@@ -379,8 +392,10 @@ class MessageBusService {
         );
 
         final responseContentType =
-            response.headers[Headers.contentTypeHeader]?.join(',').toLowerCase() ??
-                '';
+            response.headers[Headers.contentTypeHeader]
+                ?.join(',')
+                .toLowerCase() ??
+            '';
         final serverSaysJson = responseContentType.contains('application/json');
 
         if (useChunked && !serverSaysJson) {
@@ -481,7 +496,9 @@ class MessageBusService {
   }) {
     if (rateLimited) {
       final raw = rateLimitedSeconds ?? _minRateLimitedSeconds;
-      final seconds = raw < _minRateLimitedSeconds ? _minRateLimitedSeconds : raw;
+      final seconds = raw < _minRateLimitedSeconds
+          ? _minRateLimitedSeconds
+          : raw;
       final candidate = Duration(seconds: seconds);
       return candidate < _minPollInterval ? _minPollInterval : candidate;
     }
@@ -499,7 +516,9 @@ class MessageBusService {
       return _minPollInterval;
     }
 
-    final target = inBackground ? _backgroundCallbackInterval : _callbackInterval;
+    final target = inBackground
+        ? _backgroundCallbackInterval
+        : _callbackInterval;
     final elapsed = DateTime.now().difference(startedAt);
     final remaining = target - elapsed;
     return remaining < _minPollInterval ? _minPollInterval : remaining;
@@ -657,7 +676,9 @@ class MessageBusService {
           final lastId = entry.value;
           if (_subscriptions.containsKey(channelName) && lastId is int) {
             _subscriptions[channelName]!.lastMessageId = lastId;
-            debugPrint('[MessageBus] 更新频道 $channelName 的 lastMessageId: $lastId');
+            debugPrint(
+              '[MessageBus] 更新频道 $channelName 的 lastMessageId: $lastId',
+            );
           }
         }
       }

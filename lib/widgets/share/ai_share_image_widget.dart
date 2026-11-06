@@ -4,6 +4,7 @@ import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:jovial_svg/jovial_svg.dart';
 import 'package:markdown/markdown.dart' as md;
+
 import '../../constants.dart';
 import '../../l10n/s.dart';
 import '../../services/emoji_handler.dart';

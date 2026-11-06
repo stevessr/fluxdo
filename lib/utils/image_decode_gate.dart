@@ -229,7 +229,10 @@ class GatedImageCodec implements ui.Codec {
 /// 必须在 main() 里以 `FluxdoWidgetsBinding.ensureInitialized()` 替代
 /// `WidgetsFlutterBinding.ensureInitialized()`。
 class FluxdoWidgetsBinding extends WidgetsFlutterBinding
-    with PerfPipelineProbe, FrameSchedulerProbe, DesktopScrollInteractionBinding {
+    with
+        PerfPipelineProbe,
+        FrameSchedulerProbe,
+        DesktopScrollInteractionBinding {
   static FluxdoWidgetsBinding? _instance;
 
   static FluxdoWidgetsBinding ensureInitialized() =>

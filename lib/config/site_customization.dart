@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models/topic.dart';
 import '../plugins/site_plugin.dart';
 
@@ -79,10 +80,7 @@ class UserTitleStyleRule {
   /// 自定义 widget builder
   final Widget Function(String title, double fontSize) builder;
 
-  const UserTitleStyleRule({
-    required this.title,
-    required this.builder,
-  });
+  const UserTitleStyleRule({required this.title, required this.builder});
 }
 
 /// 站点自定义配置

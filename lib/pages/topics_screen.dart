@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+
 import '../l10n/s.dart';
 import '../models/search_filter.dart';
 import '../models/category.dart';
 import '../navigation/nav_action_bus.dart';
 import '../providers/selected_topic_provider.dart';
+import '../providers/preferences_provider.dart';
 import '../providers/shortcut_provider.dart';
 import '../providers/discourse_providers.dart';
 import '../utils/platform_utils.dart';
 import '../widgets/layout/master_detail_layout.dart';
+import '../widgets/layout/pico_parallel_tabs.dart';
 import '../widgets/topics/topics_fab.dart';
 import '../widgets/layout/pane_projection_back_scope.dart';
 import '../widgets/layout/home_workspace_scope.dart';
@@ -87,7 +90,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
     // 不清就会"点了板块没反应"(列表在投影底下换好了但看不见)——
     // 投影态下切板块语义就是回列表,整栈清空。
     final projecting =
-        state.hasSelection && !MasterDetailLayout.canShowBothPanesFor(context);
+        state.hasSelection &&
+        !state.showingFeed &&
+        !MasterDetailLayout.canShowBothPanesFor(context);
     if (!state.isStacked &&
         !projecting &&
         !_showEmbeddedSearch &&
@@ -96,10 +101,14 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       return;
     }
     final notifier = ref.read(selectedTopicProvider.notifier);
-    if (projecting) {
-      notifier.clear();
+    if (state.tabMode) {
+      notifier.showFeed();
     } else {
-      notifier.collapseToTop();
+      if (projecting) {
+        notifier.clear();
+      } else {
+        notifier.collapseToTop();
+      }
     }
     if (mounted) {
       setState(() {
@@ -115,7 +124,7 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   Widget build(BuildContext context) {
     final selectedTopic = ref.watch(selectedTopicProvider);
     // 左栏本质是不是"列表"（信息流）——决定给窄栏还是对半分
-    _masterIsListLike = !selectedTopic.isStacked;
+    _masterIsListLike = !selectedTopic.isStacked || selectedTopic.tabMode;
     final user = ref.watch(currentUserProvider).value;
 
     // 左侧导航栏的板块快捷入口位于平行视界布局之外。切换板块时除了让
@@ -140,11 +149,13 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       // 投影态(窄屏详情全宽盖着列表)下点"首页"=回列表,与压栈态同语义
       final projecting =
           selectedTopic.hasSelection &&
+          !selectedTopic.showingFeed &&
           !MasterDetailLayout.canShowBothPanesFor(context);
       if (_showEmbeddedSearch ||
           _leftCategory != null ||
           _leftTag != null ||
-          selectedTopic.isStacked ||
+          ((selectedTopic.isStacked || selectedTopic.tabMode) &&
+              !selectedTopic.showingFeed) ||
           projecting) {
         _showFeed();
         return;
@@ -163,7 +174,10 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
 
     // ESC 语义:栈非空(宽屏右栏开着/窄屏投影着)都让分发落 detail scope
     // (关右栏/关投影);栈空才注册 maybePop 关整页。
-    _escBinding.sync(context, paneOpen: selectedTopic.hasSelection);
+    _escBinding.sync(
+      context,
+      paneOpen: selectedTopic.hasSelection && !selectedTopic.showingFeed,
+    );
 
     // 统一使用 MasterDetailLayout 处理所有情况
     // 手机/平板单栏：只显示 master;栈非空时 detail 在本页体内全宽投影
@@ -176,48 +190,65 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       child: PaneProjectionBackScope(
         stackProvider: selectedTopicProvider,
         isActive: widget.isActive,
-        child: MasterDetailLayout(
-        // 压栈时左栏显示的是"上一层"内容而不是列表，才是真正的平行
-        // 视界——放宽到接近对半分；master 还是列表时维持列表该有的窄栏。
-        //
-        // 例外：上一层是**草稿列表**时它本质仍是列表（一列卡片），
-        // 对半分太宽、右边话题被挤扁 —— 按列表口径给窄栏。
-        maxMasterRatio: selectedTopic.isStacked && !_masterIsListLike
-            ? 0.8
-            : MasterDetailLayout.defaultMaxMasterRatio,
-        preferredMasterRatio:
-            selectedTopic.isStacked && !_masterIsListLike ? 0.5 : 0.25,
-        projectDetailWhenNarrow: true,
-        // 胶片带:列表也在带上,压栈时被顶出左侧、倒二层格顶上左栏
-        // (旧"上一层预览"形态,由容器统一承担,预览格 State 全保)。
-        pinMaster: false,
-        master: _wrapPaneTap(
-          ActivePane.master,
-          _buildMasterPane(selectedTopic),
-        ),
-        panes: [
-          for (var i = 0; i < selectedTopic.stack.length; i++)
-            _buildPaneCell(selectedTopic, i),
-        ],
-        // 压栈时 master 显示的是话题预览（不可交互，见
-        // TopicDetailPage.truncateOnPush 注释），不是列表——"新建话题"这个
-        // FAB 只在 master 真的是列表时才有意义，之前没跟着切换，压栈后
-        // 预览一个话题下面还挂着"新建话题"的加号，容易被当成回复按钮。
-        // 保留宿主，通过活跃状态播放退场，不能直接移除 FAB 截断动画。
-        masterFloatingActionButton: TopicsFab(
-          canCreate: user != null,
-          isActive: widget.isActive &&
-              !selectedTopic.isStacked &&
-              !_showEmbeddedSearch &&
-              (!selectedTopic.hasSelection ||
-                  MasterDetailLayout.canShowBothPanesFor(context)),
-          onRefresh: () {
-            ref.read(scrollToTopProvider.notifier).trigger();
-            ref.read(fabRefreshSignalProvider.notifier).trigger();
-          },
-          onCreateTopic: () => _createTopic(context, ref),
-          onOpenDrafts: () => _openDrafts(context),
-        ),
+        child: Column(
+          children: [
+            PicoParallelTabs(
+              selected: selectedTopic,
+              onActivate: (index) =>
+                  ref.read(selectedTopicProvider.notifier).activateTab(index),
+              onClose: (index) =>
+                  ref.read(selectedTopicProvider.notifier).closeTab(index),
+            ),
+            Expanded(
+              child: MasterDetailLayout(
+                // 压栈时左栏显示的是"上一层"内容而不是列表，才是真正的平行
+                // 视界——放宽到接近对半分；master 还是列表时维持列表该有的窄栏。
+                //
+                // 例外：上一层是**草稿列表**时它本质仍是列表（一列卡片），
+                // 对半分太宽、右边话题被挤扁 —— 按列表口径给窄栏。
+                maxMasterRatio: selectedTopic.isStacked && !_masterIsListLike
+                    ? 0.8
+                    : MasterDetailLayout.defaultMaxMasterRatio,
+                preferredMasterRatio:
+                    selectedTopic.isStacked && !_masterIsListLike ? 0.5 : 0.25,
+                projectDetailWhenNarrow: true,
+                // 胶片带:列表也在带上,压栈时被顶出左侧、倒二层格顶上左栏
+                // (旧"上一层预览"形态,由容器统一承担,预览格 State 全保)。
+                pinMaster: selectedTopic.tabMode,
+                master: _wrapPaneTap(
+                  ActivePane.master,
+                  _buildMasterPane(selectedTopic),
+                ),
+                panes: selectedTopic.showingFeed
+                    ? const []
+                    : [
+                        for (var i = 0; i < selectedTopic.stack.length; i++)
+                          _buildPaneCell(selectedTopic, i),
+                      ],
+                // 压栈时 master 显示的是话题预览（不可交互，见
+                // TopicDetailPage.truncateOnPush 注释），不是列表——"新建话题"这个
+                // FAB 只在 master 真的是列表时才有意义，之前没跟着切换，压栈后
+                // 预览一个话题下面还挂着"新建话题"的加号，容易被当成回复按钮。
+                // 保留宿主，通过活跃状态播放退场，不能直接移除 FAB 截断动画。
+                masterFloatingActionButton: TopicsFab(
+                  canCreate: user != null,
+                  isActive:
+                      widget.isActive &&
+                      (!selectedTopic.isStacked || selectedTopic.showingFeed) &&
+                      !_showEmbeddedSearch &&
+                      (!selectedTopic.hasSelection ||
+                          selectedTopic.showingFeed ||
+                          MasterDetailLayout.canShowBothPanesFor(context)),
+                  onRefresh: () {
+                    ref.read(scrollToTopProvider.notifier).trigger();
+                    ref.read(fabRefreshSignalProvider.notifier).trigger();
+                  },
+                  onCreateTopic: () => _createTopic(context, ref),
+                  onOpenDrafts: () => _openDrafts(context),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -279,7 +310,10 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
     final notifier = ref.read(selectedTopicProvider.notifier);
     // 投影态下"回信息流"必须整栈清空:collapseToTop 对单层栈是 no-op,
     // 投影会继续盖着列表。宽屏保留右栏基础层(仅收深层)语义不变。
-    if (ref.read(selectedTopicProvider).hasSelection &&
+    if (ref.read(selectedTopicProvider).tabMode) {
+      // 保留已打开的 Tab，只将可见区域切回信息流。
+      notifier.showFeed();
+    } else if (ref.read(selectedTopicProvider).hasSelection &&
         !MasterDetailLayout.canShowBothPanesFor(context)) {
       notifier.clear();
     } else {
@@ -294,7 +328,11 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   }
 
   void _showCategory(Category category) {
-    ref.read(selectedTopicProvider.notifier).collapseToTop();
+    if (ref.read(selectedTopicProvider).tabMode) {
+      ref.read(selectedTopicProvider.notifier).showFeed();
+    } else {
+      ref.read(selectedTopicProvider.notifier).collapseToTop();
+    }
     setState(() {
       _showEmbeddedSearch = false;
       _embeddedSearchFilter = null;
@@ -304,7 +342,11 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   }
 
   void _showTag(String tag) {
-    ref.read(selectedTopicProvider.notifier).collapseToTop();
+    if (ref.read(selectedTopicProvider).tabMode) {
+      ref.read(selectedTopicProvider.notifier).showFeed();
+    } else {
+      ref.read(selectedTopicProvider.notifier).collapseToTop();
+    }
     setState(() {
       _showEmbeddedSearch = false;
       _embeddedSearchFilter = null;
@@ -394,7 +436,10 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
       ref.invalidate(topicListProvider(null));
 
       final canShowDetailPane = MasterDetailLayout.canShowBothPanesFor(context);
-      if (canShowDetailPane) {
+      if (ref.read(preferencesProvider).openTopicsInTabsByDefault ||
+          ref.read(selectedTopicProvider).tabMode) {
+        ref.read(selectedTopicProvider.notifier).openTopicTab(topicId: topicId);
+      } else if (canShowDetailPane) {
         // 双栏模式：选中新话题，在右侧详情面板显示
         ref.read(selectedTopicProvider.notifier).select(topicId: topicId);
       } else {

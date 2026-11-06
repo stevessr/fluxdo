@@ -5,6 +5,7 @@ import '../widgets/markdown_editor/uploads/upload_task_labels.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_draft_status.dart';
 
 import '../widgets/markdown_editor/composer_chrome.dart';
+import '../widgets/markdown_editor/composer_header_actions.dart';
 import '../utils/platform_utils.dart';
 
 import 'dart:async';
@@ -23,7 +24,6 @@ import 'package:fluxdo/widgets/markdown_editor/composer_shortcuts.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_switch_fade.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_workbench.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_page_chrome.dart';
-import 'package:fluxdo/widgets/markdown_editor/composer_header_actions.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_view_mode_switcher.dart';
 import 'package:fluxdo/widgets/markdown_editor/markdown_editor.dart';
 import 'package:fluxdo/widgets/markdown_editor/rich_composer/rich_composer_editor.dart';
@@ -1185,6 +1185,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
     AsyncValue<List<String>> tagsAsync,
   ) {
     // 站点是否装 post-voting 插件:从分类 JSON 是否下发插件字段派生
+    final sitePostVoting = categories.any((c) => c.hasPostVotingFields);
     final locked = _selectedCategory?.onlyPostVotingInThisCategory ?? false;
     return ComposerMetaBar(
       category: _selectedCategory,
@@ -1194,7 +1195,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
       selectedTags: _selectedTags,
       allTags: tagsAsync.value ?? const [],
       onTagsChanged: _onTagsChanged,
-      showPostVotingToggle: false,
+      showPostVotingToggle: sitePostVoting,
       postVotingEnabled: _createAsPostVoting || locked,
       postVotingLocked: locked,
       onPostVotingChanged: (v) => setState(() => _createAsPostVoting = v),
@@ -1305,7 +1306,9 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                     MediaQuery.sizeOf(context).width -
                     MediaQuery.paddingOf(context).horizontal,
                 submitLabel: context.l10n.common_publish,
-                onSubmit: _isSubmitting ? null : _submit,
+                onSubmit: (_isSubmitting || _isResolvingFeaturedLink)
+                    ? null
+                    : _submit,
                 submitting: _isSubmitting,
                 previewing: _showPreview,
                 onTogglePreview: !_isSubmitting ? _togglePreview : null,
@@ -1395,6 +1398,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                               bodyOverlay:
                                                   _buildCharCountOverlay(),
                                               controller: _contentController,
+                                              enableStevessr: true,
                                               focusNode: _contentFocusNode,
                                               hintText: context
                                                   .l10n
@@ -1573,10 +1577,7 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
               top: 0,
               left: 0,
               right: 0,
-              child: ComposerTopFade(
-                height: _topChromeInset,
-                statusBarHeight: MediaQuery.viewPaddingOf(context).top,
-              ),
+              child: ComposerTopFade(height: _topChromeInset),
             ),
           ],
         ),
@@ -1591,14 +1592,10 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
           activator: _showQuickPanel,
         for (final activator in composerSubmitActivators())
           activator: () {
-            if (!_isSubmitting) _submit();
+            if (!_isSubmitting && !_isResolvingFeaturedLink) _submit();
           },
       },
-      child: ComposerChromeScope(
-        controller: _chrome,
-        topInset: _topChromeInset,
-        child: page,
-      ),
+      child: ComposerChromeScope(controller: _chrome, child: page),
     );
   }
 }

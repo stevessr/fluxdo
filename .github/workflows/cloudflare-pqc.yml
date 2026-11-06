@@ -1,0 +1,40 @@
+name: Cloudflare Hybrid PQ TLS
+
+on:
+  pull_request:
+    paths:
+      - 'core/doh_proxy'
+      - 'docs/network/cloudflare-pqc.md'
+      - '.github/workflows/cloudflare-pqc.yml'
+  push:
+    branches: ['feat/cloudflare-hybrid-pqc']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  negotiate-tls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: core/doh_proxy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/doh_proxy
+      - name: Install native TLS build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake nasm openssl
+      - name: Verify provider preference and classical fallback
+        run: cargo test --locked --features ech --lib tls_crypto::tests
+      - name: Verify actual negotiated key-exchange groups
+        run: cargo test --locked --features ech --test pq_handshake
+      - name: Verify ring-only compatibility
+        run: cargo test --locked --no-default-features --lib tls_crypto::tests
+      - name: Verify release library
+        run: cargo build --locked --release --features ech --lib

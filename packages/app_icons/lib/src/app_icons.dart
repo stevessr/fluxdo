@@ -49,12 +49,11 @@ class AppCustomIcon extends AppIconSpec {
 }
 
 /// painter 构造函数签名。color/fill 由 [AppIcon] 渲染时注入。
-typedef IconPainterBuilder =
-    CustomPainter Function({
-      required Color color,
-      required double fill,
-      required double strokeWidth,
-    });
+typedef IconPainterBuilder = CustomPainter Function({
+  required Color color,
+  required double fill,
+  required double strokeWidth,
+});
 
 /// 内部隐式转换：直接把 [IconData] 当 [AppIconSpec] 用。
 extension IconDataToSpec on IconData {
@@ -154,6 +153,7 @@ abstract final class AppIcons {
   static const security = Symbols.security_rounded;
   static const verifiedUser = Symbols.verified_user_rounded;
   static const medal = Symbols.workspace_premium_rounded;
+  static const crown = Symbols.crown_rounded;
 
   // ─── 通讯 / 通知 ───────────────────────────────────────────────────
   static const mail = Symbols.mail_rounded;

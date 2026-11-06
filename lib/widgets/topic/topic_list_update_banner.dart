@@ -1,5 +1,6 @@
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
+
 import '../../l10n/s.dart';
 import '../../providers/topic_list/filter_provider.dart';
 

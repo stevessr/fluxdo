@@ -6,6 +6,9 @@ import 'package:fluxdo/l10n/s.dart';
 import 'package:fluxdo/models/topic.dart';
 import 'package:fluxdo/models/user.dart';
 import 'package:fluxdo/providers/core_providers.dart';
+// 本 fork 的帖子举报面板经 S.current 读取本地化文案，依赖全局 navigatorKey。
+import 'package:fluxdo/services/local_notification_service.dart'
+    show navigatorKey;
 import 'package:fluxdo/widgets/post/post_item/widgets/post_action_bar.dart';
 import 'package:fluxdo/widgets/post/post_item/widgets/post_footer_section/post_footer_section.dart';
 import 'package:fluxdo/providers/theme_provider.dart';
@@ -31,9 +34,12 @@ void main() {
     overrides: [
       sharedPreferencesProvider.overrideWithValue(preferences),
       currentUserProvider.overrideWith(_GuestUser.new),
+      // 举报类型不在本测试范围；其网络回退会在测试环境中留下待定 Timer。
+      postFlagTypesProvider.overrideWith((_) async => const <FlagType>[]),
     ],
     child: TranslationProvider(
       child: MaterialApp(
+        navigatorKey: navigatorKey,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
             seedColor: Colors.blue,

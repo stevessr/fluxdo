@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import '../../../l10n/s.dart';
 import '../../../models/topic.dart';
 import '../../../providers/discourse_providers.dart';
@@ -14,6 +15,7 @@ import '../../../utils/time_utils.dart';
 import '../../../widgets/common/relative_time_text.dart';
 import '../../../utils/number_utils.dart';
 import '../../../widgets/topic/topic_notification_button.dart';
+import '../../../widgets/topic/topic_personal_pin_button.dart';
 import '../../../widgets/layout/home_workspace_scope.dart';
 import 'topic_vote_button.dart';
 import '../../../widgets/common/topic_badges.dart';
@@ -204,12 +206,13 @@ class TopicDetailHeader extends ConsumerWidget {
           if (detail.isAssigned) ...[
             InkWell(
               borderRadius: BorderRadius.circular(16),
-              onTap: () => unawaited(
-                showAssignSheet(context, ref, topicId: detail.id),
-              ),
+              onTap: () =>
+                  unawaited(showAssignSheet(context, ref, topicId: detail.id)),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer.withValues(
                     alpha: 0.5,
@@ -296,16 +299,28 @@ class TopicDetailHeader extends ConsumerWidget {
             ],
           ),
 
-          // AI 摘要 & 订阅按钮
+          // AI 摘要、个人置顶与订阅按钮
           const SizedBox(height: 16),
           CollapsibleTopicSummary(
             topicId: detail.id,
             topicDetail: detail,
             onJumpToPost: onJumpToPost,
-            headerExtra: TopicNotificationButton(
-              level: detail.notificationLevel,
-              onChanged: onNotificationLevelChanged,
-              style: TopicNotificationButtonStyle.chip,
+            headerExtra: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!detail.isPrivateMessage) ...[
+                  TopicPersonalPinButton(
+                    topicId: detail.id,
+                    categoryId: detail.categoryId,
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                TopicNotificationButton(
+                  level: detail.notificationLevel,
+                  onChanged: onNotificationLevelChanged,
+                  style: TopicNotificationButtonStyle.chip,
+                ),
+              ],
             ),
           ),
         ],

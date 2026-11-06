@@ -90,8 +90,10 @@ String decodeUtf8Compat(List<int> bytes) {
 /// 随机 payload 有约 1.8% 会蒙混过关）。
 bool looksLikeReadableText(List<int> bytes) {
   if (bytes.isEmpty) return false;
-  final decoded =
-      utf8.decode(_normalizeCesu8SurrogatePairs(bytes), allowMalformed: true);
+  final decoded = utf8.decode(
+    _normalizeCesu8SurrogatePairs(bytes),
+    allowMalformed: true,
+  );
   if (decoded.isEmpty) return false;
   var runeCount = 0;
   var replacements = 0;
@@ -206,8 +208,7 @@ class HexAlgorithm extends CryptoAlgorithm {
   String decrypt(String ciphertext, CryptoParams params) {
     final text = ciphertext.replaceAll(RegExp(r'[\s:,]'), '');
     if (text.isEmpty) return '';
-    if (text.length.isOdd ||
-        !RegExp(r'^[0-9a-fA-F]+$').hasMatch(text)) {
+    if (text.length.isOdd || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(text)) {
       throw const CryptoException('无效的 Hex 密文（需为偶数长度的十六进制字符）');
     }
     try {
@@ -289,9 +290,7 @@ class Base32Algorithm extends CryptoAlgorithm {
 
   @override
   String decrypt(String ciphertext, CryptoParams params) {
-    final clean = ciphertext
-        .toUpperCase()
-        .replaceAll(RegExp(r'[\s=]'), '');
+    final clean = ciphertext.toUpperCase().replaceAll(RegExp(r'[\s=]'), '');
     if (clean.isEmpty) return '';
     var buffer = 0;
     var bits = 0;
@@ -299,8 +298,7 @@ class Base32Algorithm extends CryptoAlgorithm {
     for (final unit in clean.codeUnits) {
       final v = _alphabet.indexOf(String.fromCharCode(unit));
       if (v < 0) {
-        throw CryptoException(
-            '无效的 Base32 字符: ${String.fromCharCode(unit)}');
+        throw CryptoException('无效的 Base32 字符: ${String.fromCharCode(unit)}');
       }
       buffer = (buffer << 5) | v;
       bits += 5;
@@ -329,12 +327,10 @@ class Rot13Algorithm extends CryptoAlgorithm {
   CryptoAlgorithmCategory get category => CryptoAlgorithmCategory.encoding;
 
   @override
-  String encrypt(String plaintext, CryptoParams params) =>
-      _rot13(plaintext);
+  String encrypt(String plaintext, CryptoParams params) => _rot13(plaintext);
 
   @override
-  String decrypt(String ciphertext, CryptoParams params) =>
-      _rot13(ciphertext);
+  String decrypt(String ciphertext, CryptoParams params) => _rot13(ciphertext);
 
   static String _rot13(String input) {
     final codeUnits = List<int>.from(input.codeUnits);

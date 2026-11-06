@@ -1,8 +1,10 @@
 import 'dart:math' as math;
+
 import 'package:chat_bottom_container/listener_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+
 import '../common/progressive_top_blur.dart';
 
 /// 顶栏与底栏共享阅读态显隐；输入或面板交互期间保持可见。
@@ -332,16 +334,23 @@ class ComposerTopFade extends StatelessWidget {
   const ComposerTopFade({
     super.key,
     required this.height,
-    required this.statusBarHeight,
+    this.statusBarHeight,
   });
   final double height;
-  // 从 Scaffold 外传入；body 内的 MediaQuery 已移除顶部安全区。
-  final double statusBarHeight;
+  // 新调用方可从 Scaffold 外显式传入；旧调用方则直接从 View 解析，
+  // 避免 body 内 MediaQuery 已移除顶部安全区时得到 0。
+  final double? statusBarHeight;
   @override
   Widget build(BuildContext context) {
     final hidden = ComposerChromeScope.maybeOf(context)?.hidden ?? false;
+    final resolvedStatusBarHeight =
+        statusBarHeight ??
+        MediaQueryData.fromView(View.of(context)).padding.top;
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: height, end: hidden ? statusBarHeight + 24 : height),
+      tween: Tween(
+        begin: height,
+        end: hidden ? resolvedStatusBarHeight + 24 : height,
+      ),
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
           : const Duration(milliseconds: 180),

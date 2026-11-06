@@ -17,7 +17,8 @@ class AiChatStorageService {
   static const _allSessionsIndexKey = 'ai_chat_all_sessions_index';
   static const _maxSessionsKey = 'ai_chat_max_sessions';
   static const _titleModelKey = 'ai_chat_title_model';
-  static const _imagePromptOptimizerModelKey = 'ai_image_prompt_optimizer_model';
+  static const _imagePromptOptimizerModelKey =
+      'ai_image_prompt_optimizer_model';
   static const _thinkingLevelKey = 'ai_thinking_level';
   static const _topicSessionsKeyPrefix = 'ai_chat_topic_sessions_';
   static const _sessionMessagesKeyPrefix = 'ai_chat_session_messages_';
@@ -108,10 +109,14 @@ class AiChatStorageService {
 
   /// 保存某话题的会话列表
   Future<void> _saveTopicSessions(
-      int topicId, List<AiChatSession> sessions) async {
+    int topicId,
+    List<AiChatSession> sessions,
+  ) async {
     final json = sessions.map((s) => s.toJson()).toList();
     await _prefs.setString(
-        '$_topicSessionsKeyPrefix$topicId', jsonEncode(json));
+      '$_topicSessionsKeyPrefix$topicId',
+      jsonEncode(json),
+    );
   }
 
   // ===== 会话消息操作 =====
@@ -154,7 +159,9 @@ class AiChatStorageService {
     // 保存消息
     final json = toSave.map((m) => m.toJson()).toList();
     await _prefs.setString(
-        '$_sessionMessagesKeyPrefix$sessionId', jsonEncode(json));
+      '$_sessionMessagesKeyPrefix$sessionId',
+      jsonEncode(json),
+    );
 
     // 更新话题会话列表
     final sessions = getTopicSessions(topicId);
@@ -168,7 +175,9 @@ class AiChatStorageService {
     } else {
       // 新会话，插入最前面
       sessions.insert(
-          0, AiChatSession(id: sessionId, createdAt: now, updatedAt: now));
+        0,
+        AiChatSession(id: sessionId, createdAt: now, updatedAt: now),
+      );
     }
     await _saveTopicSessions(topicId, sessions);
 
@@ -181,7 +190,10 @@ class AiChatStorageService {
 
   /// 更新会话标题
   Future<void> updateSessionTitle(
-      int topicId, String sessionId, String title) async {
+    int topicId,
+    String sessionId,
+    String title,
+  ) async {
     final sessions = getTopicSessions(topicId);
     final index = sessions.indexWhere((s) => s.id == sessionId);
     if (index < 0) return;
@@ -265,11 +277,13 @@ class AiChatStorageService {
     for (final topicId in topicOrder) {
       final sessions = getTopicSessions(topicId);
       if (sessions.isNotEmpty) {
-        result.add(TopicSessionGroup(
-          topicId: topicId,
-          topicTitle: topicTitles[topicId],
-          sessions: sessions,
-        ));
+        result.add(
+          TopicSessionGroup(
+            topicId: topicId,
+            topicTitle: topicTitles[topicId],
+            sessions: sessions,
+          ),
+        );
       }
     }
     return result;

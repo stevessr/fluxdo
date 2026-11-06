@@ -33,10 +33,7 @@ String buildAiModelKey(String providerId, String modelId) =>
   if (key == null || key.isEmpty) return null;
   final parts = key.split(':');
   if (parts.length < 2) return null;
-  return (
-    providerId: parts.first,
-    modelId: parts.sublist(1).join(':'),
-  );
+  return (providerId: parts.first, modelId: parts.sublist(1).join(':'));
 }
 
 ({AiProvider provider, AiModel model})? _findAiModelByKey(
@@ -57,77 +54,69 @@ String buildAiModelKey(String providerId, String modelId) =>
 
 /// 所有可用的 AI 模型列表（供应商 + 模型）
 final allAvailableAiModelsProvider =
-    Provider<List<({AiProvider provider, AiModel model})>>(
-  (ref) {
-    final providers = ref.watch(aiProviderListProvider);
-    final result = <({AiProvider provider, AiModel model})>[];
-    for (final provider in providers) {
-      for (final model in provider.models) {
-        if (model.enabled) {
-          result.add((provider: provider, model: model));
+    Provider<List<({AiProvider provider, AiModel model})>>((ref) {
+      final providers = ref.watch(aiProviderListProvider);
+      final result = <({AiProvider provider, AiModel model})>[];
+      for (final provider in providers) {
+        for (final model in provider.models) {
+          if (model.enabled) {
+            result.add((provider: provider, model: model));
+          }
         }
       }
-    }
-    return result;
-  },
-);
+      return result;
+    });
 
 /// 默认/首选的 AI 模型（通用）
 ///
 /// 取通用 default key；找不到时退到 allModels.first。
 final defaultAiModelProvider =
-    Provider<({AiProvider provider, AiModel model})?>(
-  (ref) {
-    final all = ref.watch(allAvailableAiModelsProvider);
-    if (all.isEmpty) return null;
+    Provider<({AiProvider provider, AiModel model})?>((ref) {
+      final all = ref.watch(allAvailableAiModelsProvider);
+      if (all.isEmpty) return null;
 
-    final defaultKey = ref.watch(defaultAiModelKeyProvider);
-    return _findAiModelByKey(all, defaultKey) ?? all.first;
-  },
-);
+      final defaultKey = ref.watch(defaultAiModelKeyProvider);
+      return _findAiModelByKey(all, defaultKey) ?? all.first;
+    });
 
 /// 文本模式默认模型
 ///
 /// 优先级：用户设的文本默认 → 通用默认（如果其 modality 是 text）→
 /// allModels 中第一个含 text output 的模型
 final defaultTextAiModelProvider =
-    Provider<({AiProvider provider, AiModel model})?>(
-  (ref) {
-    final all = ref.watch(allAvailableAiModelsProvider);
-    if (all.isEmpty) return null;
-    final key = ref.watch(defaultTextAiModelKeyProvider);
-    final explicit = _findAiModelByKey(all, key);
-    if (explicit != null) return explicit;
-    final generic = ref.watch(defaultAiModelProvider);
-    if (generic != null && generic.model.output.contains(Modality.text)) {
-      return generic;
-    }
-    for (final m in all) {
-      if (m.model.output.contains(Modality.text)) return m;
-    }
-    return null;
-  },
-);
+    Provider<({AiProvider provider, AiModel model})?>((ref) {
+      final all = ref.watch(allAvailableAiModelsProvider);
+      if (all.isEmpty) return null;
+      final key = ref.watch(defaultTextAiModelKeyProvider);
+      final explicit = _findAiModelByKey(all, key);
+      if (explicit != null) return explicit;
+      final generic = ref.watch(defaultAiModelProvider);
+      if (generic != null && generic.model.output.contains(Modality.text)) {
+        return generic;
+      }
+      for (final m in all) {
+        if (m.model.output.contains(Modality.text)) return m;
+      }
+      return null;
+    });
 
 /// 图像模式默认模型
 final defaultImageAiModelProvider =
-    Provider<({AiProvider provider, AiModel model})?>(
-  (ref) {
-    final all = ref.watch(allAvailableAiModelsProvider);
-    if (all.isEmpty) return null;
-    final key = ref.watch(defaultImageAiModelKeyProvider);
-    final explicit = _findAiModelByKey(all, key);
-    if (explicit != null) return explicit;
-    final generic = ref.watch(defaultAiModelProvider);
-    if (generic != null && generic.model.output.contains(Modality.image)) {
-      return generic;
-    }
-    for (final m in all) {
-      if (m.model.output.contains(Modality.image)) return m;
-    }
-    return null;
-  },
-);
+    Provider<({AiProvider provider, AiModel model})?>((ref) {
+      final all = ref.watch(allAvailableAiModelsProvider);
+      if (all.isEmpty) return null;
+      final key = ref.watch(defaultImageAiModelKeyProvider);
+      final explicit = _findAiModelByKey(all, key);
+      if (explicit != null) return explicit;
+      final generic = ref.watch(defaultAiModelProvider);
+      if (generic != null && generic.model.output.contains(Modality.image)) {
+        return generic;
+      }
+      for (final m in all) {
+        if (m.model.output.contains(Modality.image)) return m;
+      }
+      return null;
+    });
 
 /// AI 助手上次使用的模型 key（providerId:modelId）
 final lastUsedAiAssistantModelKeyProvider = StateProvider<String?>((ref) {
@@ -144,29 +133,31 @@ final favoriteAiModelKeysProvider = StateProvider<List<String>>((ref) {
 /// 全量收藏模型列表，保持持久化顺序，不按模式过滤。
 final allFavoriteAiModelsProvider =
     Provider<List<({AiProvider provider, AiModel model})>>((ref) {
-  final all = ref.watch(allAvailableAiModelsProvider);
-  final keys = ref.watch(favoriteAiModelKeysProvider);
+      final all = ref.watch(allAvailableAiModelsProvider);
+      final keys = ref.watch(favoriteAiModelKeysProvider);
 
-  return [
-    for (final key in keys)
-      if (_findAiModelByKey(all, key) case final item?) item,
-  ];
-});
+      return [
+        for (final key in keys)
+          if (_findAiModelByKey(all, key) case final item?) item,
+      ];
+    });
 
 /// 当前模式下可见的收藏模型列表。
 final favoriteAiModelsProvider =
-    Provider.family<List<({AiProvider provider, AiModel model})>, PromptType>(
-        (ref, mode) {
-  final favorites = ref.watch(allFavoriteAiModelsProvider);
-  bool matchesMode(AiModel model) => mode == PromptType.image
-      ? model.output.contains(Modality.image)
-      : model.output.contains(Modality.text);
+    Provider.family<List<({AiProvider provider, AiModel model})>, PromptType>((
+      ref,
+      mode,
+    ) {
+      final favorites = ref.watch(allFavoriteAiModelsProvider);
+      bool matchesMode(AiModel model) => mode == PromptType.image
+          ? model.output.contains(Modality.image)
+          : model.output.contains(Modality.text);
 
-  return [
-    for (final item in favorites)
-      if (matchesMode(item.model)) item,
-  ];
-});
+      return [
+        for (final item in favorites)
+          if (matchesMode(item.model)) item,
+      ];
+    });
 
 List<String> nextFavoriteAiModelKeys(List<String> current, String key) {
   final next = [...current];
@@ -232,15 +223,13 @@ Future<void> reorderFavoriteAiModelKeys(
 
 /// AI 助手上次使用的模型
 final lastUsedAiAssistantModelProvider =
-    Provider<({AiProvider provider, AiModel model})?>(
-  (ref) {
-    final all = ref.watch(allAvailableAiModelsProvider);
-    if (all.isEmpty) return null;
+    Provider<({AiProvider provider, AiModel model})?>((ref) {
+      final all = ref.watch(allAvailableAiModelsProvider);
+      if (all.isEmpty) return null;
 
-    final lastUsedKey = ref.watch(lastUsedAiAssistantModelKeyProvider);
-    return _findAiModelByKey(all, lastUsedKey);
-  },
-);
+      final lastUsedKey = ref.watch(lastUsedAiAssistantModelKeyProvider);
+      return _findAiModelByKey(all, lastUsedKey);
+    });
 
 /// 设置 AI 助手上次使用的模型
 ///
@@ -250,6 +239,7 @@ Future<void> setLastUsedAiAssistantModel(
   WidgetRef ref,
   String providerId,
   String modelId, {
+
   /// 模型属于的模式。null = 不区分模式（仅写通用 key，向后兼容）；
   /// 非 null = 同时写通用 key 和模式专属 key。
   ///
@@ -277,14 +267,12 @@ final lastUsedTextAiModelKeyProvider = StateProvider<String?>((ref) {
 
 /// 文本模式上次使用的模型
 final lastUsedTextAiModelProvider =
-    Provider<({AiProvider provider, AiModel model})?>(
-  (ref) {
-    final all = ref.watch(allAvailableAiModelsProvider);
-    if (all.isEmpty) return null;
-    final key = ref.watch(lastUsedTextAiModelKeyProvider);
-    return _findAiModelByKey(all, key);
-  },
-);
+    Provider<({AiProvider provider, AiModel model})?>((ref) {
+      final all = ref.watch(allAvailableAiModelsProvider);
+      if (all.isEmpty) return null;
+      final key = ref.watch(lastUsedTextAiModelKeyProvider);
+      return _findAiModelByKey(all, key);
+    });
 
 /// 图像模式上次使用的模型 key
 final lastUsedImageAiModelKeyProvider = StateProvider<String?>((ref) {
@@ -294,20 +282,18 @@ final lastUsedImageAiModelKeyProvider = StateProvider<String?>((ref) {
 
 /// 图像模式上次使用的模型
 final lastUsedImageAiModelProvider =
-    Provider<({AiProvider provider, AiModel model})?>(
-  (ref) {
-    final all = ref.watch(allAvailableAiModelsProvider);
-    if (all.isEmpty) return null;
-    final key = ref.watch(lastUsedImageAiModelKeyProvider);
-    return _findAiModelByKey(all, key);
-  },
-);
+    Provider<({AiProvider provider, AiModel model})?>((ref) {
+      final all = ref.watch(allAvailableAiModelsProvider);
+      if (all.isEmpty) return null;
+      final key = ref.watch(lastUsedImageAiModelKeyProvider);
+      return _findAiModelByKey(all, key);
+    });
 
 /// 第一个可用的 AI 模型（向后兼容）
 final firstAvailableAiModelProvider =
     Provider<({AiProvider provider, AiModel model})?>(
-  (ref) => ref.watch(defaultAiModelProvider),
-);
+      (ref) => ref.watch(defaultAiModelProvider),
+    );
 
 /// 是否有可用的 AI 模型
 final hasAvailableAiModelProvider = Provider<bool>(
@@ -317,8 +303,8 @@ final hasAvailableAiModelProvider = Provider<bool>(
 /// 话题选中的 AI 模型（独立管理，避免切换时影响消息列表）
 final topicSelectedAiModelProvider = StateProvider.autoDispose
     .family<({AiProvider provider, AiModel model})?, int>(
-  (ref, topicId) => null, // null 表示使用记忆模型或默认模型
-);
+      (ref, topicId) => null, // null 表示使用记忆模型或默认模型
+    );
 
 /// AI 聊天服务
 final aiChatServiceProvider = Provider((ref) {
@@ -366,19 +352,22 @@ final aiTitleModelKeyProvider = StateProvider<String?>((ref) {
 });
 
 /// 标题生成模型
-final aiTitleModelProvider = Provider<({AiProvider provider, AiModel model})?>(
-  (ref) {
-    final all = ref.watch(allAvailableAiModelsProvider);
-    if (all.isEmpty) return null;
+final aiTitleModelProvider = Provider<({AiProvider provider, AiModel model})?>((
+  ref,
+) {
+  final all = ref.watch(allAvailableAiModelsProvider);
+  if (all.isEmpty) return null;
 
-    final key = ref.watch(aiTitleModelKeyProvider);
-    return _findAiModelByKey(all, key);
-  },
-);
+  final key = ref.watch(aiTitleModelKeyProvider);
+  return _findAiModelByKey(all, key);
+});
 
 /// 设置标题生成模型
 Future<void> setAiTitleModel(
-    WidgetRef ref, String? providerId, String? modelId) async {
+  WidgetRef ref,
+  String? providerId,
+  String? modelId,
+) async {
   final storageService = ref.read(aiChatStorageServiceProvider);
   if (providerId == null || modelId == null) {
     await storageService.setTitleModelKey(null);
@@ -400,18 +389,19 @@ final aiImagePromptOptimizerModelKeyProvider = StateProvider<String?>((ref) {
 
 /// 图像 prompt 优化模型
 final aiImagePromptOptimizerModelProvider =
-    Provider<({AiProvider provider, AiModel model})?>(
-  (ref) {
-    final all = ref.watch(allAvailableAiModelsProvider);
-    if (all.isEmpty) return null;
-    final key = ref.watch(aiImagePromptOptimizerModelKeyProvider);
-    return _findAiModelByKey(all, key);
-  },
-);
+    Provider<({AiProvider provider, AiModel model})?>((ref) {
+      final all = ref.watch(allAvailableAiModelsProvider);
+      if (all.isEmpty) return null;
+      final key = ref.watch(aiImagePromptOptimizerModelKeyProvider);
+      return _findAiModelByKey(all, key);
+    });
 
 /// 设置图像 prompt 优化模型
 Future<void> setAiImagePromptOptimizerModel(
-    WidgetRef ref, String? providerId, String? modelId) async {
+  WidgetRef ref,
+  String? providerId,
+  String? modelId,
+) async {
   final storageService = ref.read(aiChatStorageServiceProvider);
   if (providerId == null || modelId == null) {
     await storageService.setImagePromptOptimizerModelKey(null);
@@ -485,28 +475,27 @@ typedef ContextPostsFetcher = Future<List<TopicPostContext>> Function(
 
 /// 话题 AI 聊天状态管理（per-topic，autoDispose）
 final topicAiChatProvider = StateNotifierProvider.autoDispose
-    .family<TopicAiChatNotifier, TopicAiChatState, int>(
-  (ref, topicId) {
-    final chatService = ref.watch(aiChatServiceProvider);
-    final storageService = ref.watch(aiChatStorageServiceProvider);
-    final titleModel = ref.read(aiTitleModelProvider);
-    final imagePromptOptimizerModel =
-        ref.read(aiImagePromptOptimizerModelProvider);
-    final requestClientFactory = ref.watch(aiRequestClientFactoryProvider);
-    final notifier = TopicAiChatNotifier(
-      chatService: chatService,
-      storageService: storageService,
-      topicId: topicId,
-      titleModel: titleModel,
-      imagePromptOptimizerModel: imagePromptOptimizerModel,
-      requestClientFactory: requestClientFactory,
-    );
-    ref.onDispose(() {
-      notifier.saveBeforeDispose();
+    .family<TopicAiChatNotifier, TopicAiChatState, int>((ref, topicId) {
+      final chatService = ref.watch(aiChatServiceProvider);
+      final storageService = ref.watch(aiChatStorageServiceProvider);
+      final titleModel = ref.read(aiTitleModelProvider);
+      final imagePromptOptimizerModel = ref.read(
+        aiImagePromptOptimizerModelProvider,
+      );
+      final requestClientFactory = ref.watch(aiRequestClientFactoryProvider);
+      final notifier = TopicAiChatNotifier(
+        chatService: chatService,
+        storageService: storageService,
+        topicId: topicId,
+        titleModel: titleModel,
+        imagePromptOptimizerModel: imagePromptOptimizerModel,
+        requestClientFactory: requestClientFactory,
+      );
+      ref.onDispose(() {
+        notifier.saveBeforeDispose();
+      });
+      return notifier;
     });
-    return notifier;
-  },
-);
 
 class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
   static const _uuid = Uuid();
@@ -538,8 +527,8 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
     this.titleModel,
     this.imagePromptOptimizerModel,
     http.Client Function()? requestClientFactory,
-  })  : requestClientFactory = requestClientFactory ?? AiStreamHttpClient.new,
-        super(const TopicAiChatState()) {
+  }) : requestClientFactory = requestClientFactory ?? AiStreamHttpClient.new,
+       super(const TopicAiChatState()) {
     _loadFromStorage();
   }
 
@@ -587,10 +576,7 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
   void createNewSession() {
     stopGeneration();
     final sessionId = _uuid.v4();
-    state = state.copyWith(
-      currentSessionId: sessionId,
-      messages: [],
-    );
+    state = state.copyWith(currentSessionId: sessionId, messages: []);
   }
 
   /// 切换到指定会话
@@ -598,10 +584,7 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
     if (sessionId == state.currentSessionId) return;
     stopGeneration();
     final messages = storageService.loadSessionMessages(sessionId);
-    state = state.copyWith(
-      currentSessionId: sessionId,
-      messages: messages,
-    );
+    state = state.copyWith(currentSessionId: sessionId, messages: messages);
   }
 
   /// 删除指定会话
@@ -686,8 +669,9 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
 
     try {
       // 获取 API Key
-      final apiKey =
-          await AiProviderListNotifier.getApiKey(selectedModel.provider.id);
+      final apiKey = await AiProviderListNotifier.getApiKey(
+        selectedModel.provider.id,
+      );
       if (!mounted) return;
       // null / 空白都视为未配置;避免空 key 发出去触发上游「200 + 空流」
       // 的诡异失败(比如 anthropic_sdk_dart 检测到空 key 时根本不带
@@ -712,8 +696,9 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
       final chatMessages = _buildChatMessages(topicContext, contextScope);
 
       // 图像生成路径
-      final isImageGeneration =
-          selectedModel.model.output.contains(Modality.image);
+      final isImageGeneration = selectedModel.model.output.contains(
+        Modality.image,
+      );
       final rawImageContext = isImageGeneration && topicContext != null
           ? _buildImageContextSummary(topicContext, contextScope)
           : null;
@@ -751,7 +736,8 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
               status: MessageStatus.streaming,
               loadingStage: 'generating_image',
               optimizedPrompt: refined,
-              optimizerModelName: imagePromptOptimizerModel!.model.name ??
+              optimizerModelName:
+                  imagePromptOptimizerModel!.model.name ??
                   imagePromptOptimizerModel!.model.id,
             );
           } else {
@@ -819,8 +805,9 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
                 assistantMessage.id,
                 content: textBuffer.toString(),
                 status: MessageStatus.streaming,
-                thinkingContent:
-                    thinkingBuffer.isEmpty ? null : thinkingBuffer.toString(),
+                thinkingContent: thinkingBuffer.isEmpty
+                    ? null
+                    : thinkingBuffer.toString(),
                 attachments: generatedImages.isEmpty
                     ? null
                     : List.unmodifiable(generatedImages),
@@ -860,17 +847,20 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
                   _deletePartialFile(a);
                 }
                 generatedImages.removeWhere((a) => a.isPartial);
-                generatedImages.add(AiChatAttachment(
-                  mimeType: img.mimeType,
-                  localPath: img.localPath,
-                ));
+                generatedImages.add(
+                  AiChatAttachment(
+                    mimeType: img.mimeType,
+                    localPath: img.localPath,
+                  ),
+                );
               }
               _updateAssistantMessage(
                 assistantMessage.id,
                 content: textBuffer.toString(),
                 status: MessageStatus.streaming,
-                thinkingContent:
-                    thinkingBuffer.isEmpty ? null : thinkingBuffer.toString(),
+                thinkingContent: thinkingBuffer.isEmpty
+                    ? null
+                    : thinkingBuffer.toString(),
                 attachments: List.unmodifiable(generatedImages),
               );
             case final UsageReport u:
@@ -894,7 +884,8 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
             }
           }
           // 图像模型可能正文为空但 attachments 有内容，也算成功
-          final hasOutput = textBuffer.isNotEmpty ||
+          final hasOutput =
+              textBuffer.isNotEmpty ||
               thinkingBuffer.isNotEmpty ||
               finalized.isNotEmpty;
           if (!hasOutput) {
@@ -917,10 +908,12 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
               assistantMessage.id,
               content: textBuffer.toString(),
               status: MessageStatus.completed,
-              thinkingContent:
-                  thinkingBuffer.isEmpty ? null : thinkingBuffer.toString(),
-              attachments:
-                  finalized.isEmpty ? null : List.unmodifiable(finalized),
+              thinkingContent: thinkingBuffer.isEmpty
+                  ? null
+                  : thinkingBuffer.toString(),
+              attachments: finalized.isEmpty
+                  ? null
+                  : List.unmodifiable(finalized),
               promptTokens: promptTokens,
               responseTokens: responseTokens,
               cachedTokens: cachedTokens,
@@ -1094,18 +1087,22 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
     if (topicContext != null) {
       final contextText = _buildContextText(topicContext, contextScope);
       if (contextText.isNotEmpty) {
-        result.add(AiChatMessage(
-          id: 'context-user',
-          role: ChatRole.user,
-          content: AiL10n.current.contextContentPrefix(contextText),
-          createdAt: now,
-        ));
-        result.add(AiChatMessage(
-          id: 'context-assistant',
-          role: ChatRole.assistant,
-          content: AiL10n.current.contextReadyResponse,
-          createdAt: now,
-        ));
+        result.add(
+          AiChatMessage(
+            id: 'context-user',
+            role: ChatRole.user,
+            content: AiL10n.current.contextContentPrefix(contextText),
+            createdAt: now,
+          ),
+        );
+        result.add(
+          AiChatMessage(
+            id: 'context-assistant',
+            role: ChatRole.assistant,
+            content: AiL10n.current.contextReadyResponse,
+            createdAt: now,
+          ),
+        );
       }
     }
 
@@ -1131,11 +1128,13 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
     required String userPrompt,
     required ({AiProvider provider, AiModel model}) optimizer,
   }) async {
-    final apiKey =
-        await AiProviderListNotifier.getApiKey(optimizer.provider.id);
+    final apiKey = await AiProviderListNotifier.getApiKey(
+      optimizer.provider.id,
+    );
     if (apiKey == null) throw Exception('Optimizer API key not found');
 
-    final systemPrompt = '你是图像生成 prompt 工程师。根据下面的话题内容和用户的画图需求，'
+    final systemPrompt =
+        '你是图像生成 prompt 工程师。根据下面的话题内容和用户的画图需求，'
         '输出一段精炼的英文 image prompt（≤200 词），描述具体的视觉元素、风格、'
         '构图、光线、色调、媒介。不要在 prompt 中要求嵌入文字。'
         '直接输出 prompt 文本，不要任何解释或前缀。';
@@ -1158,8 +1157,8 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
         )
         .timeout(const Duration(seconds: 15))
         .forEach((chunk) {
-      if (chunk is TextDelta) buf.write(chunk.text);
-    });
+          if (chunk is TextDelta) buf.write(chunk.text);
+        });
     return buf.toString().trim();
   }
 
@@ -1250,7 +1249,8 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
     // 只在首次对话完成时生成（用户消息 + AI 回复 = 2条）
     final completedMessages = state.messages
         .where(
-            (m) => m.status == MessageStatus.completed && m.content.isNotEmpty)
+          (m) => m.status == MessageStatus.completed && m.content.isNotEmpty,
+        )
         .toList();
     if (completedMessages.length != 2) return;
 
@@ -1263,8 +1263,9 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
       final apiKey = await AiProviderListNotifier.getApiKey(model.provider.id);
       if (apiKey == null || !mounted) return;
 
-      final userMsg =
-          completedMessages.firstWhere((m) => m.role == ChatRole.user).content;
+      final userMsg = completedMessages
+          .firstWhere((m) => m.role == ChatRole.user)
+          .content;
 
       final titleStream = chatService.sendChatStream(
         provider: model.provider,
@@ -1292,8 +1293,9 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
       final title = buffer.toString().trim();
       if (title.isNotEmpty && mounted) {
         await storageService.updateSessionTitle(topicId, sessionId, title);
-        state =
-            state.copyWith(sessions: storageService.getTopicSessions(topicId));
+        state = state.copyWith(
+          sessions: storageService.getTopicSessions(topicId),
+        );
       }
     } catch (_) {
       // 标题生成失败不影响正常使用
@@ -1344,7 +1346,8 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
     final ttfb = ttfbMs == null ? 'null' : '${ttfbMs}ms';
     final httpStatus = stats.httpStatus ?? 'null';
     final ct = stats.respContentType ?? 'null';
-    final diag = 'provider=${provider.type.name} model=$model '
+    final diag =
+        'provider=${provider.type.name} model=$model '
         'duration=${durationMs}ms ttfb=$ttfb '
         'http=$httpStatus bytes=${stats.respBytes} ct=$ct '
         'chunks=$chunkCount sdkEvents=${stats.sdkEvents} '

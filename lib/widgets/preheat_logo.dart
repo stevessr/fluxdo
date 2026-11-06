@@ -13,7 +13,15 @@ class PreheatLogo extends StatefulWidget {
   final AppIconStyle style;
   final double size;
 
-  const PreheatLogo({super.key, required this.style, this.size = 108});
+  /// false 时直接显示最终静态状态，不启动任何 ticker/呼吸光晕。
+  final bool animate;
+
+  const PreheatLogo({
+    super.key,
+    required this.style,
+    this.size = 108,
+    this.animate = true,
+  });
 
   @override
   State<PreheatLogo> createState() => _PreheatLogoState();
@@ -36,14 +44,28 @@ class _PreheatLogoState extends State<PreheatLogo>
   @override
   void initState() {
     super.initState();
-    _entry
-      ..addStatusListener((status) {
-        // 绘制完成后才开始光晕呼吸
-        if (status == AnimationStatus.completed) {
-          _glow.repeat(reverse: true);
-        }
-      })
-      ..forward();
+    _entry.addStatusListener((status) {
+      // 绘制完成后才开始光晕呼吸。省电模式保持最终静态帧。
+      if (status == AnimationStatus.completed && widget.animate) {
+        _glow.repeat(reverse: true);
+      }
+    });
+    _applyAnimationPolicy(restart: true);
+  }
+
+  void _applyAnimationPolicy({required bool restart}) {
+    if (!widget.animate) {
+      _entry.stop();
+      _glow.stop();
+      _entry.value = 1.0;
+      _glow.value = 0.0;
+      return;
+    }
+    if (restart) {
+      _glow.stop();
+      _glow.value = 0.0;
+      _entry.forward(from: 0.0);
+    }
   }
 
   @override
@@ -61,6 +83,9 @@ class _PreheatLogoState extends State<PreheatLogo>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.style != widget.style) {
       _rebuildShapes();
+    }
+    if (oldWidget.animate != widget.animate) {
+      _applyAnimationPolicy(restart: widget.animate);
     }
   }
 
@@ -85,22 +110,29 @@ class _PreheatLogoState extends State<PreheatLogo>
     return AnimatedBuilder(
       animation: Listenable.merge([_entry, _glow]),
       builder: (context, _) {
-        // 光晕随填充出现而渐亮,之后跟随 _glow 缓慢呼吸
-        final glowIn = _segment(_entry.value, 0.45, 1.0, Curves.easeIn);
-        final breathe = Curves.easeInOutSine.transform(_glow.value);
+        // 光晕随填充出现而渐亮,之后跟随 _glow 缓慢呼吸。
+        // 静态模式彻底关闭 glow，避免省电时残留阴影动画/离屏开销。
+        final glowIn = widget.animate
+            ? _segment(_entry.value, 0.45, 1.0, Curves.easeIn)
+            : 0.0;
+        final breathe = widget.animate
+            ? Curves.easeInOutSine.transform(_glow.value)
+            : 0.0;
         final glowAlpha = glowIn * (0.12 + 0.10 * breathe);
         final glowBlur = 36.0 + 16.0 * breathe;
 
         return Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.primary.withValues(alpha: glowAlpha),
-                blurRadius: glowBlur,
-              ),
-            ],
-          ),
+          decoration: glowAlpha <= 0
+              ? null
+              : BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: colorScheme.primary.withValues(alpha: glowAlpha),
+                      blurRadius: glowBlur,
+                    ),
+                  ],
+                ),
           child: RepaintBoundary(
             child: CustomPaint(
               size: Size.square(widget.size),
@@ -119,8 +151,12 @@ class _PreheatLogoState extends State<PreheatLogo>
 }
 
 /// 将整体进度 [t] 映射到 [start, end] 区间内的局部进度并应用曲线
-double _segment(double t, double start, double end,
-    [Curve curve = Curves.easeInOutCubic]) {
+double _segment(
+  double t,
+  double start,
+  double end, [
+  Curve curve = Curves.easeInOutCubic,
+]) {
   return curve.transform(((t - start) / (end - start)).clamp(0.0, 1.0));
 }
 
@@ -177,7 +213,12 @@ class _LogoPainter extends CustomPainter {
     canvas.scale(scale);
 
     for (final shape in shapes) {
-      final fillT = _segment(t, shape.fillStart, shape.fillEnd, Curves.easeInOut);
+      final fillT = _segment(
+        t,
+        shape.fillStart,
+        shape.fillEnd,
+        Curves.easeInOut,
+      );
       if (fillT <= 0) continue;
       canvas.save();
       if (shape.clip != null) {
@@ -190,7 +231,8 @@ class _LogoPainter extends CustomPainter {
       canvas.restore();
     }
 
-    final strokeAlpha = 1.0 - _segment(t, _strokeFadeStart, 1.0, Curves.easeOut);
+    final strokeAlpha =
+        1.0 - _segment(t, _strokeFadeStart, 1.0, Curves.easeOut);
     if (strokeAlpha > 0) {
       final strokePaint = Paint()
         ..style = PaintingStyle.stroke
@@ -201,8 +243,12 @@ class _LogoPainter extends CustomPainter {
       for (final shape in shapes) {
         final strokePath = shape.strokePath;
         if (strokePath == null) continue;
-        final strokeT =
-            _segment(t, shape.strokeStart, shape.strokeEnd, Curves.easeInOutCubic);
+        final strokeT = _segment(
+          t,
+          shape.strokeStart,
+          shape.strokeEnd,
+          Curves.easeInOutCubic,
+        );
         if (strokeT <= 0) continue;
         for (final metric in strokePath.computeMetrics()) {
           canvas.drawPath(
@@ -311,10 +357,12 @@ List<_LogoShape> _buildModernShapes(Brightness brightness) {
     ..close();
 
   final bar = Path()
-    ..addRRect(RRect.fromRectAndRadius(
-      const Rect.fromLTRB(342, 1022, 1232, 1232),
-      const Radius.circular(50),
-    ));
+    ..addRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTRB(342, 1022, 1232, 1232),
+        const Radius.circular(50),
+      ),
+    );
 
   final accent = Path()
     ..moveTo(1013.34, 658.68)
@@ -350,13 +398,37 @@ List<_LogoShape> _buildModernShapes(Brightness brightness) {
   }
 
   return [
-    shape(circle, circleColor,
-        strokeStart: 0.0, strokeEnd: 0.45, fillStart: 0.48, fillEnd: 0.68),
-    shape(flag, flagColor,
-        strokeStart: 0.20, strokeEnd: 0.50, fillStart: 0.56, fillEnd: 0.76),
-    shape(bar, flagColor,
-        strokeStart: 0.32, strokeEnd: 0.54, fillStart: 0.62, fillEnd: 0.82),
-    shape(accent, const Color(0xFFFFB003),
-        strokeStart: 0.42, strokeEnd: 0.58, fillStart: 0.66, fillEnd: 0.86),
+    shape(
+      circle,
+      circleColor,
+      strokeStart: 0.0,
+      strokeEnd: 0.45,
+      fillStart: 0.48,
+      fillEnd: 0.68,
+    ),
+    shape(
+      flag,
+      flagColor,
+      strokeStart: 0.20,
+      strokeEnd: 0.50,
+      fillStart: 0.56,
+      fillEnd: 0.76,
+    ),
+    shape(
+      bar,
+      flagColor,
+      strokeStart: 0.32,
+      strokeEnd: 0.54,
+      fillStart: 0.62,
+      fillEnd: 0.82,
+    ),
+    shape(
+      accent,
+      const Color(0xFFFFB003),
+      strokeStart: 0.42,
+      strokeEnd: 0.58,
+      fillStart: 0.66,
+      fillEnd: 0.86,
+    ),
   ];
 }

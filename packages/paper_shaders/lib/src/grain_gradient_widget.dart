@@ -190,13 +190,7 @@ class _GrainGradientState extends State<GrainGradient>
 
     if (widget.child != null) {
       return RepaintBoundary(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            content,
-            widget.child!,
-          ],
-        ),
+        child: Stack(fit: StackFit.expand, children: [content, widget.child!]),
       );
     }
 

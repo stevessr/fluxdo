@@ -1,7 +1,9 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:scroll_to_index/scroll_to_index.dart';
+
 import '../../../models/topic.dart';
 import '../../../services/screen_track.dart';
 import '../../../utils/scroll_jump.dart';
@@ -112,8 +114,9 @@ class TopicDetailController extends ChangeNotifier {
   /// 视口当前帖号(eyeline 上报)的细粒度通知 —— TOC 显隐门控等用;
   /// 独立 ValueNotifier 是因为滚动期它高频变化,不能走 ChangeNotifier
   /// 的 notifyListeners(会整树 rebuild)。
-  final ValueNotifier<int?> viewportPostNumberNotifier =
-      ValueNotifier<int?>(null);
+  final ValueNotifier<int?> viewportPostNumberNotifier = ValueNotifier<int?>(
+    null,
+  );
 
   Timer? _screenTrackThrottleTimer;
   bool _trackEnabled;

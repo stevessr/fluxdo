@@ -39,8 +39,10 @@ import java.io.File
  * 通过音频处理器完成重采样/混声道，通过帧丢弃效果实现目标帧率。
  */
 @UnstableApi
-object MediaTranscodeChannel {
-    private const val CHANNEL = "com.fluxdo/media_transcode"
+class MediaTranscodeChannel {
+    companion object {
+        private const val CHANNEL = "com.fluxdo/media_transcode"
+    }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var transformer: Transformer? = null
@@ -48,6 +50,13 @@ object MediaTranscodeChannel {
     private val progressHolder = ProgressHolder()
     @Volatile private var lastProgress = 0.0
     private var ticker: Runnable? = null
+
+    fun dispose() {
+        stopTicker()
+        transformer?.cancel()
+        transformer = null
+        finish { it.error("WINDOW_CLOSED", "The requesting window was closed", null) }
+    }
 
     fun register(context: Context, messenger: BinaryMessenger) {
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->

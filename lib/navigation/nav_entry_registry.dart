@@ -4,16 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/s.dart';
 import '../models/user.dart';
+import '../pages/ai_bot_conversations_page.dart';
+import '../pages/site_about_page.dart';
+import '../pages/site_policy_page.dart';
+import '../models/site_policy_document.dart';
 import '../pages/bookmarks_page.dart';
+import '../pages/boards_page.dart';
+import '../pages/mini_apps_page.dart';
 import '../pages/browsing_history_page.dart';
-import '../pages/chat/chat_list_page.dart';
+import '../pages/community_events_page.dart';
 import '../pages/drafts_page.dart';
-import '../pages/private_messages_page.dart';
+import '../pages/groups_page.dart';
+import '../pages/leaderboard_page.dart';
 import '../pages/profile_page.dart';
+import '../pages/chat/chat_page.dart';
 import '../pages/seeking_page.dart';
+import '../pages/private_messages_page.dart';
 import '../pages/topics_screen.dart';
 import '../providers/discourse_providers.dart';
-import '../providers/chat/chat_channels_provider.dart';
 import '../widgets/common/smart_avatar.dart';
 import '../widgets/notification/notification_quick_panel.dart';
 import 'nav_action_bus.dart';
@@ -40,6 +48,55 @@ class NavEntryRegistry {
         defaultInBottomNav: true,
       ),
       NavEntry(
+        id: NavEntryIds.boards,
+        kind: NavEntryKind.page,
+        iconData: Icons.view_kanban_outlined,
+        selectedIconData: Icons.view_kanban,
+        label: _boardsLabel,
+        pageBuilder: (ctx, isActive) => BoardsPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'mini_apps',
+        kind: NavEntryKind.page,
+        iconData: Icons.apps_outlined,
+        selectedIconData: Icons.apps_rounded,
+        label: (ctx) =>
+            Localizations.localeOf(ctx).languageCode == 'zh' ? '应用' : 'Apps',
+        pageBuilder: (ctx, isActive) => MiniAppsPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: NavEntryIds.chat,
+        kind: NavEntryKind.page,
+        iconData: Symbols.chat_rounded,
+        selectedIconData: Symbols.chat_rounded,
+        label: (ctx) => ctx.l10n.nav_chat,
+        pageBuilder: (ctx, isActive) => const ChatPage(),
+        defaultInBottomNav: true,
+        requiresLogin: true,
+      ),
+      NavEntry(
+        id: NavEntryIds.aiBot,
+        kind: NavEntryKind.page,
+        iconData: Icons.smart_toy_outlined,
+        selectedIconData: Icons.smart_toy_rounded,
+        label: _aiBotLabel,
+        pageBuilder: (ctx, isActive) => const AiBotConversationsPage(),
+        defaultInBottomNav: true,
+        requiresLogin: true,
+      ),
+      NavEntry(
+        id: NavEntryIds.messages,
+        kind: NavEntryKind.page,
+        iconData: Symbols.mail_rounded,
+        selectedIconData: Symbols.mail_rounded,
+        label: (ctx) => ctx.l10n.privateMessages_title,
+        pageBuilder: (ctx, isActive) => PrivateMessagesPage(isActive: isActive),
+        defaultInBottomNav: false,
+        requiresLogin: true,
+      ),
+      NavEntry(
         id: NavEntryIds.profile,
         kind: NavEntryKind.page,
         iconData: Symbols.person_rounded,
@@ -53,6 +110,47 @@ class NavEntryRegistry {
             _profileIcon(ctx, ref, selected: false),
         customSelectedIconBuilder: (ctx, ref) =>
             _profileIcon(ctx, ref, selected: true),
+      ),
+      NavEntry(
+        id: 'leaderboard',
+        kind: NavEntryKind.page,
+        iconData: Symbols.leaderboard_rounded,
+        selectedIconData: Symbols.leaderboard_rounded,
+        label: _leaderboardLabel,
+        pageBuilder: (ctx, isActive) => LeaderboardPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'groups',
+        kind: NavEntryKind.page,
+        iconData: Symbols.groups_rounded,
+        selectedIconData: Symbols.groups_rounded,
+        label: _groupsLabel,
+        pageBuilder: (ctx, isActive) => GroupsPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'upcoming_events',
+        kind: NavEntryKind.page,
+        iconData: Symbols.calendar_today_rounded,
+        selectedIconData: Symbols.calendar_today_rounded,
+        label: (ctx) => _communityEventLabel(ctx, CommunityEventsView.upcoming),
+        pageBuilder: (ctx, isActive) =>
+            const CommunityEventsPage(view: CommunityEventsView.upcoming),
+        defaultInBottomNav: false,
+        requiresLogin: true,
+      ),
+      NavEntry(
+        id: 'anniversaries',
+        kind: NavEntryKind.page,
+        iconData: Symbols.celebration_rounded,
+        selectedIconData: Symbols.celebration_rounded,
+        label: (ctx) =>
+            _communityEventLabel(ctx, CommunityEventsView.anniversaries),
+        pageBuilder: (ctx, isActive) =>
+            const CommunityEventsPage(view: CommunityEventsView.anniversaries),
+        defaultInBottomNav: false,
+        requiresLogin: true,
       ),
       NavEntry(
         id: NavEntryIds.bookmarks,
@@ -69,8 +167,7 @@ class NavEntryRegistry {
         iconData: Symbols.history_rounded,
         selectedIconData: Symbols.history_rounded,
         label: (ctx) => ctx.l10n.nav_history,
-        pageBuilder: (ctx, isActive) =>
-            BrowsingHistoryPage(isActive: isActive),
+        pageBuilder: (ctx, isActive) => BrowsingHistoryPage(isActive: isActive),
         requiresLogin: true,
       ),
       NavEntry(
@@ -81,29 +178,6 @@ class NavEntryRegistry {
         label: (ctx) => ctx.l10n.nav_drafts,
         pageBuilder: (ctx, isActive) => DraftsPage(isActive: isActive),
         requiresLogin: true,
-      ),
-      NavEntry(
-        id: NavEntryIds.messages,
-        kind: NavEntryKind.page,
-        iconData: Symbols.mail_rounded,
-        selectedIconData: Symbols.mail_rounded,
-        label: (ctx) => ctx.l10n.nav_messages,
-        pageBuilder: (ctx, isActive) =>
-            PrivateMessagesPage(isActive: isActive),
-        requiresLogin: true,
-      ),
-      NavEntry(
-        id: NavEntryIds.chat,
-        kind: NavEntryKind.page,
-        iconData: Symbols.forum_rounded,
-        selectedIconData: Symbols.forum_rounded,
-        label: (ctx) => ctx.l10n.chat_title,
-        pageBuilder: (ctx, isActive) => ChatListPage(isActive: isActive),
-        requiresLogin: true,
-        // 未读徽章:watch 即激活 chatChannelsProvider(全局非 autoDispose),
-        // 使 new-channel/user-tracking-state 订阅随底栏常驻
-        customIconBuilder: (ctx, ref) => _chatIcon(ref, selected: false),
-        customSelectedIconBuilder: (ctx, ref) => _chatIcon(ref, selected: true),
       ),
       NavEntry(
         id: NavEntryIds.seeking,
@@ -123,13 +197,54 @@ class NavEntryRegistry {
         onPanelTap: (ctx, ref) => NotificationQuickPanel.show(ctx),
         requiresLogin: true,
       ),
+      NavEntry(
+        id: 'site_guidelines',
+        kind: NavEntryKind.page,
+        iconData: Symbols.rule_rounded,
+        selectedIconData: Symbols.rule_rounded,
+        label: _siteGuidelinesLabel,
+        pageBuilder: (ctx, isActive) =>
+            SitePolicyPage(kind: SitePolicyKind.guidelines, isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'site_terms',
+        kind: NavEntryKind.page,
+        iconData: Symbols.description_rounded,
+        selectedIconData: Symbols.description_rounded,
+        label: _siteTermsLabel,
+        pageBuilder: (ctx, isActive) =>
+            SitePolicyPage(kind: SitePolicyKind.terms, isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'site_privacy',
+        kind: NavEntryKind.page,
+        iconData: Symbols.privacy_tip_rounded,
+        selectedIconData: Symbols.privacy_tip_rounded,
+        label: _sitePrivacyLabel,
+        pageBuilder: (ctx, isActive) =>
+            SitePolicyPage(kind: SitePolicyKind.privacy, isActive: isActive),
+        defaultInBottomNav: false,
+      ),
+      NavEntry(
+        id: 'site_about',
+        kind: NavEntryKind.page,
+        iconData: Symbols.info_rounded,
+        selectedIconData: Symbols.info_rounded,
+        label: _siteAboutLabel,
+        pageBuilder: (ctx, isActive) => SiteAboutPage(isActive: isActive),
+        defaultInBottomNav: false,
+      ),
     ];
   }
 
   /// 按 id 查找 entry
   static NavEntry? byId(String id) {
+    // 旧版独立生日导航入口的配置仍然可以解析。
+    final resolved = id == 'birthdays' ? 'anniversaries' : id;
     for (final e in buildAll()) {
-      if (e.id == id) return e;
+      if (e.id == resolved) return e;
     }
     return null;
   }
@@ -154,14 +269,57 @@ class NavEntryRegistry {
   }
 }
 
-Widget _chatIcon(WidgetRef ref, {required bool selected}) {
-  final unread = ref.watch(chatTotalUnreadProvider);
-  final icon = Icon(Symbols.forum_rounded, fill: selected ? 1 : 0);
-  if (unread <= 0) return icon;
-  return Badge(
-    label: Text(unread > 99 ? '99+' : '$unread'),
-    child: icon,
-  );
+String _boardsLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '看板' : 'Boards';
+}
+
+String _leaderboardLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '排行榜' : 'Leaderboard';
+}
+
+String _siteGuidelinesLabel(BuildContext context) {
+  return Localizations.localeOf(context).languageCode == 'zh'
+      ? '准则'
+      : 'Guidelines';
+}
+
+String _siteTermsLabel(BuildContext context) {
+  return Localizations.localeOf(context).languageCode == 'zh'
+      ? '服务条款'
+      : 'Terms of Service';
+}
+
+String _sitePrivacyLabel(BuildContext context) {
+  return Localizations.localeOf(context).languageCode == 'zh'
+      ? '隐私'
+      : 'Privacy';
+}
+
+String _siteAboutLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '关于' : 'About';
+}
+
+String _groupsLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? '群组' : 'Groups';
+}
+
+String _aiBotLabel(BuildContext context) {
+  final locale = Localizations.localeOf(context);
+  return locale.languageCode == 'zh' ? 'AI 聊天' : 'AI Chat';
+}
+
+String _communityEventLabel(BuildContext context, CommunityEventsView view) {
+  final zh = Localizations.localeOf(context).languageCode == 'zh';
+  return switch (view) {
+    CommunityEventsView.upcoming => zh ? '近期活动' : 'Upcoming events',
+    CommunityEventsView.anniversaries =>
+      zh ? '纪念日与生日' : 'Anniversaries & Birthdays',
+    CommunityEventsView.birthdays => zh ? '生日' : 'Birthdays',
+  };
 }
 
 Widget _profileIcon(

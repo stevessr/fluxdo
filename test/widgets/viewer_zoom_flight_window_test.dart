@@ -55,8 +55,7 @@ void main() {
       final f = ImageViewerPage.visibleFractionOf(zoomed, viewport)!;
 
       // 横向:视口 1212 / 画面 2274 = 0.533
-      expect(f.width, closeTo(1212 / 2274, 0.01),
-          reason: '横向可见比例应等于 视口宽/画面宽');
+      expect(f.width, closeTo(1212 / 2274, 0.01), reason: '横向可见比例应等于 视口宽/画面宽');
       // 纵向:视口 758 / 画面 2274 = 0.333
       expect(f.height, closeTo(758 / 2274, 0.01));
       // 居中 ⇒ 窗口也居中于 0.5
@@ -71,8 +70,7 @@ void main() {
       // 画面原点为负(向左上平移过)
       const zoomed = Rect.fromLTRB(-1000, -1400, 1274, 874);
       final f = ImageViewerPage.visibleFractionOf(zoomed, viewport)!;
-      expect(f.left, greaterThan(0.3),
-          reason: '画面左边被移出屏幕 ⇒ 可见窗口从图的中后段开始');
+      expect(f.left, greaterThan(0.3), reason: '画面左边被移出屏幕 ⇒ 可见窗口从图的中后段开始');
       expect(f.top, greaterThan(0.5));
     });
 
@@ -85,12 +83,7 @@ void main() {
       expect(ImageViewerPage.visibleFractionOf(Rect.zero, viewport), isNull);
       expect(
         ImageViewerPage.visibleFractionOf(
-          const Rect.fromLTRB(
-            double.nan,
-            double.nan,
-            double.nan,
-            double.nan,
-          ),
+          const Rect.fromLTRB(double.nan, double.nan, double.nan, double.nan),
           viewport,
         ),
         isNull,
@@ -150,8 +143,11 @@ void main() {
       // 只看到中间 50% 宽 / 33% 高
       const frac = Rect.fromLTRB(0.25, 0.335, 0.75, 0.665);
       final src = await srcAt(tester, t: 1.0, zoomFraction: frac);
-      expect(src.width, closeTo(500 * 0.5, 2),
-          reason: '查看器端应是可见窗口(全图的一半宽),不是全图');
+      expect(
+        src.width,
+        closeTo(500 * 0.5, 2),
+        reason: '查看器端应是可见窗口(全图的一半宽),不是全图',
+      );
       expect(src.height, closeTo(500 * 0.33, 4));
     });
 
@@ -167,9 +163,7 @@ void main() {
       expect(src.height, closeTo(500, 1));
     });
 
-    testWidgets('cover 源 + 放大态 t=0(贴源):src = 裁切窗口,不是全图', (
-      tester,
-    ) async {
+    testWidgets('cover 源 + 放大态 t=0(贴源):src = 裁切窗口,不是全图', (tester) async {
       // 这条守的是真机报的:聊天气泡本就纵向裁切(clamp 夹高 ⇒ cover 只显示
       // 中段),若贴源端算成完整图,落地瞬间画面会从「裁切一条」突变为完整
       // 长图。两端必须都与真实所见一致。
@@ -192,9 +186,7 @@ void main() {
       expect(src.height, closeTo(500, 2), reason: '纵向已铺满,不该再裁');
     });
 
-    testWidgets('cover 源纵向裁切(气泡夹高形态):贴源端窗口纵向收窄', (
-      tester,
-    ) async {
+    testWidgets('cover 源纵向裁切(气泡夹高形态):贴源端窗口纵向收窄', (tester) async {
       // 竖长图放进被夹高的气泡:cover 会裁掉上下
       // 画布 240x320、图 500x1000 ⇒ scale=max(0.48, 0.32)=0.48
       //   ⇒ src = 500 x 666(纵向从 1000 裁到 666,即 67%)
@@ -223,8 +215,11 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       final src = CoverContainFlightImage.debugLastSrc!;
       expect(src.width, closeTo(500, 2), reason: '横向铺满');
-      expect(src.height, closeTo(320 / 0.48, 4),
-          reason: '纵向应收窄到约 67%,与气泡里 cover 的实际可见区域一致');
+      expect(
+        src.height,
+        closeTo(320 / 0.48, 4),
+        reason: '纵向应收窄到约 67%,与气泡里 cover 的实际可见区域一致',
+      );
       expect(src.height, lessThan(1000));
     });
 
@@ -234,8 +229,11 @@ void main() {
       double prev = 0;
       for (final t in [1.0, 0.75, 0.5, 0.25, 0.0]) {
         final src = await srcAt(tester, t: t, zoomFraction: frac);
-        expect(src.width, greaterThanOrEqualTo(prev - 0.01),
-            reason: 't=$t 处窗口反而收窄了,取景框没在张开');
+        expect(
+          src.width,
+          greaterThanOrEqualTo(prev - 0.01),
+          reason: 't=$t 处窗口反而收窄了,取景框没在张开',
+        );
         prev = src.width;
       }
       expect(prev, closeTo(500, 1), reason: '落地必须是完整图');
@@ -253,8 +251,11 @@ void main() {
         zoomFraction: null,
         box: const Size(400, 200),
       );
-      expect(wide.height, lessThan(500),
-          reason: 'cover 口径:宽画布下 src 高度被裁,这是既有行为,不该丢');
+      expect(
+        wide.height,
+        lessThan(500),
+        reason: 'cover 口径:宽画布下 src 高度被裁,这是既有行为,不该丢',
+      );
     });
   });
 
@@ -278,7 +279,8 @@ void main() {
           zoomed: true,
         ),
         isTrue,
-        reason: '钉在 1 ⇒ 取景框永不张开 ⇒ 飞行全程停在局部视图(真机症状);'
+        reason:
+            '钉在 1 ⇒ 取景框永不张开 ⇒ 飞行全程停在局部视图(真机症状);'
             'contain 源一直走的就是这条分支,所以轮播/正文最明显',
       );
     });
@@ -327,5 +329,4 @@ class _Solid extends ImageProvider<_Solid> {
   bool operator ==(Object other) => other is _Solid && other.size == size;
   @override
   int get hashCode => size.hashCode;
-
 }

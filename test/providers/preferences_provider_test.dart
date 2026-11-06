@@ -174,4 +174,27 @@ void main() {
     expect(state.aiTranslationTargetLanguage, 'ja');
     expect(state.aiTranslationModelKey, 'provider:model');
   });
+  test('默认 Tab 开关初始关闭，更新后持久化', () async {
+    final container = await _createContainer();
+    addTearDown(container.dispose);
+    expect(
+      container.read(preferencesProvider).openTopicsInTabsByDefault,
+      isFalse,
+    );
+
+    await container
+        .read(preferencesProvider.notifier)
+        .setOpenTopicsInTabsByDefault(true);
+    final prefs = container.read(sharedPreferencesProvider);
+    expect(prefs.getBool('pref_open_topics_in_tabs_by_default'), isTrue);
+
+    final restored = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
+    addTearDown(restored.dispose);
+    expect(
+      restored.read(preferencesProvider).openTopicsInTabsByDefault,
+      isTrue,
+    );
+  });
 }

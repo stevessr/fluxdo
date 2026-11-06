@@ -23,10 +23,7 @@ class PresetIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     if (_looksLikeEmoji(iconRaw)) {
       // emoji 用 Text，字号略小一点保证视觉等高
-      return Text(
-        iconRaw,
-        style: TextStyle(fontSize: size * 0.95, height: 1),
-      );
+      return Text(iconRaw, style: TextStyle(fontSize: size * 0.95, height: 1));
     }
     final icon = _materialIconMap[iconRaw] ?? Symbols.auto_awesome_rounded;
     return Icon(icon, size: size, color: color);

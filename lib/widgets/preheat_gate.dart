@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../l10n/s.dart';
 import '../pages/about_page.dart';
 import '../pages/network_settings_page/network_settings_page.dart';
@@ -14,10 +15,13 @@ import '../services/discourse/discourse_service.dart';
 import '../services/emoji_handler.dart';
 import '../services/log/log_writer.dart';
 import '../services/migration_service.dart';
+import '../services/power_saving_mode_service.dart';
 import '../utils/dialog_utils.dart';
 import '../widgets/common/ambient_background.dart';
 import '../widgets/common/error_view.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import 'preheat_logo.dart';
 
 class PreheatGate extends StatefulWidget {
@@ -30,6 +34,8 @@ class PreheatGate extends StatefulWidget {
 }
 
 class _PreheatGateState extends State<PreheatGate> {
+  static const Duration _blockingPreloadBudget = Duration(seconds: 5);
+
   late Future<bool> _loadFuture;
   Object? _error;
   AppIconStyle _iconStyle = AppIconStyle.classic;
@@ -37,6 +43,9 @@ class _PreheatGateState extends State<PreheatGate> {
   @override
   void initState() {
     super.initState();
+    // 尽早读取系统省电状态；结果通过 ChangeNotifier 触发本门禁重建。
+    // 不阻塞 preload/首屏，平台通道慢或不可用时保持正常视觉策略。
+    unawaited(PowerSavingModeService.instance.initialize());
     _readIconStyle();
     // 延迟到下一帧执行，确保 context 可用（_preload 内部可能弹 Dialog）
     _loadFuture = Future.microtask(() => _preload());
@@ -61,11 +70,29 @@ class _PreheatGateState extends State<PreheatGate> {
         await _showReloginDialog();
       }
 
-      await BrowserTrustCoordinator.instance.ensurePreloaded(
+      final preloadFuture = BrowserTrustCoordinator.instance.ensurePreloaded(
         reason: 'preheat_gate',
       );
+      try {
+        // BrowserTrust 在无可信 cf_clearance 时可能走临时 WebView。该流程内部
+        // 为保证正确性允许等待更久，但它不应把整个首屏也同步锁住几十秒。
+        // 给首屏一个明确预算；超时只解除 UI 门禁，原任务继续后台完成并清理
+        // HeadlessWebView，避免为了“提速”打破 cookie/CF 的安全收尾语义。
+        await preloadFuture.timeout(_blockingPreloadBudget);
+      } on TimeoutException {
+        debugPrint(
+          '[PreheatGate] preload 超过 '
+          '${_blockingPreloadBudget.inSeconds}s，解除首屏门禁并转后台完成',
+        );
+        unawaited(
+          preloadFuture.catchError((Object e, StackTrace stackTrace) {
+            debugPrint('[PreheatGate] 后台 preload 最终失败: $e');
+          }),
+        );
+      }
 
-      DiscourseService().getEnabledReactions();
+      // enabled reactions 与 customEmoji 已由同一份 Discourse bootstrap
+      // 下发；这里不再额外触发一个无副作用的 Future。
       EmojiHandler().init();
 
       _error = null;
@@ -104,55 +131,84 @@ class _PreheatGateState extends State<PreheatGate> {
   }
 
   void _skip() {
+    // “跳过”只解除启动页门禁，不取消 BrowserTrustCoordinator 内部正在运行的
+    // preload。这样用户可以立即进入应用，同时 HeadlessWebView 仍会按原逻辑
+    // 完成 cookie 同步和 finally 清理。
     setState(() {
-      _error ??= TimeoutException(S.current.preheat_userSkipped);
-      _loadFuture = Future.value(false);
+      _error = null;
+      _loadFuture = Future.value(true);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _loadFuture,
-      builder: (context, snapshot) {
-        // 无论加载状态如何，都设置 context
-        // 避免 CF 验证等待 context 而 context 等待加载完成导致的死锁
-        BrowserTrustCoordinator.instance.setNavigatorContext(context);
+    return AnimatedBuilder(
+      animation: PowerSavingModeService.instance,
+      builder: (context, _) {
+        final powerSaving = PowerSavingModeService.instance.isEnabled;
+        return FutureBuilder<bool>(
+          future: _loadFuture,
+          builder: (context, snapshot) {
+            // 无论加载状态如何，都设置 context
+            // 避免 CF 验证等待 context 而 context 等待加载完成导致的死锁
+            BrowserTrustCoordinator.instance.setNavigatorContext(context);
 
-        Widget currentWidget;
-        if (snapshot.connectionState != ConnectionState.done) {
-          currentWidget = _PreheatLoading(
-            key: const ValueKey('loading'),
-            onSkip: _skip,
-            iconStyle: _iconStyle,
-          );
-        } else if (snapshot.data == true) {
-          currentWidget = KeyedSubtree(
-            key: const ValueKey('content'),
-            child: widget.child,
-          );
-        } else {
-          currentWidget = _PreheatFailed(
-            key: const ValueKey('error'),
-            error: _error,
-            onRetry: _retry,
-          );
-        }
+            Widget currentWidget;
+            if (snapshot.connectionState != ConnectionState.done) {
+              currentWidget = _PreheatLoading(
+                key: const ValueKey('loading'),
+                onSkip: _skip,
+                iconStyle: _iconStyle,
+                powerSaving: powerSaving,
+              );
+            } else if (snapshot.data == true) {
+              currentWidget = KeyedSubtree(
+                key: const ValueKey('content'),
+                child: widget.child,
+              );
+            } else {
+              currentWidget = _PreheatFailed(
+                key: const ValueKey('error'),
+                error: _error,
+                onRetry: _retry,
+              );
+            }
 
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 600),
-          switchInCurve: Curves.easeInOutCubic,
-          switchOutCurve: Curves.easeOut,
-          transitionBuilder: (child, animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.95, end: 1.0).animate(animation),
-                child: child,
-              ),
+            if (powerSaving) {
+              // 把系统省电状态映射到 Flutter 的标准“减少动态”信号，当前
+              // 页面子树里尊重 MediaQuery.disableAnimations 的组件会自动
+              // 切换到静态/瞬时过渡；门禁自己的动画则在下方显式旁路。
+              final mediaQuery = MediaQuery.maybeOf(context);
+              if (mediaQuery != null) {
+                currentWidget = MediaQuery(
+                  data: mediaQuery.copyWith(disableAnimations: true),
+                  child: currentWidget,
+                );
+              }
+              return currentWidget;
+            }
+
+            return AnimatedSwitcher(
+              // 数据已经 ready 后不再额外做半秒以上的“假加载”。保留一个很短的
+              // 淡入/缩放只用于遮住布局切换，不让动画本身成为启动延迟的一部分。
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeOut,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(
+                      begin: 0.985,
+                      end: 1.0,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+              child: currentWidget,
             );
           },
-          child: currentWidget,
         );
       },
     );
@@ -162,8 +218,14 @@ class _PreheatGateState extends State<PreheatGate> {
 class _PreheatLoading extends StatefulWidget {
   final VoidCallback? onSkip;
   final AppIconStyle iconStyle;
+  final bool powerSaving;
 
-  const _PreheatLoading({super.key, this.onSkip, required this.iconStyle});
+  const _PreheatLoading({
+    super.key,
+    this.onSkip,
+    required this.iconStyle,
+    required this.powerSaving,
+  });
 
   @override
   State<_PreheatLoading> createState() => _PreheatLoadingState();
@@ -178,7 +240,7 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
   void initState() {
     super.initState();
     if (widget.onSkip != null) {
-      _skipTimer = Timer(const Duration(seconds: 10), () {
+      _skipTimer = Timer(const Duration(seconds: 3), () {
         if (mounted) setState(() => _showSkip = true);
       });
     }
@@ -198,6 +260,9 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final hasAcrylic = Platform.isMacOS || Platform.isWindows;
+    final animationDuration = widget.powerSaving
+        ? Duration.zero
+        : const Duration(milliseconds: 400);
 
     return Scaffold(
       backgroundColor: hasAcrylic ? Colors.transparent : colorScheme.surface,
@@ -208,7 +273,11 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                PreheatLogo(style: widget.iconStyle, size: 108),
+                PreheatLogo(
+                  style: widget.iconStyle,
+                  size: 108,
+                  animate: !widget.powerSaving,
+                ),
                 const SizedBox(height: 24),
                 Text(
                   'FluxDO',
@@ -219,7 +288,13 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
                   ),
                 ),
                 const SizedBox(height: 56),
-                const LoadingSpinner(size: 40),
+                widget.powerSaving
+                    ? Icon(
+                        Icons.hourglass_top_rounded,
+                        size: 40,
+                        color: colorScheme.primary,
+                      )
+                    : const LoadingSpinner(size: 40),
               ],
             ),
           ),
@@ -231,16 +306,16 @@ class _PreheatLoadingState extends State<_PreheatLoading> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 跳过按钮常驻树中,超时后淡入上移出现
+                  // 跳过按钮常驻树中,超时后淡入上移出现；省电时瞬时切换。
                   IgnorePointer(
                     ignoring: !_showSkip,
                     child: AnimatedOpacity(
                       opacity: _showSkip ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 400),
+                      duration: animationDuration,
                       curve: Curves.easeOut,
                       child: AnimatedSlide(
                         offset: _showSkip ? Offset.zero : const Offset(0, 0.4),
-                        duration: const Duration(milliseconds: 400),
+                        duration: animationDuration,
                         curve: Curves.easeOutCubic,
                         child: TextButton(
                           onPressed: widget.onSkip,
@@ -281,15 +356,13 @@ class _PreheatFailed extends StatelessWidget {
   const _PreheatFailed({super.key, required this.onRetry, this.error});
 
   void _openAbout(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const AboutPage()));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const AboutPage()));
   }
 
   void _openNetworkSettings(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const NetworkSettingsPage()));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const NetworkSettingsPage()));
   }
 
   Future<void> _confirmLogout(BuildContext context) async {

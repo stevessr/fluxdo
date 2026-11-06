@@ -7,11 +7,44 @@ class TopicLinkInfo {
   const TopicLinkInfo({required this.topicId, this.slug, this.postNumber});
 }
 
+/// discourse-boards 看板链接解析结果。
+class BoardLinkInfo {
+  const BoardLinkInfo({required this.boardId, required this.slug, this.cardId});
+
+  final int boardId;
+  final String slug;
+  final int? cardId;
+}
+
 /// 用户链接解析结果
 class UserLinkInfo {
   final String username;
 
   const UserLinkInfo({required this.username});
+}
+
+/// 群组链接解析结果（/g/:name）。
+class GroupLinkInfo {
+  final String name;
+
+  const GroupLinkInfo({required this.name});
+}
+
+/// 徽章链接解析结果：/badges/:id/:slug
+class BadgeLinkInfo {
+  final int badgeId;
+  final String? slug;
+
+  const BadgeLinkInfo({required this.badgeId, this.slug});
+}
+
+/// discourse-cakeday 链接解析结果。
+class CakedayLinkInfo {
+  final bool birthdays;
+  final String? filter;
+  final int? month;
+
+  const CakedayLinkInfo({required this.birthdays, this.filter, this.month});
 }
 
 /// 分类链接解析结果。
@@ -44,6 +77,12 @@ class TitleUrlInfo {
   const TitleUrlInfo({required this.url, required this.uri});
 }
 
+/// A hosted mini app link (/apps/:slug or /apps/:uuid).
+class MiniAppLinkInfo {
+  const MiniAppLinkInfo({required this.id});
+  final String id;
+}
+
 class DiscourseUrlParser {
   DiscourseUrlParser._();
 
@@ -66,8 +105,32 @@ class DiscourseUrlParser {
     caseSensitive: false,
   );
 
+  /// discourse-boards：/boards/:slug/:id[/cards/:card_id]
+  static final _boardRegex = RegExp(
+    r'/boards/([^/?#]+)/(\d+)(?:/cards/(\d+))?(?:[/?#]|$)',
+    caseSensitive: false,
+  );
+
   /// 用户链接格式：/u/username
   static final _userRegex = RegExp(r'/u/([^/?#]+)', caseSensitive: false);
+
+  /// 群组链接格式：/g/group-name、/g/group-name/members 等。
+  static final _groupRegex = RegExp(
+    r'/g/([^/?#]+)(?:[/?#]|$)',
+    caseSensitive: false,
+  );
+
+  /// 徽章链接格式：/badges/128/-、/badges/128/devotee、/badges/128
+  static final _badgeRegex = RegExp(
+    r'/badges/(\d+)(?:/([^/?#]+))?(?:[/?#]|$)',
+    caseSensitive: false,
+  );
+
+  /// discourse-cakeday：所有分类 / 时间维度均走原生页，含 all?month=N。
+  static final _cakedayRegex = RegExp(
+    r'/cakeday/(birthdays|anniversaries)(?:/(today|tomorrow|upcoming|all))?(?:[/?#]|$)',
+    caseSensitive: false,
+  );
 
   static final _categoryRegex = RegExp(
     r'/c/(?:[^/?#]+/)?(\d+)(?:[/?#]|$)',
@@ -128,6 +191,19 @@ class DiscourseUrlParser {
     return match?.group(1);
   }
 
+  /// 解析 discourse-boards 页面链接。API 路径不会被误认为看板页面。
+  static BoardLinkInfo? parseBoard(String url) {
+    final match = _boardRegex.firstMatch(url);
+    if (match == null || match.group(1) == 'api') return null;
+    final boardId = int.tryParse(match.group(2) ?? '');
+    if (boardId == null) return null;
+    return BoardLinkInfo(
+      boardId: boardId,
+      slug: Uri.decodeComponent(match.group(1)!),
+      cardId: int.tryParse(match.group(3) ?? ''),
+    );
+  }
+
   /// 解析用户链接，返回 [UserLinkInfo] 或 null
   static UserLinkInfo? parseUser(String url) {
     final match = _userRegex.firstMatch(url);
@@ -135,6 +211,51 @@ class DiscourseUrlParser {
       return UserLinkInfo(username: match.group(1)!);
     }
     return null;
+  }
+
+  /// 解析群组链接，返回 [GroupLinkInfo] 或 null。
+  static GroupLinkInfo? parseGroup(String url) {
+    final match = _groupRegex.firstMatch(url);
+    final encoded = match?.group(1);
+    if (encoded == null || encoded.isEmpty) return null;
+    return GroupLinkInfo(name: Uri.decodeComponent(encoded));
+  }
+
+  /// 解析徽章详情链接。slug 为 `-` 时按 Discourse 占位符处理为 null。
+  static BadgeLinkInfo? parseBadge(String url) {
+    final match = _badgeRegex.firstMatch(url);
+    if (match == null) return null;
+    final id = int.tryParse(match.group(1) ?? '');
+    if (id == null) return null;
+    final rawSlug = match.group(2);
+    return BadgeLinkInfo(
+      badgeId: id,
+      slug: rawSlug == null || rawSlug == '-'
+          ? null
+          : Uri.decodeComponent(rawSlug),
+    );
+  }
+
+  /// 解析生日/周年纪念日页面链接。
+  static CakedayLinkInfo? parseCakeday(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    final match = _cakedayRegex.firstMatch(uri.path);
+    if (match == null) return null;
+    final month = int.tryParse(uri.queryParameters['month'] ?? '');
+    return CakedayLinkInfo(
+      birthdays: match.group(1)!.toLowerCase() == 'birthdays',
+      filter: match.group(2)?.toLowerCase(),
+      month: month != null && month >= 1 && month <= 12 ? month : null,
+    );
+  }
+
+  /// discourse-events 的原生近期活动页面。
+  static bool isUpcomingEvents(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final path = uri.path.toLowerCase();
+    return path == '/upcoming-events' || path.startsWith('/upcoming-events/');
   }
 
   static CategoryLinkInfo? parseCategory(String url) {
@@ -194,6 +315,38 @@ class DiscourseUrlParser {
       );
     }
     return null;
+  }
+
+  /// Only accept app detail paths, not directory, install or management routes.
+  static MiniAppLinkInfo? parseMiniApp(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    final parts = uri.pathSegments;
+    if (parts.length != 2 || parts[0].toLowerCase() != 'apps') {
+      return null;
+    }
+    final id = parts[1];
+    if (const {
+      'directory',
+      'installs',
+      'api',
+      'new',
+      'manage',
+      'settings',
+    }.contains(id.toLowerCase())) {
+      return null;
+    }
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,128}$').hasMatch(id)) return null;
+    return MiniAppLinkInfo(id: id);
+  }
+
+  static bool isMiniAppsDirectory(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    return uri.path == '/apps' ||
+        uri.path == '/apps/' ||
+        uri.path == '/apps/directory' ||
+        uri.path == '/apps/directory/';
   }
 
   static bool isHomepage(String url) {

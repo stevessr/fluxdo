@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../common/skeleton.dart';
 
 /// 帖子骨架屏
@@ -132,11 +133,7 @@ class PostListSkeleton extends StatelessWidget {
   final int? itemCount;
   final bool withHeader;
 
-  const PostListSkeleton({
-    super.key,
-    this.itemCount,
-    this.withHeader = false,
-  });
+  const PostListSkeleton({super.key, this.itemCount, this.withHeader = false});
 
   @override
   Widget build(BuildContext context) {

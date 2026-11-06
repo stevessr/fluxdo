@@ -148,8 +148,7 @@ void main() {
     test('异常页不会被当成社区准则写入缓存', () async {
       await expectLater(
         reviewWith(
-          guidelinesFetcher: () async =>
-              '<html><body>Cloudflare checking your browser. Enable JavaScript to continue.</body></html>',
+          guidelinesFetcher: () async => '<html><body>Cloudflare checking your browser. Enable JavaScript to continue.</body></html>',
         ),
         throwsA(isA<AiPostReviewException>()),
       );
@@ -164,11 +163,10 @@ String _guidelinesHtml(String text) {
   return '<html><body><main>$body</main></body></html>';
 }
 
-typedef _FakeSend =
-    Stream<AiChatChunk> Function({
-      required String? systemPrompt,
-      required List<AiChatMessage> messages,
-    });
+typedef _FakeSend = Stream<AiChatChunk> Function({
+  required String? systemPrompt,
+  required List<AiChatMessage> messages,
+});
 
 class _FakeAiChatService extends AiChatService {
   _FakeAiChatService({required _FakeSend onSend}) : _onSend = onSend;

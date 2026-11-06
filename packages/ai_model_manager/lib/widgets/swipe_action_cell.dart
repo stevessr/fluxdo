@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:common_ui/common_ui.dart';
+
 import '../utils/dialog_utils.dart';
 
 /// 滑动操作按钮数据
@@ -37,10 +38,7 @@ class _SwipeActionNotifier extends ChangeNotifier {
 class _SwipeActionScopeData extends InheritedWidget {
   final _SwipeActionNotifier notifier;
 
-  const _SwipeActionScopeData({
-    required this.notifier,
-    required super.child,
-  });
+  const _SwipeActionScopeData({required this.notifier, required super.child});
 
   static _SwipeActionScopeData? of(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<_SwipeActionScopeData>();
@@ -167,8 +165,10 @@ class _SwipeActionCellState extends State<SwipeActionCell>
   void _onDragUpdate(DragUpdateDetails details) {
     setState(() {
       _dragExtent += details.primaryDelta ?? 0;
-      _dragExtent =
-          _dragExtent.clamp(-MediaQuery.of(context).size.width * 0.8, 0.0);
+      _dragExtent = _dragExtent.clamp(
+        -MediaQuery.of(context).size.width * 0.8,
+        0.0,
+      );
     });
 
     final nowExpanded = _dragExtent.abs() > _totalActionWidth;
@@ -318,7 +318,8 @@ class _SwipeActionCellState extends State<SwipeActionCell>
                 child: GestureDetector(
                   onTap: hasReveal ? _closeActions : null,
                   child: Material(
-                    color: theme.cardTheme.color ??
+                    color:
+                        theme.cardTheme.color ??
                         theme.colorScheme.surfaceContainerLow,
                     elevation: theme.cardTheme.elevation ?? 1,
                     borderRadius: BorderRadius.circular(widget.borderRadius),
@@ -338,14 +339,19 @@ class _SwipeActionCellState extends State<SwipeActionCell>
     final actions = widget.trailingActions;
     if (actions.length <= 1) return actions.first.color;
     final expandProgress =
-        ((revealWidth - _totalActionWidth) / widget.actionWidth)
-            .clamp(0.0, 1.0);
+        ((revealWidth - _totalActionWidth) / widget.actionWidth).clamp(
+          0.0,
+          1.0,
+        );
     return expandProgress >= 1.0 ? actions.last.color : actions.first.color;
   }
 
   /// 扩展模式下最后一个按钮的图标抖一下
   Widget _buildActionIcon(
-      SwipeAction action, bool isLast, double expandProgress) {
+    SwipeAction action,
+    bool isLast,
+    double expandProgress,
+  ) {
     final icon = Icon(action.icon, color: action.foregroundColor, size: 22);
     if (!isLast || expandProgress <= 0) return icon;
 
@@ -379,8 +385,10 @@ class _SwipeActionCellState extends State<SwipeActionCell>
     if (actions.isEmpty) return [];
 
     final expandProgress =
-        ((revealWidth - _totalActionWidth) / widget.actionWidth)
-            .clamp(0.0, 1.0);
+        ((revealWidth - _totalActionWidth) / widget.actionWidth).clamp(
+          0.0,
+          1.0,
+        );
     final isExpanding = expandProgress > 0;
     final lastIndex = actions.length - 1;
 
@@ -391,7 +399,8 @@ class _SwipeActionCellState extends State<SwipeActionCell>
       double buttonWidth;
       if (isExpanding) {
         if (isLast) {
-          buttonWidth = revealWidth -
+          buttonWidth =
+              revealWidth -
               (actions.length - 1) * widget.actionWidth * (1 - expandProgress);
         } else {
           buttonWidth = widget.actionWidth * (1 - expandProgress);

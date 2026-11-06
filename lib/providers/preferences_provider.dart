@@ -34,6 +34,19 @@ enum NestedLineStyle {
   }
 }
 
+/// Local emoji artwork preference. Missing/invalid stored values stay normal.
+enum EmojiRenderStyle {
+  normal,
+  animated,
+  threeD;
+
+  static EmojiRenderStyle fromString(String? value) =>
+      EmojiRenderStyle.values.firstWhere(
+        (style) => style.name == value,
+        orElse: () => EmojiRenderStyle.normal,
+      );
+}
+
 enum BookmarksOpenMode {
   defaultRoute,
   tabbedWorkspace;
@@ -225,6 +238,9 @@ class AppPreferences {
   /// 且第三方签名图成本高、良莠不齐,默认关对齐网页更稳妥。
   final bool showSignatures;
 
+  /// Emoji presentation: normal Discourse assets, animated Fluent, or Fluent 3D.
+  final EmojiRenderStyle emojiRenderStyle;
+
   /// 小尾巴动画 SVG 自适应帧率
   final bool adaptiveSignatureFrameRate;
 
@@ -233,6 +249,10 @@ class AppPreferences {
 
   /// 帖子流末尾显示推荐话题（相关话题 / 建议话题），默认开启，对齐网页版
   final bool showSuggestedTopics;
+
+  /// 从首页打开话题时默认保留为可切换的 Tab。
+  /// 只影响默认打开行为；显式开启的 Tab 会话在最后一个标签关闭后结束。
+  final bool openTopicsInTabsByDefault;
 
   /// 默认使用树形视图
   final bool defaultNestedView;
@@ -345,9 +365,11 @@ class AppPreferences {
     required this.cryptoRememberPassword,
     required this.cryptoRecentAlgorithms,
     this.showSignatures = false,
+    this.emojiRenderStyle = EmojiRenderStyle.normal,
     this.adaptiveSignatureFrameRate = true,
     this.boostDanmaku = false,
     this.showSuggestedTopics = true,
+    this.openTopicsInTabsByDefault = false,
     this.defaultNestedView = false,
     this.nestedLineStyle = NestedLineStyle.auto,
     this.bookmarksOpenMode = BookmarksOpenMode.defaultRoute,
@@ -412,9 +434,11 @@ class AppPreferences {
     bool? cryptoRememberPassword,
     List<String>? cryptoRecentAlgorithms,
     bool? showSignatures,
+    EmojiRenderStyle? emojiRenderStyle,
     bool? adaptiveSignatureFrameRate,
     bool? boostDanmaku,
     bool? showSuggestedTopics,
+    bool? openTopicsInTabsByDefault,
     bool? defaultNestedView,
     NestedLineStyle? nestedLineStyle,
     BookmarksOpenMode? bookmarksOpenMode,
@@ -492,10 +516,13 @@ class AppPreferences {
       cryptoRecentAlgorithms:
           cryptoRecentAlgorithms ?? this.cryptoRecentAlgorithms,
       showSignatures: showSignatures ?? this.showSignatures,
+      emojiRenderStyle: emojiRenderStyle ?? this.emojiRenderStyle,
       adaptiveSignatureFrameRate:
           adaptiveSignatureFrameRate ?? this.adaptiveSignatureFrameRate,
       boostDanmaku: boostDanmaku ?? this.boostDanmaku,
       showSuggestedTopics: showSuggestedTopics ?? this.showSuggestedTopics,
+      openTopicsInTabsByDefault:
+          openTopicsInTabsByDefault ?? this.openTopicsInTabsByDefault,
       defaultNestedView: defaultNestedView ?? this.defaultNestedView,
       nestedLineStyle: nestedLineStyle ?? this.nestedLineStyle,
       bookmarksOpenMode: bookmarksOpenMode ?? this.bookmarksOpenMode,
@@ -585,10 +612,13 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   static const String _cryptoRecentAlgorithmsKey =
       'pref_crypto_recent_algorithms';
   static const String _showSignaturesKey = 'pref_show_signatures';
+  static const String _emojiRenderStyleKey = 'pref_emoji_render_style';
   static const String _adaptiveSignatureFrameRateKey =
       'pref_adaptive_signature_frame_rate';
   static const String _boostDanmakuKey = 'pref_boost_danmaku';
   static const String _showSuggestedTopicsKey = 'pref_show_suggested_topics';
+  static const String _openTopicsInTabsByDefaultKey =
+      'pref_open_topics_in_tabs_by_default';
   static const String _defaultNestedViewKey = 'pref_default_nested_view';
   static const String _nestedLineStyleKey = 'pref_nested_line_style';
   static const String _bookmarksOpenModeKey = 'pref_bookmarks_open_mode';
@@ -677,10 +707,15 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
           cryptoRecentAlgorithms:
               _prefs.getStringList(_cryptoRecentAlgorithmsKey) ?? const [],
           showSignatures: _prefs.getBool(_showSignaturesKey) ?? false,
+          emojiRenderStyle: EmojiRenderStyle.fromString(
+            _prefs.getString(_emojiRenderStyleKey),
+          ),
           adaptiveSignatureFrameRate:
               _prefs.getBool(_adaptiveSignatureFrameRateKey) ?? true,
           boostDanmaku: _prefs.getBool(_boostDanmakuKey) ?? false,
           showSuggestedTopics: _prefs.getBool(_showSuggestedTopicsKey) ?? true,
+          openTopicsInTabsByDefault:
+              _prefs.getBool(_openTopicsInTabsByDefaultKey) ?? false,
           defaultNestedView: _prefs.getBool(_defaultNestedViewKey) ?? false,
           nestedLineStyle: NestedLineStyle.fromString(
             _prefs.getString(_nestedLineStyleKey),
@@ -700,9 +735,13 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
             _prefs.getString(_bottomDoubleTapActionKey),
             fallback: NavTapAction.refresh,
           ),
+          // 将旧版独立生日入口迁入统一的纪念日页面；去重且保留原顺序。
           bottomNavIds:
-              _prefs.getStringList(_bottomNavIdsKey) ??
-              const [NavEntryIds.home, NavEntryIds.profile],
+              (_prefs.getStringList(_bottomNavIdsKey) ??
+                      const [NavEntryIds.home, NavEntryIds.profile])
+                  .map((id) => id == 'birthdays' ? 'anniversaries' : id)
+                  .toSet()
+                  .toList(),
           bottomNavLabelless: _prefs.getBool(_bottomNavLabellessKey) ?? false,
           bottomNavFloating: _prefs.getBool(_bottomNavFloatingKey) ?? false,
           // 新全局策略默认自动开启；不继承废弃的底栏局部开关。
@@ -1006,6 +1045,12 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
     await _prefs.setString(_topicCardStyleKey, style.toJsonString());
   }
 
+  Future<void> setEmojiRenderStyle(EmojiRenderStyle style) async {
+    if (state.emojiRenderStyle == style) return;
+    state = state.copyWith(emojiRenderStyle: style);
+    await _prefs.setString(_emojiRenderStyleKey, style.name);
+  }
+
   Future<void> setShowSignatures(bool enabled) async {
     state = state.copyWith(showSignatures: enabled);
     await _prefs.setBool(_showSignaturesKey, enabled);
@@ -1026,6 +1071,12 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
     if (state.showSuggestedTopics == enabled) return;
     state = state.copyWith(showSuggestedTopics: enabled);
     await _prefs.setBool(_showSuggestedTopicsKey, enabled);
+  }
+
+  Future<void> setOpenTopicsInTabsByDefault(bool enabled) async {
+    if (state.openTopicsInTabsByDefault == enabled) return;
+    state = state.copyWith(openTopicsInTabsByDefault: enabled);
+    await _prefs.setBool(_openTopicsInTabsByDefaultKey, enabled);
   }
 
   Future<void> setDefaultNestedView(bool enabled) async {

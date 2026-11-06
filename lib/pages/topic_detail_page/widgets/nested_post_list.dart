@@ -31,11 +31,10 @@ class NestedPostList extends ConsumerStatefulWidget {
   final ScrollController scrollController;
   final GlobalKey headerKey;
   final bool isLoggedIn;
+  final int? currentUserId;
+  final bool currentUserIsAdmin;
   final int? removingPrivateMessageParticipantId;
-  final String? removingPrivateMessageGroupName;
   final ValueChanged<TopicUser>? onRemovePrivateMessageParticipant;
-  final ValueChanged<TopicGroup>? onRemovePrivateMessageGroup;
-  final VoidCallback? onInvitePrivateMessageParticipants;
   final void Function(Post? replyToPost, {String? initialContent}) onReply;
   final void Function(Post post) onEdit;
   final void Function(int postId) onRefreshPost;
@@ -79,11 +78,10 @@ class NestedPostList extends ConsumerStatefulWidget {
     required this.scrollController,
     required this.headerKey,
     required this.isLoggedIn,
+    this.currentUserId,
+    this.currentUserIsAdmin = false,
     this.removingPrivateMessageParticipantId,
-    this.removingPrivateMessageGroupName,
     this.onRemovePrivateMessageParticipant,
-    this.onRemovePrivateMessageGroup,
-    this.onInvitePrivateMessageParticipants,
     required this.onReply,
     required this.onEdit,
     required this.onRefreshPost,
@@ -475,14 +473,15 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
   PrivateMessageParticipants _buildPrivateMessageParticipants(
     PrivateMessageParticipantsLocation location,
   ) {
-    return PrivateMessageParticipants.fromDetail(
+    return PrivateMessageParticipants(
+      key: ValueKey('pm-participants-${location.name}'),
       location: location,
-      detail: widget.detail,
+      participants: widget.detail.allowedUsers,
+      currentUserId: widget.currentUserId,
+      canRemoveOtherParticipants: widget.detail.canRemoveAllowedUsers,
+      removableSelfId: widget.detail.canRemoveSelfId,
       removingParticipantId: widget.removingPrivateMessageParticipantId,
-      removingGroupName: widget.removingPrivateMessageGroupName,
       onRemoveParticipant: widget.onRemovePrivateMessageParticipant,
-      onRemoveGroup: widget.onRemovePrivateMessageGroup,
-      onInvite: widget.onInvitePrivateMessageParticipants,
     );
   }
 
@@ -614,7 +613,8 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
                   ),
 
                 if (opPost != null &&
-                    PrivateMessageParticipants.shouldShow(widget.detail))
+                    widget.detail.isPrivateMessage &&
+                    widget.detail.allowedUsers.isNotEmpty)
                   SliverToBoxAdapter(
                     child: _buildPrivateMessageParticipants(
                       PrivateMessageParticipantsLocation.firstPost,
@@ -751,9 +751,8 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
                   ),
 
                 if (!ns.hasMoreRoots &&
-                    PrivateMessageParticipants.shouldShowAtBottom(
-                      widget.detail,
-                    ))
+                    widget.detail.isPrivateMessage &&
+                    widget.detail.allowedUsers.isNotEmpty)
                   SliverToBoxAdapter(
                     child: _buildPrivateMessageParticipants(
                       PrivateMessageParticipantsLocation.bottom,

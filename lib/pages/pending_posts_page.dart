@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/pending_post.dart';
 import '../models/topic.dart';
 import '../providers/discourse_providers.dart';
@@ -20,8 +21,9 @@ import 'topic_detail_page/topic_detail_page.dart';
 import 'create_topic_page.dart';
 
 /// 待审核内容列表 Provider
-final pendingPostsProvider =
-    FutureProvider.autoDispose<List<PendingPost>>((ref) async {
+final pendingPostsProvider = FutureProvider.autoDispose<List<PendingPost>>((
+  ref,
+) async {
   final service = ref.watch(discourseServiceProvider);
   return service.getMyPendingPosts();
 });
@@ -114,10 +116,9 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
   void _openTopic(PendingPost pending) {
     // 宽屏进右栏,窄屏全屏 push(平行视界宿主标准分流)。
     if (MasterDetailLayout.canShowBothPanesFor(context)) {
-      ref.read(selectedPendingPaneProvider.notifier).select(
-            topicId: pending.topicId!,
-            initialTitle: pending.title,
-          );
+      ref
+          .read(selectedPendingPaneProvider.notifier)
+          .select(topicId: pending.topicId!, initialTitle: pending.title);
       return;
     }
     Navigator.push(
@@ -160,8 +161,7 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
                     : () async {
                         setState(() => isDeleting = true);
                         try {
-                          await DiscourseService()
-                              .deleteReviewable(pending.id);
+                          await DiscourseService().deleteReviewable(pending.id);
                           if (dialogContext.mounted) {
                             Navigator.pop(dialogContext, true);
                           }
@@ -215,6 +215,15 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
     final targetKnown =
         !isReply || PendingReplyTargetRegistry.contains(pending.id);
     final replyToPostNumber = PendingReplyTargetRegistry.lookup(pending.id);
+
+    // 官方 PendingPostSerializer 不返回新主题 payload.tags。
+    // 优先接受服务器/自定义实例直接返回的 tags，否则读取送审时持久化补记。
+    final initialTags = pending.isNewTopic
+        ? pending.tags ??
+              await DiscourseService().getPendingTopicTags(pending.id)
+        : null;
+
+    if (!mounted) return;
     final confirmContent = targetKnown
         ? S.current.review_withdrawAndEditConfirmContent
         : '${S.current.review_withdrawAndEditConfirmContent}\n\n'
@@ -236,6 +245,7 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
         MaterialPageRoute(
           builder: (_) => CreateTopicPage(
             initialCategoryId: pending.categoryId,
+            initialTags: initialTags,
             initialTitle: pending.title,
             initialContent: pending.raw,
           ),

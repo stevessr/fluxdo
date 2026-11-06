@@ -1,4 +1,5 @@
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'font_awesome_name_mapping.dart';
 
 class FontAwesomeHelper {

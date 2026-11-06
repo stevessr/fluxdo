@@ -53,10 +53,7 @@ void main() {
         readSessionToken: () async =>
             CanonicalCookie(name: '_t', value: 'valid'),
       );
-      final outcome = _failure(
-        401,
-        body: {'error_type': 'not_logged_in'},
-      );
+      final outcome = _failure(401, body: {'error_type': 'not_logged_in'});
       expect(policy.canHandle(outcome), isFalse);
     });
 
@@ -122,7 +119,9 @@ void main() {
         response: Response<dynamic>(
           requestOptions: options,
           statusCode: 200,
-          headers: Headers.fromMap({'discourse-logged-out': ['1']}),
+          headers: Headers.fromMap({
+            'discourse-logged-out': ['1'],
+          }),
           data: const {},
         ),
         attemptIndex: 0,
@@ -130,6 +129,62 @@ void main() {
 
       expect(policy.canHandle(outcome), isTrue);
     });
+  });
+
+  test('200 带 logged-out 的 POST 不应重放已经成功的写操作', () {
+    final policy = SessionSelfHealPolicy(
+      readSessionToken: () async => CanonicalCookie(name: '_t', value: 'valid'),
+    );
+    final options = RequestOptions(
+      path: '/posts.json',
+      baseUrl: 'https://linux.do',
+      method: 'POST',
+    );
+    final outcome = AttemptOutcome.success(
+      response: Response<dynamic>(
+        requestOptions: options,
+        statusCode: 200,
+        headers: Headers.fromMap({
+          'discourse-logged-out': ['1'],
+        }),
+        data: const {'id': 123},
+      ),
+      attemptIndex: 0,
+    );
+    expect(policy.canHandle(outcome), isFalse);
+  });
+
+  test('CF 403 即使携带 logged-out 头也不能触发 session sweep', () {
+    final policy = SessionSelfHealPolicy(
+      readSessionToken: () async => CanonicalCookie(name: '_t', value: 'valid'),
+    );
+    final options = RequestOptions(
+      baseUrl: 'https://linux.do',
+      path: '/session/current.json',
+    );
+    final response = Response<dynamic>(
+      requestOptions: options,
+      statusCode: 403,
+      headers: Headers.fromMap({
+        'cf-mitigated': ['challenge'],
+        'discourse-logged-out': ['true'],
+        'content-type': ['text/html'],
+      }),
+      data: '<html>cf_chl_opt</html>',
+    );
+    expect(
+      policy.canHandle(
+        AttemptOutcome.failure(
+          error: DioException.badResponse(
+            statusCode: 403,
+            requestOptions: options,
+            response: response,
+          ),
+          attemptIndex: 0,
+        ),
+      ),
+      isFalse,
+    );
   });
 
   group('jar 快照时序(M0 回归护栏)', () {
@@ -164,10 +219,7 @@ void main() {
         RecoveryCoordinator(
           dio: dio,
           policies: [
-            SessionSelfHealPolicy(
-              readSessionToken: readToken,
-              sentinel: null,
-            ),
+            SessionSelfHealPolicy(readSessionToken: readToken, sentinel: null),
           ],
           budgetFactory: () => AttemptBudget(maxAttempts: 2),
         ),

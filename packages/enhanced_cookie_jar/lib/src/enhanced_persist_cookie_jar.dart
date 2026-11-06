@@ -8,9 +8,10 @@ import 'file_cookie_store.dart';
 import 'set_cookie_parser.dart';
 
 class EnhancedPersistCookieJar implements base.CookieJar {
-  EnhancedPersistCookieJar(
-      {required FileCookieStore store, this.ignoreExpires = false})
-      : _store = store;
+  EnhancedPersistCookieJar({
+    required FileCookieStore store,
+    this.ignoreExpires = false,
+  }) : _store = store;
 
   final FileCookieStore _store;
 
@@ -76,8 +77,9 @@ class EnhancedPersistCookieJar implements base.CookieJar {
         domain: cookie.domain ?? uri.host.toLowerCase(),
         path: cookie.path.isEmpty ? '/' : cookie.path,
       );
-      final idx = all
-          .indexWhere((existing) => existing.storageKey == resolved.storageKey);
+      final idx = all.indexWhere(
+        (existing) => existing.storageKey == resolved.storageKey,
+      );
       if (idx >= 0) {
         final existing = all[idx];
         if (_isWebViewHostOnlyDowngrade(resolved, existing)) {
@@ -149,15 +151,18 @@ class EnhancedPersistCookieJar implements base.CookieJar {
   Future<List<CanonicalCookie>> loadCanonicalForRequest(Uri uri) async {
     final all = await _readAll();
     final filtered = all
-        .where((cookie) =>
-            _matches(uri, cookie) && (ignoreExpires || !cookie.isExpired))
+        .where(
+          (cookie) =>
+              _matches(uri, cookie) && (ignoreExpires || !cookie.isExpired),
+        )
         .toList()
       ..sort((a, b) {
         final pathCompare = b.path.length.compareTo(a.path.length);
         if (pathCompare != 0) return pathCompare;
 
-        final domainCompare = (b.normalizedDomain?.length ?? 0)
-            .compareTo(a.normalizedDomain?.length ?? 0);
+        final domainCompare = (b.normalizedDomain?.length ?? 0).compareTo(
+          a.normalizedDomain?.length ?? 0,
+        );
         if (domainCompare != 0) return domainCompare;
 
         if (a.hostOnly != b.hostOnly) {
@@ -241,6 +246,70 @@ class EnhancedPersistCookieJar implements base.CookieJar {
         return _domainMatches(uri.host, matchDomain);
       });
       await _writeAll(all);
+    });
+  }
+
+  /// 按精确域名批量删除 Cookie，返回删除条数。
+  ///
+  /// 与 [delete] 的“请求可见性”语义不同，本接口只比较 Cookie 实际所属域名，
+  /// 因而删除 `credit.linux.do` 时不会顺带删除父域 `linux.do` 的 Domain Cookie。
+  /// host-only / domain / partitioned 变体都会按所属域统一删除，适合浏览器的
+  /// “按站点清理”场景。
+  Future<int> deleteDomainsExactly(Iterable<String> domains) {
+    final normalizedDomains = domains
+        .map((domain) => domain.trim().toLowerCase())
+        .map((domain) => domain.startsWith('.') ? domain.substring(1) : domain)
+        .where((domain) => domain.isNotEmpty)
+        .toSet();
+    if (normalizedDomains.isEmpty) return Future.value(0);
+
+    return _synchronized(() async {
+      final all = [...await _readAll()];
+      final before = all.length;
+      all.removeWhere((cookie) {
+        final domain = cookie.normalizedDomain ?? _originHost(cookie);
+        return domain != null && normalizedDomains.contains(domain);
+      });
+      final removed = before - all.length;
+      if (removed > 0) {
+        await _writeAll(all);
+      }
+      return removed;
+    });
+  }
+
+  /// 按浏览器 Cookie identity 精确删除一组分区变体。
+  ///
+  /// identity 使用 `(name, normalizedDomain, path)`。partitionKey 故意不参与
+  /// 匹配：WebView 平台 API 并不能在所有平台稳定暴露 partition key，而同一
+  /// identity 的 CHIPS / 非 CHIPS 副本同时存在时，浏览器管理器中的“删除”
+  /// 应收敛两边状态，避免某一分区副本随后重新灌回。
+  Future<int> deleteCookieIdentity({
+    required String name,
+    required String domain,
+    required String path,
+  }) {
+    final normalizedDomain = domain.trim().toLowerCase().replaceFirst(
+          RegExp(r'^\.'),
+          '',
+        );
+    final normalizedPath = path.isEmpty ? '/' : path;
+    if (name.isEmpty || normalizedDomain.isEmpty) return Future.value(0);
+
+    return _synchronized(() async {
+      final all = [...await _readAll()];
+      final before = all.length;
+      all.removeWhere(
+        (cookie) =>
+            cookie.name == name &&
+            cookie.normalizedDomain == normalizedDomain &&
+            cookie.path == normalizedPath,
+      );
+      final removed = before - all.length;
+      if (removed > 0) {
+        await _writeAll(all);
+      }
+      return removed;
     });
   }
 
@@ -376,8 +445,11 @@ class EnhancedPersistCookieJar implements base.CookieJar {
         matchDomain.endsWith('.$host');
   }
 
-  bool _domainMatches(String host, String? cookieDomain,
-      {bool hostOnly = false}) {
+  bool _domainMatches(
+    String host,
+    String? cookieDomain, {
+    bool hostOnly = false,
+  }) {
     final normalizedHost = host.toLowerCase();
     if (cookieDomain == null || cookieDomain.isEmpty) return false;
     if (hostOnly) return normalizedHost == cookieDomain;

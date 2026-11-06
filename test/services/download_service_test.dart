@@ -154,36 +154,32 @@ void main() {
       );
     });
 
-    test(
-      '提交时不会跟随被替换的目标符号链接',
-      () async {
-        final outsideFile = File(
-          p.join(downloadDirectory.parent.path, 'fluxdo-outside-target.txt'),
-        )..writeAsStringSync('outside');
-        addTearDown(() {
-          if (outsideFile.existsSync()) outsideFile.deleteSync();
-        });
-        final reservation = DownloadService.reserveAvailableDownload(
-          directory: downloadDirectory,
-          fileName: 'report.pdf',
-        );
-        addTearDown(reservation.release);
-        File(reservation.temporaryPath).writeAsStringSync('downloaded');
+    test('提交时不会跟随被替换的目标符号链接', () async {
+      final outsideFile = File(
+        p.join(downloadDirectory.parent.path, 'fluxdo-outside-target.txt'),
+      )..writeAsStringSync('outside');
+      addTearDown(() {
+        if (outsideFile.existsSync()) outsideFile.deleteSync();
+      });
+      final reservation = DownloadService.reserveAvailableDownload(
+        directory: downloadDirectory,
+        fileName: 'report.pdf',
+      );
+      addTearDown(reservation.release);
+      File(reservation.temporaryPath).writeAsStringSync('downloaded');
 
-        File(reservation.savePath).deleteSync();
-        Link(reservation.savePath).createSync(outsideFile.path);
+      File(reservation.savePath).deleteSync();
+      Link(reservation.savePath).createSync(outsideFile.path);
 
-        await reservation.commit();
+      await reservation.commit();
 
-        expect(outsideFile.readAsStringSync(), 'outside');
-        expect(File(reservation.savePath).readAsStringSync(), 'downloaded');
-        expect(
-          FileSystemEntity.typeSync(reservation.savePath, followLinks: false),
-          FileSystemEntityType.file,
-        );
-      },
-      skip: Platform.isWindows ? 'Windows 创建符号链接通常需要额外权限' : false,
-    );
+      expect(outsideFile.readAsStringSync(), 'outside');
+      expect(File(reservation.savePath).readAsStringSync(), 'downloaded');
+      expect(
+        FileSystemEntity.typeSync(reservation.savePath, followLinks: false),
+        FileSystemEntityType.file,
+      );
+    }, skip: Platform.isWindows ? 'Windows 创建符号链接通常需要额外权限' : false);
 
     test('释放预留会清理占位文件和临时文件', () async {
       final reservation = DownloadService.reserveAvailableDownload(

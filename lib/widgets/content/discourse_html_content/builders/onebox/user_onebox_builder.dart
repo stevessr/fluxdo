@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
+
 import '../../../../../providers/selected_topic_provider.dart';
 import 'onebox_base.dart';
 
@@ -18,8 +19,9 @@ Widget buildUserOnebox({
   final usernameLink = h3Element?.querySelector('a');
   final usernameText = usernameLink?.text ?? '';
   // 从 @username 提取 username
-  final username =
-      usernameText.startsWith('@') ? usernameText.substring(1) : usernameText;
+  final username = usernameText.startsWith('@')
+      ? usernameText.substring(1)
+      : usernameText;
 
   // 提取名称
   final nameElement = element.querySelector('.full-name');
@@ -46,11 +48,7 @@ Widget buildUserOnebox({
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 头像
-        OneboxAvatar(
-          imageUrl: avatarUrl,
-          size: 48,
-          borderRadius: 24,
-        ),
+        OneboxAvatar(imageUrl: avatarUrl, size: 48, borderRadius: 24),
         const SizedBox(width: 12),
         // 用户信息
         Expanded(
@@ -116,8 +114,9 @@ Widget buildUserOnebox({
                 Text(
                   joined,
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color:
-                        theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.7,
+                    ),
                   ),
                 ),
               ],

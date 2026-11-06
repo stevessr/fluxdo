@@ -43,6 +43,14 @@ extension _UserActions on _TopicDetailPageState {
     final params = _params;
     final notifier = ref.read(topicDetailProvider(params).notifier);
     final detail = ref.read(topicDetailProvider(params)).value;
+    if (detail?.closed == true) {
+      ToastService.showInfo(
+        detail!.isPrivateMessage
+            ? '该私信已关闭，无法继续回复'
+            : '该话题已关闭，无法继续回复',
+      );
+      return;
+    }
     final wasAtBottom = !notifier.hasMoreAfter;
 
     // 预加载草稿：在点击回复时就发起请求，利用 BottomSheet 动画时间并行加载
@@ -59,6 +67,25 @@ extension _UserActions on _TopicDetailPageState {
       replyToPost: replyToPost,
       initialContent: initialContent,
       topicTitle: detail?.title,
+      // 公开话题的「转为私信」预选被回复楼层作者；私信话题则沿用原
+      // 收件人/群组但排除当前用户，避免把自己加入新私信收件人列表。
+      privateMessageRecipients: detail == null
+          ? const <String>[]
+          : <String>{
+              if (detail.isPrivateMessage) ...[
+                ...detail.allowedUsers
+                    .where(
+                      (user) =>
+                          user.username !=
+                          ref.read(currentUserProvider).value?.username,
+                    )
+                    .map((user) => user.username),
+                ...detail.allowedGroups,
+              ] else if (replyToPost != null &&
+                  replyToPost.username !=
+                      ref.read(currentUserProvider).value?.username)
+                replyToPost.username,
+            }.toList(growable: false),
       preloadedDraftFuture: preloadedDraftFuture,
       isPrivateMessageTopic: detail?.isPrivateMessage ?? false,
       isPmWithNonHumanUser: detail?.pmWithNonHumanUser ?? false,
@@ -676,20 +703,26 @@ extension _UserActions on _TopicDetailPageState {
     SharePlus.instance.share(ShareParams(text: url));
   }
 
-  Future<void> _openInBrowser() async {
+  String _topicBrowserUrl() {
     final user = ref.read(currentUserProvider).value;
     final username = user?.username ?? '';
     final prefs = ref.read(preferencesProvider);
-    final url = ShareUtils.buildShareUrl(
+    return ShareUtils.buildShareUrl(
       path: '/t/topic/${widget.topicId}',
       username: username,
       anonymousShare: prefs.anonymousShare,
     );
+  }
 
-    final success = await launchInExternalBrowser(url);
+  Future<void> _openInBrowser() async {
+    final success = await launchInExternalBrowser(_topicBrowserUrl());
     if (!success && mounted) {
       ToastService.showError(S.current.topicDetail_cannotOpenBrowser);
     }
+  }
+
+  void _openInBuiltInBrowser() {
+    unawaited(WebViewPage.open(context, _topicBrowserUrl()));
   }
 
   void _shareAsImage() {
@@ -955,7 +988,13 @@ extension _UserActions on _TopicDetailPageState {
         postId: post.id,
         postUsername: post.username,
         service: DiscourseService(),
-        onSuccess: () => ToastService.showSuccess(S.current.post_flagSubmitted),
+        onSuccess: (flagType) {
+          if (!mounted) return;
+          ref
+              .read(topicDetailProvider(_params).notifier)
+              .applyLocalPostFlagged(post.id, flagType.id);
+          ToastService.showSuccess(S.current.post_flagSubmitted);
+        },
       ),
     );
   }
@@ -963,20 +1002,18 @@ extension _UserActions on _TopicDetailPageState {
   Future<void> _handleRemovePrivateMessageParticipant(
     TopicUser participant,
   ) async {
-    if (_removingPrivateMessageParticipantId != null ||
-        _removingPrivateMessageGroupName != null) {
+    if (_removingPrivateMessageParticipantId != null) return;
+
+    final detail = ref.read(topicDetailProvider(_params)).value;
+    final currentUser = ref.read(currentUserProvider).value;
+    if (detail == null || !detail.isPrivateMessage || currentUser == null) {
       return;
     }
 
-    final detail = ref.read(topicDetailProvider(_params)).value;
-    if (detail == null || !detail.isPrivateMessage) return;
-
-    // 判据与面板同源:两个 details 权限位就是唯一真相
-    // (can_remove_allowed_users 已含 staff/房主 TL2+ 判定,
-    // can_remove_self_id 恒为当前用户 id),不再叠加客户端身份门槛,
-    // 否则 UI 与此处会各判一套。
-    final isSelf = participant.id == detail.canRemoveSelfId;
-    final canRemove = detail.canRemoveAllowedUsers || isSelf;
+    final isSelf = participant.id == currentUser.id;
+    final canRemove = isSelf
+        ? detail.canRemoveSelfId == participant.id
+        : detail.canRemoveAllowedUsers;
     if (!canRemove) return;
 
     final confirmed = await showAppDialog<bool>(
@@ -1036,136 +1073,6 @@ extension _UserActions on _TopicDetailPageState {
     } finally {
       if (mounted) {
         setState(() => _removingPrivateMessageParticipantId = null);
-      }
-    }
-  }
-
-  /// 移除私信群组;群组没有「退出」语义,门禁只看 can_remove_allowed_users。
-  Future<void> _handleRemovePrivateMessageGroup(TopicGroup group) async {
-    if (_removingPrivateMessageParticipantId != null ||
-        _removingPrivateMessageGroupName != null) {
-      return;
-    }
-
-    final detail = ref.read(topicDetailProvider(_params)).value;
-    if (detail == null ||
-        !detail.isPrivateMessage ||
-        !detail.canRemoveAllowedUsers) {
-      return;
-    }
-
-    final confirmed = await showAppDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(context.l10n.common_remove),
-        content: Text(
-          context.l10n.topicDetail_removePrivateMessageGroupConfirm(group.name),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(context.l10n.common_cancel),
-          ),
-          FilledButton(
-            key: const ValueKey('pm-group-confirm'),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(context.l10n.common_remove),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _removingPrivateMessageGroupName = group.name);
-    try {
-      await ref
-          .read(topicDetailProvider(_params).notifier)
-          .removePrivateMessageGroup(group);
-      if (!mounted) return;
-      ToastService.showSuccess(
-        context.l10n.topicDetail_removedPrivateMessageGroup(group.name),
-      );
-    } catch (error) {
-      if (mounted) {
-        ToastService.showError(context.l10n.common_operationFailed('$error'));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _removingPrivateMessageGroupName = null);
-      }
-    }
-  }
-
-  /// 邀请新成员/群组加入私信。
-  Future<void> _handleInvitePrivateMessageParticipants() async {
-    final detail = ref.read(topicDetailProvider(_params)).value;
-    if (detail == null || !detail.isPrivateMessage || !detail.canInviteTo) {
-      return;
-    }
-
-    final result = await showInvitePrivateMessageDialog(context: context);
-    if (result == null || result.isEmpty || !mounted) return;
-
-    try {
-      final failed = await ref
-          .read(topicDetailProvider(_params).notifier)
-          .invitePrivateMessageParticipants(
-            usernames: result.usernames,
-            groupNames: result.groupNames,
-          );
-      if (!mounted) return;
-
-      if (failed.isEmpty) {
-        ToastService.showSuccess(context.l10n.pm_inviteSucceeded);
-      } else {
-        // 逐个提交,部分成功也已并入名单,这里只报失败的那几个。
-        ToastService.showError(
-          context.l10n.pm_invitePartiallyFailed(failed.join('、')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ToastService.showError(context.l10n.common_operationFailed('$error'));
-      }
-    }
-  }
-
-  /// 归档 / 取消归档当前私信。
-  ///
-  /// 归档后这条私信已离开收件箱，留在页上会和列表状态打架，所以直接退回
-  /// 列表（同官方 toggleArchiveMessage 的 backToInbox）；取消归档是「捞回来
-  /// 继续看」，留在原页只给个提示。
-  Future<void> _handleToggleArchiveMessage(
-    TopicDetailNotifier notifier,
-  ) async {
-    if (_isTogglingArchiveMessage) return;
-
-    final detail = ref.read(topicDetailProvider(_params)).value;
-    if (detail == null || !detail.isPrivateMessage) return;
-
-    setState(() => _isTogglingArchiveMessage = true);
-    try {
-      final archived = await notifier.toggleArchivePrivateMessage();
-      if (!mounted) return;
-
-      _invalidatePrivateMessageLists();
-      if (archived) {
-        ToastService.showSuccess(context.l10n.topicDetail_messageArchived);
-        _leaveTopicPage();
-      } else {
-        ToastService.showSuccess(context.l10n.topicDetail_messageMovedToInbox);
-      }
-    } catch (error) {
-      if (mounted) {
-        ToastService.showError(context.l10n.common_operationFailed('$error'));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isTogglingArchiveMessage = false);
       }
     }
   }
@@ -1438,7 +1345,6 @@ extension _UserActions on _TopicDetailPageState {
 
   /// 当前活跃的嵌套视图 family 参数(context 定位模式带目标楼层)
   NestedTopicParams get _activeNestedParams => NestedTopicParams(
-    instanceId: _instanceId,
     topicId: widget.topicId,
     targetPostNumber: _nestedTargetPostNumber,
   );
@@ -1674,8 +1580,9 @@ extension _UserActions on _TopicDetailPageState {
       _resolvedViewportPostNumber,
     );
     final posts = updated.postStream.posts;
-    final effectiveAnchor =
-        posts.any((p) => p.postNumber == currentAnchor) ? currentAnchor : anchor;
+    final effectiveAnchor = posts.any((p) => p.postNumber == currentAnchor)
+        ? currentAnchor
+        : anchor;
     if (posts.any((p) => p.postNumber == effectiveAnchor)) {
       _controller.prepareRefresh(effectiveAnchor, skipHighlight: true);
     } else {
@@ -1688,7 +1595,6 @@ extension _UserActions on _TopicDetailPageState {
     if (_isNestedView) {
       setState(() {
         _isNestedView = false;
-        _nestedReadingSession.enabled = false;
         _nestedAutoEnabled = false;
         _nestedTargetPostNumber = null;
       });
@@ -1704,7 +1610,6 @@ extension _UserActions on _TopicDetailPageState {
         notifier.isTopLevelMode;
     setState(() {
       _isNestedView = true;
-      _nestedReadingSession.enabled = true;
       // 手动开启:失败时显示错误页可重试,不做静默回落
       _nestedAutoEnabled = false;
     });

@@ -3,9 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 import '../l10n/s.dart';
-import '../pages/chat/channel/chat_channel_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
+import '../pages/chat/chat_message_page.dart';
 import '../utils/notification_navigation.dart';
 import 'notification_avatar_loader.dart';
 
@@ -52,11 +53,13 @@ class NotificationConversation {
 
 /// 本地系统通知服务
 class LocalNotificationService {
-  static final LocalNotificationService _instance = LocalNotificationService._internal();
+  static final LocalNotificationService _instance =
+      LocalNotificationService._internal();
   factory LocalNotificationService() => _instance;
   LocalNotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   bool _permissionGranted = false;
 
@@ -64,13 +67,17 @@ class LocalNotificationService {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    const linuxSettings = LinuxInitializationSettings(defaultActionName: 'Open');
+    const linuxSettings = LinuxInitializationSettings(
+      defaultActionName: 'Open',
+    );
     const windowsSettings = WindowsInitializationSettings(
       appName: 'FluxDO',
       appUserModelId: 'Com.FluxDO.FluxDO',
@@ -91,7 +98,7 @@ class LocalNotificationService {
     );
     _initialized = true;
     debugPrint('[LocalNotification] 初始化完成');
-    
+
     // 请求通知权限 (Android 13+)
     await _requestPermission();
   }
@@ -103,23 +110,24 @@ class LocalNotificationService {
     final payload = response.payload;
     if (payload == null || payload.isEmpty) return;
 
-    // payload 格式: "topic:{topicId}[:{postNumber}]" 或
-    // "message:{topicId}[:{postNumber}]"(私信,走私信平行视界栈)或
-    // "chat:{channelId}"(聊天,直达聊天窗)。
     if (payload.startsWith('chat:')) {
       final channelId = int.tryParse(payload.substring(5));
       if (channelId == null) return;
-      final chatPage = ChatChannelPage(channelId: channelId);
-      final chatContext = navigatorKey.currentContext;
-      if (chatContext != null && chatContext.mounted) {
-        openNotificationPage(chatContext, chatPage);
+      final page = ChatMessagePage(
+        channelId: channelId,
+        channelTitle: S.current.chat_title,
+      );
+      final context = navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        openNotificationPage(context, page);
         return;
       }
-      navigatorKey.currentState?.push(
-        MaterialPageRoute(builder: (_) => chatPage),
-      );
+      navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => page));
       return;
     }
+
+    // payload 格式: "topic:{topicId}[:{postNumber}]" 或
+    // "message:{topicId}[:{postNumber}]"(私信,走私信平行视界栈)。
     final isMessage = payload.startsWith('message:');
     if (!isMessage && !payload.startsWith('topic:')) return;
     final parts = payload.substring(isMessage ? 8 : 6).split(':');
@@ -143,16 +151,16 @@ class LocalNotificationService {
       openNotificationPage(context, page);
       return;
     }
-    navigatorKey.currentState?.push(
-      MaterialPageRoute(builder: (_) => page),
-    );
+    navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => page));
   }
 
   /// 请求通知权限
   Future<void> _requestPermission() async {
     // Android 平台请求权限
-    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidPlugin != null) {
       final granted = await androidPlugin.requestNotificationsPermission();
       _permissionGranted = granted ?? false;
@@ -202,11 +210,11 @@ class LocalNotificationService {
       altText: conversation?.senderUsername,
     );
 
-    final notificationId = id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
-    
+    final notificationId =
+        id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
     // 构建 payload 用于点击回调:私信用 message: 前缀,走私信自己的
     // 平行视界栈,不能跟普通话题共用 topic: 前缀(否则左栏会显示信息流)。
-    // chat 通知用 chat: 前缀直达聊天窗。
     String? payload;
     if (chatChannelId != null) {
       payload = 'chat:$chatChannelId';
@@ -216,9 +224,15 @@ class LocalNotificationService {
           ? '$prefix:$topicId:$postNumber'
           : '$prefix:$topicId';
     }
-    
+
     try {
-      await _plugin.show(id: notificationId, title: title, body: body, notificationDetails: details, payload: payload);
+      await _plugin.show(
+        id: notificationId,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payload,
+      );
     } finally {
       if (asConversation) await _removeConversationShortcut(conversation.id);
     }

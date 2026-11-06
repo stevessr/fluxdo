@@ -4,13 +4,15 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../models/emoji.dart';
 import '../../providers/discourse_providers.dart';
-import '../../services/emoji_handler.dart';
-import '../../services/discourse_cache_manager.dart';
+import '../common/styled_emoji_image.dart';
 import '../../utils/dialog_utils.dart';
 import '../common/app_bottom_sheet.dart';
+
 import 'package:m3e_ui/m3e_ui.dart';
+
 import '../../../../../l10n/s.dart';
 
 /// 常用表情的 Key
@@ -292,8 +294,9 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
   }
 
   Widget _buildContent(Map<String, List<Emoji>> emojiGroups) {
-    if (emojiGroups.isEmpty)
+    if (emojiGroups.isEmpty) {
       return Center(child: Text(S.current.emoji_notFound));
+    }
 
     // 内联搜索态:整个内容区切换为搜索视图(桌面悬浮弹层场景)
     if (_searching) {
@@ -449,6 +452,7 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
                                 emojiGroups[groupKeys[groupIndex]]!.first;
                             icon = _EmojiCell(
                               name: firstEmoji.name,
+                              serverUrl: firstEmoji.url,
                               width: 24,
                               height: 24,
                               decodeSize: 48,
@@ -568,7 +572,11 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
           message: ':${emoji.name}:',
           child: Padding(
             padding: const EdgeInsets.all(4.0),
-            child: _EmojiCell(name: emoji.name, decodeSize: 64),
+            child: _EmojiCell(
+              name: emoji.name,
+              serverUrl: emoji.url,
+              decodeSize: 64,
+            ),
           ),
         ),
       ),
@@ -608,42 +616,28 @@ extension StringExtension on String {
 class _EmojiCell extends StatelessWidget {
   const _EmojiCell({
     required this.name,
+    this.serverUrl,
     required this.decodeSize,
     this.width,
     this.height,
   });
 
   final String name;
+  final String? serverUrl;
   final int decodeSize;
   final double? width;
   final double? height;
 
   @override
   Widget build(BuildContext context) {
-    return Image(
-      image: ResizeImage(
-        emojiImageProvider(EmojiHandler().getEmojiUrl(name)),
-        width: decodeSize,
-        height: decodeSize,
-        policy: ResizeImagePolicy.fit,
-      ),
+    return StyledEmojiImage(
+      name: name,
+      serverUrl: serverUrl,
       width: width,
       height: height,
-      fit: BoxFit.contain,
-      gaplessPlayback: true,
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (wasSynchronouslyLoaded || frame != null) return child;
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurfaceVariant.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: SizedBox(width: width, height: height),
-        );
-      },
-      errorBuilder: (_, _, _) => SizedBox(width: width, height: height),
+      cacheWidth: decodeSize,
+      showPlaceholder: true,
+      errorFallback: SizedBox(width: width, height: height),
     );
   }
 }
@@ -800,7 +794,11 @@ class _EmojiSearchViewState extends State<_EmojiSearchView> {
                         message: ':${emoji.name}:',
                         child: Padding(
                           padding: const EdgeInsets.all(4.0),
-                          child: _EmojiCell(name: emoji.name, decodeSize: 64),
+                          child: _EmojiCell(
+                            name: emoji.name,
+                            serverUrl: emoji.url,
+                            decodeSize: 64,
+                          ),
                         ),
                       ),
                     );
@@ -1005,7 +1003,11 @@ class _EmojiSearchSheetState extends State<_EmojiSearchSheet> {
                           message: ':${emoji.name}:',
                           child: Padding(
                             padding: const EdgeInsets.all(4.0),
-                            child: _EmojiCell(name: emoji.name, decodeSize: 80),
+                            child: _EmojiCell(
+                              name: emoji.name,
+                              serverUrl: emoji.url,
+                              decodeSize: 80,
+                            ),
                           ),
                         ),
                       );

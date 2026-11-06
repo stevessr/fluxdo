@@ -134,9 +134,8 @@ Future<T?> showAdaptiveMenu<T>({
               height: 8,
               indent: 16,
               endIndent: 16,
-              color: Theme.of(
-                sheetContext,
-              ).colorScheme.outlineVariant.withValues(alpha: 0.4),
+              color: Theme.of(sheetContext).colorScheme.outlineVariant
+                  .withValues(alpha: 0.4),
             )
           else
             ListTile(

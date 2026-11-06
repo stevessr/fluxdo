@@ -1,10 +1,15 @@
 import 'package:flutter/foundation.dart' hide Category;
+
 import '../drafts_signal.dart';
+
 import 'package:flutter/material.dart' hide Badge;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dio/dio.dart';
+
 import '../../models/topic.dart';
 import '../../models/assignment.dart';
 import '../../models/nested_topic.dart';
@@ -25,12 +30,15 @@ import '../../models/invite_link.dart';
 import '../../models/template.dart';
 import '../../models/post_revision.dart';
 import '../../models/pending_post.dart';
-import '../../models/chat/chat_channel.dart';
-import '../../models/chat/chat_message.dart';
+import '../../models/group.dart';
+import '../../models/board.dart';
 
 import '../../constants.dart';
 import '../../providers/message_bus_providers.dart';
 import '../auth_session.dart';
+import '../account_manager.dart';
+import '../account_runtime_pool.dart';
+import '../account_switch_browser_cookie_cleaner.dart';
 import '../auth_issue_notice_service.dart';
 import '../cf_clearance_refresh_service.dart';
 import '../network/cookie/csrf_token_service.dart';
@@ -46,13 +54,16 @@ import '../network/webview/webview_adapter_settings_service.dart';
 import '../login_ready_coordinator.dart';
 import '../network/discourse_dio.dart';
 import '../network/flux_request_spec.dart';
+import '../network/session_rejection_classifier.dart';
 import '../preloaded_data_service.dart';
+import '../pending_review_context_store.dart';
 import '../uploads/s3_multipart_upload.dart';
 import '../uploads/upload_settings.dart';
 import '../uploads/upload_trace.dart';
 import '../uploads/upload_progress.dart';
 import '../uploads/media_upload_limits.dart';
 import '../webview_session_cookie_refresh_service.dart';
+import '../network/cookie/webview_cookie_priming.dart';
 import '../app_logger.dart';
 import '../log/log_writer.dart';
 import '../network/exceptions/api_exception.dart';
@@ -60,9 +71,11 @@ import '../storage/resilient_secure_storage.dart';
 import '../user_api_key_service.dart';
 import '../user_presence_service.dart';
 import '../../l10n/s.dart';
+import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 
 part '_auth.dart';
+part '_account_switch.dart';
 part '_login.dart';
 part '_topics.dart';
 part '_posts.dart';
@@ -83,6 +96,9 @@ part '_onebox.dart';
 part '_reviewables.dart';
 part '_assign.dart';
 part '_chat.dart';
+part '_groups.dart';
+part '_boards.dart';
+part '_ai_bot.dart';
 
 /// 基类，包含所有共享字段
 abstract class _DiscourseServiceBase {
@@ -123,7 +139,13 @@ abstract class _DiscourseServiceBase {
   Exception _handleDioError(DioException error);
   Never _throwApiError(DioException e);
   Future<void> _loadStoredCredentials();
-  Future<void> finalizeNativeLoginSuccess(String identifier);
+  Future<void> finalizeNativeLoginSuccess(
+    String identifier, {
+    bool notifyAuthState = true,
+    bool notifyBeforePreload = false,
+    User? confirmedUser,
+  });
+  Future<void> saveUsername(String username, {int? requestGeneration});
 }
 
 /// Linux.do API 服务
@@ -149,7 +171,10 @@ class DiscourseService extends _DiscourseServiceBase
         _OneboxMixin,
         _ReviewablesMixin,
         _AssignMixin,
-        _ChatMixin {
+        _ChatMixin,
+        _GroupsMixin,
+        _BoardsMixin,
+        _AiBotMixin {
   static const String baseUrl = AppConstants.baseUrl;
   static const String _usernameKey = 'linux_do_username';
   static const _summaryCacheDuration = Duration(minutes: 5);

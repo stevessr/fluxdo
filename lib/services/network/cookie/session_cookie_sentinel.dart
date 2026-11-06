@@ -838,7 +838,8 @@ class SessionCookieSentinel {
     final after = await _writer.countCookiesByName(url, name);
     final expectedMaxAfter = intent == SweepIntent.delete ? 0 : 1;
     final targetSatisfied =
-        after <= expectedMaxAfter || await _residualIsAcceptable(url, name, expectedMaxAfter);
+        after <= expectedMaxAfter ||
+        await _residualIsAcceptable(url, name, expectedMaxAfter);
     final status = targetSatisfied
         ? SweepStatus.nuclearReset
         : SweepStatus.failed;

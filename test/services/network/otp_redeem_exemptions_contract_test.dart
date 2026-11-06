@@ -121,7 +121,8 @@ Dio _buildDio(_RecordingAdapter adapter, {bool withRequestHeader = false}) {
     BaseOptions(
       baseUrl: 'https://linux.do',
       followRedirects: false,
-      validateStatus: (status) => status != null && status >= 200 && status < 400,
+      validateStatus: (status) =>
+          status != null && status >= 200 && status < 400,
     ),
   )..httpClientAdapter = adapter;
   if (withRequestHeader) {

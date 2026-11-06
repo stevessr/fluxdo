@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/emoji_handler.dart';
-import '../../services/discourse_cache_manager.dart';
+
+import 'styled_emoji_image.dart';
 import '../../utils/emoji_shortcodes.dart';
 
 /// 轻量级 Emoji 文本组件
@@ -117,27 +117,22 @@ class EmojiText extends StatelessWidget {
         style?.fontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14.0;
     final emojiSize = fontSize * 1.2;
 
-    // 获取 emoji URL
-    final emojiUrl = EmojiHandler().getEmojiUrl(emojiName);
-
     return WidgetSpan(
       alignment: PlaceholderAlignment.middle,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1),
-        child: Image(
-          image: emojiImageProvider(emojiUrl),
-          width: emojiSize,
-          height: emojiSize,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) {
-            // 加载失败时显示原文本
-            return Text(
+        child: RepaintBoundary(
+          child: StyledEmojiImage(
+            name: emojiName,
+            width: emojiSize,
+            height: emojiSize,
+            cacheWidth: (emojiSize * MediaQuery.devicePixelRatioOf(context)).round(),
+            errorFallback: Text(
               ':$emojiName:',
-              style:
-                  style?.copyWith(fontSize: fontSize) ??
+              style: style?.copyWith(fontSize: fontSize) ??
                   TextStyle(fontSize: fontSize),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );

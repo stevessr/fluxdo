@@ -27,10 +27,26 @@ final ColorFilter _saturationFilter = () {
   const sg = (1 - s) * 0.7152;
   const sb = (1 - s) * 0.0722;
   return ColorFilter.matrix(<double>[
-    sr + s, sg,     sb,     0, 0,
-    sr,     sg + s, sb,     0, 0,
-    sr,     sg,     sb + s, 0, 0,
-    0,      0,      0,      1, 0,
+    sr + s,
+    sg,
+    sb,
+    0,
+    0,
+    sr,
+    sg + s,
+    sb,
+    0,
+    0,
+    sr,
+    sg,
+    sb + s,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
   ]);
 }();
 
@@ -73,8 +89,7 @@ Widget _buildAnimatedBlurBarrier({
       final filter = _createBlurFilter(sigma);
 
       // acrylic 模式下 NavigationRail 背景透明，需跳过并补底
-      final showRail =
-          hasAcrylicRail && MediaQuery.sizeOf(context).width > 600;
+      final showRail = hasAcrylicRail && MediaQuery.sizeOf(context).width > 600;
       if (showRail) {
         const railWidth = 72.0;
         return Stack(
@@ -131,7 +146,8 @@ Future<T?> showAppDialog<T>({
         return themes.wrap(SafeArea(child: pageChild));
       },
       barrierDismissible: barrierDismissible,
-      barrierColor: barrierColor ??
+      barrierColor:
+          barrierColor ??
           (enableBlur
               ? _blurBarrierColor(Theme.of(context).brightness)
               : Colors.black54),
@@ -183,8 +199,10 @@ Future<T?> showAppBottomSheet<T>({
   bool blur = true,
 }) {
   final enableBlur = blur && _isBlurEnabled(context);
-  final NavigatorState navigator =
-      Navigator.of(context, rootNavigator: useRootNavigator);
+  final NavigatorState navigator = Navigator.of(
+    context,
+    rootNavigator: useRootNavigator,
+  );
 
   return navigator.push(
     _BlurModalBottomSheetRoute<T>(
@@ -197,7 +215,8 @@ Future<T?> showAppBottomSheet<T>({
       barrierLabel:
           barrierLabel ??
           MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      modalBarrierColor: barrierColor ??
+      modalBarrierColor:
+          barrierColor ??
           (enableBlur
               ? _blurBarrierColor(Theme.of(context).brightness)
               : Theme.of(context).bottomSheetTheme.modalBarrierColor),
@@ -249,10 +268,7 @@ class _BlurModalBottomSheetRoute<T> extends ModalBottomSheetRoute<T> {
   Widget buildModalBarrier() {
     final barrier = super.buildModalBarrier();
     if (!enableBlur) return barrier;
-    return _buildAnimatedBlurBarrier(
-      barrier: barrier,
-      animation: animation!,
-    );
+    return _buildAnimatedBlurBarrier(barrier: barrier, animation: animation!);
   }
 
   /// Android 预测返回手势:慢划边缘时 sheet 跟手下滑,与手指下拉关闭同
@@ -295,11 +311,11 @@ class _BlurRawDialogRoute<T> extends PopupRoute<T> {
     RouteTransitionsBuilder? transitionBuilder,
     super.settings,
     this.enableBlur = false,
-  })  : _barrierDismissible = barrierDismissible,
-        _barrierLabel = barrierLabel,
-        _barrierColor = barrierColor,
-        _transitionDuration = transitionDuration,
-        _transitionBuilder = transitionBuilder;
+  }) : _barrierDismissible = barrierDismissible,
+       _barrierLabel = barrierLabel,
+       _barrierColor = barrierColor,
+       _transitionDuration = transitionDuration,
+       _transitionBuilder = transitionBuilder;
 
   @override
   bool get barrierDismissible => _barrierDismissible;
@@ -342,9 +358,6 @@ class _BlurRawDialogRoute<T> extends PopupRoute<T> {
   Widget buildModalBarrier() {
     final barrier = super.buildModalBarrier();
     if (!enableBlur) return barrier;
-    return _buildAnimatedBlurBarrier(
-      barrier: barrier,
-      animation: animation!,
-    );
+    return _buildAnimatedBlurBarrier(barrier: barrier, animation: animation!);
   }
 }

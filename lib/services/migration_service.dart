@@ -164,9 +164,7 @@ class MigrationService {
                     io.Cookie.fromSetCookieValue(header),
                   ]);
                 } catch (e) {
-                  debugPrint(
-                    '[Migration v5] 单条 cookie 回灌失败 url=$url: $e',
-                  );
+                  debugPrint('[Migration v5] 单条 cookie 回灌失败 url=$url: $e');
                 }
               }
             } catch (e) {
@@ -267,9 +265,8 @@ class MigrationService {
       shouldRun: (prefs) async {
         try {
           final tempDir = await getTemporaryDirectory();
-          if (await io.Directory(
-            p.join(tempDir.path, kLegacyEmojiCacheKey),
-          ).exists()) {
+          if (await io.Directory(p.join(tempDir.path, kLegacyEmojiCacheKey))
+              .exists()) {
             return true;
           }
           final supportDir = await getApplicationSupportDirectory();
@@ -382,8 +379,10 @@ class MigrationService {
   }
 
   /// 全部迁移完成标记 key(供备份服务排除,数据驱动不抄常量)。
-  static List<String> get migrationKeys =>
-      [for (final m in _migrations) m.key, 'cookie_domain_migration_v2'];
+  static List<String> get migrationKeys => [
+    for (final m in _migrations) m.key,
+    'cookie_domain_migration_v2',
+  ];
 
   /// 判断是否为 v0.1.x 以前的老用户。
   ///

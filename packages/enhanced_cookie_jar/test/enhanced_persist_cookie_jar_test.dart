@@ -12,9 +12,7 @@ void main() {
       tempDir = await Directory.systemTemp.createTemp(
         'enhanced_cookie_jar_test_',
       );
-      jar = EnhancedPersistCookieJar(
-        store: FileCookieStore(tempDir.path),
-      );
+      jar = EnhancedPersistCookieJar(store: FileCookieStore(tempDir.path));
     });
 
     tearDown(() async {
@@ -24,10 +22,9 @@ void main() {
     });
 
     test('domain cookie matches subdomain requests', () async {
-      await jar.saveFromSetCookieHeaders(
-        Uri.parse('https://linux.do'),
-        ['cf_clearance=abc; Domain=.linux.do; Path=/; Secure; HttpOnly'],
-      );
+      await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+        'cf_clearance=abc; Domain=.linux.do; Path=/; Secure; HttpOnly',
+      ]);
 
       final cookies = await jar.loadForRequest(
         Uri.parse('https://connect.linux.do/oauth2/authorize'),
@@ -50,18 +47,19 @@ void main() {
       );
 
       expect(
-          exactHostCookies.map((e) => e.name), contains('auth.session-token'));
+        exactHostCookies.map((e) => e.name),
+        contains('auth.session-token'),
+      );
       expect(
         siblingHostCookies.map((e) => e.name),
         isNot(contains('auth.session-token')),
       );
     });
 
-    test('invalid cookie values are encoded when converted to io.Cookie',
-        () async {
-      await jar.saveCanonicalCookies(
-        Uri.parse('https://linux.do'),
-        [
+    test(
+      'invalid cookie values are encoded when converted to io.Cookie',
+      () async {
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
           CanonicalCookie(
             name: 'g_state',
             value: '{"i_l":0,"i_ll":1774544311822}',
@@ -70,14 +68,14 @@ void main() {
             originUrl: 'https://linux.do',
             hostOnly: false,
           ),
-        ],
-      );
+        ]);
 
-      final cookies = await jar.loadForRequest(Uri.parse('https://linux.do'));
-      final gState = cookies.firstWhere((e) => e.name == 'g_state');
+        final cookies = await jar.loadForRequest(Uri.parse('https://linux.do'));
+        final gState = cookies.firstWhere((e) => e.name == 'g_state');
 
-      expect(gState.value, startsWith('~enc~'));
-    });
+        expect(gState.value, startsWith('~enc~'));
+      },
+    );
 
     // =========================================================================
     // storageKey 去重：同 (name, domain, path) 不同 hostOnly 不共存
@@ -86,34 +84,28 @@ void main() {
     group('storageKey 去重', () {
       test('A1.1: hostOnly=false → hostOnly=true 替换，不共存', () async {
         // 先存 domain cookie (hostOnly=false)
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'old',
-              domain: '.linux.do',
-              path: '/',
-              hostOnly: false,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'old',
+            domain: '.linux.do',
+            path: '/',
+            hostOnly: false,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
         // 再存 host-only cookie (hostOnly=true)
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'new',
-              domain: 'linux.do',
-              path: '/',
-              hostOnly: true,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'new',
+            domain: 'linux.do',
+            path: '/',
+            hostOnly: true,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
         final all = await jar.readAllCookies();
         final tCookies = all.where((c) => c.name == '_t').toList();
@@ -123,33 +115,27 @@ void main() {
       });
 
       test('A1.2: hostOnly=true → hostOnly=false 替换', () async {
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'host_only',
-              domain: 'linux.do',
-              path: '/',
-              hostOnly: true,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'host_only',
+            domain: 'linux.do',
+            path: '/',
+            hostOnly: true,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'domain',
-              domain: '.linux.do',
-              path: '/',
-              hostOnly: false,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'domain',
+            domain: '.linux.do',
+            path: '/',
+            hostOnly: false,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
         final all = await jar.readAllCookies();
         final tCookies = all.where((c) => c.name == '_t').toList();
@@ -159,33 +145,27 @@ void main() {
       });
 
       test('A1.3: 不同 domain 不互相覆盖', () async {
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'main',
-              domain: 'linux.do',
-              path: '/',
-              hostOnly: true,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'main',
+            domain: 'linux.do',
+            path: '/',
+            hostOnly: true,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://cdn.linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'cdn',
-              domain: 'cdn.linux.do',
-              path: '/',
-              hostOnly: true,
-              originUrl: 'https://cdn.linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://cdn.linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'cdn',
+            domain: 'cdn.linux.do',
+            path: '/',
+            hostOnly: true,
+            originUrl: 'https://cdn.linux.do',
+          ),
+        ]);
 
         final all = await jar.readAllCookies();
         final tCookies = all.where((c) => c.name == '_t').toList();
@@ -193,31 +173,25 @@ void main() {
       });
 
       test('A1.4: 不同 path 不互相覆盖', () async {
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: 'sid',
-              value: 'root',
-              domain: 'linux.do',
-              path: '/',
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: 'sid',
+            value: 'root',
+            domain: 'linux.do',
+            path: '/',
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do/forum'),
-          [
-            CanonicalCookie(
-              name: 'sid',
-              value: 'forum',
-              domain: 'linux.do',
-              path: '/forum',
-              originUrl: 'https://linux.do/forum',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do/forum'), [
+          CanonicalCookie(
+            name: 'sid',
+            value: 'forum',
+            domain: 'linux.do',
+            path: '/forum',
+            originUrl: 'https://linux.do/forum',
+          ),
+        ]);
 
         final all = await jar.readAllCookies();
         final sidCookies = all.where((c) => c.name == 'sid').toList();
@@ -225,33 +199,27 @@ void main() {
       });
 
       test('A1.5: 不同 partitionKey 不互相覆盖（CHIPS）', () async {
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'no_pk',
-              domain: 'linux.do',
-              path: '/',
-              partitionKey: null,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'no_pk',
+            domain: 'linux.do',
+            path: '/',
+            partitionKey: null,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'with_pk',
-              domain: 'linux.do',
-              path: '/',
-              partitionKey: 'https://other.com',
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'with_pk',
+            domain: 'linux.do',
+            path: '/',
+            partitionKey: 'https://other.com',
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
         final all = await jar.readAllCookies();
         final tCookies = all.where((c) => c.name == '_t').toList();
@@ -259,33 +227,27 @@ void main() {
       });
 
       test('A1.6: 完全相同 storageKey 正常覆盖', () async {
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'old',
-              domain: 'linux.do',
-              path: '/',
-              hostOnly: true,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'old',
+            domain: 'linux.do',
+            path: '/',
+            hostOnly: true,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'new',
-              domain: 'linux.do',
-              path: '/',
-              hostOnly: true,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'new',
+            domain: 'linux.do',
+            path: '/',
+            hostOnly: true,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
         final all = await jar.readAllCookies();
         final tCookies = all.where((c) => c.name == '_t').toList();
@@ -300,33 +262,27 @@ void main() {
 
     group('domain 归一化', () {
       test('A2.5: .linux.do 和 linux.do 视为同一域名', () async {
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'with_dot',
-              domain: '.linux.do',
-              path: '/',
-              hostOnly: false,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'with_dot',
+            domain: '.linux.do',
+            path: '/',
+            hostOnly: false,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: '_t',
-              value: 'without_dot',
-              domain: 'linux.do',
-              path: '/',
-              hostOnly: true,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: '_t',
+            value: 'without_dot',
+            domain: 'linux.do',
+            path: '/',
+            hostOnly: true,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
         final all = await jar.readAllCookies();
         final tCookies = all.where((c) => c.name == '_t').toList();
@@ -335,28 +291,20 @@ void main() {
       });
 
       test('WebView 同值快照不把 domain cookie 降级成 host-only', () async {
-        await jar.saveFromSetCookieHeaders(
-          Uri.parse('https://linux.do'),
-          [
-            'linux_do_cdk_session_id=token; Domain=.linux.do; Path=/; Secure; SameSite=Lax',
-          ],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+          'linux_do_cdk_session_id=token; Domain=.linux.do; Path=/; Secure; SameSite=Lax',
+        ], trusted: true);
 
-        await jar.saveFromCdpCookies(
-          Uri.parse('https://linux.do'),
-          [
-            {
-              'name': 'linux_do_cdk_session_id',
-              'value': 'token',
-              'domain': 'linux.do',
-              'path': '/',
-              'secure': true,
-              'sameSite': 'Lax',
-            },
-          ],
-          trusted: true,
-        );
+        await jar.saveFromCdpCookies(Uri.parse('https://linux.do'), [
+          {
+            'name': 'linux_do_cdk_session_id',
+            'value': 'token',
+            'domain': 'linux.do',
+            'path': '/',
+            'secure': true,
+            'sameSite': 'Lax',
+          },
+        ], trusted: true);
 
         final all = await jar.readAllCookies();
         final cdk = all.singleWhere(
@@ -421,10 +369,9 @@ void main() {
 
     group('loadForRequest 匹配', () {
       test('A3.1: host-only cookie 不匹配子域名', () async {
-        await jar.saveFromSetCookieHeaders(
-          Uri.parse('https://linux.do'),
-          ['_t=token; Path=/; Secure; HttpOnly'],
-        );
+        await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+          '_t=token; Path=/; Secure; HttpOnly',
+        ]);
 
         final cookies = await jar.loadForRequest(
           Uri.parse('https://cdn.linux.do/image.png'),
@@ -433,10 +380,9 @@ void main() {
       });
 
       test('A3.3: host-only cookie 精确匹配主域名', () async {
-        await jar.saveFromSetCookieHeaders(
-          Uri.parse('https://linux.do'),
-          ['_t=token; Path=/; Secure; HttpOnly'],
-        );
+        await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+          '_t=token; Path=/; Secure; HttpOnly',
+        ]);
 
         final cookies = await jar.loadForRequest(
           Uri.parse('https://linux.do/latest.json'),
@@ -446,23 +392,18 @@ void main() {
 
       test('A3.4: 过期 cookie 不返回', () async {
         final pastDate = DateTime.now().subtract(const Duration(days: 1));
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: 'expired',
-              value: 'old',
-              domain: 'linux.do',
-              path: '/',
-              expiresAt: pastDate,
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: 'expired',
+            value: 'old',
+            domain: 'linux.do',
+            path: '/',
+            expiresAt: pastDate,
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
-        final cookies = await jar.loadForRequest(
-          Uri.parse('https://linux.do'),
-        );
+        final cookies = await jar.loadForRequest(Uri.parse('https://linux.do'));
         expect(cookies.map((e) => e.name), isNot(contains('expired')));
       });
     });
@@ -474,42 +415,39 @@ void main() {
     group('持久化', () {
       test('A5.1: session cookie 不持久化', () async {
         // 无 expires 的 cookie 是 session cookie
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: 'session',
-              value: 'temp',
-              domain: 'linux.do',
-              path: '/',
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: 'session',
+            value: 'temp',
+            domain: 'linux.do',
+            path: '/',
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
         // 创建新 jar 实例（模拟重启），共享同一磁盘路径
         final jar2 = EnhancedPersistCookieJar(
           store: FileCookieStore(tempDir.path),
         );
         final all = await jar2.readAllCookies();
-        expect(all.where((c) => c.name == 'session'), isEmpty,
-            reason: 'session cookie 不应持久化到磁盘');
+        expect(
+          all.where((c) => c.name == 'session'),
+          isEmpty,
+          reason: 'session cookie 不应持久化到磁盘',
+        );
       });
 
       test('A5.2: persistent cookie 持久化', () async {
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: 'persist',
-              value: 'keep',
-              domain: 'linux.do',
-              path: '/',
-              expiresAt: DateTime.now().add(const Duration(days: 30)),
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: 'persist',
+            value: 'keep',
+            domain: 'linux.do',
+            path: '/',
+            expiresAt: DateTime.now().add(const Duration(days: 30)),
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
         final jar2 = EnhancedPersistCookieJar(
           store: FileCookieStore(tempDir.path),
@@ -520,19 +458,16 @@ void main() {
 
       test('A5.3: 文件损坏容错', () async {
         // 写入一个合法 cookie
-        await jar.saveCanonicalCookies(
-          Uri.parse('https://linux.do'),
-          [
-            CanonicalCookie(
-              name: 'test',
-              value: 'ok',
-              domain: 'linux.do',
-              path: '/',
-              expiresAt: DateTime.now().add(const Duration(days: 1)),
-              originUrl: 'https://linux.do',
-            ),
-          ],
-        );
+        await jar.saveCanonicalCookies(Uri.parse('https://linux.do'), [
+          CanonicalCookie(
+            name: 'test',
+            value: 'ok',
+            domain: 'linux.do',
+            path: '/',
+            expiresAt: DateTime.now().add(const Duration(days: 1)),
+            originUrl: 'https://linux.do',
+          ),
+        ]);
 
         // 手动损坏文件
         final cookieFile = File('${tempDir.path}/cookies.v1.json');
@@ -555,9 +490,7 @@ void main() {
 
     test('redirect oauth cookie stays available for same host', () async {
       await jar.saveFromSetCookieHeaders(
-        Uri.parse(
-          'https://connect.linux.do/oauth2/authorize?client_id=test',
-        ),
+        Uri.parse('https://connect.linux.do/oauth2/authorize?client_id=test'),
         [
           'auth.session-token=oauth-token; Path=/; Secure; HttpOnly; SameSite=Lax',
         ],
@@ -586,8 +519,11 @@ void main() {
       await jar.saveFromResponse(Uri.parse('https://linux.do'), [cookie]);
 
       final loaded = await jar.loadForRequest(Uri.parse('https://linux.do'));
-      expect(loaded.any((c) => c.name == '_t'), true,
-          reason: '_t should be loadable');
+      expect(
+        loaded.any((c) => c.name == '_t'),
+        true,
+        reason: '_t should be loadable',
+      );
     });
 
     // =========================================================================
@@ -596,16 +532,14 @@ void main() {
 
     group('deleteByName', () {
       test('删除未过期的持久 cookie（过期写入方式会被新鲜度仲裁跳过的场景）', () async {
-        await jar.saveFromSetCookieHeaders(
-          Uri.parse('https://linux.do'),
-          [
-            'cf_clearance=token; Domain=.linux.do; Path=/; Secure; HttpOnly; Max-Age=31536000',
-          ],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+          'cf_clearance=token; Domain=.linux.do; Path=/; Secure; HttpOnly; Max-Age=31536000',
+        ], trusted: true);
 
         final removed = await jar.deleteByName(
-            Uri.parse('https://linux.do'), 'cf_clearance');
+          Uri.parse('https://linux.do'),
+          'cf_clearance',
+        );
 
         expect(removed, 1);
         final cookies = await jar.loadForRequest(Uri.parse('https://linux.do'));
@@ -617,26 +551,24 @@ void main() {
           Uri.parse('https://connect.linux.do'),
           ['_t=sub; Path=/; Max-Age=3600'],
         );
-        await jar.saveFromSetCookieHeaders(
-          Uri.parse('https://linux.do'),
-          ['_t=main; Path=/; Max-Age=3600'],
-        );
+        await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+          '_t=main; Path=/; Max-Age=3600',
+        ]);
 
-        final removed =
-            await jar.deleteByName(Uri.parse('https://linux.do'), '_t');
+        final removed = await jar.deleteByName(
+          Uri.parse('https://linux.do'),
+          '_t',
+        );
 
         expect(removed, 2);
         expect(await jar.readAllCookies(), isEmpty);
       });
 
       test('其他名称的 cookie 不受影响', () async {
-        await jar.saveFromSetCookieHeaders(
-          Uri.parse('https://linux.do'),
-          [
-            '_t=keep; Path=/; Max-Age=3600',
-            'cf_clearance=x; Path=/; Max-Age=3600',
-          ],
-        );
+        await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+          '_t=keep; Path=/; Max-Age=3600',
+          'cf_clearance=x; Path=/; Max-Age=3600',
+        ]);
 
         await jar.deleteByName(Uri.parse('https://linux.do'), 'cf_clearance');
 
@@ -647,25 +579,19 @@ void main() {
 
     group('replaceByNameForSite', () {
       test('原子替换同站相关的同名 cookie，保留其他站点和其他名称', () async {
-        await jar.saveFromSetCookieHeaders(
-          Uri.parse('https://linux.do'),
-          [
-            '_t=main; Path=/; Max-Age=3600',
-            '_t=path; Path=/u; Max-Age=3600',
-            'cf_clearance=cf; Domain=.linux.do; Path=/; Max-Age=3600',
-          ],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(Uri.parse('https://linux.do'), [
+          '_t=main; Path=/; Max-Age=3600',
+          '_t=path; Path=/u; Max-Age=3600',
+          'cf_clearance=cf; Domain=.linux.do; Path=/; Max-Age=3600',
+        ], trusted: true);
         await jar.saveFromSetCookieHeaders(
           Uri.parse('https://connect.linux.do'),
           ['_t=sub; Path=/; Max-Age=3600'],
           trusted: true,
         );
-        await jar.saveFromSetCookieHeaders(
-          Uri.parse('https://example.com'),
-          ['_t=other-site; Path=/; Max-Age=3600'],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(Uri.parse('https://example.com'), [
+          '_t=other-site; Path=/; Max-Age=3600',
+        ], trusted: true);
 
         final removed = await jar.replaceByNameForSite(
           Uri.parse('https://linux.do'),
@@ -684,15 +610,17 @@ void main() {
 
         expect(removed, 3);
         final all = await jar.readAllCookies();
-        final linuxTokens = all
-            .where((c) => c.name == '_t' && c.normalizedDomain == 'linux.do');
+        final linuxTokens = all.where(
+          (c) => c.name == '_t' && c.normalizedDomain == 'linux.do',
+        );
         expect(linuxTokens.length, 1);
         expect(linuxTokens.single.value, 'winner');
         expect(linuxTokens.single.hostOnly, true);
         expect(linuxTokens.single.path, '/');
         expect(
           all.where(
-              (c) => c.name == '_t' && c.normalizedDomain == 'example.com'),
+            (c) => c.name == '_t' && c.normalizedDomain == 'example.com',
+          ),
           hasLength(1),
         );
         expect(all.map((c) => c.name), contains('cf_clearance'));
@@ -725,19 +653,15 @@ void main() {
 
       test('替换同 key cookie 时继承 creationTime（RFC 6265 §5.3.11.3）', () async {
         final uri = Uri.parse('https://linux.do');
-        await jar.saveFromSetCookieHeaders(
-          uri,
-          ['_t=old; Path=/; Max-Age=3600'],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(uri, [
+          '_t=old; Path=/; Max-Age=3600',
+        ], trusted: true);
         final created = (await jar.readAllCookies()).single.creationTime;
 
         await Future<void>.delayed(const Duration(milliseconds: 20));
-        await jar.saveFromSetCookieHeaders(
-          uri,
-          ['_t=new; Path=/; Max-Age=3600'],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(uri, [
+          '_t=new; Path=/; Max-Age=3600',
+        ], trusted: true);
 
         final replaced = (await jar.readAllCookies()).single;
         expect(replaced.value, 'new');
@@ -758,37 +682,29 @@ void main() {
         expect(await file.exists(), false, reason: '内容未变应跳过磁盘写');
 
         // 值变化时正常写盘
-        await jar.saveFromSetCookieHeaders(
-          uri,
-          ['_t=rotated; Path=/; Expires=Wed, 01 Jan 2098 00:00:00 GMT'],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(uri, [
+          '_t=rotated; Path=/; Expires=Wed, 01 Jan 2098 00:00:00 GMT',
+        ], trusted: true);
         expect(await file.exists(), true);
       });
 
       test('session cookie 刷新不触发磁盘重写', () async {
         final uri = Uri.parse('https://linux.do');
-        await jar.saveFromSetCookieHeaders(
-          uri,
-          ['_t=tok; Path=/; Max-Age=3600'],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(uri, [
+          '_t=tok; Path=/; Max-Age=3600',
+        ], trusted: true);
 
         final file = File('${tempDir.path}/cookies.v1.json');
         await file.delete();
 
         // session cookie（无 expires/max-age）不持久化，
         // 高频刷新不应导致持久集合全量重写
-        await jar.saveFromSetCookieHeaders(
-          uri,
-          ['_forum_session=abc; Path=/; HttpOnly'],
-          trusted: true,
-        );
-        await jar.saveFromSetCookieHeaders(
-          uri,
-          ['_forum_session=def; Path=/; HttpOnly'],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(uri, [
+          '_forum_session=abc; Path=/; HttpOnly',
+        ], trusted: true);
+        await jar.saveFromSetCookieHeaders(uri, [
+          '_forum_session=def; Path=/; HttpOnly',
+        ], trusted: true);
         expect(await file.exists(), false);
 
         // 内存中仍可读到 session cookie 最新值
@@ -805,21 +721,18 @@ void main() {
     group('reloadPersistedCookies', () {
       test('吸收磁盘新值并保留内存 session cookie', () async {
         final uri = Uri.parse('https://linux.do');
-        await jar.saveFromSetCookieHeaders(
-          uri,
-          ['_t=old; Path=/; Max-Age=3600', '_forum_session=mem; Path=/'],
-          trusted: true,
-        );
+        await jar.saveFromSetCookieHeaders(uri, [
+          '_t=old; Path=/; Max-Age=3600',
+          '_forum_session=mem; Path=/',
+        ], trusted: true);
 
         // 模拟另一个 isolate 写盘：用独立 store 实例改写文件中的 _t
         final otherJar = EnhancedPersistCookieJar(
           store: FileCookieStore(tempDir.path),
         );
-        await otherJar.saveFromSetCookieHeaders(
-          uri,
-          ['_t=rotated-by-bg; Path=/; Max-Age=3600'],
-          trusted: true,
-        );
+        await otherJar.saveFromSetCookieHeaders(uri, [
+          '_t=rotated-by-bg; Path=/; Max-Age=3600',
+        ], trusted: true);
 
         await jar.reloadPersistedCookies();
 
@@ -861,7 +774,7 @@ void main() {
             'path': '/',
             'expires':
                 now.add(const Duration(days: 365)).millisecondsSinceEpoch /
-                    1000,
+                1000,
             'secure': true,
             'httpOnly': true,
             'partitionKey': 'https://linux.do',
@@ -869,8 +782,9 @@ void main() {
         ]);
 
         final loaded = await jar.loadForRequest(uri);
-        final clearances =
-            loaded.where((c) => c.name == 'cf_clearance').toList();
+        final clearances = loaded
+            .where((c) => c.name == 'cf_clearance')
+            .toList();
         expect(clearances, hasLength(1), reason: '同名 cookie 不应重复发送');
         expect(clearances.single.value, 'fresh-value');
       });

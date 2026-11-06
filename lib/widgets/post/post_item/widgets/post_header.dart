@@ -2,6 +2,7 @@ import 'package:fluxdo/utils/avatar_url.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import '../../../../l10n/s.dart';
 import '../../../../constants.dart';
 import '../../../../models/topic.dart';
@@ -42,6 +43,52 @@ class _PostAnniversaryIcon extends StatelessWidget {
         width: 14,
         height: 14,
         errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+class _PostDeviceSourceBadge extends StatelessWidget {
+  const _PostDeviceSourceBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    return Tooltip(
+      message: label,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 144),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.65,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.devices_rounded, size: 11, color: color),
+              const SizedBox(width: 3),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontSize: 10,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -140,7 +187,10 @@ class _PostAvatarState extends State<PostAvatar> {
           imageUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
           radius: rect.shortestSide / 2,
           fallbackText: widget.post.username,
-          border: Border.all(color: Theme.of(ctx).colorScheme.primary, width: 2),
+          border: Border.all(
+            color: Theme.of(ctx).colorScheme.primary,
+            width: 2,
+          ),
         ),
       ),
       child: CompositedTransformTarget(link: _link, child: avatar),
@@ -289,6 +339,14 @@ class PostHeader extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
+                    if (post.mobileSourceLabel != null) ...[
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: _PostDeviceSourceBadge(
+                          label: post.mobileSourceLabel!,
+                        ),
+                      ),
+                    ],
                     if (post.userTitle != null) ...[
                       const SizedBox(width: 6),
                       Flexible(
@@ -332,7 +390,10 @@ class PostHeader extends StatelessWidget {
                         post.badgesGranted!.isNotEmpty) ...[
                       const SizedBox(width: 4),
                       ...post.badgesGranted!.map(
-                        (badge) => PostGrantedBadgeIcon(badge: badge),
+                        (badge) => PostGrantedBadgeIcon(
+                          badge: badge,
+                          username: post.username,
+                        ),
                       ),
                     ],
                   ],
@@ -435,7 +496,11 @@ class PostHeader extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else
-            Icon(Symbols.reply_rounded, size: 14, color: theme.colorScheme.primary),
+            Icon(
+              Symbols.reply_rounded,
+              size: 14,
+              color: theme.colorScheme.primary,
+            ),
           const SizedBox(width: 6),
           SmartAvatar(
             imageUrl: replyToUser.avatarTemplate.isNotEmpty

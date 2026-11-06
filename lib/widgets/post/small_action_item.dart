@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../l10n/s.dart';
 import '../../models/topic.dart';
 import '../../providers/discourse_providers.dart';
@@ -317,9 +318,8 @@ class SmallActionItem extends ConsumerWidget {
     return callbacks.render(
       cookedHtml: parsed.preprocessed,
       parsedNodes: parsed.nodes,
-      baseTextStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: Theme.of(context).colorScheme.onSurface,
-      ),
+      baseTextStyle: Theme.of(context).textTheme.bodySmall
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurface),
       compact: true,
     );
   }

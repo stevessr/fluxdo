@@ -72,6 +72,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   bool _showAdvancedOptions = false;
   bool _isSubmitting = false;
   bool _isLoadingPending = false;
+  bool _isManagingInvite = false;
   InviteLinkResponse? _latestInvite;
   ProviderSubscription<AsyncValue<User?>>? _userSub;
   bool _hasRequestedInitialRefresh = false;
@@ -79,19 +80,18 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   @override
   void initState() {
     super.initState();
-    _userSub = ref.listenManual<AsyncValue<User?>>(
-      currentUserProvider,
-      (_, next) {
-        final user = next.value;
-        if (user == null) return;
-        _applyCachedInvite(user.username);
-        if (!_hasRequestedInitialRefresh) {
-          _hasRequestedInitialRefresh = true;
-          Future.microtask(() => _loadPendingInvites(force: true));
-        }
-      },
-      fireImmediately: true,
-    );
+    _userSub = ref.listenManual<AsyncValue<User?>>(currentUserProvider, (
+      _,
+      next,
+    ) {
+      final user = next.value;
+      if (user == null) return;
+      _applyCachedInvite(user.username);
+      if (!_hasRequestedInitialRefresh) {
+        _hasRequestedInitialRefresh = true;
+        Future.microtask(() => _loadPendingInvites(force: true));
+      }
+    }, fireImmediately: true);
   }
 
   @override
@@ -283,7 +283,9 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
         await _loadPendingInvites(force: true);
       }
       ToastService.showSuccess(
-        resolved.inviteLink.trim().isNotEmpty ? S.current.invite_linkGenerated : S.current.invite_created,
+        resolved.inviteLink.trim().isNotEmpty
+            ? S.current.invite_linkGenerated
+            : S.current.invite_created,
       );
     } catch (error) {
       if (!mounted) return;
@@ -422,7 +424,8 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       return _formatWaitDuration(retrySeconds);
     }
 
-    final resetValue = headers.value('x-ratelimit-reset') ??
+    final resetValue =
+        headers.value('x-ratelimit-reset') ??
         headers.value('ratelimit-reset') ??
         headers.value('x-rate-limit-reset') ??
         headers.value('X-RateLimit-Reset');
@@ -438,6 +441,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     }
     return null;
   }
+
   String? _extractWaitTextFromData(dynamic data) {
     if (data is Map) {
       final errors = data['errors'];
@@ -463,9 +467,8 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   }
 
   String? _extractWaitText(String message) {
-    final chineseMatch = RegExp(
-      r'请等待\s*([0-9]+\s*(?:小时|分钟|天|秒))\s*后再试',
-    ).firstMatch(message);
+    final chineseMatch = RegExp(r'请等待\s*([0-9]+\s*(?:小时|分钟|天|秒))\s*后再试')
+        .firstMatch(message);
     if (chineseMatch != null) {
       return chineseMatch.group(1);
     }
@@ -500,12 +503,304 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     return S.current.time_seconds(seconds);
   }
 
+  Future<void> _deleteLatestInvite() async {
+    final details = _latestInvite?.invite;
+    final id = details?.id;
+    if (id == null || details?.canDeleteInvite == false || _isManagingInvite) {
+      return;
+    }
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('删除邀请'),
+            content: const Text('确定删除这个待使用邀请吗？邀请链接将立即失效。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('删除'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    setState(() => _isManagingInvite = true);
+    try {
+      await ref.read(discourseServiceProvider).deleteInvite(id);
+      final user = ref.read(currentUserProvider).value;
+      if (user != null) await _clearInviteCache(user.username);
+      if (!mounted) return;
+      setState(() => _latestInvite = null);
+      await _loadPendingInvites(force: true);
+      ToastService.showSuccess('邀请已删除');
+    } catch (e) {
+      ToastService.showError('删除失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
+  Future<void> _resendLatestInvite() async {
+    final email = _latestInvite?.invite?.email?.trim();
+    if (email == null || email.isEmpty || _isManagingInvite) return;
+    setState(() => _isManagingInvite = true);
+    try {
+      await ref.read(discourseServiceProvider).resendInvite(email);
+      ToastService.showSuccess('邀请邮件已重新发送');
+    } catch (e) {
+      ToastService.showError('重新发送失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
+  Future<void> _resendAllInvites() async {
+    if (_isManagingInvite) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('重新发送全部邀请'),
+            content: const Text('将重新发送所有仍处于待处理状态的邮件邀请。继续吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('重新发送'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    setState(() => _isManagingInvite = true);
+    try {
+      await ref.read(discourseServiceProvider).resendAllInvites();
+      ToastService.showSuccess('待处理邀请已重新发送');
+    } catch (e) {
+      ToastService.showError('重新发送失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
+  Future<void> _editLatestInvite() async {
+    final details = _latestInvite?.invite;
+    final id = details?.id;
+    if (id == null || _isManagingInvite) return;
+
+    final descriptionController = TextEditingController(
+      text: details?.description ?? '',
+    );
+    final emailController = TextEditingController(text: details?.email ?? '');
+    final result = await showDialog<({String description, String email})>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('编辑邀请'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: descriptionController,
+                maxLength: 100,
+                decoration: const InputDecoration(
+                  labelText: '描述',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: '限定邮箱（留空则取消邮箱限定）',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, (
+              description: descriptionController.text.trim(),
+              email: emailController.text.trim(),
+            )),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    descriptionController.dispose();
+    emailController.dispose();
+    if (result == null || !mounted) return;
+
+    setState(() => _isManagingInvite = true);
+    try {
+      final updated = await ref
+          .read(discourseServiceProvider)
+          .updateInvite(
+            id,
+            description: result.description,
+            email: result.email,
+          );
+      final resolved = _resolveInviteLink(updated);
+      if (!mounted) return;
+      setState(() => _latestInvite = resolved);
+      final user = ref.read(currentUserProvider).value;
+      if (user != null) await _saveInviteCache(user.username, resolved);
+      ToastService.showSuccess('邀请已更新');
+    } catch (e) {
+      ToastService.showError('更新失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
+  Future<void> _createBulkEmailInvites() async {
+    if (_isManagingInvite) return;
+    final emailsController = TextEditingController();
+    final messageController = TextEditingController();
+    final result = await showDialog<({List<String> emails, String message})>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('批量邮件邀请'),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailsController,
+                autofocus: true,
+                minLines: 4,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  labelText: '邮箱地址',
+                  hintText: '每行一个，也可用逗号、分号或空格分隔',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: messageController,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: '自定义消息（可选）',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final emails = emailsController.text
+                  .split(RegExp(r'[\s,;，；]+'))
+                  .map((item) => item.trim())
+                  .where((item) => item.isNotEmpty)
+                  .toSet()
+                  .toList(growable: false);
+              if (emails.isEmpty) return;
+              Navigator.pop(dialogContext, (
+                emails: emails,
+                message: messageController.text.trim(),
+              ));
+            },
+            child: const Text('发送邀请'),
+          ),
+        ],
+      ),
+    );
+    emailsController.dispose();
+    messageController.dispose();
+    if (result == null || !mounted) return;
+
+    setState(() => _isManagingInvite = true);
+    try {
+      final response = await ref
+          .read(discourseServiceProvider)
+          .createMultipleInvites(
+            emails: result.emails,
+            customMessage: result.message.isEmpty ? null : result.message,
+            expiresAt: _expiresAt,
+          );
+      final success =
+          (response['num_successfully_created_invitations'] as num?)?.toInt() ??
+          0;
+      final failed = (response['num_failed_invitations'] as num?)?.toInt() ?? 0;
+      if (!mounted) return;
+      await _loadPendingInvites(force: true);
+      ToastService.showSuccess('批量邀请完成：成功 $success，失败 $failed');
+    } catch (e) {
+      ToastService.showError('批量邀请失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
+  Future<void> _destroyExpiredInvites() async {
+    if (_isManagingInvite) return;
+    setState(() => _isManagingInvite = true);
+    try {
+      final user = ref.read(currentUserProvider).value;
+      await ref
+          .read(discourseServiceProvider)
+          .destroyAllExpiredInvites(username: user?.username);
+      if (!mounted) return;
+      await _loadPendingInvites(force: true);
+      ToastService.showSuccess('已清理过期邀请');
+    } catch (e) {
+      ToastService.showError('清理失败: $e');
+    } finally {
+      if (mounted) setState(() => _isManagingInvite = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.invite_title)),
+      appBar: AppBar(
+        title: Text(context.l10n.invite_title),
+        actions: [
+          PopupMenuButton<String>(
+            enabled: !_isManagingInvite,
+            onSelected: (value) {
+              if (value == 'bulk_invite') _createBulkEmailInvites();
+              if (value == 'resend_all') _resendAllInvites();
+              if (value == 'clear_expired') _destroyExpiredInvites();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'bulk_invite', child: Text('批量邮件邀请')),
+              PopupMenuItem(value: 'resend_all', child: Text('重新发送全部待处理邀请')),
+              PopupMenuItem(value: 'clear_expired', child: Text('清理过期邀请')),
+            ],
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -553,7 +848,11 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
               onPressed: () =>
                   setState(() => _showAdvancedOptions = !_showAdvancedOptions),
               style: TextButton.styleFrom(padding: EdgeInsets.zero),
-              child: Text(_showAdvancedOptions ? context.l10n.invite_collapseOptions : context.l10n.invite_expandOptions),
+              child: Text(
+                _showAdvancedOptions
+                    ? context.l10n.invite_collapseOptions
+                    : context.l10n.invite_expandOptions,
+              ),
             ),
             if (!_showAdvancedOptions) ...[
               const SizedBox(height: 12),
@@ -564,7 +863,11 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                   icon: _isSubmitting
                       ? const LoadingSpinner(size: 18)
                       : const Icon(Symbols.link_rounded),
-                  label: Text(_isSubmitting ? context.l10n.invite_creating : context.l10n.invite_createLink),
+                  label: Text(
+                    _isSubmitting
+                        ? context.l10n.invite_creating
+                        : context.l10n.invite_createLink,
+                  ),
                 ),
               ),
             ],
@@ -646,7 +949,11 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                 icon: _isSubmitting
                     ? const LoadingSpinner(size: 18)
                     : const Icon(Symbols.link_rounded),
-                label: Text(_isSubmitting ? context.l10n.invite_creating : context.l10n.invite_createLink),
+                label: Text(
+                  _isSubmitting
+                      ? context.l10n.invite_creating
+                      : context.l10n.invite_createLink,
+                ),
               ),
             ),
           ],
@@ -714,14 +1021,17 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
               children: [
                 _MetaChip(
                   icon: Symbols.repeat_rounded,
-                  label:
-                      context.l10n.invite_usableCount(invite.invite?.maxRedemptionsAllowed ?? _maxRedemptionsAllowed),
+                  label: context.l10n.invite_usableCount(
+                    invite.invite?.maxRedemptionsAllowed ??
+                        _maxRedemptionsAllowed,
+                  ),
                 ),
                 if (invite.invite?.expiresAt != null)
                   _MetaChip(
                     icon: Symbols.schedule_rounded,
-                    label:
-                        context.l10n.invite_expiryDate(TimeUtils.formatDetailTime(invite.invite!.expiresAt)),
+                    label: context.l10n.invite_expiryDate(
+                      TimeUtils.formatDetailTime(invite.invite!.expiresAt),
+                    ),
                   )
                 else
                   _MetaChip(
@@ -750,6 +1060,36 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                 ),
               ],
             ),
+            if ((invite.invite?.email?.trim().isNotEmpty ?? false) ||
+                (invite.invite?.id != null &&
+                    invite.invite?.canDeleteInvite != false)) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (invite.invite?.id != null)
+                    OutlinedButton.icon(
+                      onPressed: _isManagingInvite ? null : _editLatestInvite,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('编辑邀请'),
+                    ),
+                  if (invite.invite?.email?.trim().isNotEmpty ?? false)
+                    OutlinedButton.icon(
+                      onPressed: _isManagingInvite ? null : _resendLatestInvite,
+                      icon: const Icon(Icons.forward_to_inbox_outlined),
+                      label: const Text('重新发送邮件'),
+                    ),
+                  if (invite.invite?.id != null &&
+                      invite.invite?.canDeleteInvite != false)
+                    OutlinedButton.icon(
+                      onPressed: _isManagingInvite ? null : _deleteLatestInvite,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('删除邀请'),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

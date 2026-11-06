@@ -102,6 +102,7 @@ class _PaneProjectionBackScopeState
   bool get _projectionOpen =>
       widget.isActive &&
       ref.read(widget.stackProvider).hasSelection &&
+      !ref.read(widget.stackProvider).showingFeed &&
       !MasterDetailLayout.canShowBothPanesFor(
         context,
         masterWidth: widget.masterWidth,
@@ -194,6 +195,7 @@ class _PaneProjectionBackScopeState
     final projecting =
         widget.isActive &&
         selected.hasSelection &&
+        !selected.showingFeed &&
         !MasterDetailLayout.canShowBothPanesFor(
           context,
           masterWidth: widget.masterWidth,

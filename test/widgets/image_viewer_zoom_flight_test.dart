@@ -54,7 +54,10 @@ void main() {
     Rect? publish({required double scale, Rect? rect}) =>
         (scale <= 1.0 || rect == null || rect.isEmpty) ? null : rect;
 
-    expect(publish(scale: 1.0, rect: const Rect.fromLTWH(0, 0, 10, 10)), isNull);
+    expect(
+      publish(scale: 1.0, rect: const Rect.fromLTWH(0, 0, 10, 10)),
+      isNull,
+    );
     expect(publish(scale: 3.0, rect: null), isNull);
     expect(publish(scale: 3.0, rect: Rect.zero), isNull);
     expect(

@@ -109,8 +109,14 @@ typedef _GlobalSizeD = int Function(Pointer<Void>);
 
 /// user32/kernel32 的最小绑定(只要这一处兜底用到的 5 个函数)。
 class _Win32Clipboard {
-  _Win32Clipboard._(this.openClipboard, this.closeClipboard,
-      this.getClipboardData, this.globalLock, this.globalUnlock, this.globalSize);
+  _Win32Clipboard._(
+    this.openClipboard,
+    this.closeClipboard,
+    this.getClipboardData,
+    this.globalLock,
+    this.globalUnlock,
+    this.globalSize,
+  );
 
   final _OpenClipboardD openClipboard;
   final _CloseClipboardD closeClipboard;
@@ -130,11 +136,15 @@ class _Win32Clipboard {
       final user32 = DynamicLibrary.open('user32.dll');
       final kernel32 = DynamicLibrary.open('kernel32.dll');
       _instance = _Win32Clipboard._(
-        user32.lookupFunction<_OpenClipboardC, _OpenClipboardD>('OpenClipboard'),
-        user32
-            .lookupFunction<_CloseClipboardC, _CloseClipboardD>('CloseClipboard'),
+        user32.lookupFunction<_OpenClipboardC, _OpenClipboardD>(
+          'OpenClipboard',
+        ),
+        user32.lookupFunction<_CloseClipboardC, _CloseClipboardD>(
+          'CloseClipboard',
+        ),
         user32.lookupFunction<_GetClipboardDataC, _GetClipboardDataD>(
-            'GetClipboardData'),
+          'GetClipboardData',
+        ),
         kernel32.lookupFunction<_GlobalLockC, _GlobalLockD>('GlobalLock'),
         kernel32.lookupFunction<_GlobalUnlockC, _GlobalUnlockD>('GlobalUnlock'),
         kernel32.lookupFunction<_GlobalSizeC, _GlobalSizeD>('GlobalSize'),
