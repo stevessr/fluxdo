@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show HttpHeaders;
 
 import 'package:dio/dio.dart';
 
@@ -58,7 +59,7 @@ class LoginTokenRedeemer {
         return const LoginTokenRedeemResult.failed();
       }
 
-      await dio.post<dynamic>(
+      final response = await dio.post<dynamic>(
         '/session/otp/$otp',
         options: Options(
           followRedirects: false,
@@ -75,7 +76,12 @@ class LoginTokenRedeemer {
       );
 
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
-      final afterSnapshot = await _readTToken(cookieJar);
+      final afterSnapshot = await _reconcileTToken(
+        cookieJar,
+        beforeToken: beforeToken,
+        generation: generation,
+        response: response,
+      );
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
       if (!afterSnapshot.succeeded) {
         _log(
@@ -108,7 +114,12 @@ class LoginTokenRedeemer {
       //
       // 注意：对账读取本身也可能失败。它不能覆盖原始 DioException，更不能
       // 逃出本方法；读取失败时继续按原始异常分类即可。
-      final afterSnapshot = await _readTToken(cookieJar);
+      final afterSnapshot = await _reconcileTToken(
+        cookieJar,
+        beforeToken: beforeToken,
+        generation: generation,
+        response: e.response,
+      );
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
       if (afterSnapshot.succeeded &&
           _isFreshToken(beforeToken, afterSnapshot.token)) {
@@ -204,6 +215,124 @@ class LoginTokenRedeemer {
     } catch (e) {
       return _TTokenSnapshot.failed(e);
     }
+  }
+
+  /// The authenticated Set-Cookie on a successful OTP response is
+  /// authoritative even if a downstream cookie synchronization step failed.
+  /// This is deliberately restricted to the one-time login endpoint.
+  static String? issuedTokenFromOtpResponse(Response<dynamic>? response) {
+    if (response == null) return null;
+    final request = response.requestOptions;
+    final uri = request.uri;
+    final status = response.statusCode;
+    if (request.method.toUpperCase() != 'POST' ||
+        uri.scheme != 'https' ||
+        uri.host.toLowerCase() != CookieJarService.appBaseHost ||
+        !RegExp(r'^/session/otp/[0-9a-f]+
+  static void _log(
+    String level,
+    String event,
+    String message, [
+    Map<String, dynamic>? fields,
+  ]) {
+    LogWriter.instance.write({
+      'timestamp': DateTime.now().toIso8601String(),
+      'level': level,
+      'type': 'auth',
+      'event': event,
+      'message': message,
+      ...?fields,
+    });
+  }
+}
+
+class LoginTokenRedeemResult {
+  const LoginTokenRedeemResult._({this.token, this.challengeBlocked = false});
+
+  const LoginTokenRedeemResult.success(String token) : this._(token: token);
+
+  const LoginTokenRedeemResult.failed() : this._();
+
+  const LoginTokenRedeemResult.blockedByChallenge()
+    : this._(challengeBlocked: true);
+
+  final String? token;
+  final bool challengeBlocked;
+
+  bool get succeeded => token != null && token!.isNotEmpty;
+}
+
+class _TTokenSnapshot {
+  const _TTokenSnapshot._({this.token, this.error});
+
+  const _TTokenSnapshot.success(String? token) : this._(token: token);
+
+  const _TTokenSnapshot.failed(Object error) : this._(error: error);
+
+  final String? token;
+  final Object? error;
+
+  bool get succeeded => error == null;
+}
+).hasMatch(uri.path) ||
+        status == null ||
+        status < 200 ||
+        status >= 400) {
+      return null;
+    }
+
+    final headers = response.headers[HttpHeaders.setCookieHeader] ?? const [];
+    for (final raw in headers) {
+      // Some transports combine Set-Cookie headers into one value. A cookie
+      // value ends at the next semicolon/comma; do not mistake _forum_session
+      // or a cookie attribute for an authentication token.
+      final match = RegExp(
+        r'(?:^|,\\s*)\\s*_t=([^;,]+)',
+        caseSensitive: false,
+      ).firstMatch(raw);
+      final value = match?.group(1)?.trim();
+      if (value != null && value.isNotEmpty && value != 'del') {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  static Future<_TTokenSnapshot> _reconcileTToken(
+    CookieJarService cookieJar, {
+    required String? beforeToken,
+    required int generation,
+    Response<dynamic>? response,
+  }) async {
+    var snapshot = await _readTToken(cookieJar);
+    if (_isFreshToken(beforeToken, snapshot.token)) return snapshot;
+    if (!AuthSession().isValid(generation)) return snapshot;
+
+    // A successful 302 may already have consumed the OTP while response
+    // processing failed before the new _t was persisted.
+    final issuedToken = issuedTokenFromOtpResponse(response);
+    if (_isFreshToken(beforeToken, issuedToken)) {
+      await cookieJar.setCookie(
+        '_t',
+        issuedToken!,
+        path: '/',
+        secure: true,
+        httpOnly: true,
+        trusted: true,
+      );
+      snapshot = await _readTToken(cookieJar);
+      if (_isFreshToken(beforeToken, snapshot.token)) return snapshot;
+    }
+
+    // Cookie manager and WebView boundary synchronization may settle slightly
+    // after the HTTP response. Never replay the single-use OTP.
+    for (var attempt = 0; attempt < 5; attempt++) {
+      if (!AuthSession().isValid(generation)) return snapshot;
+      await Future<void>.delayed(Duration(milliseconds: 150 * (attempt + 1)));
+      snapshot = await _readTToken(cookieJar);
+      if (_isFreshToken(beforeToken, snapshot.token)) return snapshot;
+    }
+    return snapshot;
   }
 
   static bool _isFreshToken(String? beforeToken, String? afterToken) {
