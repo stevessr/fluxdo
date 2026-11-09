@@ -51,7 +51,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
   final _service = DiscourseService();
   final _cookieJar = CookieJarService();
   final _credentialStore = CredentialStoreService();
-  final int _flowGeneration = AuthSession().generation;
+  int _flowGeneration = AuthSession().generation;
   final Uri _baseUri = Uri.parse(AppConstants.baseUrl);
   InAppWebViewController? _controller;
   bool _isLoading = true;
@@ -652,6 +652,10 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
   }) async {
     // 先切断旧请求，防止登录收口期间旧响应的 Set-Cookie 写入竞争
     final loginGeneration = AuthSession().advance();
+    // Continue observing the generation created by this login. If an
+    // optional cookie sync fails, another probe can finish the same login;
+    // an unrelated external account switch still invalidates this flow.
+    _flowGeneration = loginGeneration;
     await _service.saveUsername(username, requestGeneration: loginGeneration);
     if (!AuthSession().isValid(loginGeneration)) {
       throw StateError('登录收口期间会话已切换');
