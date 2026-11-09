@@ -502,6 +502,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
   }) async {
     if (_loginHandled || _loginInProgress) return;
     _loginInProgress = true;
+    String? committedToken;
+    int? committedGeneration;
 
     try {
       final username = await _readCurrentUsername(controller);
@@ -573,6 +575,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
         currentUrl: currentUrl,
         webViewToken: tToken,
       );
+      committedToken = finalToken;
+      committedGeneration = loginGeneration;
       final browserSessionSynced = await _syncRuntimeCookiesBeforeLoginReady(
         controller,
         currentUrl: currentUrl,
@@ -600,6 +604,36 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
         ToastService.showSuccess(S.current.webviewLogin_loginSuccess);
         Navigator.of(context).pop(true);
       }
+    } catch (e, stackTrace) {
+      debugPrint('[Login] 自动完成登录失败: $e\n$stackTrace');
+      if (committedToken != null &&
+          committedGeneration != null &&
+          AuthSession().isValid(committedGeneration)) {
+        // Authentication was already committed; a later optional bootstrap
+        // failure must not leave the user stuck on the login WebView.
+        _service.onLoginSuccess(
+          committedToken,
+          forceBrowserSessionSync: true,
+        );
+        if (mounted) {
+          _loginProbeTimer?.cancel();
+          ToastService.showSuccess(S.current.webviewLogin_loginSuccess);
+          Navigator.of(context).pop(true);
+        }
+      } else {
+        _loginHandled = false;
+        if (mounted) {
+          setState(() {
+            _isCompletingLogin = false;
+            _isLoading = false;
+          });
+        }
+        if (AuthSession().isValid(_flowGeneration)) {
+          _scheduleLoginRecheck(controller);
+        } else {
+          ToastService.showError('登录状态同步失败，请重新打开登录页面');
+        }
+      }
     } finally {
       _loginInProgress = false;
     }
@@ -622,19 +656,37 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       throw StateError('登录收口期间会话已切换');
     }
 
-    await _syncAuthCookiesFromWebView(
-      controller,
-      currentUrl: currentUrl,
-      requestGeneration: loginGeneration,
-    );
+    try {
+      await _syncAuthCookiesFromWebView(
+        controller,
+        currentUrl: currentUrl,
+        requestGeneration: loginGeneration,
+      );
+    } catch (e) {
+      debugPrint('[Login] WebView 登录 Cookie 边界同步失败，改用已验证 _t: $e');
+    }
     if (!AuthSession().isValid(loginGeneration)) {
       throw StateError('登录 Cookie 同步期间会话已切换');
     }
 
-    final jarToken = await _cookieJar.getTToken();
-    final finalToken = (jarToken != null && jarToken.isNotEmpty)
-        ? jarToken
-        : webViewToken;
+    // The first-party WebView session was verified above. Prefer its _t over
+    // an old cookie still present in the Dio jar after an OAuth redirect.
+    var jarToken = await _cookieJar.getTToken();
+    if (jarToken != webViewToken) {
+      await _cookieJar.setCookie(
+        '_t',
+        webViewToken,
+        path: '/',
+        secure: true,
+        httpOnly: true,
+        trusted: true,
+      );
+      jarToken = await _cookieJar.getTToken();
+    }
+    if (jarToken == null || jarToken.isEmpty) {
+      throw StateError('已验证登录但会话 Cookie 无法保存');
+    }
+    final finalToken = jarToken;
     final tokenMatch = jarToken == webViewToken;
     final jarAuthCookies = await _cookieJar.getAuthCookieDiagnosticsForRequest(
       uri: Uri.parse(AppConstants.baseUrl),
