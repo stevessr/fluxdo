@@ -26,6 +26,7 @@ import '../services/webview_session_cookie_refresh_service.dart';
 import '../services/windows_webview_environment_service.dart';
 import '../services/log/log_writer.dart';
 import '../services/login_ready_coordinator.dart';
+import '../services/webview_login_session_probe.dart';
 
 import 'package:common_ui/common_ui.dart';
 
@@ -64,6 +65,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
   Future<void>? _initialCookieFlushFuture;
   Completer<void>? _fingerprintCompleter;
   bool _fingerprintDone = false;
+  String? _loginStartToken;
+  Timer? _loginProbeTimer;
 
   /// 对话框期间用静态截图盖住 WebView，避免 BackdropFilter 对
   /// hybrid composition 实时回读造成的卡顿。
@@ -90,6 +93,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
 
   @override
   void dispose() {
+    _loginProbeTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -243,6 +247,25 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                         // 等待 cookie flush 完成再加载 URL，
                         // 确保 WebView 引擎初始化后 cookie 已就位
                         await _awaitInitialCookieFlush();
+                        // 记住进入登录页前的会话，避免账号切换时把旧账户
+                        // 误判为本次 OAuth / Passkey 登录成功。
+                        try {
+                          _loginStartToken = await _cookieJar.getTToken();
+                        } catch (e) {
+                          debugPrint('[Login] 读取登录前会话失败: $e');
+                        }
+                        _loginProbeTimer?.cancel();
+                        _loginProbeTimer = Timer.periodic(
+                          const Duration(seconds: 2),
+                          (_) {
+                            if (!mounted || _loginHandled || _loginInProgress) {
+                              return;
+                            }
+                            if (_controller == controller) {
+                              unawaited(_checkLoginStatus(controller));
+                            }
+                          },
+                        );
                         await controller.loadUrl(
                           urlRequest: URLRequest(
                             url: WebUri(
@@ -510,6 +533,17 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
         controller,
         currentUrl: currentUrl,
       );
+      // 旧 _t 存在并不意味着这次登录完成。特别是账号切换时，
+      // /session/current.json 可能仍返回前一个账号。
+      if (tToken != null && tToken == _loginStartToken) {
+        if (mounted && _isCompletingLogin) {
+          setState(() {
+            _isCompletingLogin = false;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
       if (tToken == null || tToken.isEmpty) {
         if (mounted && _isCompletingLogin) {
           setState(() {
@@ -562,6 +596,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       );
 
       if (mounted) {
+        _loginProbeTimer?.cancel();
         ToastService.showSuccess(S.current.webviewLogin_loginSuccess);
         Navigator.of(context).pop(true);
       }
@@ -899,9 +934,65 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
     }
   }
 
+  /// OAuth/Passkey 登录可能停留在 /login、回调页或 SPA 路由上，
+  /// 没有 current-username meta，也不一定加载 Discourse.User。
+  /// 从 WebView 自身的同源会话查询认证身份，避免误读 Dio 侧尚未同步的 cookie。
   Future<String?> _readCurrentUsername(
     InAppWebViewController controller,
   ) async {
+    String? currentUrl;
+    try {
+      currentUrl = (await controller.getUrl())?.toString();
+    } catch (_) {
+      return null;
+    }
+    if (!WebViewLoginSessionProbe.isSameSiteUrl(
+      currentUrl,
+      AppConstants.baseUrl,
+    )) {
+      return null;
+    }
+
+    // 未获得会话 cookie 时不能把前端显示的用户名当成登录成功。
+    final token = await _readTTokenFromWebView(
+      controller,
+      currentUrl: currentUrl,
+    );
+    if (token == null || token.isEmpty || token == _loginStartToken) {
+      return null;
+    }
+
+    try {
+      final response = await controller.callAsyncJavaScript(
+        functionBody: '''
+          try {
+            var response = await fetch('/session/current.json', {
+              method: 'GET',
+              credentials: 'include',
+              cache: 'no-store',
+              headers: {'Accept': 'application/json'}
+            });
+            if (!response.ok) return {probeComplete: false};
+            var contentType = response.headers.get('content-type') || '';
+            if (contentType.indexOf('json') === -1) {
+              return {probeComplete: false};
+            }
+            var data = await response.json();
+            return {probeComplete: true, current_user: data.current_user};
+          } catch (e) {
+            return {probeComplete: false};
+          }
+        ''',
+      );
+      final evidence = response?.value;
+      if (WebViewLoginSessionProbe.isCompletedProbe(evidence)) {
+        return WebViewLoginSessionProbe.usernameFromSession(evidence);
+      }
+    } catch (e) {
+      debugPrint('[Login] WebView 登录态查询不可用，回退页面识别: $e');
+    }
+
+    // 服务端查询被验证页/网络阻断时，保留原先的页面级识别作降级。
     try {
       final result = await controller.evaluateJavascript(
         source: '''
@@ -917,16 +1008,9 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
         })();
       ''',
       );
-
-      if (result == null) {
-        return null;
-      }
-
-      final username = result.toString();
-      if (username.isEmpty || username == 'null') {
-        return null;
-      }
-      return username;
+      if (result is! String) return null;
+      final username = result.trim();
+      return username.isEmpty || username == 'null' ? null : username;
     } catch (_) {
       return null;
     }
