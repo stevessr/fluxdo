@@ -983,7 +983,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
             return {probeComplete: false};
           }
         ''',
-      );
+      ).timeout(const Duration(seconds: 5));
       final evidence = response?.value;
       if (WebViewLoginSessionProbe.isCompletedProbe(evidence)) {
         return WebViewLoginSessionProbe.usernameFromSession(evidence);
