@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show HttpHeaders;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'auth_session.dart';
 import 'cf_challenge_service.dart';
@@ -256,11 +257,23 @@ class LoginTokenRedeemer {
     Response<dynamic>? response,
   }) async {
     var snapshot = await _readTToken(cookieJar);
-    if (_isFreshToken(beforeToken, snapshot.token)) return snapshot;
     if (!AuthSession().isValid(generation)) return snapshot;
 
-    // The 302 may have consumed the OTP before cookie synchronization failed.
+    // Prefer the token issued for this exact OTP. A different fresh token may
+    // belong to a concurrent login; never treat that as this OTP's success.
     final issuedToken = issuedTokenFromOtpResponse(response);
+    if (issuedToken != null &&
+        _isFreshToken(beforeToken, snapshot.token) &&
+        snapshot.token != issuedToken) {
+      return _TTokenSnapshot.failed(
+        StateError('另一次登录已更新会话，不能将其视为本次 OTP 成功'),
+      );
+    }
+    if (_isExpectedFreshToken(beforeToken, snapshot.token, issuedToken)) {
+      return snapshot;
+    }
+
+    // The 302 may have consumed the OTP before cookie synchronization failed.
     if (_isFreshToken(beforeToken, issuedToken)) {
       await cookieJar.setCookie(
         '_t',
@@ -271,7 +284,9 @@ class LoginTokenRedeemer {
         trusted: true,
       );
       snapshot = await _readTToken(cookieJar);
-      if (_isFreshToken(beforeToken, snapshot.token)) return snapshot;
+      if (_isExpectedFreshToken(beforeToken, snapshot.token, issuedToken)) {
+        return snapshot;
+      }
     }
 
     // Allow delayed cookie propagation without replaying the single-use OTP.
@@ -279,9 +294,28 @@ class LoginTokenRedeemer {
       if (!AuthSession().isValid(generation)) return snapshot;
       await Future<void>.delayed(Duration(milliseconds: 150 * (attempt + 1)));
       snapshot = await _readTToken(cookieJar);
-      if (_isFreshToken(beforeToken, snapshot.token)) return snapshot;
+      if (_isExpectedFreshToken(beforeToken, snapshot.token, issuedToken)) {
+        return snapshot;
+      }
     }
     return snapshot;
+  }
+
+  @visibleForTesting
+  static bool isExpectedFreshToken(
+    String? beforeToken,
+    String? afterToken, {
+    String? issuedToken,
+  }) =>
+      _isExpectedFreshToken(beforeToken, afterToken, issuedToken);
+
+  static bool _isExpectedFreshToken(
+    String? beforeToken,
+    String? afterToken,
+    String? issuedToken,
+  ) {
+    return _isFreshToken(beforeToken, afterToken) &&
+        (issuedToken == null || afterToken == issuedToken);
   }
 
   static bool _isFreshToken(String? beforeToken, String? afterToken) {
