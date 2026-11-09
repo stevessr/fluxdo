@@ -72,6 +72,14 @@ class UserApiKeyLoginFlow {
     );
   }
 
+  /// Only transient probe failures can be recovered using a freshly minted
+  /// OTP session. An explicit 401/403 from Discourse is an auth rejection.
+  static bool isTransientCurrentUserProbeError(DioException error) {
+    if (LoginTokenRedeemer.isChallengeError(error)) return true;
+    final status = error.response?.statusCode;
+    return status == null || status >= 500;
+  }
+
   OverlayEntry? _loadingEntry;
 
   /// 深链回到 App 后,兑换+收口这段有网络耗时(可能还含 CF 验证),
@@ -237,10 +245,10 @@ class UserApiKeyLoginFlow {
             }
           }
         } on DioException catch (e) {
-          currentUserProbeFailed = true;
+          currentUserProbeFailed = isTransientCurrentUserProbeError(e);
           debugPrint(
             '[UserApiKeyLoginFlow] 取 current_user 失败: $e '
-            '(challenge=${LoginTokenRedeemer.isChallengeError(e)})',
+            '(recoverable=$currentUserProbeFailed)',
           );
         } catch (e) {
           currentUserProbeFailed = true;
