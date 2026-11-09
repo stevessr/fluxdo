@@ -6,6 +6,7 @@ on:
       - 'lib/pages/login_page.dart'
       - 'lib/pages/webview_login_page.dart'
       - 'lib/services/login_token_redeemer.dart'
+      - 'lib/services/user_api_key_login_flow.dart'
       - 'lib/services/webview_login_session_probe.dart'
       - 'lib/services/network/cookie/app_cookie_manager.dart'
       - 'test/services/login_token_redeemer_test.dart'
@@ -59,6 +60,7 @@ jobs:
             lib/pages/login_page.dart \
             lib/pages/webview_login_page.dart \
             lib/services/login_token_redeemer.dart \
+            lib/services/user_api_key_login_flow.dart \
             lib/services/webview_login_session_probe.dart \
             lib/services/network/cookie/app_cookie_manager.dart \
             test/services/login_token_redeemer_test.dart \
@@ -78,6 +80,7 @@ jobs:
             lib/pages/login_page.dart \
             lib/pages/webview_login_page.dart \
             lib/services/login_token_redeemer.dart \
+            lib/services/user_api_key_login_flow.dart \
             lib/services/webview_login_session_probe.dart \
             lib/services/network/cookie/app_cookie_manager.dart \
             test/services/login_token_redeemer_test.dart \
@@ -100,6 +103,7 @@ jobs:
           lib/pages/login_page.dart
           lib/pages/webview_login_page.dart
           lib/services/login_token_redeemer.dart
+          lib/services/user_api_key_login_flow.dart
           lib/services/webview_login_session_probe.dart
           lib/services/network/cookie/app_cookie_manager.dart
           test/services/login_token_redeemer_test.dart
