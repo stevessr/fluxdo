@@ -1,6 +1,16 @@
 name: Login Session Regression
 
 on:
+  push:
+    paths:
+      - 'lib/services/login_token_redeemer.dart'
+      - 'lib/services/webview_login_session_probe.dart'
+      - 'lib/services/network/cookie/app_cookie_manager.dart'
+      - 'lib/pages/webview_login_page.dart'
+      - 'test/services/login_token_redeemer_test.dart'
+      - 'test/services/webview_login_session_probe_test.dart'
+      - 'test/services/network/cookie/app_cookie_manager_test.dart'
+      - '.github/workflows/login-session-regression.yml'
   pull_request:
     paths:
       - 'lib/services/login_token_redeemer.dart'
