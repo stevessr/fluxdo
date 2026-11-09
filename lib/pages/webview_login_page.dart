@@ -683,8 +683,11 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       );
       jarToken = await _cookieJar.getTToken();
     }
-    if (jarToken == null || jarToken.isEmpty) {
-      throw StateError('已验证登录但会话 Cookie 无法保存');
+    if (!AuthSession().isValid(loginGeneration)) {
+      throw StateError('登录 Cookie 保存期间会话已切换');
+    }
+    if (jarToken != webViewToken) {
+      throw StateError('已验证的 WebView 会话 Cookie 未能同步到应用');
     }
     final finalToken = jarToken;
     final tokenMatch = jarToken == webViewToken;
