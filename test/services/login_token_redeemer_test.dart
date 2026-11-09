@@ -45,6 +45,33 @@ void main() {
       );
     });
 
+    test('does not attribute an unrelated account rotation to this OTP', () {
+      expect(
+        LoginTokenRedeemer.isExpectedFreshToken(
+          'old-token',
+          'new-token',
+          issuedToken: 'new-token',
+        ),
+        isTrue,
+      );
+      expect(
+        LoginTokenRedeemer.isExpectedFreshToken(
+          'old-token',
+          'different-account',
+          issuedToken: 'new-token',
+        ),
+        isFalse,
+      );
+      expect(
+        LoginTokenRedeemer.isExpectedFreshToken(
+          'old-token',
+          'old-token',
+          issuedToken: null,
+        ),
+        isFalse,
+      );
+    });
+
     test('never trusts challenge, unrelated origin, or ordinary API response', () {
       expect(
         LoginTokenRedeemer.issuedTokenFromOtpResponse(
