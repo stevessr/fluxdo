@@ -506,19 +506,34 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
                 Expanded(child: label),
                 _calendarScales(context),
               ])
-            : Column(children: [
-                Row(children: [
-                  _calendarFilters(context),
-                  const Spacer(),
-                  _calendarNavigation(context),
-                ]),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(child: label),
-                  const SizedBox(width: 8),
-                  _calendarScales(context),
-                ]),
-              ]),
+            : constraints.maxWidth >= 440
+                ? Column(children: [
+                    Row(children: [
+                      _calendarFilters(context),
+                      const Spacer(),
+                      _calendarNavigation(context),
+                    ]),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Expanded(child: label),
+                      const SizedBox(width: 8),
+                      _calendarScales(context),
+                    ]),
+                  ])
+                : Column(children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _calendarFilters(context),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      _calendarNavigation(context),
+                      const Spacer(),
+                      _calendarScales(context),
+                    ]),
+                    const SizedBox(height: 8),
+                    label,
+                  ]),
       );
     });
   }
@@ -696,10 +711,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           date: _calendarDate,
           scale: _calendarScale,
           events: _items,
-          onSelectDate: (day) => _setCalendarDate(day,
-            scale: _calendarScale == EventCalendarScale.month ||
-                _calendarScale == EventCalendarScale.year
-                ? EventCalendarScale.day : _calendarScale),
+          onSelectDate: (day) =>
+              _setCalendarDate(day, scale: EventCalendarScale.day),
           onSelectMonth: (month) =>
               _setCalendarDate(month, scale: EventCalendarScale.month),
           onTapEvent: (event) {
