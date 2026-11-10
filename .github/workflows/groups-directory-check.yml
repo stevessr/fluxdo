@@ -1,0 +1,64 @@
+name: Group Directory Parity
+
+on:
+  pull_request:
+    paths:
+      - 'lib/models/group.dart'
+      - 'lib/pages/groups_page.dart'
+      - 'lib/pages/group_page.dart'
+      - 'test/models/group_test.dart'
+      - 'test/pages/groups_directory_test.dart'
+      - 'test/pages/group_membership_confirmation_test.dart'
+      - '.github/workflows/groups-directory-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Prepare generated asset directories
+        run: mkdir -p assets/certs
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate localizations
+        run: dart run tool/gen_l10n.dart
+
+      - name: Format group sources
+        run: >-
+          dart format
+          lib/models/group.dart
+          lib/pages/groups_page.dart
+          test/models/group_test.dart
+          test/pages/groups_directory_test.dart
+          test/pages/group_membership_confirmation_test.dart
+
+      - name: Analyze group directory
+        run: >-
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          lib/models/group.dart
+          lib/pages/groups_page.dart
+          test/models/group_test.dart
+          test/pages/groups_directory_test.dart
+          test/pages/group_membership_confirmation_test.dart
+
+      - name: Test group directory and membership confirmation
+        run: >-
+          flutter test
+          test/models/group_test.dart
+          test/pages/groups_directory_test.dart
+          test/pages/group_membership_confirmation_test.dart
