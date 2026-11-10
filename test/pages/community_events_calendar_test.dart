@@ -117,6 +117,83 @@ void main() {
     });
   });
 
+  testWidgets('年视图按日期排列并展示跨日全天活动', (tester) async {
+    final event = <String, dynamic>{
+      'name': '连续社区活动',
+      'starts_at': '2026-02-13',
+      'ends_at': '2026-02-15',
+      'all_day': true,
+    };
+    DateTime? picked;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: CommunityEventsCalendar(
+          date: DateTime(2026, 2, 14),
+          scale: EventCalendarScale.year,
+          events: [event],
+          onSelectDate: (day) => picked = day,
+          onSelectMonth: (_) {},
+          onTapEvent: (_) {},
+        ),
+      ),
+    ));
+    expect(find.text('连续社区活动'), findsNWidgets(3));
+    expect(find.textContaining('Feb 13'), findsOneWidget);
+    expect(find.textContaining('Feb 14'), findsOneWidget);
+    expect(find.textContaining('Feb 15'), findsOneWidget);
+    await tester.tap(find.textContaining('Feb 14'));
+    expect(picked, DateTime(2026, 2, 14));
+  });
+
+  testWidgets('日视图同时展示全天与定时活动，并能打开活动', (tester) async {
+    final allDay = <String, dynamic>{
+      'name': '全天活动',
+      'starts_at': '2026-11-10',
+      'all_day': true,
+    };
+    final timed = <String, dynamic>{
+      'name': '上午会议',
+      'starts_at': '2026-11-10T09:00:00',
+      'ends_at': '2026-11-10T10:00:00',
+      'all_day': false,
+    };
+    Map<String, dynamic>? tapped;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: CommunityEventsCalendar(
+        date: DateTime(2026, 11, 10),
+        scale: EventCalendarScale.day,
+        events: [allDay, timed],
+        onSelectDate: (_) {},
+        onSelectMonth: (_) {},
+        onTapEvent: (event) => tapped = event,
+      )),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('All day'), findsOneWidget);
+    expect(find.text('全天活动'), findsOneWidget);
+    expect(find.text('上午会议'), findsOneWidget);
+    await tester.tap(find.text('上午会议'));
+    expect(tapped, same(timed));
+  });
+
+  testWidgets('周视图显示七列并允许选择其中一天', (tester) async {
+    DateTime? picked;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: CommunityEventsCalendar(
+        date: DateTime(2026, 11, 10),
+        scale: EventCalendarScale.week,
+        events: const [],
+        onSelectDate: (day) => picked = day,
+        onSelectMonth: (_) {},
+        onTapEvent: (_) {},
+      )),
+    ));
+    expect(find.textContaining('11/9'), findsOneWidget);
+    expect(find.textContaining('11/15'), findsOneWidget);
+    await tester.tap(find.textContaining('11/15'));
+    expect(picked, DateTime(2026, 11, 15));
+  });
+
   testWidgets('month view includes navigation and selected-day agenda',
       (tester) async {
     final sample = <String, dynamic>{
