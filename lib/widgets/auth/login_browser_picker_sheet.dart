@@ -9,9 +9,16 @@ import '../../utils/svg_utils.dart';
 /// 可独立测试的浏览器选择弹窗。系统「打开方式」始终在滚动列表外，
 /// 防止浏览器安装数量多时入口被挤到列表末尾。
 class LoginBrowserPickerSheet extends StatelessWidget {
-  const LoginBrowserPickerSheet({super.key, required this.browsers});
+  const LoginBrowserPickerSheet({
+    super.key,
+    required this.browsers,
+    this.description = '选择已登录 Google / GitHub 等账号的浏览器，'
+        '在 LINUX DO 完成授权后将自动返回 FluxDO。',
+  });
 
   final List<LoginBrowser> browsers;
+  /// Null hides the login-specific guidance when picking a browser for a link.
+  final String? description;
 
   Widget _browserIcon(LoginBrowser browser) {
     final bytes = browser.iconBytes;
@@ -66,14 +73,11 @@ class LoginBrowserPickerSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('选择浏览器', style: Theme.of(context).textTheme.titleLarge),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 10, 20, 12),
-              child: Text(
-                '选择已登录 Google / GitHub 等账号的浏览器，'
-                '在 LINUX DO 完成授权后将自动返回 FluxDO。',
-                textAlign: TextAlign.center,
+            if (description != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                child: Text(description!, textAlign: TextAlign.center),
               ),
-            ),
             if (direct.isNotEmpty)
               Flexible(
                 child: ListView.builder(
