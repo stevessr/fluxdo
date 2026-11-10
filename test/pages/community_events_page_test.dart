@@ -33,6 +33,52 @@ Map<String, dynamic> _user(String name) => {
 };
 
 void main() {
+  testWidgets('近期活动在窄屏上切换天周月年不发生布局溢出', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final requests = <RequestOptions>[];
+    final dio = _client((options, handler) {
+      requests.add(options);
+      handler.resolve(Response<dynamic>(
+        requestOptions: options,
+        statusCode: 200,
+        data: {
+          'events': [
+            {
+              'id': 27,
+              'name': '测试活动',
+              'starts_at': '2026-11-10',
+              'all_day': true,
+            },
+          ],
+        },
+      ));
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: CommunityEventsPage(
+        view: CommunityEventsView.upcoming,
+        client: dio,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('All events'), findsOneWidget);
+    expect(find.text('My events'), findsOneWidget);
+    expect(find.text('Day'), findsOneWidget);
+    expect(find.text('Week'), findsOneWidget);
+    expect(find.text('Month'), findsOneWidget);
+    expect(find.text('Year'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    for (final label in ['Day', 'Week', 'Year', 'Month']) {
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+    expect(requests, isNotEmpty);
+    expect(requests.last.path, '/discourse-post-event/events');
+  });
+
   testWidgets('两层标签复用一张页面，分类和时间分别请求正确的 API', (tester) async {
     final requests = <RequestOptions>[];
     final dio = _client((options, handler) {
