@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/shortcut_binding.dart';
 import '../../l10n/s.dart';
-import '../../utils/notification_navigation.dart';
 import '../../providers/discourse_providers.dart';
 import '../../providers/shortcut_provider.dart';
 import '../../providers/preferences_provider.dart';
