@@ -187,6 +187,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   /// 从列表直接选中话题：退出独立 Tab 模式，恢复普通导航。
   void select({
     required int topicId,
+    bool isPrivateMessage = false,
     String? initialTitle,
     int? scrollToPostNumber,
     String? instanceId,
@@ -202,6 +203,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           autoOpenReply: autoOpenReply,
           autoReplyToPostNumber: autoReplyToPostNumber,
           topicId: topicId,
+          isPrivateMessage: isPrivateMessage,
           initialTitle: initialTitle,
           scrollToPostNumber: scrollToPostNumber,
           // 最初从列表进入的这一层也必须持有稳定实例 ID。否则它在
