@@ -548,12 +548,14 @@ mixin _UsersMixin on _DiscourseServiceBase {
     });
   }
 
-  /// 生成邀请链接
+  /// 创建 Discourse 邀请：无邮箱时返回可分享链接，有邮箱时发送邀请邮件。
   Future<InviteLinkResponse> createInviteLink({
     required int maxRedemptionsAllowed,
     DateTime? expiresAt,
     String? description,
     String? email,
+    String? domain,
+    String? customMessage,
   }) async {
     final response = await _dio.post(
       '/invites',
@@ -564,6 +566,10 @@ mixin _UsersMixin on _DiscourseServiceBase {
         if (description != null && description.trim().isNotEmpty)
           'description': description.trim(),
         if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        if (domain != null && domain.trim().isNotEmpty)
+          'domain': domain.trim(),
+        if (customMessage != null && customMessage.trim().isNotEmpty)
+          'custom_message': customMessage.trim(),
       },
     );
     return InviteLinkResponse.fromJson(response.data as Map<String, dynamic>);
