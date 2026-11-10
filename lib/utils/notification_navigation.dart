@@ -9,6 +9,7 @@ import '../providers/selected_topic_provider.dart';
 import '../navigation/nav_action_bus.dart';
 import '../utils/notification_post_target.dart';
 import '../pages/badge_page.dart';
+import '../pages/private_messages_page.dart';
 import '../pages/chat/chat_message_page.dart';
 import '../pages/reaction_notification_target_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
@@ -42,10 +43,16 @@ void _closeNotificationRouteIfNeeded(
 }
 
 /// 通知入口不再使用覆盖内容的预览弹窗。
-void openNotificationPage(BuildContext context, Widget page) {
+void openNotificationPage(
+  BuildContext context,
+  Widget page, {
+  bool isNotificationList = false,
+}) {
   _rootNavigator(context)?.push(
     MaterialPageRoute(
-      settings: const RouteSettings(name: notificationPageRouteName),
+      settings: RouteSettings(
+        name: isNotificationList ? notificationPageRouteName : null,
+      ),
       builder: (_) => page,
     ),
   );
@@ -78,6 +85,16 @@ Widget? _notificationTargetPage(
 
     case NotificationType.membershipRequestAccepted:
       return null;
+
+    case NotificationType.groupMessageSummary:
+      // 汇总通知可能没有 topic_id，此时仍要能进入私信列表。
+      if (notification.topicId == null) {
+        return const PrivateMessagesPage();
+      }
+      return TopicDetailPage(
+        topicId: notification.topicId!,
+        scrollToPostNumber: notification.postNumber,
+      );
 
     case NotificationType.boost:
       if (notification.topicId == null) return null;

@@ -616,7 +616,11 @@ class _NotificationHeader extends ConsumerWidget {
                 onViewAll ??
                 () {
                   onClose();
-                  openNotificationPage(context, const NotificationsPage());
+                  openNotificationPage(
+                    context,
+                    const NotificationsPage(),
+                    isNotificationList: true,
+                  );
                 },
             child: Row(
               mainAxisSize: MainAxisSize.min,

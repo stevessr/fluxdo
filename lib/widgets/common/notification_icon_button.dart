@@ -21,7 +21,11 @@ class NotificationIconButton extends ConsumerWidget {
     );
     return IconButton(
       onPressed: () {
-        openNotificationPage(context, const NotificationsPage());
+        openNotificationPage(
+          context,
+          const NotificationsPage(),
+          isNotificationList: true,
+        );
       },
       visualDensity: compact ? VisualDensity.compact : null,
       style: compact
