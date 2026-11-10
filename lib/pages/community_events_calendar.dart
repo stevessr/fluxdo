@@ -1,7 +1,8 @@
 import 'dart:math' as math;
 
-import '../utils/time_utils.dart';
 import 'package:flutter/material.dart';
+
+import '../utils/time_utils.dart';
 
 enum EventCalendarScale { day, week, month, year }
 
@@ -109,6 +110,95 @@ List<Map<String, dynamic>> expandCalendarEventOccurrences(
 List<Map<String, dynamic>> calendarEventsForDay(
     List<Map<String, dynamic>> events, DateTime day) {
   return events.where((event) => eventOnCalendarDay(event, day)).toList();
+}
+
+/// 某一天时间轴上的活动占位。重叠活动分别占用独立列，避免遮挡。
+class CalendarTimedPlacement {
+  CalendarTimedPlacement({
+    required this.event,
+    required this.start,
+    required this.end,
+  });
+
+  final Map<String, dynamic> event;
+  final DateTime start;
+  final DateTime end;
+  int lane = 0;
+  int laneCount = 1;
+}
+
+bool calendarEventIsAllDay(Map<String, dynamic> event) =>
+    event['all_day'] == true ||
+    (event['starts_at'] is String &&
+        (event['starts_at'] as String).length == 10);
+
+/// 为全天时间网格分配不重叠的列，事件的起止时间会裁切到本日。
+List<CalendarTimedPlacement> layoutTimedCalendarEvents(
+  List<Map<String, dynamic>> events,
+  DateTime day,
+) {
+  final startOfDay = calendarDay(day);
+  final endOfDay =
+      DateTime(startOfDay.year, startOfDay.month, startOfDay.day + 1);
+  final placements = <CalendarTimedPlacement>[];
+  for (final event in events) {
+    if (calendarEventIsAllDay(event) || !eventOnCalendarDay(event, day)) {
+      continue;
+    }
+    final start = parseCalendarEventDate(event['starts_at']);
+    if (start == null) continue;
+    final suppliedEnd = parseCalendarEventDate(event['ends_at']);
+    final end = suppliedEnd != null && suppliedEnd.isAfter(start)
+        ? suppliedEnd
+        : start.add(const Duration(hours: 1));
+    final clippedStart = start.isBefore(startOfDay) ? startOfDay : start;
+    final clippedEnd = end.isAfter(endOfDay) ? endOfDay : end;
+    if (!clippedEnd.isAfter(clippedStart)) continue;
+    placements.add(CalendarTimedPlacement(
+      event: event,
+      start: clippedStart,
+      end: clippedEnd,
+    ));
+  }
+
+  placements.sort((a, b) {
+    final order = a.start.compareTo(b.start);
+    return order != 0 ? order : a.end.compareTo(b.end);
+  });
+
+  final laneEnds = <DateTime>[];
+  final group = <CalendarTimedPlacement>[];
+  DateTime? groupEnd;
+
+  void finishGroup() {
+    for (final entry in group) {
+      entry.laneCount = laneEnds.length;
+    }
+    group.clear();
+    laneEnds.clear();
+  }
+
+  for (final placement in placements) {
+    if (groupEnd != null && !placement.start.isBefore(groupEnd)) {
+      finishGroup();
+      groupEnd = null;
+    }
+    final available =
+        laneEnds.indexWhere((ending) => !ending.isAfter(placement.start));
+    if (available == -1) {
+      placement.lane = laneEnds.length;
+      laneEnds.add(placement.end);
+    } else {
+      placement.lane = available;
+      laneEnds[available] = placement.end;
+    }
+    group.add(placement);
+    if (groupEnd == null || placement.end.isAfter(groupEnd)) {
+      groupEnd = placement.end;
+    }
+  }
+  if (group.isNotEmpty) finishGroup();
+  return placements;
 }
 
 /// 对齐 Discourse 官方 Upcoming Events 的四种视图。
@@ -447,9 +537,7 @@ class _CalendarTimelineState extends State<_CalendarTimeline> {
   }
 
   bool _isAllDay(Map<String, dynamic> event) =>
-      event['all_day'] == true ||
-      (event['starts_at'] is String &&
-       (event['starts_at'] as String).length == 10);
+      calendarEventIsAllDay(event);
 
   @override
   Widget build(BuildContext context) {
@@ -565,10 +653,9 @@ class _CalendarTimelineState extends State<_CalendarTimeline> {
                     ),
                 ]),
                 for (var index = 0; index < widget.days.length; index++)
-                  for (final event in calendarEventsForDay(
-                      widget.events, widget.days[index]).where(
-                          (item) => !_isAllDay(item)))
-                    _eventBlock(context, event, widget.days[index],
+                  for (final placement in layoutTimedCalendarEvents(
+                      widget.events, widget.days[index]))
+                    _eventBlock(context, placement, widget.days[index],
                         index, cellWidth),
               ]),
             );
@@ -585,25 +672,17 @@ class _CalendarTimelineState extends State<_CalendarTimeline> {
     return const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day - 1];
   }
 
-  Widget _eventBlock(BuildContext context, Map<String, dynamic> event,
+  Widget _eventBlock(BuildContext context, CalendarTimedPlacement placement,
       DateTime day, int column, double width) {
-    final start = parseCalendarEventDate(event['starts_at']);
-    if (start == null) return const SizedBox.shrink();
-    final end = parseCalendarEventDate(event['ends_at']);
     final dayStart = calendarDay(day);
-    final dayEnd = DateTime(day.year, day.month, day.day + 1);
-    final clippedStart = start.isBefore(dayStart) ? dayStart : start;
-    final effectiveEnd = end != null && end.isAfter(start)
-        ? end : start.add(const Duration(hours: 1));
-    final clippedEnd = effectiveEnd.isAfter(dayEnd) ? dayEnd : effectiveEnd;
-    if (!clippedEnd.isAfter(clippedStart)) return const SizedBox.shrink();
-    final minuteOffset = clippedStart.difference(dayStart).inMinutes;
-    final minutes = clippedEnd.difference(clippedStart).inMinutes;
+    final minuteOffset = placement.start.difference(dayStart).inMinutes;
+    final minutes = placement.end.difference(placement.start).inMinutes;
     final scheme = Theme.of(context).colorScheme;
+    final laneWidth = width / placement.laneCount;
     return Positioned(
-      left: _gutter + column * width + 2,
+      left: _gutter + column * width + placement.lane * laneWidth + 2,
       top: minuteOffset / 60 * _hourHeight,
-      width: math.max(1.0, width - 4),
+      width: math.max(1.0, laneWidth - 4),
       height: math.min(
         24 * _hourHeight - minuteOffset / 60 * _hourHeight,
         math.max(24.0, minutes / 60 * _hourHeight),
@@ -613,12 +692,13 @@ class _CalendarTimelineState extends State<_CalendarTimeline> {
         borderRadius: BorderRadius.circular(4),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => widget.onTapEvent(event),
+          onTap: () => widget.onTapEvent(placement.event),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             child: Text(
-              widget.titleFor(context, event),
-              maxLines: 3, overflow: TextOverflow.ellipsis,
+              widget.titleFor(context, placement.event),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: scheme.onPrimaryContainer),
             ),
