@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io' show HttpHeaders;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'auth_session.dart';
 import 'cf_challenge_service.dart';
@@ -58,7 +60,7 @@ class LoginTokenRedeemer {
         return const LoginTokenRedeemResult.failed();
       }
 
-      await dio.post<dynamic>(
+      final response = await dio.post<dynamic>(
         '/session/otp/$otp',
         options: Options(
           followRedirects: false,
@@ -75,7 +77,12 @@ class LoginTokenRedeemer {
       );
 
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
-      final afterSnapshot = await _readTToken(cookieJar);
+      final afterSnapshot = await _reconcileTToken(
+        cookieJar,
+        beforeToken: beforeToken,
+        generation: generation,
+        response: response,
+      );
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
       if (!afterSnapshot.succeeded) {
         _log(
@@ -108,7 +115,12 @@ class LoginTokenRedeemer {
       //
       // 注意：对账读取本身也可能失败。它不能覆盖原始 DioException，更不能
       // 逃出本方法；读取失败时继续按原始异常分类即可。
-      final afterSnapshot = await _readTToken(cookieJar);
+      final afterSnapshot = await _reconcileTToken(
+        cookieJar,
+        beforeToken: beforeToken,
+        generation: generation,
+        response: e.response,
+      );
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
       if (afterSnapshot.succeeded &&
           _isFreshToken(beforeToken, afterSnapshot.token)) {
@@ -204,6 +216,106 @@ class LoginTokenRedeemer {
     } catch (e) {
       return _TTokenSnapshot.failed(e);
     }
+  }
+
+  /// Extract the server-issued _t if the OTP response was successful. This
+  /// covers a transport/cookie sync failure *after* the server consumed the OTP.
+  static String? issuedTokenFromOtpResponse(Response<dynamic>? response) {
+    if (response == null) return null;
+    final request = response.requestOptions;
+    final uri = request.uri;
+    final status = response.statusCode;
+    if (request.method.toUpperCase() != 'POST' ||
+        uri.scheme != 'https' ||
+        uri.host.toLowerCase() != CookieJarService.appBaseHost ||
+        !RegExp(r'^/session/otp/[0-9a-f]+$').hasMatch(uri.path) ||
+        status == null ||
+        status < 200 ||
+        status >= 400) {
+      return null;
+    }
+
+    final headers = response.headers[HttpHeaders.setCookieHeader] ?? const [];
+    for (final raw in headers) {
+      // Transports may combine Set-Cookie fields into a single header.
+      final match = RegExp(
+        r'(?:^|,\s*)\s*_t=([^;,]+)',
+        caseSensitive: false,
+      ).firstMatch(raw);
+      final value = match?.group(1)?.trim();
+      if (value != null && value.isNotEmpty && value != 'del') {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  static Future<_TTokenSnapshot> _reconcileTToken(
+    CookieJarService cookieJar, {
+    required String? beforeToken,
+    required int generation,
+    Response<dynamic>? response,
+  }) async {
+    var snapshot = await _readTToken(cookieJar);
+    if (!AuthSession().isValid(generation)) return snapshot;
+
+    // Prefer the token issued for this exact OTP. A different fresh token may
+    // belong to a concurrent login; never treat that as this OTP's success.
+    final issuedToken = issuedTokenFromOtpResponse(response);
+    if (issuedToken != null &&
+        _isFreshToken(beforeToken, snapshot.token) &&
+        snapshot.token != issuedToken) {
+      return _TTokenSnapshot.failed(
+        StateError('另一次登录已更新会话，不能将其视为本次 OTP 成功'),
+      );
+    }
+    if (_isExpectedFreshToken(beforeToken, snapshot.token, issuedToken)) {
+      return snapshot;
+    }
+
+    // The 302 may have consumed the OTP before cookie synchronization failed.
+    if (_isFreshToken(beforeToken, issuedToken)) {
+      await cookieJar.setCookie(
+        '_t',
+        issuedToken!,
+        path: '/',
+        secure: true,
+        httpOnly: true,
+        trusted: true,
+      );
+      snapshot = await _readTToken(cookieJar);
+      if (_isExpectedFreshToken(beforeToken, snapshot.token, issuedToken)) {
+        return snapshot;
+      }
+    }
+
+    // Allow delayed cookie propagation without replaying the single-use OTP.
+    for (var attempt = 0; attempt < 5; attempt++) {
+      if (!AuthSession().isValid(generation)) return snapshot;
+      await Future<void>.delayed(Duration(milliseconds: 150 * (attempt + 1)));
+      snapshot = await _readTToken(cookieJar);
+      if (_isExpectedFreshToken(beforeToken, snapshot.token, issuedToken)) {
+        return snapshot;
+      }
+    }
+    return snapshot;
+  }
+
+  @visibleForTesting
+  static bool isExpectedFreshToken(
+    String? beforeToken,
+    String? afterToken, {
+    String? issuedToken,
+  }) =>
+      _isExpectedFreshToken(beforeToken, afterToken, issuedToken);
+
+  static bool _isExpectedFreshToken(
+    String? beforeToken,
+    String? afterToken,
+    String? issuedToken,
+  ) {
+    return _isFreshToken(beforeToken, afterToken) &&
+        (issuedToken == null || afterToken == issuedToken);
   }
 
   static bool _isFreshToken(String? beforeToken, String? afterToken) {

@@ -78,14 +78,31 @@ class AppCookieManager extends Interceptor {
 
   /// Invalid auth signals are verified by the session probe before deletion.
   /// A delayed response must never roll back a newer session cookie.
+  /// OTP redemption intentionally rotates the authenticated session, even
+  /// if the request sent no _t while another account was already present.
+  /// Generation fencing in [_saveCookies] still rejects stale responses.
+  @visibleForTesting
+  static bool isSuccessfulOtpExchange(RequestOptions request, int? statusCode) {
+    final uri = request.uri;
+    return request.method.toUpperCase() == 'POST' &&
+        uri.scheme == 'https' &&
+        uri.host.toLowerCase() == CookieJarService.appBaseHost &&
+        RegExp(r'^/session/otp/[0-9a-f]+$').hasMatch(uri.path) &&
+        statusCode != null &&
+        statusCode >= 200 &&
+        statusCode < 400;
+  }
+
   static bool shouldIgnoreSessionSetCookie({
     required bool isDeletion,
     required bool isExplicitLogout,
     required String? sentTToken,
     required String? currentTToken,
+    bool isExplicitLogin = false,
   }) {
     if (isExplicitLogout) return false;
     if (isDeletion) return true;
+    if (isExplicitLogin) return false;
     // A request without _t may still establish a new login session.
     return currentTToken != null &&
         currentTToken.isNotEmpty &&
@@ -635,6 +652,10 @@ class AppCookieManager extends Interceptor {
               isExplicitLogout: isExplicitLogout,
               sentTToken: sentTToken,
               currentTToken: currentTToken,
+              isExplicitLogin: isSuccessfulOtpExchange(
+                response.requestOptions,
+                response.statusCode,
+              ),
             )) {
           LogWriter.instance.write({
             'timestamp': DateTime.now().toIso8601String(),

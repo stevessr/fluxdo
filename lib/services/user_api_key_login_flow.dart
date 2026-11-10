@@ -13,7 +13,6 @@ import 'local_notification_service.dart' show navigatorKey;
 import 'login_token_redeemer.dart';
 import 'network/cookie/cookie_jar_service.dart';
 import 'network/flux_request_spec.dart';
-import 'network/exceptions/api_exception.dart';
 import 'toast_service.dart';
 import 'user_api_key_service.dart';
 import 'system_browser_service.dart';
@@ -71,6 +70,14 @@ class UserApiKeyLoginFlow {
         debugPrint('[UserApiKeyLoginFlow] 授权 key 后台清理失败: $error');
       }),
     );
+  }
+
+  /// Only transient probe failures can be recovered using a freshly minted
+  /// OTP session. An explicit 401/403 from Discourse is an auth rejection.
+  static bool isTransientCurrentUserProbeError(DioException error) {
+    if (LoginTokenRedeemer.isChallengeError(error)) return true;
+    final status = error.response?.statusCode;
+    return status == null || status >= 500;
   }
 
   OverlayEntry? _loadingEntry;
@@ -207,7 +214,7 @@ class UserApiKeyLoginFlow {
         // 新 _t 已落 jar;取 username 后走与密码登录同一套收口
         var username = '';
         User? verifiedUser;
-        var currentUserBlockedByChallenge = false;
+        var currentUserProbeFailed = false;
         try {
           final response = await service.dio.get(
             '/session/current.json',
@@ -238,30 +245,33 @@ class UserApiKeyLoginFlow {
             }
           }
         } on DioException catch (e) {
-          currentUserBlockedByChallenge =
-              e.error is CfChallengeException ||
-              LoginTokenRedeemer.isChallengeError(e);
-          debugPrint('[UserApiKeyLoginFlow] 取 current_user 失败: $e');
+          currentUserProbeFailed = isTransientCurrentUserProbeError(e);
+          debugPrint(
+            '[UserApiKeyLoginFlow] 取 current_user 失败: $e '
+            '(recoverable=$currentUserProbeFailed)',
+          );
         } catch (e) {
+          currentUserProbeFailed = true;
           debugPrint('[UserApiKeyLoginFlow] 取 current_user 失败: $e');
         }
 
         if (username.isEmpty) {
-          // `_t` 已经成功兑换，后续 current_user 只是为了拿本地显示用户名。
-          // 如果这里仅仅被盾挡住，不能把一个已建立的登录会话回滚成“登录失败”。
-          // 扫码登录已有同样的保守兜底：先用占位 identifier 收口，后续正常
-          // 会话请求/预加载会刷新真实用户信息。
-          if (currentUserBlockedByChallenge) {
+          // A fresh OTP session has already been committed. Failure to
+          // *query* the user (CF challenge, network, or response parsing) is
+          // not proof that the one-time token exchange failed. Let the app
+          // hydrate the identity after navigating away from the login page.
+          // An explicit successful anonymous response is still rejected.
+          if (currentUserProbeFailed) {
             if (!AuthSession().isValid(requestGeneration)) return;
             await service.finalizeNativeLoginSuccess(
               'user',
               notifyBeforePreload: true,
             );
             _burnKeyInBackground(
-          userApiKeyService,
-          service.dio,
-          authorizedKey: authorizedKey,
-        );
+              userApiKeyService,
+              service.dio,
+              authorizedKey: authorizedKey,
+            );
             ToastService.showSuccess('登录成功');
             onFlowFinished?.call(true);
             return;

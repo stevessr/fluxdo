@@ -193,6 +193,71 @@ void main() {
       );
     });
 
+    test('successful OTP POST replaces a prior account despite missing sent _t', () {
+      final request = RequestOptions(
+        baseUrl: 'https://linux.do',
+        path: '/session/otp/abcdef0123',
+        method: 'POST',
+      );
+      expect(AppCookieManager.isSuccessfulOtpExchange(request, 302), isTrue);
+      expect(
+        AppCookieManager.shouldIgnoreSessionSetCookie(
+          isDeletion: false,
+          isExplicitLogout: false,
+          sentTToken: null,
+          currentTToken: 'previous-account',
+          isExplicitLogin: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('OTP exemption never accepts deletion or unrelated/stale responses', () {
+      final request = RequestOptions(
+        baseUrl: 'https://linux.do',
+        path: '/session/otp/abcdef0123',
+        method: 'POST',
+      );
+      expect(AppCookieManager.isSuccessfulOtpExchange(request, 403), isFalse);
+      expect(
+        AppCookieManager.isSuccessfulOtpExchange(
+          request.copyWith(method: 'GET'),
+          302,
+        ),
+        isFalse,
+      );
+      expect(
+        AppCookieManager.isSuccessfulOtpExchange(
+          RequestOptions(
+            baseUrl: 'https://evil.example',
+            path: '/session/otp/abcdef0123',
+            method: 'POST',
+          ),
+          302,
+        ),
+        isFalse,
+      );
+      expect(
+        AppCookieManager.shouldIgnoreSessionSetCookie(
+          isDeletion: true,
+          isExplicitLogout: false,
+          sentTToken: null,
+          currentTToken: 'live-account',
+          isExplicitLogin: true,
+        ),
+        isTrue,
+      );
+      expect(
+        AppCookieManager.shouldIgnoreSessionSetCookie(
+          isDeletion: false,
+          isExplicitLogout: false,
+          sentTToken: 'stale-account',
+          currentTToken: 'live-account',
+        ),
+        isTrue,
+      );
+    });
+
     test('explicit user logout still accepts Set-Cookie deletion', () {
       expect(
         AppCookieManager.shouldIgnoreSessionSetCookie(

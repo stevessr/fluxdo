@@ -4,6 +4,15 @@ on:
   pull_request:
     paths:
       - 'lib/pages/login_page.dart'
+      - 'lib/pages/webview_login_page.dart'
+      - 'lib/services/login_token_redeemer.dart'
+      - 'lib/services/user_api_key_login_flow.dart'
+      - 'lib/services/webview_login_session_probe.dart'
+      - 'lib/services/network/cookie/app_cookie_manager.dart'
+      - 'test/services/login_token_redeemer_test.dart'
+      - 'test/services/user_api_key_login_flow_test.dart'
+      - 'test/services/webview_login_session_probe_test.dart'
+      - 'test/services/network/cookie/app_cookie_manager_test.dart'
       - 'lib/services/account_manager.dart'
       - 'lib/services/credential_store_service.dart'
       - 'lib/services/discourse/_login.dart'
@@ -50,6 +59,15 @@ jobs:
         run: |
           dart format \
             lib/pages/login_page.dart \
+            lib/pages/webview_login_page.dart \
+            lib/services/login_token_redeemer.dart \
+            lib/services/user_api_key_login_flow.dart \
+            lib/services/webview_login_session_probe.dart \
+            lib/services/network/cookie/app_cookie_manager.dart \
+            test/services/login_token_redeemer_test.dart \
+            test/services/user_api_key_login_flow_test.dart \
+            test/services/webview_login_session_probe_test.dart \
+            test/services/network/cookie/app_cookie_manager_test.dart \
             lib/services/account_manager.dart \
             lib/services/credential_store_service.dart \
             lib/services/discourse/_login.dart \
@@ -62,6 +80,15 @@ jobs:
             test/widgets/auth/direct_login_contract_test.dart
           git diff --exit-code -- \
             lib/pages/login_page.dart \
+            lib/pages/webview_login_page.dart \
+            lib/services/login_token_redeemer.dart \
+            lib/services/user_api_key_login_flow.dart \
+            lib/services/webview_login_session_probe.dart \
+            lib/services/network/cookie/app_cookie_manager.dart \
+            test/services/login_token_redeemer_test.dart \
+            test/services/user_api_key_login_flow_test.dart \
+            test/services/webview_login_session_probe_test.dart \
+            test/services/network/cookie/app_cookie_manager_test.dart \
             lib/services/account_manager.dart \
             lib/services/credential_store_service.dart \
             lib/services/discourse/_login.dart \
@@ -77,6 +104,15 @@ jobs:
         run: >-
           flutter analyze
           lib/pages/login_page.dart
+          lib/pages/webview_login_page.dart
+          lib/services/login_token_redeemer.dart
+          lib/services/user_api_key_login_flow.dart
+          lib/services/webview_login_session_probe.dart
+          lib/services/network/cookie/app_cookie_manager.dart
+          test/services/login_token_redeemer_test.dart
+          test/services/user_api_key_login_flow_test.dart
+          test/services/webview_login_session_probe_test.dart
+          test/services/network/cookie/app_cookie_manager_test.dart
           lib/services/account_manager.dart
           lib/services/credential_store_service.dart
           lib/services/discourse/discourse_service.dart
@@ -95,3 +131,8 @@ jobs:
           test/services/account_guest_startup_recovery_test.dart
           test/services/account_cold_start_snapshot_test.dart
           test/widgets/auth/direct_login_contract_test.dart
+          test/services/login_token_redeemer_test.dart
+          test/services/webview_login_session_probe_test.dart
+          test/services/network/cookie/app_cookie_manager_test.dart
+          test/services/user_api_key_login_flow_test.dart
+          test/services/login_cf_challenge_classification_test.dart
