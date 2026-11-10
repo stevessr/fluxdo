@@ -12,7 +12,11 @@ import 'local_notification_service.dart';
 
 /// Optional secondary actions displayed by the arrow beside a Toast CTA.
 class ToastActionOption {
-  const ToastActionOption({required this.label, required this.icon, required this.onTap});
+  const ToastActionOption({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
 
   final String label;
   final IconData icon;
@@ -317,7 +321,8 @@ class ToastService {
       if (current.kind == data.kind &&
           current.message == data.message &&
           current.actionLabel == data.actionLabel &&
-          identical(current.onAction, data.onAction)) {
+          identical(current.onAction, data.onAction) &&
+          identical(current.actionOptions, data.actionOptions)) {
         return session;
       }
     }
@@ -795,7 +800,7 @@ class _ToastViewState extends State<_ToastView> with TickerProviderStateMixin {
                           ),
                       ],
                       child: Container(
-                        width: 38,
+                        width: 44,
                         height: 40,
                         decoration: BoxDecoration(
                           color: toBg,
