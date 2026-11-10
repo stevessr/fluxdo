@@ -71,3 +71,5 @@ jobs:
           flutter test
           test/models/site_about_test.dart
           test/models/site_policy_document_test.dart
+          test/navigation/site_info_registry_test.dart
+          test/pages/site_info_page_test.dart
