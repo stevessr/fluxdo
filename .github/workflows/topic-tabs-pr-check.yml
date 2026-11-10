@@ -14,11 +14,14 @@ on:
       - 'lib/providers/app_state_refresher.dart'
       - 'lib/settings/definitions/custom_settings_defs.dart'
       - 'lib/widgets/layout/pico_parallel_tabs.dart'
+      - 'lib/widgets/layout/pane_filmstrip.dart'
+      - 'lib/widgets/layout/master_detail_layout.dart'
       - 'lib/widgets/layout/pane_projection_back_scope.dart'
       - 'test/pages/topic_detail_page/topic_more_menu_actions_test.dart'
       - 'test/providers/preferences_provider_test.dart'
       - 'test/providers/selected_topic_provider_test.dart'
       - 'test/widgets/layout/unified_topic_tabs_test.dart'
+      - 'test/widgets/layout/pane_filmstrip_master_only_test.dart'
       - 'test/widgets/layout/pane_projection_test.dart'
       - '.github/workflows/topic-tabs-pr-check.yml'
 
@@ -62,11 +65,14 @@ jobs:
             lib/providers/app_state_refresher.dart \
             lib/settings/definitions/custom_settings_defs.dart \
             lib/widgets/layout/pico_parallel_tabs.dart \
+            lib/widgets/layout/pane_filmstrip.dart \
+            lib/widgets/layout/master_detail_layout.dart \
             lib/widgets/layout/pane_projection_back_scope.dart \
             test/pages/topic_detail_page/topic_more_menu_actions_test.dart \
             test/providers/preferences_provider_test.dart \
             test/providers/selected_topic_provider_test.dart \
             test/widgets/layout/unified_topic_tabs_test.dart \
+            test/widgets/layout/pane_filmstrip_master_only_test.dart \
             test/widgets/layout/pane_projection_test.dart
       - name: Analyze tab navigation implementation
         run: |
@@ -82,11 +88,14 @@ jobs:
             lib/providers/app_state_refresher.dart \
             lib/settings/definitions/custom_settings_defs.dart \
             lib/widgets/layout/pico_parallel_tabs.dart \
+            lib/widgets/layout/pane_filmstrip.dart \
+            lib/widgets/layout/master_detail_layout.dart \
             lib/widgets/layout/pane_projection_back_scope.dart \
             test/pages/topic_detail_page/topic_more_menu_actions_test.dart \
             test/providers/preferences_provider_test.dart \
             test/providers/selected_topic_provider_test.dart \
             test/widgets/layout/unified_topic_tabs_test.dart \
+            test/widgets/layout/pane_filmstrip_master_only_test.dart \
             test/widgets/layout/pane_projection_test.dart
       - name: Run tab navigation regression tests
         run: |
@@ -95,4 +104,5 @@ jobs:
             test/providers/preferences_provider_test.dart \
             test/providers/selected_topic_provider_test.dart \
             test/widgets/layout/unified_topic_tabs_test.dart \
+            test/widgets/layout/pane_filmstrip_master_only_test.dart \
             test/widgets/layout/pane_projection_test.dart
