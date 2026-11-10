@@ -17,6 +17,7 @@ class LoginBrowserPickerSheet extends StatelessWidget {
   });
 
   final List<LoginBrowser> browsers;
+
   /// Null hides the login-specific guidance when picking a browser for a link.
   final String? description;
 
