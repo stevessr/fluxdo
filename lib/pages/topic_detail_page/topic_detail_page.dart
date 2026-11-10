@@ -1665,6 +1665,12 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           isPrivateMessage: detail.isPrivateMessage,
         );
     ref.requestNavDestination(NavEntryIds.home);
+    if (widget.embeddedMode &&
+        widget.stackProvider == selectedMessageProvider) {
+      // Moving a PM into the global workspace should not leave a stale
+      // private-message detail behind when all shared tabs are closed.
+      ref.read(selectedMessageProvider.notifier).clear();
+    }
     if (!widget.embeddedMode) {
       // 全屏路由回到所属首页，由首页的 Tab 显示新话题。
       final route = ModalRoute.of(context);
