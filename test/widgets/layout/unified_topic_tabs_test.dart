@@ -15,7 +15,6 @@ void main() {
       );
 
     Widget buildTabs() => MaterialApp(
-      locale: const Locale('zh'),
       home: Scaffold(
         body: PicoParallelTabs(
           selected: notifier.state,
@@ -33,10 +32,10 @@ void main() {
 
     await tester.longPress(find.byKey(const ValueKey('pico-pane-tab-1')));
     await tester.pumpAndSettle();
-    expect(find.text('关闭其他标签'), findsOneWidget);
-    expect(find.text('关闭所有标签'), findsOneWidget);
+    expect(find.text('Close other tabs'), findsOneWidget);
+    expect(find.text('Close all tabs'), findsOneWidget);
 
-    await tester.tap(find.text('关闭其他标签'));
+    await tester.tap(find.text('Close other tabs'));
     await tester.pumpAndSettle();
     expect(notifier.state.stack, hasLength(1));
     expect(notifier.state.instanceId, 'pm');
@@ -44,7 +43,7 @@ void main() {
     await tester.pumpWidget(buildTabs());
     await tester.longPress(find.byKey(const ValueKey('pico-pane-tab-0')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('关闭所有标签'));
+    await tester.tap(find.text('Close all tabs'));
     await tester.pumpAndSettle();
 
     expect(notifier.state.stack, isEmpty);
