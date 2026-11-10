@@ -23,41 +23,55 @@ void main() {
 
   test('默认关闭的实验策略被持久化并同步至验证服务', () {
     expect(preferences, contains('pref_proactive_cf_before_preload'));
-    expect(preferences, contains(
-      '_prefs.getBool(proactiveCfBeforePreloadKey) ?? false',
-    ));
-    expect(preferences, contains(
-      'state.copyWith(proactiveCfBeforePreload: enabled)',
-    ));
-    expect(preferences, contains(
-      'CfChallengeService().proactiveVerifyBeforePreloadEnabled = enabled',
-    ));
+    expect(
+      preferences,
+      contains('_prefs.getBool(proactiveCfBeforePreloadKey) ?? false'),
+    );
+    expect(
+      preferences,
+      contains('state.copyWith(proactiveCfBeforePreload: enabled)'),
+    );
+    expect(
+      preferences,
+      contains(
+        'CfChallengeService().proactiveVerifyBeforePreloadEnabled = enabled',
+      ),
+    );
     expect(settings, contains("id: 'proactiveCfBeforePreload'"));
     expect(settings, contains('.setProactiveCfBeforePreload(value)'));
-    expect(challenge, contains(
-      'bool proactiveVerifyBeforePreloadEnabled = false',
-    ));
+    expect(
+      challenge,
+      contains('bool proactiveVerifyBeforePreloadEnabled = false'),
+    );
   });
 
-  test('主动探测保留有效 clearance，且不会在预加载期间重启续期 WebView', () {
-    expect(challenge, contains(
-      'enum CfVerificationMode { challengeRecovery, preloadProbe }',
-    ));
-    expect(challenge, contains(
-      'showManualVerify(context, false, CfVerificationMode.preloadProbe)',
-    ));
-    expect(challenge, contains(
-      'if (mode == CfVerificationMode.challengeRecovery) {',
-    ));
+  test('主动探测保留有效 clearance，不在预加载期间启动续期 WebView', () {
+    expect(
+      challenge,
+      contains('enum CfVerificationMode { challengeRecovery, preloadProbe }'),
+    );
+    expect(
+      challenge,
+      contains(
+        'showManualVerify(context, false, CfVerificationMode.preloadProbe)',
+      ),
+    );
+    expect(
+      challenge,
+      contains('if (mode == CfVerificationMode.challengeRecovery) {'),
+    );
     expect(challenge, contains("deleteCookie('cf_clearance')"));
     expect(challenge, contains("deleteWebViewCookie('cf_clearance')"));
-    expect(challenge, contains(
-      'if (mode == CfVerificationMode.challengeRecovery) {\n'
-      '        Future.delayed(_postCleanupCooldown',
-    ));
+    expect(
+      challenge,
+      contains(
+        'if (mode == CfVerificationMode.challengeRecovery) {\n'
+        '        Future.delayed(_postCleanupCooldown',
+      ),
+    );
   });
 
-  test('预加载早于 ProviderScope：启动入口应先读取保存的开关', () {
+  test('预加载早于 ProviderScope：启动入口先恢复保存的开关', () {
     final flag = startup.indexOf(
       'prefs.getBool(PreferencesNotifier.proactiveCfBeforePreloadKey)',
     );
@@ -67,11 +81,9 @@ void main() {
     expect(startup, contains("prefs.getBool('pref_auto_cf_challenge')"));
   });
 
-  test('验证与 Cookie 同步发生在预加载前，且遵循全局开关与冷却期', () {
-    final verify = coordinator.indexOf('Future<void> _verifyCfBeforePreload');
-    final start = coordinator.indexOf(
-      'Future<void> _ensurePreloadedInternal',
-    );
+  test('主动检查在预加载之前执行，且不会盲目认定原生网络可信', () {
+    final verify = coordinator.indexOf('Future<bool> _verifyCfBeforePreload');
+    final start = coordinator.indexOf('Future<void> _ensurePreloadedInternal');
     final probe = coordinator.indexOf(
       '_preload.ensureLoaded(suppressCfChallenge: true)',
       start,
@@ -100,11 +112,11 @@ void main() {
     expect(body, contains('!cf.proactiveVerifyBeforePreloadEnabled'));
     expect(body, contains('!cf.autoVerifyEnabled'));
     expect(body, contains('cf.isInCooldown'));
-    expect(coordinator, contains('final active = _activePreload;'));
     expect(
       body,
       isNot(contains('_lastClearanceRejectedAt = null')),
-      reason: '仅凭浏览器端无挑战，不可认定原生 API 也已获放行',
+      reason: '仅凭浏览器无挑战，不可认定原生 API 获放行',
     );
+    expect(coordinator, contains('final active = _activePreload;'));
   });
 }
