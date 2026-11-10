@@ -45,6 +45,38 @@ void main() {
       );
     });
 
+    test('普通浏览器链接只接受 HTTP(S)，登录授权白名单保持严格', () async {
+      for (final url in [
+        'https://example.com/page?q=1',
+        'http://example.com/',
+      ]) {
+        expect(SystemBrowserService.isWebUrl(Uri.parse(url)), isTrue);
+      }
+      for (final url in [
+        'javascript:alert(1)',
+        'mailto:test@example.com',
+        'https://user:pass@example.com/',
+        'file:///etc/passwd',
+      ]) {
+        expect(SystemBrowserService.isWebUrl(Uri.parse(url)), isFalse);
+      }
+      const browser = LoginBrowser(id: 'invalid-browser', name: 'Invalid');
+      expect(
+        await SystemBrowserService.instance.openWebLink(
+          browser,
+          Uri.parse('javascript:alert(1)'),
+        ),
+        isFalse,
+      );
+      expect(
+        await SystemBrowserService.instance.open(
+          browser,
+          Uri.parse('https://example.com/page'),
+        ),
+        isFalse,
+      );
+    });
+
     test('opens only the LINUX DO User API Key authorization entrypoint', () {
       expect(
         SystemBrowserService.isAuthorizationUrl(
