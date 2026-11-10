@@ -302,13 +302,22 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
           stackProvider: selectedTopicProvider,
           parentActive: widget.isActive,
           // 非顶格 = "上一层预览":内部点击走截断替换语义。
-          truncateOnPush: !isTop,
+          // In independent Tab mode the left pane is another live Tab,
+          // not navigation history. A link must never replace its neighbor.
+          truncateOnPush: !isTop && !selectedTopic.tabMode,
           // 基础层（栈仅一层）也给 clear：ESC/返回按钮清空右栏回到
           // 空态，与 search/seeking 行为一致（平行视界 ESC 统一）。
           // 回调内重读 provider，不闭包捕获 build 时的快照。
           onBack: () {
             final notifier = ref.read(selectedTopicProvider.notifier);
-            if (ref.read(selectedTopicProvider).isStacked) {
+            final current = ref.read(selectedTopicProvider);
+            if (current.tabMode) {
+              // Back from the left tab must close that tab, not the right one.
+              final tabIndex = current.stack.indexWhere(
+                (pane) => identical(pane, entry),
+              );
+              if (tabIndex >= 0) notifier.closeTab(tabIndex);
+            } else if (current.isStacked) {
               notifier.pop();
             } else {
               notifier.clear();
