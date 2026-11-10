@@ -326,9 +326,17 @@ class CommunityEventsCalendar extends StatelessWidget {
     }
     final days = grouped.keys.toList()..sort();
     if (days.isEmpty) {
-      return Center(child: Text(
-        _zh(context) ? '本年没有活动' : 'No events this year',
-        style: Theme.of(context).textTheme.bodyMedium));
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(32),
+            child: Center(child: Text(
+              _zh(context) ? '本年没有活动' : 'No events this year',
+              style: Theme.of(context).textTheme.bodyMedium)),
+          ),
+        ],
+      );
     }
     final scheme = Theme.of(context).colorScheme;
     final weekdays = _zh(context)
@@ -507,6 +515,12 @@ class _CalendarTimelineState extends State<_CalendarTimeline> {
                             style: Theme.of(context).textTheme.labelSmall),
                         ),
                       )),
+                    if (calendarEventsForDay(widget.events, day)
+                            .where(_isAllDay).length > 2)
+                      Text(
+                        '+' + (calendarEventsForDay(widget.events, day)
+                            .where(_isAllDay).length - 2).toString(),
+                        style: Theme.of(context).textTheme.labelSmall),
                   ],
                 ),
               ),
