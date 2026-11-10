@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/s.dart';
 import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
+import '../providers/notification_list_provider.dart';
 import '../providers/selected_topic_provider.dart';
 import '../navigation/nav_action_bus.dart';
 import '../utils/notification_post_target.dart';
@@ -14,6 +15,10 @@ import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page.dart';
 import '../services/local_notification_service.dart';
 import '../widgets/layout/master_detail_layout.dart';
+
+/// 隔离正在等待原帖回查的通知：后一次点击优先于较早的异步跳转。
+final Expando<int> _notificationNavigationGeneration =
+    Expando<int>('notificationNavigationGeneration');
 
 NavigatorState? _rootNavigator(BuildContext context) {
   return navigatorKey.currentState ??
@@ -123,6 +128,14 @@ void _markNotificationRead(
   container
       .read(recentNotificationsProvider.notifier)
       .markAsRead(notification.id);
+  // 仅更新已经挂载的完整通知列表。快捷面板单独使用时不额外触发
+  // 历史通知首屏请求；两种入口同时存在时也能同步已读/未读筛选。
+  // ignore: deprecated_member_use
+  if (container.exists(notificationListProvider)) {
+    container
+        .read(notificationListProvider.notifier)
+        .markAsRead(notification.id);
+  }
   container
       .read(discourseServiceProvider)
       .markNotificationRead(notification.id)
@@ -211,13 +224,18 @@ bool _isTopicNotification(DiscourseNotification notification) {
 Future<void> _openReactionTabAfterLookup(
   ProviderContainer container,
   DiscourseNotification notification,
-  int postId,
-) async {
+  int postId, {
+  required int navigationGeneration,
+}) async {
   try {
     final response = await container
         .read(discourseServiceProvider)
         .dio
         .get('/posts/$postId.json');
+    // 用户可能在网络请求期间点开了另一条通知，旧结果不能抢回前台。
+    if (_notificationNavigationGeneration[container] != navigationGeneration) {
+      return;
+    }
     final target = parseNotificationPostTarget(response.data);
     if (target != null) {
       _openTopicNotificationTab(
@@ -230,6 +248,9 @@ Future<void> _openReactionTabAfterLookup(
     }
   } catch (error) {
     debugPrint('无法定位聚合 Reaction 通知: $error');
+  }
+  if (_notificationNavigationGeneration[container] != navigationGeneration) {
+    return;
   }
   if (notification.topicId != null) {
     _openTopicNotificationTab(
@@ -257,13 +278,21 @@ void handleNotificationTap(
   List<DiscourseNotification>? siblings,
 }) {
   final container = ProviderScope.containerOf(context, listen: false);
+  final navigationGeneration =
+      (_notificationNavigationGeneration[container] ?? 0) + 1;
+  _notificationNavigationGeneration[container] = navigationGeneration;
   _markNotificationRead(container, notification);
 
   if (MasterDetailLayout.canShowBothPanesFor(context) &&
       _isTopicNotification(notification)) {
     final fallbackPostId = reactionFallbackPostId(notification);
     if (fallbackPostId != null) {
-      _openReactionTabAfterLookup(container, notification, fallbackPostId);
+      _openReactionTabAfterLookup(
+        container,
+        notification,
+        fallbackPostId,
+        navigationGeneration: navigationGeneration,
+      );
       return;
     }
     if (notification.topicId != null) {

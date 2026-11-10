@@ -400,7 +400,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                                   systemAvatarTemplate: systemAvatarTemplate,
                                   // siblings = 当前数据源已经正确分类后的列表。
                                   onTap: () {
-                                    notifier.markAsRead(notification.id);
+                                    // 已读状态统一由导航入口同步近期与完整列表。
                                     handleNotificationTap(
                                       context,
                                       ref,
