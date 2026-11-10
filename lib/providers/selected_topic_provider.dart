@@ -445,7 +445,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   void activateTab(int index) {
     if (index < 0 ||
         index >= state.stack.length ||
-        index == state.stack.length - 1) {
+        (index == state.stack.length - 1 && !state.showingFeed)) {
       return;
     }
     final panes = [...state.stack];
