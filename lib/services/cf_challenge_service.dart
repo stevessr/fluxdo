@@ -39,6 +39,9 @@ enum _CompatPromptChoice {
   dismiss,
 }
 
+/// 验证用途：主动预加载检查不应破坏已有的有效 clearance。
+enum CfVerificationMode { challengeRecovery, preloadProbe }
+
 /// CF 验证服务
 /// 处理 Cloudflare Turnstile 验证（仅手动模式）
 class CfChallengeService {
@@ -485,10 +488,12 @@ class CfChallengeService {
 
   /// 显示手动验证页面
   /// 返回值：true=验证成功, false=验证失败, null=冷却期内暂不可用或无 context
-  /// [forceForeground] 是否强制前台显示（默认为 true）
+  /// [forceForeground] 是否强制前台显示（默认为 true）。
+  /// [mode] 为主动探测时保留现有 Cookie，并推迟续期 WebView 到预加载后。
   Future<bool?> showManualVerify([
     BuildContext? context,
     bool forceForeground = true,
+    CfVerificationMode mode = CfVerificationMode.challengeRecovery,
   ]) async {
     // 检查冷却期
     if (isInCooldown) {
@@ -600,10 +605,13 @@ class CfChallengeService {
       );
     }
 
-    // Dio 请求已经 403，说明当前 cf_clearance 可能失效了。
-    // 必须确保 WebView 中也没有旧的 cf_clearance，否则 CF 直接放行不显示盾。
-    await cookieJarService.deleteCookie('cf_clearance');
-    await cookieJarService.deleteWebViewCookie('cf_clearance');
+    // 撞盾恢复路径已有 403/429 证据，必须清除被拒绝的旧值。
+    // 实验性启动探测尚未遇到拒绝：保留现有 clearance，验证端点会
+    // 按服务端实际要求决定是否需要挑战，避免每次启动注销有效凭证。
+    if (mode == CfVerificationMode.challengeRecovery) {
+      await cookieJarService.deleteCookie('cf_clearance');
+      await cookieJarService.deleteWebViewCookie('cf_clearance');
+    }
     if (!overlayState.mounted) {
       debugPrint('[CfChallenge] Overlay no longer mounted');
       CfChallengeLogger.log('[VERIFY] Overlay not mounted');
@@ -775,11 +783,13 @@ class CfChallengeService {
       );
       // 验证页移除后，Windows WebView2 的原生 Controller 仍会异步析构。
       // 等验证冷却完成、帖子 WebView 池恢复后再错峰启动续期 WebView。
-      Future.delayed(_postCleanupCooldown + _refreshRestartCooldown, () {
-        if (!_isVerifying) {
-          CfClearanceRefreshService().start();
-        }
-      });
+      if (mode == CfVerificationMode.challengeRecovery) {
+        Future.delayed(_postCleanupCooldown + _refreshRestartCooldown, () {
+          if (!_isVerifying) {
+            CfClearanceRefreshService().start();
+          }
+        });
+      }
     } else {
       // 验证失败，恢复备份的 cf_clearance（避免丢失可能仍有效的值）
       if (backupCfClearance != null) {
@@ -799,6 +809,11 @@ class CfChallengeService {
 
     return result;
   }
+
+  /// 预加载前的非破坏性主动探测：后台先尝试，真正需要交互时才前台显示。
+  /// 与撞盾恢复共用去重、Cookie 边界同步和 Windows WebView 清理机制。
+  Future<bool?> probeBeforePreload([BuildContext? context]) =>
+      showManualVerify(context, false, CfVerificationMode.preloadProbe);
 
   /// 用户主动触发的验证入口：允许绕过冷却期。
   Future<bool?> showManualVerifyNow([
