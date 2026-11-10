@@ -65,10 +65,8 @@ jobs:
           test/models/site_policy_document_test.dart
           test/navigation/site_info_registry_test.dart
           test/pages/site_info_page_test.dart
-          test/navigation/site_info_registry_test.dart
-          test/pages/site_info_page_test.dart
 
-      - name: Test site information and policy parsing
+      - name: Test site information tabs and policy parsing
         run: >-
           flutter test
           test/models/site_about_test.dart
