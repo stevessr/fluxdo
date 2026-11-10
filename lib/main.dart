@@ -72,6 +72,8 @@ import 'package:fluxdo_render/fluxdo_render.dart'
     show FlattenCache, ParagraphLayoutCache;
 
 import 'services/clipboard_topic_link_service.dart';
+import 'pages/webview_page.dart';
+import 'utils/link_launcher.dart';
 import 'services/deep_link_service.dart';
 import 'services/pico_vr_service.dart';
 import 'pages/topic_detail_page/topic_detail_page.dart';
@@ -1515,6 +1517,34 @@ class _MainPageState extends ConsumerState<MainPage>
         context.l10n.preferences_clipboardTopicLink_detected,
         duration: const Duration(seconds: 8),
         actionLabel: context.l10n.preferences_clipboardTopicLink_open,
+        actionOptions: [
+          ToastActionOption(
+            label: '使用内置浏览器打开',
+            icon: Icons.language_rounded,
+            onTap: () {
+              final navContext = navigatorKey.currentState?.context;
+              if (navContext != null) {
+                unawaited(WebViewPage.open<void>(navContext, candidate.normalizedUrl));
+              }
+            },
+          ),
+          ToastActionOption(
+            label: '选择浏览器打开',
+            icon: Icons.open_in_browser_rounded,
+            onTap: () {
+              final navContext = navigatorKey.currentState?.context;
+              if (navContext == null) return;
+              unawaited(
+                openLinkWithBrowserPicker(navContext, candidate.normalizedUrl)
+                    .then((success) {
+                  if (success == false) {
+                    ToastService.showError('无法使用所选浏览器打开链接');
+                  }
+                }),
+              );
+            },
+          ),
+        ],
         // 宽屏且能解析成话题链接就进首页平行视界（选中 + 切 tab）；
         // 窄屏没有「写栈 → 推详情」的桥（同通知入口的窄屏问题），
         // 和解析失败一样退回深链通道全屏打开
