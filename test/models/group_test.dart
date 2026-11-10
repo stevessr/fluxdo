@@ -87,6 +87,32 @@ void main() {
     });
   });
 
+  test('目录简介优先使用 bio_excerpt 并去除 HTML 标签', () {
+    final group = DiscourseGroup.fromJson({
+      'id': 105,
+      'name': 'g-s-linux-desktop',
+      'full_name': 'g/桌面GNU/Linux',
+      'bio_excerpt': '【桌面GNU/Linux】版块群组 <a href="https://gnu.org">GNU &amp; 自由软件</a>',
+      'bio_cooked': '<p>这是备用的简介</p>',
+      'flair_url': 'https://example.com/group.svg',
+      'flair_bg_color': '3369FF',
+    });
+
+    expect(group.bioPreview, '【桌面GNU/Linux】版块群组 GNU & 自由软件');
+    expect(group.flairUrl, 'https://example.com/group.svg');
+    final copy = group.copyWith(isGroupUser: true);
+    expect(copy.bioPreview, group.bioPreview);
+  });
+
+  test('目录简介缺失时使用 bio_cooked 并保留换行语义', () {
+    final group = DiscourseGroup.fromJson({
+      'id': 90,
+      'name': 'g-adsfree',
+      'bio_cooked': '<p>加入群组</p><p>进出自由<br>尊重态度</p>',
+    });
+    expect(group.bioPreview, '加入群组 进出自由 尊重态度');
+  });
+
   test('member result marks owners from the owners array', () {
     final result = GroupMembersResult.fromJson({
       'owners': [
