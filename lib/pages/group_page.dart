@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/group.dart';
 import '../providers/discourse_providers.dart';
+import '../widgets/common/flair_badge.dart';
 import '../widgets/common/group_leave_confirmation_dialog.dart';
 import '../widgets/common/smart_avatar.dart';
 import 'user_profile_page.dart';
@@ -848,14 +849,23 @@ class _GroupHeader extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: scheme.secondaryContainer,
-                child: Icon(
-                  Symbols.groups_rounded,
-                  color: scheme.onSecondaryContainer,
+              if (group.flairUrl?.trim().isNotEmpty == true)
+                FlairBadge(
+                  flairUrl: group.flairUrl,
+                  flairName: group.label,
+                  flairBgColor: group.flairBackgroundColor,
+                  flairColor: group.flairColor,
+                  size: 56,
+                )
+              else
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: scheme.secondaryContainer,
+                  child: Icon(
+                    Symbols.groups_rounded,
+                    color: scheme.onSecondaryContainer,
+                  ),
                 ),
-              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -871,9 +881,14 @@ class _GroupHeader extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyMedium
                           ?.copyWith(color: scheme.onSurfaceVariant),
                     ),
-                    if (group.bioRaw?.trim().isNotEmpty == true) ...[
+                    if (group.bioRaw?.trim().isNotEmpty == true ||
+                        group.bioPreview.isNotEmpty) ...[
                       const SizedBox(height: 10),
-                      Text(group.bioRaw!.trim()),
+                      Text(
+                        group.bioRaw?.trim().isNotEmpty == true
+                            ? group.bioRaw!.trim()
+                            : group.bioPreview,
+                      ),
                     ],
                     const SizedBox(height: 10),
                     Wrap(
