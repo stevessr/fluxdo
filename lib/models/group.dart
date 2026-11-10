@@ -76,13 +76,13 @@ class DiscourseGroup {
     }
     if (source == null) return '';
     final withBreaks = source
-        .replaceAll(RegExp(r'<br\\s*/?>', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), ' ')
         .replaceAll(
-          RegExp(r'</(?:p|div|li|blockquote|h[1-6])\\s*>', caseSensitive: false),
+          RegExp(r'</(?:p|div|li|blockquote|h[1-6])\s*>', caseSensitive: false),
           ' ',
         );
     return html_parser.parseFragment(withBreaks).text
-        .replaceAll(RegExp(r'\\s+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
 
