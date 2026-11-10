@@ -25,6 +25,7 @@ class PaneEntry {
     this.initialRevisionNumber,
     this.autoOpenReply = false,
     this.autoReplyToPostNumber,
+    this.isPrivateMessage = false,
   }) : kind = PaneKind.topic,
        username = null;
 
@@ -38,7 +39,8 @@ class PaneEntry {
       initialRevisionPostNumber = null,
       initialRevisionNumber = null,
       autoOpenReply = false,
-      autoReplyToPostNumber = null;
+      autoReplyToPostNumber = null,
+      isPrivateMessage = false;
 
   const PaneEntry.settings()
     : kind = PaneKind.settings,
@@ -51,10 +53,13 @@ class PaneEntry {
       initialRevisionPostNumber = null,
       initialRevisionNumber = null,
       autoOpenReply = false,
-      autoReplyToPostNumber = null;
+      autoReplyToPostNumber = null,
+      isPrivateMessage = false;
 
   final PaneKind kind;
   final int? topicId;
+  /// PM is a Discourse topic, distinguished only for tab presentation.
+  final bool isPrivateMessage;
   final String? username;
   final String? initialTitle;
   final int? scrollToPostNumber;
@@ -128,6 +133,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     String? initialTitle,
     int? scrollToPostNumber,
     String? instanceId,
+    bool isPrivateMessage = false,
   }) {
     final existing = state.stack.indexWhere(
       (pane) => pane.kind == PaneKind.topic && pane.topicId == topicId,
@@ -135,7 +141,15 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     final tabs = [...state.stack];
     if (existing != -1) {
       final pane = tabs.removeAt(existing);
-      tabs.add(pane);
+      tabs.add(isPrivateMessage && !pane.isPrivateMessage
+          ? PaneEntry.topic(
+              topicId: topicId,
+              initialTitle: initialTitle ?? pane.initialTitle,
+              scrollToPostNumber: pane.scrollToPostNumber,
+              instanceId: pane.instanceId,
+              isPrivateMessage: true,
+            )
+          : pane);
     } else {
       tabs.add(
         PaneEntry.topic(
@@ -143,6 +157,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           initialTitle: initialTitle,
           scrollToPostNumber: scrollToPostNumber,
           instanceId: instanceId ?? const Uuid().v4(),
+          isPrivateMessage: isPrivateMessage,
         ),
       );
     }
@@ -349,6 +364,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           initialTitle: initialTitle ?? current.initialTitle,
           scrollToPostNumber: scrollToPostNumber ?? current.scrollToPostNumber,
           instanceId: instanceId ?? current.instanceId,
+          isPrivateMessage: current.isPrivateMessage,
           highlightBoostUsername: current.highlightBoostUsername,
           initialRevisionPostNumber: current.initialRevisionPostNumber,
           initialRevisionNumber: current.initialRevisionNumber,
@@ -442,6 +458,19 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     );
   }
 
+  /// Keep only the long-pressed tab without changing its provider identity.
+  void closeOtherTabs(int index) {
+    if (index < 0 || index >= state.stack.length) return;
+    state = SelectedTopicState(
+      stack: [state.stack[index]],
+      tabMode: state.tabMode,
+      showingFeed: false,
+    );
+  }
+
+  /// Close all tabs and return to the list.
+  void closeAllTabs() => clear();
+
   /// 关闭单个标签。关闭背景层不影响当前页；关闭栈顶则回到上一层。
   void closeTab(int index) {
     if (index < 0 || index >= state.stack.length) return;
@@ -497,6 +526,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           initialTitle: top.initialTitle,
           scrollToPostNumber: top.scrollToPostNumber,
           instanceId: top.instanceId,
+          isPrivateMessage: top.isPrivateMessage,
           highlightBoostUsername: top.highlightBoostUsername,
           initialRevisionPostNumber: top.initialRevisionPostNumber,
           initialRevisionNumber: top.initialRevisionNumber,
