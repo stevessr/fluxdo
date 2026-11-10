@@ -316,7 +316,11 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       }
 
       setState(() => _latestInvite = resolved);
-      await _saveInviteCache(user.username, resolved);
+      try {
+        await _saveInviteCache(user.username, resolved);
+      } catch (_) {
+        // 缓存失败不应阻止已经创建成功的邀请链接复制。
+      }
       if (!mounted) return;
 
       try {
