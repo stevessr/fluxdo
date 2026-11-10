@@ -1813,7 +1813,8 @@ class _MainPageState extends ConsumerState<MainPage>
     final resolved = <NavEntry>[];
     final seen = <String>{};
 
-    for (final id in ids) {
+    for (final storedId in ids) {
+      final id = NavEntryRegistry.canonicalId(storedId);
       final e = byId[id];
       if (e == null) continue;
       if (e.requiresLogin && user == null) continue;

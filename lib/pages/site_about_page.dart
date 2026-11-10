@@ -6,25 +6,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../models/site_about.dart';
-import '../models/site_policy_document.dart';
-import '../widgets/common/site_info_tabs.dart';
 import '../providers/discourse_providers.dart';
 import '../services/discourse_cache_manager.dart';
 import '../utils/url_helper.dart';
 import '../widgets/common/smart_avatar.dart';
 import 'user_profile_page.dart';
-import 'webview_page.dart';
-import 'site_policy_page.dart';
 
-/// Native rendering of the public Discourse /about page.
-///
-/// This is intentionally separate from AboutPage, which describes the FluxDO
-/// application. Data and visible staff come from /about.json, never a snapshot
-/// of the forum's statistics or personnel.
+/// Content for the site's About section inside the unified SiteInfoPage.
+/// Data and visible staff come from /about.json, never a local snapshot.
 class SiteAboutPage extends ConsumerStatefulWidget {
-  const SiteAboutPage({super.key, this.isActive = true});
+  const SiteAboutPage({
+    super.key,
+    this.isActive = true,
+    this.refreshToken = 0,
+  });
 
   final bool isActive;
+  final int refreshToken;
 
   @override
   ConsumerState<SiteAboutPage> createState() => _SiteAboutPageState();
@@ -50,7 +48,9 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
   @override
   void didUpdateWidget(covariant SiteAboutPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!oldWidget.isActive && widget.isActive && _data == null) {
+    if (widget.isActive &&
+        (oldWidget.refreshToken != widget.refreshToken ||
+            (!oldWidget.isActive && _data == null))) {
       scheduleMicrotask(_load);
     }
   }
@@ -82,14 +82,6 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
     }
   }
 
-  void _openSection(String path, String title) {
-    WebViewPage.open(
-      context,
-      UrlHelper.resolveUrl(path),
-      title: title,
-    );
-  }
-
   void _openUser(SiteAboutUser user) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -101,28 +93,7 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
   @override
   Widget build(BuildContext context) {
     if (!widget.isActive) return const SizedBox.shrink();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_tr('关于 LINUX DO', 'About LINUX DO')),
-        actions: [
-          IconButton(
-            icon: const Icon(Symbols.refresh_rounded),
-            tooltip: _tr('刷新', 'Refresh'),
-            onPressed: _loading ? null : _load,
-          ),
-          IconButton(
-            icon: const Icon(Symbols.open_in_new_rounded),
-            tooltip: _tr('查看官方页面', 'View official page'),
-            onPressed: () => _openSection(
-              '/about',
-              _tr('关于 LINUX DO', 'About LINUX DO'),
-            ),
-          ),
-        ],
-      ),
-      body: _buildBody(),
-    );
+    return _buildBody();
   }
 
   Widget _buildBody() {
@@ -171,8 +142,6 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          _buildNavigation(),
-          const SizedBox(height: 20),
           if (data.bannerUrl.isNotEmpty) ...[
             _buildBanner(data.bannerUrl),
             const SizedBox(height: 16),
@@ -231,16 +200,6 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
       ),
     );
   }
-
-  Widget _buildNavigation() => SiteInfoTabs(
-    selected: 0,
-    onSelected: (index) {
-      final kind = SitePolicyKind.values[index - 1];
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => SitePolicyPage(kind: kind)),
-      );
-    },
-  );
 
   Widget _buildBanner(String url) {
     final theme = Theme.of(context);
