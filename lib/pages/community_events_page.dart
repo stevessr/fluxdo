@@ -277,7 +277,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     EventCalendarRange period,
     String? username,
   ) async {
-    final response = await _service.dio.get<dynamic>(
+    final response = await _dio.get<dynamic>(
       '/discourse-post-event/events',
       queryParameters: {
         'limit': 200,
@@ -360,91 +360,167 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     };
   }
 
-  Widget _buildCalendarControls(BuildContext context) {
+  /// 官方式分段选择器，避免 ChoiceChip 分散占用三行。
+  Widget _calendarFilters(BuildContext context) {
+    final zh = _zh(context);
+    final scheme = Theme.of(context).colorScheme;
+    return ToggleButtons(
+      isSelected: [!_myEvents, _myEvents],
+      onPressed: (index) {
+        final next = index == 1;
+        if (_myEvents == next) return;
+        setState(() => _myEvents = next);
+        _loadCalendarEvents();
+      },
+      fillColor: scheme.primary,
+      selectedColor: scheme.onPrimary,
+      color: scheme.onSurface,
+      selectedBorderColor: scheme.primary,
+      borderRadius: BorderRadius.circular(5),
+      constraints: const BoxConstraints(minHeight: 36, minWidth: 56),
+      children: [
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 7),
+          child: Text(zh ? '所有活动' : 'All events')),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 7),
+          child: Text(zh ? '我的活动' : 'My events')),
+      ],
+    );
+  }
+
+  Widget _calendarNavigation(BuildContext context) {
+    final zh = _zh(context);
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      IconButton(
+        tooltip: zh ? '上一时间段' : 'Previous period',
+        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+        padding: EdgeInsets.zero,
+        onPressed: () => _moveCalendar(-1),
+        icon: const Icon(Icons.chevron_left),
+      ),
+      IconButton(
+        tooltip: zh ? '下一时间段' : 'Next period',
+        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+        padding: EdgeInsets.zero,
+        onPressed: () => _moveCalendar(1),
+        icon: const Icon(Icons.chevron_right),
+      ),
+      OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 36),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+        ),
+        onPressed: () => _setCalendarDate(DateTime.now()),
+        child: Text(zh ? '今天' : 'Today'),
+      ),
+    ]);
+  }
+
+  Widget _calendarScales(BuildContext context) {
+    final zh = _zh(context);
+    final scheme = Theme.of(context).colorScheme;
+    return ToggleButtons(
+      isSelected: [
+        for (final scale in EventCalendarScale.values)
+          _calendarScale == scale,
+      ],
+      onPressed: (index) {
+        final scale = EventCalendarScale.values[index];
+        if (scale != _calendarScale) {
+          _setCalendarDate(_calendarDate, scale: scale);
+        }
+      },
+      fillColor: scheme.primary,
+      selectedColor: scheme.onPrimary,
+      color: scheme.onSurface,
+      selectedBorderColor: scheme.primary,
+      borderRadius: BorderRadius.circular(5),
+      constraints: const BoxConstraints(minHeight: 36, minWidth: 32),
+      children: [
+        for (final scale in EventCalendarScale.values)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: Text(switch (scale) {
+              EventCalendarScale.day => zh ? '天' : 'Day',
+              EventCalendarScale.week => zh ? '周' : 'Week',
+              EventCalendarScale.month => zh ? '月' : 'Month',
+              EventCalendarScale.year => zh ? '年' : 'Year',
+            }),
+          ),
+      ],
+    );
+  }
+
+  Widget _calendarGuidelines(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final zh = _zh(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ChoiceChip(
-                label: Text(zh ? '所有活动' : 'All events'),
-                selected: !_myEvents,
-                onSelected: (value) {
-                  if (!value || !_myEvents) return;
-                  setState(() => _myEvents = false);
-                  _loadCalendarEvents();
-                },
-              ),
-              ChoiceChip(
-                label: Text(zh ? '我的活动' : 'My events'),
-                selected: _myEvents,
-                onSelected: (value) {
-                  if (!value || _myEvents) return;
-                  setState(() => _myEvents = true);
-                  _loadCalendarEvents();
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              IconButton(
-                tooltip: zh ? '上一时间段' : 'Previous period',
-                onPressed: () => _moveCalendar(-1),
-                icon: const Icon(Icons.chevron_left),
-              ),
-              Expanded(
-                child: Text(
-                  _calendarPeriodLabel(context),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium,
+      child: Material(
+        color: scheme.secondaryContainer.withValues(alpha: .7),
+        child: InkWell(
+          onTap: () => launchContentLink(context, '/guidelines'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                  text: zh
+                      ? '真诚、友善、团结、专业，'
+                      : 'Sincere, friendly, united, professional. ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-              ),
-              IconButton(
-                tooltip: zh ? '下一时间段' : 'Next period',
-                onPressed: () => _moveCalendar(1),
-                icon: const Icon(Icons.chevron_right),
-              ),
-              TextButton(
-                onPressed: () => _setCalendarDate(DateTime.now()),
-                child: Text(zh ? '今天' : 'Today'),
-              ),
-            ],
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final scale in EventCalendarScale.values)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                      label: Text(switch (scale) {
-                        EventCalendarScale.day => zh ? '天' : 'Day',
-                        EventCalendarScale.week => zh ? '周' : 'Week',
-                        EventCalendarScale.month => zh ? '月' : 'Month',
-                        EventCalendarScale.year => zh ? '年' : 'Year',
-                      }),
-                      selected: _calendarScale == scale,
-                      onSelected: (selected) {
-                        if (!selected || _calendarScale == scale) return;
-                        _setCalendarDate(_calendarDate, scale: scale);
-                      },
-                    ),
-                  ),
-              ],
+                TextSpan(text: zh
+                    ? '共建你我引以为荣之社区。 '
+                    : 'Build a community we are proud of. '),
+                TextSpan(
+                  text: zh ? '《社区准则》' : 'Guidelines',
+                  style: TextStyle(color: scheme.primary),
+                ),
+              ]),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-        ],
+        ),
       ),
     );
+  }
+
+  Widget _buildCalendarControls(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final label = Text(
+        _calendarPeriodLabel(context),
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w600),
+      );
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: constraints.maxWidth >= 840
+            ? Row(children: [
+                _calendarFilters(context),
+                const SizedBox(width: 12),
+                _calendarNavigation(context),
+                Expanded(child: label),
+                _calendarScales(context),
+              ])
+            : Column(children: [
+                Row(children: [
+                  _calendarFilters(context),
+                  const Spacer(),
+                  _calendarNavigation(context),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: label),
+                  const SizedBox(width: 8),
+                  _calendarScales(context),
+                ]),
+              ]),
+      );
+    });
   }
 
   @override
@@ -465,6 +541,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           if (_isCakeday) _buildCakedayTypeTabs(context),
           if (_isCakeday) _buildCakedayFilter(context),
           if (_isCakeday && _filter == 'all') _buildMonthSelector(context),
+          if (!_isCakeday) _calendarGuidelines(context),
           if (!_isCakeday) _buildCalendarControls(context),
           Expanded(child: _buildBody(context)),
         ],
@@ -619,7 +696,10 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           date: _calendarDate,
           scale: _calendarScale,
           events: _items,
-          onSelectDate: _setCalendarDate,
+          onSelectDate: (day) => _setCalendarDate(day,
+            scale: _calendarScale == EventCalendarScale.month ||
+                _calendarScale == EventCalendarScale.year
+                ? EventCalendarScale.day : _calendarScale),
           onSelectMonth: (month) =>
               _setCalendarDate(month, scale: EventCalendarScale.month),
           onTapEvent: (event) {
@@ -770,20 +850,8 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   static String? _string(dynamic value) =>
       value is String && value.isNotEmpty ? value : null;
 
-  static DateTime? _parseEventDate(dynamic value) {
-    if (value is! String || value.isEmpty) return null;
-    // discourse-events 的全天事件可能返回 YYYY-MM-DD；显式按本地日历构造，
-    // 避免把 date-only 当 UTC 导致西半球日期前移一天。
-    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
-      final parts = value.split('-');
-      final year = int.tryParse(parts[0]);
-      final month = int.tryParse(parts[1]);
-      final day = int.tryParse(parts[2]);
-      if (year == null || month == null || day == null) return null;
-      return DateTime(year, month, day);
-    }
-    return DateTime.tryParse(value);
-  }
+  static DateTime? _parseEventDate(dynamic value) =>
+      parseCalendarEventDate(value);
 
   static String _normalizeFilter(String? value) {
     if (value == 'today' ||
