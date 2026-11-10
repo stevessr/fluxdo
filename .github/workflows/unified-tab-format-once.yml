@@ -1,0 +1,44 @@
+name: Format unified tabs once
+
+on:
+  push:
+    branches:
+      - feat/unified-topic-pm-tabs
+    paths:
+      - .github/workflows/unified-tab-format-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Format changed sources
+        run: |
+          dart format --output=write \
+            lib/pages/topic_detail_page/topic_detail_page.dart \
+            lib/pages/topics_screen.dart \
+            lib/pages/private_messages_page.dart \
+            lib/providers/selected_topic_provider.dart \
+            lib/widgets/layout/pico_parallel_tabs.dart \
+            test/providers/selected_topic_provider_test.dart \
+            test/widgets/layout/unified_topic_tabs_test.dart
+          git diff --check
+      - name: Commit formatting if needed
+        run: |
+          git add lib/pages/topic_detail_page/topic_detail_page.dart lib/pages/topics_screen.dart lib/pages/private_messages_page.dart lib/providers/selected_topic_provider.dart lib/widgets/layout/pico_parallel_tabs.dart test/providers/selected_topic_provider_test.dart test/widgets/layout/unified_topic_tabs_test.dart
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "style: dart format unified tab changes"
+            git push origin HEAD:feat/unified-topic-pm-tabs
+          fi
