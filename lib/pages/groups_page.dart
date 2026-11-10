@@ -426,8 +426,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     }
 
     final fontScale = MediaQuery.textScalerOf(context).scale(1);
-    final cardHeight = 248.0 +
-        (fontScale - 1.0).clamp(0.0, 2.0) * 144.0;
+    final cardHeight = 312.0 +
+        (fontScale - 1.0).clamp(0.0, 2.0) * 175.0;
     return RefreshIndicator(
         onRefresh: () => _load(reset: true),
         child: CustomScrollView(
@@ -553,29 +553,27 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                       ],
                     ),
                   ),
-                  if (group.userCount != null) ...[
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 5),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Symbols.person_rounded,
-                            size: 16,
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Symbols.person_rounded,
+                          size: 16,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${group.userCount ?? 0}',
+                          style: textTheme.bodyMedium?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            group.userCount.toString(),
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
