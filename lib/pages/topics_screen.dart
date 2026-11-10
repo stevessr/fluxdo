@@ -124,7 +124,11 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   Widget build(BuildContext context) {
     final selectedTopic = ref.watch(selectedTopicProvider);
     // 左栏本质是不是"列表"（信息流）——决定给窄栏还是对半分
-    _masterIsListLike = !selectedTopic.isStacked || selectedTopic.tabMode;
+    final adjacentTabs = selectedTopic.tabMode &&
+        selectedTopic.stack.length > 1 &&
+        !selectedTopic.showingFeed;
+    _masterIsListLike =
+        !adjacentTabs && (!selectedTopic.isStacked || selectedTopic.tabMode);
     final user = ref.watch(currentUserProvider).value;
 
     // 左侧导航栏的板块快捷入口位于平行视界布局之外。切换板块时除了让
@@ -198,6 +202,11 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                   ref.read(selectedTopicProvider.notifier).activateTab(index),
               onClose: (index) =>
                   ref.read(selectedTopicProvider.notifier).closeTab(index),
+              onCloseOthers: (index) =>
+                  ref.read(selectedTopicProvider.notifier).closeOtherTabs(index),
+              onCloseAll: () =>
+                  ref.read(selectedTopicProvider.notifier).closeAllTabs(),
+              onShowFeed: _showFeed,
             ),
             Expanded(
               child: MasterDetailLayout(
@@ -214,12 +223,14 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                 projectDetailWhenNarrow: true,
                 // 胶片带:列表也在带上,压栈时被顶出左侧、倒二层格顶上左栏
                 // (旧"上一层预览"形态,由容器统一承担,预览格 State 全保)。
-                pinMaster: selectedTopic.tabMode,
+                // The two most recent tabs share the two parallel-view panes.
+                pinMaster: selectedTopic.tabMode && !adjacentTabs,
                 master: _wrapPaneTap(
                   ActivePane.master,
                   _buildMasterPane(selectedTopic),
                 ),
-                panes: selectedTopic.showingFeed
+                panes: selectedTopic.showingFeed ||
+                        (selectedTopic.tabMode && !widget.isActive)
                     ? const []
                     : [
                         for (var i = 0; i < selectedTopic.stack.length; i++)
