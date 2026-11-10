@@ -13,11 +13,17 @@ class PicoParallelTabs extends StatelessWidget {
     required this.selected,
     required this.onActivate,
     required this.onClose,
+    required this.onCloseOthers,
+    required this.onCloseAll,
+    this.onShowFeed,
   });
 
   final SelectedTopicState selected;
   final ValueChanged<int> onActivate;
   final ValueChanged<int> onClose;
+  final ValueChanged<int> onCloseOthers;
+  final VoidCallback onCloseAll;
+  final VoidCallback? onShowFeed;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +43,37 @@ class PicoParallelTabs extends StatelessWidget {
         }
         return _buildTabBar(context);
       },
+    );
+  }
+
+  void _showTabActions(BuildContext context, int index) {
+    final chinese = Localizations.localeOf(context).languageCode == 'zh';
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.tab_unselected_rounded),
+              title: Text(chinese ? '关闭其他标签' : 'Close other tabs'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                onCloseOthers(index);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.close_rounded),
+              title: Text(chinese ? '关闭所有标签' : 'Close all tabs'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                onCloseAll();
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -60,6 +97,13 @@ class PicoParallelTabs extends StatelessWidget {
               color: colors.onSurfaceVariant,
             ),
           ),
+          if (selected.tabMode && onShowFeed != null)
+            IconButton(
+              key: const ValueKey('unified-tabs-show-list'),
+              tooltip: chinese ? '返回列表' : 'Show list',
+              onPressed: onShowFeed,
+              icon: const Icon(Icons.view_list_rounded),
+            ),
           Expanded(
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
@@ -68,35 +112,48 @@ class PicoParallelTabs extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(width: 6),
               itemBuilder: (context, index) {
                 final entry = selected.stack[index];
-                final active = index == selected.stack.length - 1;
+                final active = !selected.showingFeed &&
+                    index == selected.stack.length - 1;
                 final label = switch (entry.kind) {
                   PaneKind.topic =>
                     entry.initialTitle?.trim().isNotEmpty == true
                         ? entry.initialTitle!
-                        : (chinese
-                              ? '话题 #${entry.topicId}'
-                              : 'Topic #${entry.topicId}'),
+                        : (entry.isPrivateMessage
+                              ? (chinese ? '私信 #${entry.topicId}' : 'PM #${entry.topicId}')
+                              : (chinese ? '话题 #${entry.topicId}' : 'Topic #${entry.topicId}')),
                   PaneKind.profile => '@${entry.username}',
                   PaneKind.settings => chinese ? '设置' : 'Settings',
                 };
                 return Center(
-                  child: InputChip(
+                  child: GestureDetector(
+                    onLongPress: () => _showTabActions(context, index),
+                    child: InputChip(
                     key: ValueKey('pico-pane-tab-$index'),
                     selected: active,
                     showCheckmark: false,
                     tooltip: label,
                     label: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 180),
-                      child: Text(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (entry.kind == PaneKind.topic && entry.isPrivateMessage) ...[
+                            const Icon(Icons.mail_outline_rounded, size: 15),
+                            const SizedBox(width: 5),
+                          ],
+                          Flexible(child: Text(
                         label,
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
+                          )),
+                        ],
                       ),
                     ),
                     onPressed: () => onActivate(index),
                     onDeleted: () => onClose(index),
                     deleteButtonTooltipMessage: chinese ? '关闭标签' : 'Close tab',
                     visualDensity: VisualDensity.compact,
+                    ),
                   ),
                 );
               },
