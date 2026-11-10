@@ -229,8 +229,10 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                   ActivePane.master,
                   _buildMasterPane(selectedTopic),
                 ),
-                panes: selectedTopic.showingFeed ||
-                        (selectedTopic.tabMode && !widget.isActive)
+                // IndexedStack already keeps inactive destinations offstage.
+                // Do not remove the panes on a bottom-nav switch: doing so
+                // would dispose the active tab's editor and scroll state.
+                panes: selectedTopic.showingFeed
                     ? const []
                     : [
                         for (var i = 0; i < selectedTopic.stack.length; i++)
