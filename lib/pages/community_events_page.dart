@@ -350,13 +350,27 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   String _calendarPeriodLabel(BuildContext context) {
     final date = _calendarDate;
     final localizations = MaterialLocalizations.of(context);
+    final monday = calendarWeekStart(date);
+    final sunday = DateTime(monday.year, monday.month, monday.day + 6);
+    final sameMonth = monday.year == sunday.year &&
+        monday.month == sunday.month;
+    final weekLabel = _zh(context)
+        ? sameMonth
+            ? monday.year.toString() + '年' + monday.month.toString() +
+                '月' + monday.day.toString() + '日 – ' +
+                sunday.day.toString() + '日'
+            : monday.year.toString() + '年' + monday.month.toString() +
+                '月' + monday.day.toString() + '日 – ' +
+                sunday.year.toString() + '年' + sunday.month.toString() +
+                '月' + sunday.day.toString() + '日'
+        : localizations.formatMediumDate(monday) + ' – ' +
+            localizations.formatMediumDate(sunday);
     return switch (_calendarScale) {
       EventCalendarScale.day => localizations.formatMediumDate(date),
-      EventCalendarScale.week =>
-        '${localizations.formatMediumDate(calendarWeekStart(date))} – '
-            '${localizations.formatMediumDate(DateTime(date.year, date.month, date.day - date.weekday + 7))}',
+      EventCalendarScale.week => weekLabel,
       EventCalendarScale.month => localizations.formatMonthYear(date),
-      EventCalendarScale.year => date.year.toString(),
+      EventCalendarScale.year =>
+        _zh(context) ? date.year.toString() + '年' : date.year.toString(),
     };
   }
 
