@@ -31,7 +31,12 @@
 普通非 Tab 的私信平行视界仍由 `selectedMessageProvider` 独立管理。
 两个及以上 Tab 时采用 `pinMaster: false`，最近两层在宽屏并排；
 单个 Tab 时列表与详情并排，窄屏投影栈顶。主导航的 IndexedStack
-只让活跃宿主挂载共享详情，避免两页同时请求与响应输入。
+只在首页宿主挂载共享详情，私信页的标签点击切到首页工作区；
+首页离开时维持同一组 Element，而不是让两个宿主重复挂载。
+切换到首页信息流时通过 `showMasterOnly` 将详情格保留在胶片带外
+（Offstage），不是传空 `panes` 销毁全部编辑/滚动 State。
+Tab 视图的相邻格是平级标签，不得走 `truncateOnPush` 替换另一格；
+正文链接转为去重后的新 Tab，返回操作仅关闭所属 Tab。
 长按 Tab 提供关闭其他/全部：关闭其他保留被按住层的 `instanceId`，
 关闭全部回到列表；从列表重新选择当前最后一个 Tab 必须退出
 `showingFeed` 状态。
