@@ -27,10 +27,9 @@ void openNotificationPage(BuildContext context, Widget page) {
 
 /// 通知 → 落点页面。null = 该通知没有可打开的目标(如入群申请通过)。
 ///
-/// 话题/私信共用 TopicDetailPage,无需辨 archetype;
-/// autoSwitchToMasterDetail 保持关闭 —— 通知打开的是临时查看面,中途
-/// 拉宽窗口保持原样,不自动折叠进工作区栈(私信话题会折进错误的栈,
-/// 这正是弹窗方案要消灭的分支)。
+/// 这是窄屏路由及非话题目标的构造器；宽屏话题（包括私信）由
+/// _openTopicNotificationTab 直接交给首页工作区的独立 Tab。
+/// 两者共用 TopicDetailPage，无需预取话题 archetype。
 Widget? _notificationTargetPage(
   DiscourseNotification notification, {
   String? currentUsername,
