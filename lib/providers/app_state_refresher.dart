@@ -12,6 +12,7 @@ import 'topic_list/topic_list_provider.dart';
 import 'topic_list/filter_provider.dart';
 import 'topic_list/sort_provider.dart';
 import 'topic_list/tab_state_provider.dart';
+import 'selected_topic_provider.dart';
 import 'pinned_categories_provider.dart';
 import 'user_content_providers.dart';
 import 'category_provider.dart';
@@ -69,6 +70,10 @@ class AppStateRefresher {
   }
 
   static Future<void> resetForLogout(ProviderContainer container) async {
+    // Workspaces may contain private messages: never carry old-account panes
+    // into a logged-out or newly authenticated session.
+    container.read(selectedTopicProvider.notifier).clear();
+    container.read(selectedMessageProvider.notifier).clear();
     // 先使已有的延迟刷新失效，避免退出/重新登录窗口中的旧闭包重新
     // invalidate provider，把旧账号请求带入新会话。
     _refreshEpoch++;
@@ -114,6 +119,8 @@ class AppStateRefresher {
   /// currentUser 主动清成 null。切换遮罩还在时先把身份原子刷新为目标账号，
   /// 再重建其余账号级状态，避免导航和“我的”短暂/持续落入游客外观。
   static Future<void> resetForAccountSwitch(ProviderContainer container) async {
+    container.read(selectedTopicProvider.notifier).clear();
+    container.read(selectedMessageProvider.notifier).clear();
     // 清理尚未执行的上一账号延迟刷新；refreshAll 完成后会再建立新 epoch。
     _refreshEpoch++;
     final generation = AuthSession().generation;
