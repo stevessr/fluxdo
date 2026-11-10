@@ -28,6 +28,8 @@ on:
       - 'lib/widgets/common/group_leave_confirmation_dialog.dart'
       - 'test/pages/group_membership_confirmation_test.dart'
       - 'lib/pages/invite_links_page.dart'
+      - 'lib/models/invite_draft.dart'
+      - 'test/models/invite_draft_test.dart'
       - 'lib/providers/chat_providers.dart'
       - 'lib/services/discourse/_boards.dart'
       - 'lib/services/discourse/_chat.dart'
@@ -95,6 +97,8 @@ jobs:
             lib/widgets/common/group_leave_confirmation_dialog.dart \
             test/pages/group_membership_confirmation_test.dart \
             lib/pages/invite_links_page.dart \
+            lib/models/invite_draft.dart \
+            test/models/invite_draft_test.dart \
             lib/providers/chat_providers.dart \
             lib/services/discourse/_boards.dart \
             lib/services/discourse/_chat.dart \
@@ -129,6 +133,8 @@ jobs:
               lib/widgets/common/group_leave_confirmation_dialog.dart \
               test/pages/group_membership_confirmation_test.dart \
               lib/pages/invite_links_page.dart \
+              lib/models/invite_draft.dart \
+              test/models/invite_draft_test.dart \
               lib/providers/chat_providers.dart \
               lib/services/discourse/_boards.dart \
               lib/services/discourse/_chat.dart \
@@ -164,10 +170,15 @@ jobs:
           lib/widgets/common/group_leave_confirmation_dialog.dart
           test/pages/group_membership_confirmation_test.dart
           lib/pages/invite_links_page.dart
+          lib/models/invite_draft.dart
+          test/models/invite_draft_test.dart
           lib/providers/chat_providers.dart
           lib/services/discourse/discourse_service.dart
           lib/widgets/post/post_item/widgets/post_footer_section/post_footer_section.dart
 
+
+      - name: Run invite form validation tests
+        run: flutter test test/models/invite_draft_test.dart
 
       - name: Run management compatibility tests
         run: flutter test test/models/discourse_management_compat_test.dart
