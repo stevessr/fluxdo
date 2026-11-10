@@ -61,11 +61,17 @@ void main() {
       );
       const url = 'https://example.com/normal-page';
       expect(
-        await SystemBrowserService.instance.openWebLink(success, Uri.parse(url)),
+        await SystemBrowserService.instance.openWebLink(
+          success,
+          Uri.parse(url),
+        ),
         isTrue,
       );
       expect(
-        await SystemBrowserService.instance.openWebLink(failure, Uri.parse(url)),
+        await SystemBrowserService.instance.openWebLink(
+          failure,
+          Uri.parse(url),
+        ),
         isFalse,
       );
     });
