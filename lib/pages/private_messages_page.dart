@@ -561,6 +561,7 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
           .read(selectedMessageProvider.notifier)
           .select(
             topicId: topic.id,
+            isPrivateMessage: true,
             initialTitle: topic.title,
             scrollToPostNumber: topic.lastReadPostNumber,
           );
