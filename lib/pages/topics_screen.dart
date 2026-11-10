@@ -232,12 +232,13 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                 // IndexedStack already keeps inactive destinations offstage.
                 // Do not remove the panes on a bottom-nav switch: doing so
                 // would dispose the active tab's editor and scroll state.
-                panes: selectedTopic.showingFeed
-                    ? const []
-                    : [
-                        for (var i = 0; i < selectedTopic.stack.length; i++)
-                          _buildPaneCell(selectedTopic, i),
-                      ],
+                // The feed view hides tabs geometrically rather than
+                // removing them, preserving their mounted State and editors.
+                showMasterOnly: selectedTopic.showingFeed,
+                panes: [
+                  for (var i = 0; i < selectedTopic.stack.length; i++)
+                    _buildPaneCell(selectedTopic, i),
+                ],
                 // 压栈时 master 显示的是话题预览（不可交互，见
                 // TopicDetailPage.truncateOnPush 注释），不是列表——"新建话题"这个
                 // FAB 只在 master 真的是列表时才有意义，之前没跟着切换，压栈后
