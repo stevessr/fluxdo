@@ -304,7 +304,13 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       return;
     }
 
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+      if (draft.method == InviteDeliveryMethod.email) {
+        // 再次发送前清除旧的成功提示，以免失败后显示过时结果。
+        _lastEmailRecipient = null;
+      }
+    });
     try {
       // 简单模式固定使用 1 天，不能泄漏上次高级模式的配置。
       final expiresAt = _showAdvancedOptions
