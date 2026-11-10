@@ -129,7 +129,9 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     return null;
   }
 
-  bool get _hasInviteLink => (_effectiveInviteLink?.isNotEmpty ?? false);
+  bool get _hasInviteLink =>
+      (_latestInvite?.invite?.email?.trim().isEmpty ?? true) &&
+      (_effectiveInviteLink?.isNotEmpty ?? false);
 
   String _buildInviteLink(String key) {
     return '${AppConstants.baseUrl}/invites/$key';
@@ -252,7 +254,6 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       }
     }
   }
-
 
   Future<void> _createInvite() async {
     if (_isSubmitting) return;
@@ -817,7 +818,6 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -865,7 +865,8 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                       ),
                     ),
                   ],
-                  if (_hasInviteLink) ...[
+                  if (_inviteMethod == InviteDeliveryMethod.link &&
+                      _hasInviteLink) ...[
                     const SizedBox(height: 16),
                     _buildResultCard(theme),
                   ] else if (!_isLoadingPending &&
@@ -912,18 +913,22 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                   avatar: const Icon(Icons.link_rounded, size: 18),
                   label: Text(strings.shareLink),
                   selected: !isEmail,
-                  onSelected: (_) => setState(
-                    () => _inviteMethod = InviteDeliveryMethod.link,
-                  ),
+                  onSelected: _isSubmitting
+                      ? null
+                      : (_) => setState(
+                          () => _inviteMethod = InviteDeliveryMethod.link,
+                        ),
                 ),
                 ChoiceChip(
                   key: const Key('invite-method-email'),
                   avatar: const Icon(Icons.mail_outline_rounded, size: 18),
                   label: Text(strings.email),
                   selected: isEmail,
-                  onSelected: (_) => setState(
-                    () => _inviteMethod = InviteDeliveryMethod.email,
-                  ),
+                  onSelected: _isSubmitting
+                      ? null
+                      : (_) => setState(
+                          () => _inviteMethod = InviteDeliveryMethod.email,
+                        ),
                 ),
               ],
             ),
