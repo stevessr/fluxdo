@@ -309,14 +309,14 @@ class BrowserTrustCoordinator {
   }
 
   /// 每次实际预加载前尝试一轮实验性验证；并发 ensurePreloaded 复用同一轮。
-  Future<void> _verifyCfBeforePreload({required String reason}) async {
+  Future<bool> _verifyCfBeforePreload({required String reason}) async {
     final cf = CfChallengeService();
     if (!cf.proactiveVerifyBeforePreloadEnabled || !cf.autoVerifyEnabled) {
-      return;
+      return false;
     }
     if (cf.isInCooldown) {
       _log('skip proactive CF verification during cooldown: $reason');
-      return;
+      return false;
     }
 
     _log('start proactive CF verification before preload: $reason');
@@ -325,32 +325,36 @@ class BrowserTrustCoordinator {
       if (verified == true) {
         // 验证完成不代表新 Cookie 已同步到原生请求栈。
         await cf.waitForCompletionCookieSync();
-        _lastClearanceRejectedAt = null;
       }
       // 尤其是 Windows，必须让上一个验证 WebView 完全释放再继续预加载。
       await cf.waitForManualTeardown();
       _log(
         'proactive CF verification completed: result=$verified reason=$reason',
       );
+      return verified == true;
     } catch (e) {
       _log('proactive CF verification failed: $e', level: 'warning');
       // 实验策略未成功时仍沿用现有预加载/撞盾恢复路径。
+      return false;
     }
   }
 
   Future<void> _ensurePreloadedInternal({required String reason}) async {
-    await _verifyCfBeforePreload(reason: reason);
+    final proactiveVerified = await _verifyCfBeforePreload(reason: reason);
     if (_preload.isLoaded) return;
     // A missing/short-lived cf_clearance is not proof that the homepage needs a
     // browser. Discourse may answer native HTTP normally, and the preload cache
     // interceptor may satisfy this request without touching the network at all.
     // Probe native first and suppress CF UI for this one attempt; a genuine CF
     // rejection falls through to the startup WebView below.
-    if (!_clearanceRecentlyRejected) {
+    // /challenge 放行只能证明浏览器侧可达。不要提前清除最近的原生
+    // 拒绝记录；本轮先用真实 native preload 验证是否也已恢复。
+    if (!_clearanceRecentlyRejected || proactiveVerified) {
       _lastPreloadPath = BrowserTrustPreloadPath.native;
       _log('preload path=native_probe reason=$reason');
       try {
         await _preload.ensureLoaded(suppressCfChallenge: true);
+        _lastClearanceRejectedAt = null;
         _log('native preload fast path success reason=$reason');
         _startBrowserTrustAfterPreload(reason: reason, path: 'native');
         return;
