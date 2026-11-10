@@ -205,6 +205,62 @@ void main() {
     expect(notifier.state.stack, isEmpty);
   });
 
+  test('私信与公开话题共享一套标签，并复用相同话题实例', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 10, initialTitle: '公开', instanceId: 'public')
+      ..openTopicTab(
+        topicId: 20,
+        initialTitle: '私信',
+        instanceId: 'private',
+        isPrivateMessage: true,
+      );
+
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.stack.last.isPrivateMessage, isTrue);
+
+    notifier.openTopicTab(topicId: 20, isPrivateMessage: true);
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.instanceId, 'private');
+
+    notifier.activateTab(0);
+    expect(notifier.state.stack.last.instanceId, 'public');
+    expect(notifier.state.stack.first.isPrivateMessage, isTrue);
+  });
+
+  test('从普通话题入口再次打开私信可升级标记，实例不重建', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 3, instanceId: 'old')
+      ..openTopicTab(topicId: 3, isPrivateMessage: true);
+    expect(notifier.state.stack, hasLength(1));
+    expect(notifier.state.topEntry!.isPrivateMessage, isTrue);
+    expect(notifier.state.instanceId, 'old');
+  });
+
+  test('长按关闭其他标签保留目标，关闭所有返回列表', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 10, instanceId: 'first')
+      ..openTopicTab(
+        topicId: 20,
+        instanceId: 'second',
+        isPrivateMessage: true,
+      )
+      ..openTopicTab(topicId: 30, instanceId: 'third');
+
+    notifier.closeOtherTabs(1);
+    expect(notifier.state.stack, hasLength(1));
+    expect(notifier.state.instanceId, 'second');
+    expect(notifier.state.topEntry!.isPrivateMessage, isTrue);
+    expect(notifier.state.tabMode, isTrue);
+
+    final before = notifier.state;
+    notifier.closeOtherTabs(-1);
+    expect(notifier.state, same(before));
+
+    notifier.closeAllTabs();
+    expect(notifier.state.stack, isEmpty);
+    expect(notifier.state.tabMode, isFalse);
+  });
+
   test('Tab 模式压栈和返回不会被静默关闭', () {
     final notifier = SelectedTopicNotifier()
       ..openTopicTab(topicId: 1)
