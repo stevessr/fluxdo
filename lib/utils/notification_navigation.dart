@@ -272,7 +272,8 @@ Future<void> _openReactionTabAfterLookup(
         .dio
         .get('/posts/$postId.json');
     // 用户可能在网络请求期间点开了另一条通知，旧结果不能抢回前台。
-    if (_notificationNavigationGeneration[container] != navigationGeneration) {
+    if (_notificationNavigationGeneration[container] != navigationGeneration ||
+        (originRoute != null && !originRoute.isCurrent)) {
       return;
     }
     final target = parseNotificationPostTarget(response.data);
@@ -289,7 +290,8 @@ Future<void> _openReactionTabAfterLookup(
   } catch (error) {
     debugPrint('无法定位聚合 Reaction 通知: $error');
   }
-  if (_notificationNavigationGeneration[container] != navigationGeneration) {
+  if (_notificationNavigationGeneration[container] != navigationGeneration ||
+      (originRoute != null && !originRoute.isCurrent)) {
     return;
   }
   if (notification.topicId != null) {
