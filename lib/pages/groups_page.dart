@@ -36,6 +36,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   bool _loading = false;
   bool _reloadQueued = false;
   int _membershipRevision = 0;
+  int _queryRevision = 0;
   Object? _error;
 
   @override
@@ -73,6 +74,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     final requestedFilter = _filter;
     final requestedType = _type;
     final requestedRevision = _membershipRevision;
+    final requestedQueryRevision = _queryRevision;
     setState(() {
       _loading = true;
       _error = null;
@@ -89,7 +91,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       if (!mounted ||
           requestedFilter != _filter ||
           requestedType != _type ||
-          requestedRevision != _membershipRevision) {
+          (requestedRevision != _membershipRevision ||
+              requestedQueryRevision != _queryRevision)) {
         return;
       }
 
@@ -106,7 +109,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       if (!mounted ||
           requestedFilter != _filter ||
           requestedType != _type ||
-          requestedRevision != _membershipRevision) {
+          (requestedRevision != _membershipRevision ||
+              requestedQueryRevision != _queryRevision)) {
         return;
       }
       setState(() => _error = error);
@@ -147,6 +151,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     if (next == _filter) return;
     setState(() {
       _filter = next;
+      _queryRevision++;
       _groups = const [];
       _hasMore = false;
       _nextPage = 0;
@@ -158,6 +163,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     if (_type == type) return;
     setState(() {
       _type = type;
+      _queryRevision++;
       _groups = const [];
       _hasMore = false;
       _nextPage = 0;
@@ -413,8 +419,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) => RefreshIndicator(
+    final fontScale = MediaQuery.textScalerOf(context).scale(1);
+    final cardHeight = 248.0 +
+        (fontScale - 1.0).clamp(0.0, 2.0) * 144.0;
+    return RefreshIndicator(
         onRefresh: () => _load(reset: true),
         child: CustomScrollView(
           controller: _scrollController,
@@ -423,9 +431,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 430,
-                  mainAxisExtent: 248,
+                  mainAxisExtent: cardHeight,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
                 ),
@@ -456,8 +464,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildGroupCard(
