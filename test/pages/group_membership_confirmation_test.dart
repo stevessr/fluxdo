@@ -84,31 +84,35 @@ void main() {
         );
         await tester.pumpAndSettle();
         final leaveLabel = detail ? '退出' : '离开';
-        expect(find.widgetWithText(OutlinedButton, leaveLabel), findsOneWidget);
+        final leaveButton = find.ancestor(
+          of: find.text(leaveLabel),
+          matching: find.byWidgetPredicate((widget) => widget is OutlinedButton),
+        );
+        expect(leaveButton, findsOneWidget);
         expect(tester.takeException(), isNull);
 
         // Opening, cancelling, or dismissing must not send a DELETE.
-        await tester.tap(find.widgetWithText(OutlinedButton, leaveLabel));
+        await tester.tap(leaveButton);
         await tester.pumpAndSettle();
         expect(find.textContaining('测试群组'), findsWidgets);
         expect(leaveRequests, 0);
         await tester.tap(find.byKey(const ValueKey('leave-group-cancel')));
         await tester.pumpAndSettle();
         expect(leaveRequests, 0);
-        expect(find.widgetWithText(OutlinedButton, leaveLabel), findsOneWidget);
+        expect(leaveButton, findsOneWidget);
 
-        await tester.tap(find.widgetWithText(OutlinedButton, leaveLabel));
+        await tester.tap(leaveButton);
         await tester.pumpAndSettle();
         await tester.tapAt(const Offset(4, 4));
         await tester.pumpAndSettle();
         expect(leaveRequests, 0);
 
-        await tester.tap(find.widgetWithText(OutlinedButton, leaveLabel));
+        await tester.tap(leaveButton);
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('leave-group-confirm')));
         await tester.pumpAndSettle();
         expect(leaveRequests, 1);
-        expect(find.widgetWithText(OutlinedButton, leaveLabel), findsNothing);
+        expect(leaveButton, findsNothing);
         expect(tester.takeException(), isNull);
       },
     );
