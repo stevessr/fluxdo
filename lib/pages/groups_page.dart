@@ -360,10 +360,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                   children: [
                     Expanded(child: search),
                     const SizedBox(width: 12),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 280),
-                      child: typePicker,
-                    ),
+                    SizedBox(width: 280, child: typePicker),
                   ],
                 );
               },
