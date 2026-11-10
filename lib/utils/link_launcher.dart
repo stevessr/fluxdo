@@ -18,6 +18,8 @@ import '../providers/preferences_provider.dart';
 import '../providers/category_provider.dart';
 import '../providers/selected_topic_provider.dart';
 import '../services/discourse/discourse_service.dart';
+import '../services/system_browser_service.dart';
+import '../widgets/auth/login_browser_picker_sheet.dart';
 import '../widgets/common/external_link_confirm_dialog.dart';
 import '../widgets/content/discourse_html_content/image_utils.dart';
 import '../widgets/layout/home_workspace_scope.dart';
@@ -121,7 +123,9 @@ Future<void> launchExternalLink(BuildContext context, String url) async {
     return;
   }
 
-  if (await canLaunchUrl(uri)) {
+  if (uri.scheme == 'http' || uri.scheme == 'https') {
+    await launchInExternalBrowser(url);
+  } else if (await canLaunchUrl(uri)) {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
@@ -329,6 +333,33 @@ Future<void> launchContentLink(
 
   // 9. 外部链接 → 根据用户偏好决定
   await launchExternalLink(context, url);
+}
+
+/// Let the user choose an installed browser for an ordinary HTTP(S) URL.
+/// Returns null when the sheet is dismissed without making a selection.
+Future<bool?> openLinkWithBrowserPicker(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !SystemBrowserService.isWebUrl(uri)) return false;
+
+  List<LoginBrowser> browsers;
+  try {
+    browsers = await SystemBrowserService.instance.availableBrowsers();
+  } catch (_) {
+    return false;
+  }
+  if (!context.mounted) return null;
+
+  final selected = await showModalBottomSheet<LoginBrowser>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (_) => LoginBrowserPickerSheet(
+      browsers: browsers,
+      description: null,
+    ),
+  );
+  if (selected == null) return null;
+  return SystemBrowserService.instance.openWebLink(selected, uri);
 }
 
 /// 强制在外部浏览器打开链接，绕过 App Links

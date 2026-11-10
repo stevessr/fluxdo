@@ -10,6 +10,19 @@ import 'package:m3e_ui/m3e_ui.dart';
 
 import 'local_notification_service.dart';
 
+/// Optional secondary actions displayed by the arrow beside a Toast CTA.
+class ToastActionOption {
+  const ToastActionOption({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+}
+
 /// Toast 类型
 enum ToastType { success, error, info }
 
@@ -23,18 +36,21 @@ class _ToastData {
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.actionOptions,
   });
 
   final _ToastKind kind;
   final String message;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final List<ToastActionOption>? actionOptions;
 
   _ToastData withMessage(String message) => _ToastData(
     kind: kind,
     message: message,
     actionLabel: actionLabel,
     onAction: onAction,
+    actionOptions: actionOptions,
   );
 }
 
@@ -162,6 +178,7 @@ class DownloadToastHandle {
     Duration? duration,
     String? actionLabel,
     VoidCallback? onAction,
+    List<ToastActionOption>? actionOptions,
   }) {
     final effective = duration ?? ToastService._defaultDuration(type);
     if (!isActive) {
@@ -172,6 +189,7 @@ class DownloadToastHandle {
         duration: effective,
         actionLabel: actionLabel,
         onAction: onAction,
+        actionOptions: actionOptions,
       );
       return;
     }
@@ -182,6 +200,7 @@ class DownloadToastHandle {
       message: message,
       actionLabel: actionLabel,
       onAction: onAction,
+      actionOptions: actionOptions,
     );
     session.scheduleDismiss(effective);
   }
@@ -228,12 +247,14 @@ class ToastService {
     Duration? duration,
     String? actionLabel,
     VoidCallback? onAction,
+    List<ToastActionOption>? actionOptions,
   }) {
     final data = _ToastData(
       kind: _kindOf(type),
       message: message,
       actionLabel: actionLabel,
       onAction: onAction,
+      actionOptions: actionOptions,
     );
     final effective = duration ?? _defaultDuration(type);
 
@@ -299,7 +320,9 @@ class ToastService {
       final current = session.data.value;
       if (current.kind == data.kind &&
           current.message == data.message &&
-          current.actionLabel == data.actionLabel) {
+          current.actionLabel == data.actionLabel &&
+          identical(current.onAction, data.onAction) &&
+          identical(current.actionOptions, data.actionOptions)) {
         return session;
       }
     }
@@ -727,23 +750,78 @@ class _ToastViewState extends State<_ToastView> with TickerProviderStateMixin {
           if (hasAction) ...[
             const SizedBox(width: 12),
             slideIn(
-              TextButton(
-                onPressed: () {
-                  data.onAction?.call();
-                  widget.session.close(animate: true);
-                },
-                style: TextButton.styleFrom(
-                  backgroundColor: toBg,
-                  foregroundColor: toFg,
-                  minimumSize: const Size(0, 40),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: const StadiumBorder(),
-                  textStyle: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      data.onAction?.call();
+                      widget.session.close(animate: true);
+                    },
+                    style: TextButton.styleFrom(
+                      backgroundColor: toBg,
+                      foregroundColor: toFg,
+                      minimumSize: const Size(0, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.horizontal(
+                          left: const Radius.circular(20),
+                          right: Radius.circular(
+                            (data.actionOptions?.isNotEmpty ?? false) ? 0 : 20,
+                          ),
+                        ),
+                      ),
+                      textStyle: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    child: Text(data.actionLabel!),
                   ),
-                ),
-                child: Text(data.actionLabel!),
+                  if (data.actionOptions?.isNotEmpty ?? false)
+                    PopupMenuButton<int>(
+                      tooltip: '更多打开方式',
+                      padding: EdgeInsets.zero,
+                      onSelected: (index) {
+                        data.actionOptions![index].onTap();
+                        widget.session.close(animate: true);
+                      },
+                      itemBuilder: (_) => [
+                        for (var i = 0; i < data.actionOptions!.length; i++)
+                          PopupMenuItem<int>(
+                            value: i,
+                            child: Row(
+                              children: [
+                                Icon(data.actionOptions![i].icon, size: 20),
+                                const SizedBox(width: 10),
+                                Text(data.actionOptions![i].label),
+                              ],
+                            ),
+                          ),
+                      ],
+                      child: Container(
+                        width: 44,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: toBg,
+                          border: Border(
+                            left: BorderSide(
+                              color: toFg.withValues(alpha: 0.22),
+                            ),
+                          ),
+                          borderRadius: const BorderRadius.horizontal(
+                            right: Radius.circular(20),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Symbols.expand_more_rounded,
+                          size: 19,
+                          color: toFg,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
