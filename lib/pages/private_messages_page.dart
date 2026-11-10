@@ -149,6 +149,10 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
 
   void _enterSelectionMode() {
     ref.read(selectedMessageProvider.notifier).clear();
+    // Bulk PM selection needs the list, but should not destroy shared tabs.
+    if (ref.read(selectedTopicProvider).tabMode) {
+      ref.read(selectedTopicProvider.notifier).showFeed();
+    }
     setState(() {
       _selectionMode = true;
       _selectedTopicIds = <int>{};
