@@ -79,8 +79,16 @@ void main() {
     expect(verify, greaterThanOrEqualTo(0));
     expect(start, greaterThan(verify));
     expect(probe, greaterThan(start));
-    expect(coordinator.substring(start, probe),
-        contains('await _verifyCfBeforePreload(reason: reason)'));
+    expect(
+      coordinator.substring(start, probe),
+      contains(
+        'final proactiveVerified = await _verifyCfBeforePreload(reason: reason)',
+      ),
+    );
+    expect(
+      coordinator.substring(start, probe),
+      contains('if (!_clearanceRecentlyRejected || proactiveVerified)'),
+    );
 
     final body = coordinator.substring(verify, start);
     final result = body.indexOf('await cf.probeBeforePreload');
@@ -93,5 +101,10 @@ void main() {
     expect(body, contains('!cf.autoVerifyEnabled'));
     expect(body, contains('cf.isInCooldown'));
     expect(coordinator, contains('final active = _activePreload;'));
+    expect(
+      body,
+      isNot(contains('_lastClearanceRejectedAt = null')),
+      reason: '仅凭浏览器端无挑战，不可认定原生 API 也已获放行',
+    );
   });
 }
