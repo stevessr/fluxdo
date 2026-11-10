@@ -72,6 +72,27 @@
   "notification_qaCommented": "{username} commented on Q&A",
   "notification_quoted": "{username} quoted your post",
   "notification_reaction": "{username} reacted to your post",
+  "notification_reactionByTwo": "{username} and {username2} reacted to your post",
+  "@notification_reactionByTwo": {
+    "placeholders": {
+      "username": {"type": "String"},
+      "username2": {"type": "String"}
+    }
+  },
+  "notification_reactionByMany": "{username} and {count} others reacted to your post",
+  "@notification_reactionByMany": {
+    "placeholders": {
+      "username": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "notification_reactionMultiplePosts": "{username} reacted to {count} of your posts",
+  "@notification_reactionMultiplePosts": {
+    "placeholders": {
+      "username": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
   "notification_replied": "{username} replied to your post",
   "notification_repliedTopic": "{username} replied to the topic",
   "notification_showList": "Notification list",

@@ -134,6 +134,10 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     int? scrollToPostNumber,
     String? instanceId,
     bool isPrivateMessage = false,
+    String? highlightBoostUsername,
+    int? initialRevisionPostNumber,
+    int? initialRevisionNumber,
+    bool replaceNavigationTarget = false,
   }) {
     final existing = state.stack.indexWhere(
       (pane) => pane.kind == PaneKind.topic && pane.topicId == topicId,
@@ -145,16 +149,28 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
         PaneEntry.topic(
           topicId: topicId,
           initialTitle: initialTitle ?? pane.initialTitle,
-          // Reopening an existing tab must not jump away from its reading
-          // position or lose a reply/revision intent.
-          scrollToPostNumber: pane.scrollToPostNumber ?? scrollToPostNumber,
-          instanceId: pane.instanceId,
+          // Normal reactivation retains the previous position/reply state.
+          // Notification-driven navigation explicitly replaces the target.
+          scrollToPostNumber: replaceNavigationTarget
+              ? scrollToPostNumber
+              : (pane.scrollToPostNumber ?? scrollToPostNumber),
+          instanceId: replaceNavigationTarget && initialRevisionNumber != null
+              ? (instanceId ?? const Uuid().v4())
+              : pane.instanceId,
           isPrivateMessage: pane.isPrivateMessage || isPrivateMessage,
-          highlightBoostUsername: pane.highlightBoostUsername,
-          initialRevisionPostNumber: pane.initialRevisionPostNumber,
-          initialRevisionNumber: pane.initialRevisionNumber,
-          autoOpenReply: pane.autoOpenReply,
-          autoReplyToPostNumber: pane.autoReplyToPostNumber,
+          highlightBoostUsername: replaceNavigationTarget
+              ? highlightBoostUsername
+              : pane.highlightBoostUsername,
+          initialRevisionPostNumber: replaceNavigationTarget
+              ? initialRevisionPostNumber
+              : pane.initialRevisionPostNumber,
+          initialRevisionNumber: replaceNavigationTarget
+              ? initialRevisionNumber
+              : pane.initialRevisionNumber,
+          autoOpenReply: replaceNavigationTarget ? false : pane.autoOpenReply,
+          autoReplyToPostNumber: replaceNavigationTarget
+              ? null
+              : pane.autoReplyToPostNumber,
         ),
       );
     } else {
@@ -165,6 +181,9 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           scrollToPostNumber: scrollToPostNumber,
           instanceId: instanceId ?? const Uuid().v4(),
           isPrivateMessage: isPrivateMessage,
+          highlightBoostUsername: highlightBoostUsername,
+          initialRevisionPostNumber: initialRevisionPostNumber,
+          initialRevisionNumber: initialRevisionNumber,
         ),
       );
     }

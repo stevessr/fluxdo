@@ -317,4 +317,54 @@ void main() {
     expect(notifier.state.tabMode, isTrue);
     expect(notifier.state.topicId, 1);
   });
+
+  test('通知重复打开同一话题只激活一个 Tab 并更新楼层', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 10, instanceId: 'original', scrollToPostNumber: 3)
+      ..openTopicTab(topicId: 20, instanceId: 'second');
+
+    notifier.openTopicTab(
+      topicId: 10,
+      scrollToPostNumber: 12,
+      highlightBoostUsername: 'alice',
+      replaceNavigationTarget: true,
+    );
+
+    expect(notifier.state.tabMode, isTrue);
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.instanceId, 'original');
+    expect(notifier.state.topEntry?.scrollToPostNumber, 12);
+    expect(notifier.state.topEntry?.highlightBoostUsername, 'alice');
+
+    notifier.openTopicTab(
+      topicId: 10,
+      scrollToPostNumber: 15,
+      initialRevisionPostNumber: 15,
+      initialRevisionNumber: 2,
+      replaceNavigationTarget: true,
+    );
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.instanceId, isNot('original'));
+    expect(notifier.state.topEntry?.scrollToPostNumber, 15);
+    expect(notifier.state.topEntry?.highlightBoostUsername, isNull);
+    expect(notifier.state.topEntry?.initialRevisionPostNumber, 15);
+    expect(notifier.state.topEntry?.initialRevisionNumber, 2);
+  });
+
+  test('通知打开私信 Tab 不覆盖公开话题且保留来源', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 77, instanceId: 'pm', isPrivateMessage: true)
+      ..openTopicTab(topicId: 88, instanceId: 'public');
+
+    notifier.openTopicTab(
+      topicId: 77,
+      isPrivateMessage: true,
+      scrollToPostNumber: 8,
+      replaceNavigationTarget: true,
+    );
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.isPrivateMessage, isTrue);
+    expect(notifier.state.topEntry?.instanceId, 'pm');
+    expect(notifier.state.topEntry?.scrollToPostNumber, 8);
+  });
 }

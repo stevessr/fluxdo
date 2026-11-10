@@ -543,7 +543,10 @@ class _MobileNotificationPanelState extends State<_MobileNotificationPanel> {
     final navigator = Navigator.of(context, rootNavigator: true);
     navigator.pop();
     navigator.push(
-      MaterialPageRoute(builder: (_) => const NotificationsPage()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: notificationPageRouteName),
+        builder: (_) => const NotificationsPage(),
+      ),
     );
   }
 
@@ -613,10 +616,10 @@ class _NotificationHeader extends ConsumerWidget {
                 onViewAll ??
                 () {
                   onClose();
-                  Navigator.of(context, rootNavigator: true).push(
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationsPage(),
-                    ),
+                  openNotificationPage(
+                    context,
+                    const NotificationsPage(),
+                    isNotificationList: true,
                   );
                 },
             child: Row(
@@ -713,18 +716,16 @@ class _NotificationBodyState extends ConsumerState<_NotificationBody> {
                 notification: notification,
                 systemAvatarTemplate: systemAvatarTemplate,
                 onTap: () {
-                  // 先派发跳转再处理面板:跳转在本帧同步读取
-                  // context/provider。siblings = 当前可见列表,大屏弹窗
-                  // 内可上一条/下一条快速切换。
+                  // 先派发跳转，再收起快捷面板；话题通知直接进入工作区
+                  // Tab，非话题通知打开正常路由。
                   handleNotificationTap(
                     context,
                     ref,
                     notification,
                     siblings: visibleNotifications,
                   );
-                  // 大屏(弹窗落点,自带通知列表侧栏)关面板;窄屏推的
-                  // 是全屏详情路由,sheet 留在栈里垫底——返回即回到
-                  // 面板继续看下一条,不用重新拉开。
+                  // 宽屏关闭快捷面板露出新激活的 Tab；窄屏维持
+                  // sheet 的返回路径，查看后可继续处理其他通知。
                   if (MasterDetailLayout.canShowBothPanesFor(context)) {
                     NotificationQuickPanel.dismiss();
                   }
