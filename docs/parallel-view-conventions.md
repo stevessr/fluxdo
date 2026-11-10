@@ -25,6 +25,17 @@
   （`lib/widgets/layout/pane_projection_back_scope.dart`）统一承担投影态的
   系统返回 / Android 预测返回跟手 / 与根 PopScope 的协调。
 
+**统一 Topic Tab 工作区（首页/私信）**：开启 Tab 模式后，两页共用
+`selectedTopicProvider` 的标签集合；Discourse `private_message` 也是 Topic，
+用相同的 `topicId + instanceId` 承载，只通过 `isPrivateMessage` 标记标签图标。
+普通非 Tab 的私信平行视界仍由 `selectedMessageProvider` 独立管理。
+两个及以上 Tab 时采用 `pinMaster: false`，最近两层在宽屏并排；
+单个 Tab 时列表与详情并排，窄屏投影栈顶。主导航的 IndexedStack
+只让活跃宿主挂载共享详情，避免两页同时请求与响应输入。
+长按 Tab 提供关闭其他/全部：关闭其他保留被按住层的 `instanceId`，
+关闭全部回到列表；从列表重新选择当前最后一个 Tab 必须退出
+`showingFeed` 状态。
+
 现有宿主：首页（`selectedTopicProvider`）、私信（`selectedMessageProvider`）、
 搜索（`selectedSearchProvider`）、追觅（`selectedSeekingProvider`）、
 草稿（`selectedDraftPaneProvider`）、浏览历史（`selectedHistoryPaneProvider`）、
