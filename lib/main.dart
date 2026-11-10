@@ -1524,7 +1524,9 @@ class _MainPageState extends ConsumerState<MainPage>
             onTap: () {
               final navContext = navigatorKey.currentState?.context;
               if (navContext != null) {
-                unawaited(WebViewPage.open<void>(navContext, candidate.normalizedUrl));
+                unawaited(
+                  WebViewPage.open<void>(navContext, candidate.normalizedUrl),
+                );
               }
             },
           ),
@@ -1535,8 +1537,10 @@ class _MainPageState extends ConsumerState<MainPage>
               final navContext = navigatorKey.currentState?.context;
               if (navContext == null) return;
               unawaited(
-                openLinkWithBrowserPicker(navContext, candidate.normalizedUrl)
-                    .then((success) {
+                openLinkWithBrowserPicker(
+                  navContext,
+                  candidate.normalizedUrl,
+                ).then((success) {
                   if (success == false) {
                     ToastService.showError('无法使用所选浏览器打开链接');
                   }
