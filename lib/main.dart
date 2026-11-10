@@ -460,8 +460,7 @@ Future<void> main() async {
 
   // 预加载先于 ProviderScope，因此要在此从磁盘恢复验证策略与自动过盾总开关。
   final cfChallenge = CfChallengeService();
-  cfChallenge.autoVerifyEnabled =
-      prefs.getBool('pref_auto_cf_challenge') ?? true;
+  cfChallenge.autoVerifyEnabled = prefs.getBool('pref_auto_cf_challenge') ?? true;
   cfChallenge.proactiveVerifyBeforePreloadEnabled =
       prefs.getBool(PreferencesNotifier.proactiveCfBeforePreloadKey) ?? false;
 
