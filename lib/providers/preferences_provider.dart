@@ -184,6 +184,9 @@ class AppPreferences {
   /// 拦截到 CF 盾时自动弹出验证页面
   final bool autoCfChallenge;
 
+  /// 预加载前主动进行 Cloudflare 验证（实验性，默认关闭）。
+  final bool proactiveCfBeforePreload;
+
   /// 相关链接默认展开
   final bool expandRelatedLinks;
 
@@ -350,6 +353,7 @@ class AppPreferences {
     required this.hideBarOnScroll,
     required this.clearCacheOnExit,
     required this.autoCfChallenge,
+    this.proactiveCfBeforePreload = false,
     required this.expandRelatedLinks,
     required this.aiSwipeEntry,
     this.useRichComposer = false,
@@ -419,6 +423,7 @@ class AppPreferences {
     bool? hideBarOnScroll,
     bool? clearCacheOnExit,
     bool? autoCfChallenge,
+    bool? proactiveCfBeforePreload,
     bool? expandRelatedLinks,
     bool? aiSwipeEntry,
     bool? useRichComposer,
@@ -489,6 +494,8 @@ class AppPreferences {
       hideBarOnScroll: hideBarOnScroll ?? this.hideBarOnScroll,
       clearCacheOnExit: clearCacheOnExit ?? this.clearCacheOnExit,
       autoCfChallenge: autoCfChallenge ?? this.autoCfChallenge,
+      proactiveCfBeforePreload:
+          proactiveCfBeforePreload ?? this.proactiveCfBeforePreload,
       expandRelatedLinks: expandRelatedLinks ?? this.expandRelatedLinks,
       aiSwipeEntry: aiSwipeEntry ?? this.aiSwipeEntry,
       useRichComposer: useRichComposer ?? this.useRichComposer,
@@ -592,6 +599,10 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   static const String _hideBarOnScrollKey = 'pref_hide_bar_on_scroll';
   static const String _clearCacheOnExitKey = 'pref_clear_cache_on_exit';
   static const String _autoCfChallengeKey = 'pref_auto_cf_challenge';
+
+  /// 主进程在 ProviderScope 建立前恢复此开关，必须提供一致的公开键。
+  static const String proactiveCfBeforePreloadKey =
+      'pref_proactive_cf_before_preload';
   static const String _expandRelatedLinksKey = 'pref_expand_related_links';
   static const String _aiSwipeEntryKey = 'pref_ai_swipe_entry';
   static const String _useRichComposerKey = 'pref_use_rich_composer';
@@ -686,6 +697,8 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
           hideBarOnScroll: _prefs.getBool(_hideBarOnScrollKey) ?? true,
           clearCacheOnExit: _prefs.getBool(_clearCacheOnExitKey) ?? false,
           autoCfChallenge: _prefs.getBool(_autoCfChallengeKey) ?? true,
+          proactiveCfBeforePreload:
+              _prefs.getBool(proactiveCfBeforePreloadKey) ?? false,
           expandRelatedLinks: _prefs.getBool(_expandRelatedLinksKey) ?? false,
           aiSwipeEntry: _prefs.getBool(_aiSwipeEntryKey) ?? false,
           useRichComposer: _prefs.getBool(_useRichComposerKey) ?? false,
@@ -784,6 +797,8 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
     isPortraitLocked = state.portraitLock;
     TopicCardStyleScope.current = state.topicCardStyle;
     CfChallengeService().autoVerifyEnabled = state.autoCfChallenge;
+    CfChallengeService().proactiveVerifyBeforePreloadEnabled =
+        state.proactiveCfBeforePreload;
     // CF 服务在「切兼容」询问里给用户第二条出路(关掉自动过盾),但它拿不到
     // Riverpod 容器,也不该自己写 SharedPreferences —— 这里把持久化通道注入。
     CfChallengeService().disableAutoVerifyRequest = () =>
@@ -946,6 +961,12 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
     state = state.copyWith(autoCfChallenge: enabled);
     await _prefs.setBool(_autoCfChallengeKey, enabled);
     CfChallengeService().autoVerifyEnabled = enabled;
+  }
+
+  Future<void> setProactiveCfBeforePreload(bool enabled) async {
+    state = state.copyWith(proactiveCfBeforePreload: enabled);
+    CfChallengeService().proactiveVerifyBeforePreloadEnabled = enabled;
+    await _prefs.setBool(proactiveCfBeforePreloadKey, enabled);
   }
 
   Future<void> setExpandRelatedLinks(bool enabled) async {

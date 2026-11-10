@@ -215,6 +215,13 @@ void _openTopicNotificationTab(
     topicId: topicId,
     initialTitle: notification.data.topicTitle ?? notification.fancyTitle,
     scrollToPostNumber: targetPostNumber,
+    isPrivateMessage:
+        notification.notificationType == NotificationType.privateMessage ||
+        notification.notificationType ==
+            NotificationType.invitedToPrivateMessage ||
+        notification.notificationType ==
+            NotificationType.groupMessageSummary,
+    replaceNavigationTarget: true,
     highlightBoostUsername: notification.notificationType == NotificationType.boost
         ? notification.data.displayUsername
         : null,

@@ -23,7 +23,10 @@ void main() {
     final webViewFallback = body.indexOf('_hydratePreloadThroughWebView(');
     expect(nativeProbe, greaterThanOrEqualTo(0));
     expect(webViewFallback, greaterThan(nativeProbe));
-    expect(body, contains('if (!_clearanceRecentlyRejected)'));
+    expect(
+      body,
+      contains('if (!_clearanceRecentlyRejected || proactiveVerified)'),
+    );
     expect(body, isNot(contains('_isNativePreloadTrusted')));
   });
 

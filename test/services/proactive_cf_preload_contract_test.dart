@@ -1,0 +1,122 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  late String coordinator;
+  late String startup;
+  late String preferences;
+  late String settings;
+  late String challenge;
+
+  setUpAll(() {
+    coordinator = File('lib/services/browser_trust_coordinator.dart')
+        .readAsStringSync();
+    startup = File('lib/main.dart').readAsStringSync();
+    preferences = File('lib/providers/preferences_provider.dart')
+        .readAsStringSync();
+    settings = File('lib/settings/definitions/custom_settings_defs.dart')
+        .readAsStringSync();
+    challenge = File('lib/services/cf_challenge_service.dart')
+        .readAsStringSync();
+  });
+
+  test('默认关闭的实验策略被持久化并同步至验证服务', () {
+    expect(preferences, contains('pref_proactive_cf_before_preload'));
+    expect(
+      preferences,
+      contains('_prefs.getBool(proactiveCfBeforePreloadKey) ?? false'),
+    );
+    expect(
+      preferences,
+      contains('state.copyWith(proactiveCfBeforePreload: enabled)'),
+    );
+    expect(
+      preferences,
+      contains(
+        'CfChallengeService().proactiveVerifyBeforePreloadEnabled = enabled',
+      ),
+    );
+    expect(settings, contains("id: 'proactiveCfBeforePreload'"));
+    expect(settings, contains('.setProactiveCfBeforePreload(value)'));
+    expect(
+      challenge,
+      contains('bool proactiveVerifyBeforePreloadEnabled = false'),
+    );
+  });
+
+  test('主动探测保留有效 clearance，不在预加载期间启动续期 WebView', () {
+    expect(
+      challenge,
+      contains('enum CfVerificationMode { challengeRecovery, preloadProbe }'),
+    );
+    expect(
+      challenge,
+      contains(
+        'showManualVerify(context, false, CfVerificationMode.preloadProbe)',
+      ),
+    );
+    expect(
+      challenge,
+      contains('if (mode == CfVerificationMode.challengeRecovery) {'),
+    );
+    expect(challenge, contains("deleteCookie('cf_clearance')"));
+    expect(challenge, contains("deleteWebViewCookie('cf_clearance')"));
+    expect(
+      challenge,
+      contains(
+        'if (mode == CfVerificationMode.challengeRecovery) {\n'
+        '        Future.delayed(_postCleanupCooldown',
+      ),
+    );
+  });
+
+  test('预加载早于 ProviderScope：启动入口先恢复保存的开关', () {
+    final flag = startup.indexOf(
+      'prefs.getBool(PreferencesNotifier.proactiveCfBeforePreloadKey)',
+    );
+    final preload = startup.indexOf(".ensurePreloaded(reason: 'startup')");
+    expect(flag, greaterThanOrEqualTo(0));
+    expect(preload, greaterThan(flag));
+    expect(startup, contains("prefs.getBool('pref_auto_cf_challenge')"));
+  });
+
+  test('主动检查在预加载之前执行，且不会盲目认定原生网络可信', () {
+    final verify = coordinator.indexOf('Future<bool> _verifyCfBeforePreload');
+    final start = coordinator.indexOf('Future<void> _ensurePreloadedInternal');
+    final probe = coordinator.indexOf(
+      '_preload.ensureLoaded(suppressCfChallenge: true)',
+      start,
+    );
+    expect(verify, greaterThanOrEqualTo(0));
+    expect(start, greaterThan(verify));
+    expect(probe, greaterThan(start));
+    expect(
+      coordinator.substring(start, probe),
+      contains(
+        'final proactiveVerified = await _verifyCfBeforePreload(reason: reason)',
+      ),
+    );
+    expect(
+      coordinator.substring(start, probe),
+      contains('if (!_clearanceRecentlyRejected || proactiveVerified)'),
+    );
+
+    final body = coordinator.substring(verify, start);
+    final result = body.indexOf('await cf.probeBeforePreload');
+    final sync = body.indexOf('await cf.waitForCompletionCookieSync()');
+    final teardown = body.indexOf('await cf.waitForManualTeardown()');
+    expect(result, greaterThanOrEqualTo(0));
+    expect(sync, greaterThan(result));
+    expect(teardown, greaterThan(sync));
+    expect(body, contains('!cf.proactiveVerifyBeforePreloadEnabled'));
+    expect(body, contains('!cf.autoVerifyEnabled'));
+    expect(body, contains('cf.isInCooldown'));
+    expect(
+      body,
+      isNot(contains('_lastClearanceRejectedAt = null')),
+      reason: '仅凭浏览器无挑战，不可认定原生 API 获放行',
+    );
+    expect(coordinator, contains('final active = _activePreload;'));
+  });
+}

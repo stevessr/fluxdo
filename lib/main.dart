@@ -63,6 +63,7 @@ import 'services/network/vpn_auto_toggle_service.dart';
 import 'services/network/vpn_bypass_service.dart';
 import 'services/network/doh_proxy/proxy_certificate.dart';
 import 'services/cf_challenge_logger.dart';
+import 'services/cf_challenge_service.dart';
 import 'services/browser_trust_coordinator.dart';
 import 'services/update_service.dart';
 import 'services/update_checker_helper.dart';
@@ -456,6 +457,13 @@ Future<void> main() async {
   if (Platform.isAndroid) {
     unawaited(_applyAndroidDisplayMode(prefs));
   }
+
+  // 预加载先于 ProviderScope，因此要在此从磁盘恢复验证策略与自动过盾总开关。
+  final cfChallenge = CfChallengeService();
+  cfChallenge.autoVerifyEnabled =
+      prefs.getBool('pref_auto_cf_challenge') ?? true;
+  cfChallenge.proactiveVerifyBeforePreloadEnabled =
+      prefs.getBool(PreferencesNotifier.proactiveCfBeforePreloadKey) ?? false;
 
   // 提前触发预加载数据请求，与 runApp 并行执行。
   // PreheatGate 中的 ensurePreloaded() 会复用这个已在进行的请求。

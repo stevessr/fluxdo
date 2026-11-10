@@ -25,6 +25,22 @@
   （`lib/widgets/layout/pane_projection_back_scope.dart`）统一承担投影态的
   系统返回 / Android 预测返回跟手 / 与根 PopScope 的协调。
 
+**统一 Topic Tab 工作区（首页/私信）**：开启 Tab 模式后，两页共用
+`selectedTopicProvider` 的标签集合；Discourse `private_message` 也是 Topic，
+用相同的 `topicId + instanceId` 承载，只通过 `isPrivateMessage` 标记标签图标。
+普通非 Tab 的私信平行视界仍由 `selectedMessageProvider` 独立管理。
+两个及以上 Tab 时采用 `pinMaster: false`，最近两层在宽屏并排；
+单个 Tab 时列表与详情并排，窄屏投影栈顶。主导航的 IndexedStack
+只在首页宿主挂载共享详情，私信页的标签点击切到首页工作区；
+首页离开时维持同一组 Element，而不是让两个宿主重复挂载。
+切换到首页信息流时通过 `showMasterOnly` 将详情格保留在胶片带外
+（Offstage），不是传空 `panes` 销毁全部编辑/滚动 State。
+Tab 视图的相邻格是平级标签，不得走 `truncateOnPush` 替换另一格；
+正文链接转为去重后的新 Tab，返回操作仅关闭所属 Tab。
+长按 Tab 提供关闭其他/全部：关闭其他保留被按住层的 `instanceId`，
+关闭全部回到列表；从列表重新选择当前最后一个 Tab 必须退出
+`showingFeed` 状态。
+
 现有宿主：首页（`selectedTopicProvider`）、私信（`selectedMessageProvider`）、
 搜索（`selectedSearchProvider`）、追觅（`selectedSeekingProvider`）、
 草稿（`selectedDraftPaneProvider`）、浏览历史（`selectedHistoryPaneProvider`）、
@@ -91,8 +107,8 @@
 一句话：**已在平行视界面板里的一切打开话题/资料动作，继续压当前栈
 （`EmbeddedStackScope.maybePushTopic` / `openProfile`，返回 false 再退
 全屏 push）；列表宿主页自己分流（宽屏 `select()` 进右栏，窄屏真路由）；
-通知（宽屏话题开独立 Tab、其他目标走正常路由）/深链（恒全屏）/
-书签 workspace/稍后读浮层采用各自的显式入口。**
+通知（宽屏话题直接开统一工作区独立 Tab，其他目标走正常路由）/
+深链（恒全屏）/书签 workspace/稍后读浮层走各自显式入口。**
 
 - 话题体内入口已全部收敛：相关/建议话题、链接面板（post_links）、AI
   摘要跨话题链接、话题内搜索、预览弹窗（show 时捕获栈，pop 后压栈）。

@@ -124,7 +124,11 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   Widget build(BuildContext context) {
     final selectedTopic = ref.watch(selectedTopicProvider);
     // 左栏本质是不是"列表"（信息流）——决定给窄栏还是对半分
-    _masterIsListLike = !selectedTopic.isStacked || selectedTopic.tabMode;
+    final adjacentTabs = selectedTopic.tabMode &&
+        selectedTopic.stack.length > 1 &&
+        !selectedTopic.showingFeed;
+    _masterIsListLike =
+        !adjacentTabs && (!selectedTopic.isStacked || selectedTopic.tabMode);
     final user = ref.watch(currentUserProvider).value;
 
     // 左侧导航栏的板块快捷入口位于平行视界布局之外。切换板块时除了让
@@ -198,6 +202,11 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                   ref.read(selectedTopicProvider.notifier).activateTab(index),
               onClose: (index) =>
                   ref.read(selectedTopicProvider.notifier).closeTab(index),
+              onCloseOthers: (index) =>
+                  ref.read(selectedTopicProvider.notifier).closeOtherTabs(index),
+              onCloseAll: () =>
+                  ref.read(selectedTopicProvider.notifier).closeAllTabs(),
+              onShowFeed: _showFeed,
             ),
             Expanded(
               child: MasterDetailLayout(
@@ -214,17 +223,22 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                 projectDetailWhenNarrow: true,
                 // 胶片带:列表也在带上,压栈时被顶出左侧、倒二层格顶上左栏
                 // (旧"上一层预览"形态,由容器统一承担,预览格 State 全保)。
-                pinMaster: selectedTopic.tabMode,
+                // The two most recent tabs share the two parallel-view panes.
+                pinMaster: selectedTopic.tabMode && !adjacentTabs,
                 master: _wrapPaneTap(
                   ActivePane.master,
                   _buildMasterPane(selectedTopic),
                 ),
-                panes: selectedTopic.showingFeed
-                    ? const []
-                    : [
-                        for (var i = 0; i < selectedTopic.stack.length; i++)
-                          _buildPaneCell(selectedTopic, i),
-                      ],
+                // IndexedStack already keeps inactive destinations offstage.
+                // Do not remove the panes on a bottom-nav switch: doing so
+                // would dispose the active tab's editor and scroll state.
+                // The feed view hides tabs geometrically rather than
+                // removing them, preserving their mounted State and editors.
+                showMasterOnly: selectedTopic.showingFeed,
+                panes: [
+                  for (var i = 0; i < selectedTopic.stack.length; i++)
+                    _buildPaneCell(selectedTopic, i),
+                ],
                 // 压栈时 master 显示的是话题预览（不可交互，见
                 // TopicDetailPage.truncateOnPush 注释），不是列表——"新建话题"这个
                 // FAB 只在 master 真的是列表时才有意义，之前没跟着切换，压栈后
@@ -289,13 +303,22 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
           stackProvider: selectedTopicProvider,
           parentActive: widget.isActive,
           // 非顶格 = "上一层预览":内部点击走截断替换语义。
-          truncateOnPush: !isTop,
+          // In independent Tab mode the left pane is another live Tab,
+          // not navigation history. A link must never replace its neighbor.
+          truncateOnPush: !isTop && !selectedTopic.tabMode,
           // 基础层（栈仅一层）也给 clear：ESC/返回按钮清空右栏回到
           // 空态，与 search/seeking 行为一致（平行视界 ESC 统一）。
           // 回调内重读 provider，不闭包捕获 build 时的快照。
           onBack: () {
             final notifier = ref.read(selectedTopicProvider.notifier);
-            if (ref.read(selectedTopicProvider).isStacked) {
+            final current = ref.read(selectedTopicProvider);
+            if (current.tabMode) {
+              // Back from the left tab must close that tab, not the right one.
+              final tabIndex = current.stack.indexWhere(
+                (pane) => identical(pane, entry),
+              );
+              if (tabIndex >= 0) notifier.closeTab(tabIndex);
+            } else if (current.isStacked) {
               notifier.pop();
             } else {
               notifier.clear();
