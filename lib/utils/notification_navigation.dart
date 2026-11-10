@@ -130,7 +130,6 @@ void _markNotificationRead(
       .markAsRead(notification.id);
   // 仅更新已经挂载的完整通知列表。快捷面板单独使用时不额外触发
   // 历史通知首屏请求；两种入口同时存在时也能同步已读/未读筛选。
-  // ignore: deprecated_member_use
   if (container.exists(notificationListProvider)) {
     container
         .read(notificationListProvider.notifier)
