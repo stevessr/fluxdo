@@ -31,7 +31,7 @@ void main() {
     await tester.pumpWidget(buildTabs());
     expect(find.byIcon(Icons.mail_outline_rounded), findsOneWidget);
 
-    await tester.longPress(const ValueKey('pico-pane-tab-1'));
+    await tester.longPress(find.byKey(const ValueKey('pico-pane-tab-1')));
     await tester.pumpAndSettle();
     expect(find.text('关闭其他标签'), findsOneWidget);
     expect(find.text('关闭所有标签'), findsOneWidget);
@@ -42,7 +42,7 @@ void main() {
     expect(notifier.state.instanceId, 'pm');
 
     await tester.pumpWidget(buildTabs());
-    await tester.longPress(const ValueKey('pico-pane-tab-0'));
+    await tester.longPress(find.byKey(const ValueKey('pico-pane-tab-0')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('关闭所有标签'));
     await tester.pumpAndSettle();
