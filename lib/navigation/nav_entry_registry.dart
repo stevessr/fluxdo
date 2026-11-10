@@ -23,7 +23,7 @@ import '../pages/private_messages_page.dart';
 import '../pages/topics_screen.dart';
 import '../providers/discourse_providers.dart';
 import '../widgets/common/smart_avatar.dart';
-import '../widgets/notification/notification_quick_panel.dart';
+import '../pages/notifications_page.dart';
 import 'nav_action_bus.dart';
 import 'nav_entry.dart';
 
@@ -190,11 +190,11 @@ class NavEntryRegistry {
       ),
       NavEntry(
         id: NavEntryIds.notifications,
-        kind: NavEntryKind.panel,
+        kind: NavEntryKind.page,
         iconData: Symbols.notifications_rounded,
         selectedIconData: Symbols.notifications_rounded,
         label: (ctx) => ctx.l10n.nav_notifications,
-        onPanelTap: (ctx, ref) => NotificationQuickPanel.show(ctx),
+        pageBuilder: (ctx, isActive) => const NotificationsPage(),
         requiresLogin: true,
       ),
       NavEntry(

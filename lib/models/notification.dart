@@ -188,6 +188,8 @@ class NotificationData {
   final String? groupName;
   final String? inboxCount;
   final int? count;
+  /// 同一用户对多篇帖子做出的 reaction 被 Discourse 服务端聚合。
+  final bool consolidated;
   final String? username;
   final String? username2;
   final String? avatarTemplate;
@@ -216,6 +218,7 @@ class NotificationData {
     this.groupName,
     this.inboxCount,
     this.count,
+    this.consolidated = false,
     this.username,
     this.username2,
     this.avatarTemplate,
@@ -240,7 +243,11 @@ class NotificationData {
       badgeSlug: json['badge_slug'] as String?,
       groupName: json['group_name'] as String?,
       inboxCount: json['inbox_count']?.toString(),
-      count: json['count'] as int?,
+      count: json['count'] is int
+          ? json['count'] as int
+          : int.tryParse(json['count']?.toString() ?? ''),
+      consolidated: json['consolidated'] == true ||
+          json['consolidated'] == 'true',
       username: json['username'] as String?,
       username2: json['username2'] as String?,
       avatarTemplate:
@@ -381,6 +388,14 @@ class DiscourseNotification {
         return displayName.isNotEmpty
             ? S.current.notification_followingYou(displayName)
             : notificationType.label;
+      case NotificationType.reaction:
+        if (data.consolidated && (data.count ?? 0) > 1) {
+          return S.current.notification_reactionMultiplePosts(
+            displayName.isNotEmpty ? displayName : (data.username ?? ''),
+            data.count!,
+          );
+        }
+        break;
       case NotificationType.likedConsolidated:
         final count = data.count ?? 0;
         return displayName.isNotEmpty
@@ -483,6 +498,19 @@ class DiscourseNotification {
       case NotificationType.topicReminder:
         return S.current.notification_topicReminder;
       case NotificationType.reaction:
+        final count = data.count ?? 1;
+        if (data.consolidated && count > 1) {
+          return notificationType.label;
+        }
+        if (count == 2 && (data.username2?.isNotEmpty ?? false)) {
+          return S.current.notification_reactionByTwo(
+            username,
+            data.username2!,
+          );
+        }
+        if (count > 1) {
+          return S.current.notification_reactionByMany(username, count - 1);
+        }
         return S.current.notification_reaction(username);
       case NotificationType.votesReleased:
         return S.current.notification_votesReleased;

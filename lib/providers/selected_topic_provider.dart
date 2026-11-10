@@ -128,6 +128,9 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     String? initialTitle,
     int? scrollToPostNumber,
     String? instanceId,
+    String? highlightBoostUsername,
+    int? initialRevisionPostNumber,
+    int? initialRevisionNumber,
   }) {
     final existing = state.stack.indexWhere(
       (pane) => pane.kind == PaneKind.topic && pane.topicId == topicId,
@@ -135,7 +138,20 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     final tabs = [...state.stack];
     if (existing != -1) {
       final pane = tabs.removeAt(existing);
-      tabs.add(pane);
+      tabs.add(
+        PaneEntry.topic(
+          topicId: topicId,
+          initialTitle: initialTitle ?? pane.initialTitle,
+          scrollToPostNumber: scrollToPostNumber ?? pane.scrollToPostNumber,
+          instanceId: pane.instanceId,
+          highlightBoostUsername:
+              highlightBoostUsername ?? pane.highlightBoostUsername,
+          initialRevisionPostNumber:
+              initialRevisionPostNumber ?? pane.initialRevisionPostNumber,
+          initialRevisionNumber:
+              initialRevisionNumber ?? pane.initialRevisionNumber,
+        ),
+      );
     } else {
       tabs.add(
         PaneEntry.topic(
@@ -143,6 +159,9 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           initialTitle: initialTitle,
           scrollToPostNumber: scrollToPostNumber,
           instanceId: instanceId ?? const Uuid().v4(),
+          highlightBoostUsername: highlightBoostUsername,
+          initialRevisionPostNumber: initialRevisionPostNumber,
+          initialRevisionNumber: initialRevisionNumber,
         ),
       );
     }
