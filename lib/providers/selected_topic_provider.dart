@@ -145,7 +145,12 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           // 重新打开同一话题时只保留 provider 实例，新的跳转意图
           // 必须替换而非继承，避免反复触发旧的楼层/编辑历史/Boost。
           scrollToPostNumber: scrollToPostNumber,
-          instanceId: pane.instanceId,
+          // 编辑历史弹窗只在 TopicDetailPage 初始化时自动打开。
+          // 再次打开同一话题的「帖子已编辑」通知需要新的页面实例，
+          // 但仍复用原 Tab 的占位，不产生重复标签。
+          instanceId: initialRevisionNumber != null
+              ? (instanceId ?? const Uuid().v4())
+              : pane.instanceId,
           highlightBoostUsername: highlightBoostUsername,
           initialRevisionPostNumber: initialRevisionPostNumber,
           initialRevisionNumber: initialRevisionNumber,

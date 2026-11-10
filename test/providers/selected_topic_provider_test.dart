@@ -240,7 +240,7 @@ void main() {
     );
 
     expect(notifier.state.stack, hasLength(2));
-    expect(notifier.state.topEntry?.instanceId, 'original');
+    expect(notifier.state.topEntry?.instanceId, isNot('original'));
     expect(notifier.state.topEntry?.scrollToPostNumber, 15);
     expect(notifier.state.topEntry?.highlightBoostUsername, isNull);
     expect(notifier.state.topEntry?.initialRevisionPostNumber, 15);

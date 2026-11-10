@@ -139,10 +139,33 @@ void _openTopicNotificationTab(
   required int topicId,
   int? postNumber,
 }) {
+  final targetPostNumber = postNumber ?? notification.postNumber;
+  // 已打开的 Tab 可能缓存了上一次浏览的楼层。通知带有明确落点时先
+  // 清掉该实例的恢复位置，否则 TopicDetailPane 会优先读旧缓存，
+  // 从而忽略这次通知的新楼层。
+  if (targetPostNumber != null) {
+    final previousTabs = container.read(selectedTopicProvider).stack;
+    for (final pane in previousTabs) {
+      if (pane.kind == PaneKind.topic &&
+          pane.topicId == topicId &&
+          pane.instanceId != null) {
+        container
+            .read(
+              detailScrollPositionProvider((
+                topicId: topicId,
+                instanceId: pane.instanceId!,
+              )).notifier,
+            )
+            .state = null;
+        break;
+      }
+    }
+  }
+
   container.read(selectedTopicProvider.notifier).openTopicTab(
     topicId: topicId,
     initialTitle: notification.data.topicTitle ?? notification.fancyTitle,
-    scrollToPostNumber: postNumber ?? notification.postNumber,
+    scrollToPostNumber: targetPostNumber,
     highlightBoostUsername: notification.notificationType == NotificationType.boost
         ? notification.data.displayUsername
         : null,
