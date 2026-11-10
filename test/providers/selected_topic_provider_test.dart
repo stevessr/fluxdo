@@ -214,4 +214,36 @@ void main() {
     expect(notifier.state.tabMode, isTrue);
     expect(notifier.state.topicId, 1);
   });
+
+  test('通知重复打开同一话题会激活原 Tab 并更新落点', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 10, instanceId: 'original', scrollToPostNumber: 3)
+      ..openTopicTab(topicId: 20, instanceId: 'second');
+
+    notifier.openTopicTab(
+      topicId: 10,
+      scrollToPostNumber: 12,
+      highlightBoostUsername: 'alice',
+    );
+
+    expect(notifier.state.tabMode, isTrue);
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.instanceId, 'original');
+    expect(notifier.state.topEntry?.scrollToPostNumber, 12);
+    expect(notifier.state.topEntry?.highlightBoostUsername, 'alice');
+
+    notifier.openTopicTab(
+      topicId: 10,
+      scrollToPostNumber: 15,
+      initialRevisionPostNumber: 15,
+      initialRevisionNumber: 2,
+    );
+
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.topEntry?.instanceId, 'original');
+    expect(notifier.state.topEntry?.scrollToPostNumber, 15);
+    expect(notifier.state.topEntry?.highlightBoostUsername, isNull);
+    expect(notifier.state.topEntry?.initialRevisionPostNumber, 15);
+    expect(notifier.state.topEntry?.initialRevisionNumber, 2);
+  });
 }

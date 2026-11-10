@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/s.dart';
 import '../../providers/message_bus/notification_providers.dart';
-import '../notification/notification_quick_panel.dart';
+import '../../pages/notifications_page.dart';
+import '../../utils/notification_navigation.dart';
 
 class NotificationIconButton extends ConsumerWidget {
   const NotificationIconButton({super.key, this.compact = false});
@@ -20,7 +21,7 @@ class NotificationIconButton extends ConsumerWidget {
     );
     return IconButton(
       onPressed: () {
-        NotificationQuickPanel.show(context);
+        openNotificationPage(context, const NotificationsPage());
       },
       visualDensity: compact ? VisualDensity.compact : null,
       style: compact

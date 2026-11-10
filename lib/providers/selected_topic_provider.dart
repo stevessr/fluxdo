@@ -142,14 +142,13 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
         PaneEntry.topic(
           topicId: topicId,
           initialTitle: initialTitle ?? pane.initialTitle,
-          scrollToPostNumber: scrollToPostNumber ?? pane.scrollToPostNumber,
+          // 重新打开同一话题时只保留 provider 实例，新的跳转意图
+          // 必须替换而非继承，避免反复触发旧的楼层/编辑历史/Boost。
+          scrollToPostNumber: scrollToPostNumber,
           instanceId: pane.instanceId,
-          highlightBoostUsername:
-              highlightBoostUsername ?? pane.highlightBoostUsername,
-          initialRevisionPostNumber:
-              initialRevisionPostNumber ?? pane.initialRevisionPostNumber,
-          initialRevisionNumber:
-              initialRevisionNumber ?? pane.initialRevisionNumber,
+          highlightBoostUsername: highlightBoostUsername,
+          initialRevisionPostNumber: initialRevisionPostNumber,
+          initialRevisionNumber: initialRevisionNumber,
         ),
       );
     } else {
