@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/shortcut_binding.dart';
 import '../../l10n/s.dart';
+import '../../utils/notification_navigation.dart';
 import '../../providers/discourse_providers.dart';
 import '../../providers/shortcut_provider.dart';
 import '../../providers/preferences_provider.dart';
@@ -543,7 +544,10 @@ class _MobileNotificationPanelState extends State<_MobileNotificationPanel> {
     final navigator = Navigator.of(context, rootNavigator: true);
     navigator.pop();
     navigator.push(
-      MaterialPageRoute(builder: (_) => const NotificationsPage()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: notificationPageRouteName),
+        builder: (_) => const NotificationsPage(),
+      ),
     );
   }
 
@@ -613,11 +617,7 @@ class _NotificationHeader extends ConsumerWidget {
                 onViewAll ??
                 () {
                   onClose();
-                  Navigator.of(context, rootNavigator: true).push(
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationsPage(),
-                    ),
-                  );
+                  openNotificationPage(context, const NotificationsPage());
                 },
             child: Row(
               mainAxisSize: MainAxisSize.min,

@@ -25,9 +25,30 @@ NavigatorState? _rootNavigator(BuildContext context) {
       Navigator.of(context, rootNavigator: true);
 }
 
+/// 完整通知页从其他位置作为路由进入时，用稳定名称识别该入口。
+const notificationPageRouteName = '/fluxdo/notifications';
+
+/// 切换到首页工作区前退出临时路由，以免通知页挡在新 Tab 上。
+///
+/// 只在完整通知页路由上进行返回；作为主导航页常驻时不影响栈。
+void _closeNotificationRouteIfNeeded(
+  NavigatorState? navigator,
+  Route<dynamic>? originRoute,
+) {
+  if (originRoute?.settings.name == notificationPageRouteName &&
+      originRoute?.isCurrent == true) {
+    navigator?.pop();
+  }
+}
+
 /// 通知入口不再使用覆盖内容的预览弹窗。
 void openNotificationPage(BuildContext context, Widget page) {
-  _rootNavigator(context)?.push(MaterialPageRoute(builder: (_) => page));
+  _rootNavigator(context)?.push(
+    MaterialPageRoute(
+      settings: const RouteSettings(name: notificationPageRouteName),
+      builder: (_) => page,
+    ),
+  );
 }
 
 /// 通知 → 落点页面。null = 该通知没有可打开的目标(如入群申请通过)。
@@ -225,6 +246,8 @@ Future<void> _openReactionTabAfterLookup(
   DiscourseNotification notification,
   int postId, {
   required int navigationGeneration,
+  required NavigatorState? navigator,
+  required Route<dynamic>? originRoute,
 }) async {
   try {
     final response = await container
@@ -237,6 +260,7 @@ Future<void> _openReactionTabAfterLookup(
     }
     final target = parseNotificationPostTarget(response.data);
     if (target != null) {
+      _closeNotificationRouteIfNeeded(navigator, originRoute);
       _openTopicNotificationTab(
         container,
         notification,
@@ -252,6 +276,7 @@ Future<void> _openReactionTabAfterLookup(
     return;
   }
   if (notification.topicId != null) {
+    _closeNotificationRouteIfNeeded(navigator, originRoute);
     _openTopicNotificationTab(
       container,
       notification,
@@ -277,6 +302,8 @@ void handleNotificationTap(
   List<DiscourseNotification>? siblings,
 }) {
   final container = ProviderScope.containerOf(context, listen: false);
+  final navigator = _rootNavigator(context);
+  final originRoute = ModalRoute.of(context);
   final navigationGeneration =
       (_notificationNavigationGeneration[container] ?? 0) + 1;
   _notificationNavigationGeneration[container] = navigationGeneration;
@@ -291,10 +318,13 @@ void handleNotificationTap(
         notification,
         fallbackPostId,
         navigationGeneration: navigationGeneration,
+        navigator: navigator,
+        originRoute: originRoute,
       );
       return;
     }
     if (notification.topicId != null) {
+      _closeNotificationRouteIfNeeded(navigator, originRoute);
       _openTopicNotificationTab(
         container,
         notification,
