@@ -308,7 +308,39 @@ class BrowserTrustCoordinator {
     });
   }
 
+  /// 每次实际预加载前尝试一轮实验性验证；并发 ensurePreloaded 复用同一轮。
+  Future<void> _verifyCfBeforePreload({required String reason}) async {
+    final cf = CfChallengeService();
+    if (!cf.proactiveVerifyBeforePreloadEnabled || !cf.autoVerifyEnabled) {
+      return;
+    }
+    if (cf.isInCooldown) {
+      _log('skip proactive CF verification during cooldown: $reason');
+      return;
+    }
+
+    _log('start proactive CF verification before preload: $reason');
+    try {
+      final verified = await cf.showManualVerify(_navigatorContext, true);
+      if (verified == true) {
+        // 验证完成不代表新 Cookie 已同步到原生请求栈。
+        await cf.waitForCompletionCookieSync();
+        _lastClearanceRejectedAt = null;
+      }
+      // 尤其是 Windows，必须让上一个验证 WebView 完全释放再继续预加载。
+      await cf.waitForManualTeardown();
+      _log(
+        'proactive CF verification completed: result=$verified reason=$reason',
+      );
+    } catch (e) {
+      _log('proactive CF verification failed: $e', level: 'warning');
+      // 实验策略未成功时仍沿用现有预加载/撞盾恢复路径。
+    }
+  }
+
   Future<void> _ensurePreloadedInternal({required String reason}) async {
+    await _verifyCfBeforePreload(reason: reason);
+    if (_preload.isLoaded) return;
     // A missing/short-lived cf_clearance is not proof that the homepage needs a
     // browser. Discourse may answer native HTTP normally, and the preload cache
     // interceptor may satisfy this request without touching the network at all.

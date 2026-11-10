@@ -132,6 +132,10 @@ class CfChallengeService {
   /// 交给 ErrorView 提供"手动验证"入口。由 PreferencesNotifier 同步维护。
   bool autoVerifyEnabled = true;
 
+  /// 实验策略：每轮预加载前主动运行一次 CF 验证，默认关闭。
+  /// 此值由偏好设置和启动期已保存的 SharedPreferences 同步。
+  bool proactiveVerifyBeforePreloadEnabled = false;
+
   /// 请求把「自动过盾」开关持久化关闭。
   ///
   /// 服务层拿不到 Riverpod 容器,由 PreferencesNotifier 在初始化时注入
