@@ -43,6 +43,7 @@ jobs:
           dart format
           lib/models/group.dart
           lib/pages/groups_page.dart
+          lib/pages/group_page.dart
           test/models/group_test.dart
           test/pages/groups_directory_test.dart
           test/pages/group_membership_confirmation_test.dart
@@ -52,6 +53,7 @@ jobs:
           flutter analyze --no-fatal-infos --no-fatal-warnings
           lib/models/group.dart
           lib/pages/groups_page.dart
+          lib/pages/group_page.dart
           test/models/group_test.dart
           test/pages/groups_directory_test.dart
           test/pages/group_membership_confirmation_test.dart
