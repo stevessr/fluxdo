@@ -2089,25 +2089,25 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           ),
         ),
         PopupMenuItem(
-            key: const ValueKey('topic-open-in-tab'),
-            value: 'open_in_tab',
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.tab_rounded,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  Localizations.localeOf(context).languageCode == 'zh'
-                      ? '在 Tab 中打开'
-                      : 'Open in tab',
-                ),
-              ],
-            ),
+          key: const ValueKey('topic-open-in-tab'),
+          value: 'open_in_tab',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.tab_rounded,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                Localizations.localeOf(context).languageCode == 'zh'
+                    ? '在 Tab 中打开'
+                    : 'Open in tab',
+              ),
+            ],
           ),
+        ),
         if (showNewWindow)
           PopupMenuItem(
             key: const ValueKey('topic-open-native-window'),
