@@ -17,6 +17,7 @@ import '../providers/shortcut_provider.dart';
 import '../utils/load_more_coordinator.dart';
 import '../widgets/common/paged_list_footer.dart';
 import '../widgets/layout/master_detail_layout.dart';
+import '../widgets/layout/pico_parallel_tabs.dart';
 import '../widgets/layout/pane_projection_back_scope.dart';
 import '../widgets/topic/topic_card_prewarmer.dart';
 import '../widgets/topic/topic_item_builder.dart';
@@ -74,7 +75,11 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
 
   /// 平行视界第 [index] 层格(0=栈底):胶片带模型,每层一格恒驻,
   /// 压栈=倒二格滑去左栏当预览(State 全保),退栈=滑回。
-  Widget _buildPaneCell(SelectedTopicState selectedMessage, int index) {
+  Widget _buildPaneCell(
+    SelectedTopicState selectedMessage,
+    SelectedTopicProvider stackProvider,
+    int index,
+  ) {
     final entry = selectedMessage.stack[index];
     final isTop = index == selectedMessage.stack.length - 1;
     final key = entry.kind == PaneKind.topic
@@ -84,15 +89,15 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
       key: key,
       child: PaneContentWidget(
         entry: entry,
-        stackProvider: selectedMessageProvider,
+        stackProvider: stackProvider,
         parentActive: widget.isActive,
         truncateOnPush: !isTop,
         // 基础层也给 clear：ESC/返回按钮清空右栏回到空态，与
         // search/seeking 一致（平行视界 ESC 统一）。回调内重读
         // provider，不闭包捕获 build 时的快照。
         onBack: () {
-          final notifier = ref.read(selectedMessageProvider.notifier);
-          if (ref.read(selectedMessageProvider).isStacked) {
+          final notifier = ref.read(stackProvider.notifier);
+          if (ref.read(stackProvider).isStacked) {
             notifier.pop();
           } else {
             notifier.clear();
@@ -376,26 +381,64 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
     // 平行视界：宽屏双栏下私信列表跟话题列表一样，走独立的
     // selectedMessageProvider 导航栈;窄屏栈非空时详情在本页体内全宽
     // 投影(栈是唯一真相,不 push 合成路由,宽窄切换 State 原地保留)。
-    final selectedMessage = ref.watch(selectedMessageProvider);
-    // ESC:栈非空(右栏开着/投影着)都让分发落 detail scope。
-    _escBinding.sync(context, paneOpen: selectedMessage.hasSelection);
+    final sharedTabs = ref.watch(selectedTopicProvider);
+    final useSharedTabs = sharedTabs.tabMode;
+    final stackProvider = useSharedTabs
+        ? selectedTopicProvider
+        : selectedMessageProvider;
+    final selectedMessage = useSharedTabs
+        ? sharedTabs
+        : ref.watch(selectedMessageProvider);
+    final adjacentTabs = useSharedTabs &&
+        selectedMessage.stack.length > 1 &&
+        !selectedMessage.showingFeed;
+    final masterIsListLike =
+        !adjacentTabs && (!selectedMessage.isStacked || useSharedTabs);
+    // The two IndexedStack hosts share tab state, but only the active
+    // host mounts detail panes. Their instance IDs remain stable.
+    final visiblePanes =
+        !selectedMessage.showingFeed && (widget.isActive || !useSharedTabs);
+    _escBinding.sync(
+      context,
+      paneOpen: selectedMessage.hasSelection && visiblePanes,
+    );
 
-    // 左栏本质是不是"列表"（私信列表）——决定给窄栏还是对半分。
-    final masterIsListLike = !selectedMessage.isStacked;
     return PaneProjectionBackScope(
-      stackProvider: selectedMessageProvider,
+      stackProvider: stackProvider,
       isActive: widget.isActive,
-      child: MasterDetailLayout(
-        maxMasterRatio: masterIsListLike
-            ? MasterDetailLayout.defaultMaxMasterRatio
-            : 0.8,
-        preferredMasterRatio: masterIsListLike ? 0.25 : 0.5,
-        projectDetailWhenNarrow: true,
-        pinMaster: false,
-        master: listScaffold,
-        panes: [
-          for (var i = 0; i < selectedMessage.stack.length; i++)
-            _buildPaneCell(selectedMessage, i),
+      child: Column(
+        children: [
+          PicoParallelTabs(
+            selected: selectedMessage,
+            onActivate: (index) =>
+                ref.read(stackProvider.notifier).activateTab(index),
+            onClose: (index) =>
+                ref.read(stackProvider.notifier).closeTab(index),
+            onCloseOthers: (index) =>
+                ref.read(stackProvider.notifier).closeOtherTabs(index),
+            onCloseAll: () =>
+                ref.read(stackProvider.notifier).closeAllTabs(),
+            onShowFeed: useSharedTabs
+                ? () => ref.read(selectedTopicProvider.notifier).showFeed()
+                : null,
+          ),
+          Expanded(
+            child: MasterDetailLayout(
+              maxMasterRatio: masterIsListLike
+                  ? MasterDetailLayout.defaultMaxMasterRatio
+                  : 0.8,
+              preferredMasterRatio: masterIsListLike ? 0.25 : 0.5,
+              projectDetailWhenNarrow: true,
+              pinMaster: useSharedTabs && !adjacentTabs,
+              master: listScaffold,
+              panes: visiblePanes
+                  ? [
+                      for (var i = 0; i < selectedMessage.stack.length; i++)
+                        _buildPaneCell(selectedMessage, stackProvider, i),
+                    ]
+                  : const [],
+            ),
+          ),
         ],
       ),
     );
@@ -500,6 +543,18 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
   }
 
   void _onItemTap(Topic topic) {
+    // Discourse PMs are topics: use the same shared tabs as public topics.
+    if (ref.read(preferencesProvider).openTopicsInTabsByDefault ||
+        ref.read(selectedTopicProvider).tabMode) {
+      ref.read(selectedMessageProvider.notifier).clear();
+      ref.read(selectedTopicProvider.notifier).openTopicTab(
+        topicId: topic.id,
+        initialTitle: topic.title,
+        scrollToPostNumber: topic.lastReadPostNumber,
+        isPrivateMessage: true,
+      );
+      return;
+    }
     final canShowDetailPane = MasterDetailLayout.canShowBothPanesFor(context);
     if (canShowDetailPane) {
       ref
@@ -622,9 +677,12 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
                 final enableLongPress =
                     !widget.selectionMode &&
                     ref.watch(preferencesProvider).longPressPreview;
-                final selectedTopicId = ref.watch(
-                  selectedMessageProvider.select((state) => state.topicId),
-                );
+                final sharedTabs = ref.watch(selectedTopicProvider);
+                final selectedTopicId = sharedTabs.tabMode
+                    ? sharedTabs.topicId
+                    : ref.watch(
+                        selectedMessageProvider.select((state) => state.topicId),
+                      );
                 final topicItem = buildTopicItem(
                   context: context,
                   topic: topic,
