@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+
+import '../utils/time_utils.dart';
 import 'package:flutter/material.dart';
 
 enum EventCalendarScale { day, week, month, year }
@@ -36,12 +38,17 @@ EventCalendarRange calendarRange(DateTime date, EventCalendarScale scale) {
 /// Date-only all-day values must not be converted from UTC.
 DateTime? parseCalendarEventDate(Object? value) {
   if (value is! String || value.isEmpty) return null;
-  final parsed = DateTime.tryParse(value);
-  if (parsed == null) return null;
   if (value.length == 10 && value[4] == '-' && value[7] == '-') {
-    return DateTime(parsed.year, parsed.month, parsed.day);
+    final year = int.tryParse(value.substring(0, 4));
+    final month = int.tryParse(value.substring(5, 7));
+    final day = int.tryParse(value.substring(8, 10));
+    if (year == null || month == null || day == null) return null;
+    final localDay = DateTime(year, month, day);
+    if (localDay.year != year || localDay.month != month ||
+        localDay.day != day) return null;
+    return localDay;
   }
-  return parsed.toLocal();
+  return TimeUtils.parseUtcTime(value);
 }
 
 bool eventOnCalendarDay(Map<String, dynamic> event, DateTime date) {
@@ -582,10 +589,10 @@ class _CalendarTimelineState extends State<_CalendarTimeline> {
     return Positioned(
       left: _gutter + column * width + 2,
       top: minuteOffset / 60 * _hourHeight,
-      width: math.max(1, width - 4),
+      width: math.max(1.0, width - 4),
       height: math.min(
         24 * _hourHeight - minuteOffset / 60 * _hourHeight,
-        math.max(24, minutes / 60 * _hourHeight),
+        math.max(24.0, minutes / 60 * _hourHeight),
       ),
       child: Material(
         color: scheme.primaryContainer,
