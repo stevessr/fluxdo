@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -125,4 +127,71 @@ void main() {
     expect(find.byKey(const ValueKey('group-card-g-verified-staff')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('快速切换群组类型时丢弃旧请求结果', (tester) async {
+    final releaseFirstRequest = Completer<void>();
+    final requestedTypes = <String?>[];
+    final service = DiscourseService();
+    var requestCount = 0;
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.method != 'GET' || options.path != '/groups.json') {
+          handler.reject(
+            DioException(requestOptions: options, message: 'Unexpected request'),
+          );
+          return;
+        }
+        requestCount++;
+        final type = options.queryParameters['type']?.toString();
+        requestedTypes.add(type);
+        final response = Response(
+          requestOptions: options,
+          data: {
+            'groups': [
+              {
+                'id': type == 'public' ? 80 : 70,
+                'name': type == 'public' ? 'public-group' : 'stale-group',
+                'full_name': type == 'public' ? '公开群组结果' : '过期群组结果',
+              },
+            ],
+            'total_rows_groups': 1,
+          },
+        );
+        if (requestCount == 1) {
+          // 第一个请求晚于两次筛选操作完成。
+          releaseFirstRequest.future.then((_) => handler.resolve(response));
+        } else {
+          handler.resolve(response);
+        }
+      },
+    );
+    service.dio.interceptors.insert(0, interceptor);
+    addTearDown(() => service.dio.interceptors.remove(interceptor));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [discourseServiceProvider.overrideWithValue(service)],
+        child: const MaterialApp(home: GroupsPage()),
+      ),
+    );
+    await tester.pump();
+    expect(requestedTypes, [null]);
+
+    await tester.tap(find.byKey(const ValueKey('groups-type-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('groups-filter-my')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('groups-type-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('groups-filter-public')));
+    await tester.pump();
+
+    releaseFirstRequest.complete();
+    await tester.pumpAndSettle();
+    expect(requestedTypes.last, 'public');
+    expect(find.text('公开群组结果'), findsOneWidget);
+    expect(find.text('过期群组结果'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
 }
