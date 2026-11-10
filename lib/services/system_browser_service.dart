@@ -145,9 +145,12 @@ class SystemBrowserService {
       }
       if (browser.id == androidChooserId && Platform.isAndroid) {
         // Android ACTION_CHOOSER: 强制显示系统原生打开方式，而非直接使用默认浏览器。
-        return await _channel.invokeMethod<bool>(authorization ? 'launchLoginBrowserChooser' : 'launchWebBrowserChooser', {
-              'url': uri.toString(),
-            }) ??
+        return await _channel.invokeMethod<bool>(
+              authorization
+                  ? 'launchLoginBrowserChooser'
+                  : 'launchWebBrowserChooser',
+              {'url': uri.toString()},
+            ) ??
             false;
       }
       if (browser.id == 'default') {
@@ -160,10 +163,10 @@ class SystemBrowserService {
         return await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
       if (Platform.isAndroid) {
-        return await _channel.invokeMethod<bool>(authorization ? 'launchLoginBrowser' : 'launchWebBrowser', {
-              'id': browser.id,
-              'url': uri.toString(),
-            }) ??
+        return await _channel.invokeMethod<bool>(
+              authorization ? 'launchLoginBrowser' : 'launchWebBrowser',
+              {'id': browser.id, 'url': uri.toString()},
+            ) ??
             false;
       }
       if (Platform.isIOS) {
