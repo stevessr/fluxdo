@@ -145,10 +145,15 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     }
   }
 
+  void _resetDirectoryScroll() {
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+  }
+
   void _applyFilter() {
     _searchDebounce?.cancel();
     final next = _filterController.text.trim();
     if (next == _filter) return;
+    _resetDirectoryScroll();
     setState(() {
       _filter = next;
       _queryRevision++;
@@ -161,6 +166,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 
   void _changeType(String type) {
     if (_type == type) return;
+    _resetDirectoryScroll();
     setState(() {
       _type = type;
       _queryRevision++;
@@ -453,6 +459,22 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                 child: Center(
                   child: _loading
                       ? const CircularProgressIndicator.adaptive()
+                      : _error != null
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              copy.loadMoreFailed,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => _load(reset: false),
+                              child: Text(copy.retry),
+                            ),
+                          ],
+                        )
                       : _hasMore
                       ? FilledButton.tonal(
                           onPressed: () => _load(reset: false),
@@ -706,6 +728,7 @@ class _GroupsCopy {
   String get clear => zh ? '清除' : 'Clear';
   String get empty => zh ? '没有可见群组' : 'No visible groups';
   String get loadMore => zh ? '加载更多' : 'Load more';
+  String get loadMoreFailed => zh ? '加载更多群组失败' : 'Could not load more groups';
   String get loadFailed => zh ? '群组加载失败' : 'Failed to load groups';
   String get join => zh ? '加入' : 'Join';
   String get member => zh ? '成员' : 'Member';
