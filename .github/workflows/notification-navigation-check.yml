@@ -11,6 +11,7 @@ on:
       - 'lib/widgets/common/notification_icon_button.dart'
       - 'lib/l10n/modules/notification/**'
       - 'test/models/notification_reaction_aggregation_test.dart'
+      - 'test/utils/notification_navigation_route_test.dart'
       - 'test/providers/selected_topic_provider_test.dart'
       - '.github/workflows/notification-navigation-check.yml'
 
@@ -49,11 +50,13 @@ jobs:
             lib/utils/notification_navigation.dart \
             lib/widgets/common/notification_icon_button.dart \
             test/models/notification_reaction_aggregation_test.dart \
+            test/utils/notification_navigation_route_test.dart \
             test/providers/selected_topic_provider_test.dart
       - name: Run reaction and tab regressions
         run: |
           flutter test \
             test/models/notification_reaction_aggregation_test.dart \
+            test/utils/notification_navigation_route_test.dart \
             test/utils/notification_post_target_test.dart \
             test/models/notification_category_test.dart \
             test/providers/selected_topic_provider_test.dart
