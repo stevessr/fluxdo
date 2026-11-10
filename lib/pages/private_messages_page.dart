@@ -149,10 +149,6 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
 
   void _enterSelectionMode() {
     ref.read(selectedMessageProvider.notifier).clear();
-    // Bulk PM selection needs the list, but should not destroy shared tabs.
-    if (ref.read(selectedTopicProvider).tabMode) {
-      ref.read(selectedTopicProvider.notifier).showFeed();
-    }
     setState(() {
       _selectionMode = true;
       _selectedTopicIds = <int>{};
@@ -386,61 +382,65 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
     // selectedMessageProvider 导航栈;窄屏栈非空时详情在本页体内全宽
     // 投影(栈是唯一真相,不 push 合成路由,宽窄切换 State 原地保留)。
     final sharedTabs = ref.watch(selectedTopicProvider);
-    final useSharedTabs = sharedTabs.tabMode;
-    final stackProvider = useSharedTabs
-        ? selectedTopicProvider
-        : selectedMessageProvider;
-    final selectedMessage = useSharedTabs
-        ? sharedTabs
-        : ref.watch(selectedMessageProvider);
-    final adjacentTabs = useSharedTabs &&
-        selectedMessage.stack.length > 1 &&
-        !selectedMessage.showingFeed;
-    final masterIsListLike =
-        !adjacentTabs && (!selectedMessage.isStacked || useSharedTabs);
-    // The two IndexedStack hosts share tab state, but only the active
-    // host mounts detail panes. Their instance IDs remain stable.
-    final visiblePanes =
-        !selectedMessage.showingFeed && (widget.isActive || !useSharedTabs);
-    _escBinding.sync(
-      context,
-      paneOpen: selectedMessage.hasSelection && visiblePanes,
-    );
-
+    final selectedMessage = ref.watch(selectedMessageProvider);
+    // The home screen is the sole host for shared topic widgets. Keeping it
+    // mounted offstage preserves scroll/controllers while switching bottom
+    // destinations, and prevents duplicate detail subscriptions.
+    _escBinding.sync(context, paneOpen: selectedMessage.hasSelection);
     return PaneProjectionBackScope(
-      stackProvider: stackProvider,
+      stackProvider: selectedMessageProvider,
       isActive: widget.isActive,
       child: Column(
         children: [
           PicoParallelTabs(
-            selected: selectedMessage,
-            onActivate: (index) =>
-                ref.read(stackProvider.notifier).activateTab(index),
-            onClose: (index) =>
-                ref.read(stackProvider.notifier).closeTab(index),
-            onCloseOthers: (index) =>
-                ref.read(stackProvider.notifier).closeOtherTabs(index),
-            onCloseAll: () =>
-                ref.read(stackProvider.notifier).closeAllTabs(),
-            onShowFeed: useSharedTabs
-                ? () => ref.read(selectedTopicProvider.notifier).showFeed()
-                : null,
+            selected: sharedTabs.tabMode ? sharedTabs : selectedMessage,
+            onActivate: (index) {
+              if (ref.read(selectedTopicProvider).tabMode) {
+                ref.read(selectedTopicProvider.notifier).activateTab(index);
+                ref.requestNavDestination(NavEntryIds.home);
+              } else {
+                ref.read(selectedMessageProvider.notifier).activateTab(index);
+              }
+            },
+            onClose: (index) {
+              if (ref.read(selectedTopicProvider).tabMode) {
+                ref.read(selectedTopicProvider.notifier).closeTab(index);
+              } else {
+                ref.read(selectedMessageProvider.notifier).closeTab(index);
+              }
+            },
+            onCloseOthers: (index) {
+              if (ref.read(selectedTopicProvider).tabMode) {
+                ref.read(selectedTopicProvider.notifier).closeOtherTabs(index);
+              } else {
+                ref.read(selectedMessageProvider.notifier).closeOtherTabs(index);
+              }
+            },
+            onCloseAll: () {
+              if (ref.read(selectedTopicProvider).tabMode) {
+                ref.read(selectedTopicProvider.notifier).closeAllTabs();
+              } else {
+                ref.read(selectedMessageProvider.notifier).closeAllTabs();
+              }
+            },
           ),
           Expanded(
             child: MasterDetailLayout(
-              maxMasterRatio: masterIsListLike
-                  ? MasterDetailLayout.defaultMaxMasterRatio
-                  : 0.8,
-              preferredMasterRatio: masterIsListLike ? 0.25 : 0.5,
+              maxMasterRatio: selectedMessage.isStacked
+                  ? 0.8
+                  : MasterDetailLayout.defaultMaxMasterRatio,
+              preferredMasterRatio: selectedMessage.isStacked ? 0.5 : 0.25,
               projectDetailWhenNarrow: true,
-              pinMaster: useSharedTabs && !adjacentTabs,
+              pinMaster: false,
               master: listScaffold,
-              panes: visiblePanes
-                  ? [
-                      for (var i = 0; i < selectedMessage.stack.length; i++)
-                        _buildPaneCell(selectedMessage, stackProvider, i),
-                    ]
-                  : const [],
+              panes: [
+                for (var i = 0; i < selectedMessage.stack.length; i++)
+                  _buildPaneCell(
+                    selectedMessage,
+                    selectedMessageProvider,
+                    i,
+                  ),
+              ],
             ),
           ),
         ],
@@ -557,6 +557,7 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
         scrollToPostNumber: topic.lastReadPostNumber,
         isPrivateMessage: true,
       );
+      ref.requestNavDestination(NavEntryIds.home);
       return;
     }
     final canShowDetailPane = MasterDetailLayout.canShowBothPanesFor(context);
