@@ -247,6 +247,42 @@ void main() {
     expect(notifier.state.instanceId, 'old');
   });
 
+  test('Tab 模式的内部链接不会顶掉相邻标签，也不会重复打开同一话题', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1, instanceId: 'public')
+      ..openTopicTab(
+        topicId: 2,
+        instanceId: 'private',
+        isPrivateMessage: true,
+      );
+
+    notifier.push(topicId: 3, initialTitle: '链接目标');
+    expect(notifier.state.stack.map((e) => e.topicId), [1, 2, 3]);
+
+    notifier.pushTruncating(topicId: 2);
+    expect(notifier.state.stack.map((e) => e.topicId), [1, 3, 2]);
+    expect(notifier.state.stack.last.instanceId, 'private');
+    expect(notifier.state.stack.last.isPrivateMessage, isTrue);
+  });
+
+  test('再次打开现有 Tab 不会丢失回复意图或定位信息', () {
+    final notifier = SelectedTopicNotifier()
+      ..select(
+        topicId: 4,
+        instanceId: 'resume',
+        autoOpenReply: true,
+        autoReplyToPostNumber: 2,
+      )
+      ..enableTabMode();
+
+    notifier.openTopicTab(topicId: 4, initialTitle: '新标题');
+    expect(notifier.state.stack, hasLength(1));
+    expect(notifier.state.instanceId, 'resume');
+    expect(notifier.state.topEntry!.initialTitle, '新标题');
+    expect(notifier.state.topEntry!.autoOpenReply, isTrue);
+    expect(notifier.state.topEntry!.autoReplyToPostNumber, 2);
+  });
+
   test('长按关闭其他标签保留目标，关闭所有返回列表', () {
     final notifier = SelectedTopicNotifier()
       ..openTopicTab(topicId: 10, instanceId: 'first')
