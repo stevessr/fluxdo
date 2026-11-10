@@ -46,6 +46,19 @@ class PicoParallelTabs extends StatelessWidget {
     );
   }
 
+  String _tabLabel(PaneEntry entry, bool chinese) {
+    if (entry.kind == PaneKind.profile) return '@${entry.username}';
+    if (entry.kind == PaneKind.settings) {
+      return chinese ? '设置' : 'Settings';
+    }
+    final title = entry.initialTitle?.trim();
+    if (title != null && title.isNotEmpty) return title;
+    if (entry.isPrivateMessage) {
+      return chinese ? '私信 #${entry.topicId}' : 'PM #${entry.topicId}';
+    }
+    return chinese ? '话题 #${entry.topicId}' : 'Topic #${entry.topicId}';
+  }
+
   void _showTabActions(BuildContext context, int index) {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
     showModalBottomSheet<void>(
@@ -115,19 +128,7 @@ class PicoParallelTabs extends StatelessWidget {
                 final active =
                     !selected.showingFeed &&
                     index == selected.stack.length - 1;
-                final label = switch (entry.kind) {
-                  PaneKind.topic => entry.initialTitle?.trim().isNotEmpty == true
-                      ? entry.initialTitle!
-                      : entry.isPrivateMessage
-                      ? (chinese
-                            ? '私信 #${entry.topicId}'
-                            : 'PM #${entry.topicId}')
-                      : (chinese
-                            ? '话题 #${entry.topicId}'
-                            : 'Topic #${entry.topicId}'),
-                  PaneKind.profile => '@${entry.username}',
-                  PaneKind.settings => chinese ? '设置' : 'Settings',
-                };
+                final label = _tabLabel(entry, chinese);
                 return Center(
                   child: GestureDetector(
                     onLongPress: () => _showTabActions(context, index),
