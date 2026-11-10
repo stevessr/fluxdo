@@ -19,7 +19,7 @@ import '../services/toast_service.dart';
 import '../utils/time_utils.dart';
 import '../l10n/s.dart';
 
-enum _InviteExpiryPreset { days1, days7, days30, days90, never }
+enum _InviteExpiryPreset { days1, days7, days30, days90 }
 
 extension on _InviteExpiryPreset {
   String get label {
@@ -32,8 +32,6 @@ extension on _InviteExpiryPreset {
         return S.current.time_days(30);
       case _InviteExpiryPreset.days90:
         return S.current.time_days(90);
-      case _InviteExpiryPreset.never:
-        return S.current.invite_never;
     }
   }
 
@@ -47,8 +45,6 @@ extension on _InviteExpiryPreset {
         return const Duration(days: 30);
       case _InviteExpiryPreset.days90:
         return const Duration(days: 90);
-      case _InviteExpiryPreset.never:
-        return null;
     }
   }
 }
