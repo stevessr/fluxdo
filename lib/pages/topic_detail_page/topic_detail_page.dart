@@ -1644,8 +1644,16 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         (widget.stackProvider == null ||
             widget.stackProvider == selectedTopicProvider);
     if (isHomePane && home.topEntry?.topicId == widget.topicId) {
-      // 当前详情已在首页栈内：切换模式而不是复制同一个页面。
-      ref.read(selectedTopicProvider.notifier).enableTabMode();
+      // Upgrade the current PM topic label without replacing its pane instance.
+      if (detail.isPrivateMessage) {
+        ref.read(selectedTopicProvider.notifier).openTopicTab(
+          topicId: widget.topicId,
+          initialTitle: detail.title,
+          isPrivateMessage: true,
+        );
+      } else {
+        ref.read(selectedTopicProvider.notifier).enableTabMode();
+      }
       return;
     }
     ref
@@ -1654,6 +1662,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           topicId: widget.topicId,
           initialTitle: detail.title,
           scrollToPostNumber: _resolvedViewportPostNumber,
+          isPrivateMessage: detail.isPrivateMessage,
         );
     ref.requestNavDestination(NavEntryIds.home);
     if (!widget.embeddedMode) {
@@ -2073,8 +2082,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             ],
           ),
         ),
-        if (!detail.isPrivateMessage)
-          PopupMenuItem(
+        PopupMenuItem(
             key: const ValueKey('topic-open-in-tab'),
             value: 'open_in_tab',
             child: Row(
