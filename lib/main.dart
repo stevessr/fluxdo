@@ -1542,7 +1542,7 @@ class _MainPageState extends ConsumerState<MainPage>
                   candidate.normalizedUrl,
                 ).then((success) {
                   if (success == false) {
-                    ToastService.showError('无法使用所选浏览器打开链接');
+                    ToastService.showError(S.current.webview_cannotOpenBrowser);
                   }
                 }),
               );
