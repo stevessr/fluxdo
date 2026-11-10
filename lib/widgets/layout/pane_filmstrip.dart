@@ -68,6 +68,7 @@ class PaneFilmstrip extends StatefulWidget {
     required this.viewportPanes,
     this.emptyPane,
     this.masterFillsWhenEmpty = false,
+    this.showMasterOnly = false,
     this.pinMaster = true,
     this.dividerColor,
     this.animate = true,
@@ -89,6 +90,10 @@ class PaneFilmstrip extends StatefulWidget {
   /// 才收窄成左栏、新层从右滑入。适合"页面本身是内容、点开条目才
   /// 分栏"的宿主(用户资料页)。仅 unpinned 生效。
   final bool masterFillsWhenEmpty;
+
+  /// Reveal the full-width list while retaining all pane Elements offstage.
+  /// Unlike passing an empty panes list this preserves tab scroll/editor state.
+  final bool showMasterOnly;
 
   /// true = master 格钉死左栏,层带只在右格区滑(PaneHost/profile);
   /// false = master 格也在带上,压栈时被顶出视口左侧(首页平行视界)。
@@ -150,6 +155,7 @@ class _PaneFilmstripState extends State<PaneFilmstrip>
   Size _lastSize = Size.zero;
   int _lastViewportPanes = 0;
   double _lastMasterWidth = 0;
+  bool _lastShowMasterOnly = false;
   bool _kickScheduled = false;
 
   @override
@@ -186,6 +192,19 @@ class _PaneFilmstripState extends State<PaneFilmstrip>
     final h = size.height;
     final mW = widget.masterWidth;
     final d = widget.panes.length;
+
+    if (widget.showMasterOnly) {
+      layout[masterCellKey] = Rect.fromLTWH(0, 0, v, h);
+      for (var i = 0; i < d; i++) {
+        layout[widget.panes[i].key!] = Rect.fromLTWH(
+          -(d - i) * v,
+          0,
+          v,
+          h,
+        );
+      }
+      return layout;
+    }
 
     if (widget.viewportPanes <= 1) {
       layout[masterCellKey] = Rect.fromLTWH(-d * v, 0, v, h);
@@ -389,10 +408,12 @@ class _PaneFilmstripState extends State<PaneFilmstrip>
         final formChanged =
             size != _lastSize ||
             widget.viewportPanes != _lastViewportPanes ||
+            widget.showMasterOnly != _lastShowMasterOnly ||
             (!structureDiffers && widget.masterWidth != _lastMasterWidth);
         _lastSize = size;
         _lastViewportPanes = widget.viewportPanes;
         _lastMasterWidth = widget.masterWidth;
+        _lastShowMasterOnly = widget.showMasterOnly;
         // suppress:预测返回 commit 收尾的清栈,滑出已由手势演过,这次
         // 结构变化瞬切。只在层格结构真变时消费——无关 build 提前吃掉
         // 标记会让随后的清栈又演一遍滑出(顶格跳回重滑)。

@@ -25,6 +25,7 @@ class PaneEntry {
     this.initialRevisionNumber,
     this.autoOpenReply = false,
     this.autoReplyToPostNumber,
+    this.isPrivateMessage = false,
   }) : kind = PaneKind.topic,
        username = null;
 
@@ -38,7 +39,8 @@ class PaneEntry {
       initialRevisionPostNumber = null,
       initialRevisionNumber = null,
       autoOpenReply = false,
-      autoReplyToPostNumber = null;
+      autoReplyToPostNumber = null,
+      isPrivateMessage = false;
 
   const PaneEntry.settings()
     : kind = PaneKind.settings,
@@ -51,10 +53,13 @@ class PaneEntry {
       initialRevisionPostNumber = null,
       initialRevisionNumber = null,
       autoOpenReply = false,
-      autoReplyToPostNumber = null;
+      autoReplyToPostNumber = null,
+      isPrivateMessage = false;
 
   final PaneKind kind;
   final int? topicId;
+  /// PM is a Discourse topic, distinguished only for tab presentation.
+  final bool isPrivateMessage;
   final String? username;
   final String? initialTitle;
   final int? scrollToPostNumber;
@@ -128,6 +133,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     String? initialTitle,
     int? scrollToPostNumber,
     String? instanceId,
+    bool isPrivateMessage = false,
   }) {
     final existing = state.stack.indexWhere(
       (pane) => pane.kind == PaneKind.topic && pane.topicId == topicId,
@@ -135,7 +141,22 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     final tabs = [...state.stack];
     if (existing != -1) {
       final pane = tabs.removeAt(existing);
-      tabs.add(pane);
+      tabs.add(
+        PaneEntry.topic(
+          topicId: topicId,
+          initialTitle: initialTitle ?? pane.initialTitle,
+          // Reopening an existing tab must not jump away from its reading
+          // position or lose a reply/revision intent.
+          scrollToPostNumber: pane.scrollToPostNumber ?? scrollToPostNumber,
+          instanceId: pane.instanceId,
+          isPrivateMessage: pane.isPrivateMessage || isPrivateMessage,
+          highlightBoostUsername: pane.highlightBoostUsername,
+          initialRevisionPostNumber: pane.initialRevisionPostNumber,
+          initialRevisionNumber: pane.initialRevisionNumber,
+          autoOpenReply: pane.autoOpenReply,
+          autoReplyToPostNumber: pane.autoReplyToPostNumber,
+        ),
+      );
     } else {
       tabs.add(
         PaneEntry.topic(
@@ -143,6 +164,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           initialTitle: initialTitle,
           scrollToPostNumber: scrollToPostNumber,
           instanceId: instanceId ?? const Uuid().v4(),
+          isPrivateMessage: isPrivateMessage,
         ),
       );
     }
@@ -172,6 +194,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   /// 从列表直接选中话题：退出独立 Tab 模式，恢复普通导航。
   void select({
     required int topicId,
+    bool isPrivateMessage = false,
     String? initialTitle,
     int? scrollToPostNumber,
     String? instanceId,
@@ -187,6 +210,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           autoOpenReply: autoOpenReply,
           autoReplyToPostNumber: autoReplyToPostNumber,
           topicId: topicId,
+          isPrivateMessage: isPrivateMessage,
           initialTitle: initialTitle,
           scrollToPostNumber: scrollToPostNumber,
           // 最初从列表进入的这一层也必须持有稳定实例 ID。否则它在
@@ -224,6 +248,21 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     bool autoOpenReply = false,
     int? autoReplyToPostNumber,
   }) {
+    if (state.tabMode &&
+        !autoOpenReply &&
+        autoReplyToPostNumber == null &&
+        highlightBoostUsername == null &&
+        initialRevisionPostNumber == null &&
+        initialRevisionNumber == null) {
+      // Internal topic links participate in the same deduplicated tab set.
+      openTopicTab(
+        topicId: topicId,
+        initialTitle: initialTitle,
+        scrollToPostNumber: scrollToPostNumber,
+        instanceId: instanceId,
+      );
+      return;
+    }
     state = SelectedTopicState(
       tabMode: state.tabMode,
       showingFeed: false,
@@ -257,6 +296,16 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     int? scrollToPostNumber,
     String? instanceId,
   }) {
+    if (state.tabMode) {
+      // Replacing a list selection must not discard any other open tab.
+      openTopicTab(
+        topicId: topicId,
+        initialTitle: initialTitle,
+        scrollToPostNumber: scrollToPostNumber,
+        instanceId: instanceId,
+      );
+      return;
+    }
     if (state.stack.isEmpty) {
       push(
         topicId: topicId,
@@ -293,6 +342,18 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
     bool autoOpenReply = false,
     int? autoReplyToPostNumber,
   }) {
+    if (state.tabMode) {
+      // An adjacent Tab is not a predecessor in a navigation history.
+      push(
+        topicId: topicId,
+        initialTitle: initialTitle,
+        scrollToPostNumber: scrollToPostNumber,
+        instanceId: instanceId,
+        autoOpenReply: autoOpenReply,
+        autoReplyToPostNumber: autoReplyToPostNumber,
+      );
+      return;
+    }
     if (state.stack.length < 2) {
       push(
         topicId: topicId,
@@ -349,6 +410,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           initialTitle: initialTitle ?? current.initialTitle,
           scrollToPostNumber: scrollToPostNumber ?? current.scrollToPostNumber,
           instanceId: instanceId ?? current.instanceId,
+          isPrivateMessage: current.isPrivateMessage,
           highlightBoostUsername: current.highlightBoostUsername,
           initialRevisionPostNumber: current.initialRevisionPostNumber,
           initialRevisionNumber: current.initialRevisionNumber,
@@ -393,7 +455,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   /// master 面板"上一层预览"里点头像/用户名跳资料：截断当前栈顶后压入，
   /// 语义同 [pushTruncating]。
   void pushProfileTruncating(String username) {
-    if (state.stack.length < 2) {
+    if (state.tabMode || state.stack.length < 2) {
       pushProfile(username);
       return;
     }
@@ -410,7 +472,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   /// master 面板"上一层预览"里打开设置：截断当前栈顶后压入，语义同
   /// [pushTruncating]。
   void pushSettingsTruncating() {
-    if (state.stack.length < 2) {
+    if (state.tabMode || state.stack.length < 2) {
       pushSettings();
       return;
     }
@@ -429,7 +491,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
   void activateTab(int index) {
     if (index < 0 ||
         index >= state.stack.length ||
-        index == state.stack.length - 1) {
+        (index == state.stack.length - 1 && !state.showingFeed)) {
       return;
     }
     final panes = [...state.stack];
@@ -441,6 +503,19 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
       showingFeed: false,
     );
   }
+
+  /// Keep only the long-pressed tab without changing its provider identity.
+  void closeOtherTabs(int index) {
+    if (index < 0 || index >= state.stack.length) return;
+    state = SelectedTopicState(
+      stack: [state.stack[index]],
+      tabMode: state.tabMode,
+      showingFeed: false,
+    );
+  }
+
+  /// Close all tabs and return to the list.
+  void closeAllTabs() => clear();
 
   /// 关闭单个标签。关闭背景层不影响当前页；关闭栈顶则回到上一层。
   void closeTab(int index) {
@@ -497,6 +572,7 @@ class SelectedTopicNotifier extends StateNotifier<SelectedTopicState> {
           initialTitle: top.initialTitle,
           scrollToPostNumber: top.scrollToPostNumber,
           instanceId: top.instanceId,
+          isPrivateMessage: top.isPrivateMessage,
           highlightBoostUsername: top.highlightBoostUsername,
           initialRevisionPostNumber: top.initialRevisionPostNumber,
           initialRevisionNumber: top.initialRevisionNumber,

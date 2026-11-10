@@ -1644,8 +1644,16 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         (widget.stackProvider == null ||
             widget.stackProvider == selectedTopicProvider);
     if (isHomePane && home.topEntry?.topicId == widget.topicId) {
-      // 当前详情已在首页栈内：切换模式而不是复制同一个页面。
-      ref.read(selectedTopicProvider.notifier).enableTabMode();
+      // Upgrade the current PM topic label without replacing its pane instance.
+      if (detail.isPrivateMessage) {
+        ref.read(selectedTopicProvider.notifier).openTopicTab(
+          topicId: widget.topicId,
+          initialTitle: detail.title,
+          isPrivateMessage: true,
+        );
+      } else {
+        ref.read(selectedTopicProvider.notifier).enableTabMode();
+      }
       return;
     }
     ref
@@ -1654,8 +1662,15 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           topicId: widget.topicId,
           initialTitle: detail.title,
           scrollToPostNumber: _resolvedViewportPostNumber,
+          isPrivateMessage: detail.isPrivateMessage,
         );
     ref.requestNavDestination(NavEntryIds.home);
+    if (widget.embeddedMode &&
+        widget.stackProvider == selectedMessageProvider) {
+      // Moving a PM into the global workspace should not leave a stale
+      // private-message detail behind when all shared tabs are closed.
+      ref.read(selectedMessageProvider.notifier).clear();
+    }
     if (!widget.embeddedMode) {
       // 全屏路由回到所属首页，由首页的 Tab 显示新话题。
       final route = ModalRoute.of(context);
@@ -2073,27 +2088,26 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             ],
           ),
         ),
-        if (!detail.isPrivateMessage)
-          PopupMenuItem(
-            key: const ValueKey('topic-open-in-tab'),
-            value: 'open_in_tab',
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.tab_rounded,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  Localizations.localeOf(context).languageCode == 'zh'
-                      ? '在 Tab 中打开'
-                      : 'Open in tab',
-                ),
-              ],
-            ),
+        PopupMenuItem(
+          key: const ValueKey('topic-open-in-tab'),
+          value: 'open_in_tab',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.tab_rounded,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                Localizations.localeOf(context).languageCode == 'zh'
+                    ? '在 Tab 中打开'
+                    : 'Open in tab',
+              ),
+            ],
           ),
+        ),
         if (showNewWindow)
           PopupMenuItem(
             key: const ValueKey('topic-open-native-window'),

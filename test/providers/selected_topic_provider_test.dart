@@ -183,6 +183,17 @@ void main() {
     expect(notifier.state.stack, hasLength(2));
   });
 
+  test('从列表点击当前最后一个 Tab 会重新显示详情', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 42)
+      ..showFeed();
+
+    expect(notifier.state.showingFeed, isTrue);
+    notifier.activateTab(0);
+    expect(notifier.state.showingFeed, isFalse);
+    expect(notifier.state.topicId, 42);
+  });
+
   test('信息流可见时关闭背景 Tab 不会切回详情', () {
     final notifier = SelectedTopicNotifier()
       ..openTopicTab(topicId: 1)
@@ -203,6 +214,98 @@ void main() {
     expect(notifier.state.tabMode, isFalse);
     expect(notifier.state.showingFeed, isFalse);
     expect(notifier.state.stack, isEmpty);
+  });
+
+  test('私信与公开话题共享一套标签，并复用相同话题实例', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 10, initialTitle: '公开', instanceId: 'public')
+      ..openTopicTab(
+        topicId: 20,
+        initialTitle: '私信',
+        instanceId: 'private',
+        isPrivateMessage: true,
+      );
+
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.stack.last.isPrivateMessage, isTrue);
+
+    notifier.openTopicTab(topicId: 20, isPrivateMessage: true);
+    expect(notifier.state.stack, hasLength(2));
+    expect(notifier.state.instanceId, 'private');
+
+    notifier.activateTab(0);
+    expect(notifier.state.stack.last.instanceId, 'public');
+    expect(notifier.state.stack.first.isPrivateMessage, isTrue);
+  });
+
+  test('从普通话题入口再次打开私信可升级标记，实例不重建', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 3, instanceId: 'old')
+      ..openTopicTab(topicId: 3, isPrivateMessage: true);
+    expect(notifier.state.stack, hasLength(1));
+    expect(notifier.state.topEntry!.isPrivateMessage, isTrue);
+    expect(notifier.state.instanceId, 'old');
+  });
+
+  test('Tab 模式的内部链接不会顶掉相邻标签，也不会重复打开同一话题', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 1, instanceId: 'public')
+      ..openTopicTab(
+        topicId: 2,
+        instanceId: 'private',
+        isPrivateMessage: true,
+      );
+
+    notifier.push(topicId: 3, initialTitle: '链接目标');
+    expect(notifier.state.stack.map((e) => e.topicId), [1, 2, 3]);
+
+    notifier.pushTruncating(topicId: 2);
+    expect(notifier.state.stack.map((e) => e.topicId), [1, 3, 2]);
+    expect(notifier.state.stack.last.instanceId, 'private');
+    expect(notifier.state.stack.last.isPrivateMessage, isTrue);
+  });
+
+  test('再次打开现有 Tab 不会丢失回复意图或定位信息', () {
+    final notifier = SelectedTopicNotifier()
+      ..select(
+        topicId: 4,
+        instanceId: 'resume',
+        autoOpenReply: true,
+        autoReplyToPostNumber: 2,
+      )
+      ..enableTabMode();
+
+    notifier.openTopicTab(topicId: 4, initialTitle: '新标题');
+    expect(notifier.state.stack, hasLength(1));
+    expect(notifier.state.instanceId, 'resume');
+    expect(notifier.state.topEntry!.initialTitle, '新标题');
+    expect(notifier.state.topEntry!.autoOpenReply, isTrue);
+    expect(notifier.state.topEntry!.autoReplyToPostNumber, 2);
+  });
+
+  test('长按关闭其他标签保留目标，关闭所有返回列表', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 10, instanceId: 'first')
+      ..openTopicTab(
+        topicId: 20,
+        instanceId: 'second',
+        isPrivateMessage: true,
+      )
+      ..openTopicTab(topicId: 30, instanceId: 'third');
+
+    notifier.closeOtherTabs(1);
+    expect(notifier.state.stack, hasLength(1));
+    expect(notifier.state.instanceId, 'second');
+    expect(notifier.state.topEntry!.isPrivateMessage, isTrue);
+    expect(notifier.state.tabMode, isTrue);
+
+    final before = notifier.state;
+    notifier.closeOtherTabs(-1);
+    expect(notifier.state, same(before));
+
+    notifier.closeAllTabs();
+    expect(notifier.state.stack, isEmpty);
+    expect(notifier.state.tabMode, isFalse);
   });
 
   test('Tab 模式压栈和返回不会被静默关闭', () {
