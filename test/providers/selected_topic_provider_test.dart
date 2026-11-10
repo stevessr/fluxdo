@@ -183,6 +183,17 @@ void main() {
     expect(notifier.state.stack, hasLength(2));
   });
 
+  test('从列表点击当前最后一个 Tab 会重新显示详情', () {
+    final notifier = SelectedTopicNotifier()
+      ..openTopicTab(topicId: 42)
+      ..showFeed();
+
+    expect(notifier.state.showingFeed, isTrue);
+    notifier.activateTab(0);
+    expect(notifier.state.showingFeed, isFalse);
+    expect(notifier.state.topicId, 42);
+  });
+
   test('信息流可见时关闭背景 Tab 不会切回详情', () {
     final notifier = SelectedTopicNotifier()
       ..openTopicTab(topicId: 1)
