@@ -321,7 +321,7 @@ class BrowserTrustCoordinator {
 
     _log('start proactive CF verification before preload: $reason');
     try {
-      final verified = await cf.showManualVerify(_navigatorContext, true);
+      final verified = await cf.probeBeforePreload(_navigatorContext);
       if (verified == true) {
         // 验证完成不代表新 Cookie 已同步到原生请求栈。
         await cf.waitForCompletionCookieSync();
