@@ -1,6 +1,18 @@
 name: Proactive CF Preload
 
 on:
+  push:
+    branches:
+      - feat/proactive-cf-verification-before-preload
+    paths:
+      - 'lib/main.dart'
+      - 'lib/providers/preferences_provider.dart'
+      - 'lib/services/cf_challenge_service.dart'
+      - 'lib/services/browser_trust_coordinator.dart'
+      - 'lib/settings/definitions/custom_settings_defs.dart'
+      - 'test/services/proactive_cf_preload_contract_test.dart'
+      - 'test/services/browser_trust_preload_latency_contract_test.dart'
+      - '.github/workflows/proactive-cf-preload.yml'
   pull_request:
     paths:
       - 'lib/main.dart'
