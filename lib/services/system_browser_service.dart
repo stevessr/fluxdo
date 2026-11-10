@@ -117,29 +117,52 @@ class SystemBrowserService {
     ).availableBrowsers();
   }
 
-  Future<bool> open(LoginBrowser browser, Uri authorizationUrl) async {
-    if (!isAuthorizationUrl(authorizationUrl)) return false;
+  /// Authorization continues to use the strict Discourse endpoint allowlist.
+  Future<bool> open(LoginBrowser browser, Uri uri) {
+    if (!isAuthorizationUrl(uri)) return Future.value(false);
+    return _openBrowser(browser, uri, authorization: true);
+  }
+
+  /// Open a regular HTTP(S) link in a selected installed browser.
+  Future<bool> openWebLink(LoginBrowser browser, Uri uri) {
+    if (!isWebUrl(uri)) return Future.value(false);
+    return _openBrowser(browser, uri, authorization: false);
+  }
+
+  static bool isWebUrl(Uri uri) =>
+      (uri.scheme == 'https' || uri.scheme == 'http') &&
+      uri.host.isNotEmpty &&
+      uri.userInfo.isEmpty;
+
+  Future<bool> _openBrowser(
+    LoginBrowser browser,
+    Uri uri, {
+    required bool authorization,
+  }) async {
     try {
       if (browser.id == _portalChooser.id && Platform.isLinux && _inFlatpak) {
-        return await _openWithPortalChooser(authorizationUrl);
+        return await _openWithPortalChooser(uri);
       }
       if (browser.id == androidChooserId && Platform.isAndroid) {
         // Android ACTION_CHOOSER: 强制显示系统原生打开方式，而非直接使用默认浏览器。
-        return await _channel.invokeMethod<bool>('launchLoginBrowserChooser', {
-              'url': authorizationUrl.toString(),
+        return await _channel.invokeMethod<bool>(authorization ? 'launchLoginBrowserChooser' : 'launchWebBrowserChooser', {
+              'url': uri.toString(),
             }) ??
             false;
       }
       if (browser.id == 'default') {
-        return await launchUrl(
-          authorizationUrl,
-          mode: LaunchMode.externalApplication,
-        );
+        if (Platform.isAndroid && !authorization) {
+          return await _channel.invokeMethod<bool>('openInBrowser', {
+                'url': uri.toString(),
+              }) ??
+              false;
+        }
+        return await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
       if (Platform.isAndroid) {
-        return await _channel.invokeMethod<bool>('launchLoginBrowser', {
+        return await _channel.invokeMethod<bool>(authorization ? 'launchLoginBrowser' : 'launchWebBrowser', {
               'id': browser.id,
-              'url': authorizationUrl.toString(),
+              'url': uri.toString(),
             }) ??
             false;
       }
@@ -147,14 +170,14 @@ class SystemBrowserService {
         late final Uri target;
         switch (browser.id) {
           case 'ios:chrome':
-            target = authorizationUrl.replace(scheme: 'googlechromes');
+            target = uri.replace(scheme: 'googlechromes');
             break;
           case 'ios:firefox':
             target = Uri.parse('firefox://open-url')
-                .replace(queryParameters: {'url': authorizationUrl.toString()});
+                .replace(queryParameters: {'url': uri.toString()});
             break;
           case 'ios:edge':
-            target = authorizationUrl.replace(scheme: 'microsoft-edge-https');
+            target = uri.replace(scheme: 'microsoft-edge-https');
             break;
           default:
             return false;
@@ -166,13 +189,13 @@ class SystemBrowserService {
         // GIO 提交启动请求后返回；检查退出码，避免把拒绝启动当作成功。
         return (await Process.run(browser.executable!, [
               ...browser.arguments,
-              authorizationUrl.toString(),
+              uri.toString(),
             ])).exitCode ==
             0;
       }
       await Process.start(browser.executable!, [
         ...browser.arguments,
-        authorizationUrl.toString(),
+        uri.toString(),
       ], mode: ProcessStartMode.detached);
       return true;
     } catch (_) {
