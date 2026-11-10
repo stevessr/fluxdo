@@ -80,6 +80,8 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   InviteLinkResponse? _latestInvite;
   ProviderSubscription<AsyncValue<User?>>? _userSub;
   bool _hasRequestedInitialRefresh = false;
+  String? _activeUsername;
+  int _pendingRequestGeneration = 0;
 
   @override
   void initState() {
@@ -88,12 +90,27 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       _,
       next,
     ) {
-      final user = next.value;
-      if (user == null) return;
-      _applyCachedInvite(user.username);
+      final username = next.value?.username;
+      if (username != _activeUsername) {
+        _activeUsername = username;
+        // 丢弃旧账号请求，切换账号期间绝不展示旧邀请。
+        _pendingRequestGeneration++;
+        _hasRequestedInitialRefresh = false;
+        setState(() {
+          _latestInvite = null;
+          _lastEmailRecipient = null;
+          _isLoadingPending = false;
+        });
+      }
+      if (username == null) return;
+      _applyCachedInvite(username);
       if (!_hasRequestedInitialRefresh) {
         _hasRequestedInitialRefresh = true;
-        Future.microtask(() => _loadPendingInvites(force: true));
+        Future.microtask(() {
+          if (mounted && _activeUsername == username) {
+            _loadPendingInvites(force: true);
+          }
+        });
       }
     }, fireImmediately: true);
   }
@@ -223,18 +240,24 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   }
 
   Future<void> _loadPendingInvites({bool force = false}) async {
-    if (_isLoadingPending) return;
+    if (_isLoadingPending && !force) return;
     final user = ref.read(currentUserProvider).value;
     if (user == null) return;
+    final generation = ++_pendingRequestGeneration;
 
     setState(() => _isLoadingPending = true);
     try {
       final invites = await ref
           .read(discourseServiceProvider)
           .getPendingInvites(user.username);
+      if (!mounted ||
+          generation != _pendingRequestGeneration ||
+          _activeUsername != user.username) {
+        return;
+      }
       final latest = _pickLatestInvite(invites);
       final resolved = latest != null ? _resolveInviteLink(latest) : null;
-      if (!_isSameInvite(_latestInvite, resolved) && mounted) {
+      if (!_isSameInvite(_latestInvite, resolved)) {
         setState(() => _latestInvite = resolved);
         if (resolved != null) {
           await _saveInviteCache(user.username, resolved);
@@ -243,9 +266,9 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
         }
       }
     } catch (_) {
-      // 忽略失败，避免干扰手动创建流程
+      // 不覆盖页面当前状态；后续仍可手动创建或刷新邀请。
     } finally {
-      if (mounted) {
+      if (mounted && generation == _pendingRequestGeneration) {
         setState(() => _isLoadingPending = false);
       }
     }
@@ -258,10 +281,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       ToastService.showError(S.current.common_pleaseLogin);
       return;
     }
-    if (user.trustLevel < 3) {
-      ToastService.showError(S.current.invite_trustLevelTooLow);
-      return;
-    }
+    // 邀请资格由当前站点的 Discourse 权限接口判定。
 
     final draft = InviteDraft(
       method: _inviteMethod,
@@ -298,7 +318,14 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
         domain: draft.domain,
         customMessage: draft.customMessage,
       );
-      if (!mounted) return;
+      if (!mounted ||
+          ref.read(currentUserProvider).value?.username != user.username) {
+        return;
+      }
+
+      // 已提交成功的结果优先于先前的待处理邀请列表响应。
+      _pendingRequestGeneration++;
+      if (_isLoadingPending) setState(() => _isLoadingPending = false);
 
       if (draft.method == InviteDeliveryMethod.email) {
         setState(() => _lastEmailRecipient = draft.email);
