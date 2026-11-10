@@ -112,15 +112,19 @@ class PicoParallelTabs extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(width: 6),
               itemBuilder: (context, index) {
                 final entry = selected.stack[index];
-                final active = !selected.showingFeed &&
+                final active =
+                    !selected.showingFeed &&
                     index == selected.stack.length - 1;
                 final label = switch (entry.kind) {
-                  PaneKind.topic =>
-                    entry.initialTitle?.trim().isNotEmpty == true
-                        ? entry.initialTitle!
-                        : (entry.isPrivateMessage
-                              ? (chinese ? '私信 #${entry.topicId}' : 'PM #${entry.topicId}')
-                              : (chinese ? '话题 #${entry.topicId}' : 'Topic #${entry.topicId}')),
+                  PaneKind.topic => entry.initialTitle?.trim().isNotEmpty == true
+                      ? entry.initialTitle!
+                      : entry.isPrivateMessage
+                      ? (chinese
+                            ? '私信 #${entry.topicId}'
+                            : 'PM #${entry.topicId}')
+                      : (chinese
+                            ? '话题 #${entry.topicId}'
+                            : 'Topic #${entry.topicId}'),
                   PaneKind.profile => '@${entry.username}',
                   PaneKind.settings => chinese ? '设置' : 'Settings',
                 };
@@ -128,31 +132,34 @@ class PicoParallelTabs extends StatelessWidget {
                   child: GestureDetector(
                     onLongPress: () => _showTabActions(context, index),
                     child: InputChip(
-                    key: ValueKey('pico-pane-tab-$index'),
-                    selected: active,
-                    showCheckmark: false,
-                    tooltip: label,
-                    label: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 180),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (entry.kind == PaneKind.topic && entry.isPrivateMessage) ...[
-                            const Icon(Icons.mail_outline_rounded, size: 15),
-                            const SizedBox(width: 5),
+                      key: ValueKey('pico-pane-tab-$index'),
+                      selected: active,
+                      showCheckmark: false,
+                      tooltip: label,
+                      label: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 180),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (entry.kind == PaneKind.topic &&
+                                entry.isPrivateMessage) ...[
+                              const Icon(Icons.mail_outline_rounded, size: 15),
+                              const SizedBox(width: 5),
+                            ],
+                            Flexible(
+                              child: Text(
+                                label,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
                           ],
-                          Flexible(child: Text(
-                        label,
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                          )),
-                        ],
+                        ),
                       ),
-                    ),
-                    onPressed: () => onActivate(index),
-                    onDeleted: () => onClose(index),
-                    deleteButtonTooltipMessage: chinese ? '关闭标签' : 'Close tab',
-                    visualDensity: VisualDensity.compact,
+                      onPressed: () => onActivate(index),
+                      onDeleted: () => onClose(index),
+                      deleteButtonTooltipMessage: chinese ? '关闭标签' : 'Close tab',
+                      visualDensity: VisualDensity.compact,
                     ),
                   ),
                 );
