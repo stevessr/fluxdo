@@ -39,6 +39,24 @@ void main() {
     ));
   });
 
+  test('主动探测保留有效 clearance，且不会在预加载期间重启续期 WebView', () {
+    expect(challenge, contains(
+      'enum CfVerificationMode { challengeRecovery, preloadProbe }',
+    ));
+    expect(challenge, contains(
+      'showManualVerify(context, false, CfVerificationMode.preloadProbe)',
+    ));
+    expect(challenge, contains(
+      'if (mode == CfVerificationMode.challengeRecovery) {',
+    ));
+    expect(challenge, contains("deleteCookie('cf_clearance')"));
+    expect(challenge, contains("deleteWebViewCookie('cf_clearance')"));
+    expect(challenge, contains(
+      'if (mode == CfVerificationMode.challengeRecovery) {\n'
+      '        Future.delayed(_postCleanupCooldown',
+    ));
+  });
+
   test('预加载早于 ProviderScope：启动入口应先读取保存的开关', () {
     final flag = startup.indexOf(
       'prefs.getBool(PreferencesNotifier.proactiveCfBeforePreloadKey)',
@@ -65,7 +83,7 @@ void main() {
         contains('await _verifyCfBeforePreload(reason: reason)'));
 
     final body = coordinator.substring(verify, start);
-    final result = body.indexOf('await cf.showManualVerify');
+    final result = body.indexOf('await cf.probeBeforePreload');
     final sync = body.indexOf('await cf.waitForCompletionCookieSync()');
     final teardown = body.indexOf('await cf.waitForManualTeardown()');
     expect(result, greaterThanOrEqualTo(0));
