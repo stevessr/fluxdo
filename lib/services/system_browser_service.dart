@@ -173,14 +173,20 @@ class SystemBrowserService {
         late final Uri target;
         switch (browser.id) {
           case 'ios:chrome':
-            target = uri.replace(scheme: 'googlechromes');
+            target = uri.replace(
+              scheme: uri.scheme == 'http' ? 'googlechrome' : 'googlechromes',
+            );
             break;
           case 'ios:firefox':
             target = Uri.parse('firefox://open-url')
                 .replace(queryParameters: {'url': uri.toString()});
             break;
           case 'ios:edge':
-            target = uri.replace(scheme: 'microsoft-edge-https');
+            target = uri.replace(
+              scheme: uri.scheme == 'http'
+                  ? 'microsoft-edge-http'
+                  : 'microsoft-edge-https',
+            );
             break;
           default:
             return false;
