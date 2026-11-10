@@ -204,6 +204,10 @@ void main() {
         'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/MainActivity.kt',
       ).readAsStringSync();
       expect(nativeSource, contains('"launchLoginBrowserChooser"'));
+      expect(nativeSource, contains('"launchWebBrowser"'));
+      expect(nativeSource, contains('"launchWebBrowserChooser"'));
+      expect(nativeSource, contains('if (!isWebBrowserUri(uri)) return false'));
+      expect(nativeSource, contains('Intent.EXTRA_INITIAL_INTENTS'));
       expect(
         nativeSource,
         contains('Intent.createChooser(viewIntent, "选择打开方式")'),
