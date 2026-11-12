@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluxdo_render/fluxdo_render.dart';
 
 import '../models/site_policy_document.dart';
+import '../models/site_info_section.dart';
 import '../providers/discourse_providers.dart';
 import '../utils/link_launcher.dart';
 import '../utils/url_helper.dart';
@@ -157,23 +158,20 @@ class _SitePolicyPageState extends ConsumerState<SitePolicyPage> {
     final sameOrigin = uri.host == Uri.parse(
       UrlHelper.resolveUrl('/'),
     ).host;
-    if (sameOrigin && uri.path == '/' + widget.kind.path &&
-        uri.fragment.isNotEmpty) {
-      unawaited(_jumpTo(uri.fragment));
-      return;
-    }
+    // A policy hyperlink changes the section of the existing workspace.
+    // Normalize trailing slashes so /tos/ cannot launch a nested page.
     if (sameOrigin) {
-      for (final kind in SitePolicyKind.values) {
-        if (uri.path == '/' + kind.path) {
+      final section = SiteInfoSection.fromPath(uri.path);
+      if (section != null) {
+        if (section.index == widget.kind.index + 1 &&
+            uri.fragment.isNotEmpty) {
+          unawaited(_jumpTo(uri.fragment));
+        } else {
           _selectTab(
-            kind.index + 1,
+            section.index,
             uri.fragment.isEmpty ? null : uri.fragment,
           );
-          return;
         }
-      }
-      if (uri.path == '/about') {
-        _selectTab(0);
         return;
       }
     }
