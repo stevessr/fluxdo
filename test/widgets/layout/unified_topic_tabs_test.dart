@@ -15,6 +15,7 @@ void main() {
       );
 
     Widget buildTabs() => MaterialApp(
+      locale: const Locale('en'),
       home: Scaffold(
         body: PicoParallelTabs(
           selected: notifier.state,
