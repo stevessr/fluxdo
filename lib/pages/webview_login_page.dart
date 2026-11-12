@@ -698,7 +698,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
     if (jarToken != webViewToken) {
       throw StateError('已验证的 WebView 会话 Cookie 未能同步到应用');
     }
-    final finalToken = jarToken;
+    // The equality check above proves this cookie is the verified token.
+    final String finalToken = webViewToken;
     final tokenMatch = jarToken == webViewToken;
     final jarAuthCookies = await _cookieJar.getAuthCookieDiagnosticsForRequest(
       uri: Uri.parse(AppConstants.baseUrl),

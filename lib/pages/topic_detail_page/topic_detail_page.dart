@@ -1636,47 +1636,50 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     ];
   }
 
-  /// 将当前话题移入首页 Tab 工作区，并保留当前浏览楼层。
+  /// Maximize a topic into the first (home) destination as a real Tab.
+  /// Never leave a full-screen route above the bottom navigation shell.
   void _openTopicInTab(TopicDetail detail) {
     final home = ref.read(selectedTopicProvider);
+    final notifier = ref.read(selectedTopicProvider.notifier);
     final isHomePane =
         widget.embeddedMode &&
         (widget.stackProvider == null ||
             widget.stackProvider == selectedTopicProvider);
+
     if (isHomePane && home.topEntry?.topicId == widget.topicId) {
-      // Upgrade the current PM topic label without replacing its pane instance.
+      // Keep the existing pane instance, scroll position, and reply editor.
       if (detail.isPrivateMessage) {
-        ref.read(selectedTopicProvider.notifier).openTopicTab(
+        notifier.openTopicTab(
           topicId: widget.topicId,
           initialTitle: detail.title,
           isPrivateMessage: true,
         );
       } else {
-        ref.read(selectedTopicProvider.notifier).enableTabMode();
+        notifier.enableTabMode();
       }
-      return;
+    } else {
+      notifier.openTopicTab(
+        topicId: widget.topicId,
+        initialTitle: detail.title,
+        scrollToPostNumber: _resolvedViewportPostNumber,
+        isPrivateMessage: detail.isPrivateMessage,
+      );
     }
-    ref
-        .read(selectedTopicProvider.notifier)
-        .openTopicTab(
-          topicId: widget.topicId,
-          initialTitle: detail.title,
-          scrollToPostNumber: _resolvedViewportPostNumber,
-          isPrivateMessage: detail.isPrivateMessage,
-        );
+
+    // Always activate the first destination, even if this was already
+    // rendered in its home pane. The route can still be nested elsewhere.
     ref.requestNavDestination(NavEntryIds.home);
     if (widget.embeddedMode &&
         widget.stackProvider == selectedMessageProvider) {
-      // Moving a PM into the global workspace should not leave a stale
-      // private-message detail behind when all shared tabs are closed.
       ref.read(selectedMessageProvider.notifier).clear();
     }
-    if (!widget.embeddedMode) {
-      // 全屏路由回到所属首页，由首页的 Tab 显示新话题。
-      final route = ModalRoute.of(context);
-      if (route?.isCurrent == true && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
+
+    // A pushed detail/search/profile route would otherwise cover the whole
+    // app even though the tab has been registered in the home workspace.
+    // The root shell stays mounted and owns all unified topic tabs.
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    if (rootNavigator.canPop()) {
+      rootNavigator.popUntil((route) => route.isFirst);
     }
   }
 

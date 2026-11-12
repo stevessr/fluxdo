@@ -10,6 +10,7 @@ import '../constants.dart';
 import '../pages/badge_page.dart';
 import '../pages/boards_page.dart';
 import '../pages/mini_apps_page.dart';
+import '../pages/site_info_page.dart';
 import '../pages/community_events_page.dart';
 import '../pages/group_page.dart';
 import '../pages/image_viewer_page.dart';
@@ -158,6 +159,26 @@ Future<void> launchContentLink(
   }
 
   final internal = isInternalUrlString(url);
+
+  // /about, /guidelines, /tos and /privacy are four states of ONE page.
+  // Resolve them before the general internal-link WebView fallback.
+  if (internal) {
+    final path = Uri.tryParse(UrlHelper.resolveUrl(url))?.path ?? '';
+    final siteSection = SiteInfoSection.fromPath(path);
+    if (siteSection != null) {
+      final workspace = SiteInfoNavigationScope.maybeOf(context);
+      if (workspace != null) {
+        workspace.onSelect(siteSection);
+      } else {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => SiteInfoPage(initialSection: siteSection),
+          ),
+        );
+      }
+      return;
+    }
+  }
 
   // Site-hosted mini apps run in their original web origin with the active
   // account's primed cookies; they are not HTML post fragments.
