@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 
 import '../models/site_policy_document.dart';
 import '../models/site_info_section.dart';
-
-export '../models/site_info_section.dart' show SiteInfoSection;
 import '../utils/url_helper.dart';
 import '../widgets/common/site_info_tabs.dart';
 import 'site_about_page.dart';
 import 'site_policy_page.dart';
 import 'webview_page.dart';
+
+export '../models/site_info_section.dart' show SiteInfoSection;
 
 /// The site's four public information sections share one navigation route.
 /// Switching sections changes content, never pushes another page.
@@ -110,58 +110,58 @@ class _SiteInfoPageState extends State<SiteInfoPage> {
     return SiteInfoNavigationScope(
       onSelect: (section) => _selectTab(section.index, null),
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(_title(context)),
-        actions: [
-          IconButton(
-            tooltip: zh ? '刷新' : 'Refresh',
-            icon: const Icon(Symbols.refresh_rounded),
-            onPressed: _refresh,
-          ),
-          IconButton(
-            tooltip: zh ? '查看官方页面' : 'View official page',
-            icon: const Icon(Symbols.open_in_new_rounded),
-            onPressed: _openOfficial,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SiteInfoTabs(
-                selected: _section.index,
-                onSelected: (index) => _selectTab(index, null),
+        appBar: AppBar(
+          title: Text(_title(context)),
+          actions: [
+            IconButton(
+              tooltip: zh ? '刷新' : 'Refresh',
+              icon: const Icon(Symbols.refresh_rounded),
+              onPressed: _refresh,
+            ),
+            IconButton(
+              tooltip: zh ? '查看官方页面' : 'View official page',
+              icon: const Icon(Symbols.open_in_new_rounded),
+              onPressed: _openOfficial,
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SiteInfoTabs(
+                  selected: _section.index,
+                  onSelected: (index) => _selectTab(index, null),
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: IndexedStack(
-              index: _section.index,
-              children: [
-                SiteAboutPage(
-                  isActive: _section == SiteInfoSection.about,
-                  refreshToken: _refreshToken,
-                ),
-                for (final kind in SitePolicyKind.values)
-                  SitePolicyPage(
-                    kind: kind,
-                    isActive: _section.index == kind.index + 1,
+            Expanded(
+              child: IndexedStack(
+                index: _section.index,
+                children: [
+                  SiteAboutPage(
+                    isActive: _section == SiteInfoSection.about,
                     refreshToken: _refreshToken,
-                    onNavigate: _selectTab,
-                    requestedFragment:
-                        _section.index == kind.index + 1
-                            ? _requestedFragment
-                            : null,
-                    fragmentRequestId: _fragmentRequestId,
                   ),
-              ],
+                  for (final kind in SitePolicyKind.values)
+                    SitePolicyPage(
+                      kind: kind,
+                      isActive: _section.index == kind.index + 1,
+                      refreshToken: _refreshToken,
+                      onNavigate: _selectTab,
+                      requestedFragment:
+                          _section.index == kind.index + 1
+                              ? _requestedFragment
+                              : null,
+                      fragmentRequestId: _fragmentRequestId,
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
