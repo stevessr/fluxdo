@@ -2,6 +2,9 @@ import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
 
 import '../models/site_policy_document.dart';
+import '../models/site_info_section.dart';
+
+export '../models/site_info_section.dart' show SiteInfoSection;
 import '../utils/url_helper.dart';
 import '../widgets/common/site_info_tabs.dart';
 import 'site_about_page.dart';
@@ -10,7 +13,23 @@ import 'webview_page.dart';
 
 /// The site's four public information sections share one navigation route.
 /// Switching sections changes content, never pushes another page.
-enum SiteInfoSection { about, guidelines, terms, privacy }
+/// Descendants of the information workspace reuse its current route.
+class SiteInfoNavigationScope extends InheritedWidget {
+  const SiteInfoNavigationScope({
+    super.key,
+    required this.onSelect,
+    required super.child,
+  });
+
+  final ValueChanged<SiteInfoSection> onSelect;
+
+  static SiteInfoNavigationScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SiteInfoNavigationScope>();
+
+  @override
+  bool updateShouldNotify(SiteInfoNavigationScope oldWidget) =>
+      onSelect != oldWidget.onSelect;
+}
 
 class SiteInfoPage extends StatefulWidget {
   const SiteInfoPage({
@@ -88,7 +107,9 @@ class _SiteInfoPageState extends State<SiteInfoPage> {
     if (!widget.isActive) return const SizedBox.shrink();
     final zh = Localizations.localeOf(context).languageCode == 'zh';
 
-    return Scaffold(
+    return SiteInfoNavigationScope(
+      onSelect: (section) => _selectTab(section.index, null),
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_title(context)),
         actions: [
@@ -140,6 +161,7 @@ class _SiteInfoPageState extends State<SiteInfoPage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
