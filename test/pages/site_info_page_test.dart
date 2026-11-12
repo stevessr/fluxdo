@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/pages/site_info_page.dart';
+import 'package:fluxdo/utils/link_launcher.dart';
 import 'package:fluxdo/providers/core_providers.dart';
 import 'package:fluxdo/services/discourse/discourse_service.dart';
 
@@ -96,5 +97,70 @@ void main() {
     expect(service.requests.where((path) => path == '/about.json').length, 1);
     expect(find.text('Test Forum'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('policy hyperlinks reuse the current site information route', (
+    tester,
+  ) async {
+    final observer = _RouteCounter();
+    SiteInfoSection? selected;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          navigatorObservers: [observer],
+          home: SiteInfoNavigationScope(
+            onSelect: (section) => selected = section,
+            child: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => launchContentLink(context, '/tos/'),
+                  child: const Text('Open terms link'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open terms link'));
+    await tester.pumpAndSettle();
+    expect(selected, SiteInfoSection.terms);
+    expect(observer.pushes, 1);
+  });
+
+  testWidgets('external site policy entry opens one native four-state page', (
+    tester,
+  ) async {
+    final observer = _RouteCounter();
+    final service = _FakeDiscourseService();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [discourseServiceProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          navigatorObservers: [observer],
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => launchContentLink(context, '/privacy/'),
+                child: const Text('Open privacy link'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open privacy link'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SiteInfoPage), findsOneWidget);
+    expect(
+      tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Privacy'))
+          .selected,
+      isTrue,
+    );
+    expect(observer.pushes, 2);
+    expect(service.requests.where((path) => path == '/privacy').length, 1);
   });
 }
