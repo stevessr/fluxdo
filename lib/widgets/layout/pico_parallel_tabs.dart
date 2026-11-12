@@ -135,9 +135,9 @@ class PicoParallelTabs extends StatelessWidget {
                     child: GestureDetector(
                       onLongPress: () => _showTabActions(context, index),
                       child: InputChip(
-                          key: ValueKey('pico-pane-tab-$index'),
-                          selected: active,
-                          showCheckmark: false,
+                        key: ValueKey('pico-pane-tab-$index'),
+                        selected: active,
+                        showCheckmark: false,
                         label: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 180),
                           child: Row(
@@ -161,7 +161,7 @@ class PicoParallelTabs extends StatelessWidget {
                         onPressed: () => onActivate(index),
                         onDeleted: () => onClose(index),
                         deleteButtonTooltipMessage: chinese ? '关闭标签' : 'Close tab',
-                          visualDensity: VisualDensity.compact,
+                        visualDensity: VisualDensity.compact,
                       ),
                     ),
                   ),
