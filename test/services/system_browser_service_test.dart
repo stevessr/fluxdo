@@ -45,6 +45,69 @@ void main() {
       );
     });
 
+    test('Linux 普通网页可选择桌面浏览器且正确反馈启动结果', () async {
+      if (!Platform.isLinux) return;
+      const success = LoginBrowser(
+        id: 'xdg:test.desktop',
+        name: '测试浏览器',
+        executable: '/bin/sh',
+        arguments: ['-c', 'exit 0'],
+      );
+      const failure = LoginBrowser(
+        id: 'xdg:failure.desktop',
+        name: '失败浏览器',
+        executable: '/bin/sh',
+        arguments: ['-c', 'exit 7'],
+      );
+      const url = 'https://example.com/normal-page';
+      expect(
+        await SystemBrowserService.instance.openWebLink(
+          success,
+          Uri.parse(url),
+        ),
+        isTrue,
+      );
+      expect(
+        await SystemBrowserService.instance.openWebLink(
+          failure,
+          Uri.parse(url),
+        ),
+        isFalse,
+      );
+    });
+
+    test('普通浏览器链接只接受 HTTP(S)，登录授权白名单保持严格', () async {
+      for (final url in [
+        'https://example.com/page?q=1',
+        'http://example.com/',
+      ]) {
+        expect(SystemBrowserService.isWebUrl(Uri.parse(url)), isTrue);
+      }
+      for (final url in [
+        'javascript:alert(1)',
+        'mailto:test@example.com',
+        'https://user:pass@example.com/',
+        'file:///etc/passwd',
+      ]) {
+        expect(SystemBrowserService.isWebUrl(Uri.parse(url)), isFalse);
+      }
+      const browser = LoginBrowser(id: 'invalid-browser', name: 'Invalid');
+      expect(
+        await SystemBrowserService.instance.openWebLink(
+          browser,
+          Uri.parse('javascript:alert(1)'),
+        ),
+        isFalse,
+      );
+      expect(
+        await SystemBrowserService.instance.open(
+          browser,
+          Uri.parse('https://example.com/page'),
+        ),
+        isFalse,
+      );
+    });
+
     test('opens only the LINUX DO User API Key authorization entrypoint', () {
       expect(
         SystemBrowserService.isAuthorizationUrl(
@@ -172,6 +235,10 @@ void main() {
         'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/MainActivity.kt',
       ).readAsStringSync();
       expect(nativeSource, contains('"launchLoginBrowserChooser"'));
+      expect(nativeSource, contains('"launchWebBrowser"'));
+      expect(nativeSource, contains('"launchWebBrowserChooser"'));
+      expect(nativeSource, contains('if (!isWebBrowserUri(uri)) return false'));
+      expect(nativeSource, contains('Intent.EXTRA_INITIAL_INTENTS'));
       expect(
         nativeSource,
         contains('Intent.createChooser(viewIntent, "选择打开方式")'),

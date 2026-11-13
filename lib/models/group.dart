@@ -1,3 +1,5 @@
+import 'package:html/parser.dart' as html_parser;
+
 import '../utils/time_utils.dart';
 import '../utils/url_helper.dart';
 
@@ -24,6 +26,7 @@ class DiscourseGroup {
     this.allowMembershipRequests = false,
     this.bioRaw,
     this.bioCooked,
+    this.bioExcerpt,
     this.flairUrl,
     this.flairBackgroundColor,
     this.flairColor,
@@ -46,6 +49,7 @@ class DiscourseGroup {
   final bool allowMembershipRequests;
   final String? bioRaw;
   final String? bioCooked;
+  final String? bioExcerpt;
   final String? flairUrl;
   final String? flairBackgroundColor;
   final String? flairColor;
@@ -57,6 +61,29 @@ class DiscourseGroup {
     final display = displayName?.trim();
     if (display != null && display.isNotEmpty) return display;
     return name;
+  }
+
+  /// 目录接口通常只有 bio_excerpt / bio_cooked，bio_raw 仅在详情中出现。
+  /// 用 HTML parser 解码链接、实体与标签，不将服务端 HTML 作为纯文本显示。
+  String get bioPreview {
+    final candidates = [bioExcerpt, bioCooked, bioRaw];
+    String? source;
+    for (final candidate in candidates) {
+      if (candidate != null && candidate.trim().isNotEmpty) {
+        source = candidate;
+        break;
+      }
+    }
+    if (source == null) return '';
+    final withBreaks = source
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), ' ')
+        .replaceAll(
+          RegExp(r'</(?:p|div|li|blockquote|h[1-6])\s*>', caseSensitive: false),
+          ' ',
+        );
+    return (html_parser.parseFragment(withBreaks).text ?? '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   /// 与 Discourse 原版群组成员页一致：自动群组不可手工加人；普通群组只有
@@ -90,6 +117,7 @@ class DiscourseGroup {
     allowMembershipRequests: allowMembershipRequests,
     bioRaw: bioRaw,
     bioCooked: bioCooked,
+    bioExcerpt: bioExcerpt,
     flairUrl: flairUrl,
     flairBackgroundColor: flairBackgroundColor,
     flairColor: flairColor,
@@ -115,6 +143,7 @@ class DiscourseGroup {
           json['allow_membership_requests'] as bool? ?? false,
       bioRaw: json['bio_raw']?.toString(),
       bioCooked: json['bio_cooked']?.toString(),
+      bioExcerpt: json['bio_excerpt']?.toString(),
       flairUrl: json['flair_url']?.toString(),
       flairBackgroundColor: json['flair_bg_color']?.toString(),
       flairColor: json['flair_color']?.toString(),

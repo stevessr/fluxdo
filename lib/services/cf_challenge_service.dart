@@ -66,6 +66,9 @@ enum CfVerifyPresentation {
   foreground,
 }
 
+/// 验证用途：主动预加载检查不应破坏已有的有效 clearance。
+enum CfVerificationMode { challengeRecovery, preloadProbe }
+
 /// CF 验证服务
 /// 处理 Cloudflare Turnstile 验证（仅手动模式）
 class CfChallengeService {
@@ -195,6 +198,9 @@ class CfChallengeService {
   /// 关闭后 [CfChallengeInterceptor] 命中 CF 盾时会静默 reject，
   /// 交给 ErrorView 提供"手动验证"入口。由 PreferencesNotifier 同步维护。
   bool autoVerifyEnabled = true;
+
+  /// 实验策略：每轮预加载前主动运行一次 CF 验证，默认关闭。
+  bool proactiveVerifyBeforePreloadEnabled = false;
 
   /// 请求把「自动过盾」开关持久化关闭。
   ///
@@ -548,20 +554,23 @@ class CfChallengeService {
   Future<bool?> showManualVerify([
     BuildContext? context,
     bool forceForeground = true,
+    CfVerificationMode mode = CfVerificationMode.challengeRecovery,
   ]) {
     return verify(
       context: context,
       presentation: forceForeground
           ? CfVerifyPresentation.foreground
           : CfVerifyPresentation.pill,
+      mode: mode,
     );
   }
 
-  /// 发起（或合流到进行中的）CF 验证，[presentation] 声明本次诉求的打扰等级。
-  /// 返回值语义同 [showManualVerify]。
+  /// 发起（或合流到进行中的）CF 验证，[presentation] 声明打扰等级，
+  /// [mode] 决定是否清理并续期已有 clearance。
   Future<bool?> verify({
     BuildContext? context,
     CfVerifyPresentation presentation = CfVerifyPresentation.foreground,
+    CfVerificationMode mode = CfVerificationMode.challengeRecovery,
   }) async {
     // 检查冷却期
     if (isInCooldown) {
@@ -665,10 +674,12 @@ class CfChallengeService {
       );
     }
 
-    // Dio 请求已经 403，说明当前 cf_clearance 可能失效了。
-    // 必须确保 WebView 中也没有旧的 cf_clearance，否则 CF 直接放行不显示盾。
-    await cookieJarService.deleteCookie('cf_clearance');
-    await cookieJarService.deleteWebViewCookie('cf_clearance');
+    // 撞盾恢复路径已有 403/429 证据，必须清除被拒绝的旧值。
+    // 主动预加载探测尚未遇到拒绝：保留已有 clearance，避免无故注销有效凭证。
+    if (mode == CfVerificationMode.challengeRecovery) {
+      await cookieJarService.deleteCookie('cf_clearance');
+      await cookieJarService.deleteWebViewCookie('cf_clearance');
+    }
     if (!overlayState.mounted) {
       debugPrint('[CfChallenge] Overlay no longer mounted');
       CfChallengeLogger.log('[VERIFY] Overlay not mounted');
@@ -825,11 +836,13 @@ class CfChallengeService {
       );
       // 验证页移除后，Windows WebView2 的原生 Controller 仍会异步析构。
       // 等验证冷却完成、帖子 WebView 池恢复后再错峰启动续期 WebView。
-      Future.delayed(_postCleanupCooldown + _refreshRestartCooldown, () {
-        if (!_isVerifying) {
-          CfClearanceRefreshService().start();
-        }
-      });
+      if (mode == CfVerificationMode.challengeRecovery) {
+        Future.delayed(_postCleanupCooldown + _refreshRestartCooldown, () {
+          if (!_isVerifying) {
+            CfClearanceRefreshService().start();
+          }
+        });
+      }
     } else {
       // 验证失败，恢复备份的 cf_clearance（避免丢失可能仍有效的值）
       if (backupCfClearance != null) {
@@ -855,6 +868,11 @@ class CfChallengeService {
 
     return result;
   }
+
+  /// 预加载前的非破坏性主动探测：在后台尝试，不删除已有 clearance，
+  /// 也不立即重启续期 WebView。
+  Future<bool?> probeBeforePreload([BuildContext? context]) =>
+      showManualVerify(context, false, CfVerificationMode.preloadProbe);
 
   /// 用户主动触发的验证入口：允许绕过冷却期。
   Future<bool?> showManualVerifyNow([

@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
 import '../constants.dart';
+import '../models/invite_draft.dart';
 import '../models/invite_link.dart';
 import '../models/user.dart';
 import '../providers/discourse_providers.dart';
@@ -19,7 +20,7 @@ import '../services/toast_service.dart';
 import '../utils/time_utils.dart';
 import '../l10n/s.dart';
 
-enum _InviteExpiryPreset { days1, days7, days30, days90, never }
+enum _InviteExpiryPreset { days1, days7, days30, days90 }
 
 extension on _InviteExpiryPreset {
   String get label {
@@ -32,8 +33,6 @@ extension on _InviteExpiryPreset {
         return S.current.time_days(30);
       case _InviteExpiryPreset.days90:
         return S.current.time_days(90);
-      case _InviteExpiryPreset.never:
-        return S.current.invite_never;
     }
   }
 
@@ -47,8 +46,6 @@ extension on _InviteExpiryPreset {
         return const Duration(days: 30);
       case _InviteExpiryPreset.days90:
         return const Duration(days: 90);
-      case _InviteExpiryPreset.never:
-        return null;
     }
   }
 }
@@ -68,7 +65,14 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
 
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _restrictionController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _customMessageController = TextEditingController();
+  final TextEditingController _maxRedemptionsController = TextEditingController(
+    text: '1',
+  );
 
+  InviteDeliveryMethod _inviteMethod = InviteDeliveryMethod.link;
+  String? _lastEmailRecipient;
   _InviteExpiryPreset _expiryPreset = _InviteExpiryPreset.days1;
   bool _showAdvancedOptions = false;
   bool _isSubmitting = false;
@@ -77,6 +81,8 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   InviteLinkResponse? _latestInvite;
   ProviderSubscription<AsyncValue<User?>>? _userSub;
   bool _hasRequestedInitialRefresh = false;
+  String? _activeUsername;
+  int _pendingRequestGeneration = 0;
 
   @override
   void initState() {
@@ -85,12 +91,27 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       _,
       next,
     ) {
-      final user = next.value;
-      if (user == null) return;
-      _applyCachedInvite(user.username);
+      final username = next.value?.username;
+      if (username != _activeUsername) {
+        _activeUsername = username;
+        // 丢弃旧账号请求，切换账号期间绝不展示旧邀请。
+        _pendingRequestGeneration++;
+        _hasRequestedInitialRefresh = false;
+        setState(() {
+          _latestInvite = null;
+          _lastEmailRecipient = null;
+          _isLoadingPending = false;
+        });
+      }
+      if (username == null) return;
+      _applyCachedInvite(username);
       if (!_hasRequestedInitialRefresh) {
         _hasRequestedInitialRefresh = true;
-        Future.microtask(() => _loadPendingInvites(force: true));
+        Future.microtask(() {
+          if (mounted && _activeUsername == username) {
+            _loadPendingInvites(force: true);
+          }
+        });
       }
     }, fireImmediately: true);
   }
@@ -99,6 +120,9 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   void dispose() {
     _descriptionController.dispose();
     _restrictionController.dispose();
+    _emailController.dispose();
+    _customMessageController.dispose();
+    _maxRedemptionsController.dispose();
     _userSub?.close();
     super.dispose();
   }
@@ -107,16 +131,6 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     final duration = _expiryPreset.duration;
     if (duration == null) return null;
     return DateTime.now().add(duration);
-  }
-
-  String get _summaryText {
-    if (_expiryPreset == _InviteExpiryPreset.days1) {
-      return S.current.invite_summaryDay1;
-    }
-    if (_expiryPreset == _InviteExpiryPreset.never) {
-      return S.current.invite_summaryNever;
-    }
-    return S.current.invite_summaryExpiry(_expiryPreset.label);
   }
 
   String? get _effectiveInviteLink {
@@ -129,7 +143,9 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     return null;
   }
 
-  bool get _hasInviteLink => (_effectiveInviteLink?.isNotEmpty ?? false);
+  bool get _hasInviteLink =>
+      (_latestInvite?.invite?.email?.trim().isEmpty ?? true) &&
+      (_effectiveInviteLink?.isNotEmpty ?? false);
 
   String _buildInviteLink(String key) {
     return '${AppConstants.baseUrl}/invites/$key';
@@ -149,8 +165,13 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   }
 
   InviteLinkResponse? _pickLatestInvite(List<InviteLinkResponse> invites) {
-    if (invites.isEmpty) return null;
-    return invites.reduce((a, b) {
+    // 邮箱邀请不作为可分享的链接展示，避免将定向邀请误分享。
+    final links = invites.where((invite) {
+      final email = invite.invite?.email?.trim() ?? '';
+      return email.isEmpty;
+    }).toList();
+    if (links.isEmpty) return null;
+    return links.reduce((a, b) {
       final aTime =
           a.invite?.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
       final bTime =
@@ -220,18 +241,24 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   }
 
   Future<void> _loadPendingInvites({bool force = false}) async {
-    if (_isLoadingPending) return;
+    if (_isLoadingPending && !force) return;
     final user = ref.read(currentUserProvider).value;
     if (user == null) return;
+    final generation = ++_pendingRequestGeneration;
 
     setState(() => _isLoadingPending = true);
     try {
       final invites = await ref
           .read(discourseServiceProvider)
           .getPendingInvites(user.username);
+      if (!mounted ||
+          generation != _pendingRequestGeneration ||
+          _activeUsername != user.username) {
+        return;
+      }
       final latest = _pickLatestInvite(invites);
       final resolved = latest != null ? _resolveInviteLink(latest) : null;
-      if (!_isSameInvite(_latestInvite, resolved) && mounted) {
+      if (!_isSameInvite(_latestInvite, resolved)) {
         setState(() => _latestInvite = resolved);
         if (resolved != null) {
           await _saveInviteCache(user.username, resolved);
@@ -240,65 +267,111 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
         }
       }
     } catch (_) {
-      // 忽略失败，避免干扰手动创建流程
+      // 不覆盖页面当前状态；后续仍可手动创建或刷新邀请。
     } finally {
-      if (mounted) {
+      if (mounted && generation == _pendingRequestGeneration) {
         setState(() => _isLoadingPending = false);
       }
     }
   }
 
-  Future<void> _createInviteLink({bool useAdvancedOptions = false}) async {
+  Future<void> _createInvite() async {
+    if (_isSubmitting) return;
     final user = ref.read(currentUserProvider).value;
     if (user == null) {
       ToastService.showError(S.current.common_pleaseLogin);
       return;
     }
-    if (user.trustLevel < 3) {
-      ToastService.showError(S.current.invite_trustLevelTooLow);
+    // 邀请资格由当前站点的 Discourse 权限接口判定。
+
+    final draft = InviteDraft(
+      method: _inviteMethod,
+      advanced: _showAdvancedOptions,
+      emailInput: _emailController.text,
+      domainInput: _restrictionController.text,
+      maxRedemptionsInput: _maxRedemptionsController.text,
+      descriptionInput: _descriptionController.text,
+      customMessageInput: _customMessageController.text,
+    );
+    final strings = _InviteFormStrings.of(context);
+    final error = switch (draft.validation) {
+      InviteDraftValidation.invalidEmail => strings.invalidEmail,
+      InviteDraftValidation.invalidDomain => strings.invalidDomain,
+      InviteDraftValidation.invalidRedemptions => strings.invalidRedemptions,
+      null => null,
+    };
+    if (error != null) {
+      ToastService.showError(error);
       return;
     }
 
-    final description = useAdvancedOptions
-        ? _descriptionController.text.trim()
-        : '';
-    final email = useAdvancedOptions ? _restrictionController.text.trim() : '';
-
-    setState(() => _isSubmitting = true);
-
-    try {
-      final result = await ref
-          .read(discourseServiceProvider)
-          .createInviteLink(
-            maxRedemptionsAllowed: _maxRedemptionsAllowed,
-            expiresAt: _expiresAt,
-            description: description,
-            email: email.isEmpty ? null : email,
-          );
-      if (!mounted) return;
-      final resolved = _resolveInviteLink(result);
-      if (resolved.inviteLink.trim().isNotEmpty) {
-        setState(() => _latestInvite = resolved);
-        await _saveInviteCache(user.username, resolved);
-      } else {
-        await _loadPendingInvites(force: true);
+    setState(() {
+      _isSubmitting = true;
+      if (draft.method == InviteDeliveryMethod.email) {
+        // 再次发送前清除旧的成功提示，以免失败后显示过时结果。
+        _lastEmailRecipient = null;
       }
-      ToastService.showSuccess(
-        resolved.inviteLink.trim().isNotEmpty
-            ? S.current.invite_linkGenerated
-            : S.current.invite_created,
+    });
+    try {
+      // 简单模式固定使用 1 天，不能泄漏上次高级模式的配置。
+      final expiresAt = _showAdvancedOptions
+          ? _expiresAt
+          : DateTime.now().add(const Duration(days: 1));
+      final result = await ref.read(discourseServiceProvider).createInviteLink(
+        maxRedemptionsAllowed: draft.maxRedemptionsAllowed,
+        expiresAt: expiresAt,
+        description: draft.description,
+        email: draft.email,
+        domain: draft.domain,
+        customMessage: draft.customMessage,
       );
+      if (!mounted ||
+          ref.read(currentUserProvider).value?.username != user.username) {
+        return;
+      }
+
+      // 已提交成功的结果优先于先前的待处理邀请列表响应。
+      _pendingRequestGeneration++;
+      if (_isLoadingPending) setState(() => _isLoadingPending = false);
+
+      if (draft.method == InviteDeliveryMethod.email) {
+        setState(() => _lastEmailRecipient = draft.email);
+        await _loadPendingInvites(force: true);
+        if (mounted) ToastService.showSuccess(strings.emailSent);
+        return;
+      }
+
+      final resolved = _resolveInviteLink(result);
+      final link = resolved.inviteLink.trim();
+      if (link.isEmpty) {
+        await _loadPendingInvites(force: true);
+        if (mounted) ToastService.showSuccess(S.current.invite_created);
+        return;
+      }
+
+      setState(() => _latestInvite = resolved);
+      try {
+        await _saveInviteCache(user.username, resolved);
+      } catch (_) {
+        // 缓存失败不应阻止已经创建成功的邀请链接复制。
+      }
+      if (!mounted) return;
+
+      try {
+        await Clipboard.setData(ClipboardData(text: link));
+        if (mounted) ToastService.showSuccess(S.current.invite_linkCopied);
+      } catch (_) {
+        // 创建已成功，复制失败时仍可从下方结果卡片手动复制。
+        if (mounted) ToastService.showSuccess(S.current.invite_linkGenerated);
+      }
     } catch (error) {
       if (!mounted) return;
-      final message = _normalizeErrorMessage(error);
-      ToastService.showError(message);
+      ToastService.showError(_normalizeErrorMessage(error));
       if (_latestInvite == null) {
         await _loadPendingInvites(force: true);
       }
     } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -785,7 +858,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(context.l10n.invite_title),
+        title: Text(context.l10n.invite_inviteMembers),
         actions: [
           PopupMenuButton<String>(
             enabled: !_isManagingInvite,
@@ -805,73 +878,196 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSummaryCard(theme),
-          if (_showAdvancedOptions) ...[
-            const SizedBox(height: 16),
-            _buildAdvancedOptionsCard(theme),
-          ],
-          if (_hasInviteLink) ...[
-            const SizedBox(height: 16),
-            _buildResultCard(theme),
-          ] else if (!_isLoadingPending) ...[
-            const SizedBox(height: 16),
-            _buildEmptyStateCard(theme),
-          ],
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildCreateForm(theme),
+                  if (_inviteMethod == InviteDeliveryMethod.email &&
+                      _lastEmailRecipient != null) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.mark_email_read_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
+                        title: Text(_InviteFormStrings.of(context).emailSent),
+                        subtitle: Text(_lastEmailRecipient!),
+                      ),
+                    ),
+                  ],
+                  if (_inviteMethod == InviteDeliveryMethod.link &&
+                      _hasInviteLink) ...[
+                    const SizedBox(height: 16),
+                    _buildResultCard(theme),
+                  ] else if (!_isLoadingPending &&
+                      _inviteMethod == InviteDeliveryMethod.link) ...[
+                    const SizedBox(height: 16),
+                    _buildEmptyStateCard(theme),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ],
       ),
+      bottomNavigationBar: _buildActionBar(theme),
     );
   }
 
-  Widget _buildSummaryCard(ThemeData theme) {
+  Widget _buildCreateForm(ThemeData theme) {
+    final strings = _InviteFormStrings.of(context);
+    final isEmail = _inviteMethod == InviteDeliveryMethod.email;
+    final labelStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    final helperStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
     return Card(
+      key: const Key('invite-create-form'),
+      margin: EdgeInsets.zero,
       shape: RoundedSuperellipseBorder(
         borderRadius: context.shapes.borderRadius(16),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              context.l10n.invite_createLink,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _summaryText,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.5,
-              ),
-            ),
+            Text(strings.inviteMethod, style: labelStyle),
             const SizedBox(height: 12),
-            TextButton(
-              onPressed: () =>
-                  setState(() => _showAdvancedOptions = !_showAdvancedOptions),
-              style: TextButton.styleFrom(padding: EdgeInsets.zero),
-              child: Text(
-                _showAdvancedOptions
-                    ? context.l10n.invite_collapseOptions
-                    : context.l10n.invite_expandOptions,
-              ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  key: const Key('invite-method-link'),
+                  avatar: const Icon(Icons.link_rounded, size: 18),
+                  label: Text(strings.shareLink),
+                  selected: !isEmail,
+                  onSelected: _isSubmitting
+                      ? null
+                      : (_) => setState(
+                          () => _inviteMethod = InviteDeliveryMethod.link,
+                        ),
+                ),
+                ChoiceChip(
+                  key: const Key('invite-method-email'),
+                  avatar: const Icon(Icons.mail_outline_rounded, size: 18),
+                  label: Text(strings.email),
+                  selected: isEmail,
+                  onSelected: _isSubmitting
+                      ? null
+                      : (_) => setState(
+                          () => _inviteMethod = InviteDeliveryMethod.email,
+                        ),
+                ),
+              ],
             ),
-            if (!_showAdvancedOptions) ...[
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _isSubmitting ? null : () => _createInviteLink(),
-                  icon: _isSubmitting
-                      ? const LoadingSpinner(size: 18)
-                      : const Icon(Symbols.link_rounded),
-                  label: Text(
-                    _isSubmitting
-                        ? context.l10n.invite_creating
-                        : context.l10n.invite_createLink,
+            if (isEmail) ...[
+              const SizedBox(height: 24),
+              Text(strings.sendTo, style: labelStyle),
+              const SizedBox(height: 4),
+              Text(strings.sendToHelp, style: helperStyle),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('invite-email'),
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                decoration: const InputDecoration(
+                  hintText: 'name@example.com',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+            if (_showAdvancedOptions) ...[
+              if (!isEmail) ...[
+                const SizedBox(height: 24),
+                Text(strings.domain, style: labelStyle),
+                const SizedBox(height: 4),
+                Text(strings.domainHelp, style: helperStyle),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const Key('invite-domain'),
+                  controller: _restrictionController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    hintText: 'example.com',
+                    border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 24),
+                Text(context.l10n.invite_maxRedemptions, style: labelStyle),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: 140,
+                  child: TextField(
+                    key: const Key('invite-max-redemptions'),
+                    controller: _maxRedemptionsController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 24),
+                Text(strings.customMessage, style: labelStyle),
+                const SizedBox(height: 4),
+                Text(strings.customMessageHelp, style: helperStyle),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const Key('invite-custom-message'),
+                  controller: _customMessageController,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: InputDecoration(
+                    hintText: strings.customMessageHint,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              Text(context.l10n.invite_description, style: labelStyle),
+              const SizedBox(height: 4),
+              Text(strings.descriptionHelp, style: helperStyle),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('invite-description'),
+                controller: _descriptionController,
+                maxLength: 100,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(context.l10n.invite_expiryTime, style: labelStyle),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<_InviteExpiryPreset>(
+                key: const Key('invite-expiry'),
+                initialValue: _expiryPreset,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                ),
+                items: _InviteExpiryPreset.values
+                    .map(
+                      (preset) => DropdownMenuItem(
+                        value: preset,
+                        child: Text(preset.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (preset) {
+                  if (preset != null) setState(() => _expiryPreset = preset);
+                },
               ),
             ],
           ],
@@ -880,116 +1076,79 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     );
   }
 
-  Widget _buildAdvancedOptionsCard(ThemeData theme) {
-    return Card(
-      shape: RoundedSuperellipseBorder(
-        borderRadius: context.shapes.borderRadius(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context.l10n.invite_inviteMembers,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _descriptionController,
-              maxLength: 100,
-              decoration: InputDecoration(
-                labelText: context.l10n.invite_description,
-                border: OutlineInputBorder(
-                  borderRadius: context.shapes.borderRadius(4),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _restrictionController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                labelText: context.l10n.invite_restriction,
-                helperText: context.l10n.invite_restrictionHelper,
-                hintText: context.l10n.invite_restrictionHint,
-                border: OutlineInputBorder(
-                  borderRadius: context.shapes.borderRadius(4),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              context.l10n.invite_maxRedemptions,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _buildReadOnlyField(theme, value: '1'),
-            const SizedBox(height: 16),
-            Text(
-              context.l10n.invite_expiryTime,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _InviteExpiryPreset.values.map((preset) {
-                return ChoiceChip(
-                  label: Text(preset.label),
-                  selected: _expiryPreset == preset,
-                  onSelected: (_) => setState(() => _expiryPreset = preset),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _isSubmitting
-                    ? null
-                    : () => _createInviteLink(useAdvancedOptions: true),
-                icon: _isSubmitting
-                    ? const LoadingSpinner(size: 18)
-                    : const Icon(Symbols.link_rounded),
-                label: Text(
-                  _isSubmitting
-                      ? context.l10n.invite_creating
-                      : context.l10n.invite_createLink,
-                ),
-              ),
-            ),
-          ],
-        ),
+  Widget _buildActionBar(ThemeData theme) {
+    final strings = _InviteFormStrings.of(context);
+    final isEmail = _inviteMethod == InviteDeliveryMethod.email;
+    final submit = FilledButton.icon(
+      key: const Key('invite-submit'),
+      onPressed: _isSubmitting ? null : _createInvite,
+      icon: _isSubmitting
+          ? const LoadingSpinner(size: 18)
+          : Icon(isEmail ? Icons.send_rounded : Icons.content_copy_rounded),
+      label: Text(
+        _isSubmitting
+            ? context.l10n.invite_creating
+            : (isEmail ? strings.send : strings.copyLink),
       ),
     );
-  }
-
-  Widget _buildReadOnlyField(ThemeData theme, {required String value}) {
-    return InputDecorator(
-      decoration: InputDecoration(
-        border: OutlineInputBorder(
-          borderRadius: context.shapes.borderRadius(4),
-        ),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+    final cancel = TextButton(
+      onPressed: _isSubmitting ? null : () => Navigator.of(context).maybePop(),
+      child: Text(strings.cancel),
+    );
+    final mode = OutlinedButton.icon(
+      key: const Key('invite-mode-toggle'),
+      onPressed: _isSubmitting
+          ? null
+          : () => setState(
+              () => _showAdvancedOptions = !_showAdvancedOptions,
+            ),
+      icon: const Icon(Icons.settings_outlined),
+      label: Text(
+        _showAdvancedOptions ? strings.simpleMode : strings.advancedMode,
       ),
-      child: Row(
-        children: [
-          Expanded(child: Text(value, style: theme.textTheme.bodyLarge)),
-          Text(
-            context.l10n.invite_fixed,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w500,
+    );
+
+    return Material(
+      color: theme.colorScheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: theme.colorScheme.outlineVariant),
             ),
           ),
-        ],
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 460) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: submit),
+                        const SizedBox(width: 8),
+                        cancel,
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Align(alignment: Alignment.centerRight, child: mode),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  submit,
+                  const SizedBox(width: 8),
+                  cancel,
+                  const Spacer(),
+                  mode,
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -1164,4 +1323,155 @@ class _MetaChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Local labels for the invite composer; no generated localization files needed.
+class _InviteFormStrings {
+  const _InviteFormStrings({
+    required this.inviteMethod,
+    required this.shareLink,
+    required this.email,
+    required this.sendTo,
+    required this.sendToHelp,
+    required this.domain,
+    required this.domainHelp,
+    required this.customMessage,
+    required this.customMessageHelp,
+    required this.customMessageHint,
+    required this.descriptionHelp,
+    required this.copyLink,
+    required this.send,
+    required this.cancel,
+    required this.advancedMode,
+    required this.simpleMode,
+    required this.invalidEmail,
+    required this.invalidDomain,
+    required this.invalidRedemptions,
+    required this.emailSent,
+  });
+
+  const _InviteFormStrings.zh()
+      : this(
+          inviteMethod: '邀请方式',
+          shareLink: '可分享链接',
+          email: '电子邮件',
+          sendTo: '发送至',
+          sendToHelp: '我们将向此电子邮件地址发送邀请链接。',
+          domain: '限制为域名（可选）',
+          domainHelp: '只有拥有此域名下电子邮箱的用户才能接受此链接。',
+          customMessage: '自定义消息（可选）',
+          customMessageHelp: '包含在邀请电子邮件中。',
+          customMessageHint: '在您的邀请中添加个人备注',
+          descriptionHelp: '可以帮助您识别此邀请的备注。',
+          copyLink: '复制链接',
+          send: '发送',
+          cancel: '取消',
+          advancedMode: '高级模式',
+          simpleMode: '简单模式',
+          invalidEmail: '请输入有效的电子邮件地址',
+          invalidDomain: '请输入有效的域名，如 example.com',
+          invalidRedemptions: '最大使用次数必须为正整数',
+          emailSent: '邀请邮件已发送',
+        );
+
+  const _InviteFormStrings.zhHk()
+      : this(
+          inviteMethod: '邀請方式',
+          shareLink: '可分享連結',
+          email: '電子郵件',
+          sendTo: '傳送至',
+          sendToHelp: '我們將向此電子郵件地址傳送邀請連結。',
+          domain: '限制為網域（可選）',
+          domainHelp: '只有擁有此網域下電郵地址的用戶才能接受此連結。',
+          customMessage: '自訂訊息（可選）',
+          customMessageHelp: '包含在邀請電郵中。',
+          customMessageHint: '在您的邀請中加入個人備註',
+          descriptionHelp: '可以幫助您識別此邀請的備註。',
+          copyLink: '複製連結',
+          send: '傳送',
+          cancel: '取消',
+          advancedMode: '進階模式',
+          simpleMode: '簡單模式',
+          invalidEmail: '請輸入有效的電子郵件地址',
+          invalidDomain: '請輸入有效的網域，例如 example.com',
+          invalidRedemptions: '最多使用次數必須為正整數',
+          emailSent: '邀請電郵已傳送',
+        );
+
+  const _InviteFormStrings.zhTw()
+      : this(
+          inviteMethod: '邀請方式',
+          shareLink: '可分享連結',
+          email: '電子郵件',
+          sendTo: '寄送至',
+          sendToHelp: '我們將向此電子郵件地址寄送邀請連結。',
+          domain: '限制為網域（選填）',
+          domainHelp: '只有擁有此網域下電子郵件地址的使用者才能接受此連結。',
+          customMessage: '自訂訊息（選填）',
+          customMessageHelp: '包含在邀請電子郵件中。',
+          customMessageHint: '在您的邀請中加入個人備註',
+          descriptionHelp: '可以幫助您辨識此邀請的備註。',
+          copyLink: '複製連結',
+          send: '寄送',
+          cancel: '取消',
+          advancedMode: '進階模式',
+          simpleMode: '簡單模式',
+          invalidEmail: '請輸入有效的電子郵件地址',
+          invalidDomain: '請輸入有效的網域，例如 example.com',
+          invalidRedemptions: '最大使用次數必須為正整數',
+          emailSent: '邀請電子郵件已寄送',
+        );
+
+  const _InviteFormStrings.en()
+      : this(
+          inviteMethod: 'Invitation method',
+          shareLink: 'Shareable link',
+          email: 'Email',
+          sendTo: 'Send to',
+          sendToHelp: 'We will send an invitation link to this email address.',
+          domain: 'Restrict to domain (optional)',
+          domainHelp: 'Only people with an email address on this domain can use this link.',
+          customMessage: 'Custom message (optional)',
+          customMessageHelp: 'Included in the invitation email.',
+          customMessageHint: 'Add a personal note to your invitation',
+          descriptionHelp: 'A note to help you identify this invitation.',
+          copyLink: 'Copy link',
+          send: 'Send',
+          cancel: 'Cancel',
+          advancedMode: 'Advanced mode',
+          simpleMode: 'Simple mode',
+          invalidEmail: 'Enter a valid email address',
+          invalidDomain: 'Enter a valid domain, e.g. example.com',
+          invalidRedemptions: 'Maximum uses must be a positive integer',
+          emailSent: 'Invitation email sent',
+        );
+
+  static _InviteFormStrings of(BuildContext context) {
+    final locale = Localizations.localeOf(context).toLanguageTag().toLowerCase();
+    if (locale.startsWith('zh-hk')) return const _InviteFormStrings.zhHk();
+    if (locale.startsWith('zh-tw')) return const _InviteFormStrings.zhTw();
+    if (locale.startsWith('zh')) return const _InviteFormStrings.zh();
+    return const _InviteFormStrings.en();
+  }
+
+  final String inviteMethod;
+  final String shareLink;
+  final String email;
+  final String sendTo;
+  final String sendToHelp;
+  final String domain;
+  final String domainHelp;
+  final String customMessage;
+  final String customMessageHelp;
+  final String customMessageHint;
+  final String descriptionHelp;
+  final String copyLink;
+  final String send;
+  final String cancel;
+  final String advancedMode;
+  final String simpleMode;
+  final String invalidEmail;
+  final String invalidDomain;
+  final String invalidRedemptions;
+  final String emailSent;
 }

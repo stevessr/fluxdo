@@ -7,6 +7,7 @@ import '../constants.dart';
 import '../models/mini_app.dart';
 import '../services/discourse/discourse_service.dart';
 import '../services/mini_app_directory_repository.dart';
+import 'mini_app_runtime_page.dart';
 import 'webview_page.dart';
 
 /// Native directory for site-hosted mini apps. Execution stays in the website:
@@ -28,6 +29,10 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
     site: Uri.parse(AppConstants.baseUrl),
   );
 
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchTimer;
+  String _sort = 'hot';
+  String _query = '';
   bool _loading = false;
   bool _refreshing = false;
   bool _retryReset = false;
@@ -60,8 +65,27 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
   @override
   void dispose() {
     _generation++;
+    _searchTimer?.cancel();
+    _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _applySearch(String value) {
+    _searchTimer?.cancel();
+    _searchTimer = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted || _query == value.trim()) return;
+      setState(() => _query = value.trim());
+      _scrollController.hasClients ? _scrollController.jumpTo(0) : null;
+      unawaited(_loadPage(reset: true));
+    });
+  }
+
+  void _changeSort(String sort) {
+    if (_sort == sort) return;
+    setState(() => _sort = sort);
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    unawaited(_loadPage(reset: true));
   }
 
   void _maybeLoadMore() {
@@ -95,7 +119,11 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
     });
 
     try {
-      final directory = await _repository.fetchPage(requestedPage);
+      final directory = await _repository.fetchPage(
+        requestedPage,
+        sort: _sort,
+        query: _query,
+      );
       if (!mounted || generation != _generation) return;
       setState(() {
         if (reset) _apps.clear();
@@ -173,6 +201,24 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
       appBar: AppBar(
         title: Text(zh ? '站内应用' : 'Mini apps'),
         actions: [
+          PopupMenuButton<String>(
+            tooltip: zh ? '排序依据' : 'Sort by',
+            initialValue: _sort,
+            onSelected: _changeSort,
+            itemBuilder: (_) => [
+              for (final sort in MiniAppDirectoryRepository.sorts)
+                PopupMenuItem(
+                  value: sort,
+                  child: Text(switch (sort) {
+                    'latest' => zh ? '最新上线' : 'Latest',
+                    'rating' => zh ? '评分最高' : 'Top rated',
+                    'used' => zh ? '使用最多' : 'Most used',
+                    _ => zh ? '最热' : 'Hot',
+                  }),
+                ),
+            ],
+            icon: const Icon(Icons.sort_rounded),
+          ),
           IconButton(
             tooltip: zh ? '网页目录' : 'Website directory',
             icon: const Icon(Icons.open_in_browser_rounded),
@@ -185,7 +231,30 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
           ),
         ],
       ),
-      body: _apps.isEmpty && _loading
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: TextField(
+              controller: _searchController,
+              onChanged: _applySearch,
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search_rounded),
+                hintText: zh ? '搜索站内应用' : 'Search mini apps',
+                isDense: true,
+                border: const OutlineInputBorder(),
+                suffixIcon: _searchController.text.isEmpty ? null : IconButton(
+                  icon: const Icon(Icons.clear_rounded),
+                  onPressed: () {
+                    _searchController.clear();
+                    _applySearch('');
+                    setState(() {});
+                  },
+                ),
+              ),
+            ),
+          ),
+          Expanded(child: _apps.isEmpty && _loading
           ? const Center(child: CircularProgressIndicator())
           : _apps.isEmpty
           ? Center(
@@ -269,15 +338,20 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
                                   zh
                                       ? '适用年龄 ${app.ageRating}+'
                                       : 'Age ${app.ageRating}+',
+                                if (app.ratingAverage != null && (app.ratingCount ?? 0) > 0)
+                                  '★ ${app.ratingAverage!.toStringAsFixed(1)} (${app.ratingCount})',
+                                if (app.usageCount != null)
+                                  zh ? '使用 ${app.usageCount} 次' : '${app.usageCount} uses',
+                                if (app.authorName != null) app.authorName!,
                               ].join(' · '),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () => WebViewPage.open(
-                              context,
-                              app.url.toString(),
-                              title: app.name,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => MiniAppRuntimePage(app: app),
+                              ),
                             ),
                           ),
                         );
@@ -287,6 +361,9 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -447,6 +447,23 @@ open class MainActivity : FlutterActivity() {
                         result.success(launchLoginBrowserChooser(url))
                     }
                 }
+                "launchWebBrowser" -> {
+                    val url = call.argument<String>("url")
+                    val browserId = call.argument<String>("id")
+                    if (url == null || browserId == null) {
+                        result.error("INVALID_ARGS", "url and browser id required", null)
+                    } else {
+                        result.success(launchWebBrowser(browserId, url))
+                    }
+                }
+                "launchWebBrowserChooser" -> {
+                    val url = call.argument<String>("url")
+                    if (url == null) {
+                        result.error("INVALID_URL", "url required", null)
+                    } else {
+                        result.success(launchWebBrowserChooser(url))
+                    }
+                }
                 "resolveAppLink" -> {
                     val url = call.argument<String>("url")
                     if (url != null) {
@@ -1626,6 +1643,60 @@ open class MainActivity : FlutterActivity() {
             false
         } catch (e: SecurityException) {
             Log.w(TAG, "Android chooser could not be opened", e)
+            false
+        }
+    }
+
+    /** Regular web links use a separate path; login authorization keeps its strict allowlist. */
+    private fun isWebBrowserUri(uri: Uri): Boolean =
+        (uri.scheme == "http" || uri.scheme == "https") &&
+            !uri.host.isNullOrBlank() && uri.userInfo == null
+
+    private fun launchWebBrowser(browserPackage: String, rawUrl: String): Boolean {
+        val uri = try { Uri.parse(rawUrl) } catch (_: Exception) { return false }
+        if (!isWebBrowserUri(uri)) return false
+        // Only launch browser packages verified by PackageManager, not arbitrary app IDs.
+        if (listLoginBrowsers(includeIcons = false).none { it["id"] == browserPackage }) return false
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                setPackage(browserPackage)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Selected browser could not open web link", e)
+            false
+        }
+    }
+
+    private fun launchWebBrowserChooser(rawUrl: String): Boolean {
+        val uri = try { Uri.parse(rawUrl) } catch (_: Exception) { return false }
+        if (!isWebBrowserUri(uri)) return false
+        val packages = listLoginBrowsers(includeIcons = false)
+            .mapNotNull { it["id"] as? String }
+            .distinct()
+        if (packages.isEmpty()) return false
+        val intents = packages.map { browserPackage ->
+            Intent(Intent.ACTION_VIEW, uri).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                setPackage(browserPackage)
+            }
+        }
+        return try {
+            // Explicit browser-only targets prevent FluxDO's own App Link handler
+            // and unrelated deep-link applications from appearing in the chooser.
+            val chooser = Intent.createChooser(intents.first(), "选择浏览器").apply {
+                if (intents.size > 1) {
+                    putExtra(Intent.EXTRA_INITIAL_INTENTS, intents.drop(1).toTypedArray())
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(chooser)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Browser chooser could not open web link", e)
             false
         }
     }

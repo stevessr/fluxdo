@@ -22,6 +22,68 @@ Future<void> _pumpHost(WidgetTester tester, {bool glass = true}) {
 }
 
 void main() {
+  testWidgets('链接打开保留主按钮，右侧箭头提供独立操作', (tester) async {
+    await _pumpHost(tester);
+    var openedNormally = 0;
+    var openedInApp = 0;
+    var choseBrowser = 0;
+    ToastService.show(
+      '检测到链接',
+      duration: const Duration(seconds: 8),
+      actionLabel: '打开',
+      onAction: () => openedNormally++,
+      actionOptions: [
+        ToastActionOption(
+          label: '使用内置浏览器打开',
+          icon: Icons.language,
+          onTap: () => openedInApp++,
+        ),
+        ToastActionOption(
+          label: '选择浏览器打开',
+          icon: Icons.open_in_browser,
+          onTap: () => choseBrowser++,
+        ),
+      ],
+    );
+    await tester.pump();
+    await tester.pump(_enter);
+    expect(find.text('打开'), findsOneWidget);
+    expect(find.byTooltip('更多打开方式'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('更多打开方式'));
+    await tester.pumpAndSettle();
+    expect(find.text('使用内置浏览器打开'), findsOneWidget);
+    expect(find.text('选择浏览器打开'), findsOneWidget);
+    expect(openedNormally, 0);
+    await tester.tap(find.text('选择浏览器打开'));
+    await tester.pump();
+    await tester.pump(_exit);
+    expect(choseBrowser, 1);
+    expect(openedInApp, 0);
+    expect(openedNormally, 0);
+
+    ToastService.show(
+      '第二条链接',
+      duration: const Duration(seconds: 8),
+      actionLabel: '打开',
+      onAction: () => openedNormally++,
+      actionOptions: [
+        ToastActionOption(
+          label: '使用内置浏览器打开',
+          icon: Icons.language,
+          onTap: () => openedInApp++,
+        ),
+      ],
+    );
+    await tester.pump();
+    await tester.pump(_enter);
+    await tester.tap(find.text('打开'));
+    await tester.pump();
+    await tester.pump(_exit);
+    expect(openedNormally, 1);
+    expect(openedInApp, 0);
+  });
+
   testWidgets('普通 Toast 展开后按时长自动收起', (tester) async {
     await _pumpHost(tester);
 

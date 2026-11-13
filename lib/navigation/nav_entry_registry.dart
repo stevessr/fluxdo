@@ -6,9 +6,7 @@ import '../l10n/s.dart';
 import '../models/user.dart';
 import '../modules/mini_apps/mini_app_gallery_page.dart';
 import '../pages/ai_bot_conversations_page.dart';
-import '../pages/site_about_page.dart';
-import '../pages/site_policy_page.dart';
-import '../models/site_policy_document.dart';
+import '../pages/site_info_page.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/boards_page.dart';
 import '../pages/browsing_history_page.dart';
@@ -24,7 +22,7 @@ import '../pages/topics_screen.dart';
 import '../providers/chat_providers.dart';
 import '../providers/discourse_providers.dart';
 import '../widgets/common/smart_avatar.dart';
-import '../widgets/notification/notification_quick_panel.dart';
+import '../pages/notifications_page.dart';
 import 'nav_action_bus.dart';
 import 'nav_entry.dart';
 
@@ -195,42 +193,12 @@ class NavEntryRegistry {
       ),
       NavEntry(
         id: NavEntryIds.notifications,
-        kind: NavEntryKind.panel,
+        kind: NavEntryKind.page,
         iconData: Symbols.notifications_rounded,
         selectedIconData: Symbols.notifications_rounded,
         label: (ctx) => ctx.l10n.nav_notifications,
-        onPanelTap: (ctx, ref) => NotificationQuickPanel.show(ctx),
+        pageBuilder: (ctx, isActive) => const NotificationsPage(),
         requiresLogin: true,
-      ),
-      NavEntry(
-        id: 'site_guidelines',
-        kind: NavEntryKind.page,
-        iconData: Symbols.rule_rounded,
-        selectedIconData: Symbols.rule_rounded,
-        label: _siteGuidelinesLabel,
-        pageBuilder: (ctx, isActive) =>
-            SitePolicyPage(kind: SitePolicyKind.guidelines, isActive: isActive),
-        defaultInBottomNav: false,
-      ),
-      NavEntry(
-        id: 'site_terms',
-        kind: NavEntryKind.page,
-        iconData: Symbols.description_rounded,
-        selectedIconData: Symbols.description_rounded,
-        label: _siteTermsLabel,
-        pageBuilder: (ctx, isActive) =>
-            SitePolicyPage(kind: SitePolicyKind.terms, isActive: isActive),
-        defaultInBottomNav: false,
-      ),
-      NavEntry(
-        id: 'site_privacy',
-        kind: NavEntryKind.page,
-        iconData: Symbols.privacy_tip_rounded,
-        selectedIconData: Symbols.privacy_tip_rounded,
-        label: _sitePrivacyLabel,
-        pageBuilder: (ctx, isActive) =>
-            SitePolicyPage(kind: SitePolicyKind.privacy, isActive: isActive),
-        defaultInBottomNav: false,
       ),
       NavEntry(
         id: 'site_about',
@@ -238,16 +206,27 @@ class NavEntryRegistry {
         iconData: Symbols.info_rounded,
         selectedIconData: Symbols.info_rounded,
         label: _siteAboutLabel,
-        pageBuilder: (ctx, isActive) => SiteAboutPage(isActive: isActive),
+        pageBuilder: (ctx, isActive) => SiteInfoPage(isActive: isActive),
         defaultInBottomNav: false,
       ),
     ];
   }
 
+  /// Map legacy saved navigation IDs to the single site information entry.
+  /// Retain compatibility with users who pinned a policy in older versions.
+  static String canonicalId(String id) {
+    if (id == 'birthdays') return 'anniversaries';
+    if (id == 'site_guidelines' ||
+        id == 'site_terms' ||
+        id == 'site_privacy') {
+      return 'site_about';
+    }
+    return id;
+  }
+
   /// 按 id 查找 entry
   static NavEntry? byId(String id) {
-    // 旧版独立生日导航入口的配置仍然可以解析。
-    final resolved = id == 'birthdays' ? 'anniversaries' : id;
+    final resolved = canonicalId(id);
     for (final e in buildAll()) {
       if (e.id == resolved) return e;
     }
@@ -292,24 +271,6 @@ String _boardsLabel(BuildContext context) {
 String _leaderboardLabel(BuildContext context) {
   final locale = Localizations.localeOf(context);
   return locale.languageCode == 'zh' ? '排行榜' : 'Leaderboard';
-}
-
-String _siteGuidelinesLabel(BuildContext context) {
-  return Localizations.localeOf(context).languageCode == 'zh'
-      ? '准则'
-      : 'Guidelines';
-}
-
-String _siteTermsLabel(BuildContext context) {
-  return Localizations.localeOf(context).languageCode == 'zh'
-      ? '服务条款'
-      : 'Terms of Service';
-}
-
-String _sitePrivacyLabel(BuildContext context) {
-  return Localizations.localeOf(context).languageCode == 'zh'
-      ? '隐私'
-      : 'Privacy';
 }
 
 String _siteAboutLabel(BuildContext context) {

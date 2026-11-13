@@ -4,13 +4,21 @@ on:
   pull_request:
     paths:
       - 'lib/models/site_about.dart'
+      - 'lib/models/site_info_section.dart'
+      - 'lib/utils/link_launcher.dart'
       - 'lib/models/site_policy_document.dart'
       - 'lib/navigation/nav_entry_registry.dart'
       - 'lib/pages/site_about_page.dart'
       - 'lib/pages/site_policy_page.dart'
+      - 'lib/pages/site_info_page.dart'
+      - 'lib/pages/bottom_nav_settings_page.dart'
+      - 'lib/main.dart'
       - 'lib/widgets/common/site_info_tabs.dart'
       - 'test/models/site_about_test.dart'
+      - 'test/models/site_info_section_test.dart'
       - 'test/models/site_policy_document_test.dart'
+      - 'test/navigation/site_info_registry_test.dart'
+      - 'test/pages/site_info_page_test.dart'
       - '.github/workflows/site-information-parity.yml'
   workflow_dispatch:
 
@@ -48,16 +56,27 @@ jobs:
         run: >-
           flutter analyze --no-fatal-infos --no-fatal-warnings
           lib/models/site_about.dart
+          lib/models/site_info_section.dart
+          lib/utils/link_launcher.dart
           lib/models/site_policy_document.dart
           lib/navigation/nav_entry_registry.dart
           lib/pages/site_about_page.dart
           lib/pages/site_policy_page.dart
+          lib/pages/site_info_page.dart
+          lib/pages/bottom_nav_settings_page.dart
+          lib/main.dart
           lib/widgets/common/site_info_tabs.dart
           test/models/site_about_test.dart
+          test/models/site_info_section_test.dart
           test/models/site_policy_document_test.dart
+          test/navigation/site_info_registry_test.dart
+          test/pages/site_info_page_test.dart
 
-      - name: Test site information and policy parsing
+      - name: Test site information tabs and policy parsing
         run: >-
           flutter test
+          test/models/site_info_section_test.dart
           test/models/site_about_test.dart
           test/models/site_policy_document_test.dart
+          test/navigation/site_info_registry_test.dart
+          test/pages/site_info_page_test.dart

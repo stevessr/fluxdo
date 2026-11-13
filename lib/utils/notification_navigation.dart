@@ -1,50 +1,75 @@
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_icons/app_icons.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/s.dart';
 import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
+import '../providers/notification_list_provider.dart';
+import '../providers/selected_topic_provider.dart';
+import '../navigation/nav_action_bus.dart';
+import '../utils/notification_post_target.dart';
+import '../utils/dialog_utils.dart';
 import '../pages/badge_page.dart';
+import '../pages/private_messages_page.dart';
 import '../pages/chat/chat_message_page.dart';
 import '../pages/reaction_notification_target_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page.dart';
 import '../services/local_notification_service.dart';
-import '../utils/dialog_utils.dart';
-import '../widgets/common/page_dialog.dart';
 import '../widgets/layout/master_detail_layout.dart';
+import '../widgets/common/page_dialog.dart';
 import '../widgets/notification/notification_item.dart';
+
+/// 隔离正在等待原帖回查的通知：后一次点击优先于较早的异步跳转。
+final Expando<int> _notificationNavigationGeneration =
+    Expando<int>('notificationNavigationGeneration');
 
 NavigatorState? _rootNavigator(BuildContext context) {
   return navigatorKey.currentState ??
       Navigator.of(context, rootNavigator: true);
 }
 
-/// 通知落点统一入口:大屏开「页面弹窗」(独立导航的迷你窗口,盖在
-/// 当前内容上,看完即走),窄屏推全屏路由。
-///
-/// 曾经的方案是大屏写工作区栈 + 切 tab(与列表点击一致的双栏表现),
-/// 但它要求先辨明话题 archetype 才能选栈(私信栏/信息流栈),而通知
-/// payload 不带该信息,任何预取/乐观归位方案都引入延迟或跳变;私信
-/// tab 还可能被用户从底栏移除,切 tab 请求静默失效。弹窗方案不进栈、
-/// 不切 tab,这些分支整个消失,四个入口(快捷面板/全部通知页/系统
-/// 通知/徽章等)行为完全一致。
-void openNotificationPage(BuildContext context, Widget page) {
-  if (MasterDetailLayout.canShowBothPanesFor(context)) {
-    showPageDialog(context: context, builder: (_) => page);
-  } else {
-    _rootNavigator(context)?.push(InteractionPageRoute(builder: (_) => page));
+/// 完整通知页从其他位置作为路由进入时，用稳定名称识别该入口。
+const notificationPageRouteName = '/fluxdo/notifications';
+
+/// 切换到首页工作区前退出临时通知列表路由；主导航常驻页不受影响。
+void _closeNotificationRouteIfNeeded(
+  NavigatorState? navigator,
+  Route<dynamic>? originRoute,
+) {
+  if (originRoute?.settings.name == notificationPageRouteName &&
+      originRoute?.isCurrent == true) {
+    navigator?.pop();
   }
+}
+
+/// 打开通知页面。完整列表使用稳定路由名；其他页面维持大屏弹窗体验。
+void openNotificationPage(
+  BuildContext context,
+  Widget page, {
+  bool isNotificationList = false,
+}) {
+  if (!isNotificationList && MasterDetailLayout.canShowBothPanesFor(context)) {
+    showPageDialog(context: context, builder: (_) => page);
+    return;
+  }
+  _rootNavigator(context)?.push(
+    InteractionPageRoute(
+      settings: RouteSettings(
+        name: isNotificationList ? notificationPageRouteName : null,
+      ),
+      builder: (_) => page,
+    ),
+  );
 }
 
 /// 通知 → 落点页面。null = 该通知没有可打开的目标(如入群申请通过)。
 ///
-/// 话题/私信共用 TopicDetailPage,无需辨 archetype;
-/// autoSwitchToMasterDetail 保持关闭 —— 通知打开的是临时查看面,中途
-/// 拉宽窗口保持原样,不自动折叠进工作区栈(私信话题会折进错误的栈,
-/// 这正是弹窗方案要消灭的分支)。
+/// 这是窄屏路由及非话题目标的构造器；宽屏话题（包括私信）由
+/// _openTopicNotificationTab 直接交给首页工作区的独立 Tab。
+/// 两者共用 TopicDetailPage，无需预取话题 archetype。
 Widget? _notificationTargetPage(
   DiscourseNotification notification, {
   String? currentUsername,
@@ -67,6 +92,16 @@ Widget? _notificationTargetPage(
 
     case NotificationType.membershipRequestAccepted:
       return null;
+
+    case NotificationType.groupMessageSummary:
+      // 汇总通知可能没有 topic_id，此时仍要能进入私信列表。
+      if (notification.topicId == null) {
+        return const PrivateMessagesPage();
+      }
+      return TopicDetailPage(
+        topicId: notification.topicId!,
+        scrollToPostNumber: notification.postNumber,
+      );
 
     case NotificationType.boost:
       if (notification.topicId == null) return null;
@@ -138,6 +173,13 @@ void _markNotificationRead(
   container
       .read(recentNotificationsProvider.notifier)
       .markAsRead(notification.id);
+  // 仅更新已经挂载的完整通知列表。快捷面板单独使用时不额外触发
+  // 历史通知首屏请求；两种入口同时存在时也能同步已读/未读筛选。
+  if (container.exists(notificationListProvider)) {
+    container
+        .read(notificationListProvider.notifier)
+        .markAsRead(notification.id);
+  }
   container
       .read(discourseServiceProvider)
       .markNotificationRead(notification.id)
@@ -146,10 +188,146 @@ void _markNotificationRead(
       });
 }
 
-/// 处理通知点击：标记已读 + 按类型跳转。快捷面板和历史列表页面共用。
-///
-/// [siblings] 是点击项所在的完整通知列表:大屏弹窗据此提供
-/// 上一条/下一条快速切换;不传或窄屏时只打开单条。
+/// 通知跳转采用稳定的导航 ID，兼容自定义底栏顺序。
+void _openTopicNotificationTab(
+  ProviderContainer container,
+  DiscourseNotification notification, {
+  required int topicId,
+  int? postNumber,
+}) {
+  final targetPostNumber = postNumber ?? notification.postNumber;
+  // 已打开的 Tab 可能缓存了上一次浏览的楼层。通知带有明确落点时先
+  // 清掉该实例的恢复位置，否则 TopicDetailPane 会优先读旧缓存，
+  // 从而忽略这次通知的新楼层。
+  if (targetPostNumber != null) {
+    final previousTabs = container.read(selectedTopicProvider).stack;
+    for (final pane in previousTabs) {
+      if (pane.kind == PaneKind.topic &&
+          pane.topicId == topicId &&
+          pane.instanceId != null) {
+        container
+            .read(
+              detailScrollPositionProvider((
+                topicId: topicId,
+                instanceId: pane.instanceId!,
+              )).notifier,
+            )
+            .state = null;
+        break;
+      }
+    }
+  }
+
+  container.read(selectedTopicProvider.notifier).openTopicTab(
+    topicId: topicId,
+    initialTitle: notification.data.topicTitle ?? notification.fancyTitle,
+    scrollToPostNumber: targetPostNumber,
+    isPrivateMessage:
+        notification.notificationType == NotificationType.privateMessage ||
+        notification.notificationType ==
+            NotificationType.invitedToPrivateMessage ||
+        notification.notificationType ==
+            NotificationType.groupMessageSummary,
+    replaceNavigationTarget: true,
+    highlightBoostUsername: notification.notificationType == NotificationType.boost
+        ? notification.data.displayUsername
+        : null,
+    initialRevisionPostNumber:
+        notification.notificationType == NotificationType.edited
+            ? notification.postNumber
+            : null,
+    initialRevisionNumber:
+        notification.notificationType == NotificationType.edited
+            ? notification.data.revisionNumber
+            : null,
+  );
+  final previous = container.read(navDestinationRequestProvider);
+  container.read(navDestinationRequestProvider.notifier).state =
+      NavDestinationRequest(
+        targetId: NavEntryIds.home,
+        nonce: (previous?.nonce ?? 0) + 1,
+      );
+}
+
+/// 私信本身就是 topic：不区分 archetype，同普通话题使用独立 Tab。
+bool _isTopicNotification(DiscourseNotification notification) {
+  switch (notification.notificationType) {
+    case NotificationType.inviteeAccepted:
+    case NotificationType.following:
+    case NotificationType.grantedBadge:
+    case NotificationType.membershipRequestAccepted:
+    case NotificationType.chatMention:
+    case NotificationType.chatMessage:
+    case NotificationType.chatInvitation:
+    case NotificationType.chatGroupMention:
+    case NotificationType.chatQuotedPost:
+    case NotificationType.chatWatchedThread:
+      return false;
+    default:
+      return notification.topicId != null ||
+          (notification.notificationType == NotificationType.reaction &&
+              reactionFallbackPostId(notification) != null);
+  }
+}
+
+/// Discourse 对同一用户多帖 Reaction 聚合后可能清空顶层 topic_id。
+/// 回查原帖定位成功再开 Tab；失败时提供可重试的完整落点页。
+Future<void> _openReactionTabAfterLookup(
+  ProviderContainer container,
+  DiscourseNotification notification,
+  int postId, {
+  required int navigationGeneration,
+  required NavigatorState? navigator,
+  required Route<dynamic>? originRoute,
+}) async {
+  try {
+    final response = await container
+        .read(discourseServiceProvider)
+        .dio
+        .get('/posts/$postId.json');
+    // 用户可能在网络请求期间点开了另一条通知，旧结果不能抢回前台。
+    if (_notificationNavigationGeneration[container] != navigationGeneration ||
+        (originRoute != null && !originRoute.isCurrent)) {
+      return;
+    }
+    final target = parseNotificationPostTarget(response.data);
+    if (target != null) {
+      _closeNotificationRouteIfNeeded(navigator, originRoute);
+      _openTopicNotificationTab(
+        container,
+        notification,
+        topicId: target.topicId,
+        postNumber: target.postNumber,
+      );
+      return;
+    }
+  } catch (error) {
+    debugPrint('无法定位聚合 Reaction 通知: $error');
+  }
+  if (_notificationNavigationGeneration[container] != navigationGeneration ||
+      (originRoute != null && !originRoute.isCurrent)) {
+    return;
+  }
+  if (notification.topicId != null) {
+    _closeNotificationRouteIfNeeded(navigator, originRoute);
+    _openTopicNotificationTab(
+      container,
+      notification,
+      topicId: notification.topicId!,
+    );
+  } else {
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => ReactionNotificationTargetPage(
+          notification: notification,
+        ),
+      ),
+    );
+  }
+}
+
+/// 点击直接进入话题 Tab 或对应页面；不再创建通知内预览/翻页弹窗。
+/// [siblings] 为旧调用方保留，通知列表自行负责分类和切换。
 void handleNotificationTap(
   BuildContext context,
   WidgetRef ref,
@@ -157,7 +335,37 @@ void handleNotificationTap(
   List<DiscourseNotification>? siblings,
 }) {
   final container = ProviderScope.containerOf(context, listen: false);
+  final navigator = _rootNavigator(context);
+  final originRoute = ModalRoute.of(context);
+  final navigationGeneration =
+      (_notificationNavigationGeneration[container] ?? 0) + 1;
+  _notificationNavigationGeneration[container] = navigationGeneration;
   _markNotificationRead(container, notification);
+
+  if (MasterDetailLayout.canShowBothPanesFor(context) &&
+      _isTopicNotification(notification)) {
+    final fallbackPostId = reactionFallbackPostId(notification);
+    if (fallbackPostId != null) {
+      _openReactionTabAfterLookup(
+        container,
+        notification,
+        fallbackPostId,
+        navigationGeneration: navigationGeneration,
+        navigator: navigator,
+        originRoute: originRoute,
+      );
+      return;
+    }
+    if (notification.topicId != null) {
+      _closeNotificationRouteIfNeeded(navigator, originRoute);
+      _openTopicNotificationTab(
+        container,
+        notification,
+        topicId: notification.topicId!,
+      );
+      return;
+    }
+  }
 
   final currentUsername = ref.read(currentUserProvider).value?.username;
   final page = _notificationTargetPage(

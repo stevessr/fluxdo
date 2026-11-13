@@ -112,7 +112,8 @@ class _BottomNavSettingsPageState extends ConsumerState<BottomNavSettingsPage> {
       seen.add(homeId);
     }
 
-    for (final id in _enabledIds) {
+    for (final storedId in _enabledIds) {
+      final id = NavEntryRegistry.canonicalId(storedId);
       if (id == homeId) continue;
       if (!byId.containsKey(id)) continue;
       if (seen.contains(id)) continue;

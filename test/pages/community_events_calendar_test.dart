@@ -117,6 +117,133 @@ void main() {
     });
   });
 
+  test('同时段活动分列显示，分组结束后恢复整列宽度', () {
+    Map<String, dynamic> event(String title, String start, String end) => {
+      'name': title,
+      'starts_at': '2026-11-10T' + start + ':00',
+      'ends_at': '2026-11-10T' + end + ':00',
+    };
+    final placements = layoutTimedCalendarEvents([
+      event('A', '09:00', '10:00'),
+      event('B', '09:30', '10:30'),
+      event('C', '09:45', '10:15'),
+      event('D', '11:00', '12:00'),
+    ], DateTime(2026, 11, 10));
+    expect(placements, hasLength(4));
+    expect(placements.take(3).map((entry) => entry.lane).toSet(),
+        {0, 1, 2});
+    expect(placements.take(3).every((entry) => entry.laneCount == 3),
+        isTrue);
+    expect(placements.last.lane, 0);
+    expect(placements.last.laneCount, 1);
+  });
+
+  test('跨日活动按当天区间裁切，不将次日午夜视为活动日', () {
+    final event = <String, dynamic>{
+      'name': '夜间活动',
+      'starts_at': '2026-11-10T23:00:00',
+      'ends_at': '2026-11-12T00:00:00',
+    };
+    final first = layoutTimedCalendarEvents([event], DateTime(2026, 11, 10));
+    final second = layoutTimedCalendarEvents([event], DateTime(2026, 11, 11));
+    final third = layoutTimedCalendarEvents([event], DateTime(2026, 11, 12));
+    expect(first.single.start.hour, 23);
+    expect(first.single.end, DateTime(2026, 11, 11));
+    expect(second.single.start, DateTime(2026, 11, 11));
+    expect(second.single.end, DateTime(2026, 11, 12));
+    expect(third, isEmpty);
+  });
+
+  test('全天活动不占用定时网格列', () {
+    final events = <Map<String, dynamic>>[
+      {'name': '全天', 'starts_at': '2026-11-10', 'all_day': true},
+      {
+        'name': '定时',
+        'starts_at': '2026-11-10T13:00:00',
+        'ends_at': '2026-11-10T13:30:00',
+      },
+    ];
+    expect(layoutTimedCalendarEvents(events, DateTime(2026, 11, 10)),
+        hasLength(1));
+  });
+
+  testWidgets('年视图按日期排列并展示跨日全天活动', (tester) async {
+    final event = <String, dynamic>{
+      'name': '连续社区活动',
+      'starts_at': '2026-02-13',
+      'ends_at': '2026-02-15',
+      'all_day': true,
+    };
+    DateTime? picked;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: CommunityEventsCalendar(
+          date: DateTime(2026, 2, 14),
+          scale: EventCalendarScale.year,
+          events: [event],
+          onSelectDate: (day) => picked = day,
+          onSelectMonth: (_) {},
+          onTapEvent: (_) {},
+        ),
+      ),
+    ));
+    expect(find.text('连续社区活动'), findsNWidgets(3));
+    expect(find.textContaining('Feb 13'), findsOneWidget);
+    expect(find.textContaining('Feb 14'), findsOneWidget);
+    expect(find.textContaining('Feb 15'), findsOneWidget);
+    await tester.tap(find.textContaining('Feb 14'));
+    expect(picked, DateTime(2026, 2, 14));
+  });
+
+  testWidgets('日视图同时展示全天与定时活动，并能打开活动', (tester) async {
+    final allDay = <String, dynamic>{
+      'name': '全天活动',
+      'starts_at': '2026-11-10',
+      'all_day': true,
+    };
+    final timed = <String, dynamic>{
+      'name': '上午会议',
+      'starts_at': '2026-11-10T09:00:00',
+      'ends_at': '2026-11-10T10:00:00',
+      'all_day': false,
+    };
+    Map<String, dynamic>? tapped;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: CommunityEventsCalendar(
+        date: DateTime(2026, 11, 10),
+        scale: EventCalendarScale.day,
+        events: [allDay, timed],
+        onSelectDate: (_) {},
+        onSelectMonth: (_) {},
+        onTapEvent: (event) => tapped = event,
+      )),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('All day'), findsOneWidget);
+    expect(find.text('全天活动'), findsOneWidget);
+    expect(find.text('上午会议'), findsOneWidget);
+    await tester.tap(find.text('上午会议'));
+    expect(tapped, same(timed));
+  });
+
+  testWidgets('周视图显示七列并允许选择其中一天', (tester) async {
+    DateTime? picked;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: CommunityEventsCalendar(
+        date: DateTime(2026, 11, 10),
+        scale: EventCalendarScale.week,
+        events: const [],
+        onSelectDate: (day) => picked = day,
+        onSelectMonth: (_) {},
+        onTapEvent: (_) {},
+      )),
+    ));
+    expect(find.textContaining('11/9'), findsOneWidget);
+    expect(find.textContaining('11/15'), findsOneWidget);
+    await tester.tap(find.textContaining('11/15'));
+    expect(picked, DateTime(2026, 11, 15));
+  });
+
   testWidgets('month view includes navigation and selected-day agenda',
       (tester) async {
     final sample = <String, dynamic>{

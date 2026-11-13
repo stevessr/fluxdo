@@ -13,22 +13,27 @@ import '../modules/mini_apps/mini_app_navigation.dart';
 import '../pages/badge_page.dart';
 import '../pages/boards_page.dart';
 import '../pages/chat/chat_message_page.dart';
+import '../pages/site_info_page.dart';
 import '../pages/community_events_page.dart';
 import '../pages/group_page.dart';
 import '../pages/groups_page.dart';
 import '../pages/image_viewer_page.dart';
 import '../pages/mini_apps_page.dart';
 import '../pages/webview_page.dart';
+import '../providers/category_provider.dart';
 import '../providers/preferences_provider.dart';
 import '../providers/selected_topic_provider.dart';
 import '../services/discourse/discourse_service.dart';
 import '../services/toast_service.dart';
 import '../l10n/s.dart';
+import '../services/system_browser_service.dart';
+import '../widgets/auth/login_browser_picker_sheet.dart';
 import '../widgets/common/external_link_confirm_dialog.dart';
 import '../widgets/content/discourse_html_content/image_utils.dart';
 import '../widgets/layout/home_workspace_scope.dart';
 import 'discourse_url_parser.dart';
 import 'category_navigation.dart';
+import 'dialog_utils.dart';
 import 'link_security.dart';
 import 'url_helper.dart';
 
@@ -134,15 +139,16 @@ Future<void> launchExternalLink(
   }
 
   // Android 的包可见性查询可能返回 false，但实际 ACTION_VIEW 仍能打开。
-  // 确认之后直接尝试启动；网页失败则交给内置浏览器，不能悄悄丢掉点击。
+  // 先直接尝试；失败后走系统浏览器 service，最后网页回退到内置浏览器。
   try {
     if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
   } catch (_) {
-    // 无可用处理程序、平台插件异常均进入同一兜底。
+    // 无可用处理程序、平台插件异常均进入统一兜底。
   }
   if (!context.mounted) return;
   if (uri.scheme == 'https' || uri.scheme == 'http') {
-    WebViewPage.open(context, url);
+    if (await launchInExternalBrowser(url)) return;
+    if (context.mounted) WebViewPage.open(context, url);
   } else {
     ToastService.showError(context.l10n.common_cannotOpenBrowser);
   }
@@ -181,6 +187,26 @@ Future<void> launchContentLink(
   }
 
   final internal = isInternalUrlString(url);
+
+  // /about、/guidelines、/tos 和 /privacy 是同一页面的四种状态，
+  // 在通用站内 WebView fallback 之前解析。
+  if (internal) {
+    final path = Uri.tryParse(UrlHelper.resolveUrl(url))?.path ?? '';
+    final siteSection = SiteInfoSection.fromPath(path);
+    if (siteSection != null) {
+      final workspace = SiteInfoNavigationScope.maybeOf(context);
+      if (workspace != null) {
+        workspace.onSelect(siteSection);
+      } else {
+        await Navigator.of(context).push(
+          InteractionPageRoute<void>(
+            builder: (_) => SiteInfoPage(initialSection: siteSection),
+          ),
+        );
+      }
+      return;
+    }
+  }
 
   // 站内应用：先交给小程序导航统一处理（应用广场 / 应用直链）。
   if (internal && await openMiniAppLink(context, url)) return;
@@ -255,6 +281,17 @@ Future<void> launchContentLink(
   // 1.7 分类链接 /c/slug/id → 首页分类视图或独立分类页。
   final categoryInfo = DiscourseUrlParser.parseCategory(url);
   if (categoryInfo != null && internal) {
+    final categoryWorkspace = HomeWorkspaceScope.maybeOf(context);
+    if (categoryWorkspace != null) {
+      final category = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(categoryMapProvider).value?[categoryInfo.categoryId];
+      if (category != null) {
+        categoryWorkspace.onShowCategory(category);
+        return;
+      }
+    }
     await openCategoryPage(context, categoryInfo.categoryId);
     return;
   }
@@ -398,6 +435,33 @@ Future<void> launchContentLink(
 
   // 9. 外部链接 → 根据用户偏好决定
   await launchExternalLink(context, url);
+}
+
+/// Let the user choose an installed browser for an ordinary HTTP(S) URL.
+/// Returns null when the sheet is dismissed without making a selection.
+Future<bool?> openLinkWithBrowserPicker(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !SystemBrowserService.isWebUrl(uri)) return false;
+
+  List<LoginBrowser> browsers;
+  try {
+    browsers = await SystemBrowserService.instance.availableBrowsers();
+  } catch (_) {
+    return false;
+  }
+  if (!context.mounted) return null;
+
+  final selected = await showAppBottomSheet<LoginBrowser>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (_) => LoginBrowserPickerSheet(
+      browsers: browsers,
+      description: null,
+    ),
+  );
+  if (selected == null) return null;
+  return SystemBrowserService.instance.openWebLink(selected, uri);
 }
 
 /// 强制在外部浏览器打开链接，绕过 App Links

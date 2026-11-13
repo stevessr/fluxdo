@@ -1,5 +1,5 @@
-import '../utils/avatar_url.dart';
 import 'dart:convert';
+import '../utils/avatar_url.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -565,7 +565,7 @@ class PreloadedDataService {
     _loadedFromPersistentCache = false;
     _currentUser = null;
     _siteSettings = null;
-    AvatarUrl.configure(_siteSettings?['avatar_sizes']);
+    AvatarUrl.configure(null);
     _site = null;
     _topicListData = null;
     _cachedTopicListResponse = null;
@@ -604,8 +604,8 @@ class PreloadedDataService {
   }) {
     _currentUser = currentUser;
     _siteSettings = siteSettings;
-    if (loaded != null) _loaded = loaded;
     AvatarUrl.configure(_siteSettings?['avatar_sizes']);
+    if (loaded != null) _loaded = loaded;
   }
 
   /// 测试用：模拟首屏放行后自定义表情才到达，以及站点切换。

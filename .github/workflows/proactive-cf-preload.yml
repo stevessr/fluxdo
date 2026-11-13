@@ -1,0 +1,84 @@
+name: Proactive CF Preload
+
+on:
+  push:
+    branches:
+      - feat/proactive-cf-verification-before-preload
+    paths:
+      - 'lib/main.dart'
+      - 'lib/providers/preferences_provider.dart'
+      - 'lib/services/cf_challenge_service.dart'
+      - 'lib/services/browser_trust_coordinator.dart'
+      - 'lib/settings/definitions/custom_settings_defs.dart'
+      - 'test/services/proactive_cf_preload_contract_test.dart'
+      - 'test/services/browser_trust_preload_latency_contract_test.dart'
+      - '.github/workflows/proactive-cf-preload.yml'
+  pull_request:
+    paths:
+      - 'lib/main.dart'
+      - 'lib/providers/preferences_provider.dart'
+      - 'lib/services/cf_challenge_service.dart'
+      - 'lib/services/browser_trust_coordinator.dart'
+      - 'lib/settings/definitions/custom_settings_defs.dart'
+      - 'test/services/proactive_cf_preload_contract_test.dart'
+      - 'test/services/browser_trust_preload_latency_contract_test.dart'
+      - '.github/workflows/proactive-cf-preload.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proactive-cf-preload-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+
+      - name: Prepare assets
+        run: mkdir -p assets/certs assets/images/llm
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate localization
+        run: dart run tool/gen_l10n.dart
+
+      - name: Check changed Dart formatting
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/main.dart \
+            lib/providers/preferences_provider.dart \
+            lib/services/cf_challenge_service.dart \
+            lib/services/browser_trust_coordinator.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            test/services/proactive_cf_preload_contract_test.dart
+
+      - name: Analyze changed code
+        run: |
+          flutter analyze \
+            lib/main.dart \
+            lib/providers/preferences_provider.dart \
+            lib/services/cf_challenge_service.dart \
+            lib/services/browser_trust_coordinator.dart \
+            lib/settings/definitions/custom_settings_defs.dart \
+            test/services/proactive_cf_preload_contract_test.dart
+
+      - name: Run preload regression tests
+        run: |
+          dart tool/flutterw.dart test \
+            test/services/proactive_cf_preload_contract_test.dart \
+            test/services/browser_trust_preload_latency_contract_test.dart

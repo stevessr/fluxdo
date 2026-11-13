@@ -1,6 +1,6 @@
 // 帖子数据模型
-import 'package:fluxdo/utils/avatar_url.dart';
 import 'package:flutter/foundation.dart' show listEquals;
+import '../utils/avatar_url.dart';
 
 import '../l10n/s.dart';
 import '../utils/time_utils.dart';

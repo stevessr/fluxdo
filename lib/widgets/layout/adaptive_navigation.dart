@@ -231,6 +231,19 @@ class _NavigationRailItem extends StatelessWidget {
         ? colorScheme.onSecondaryContainer
         : colorScheme.onSurfaceVariant;
 
+    // Anchor the account switcher to the visible rail icon, not its full row.
+    // Keep the upstream tooltip and shape tokens around the entire hit target.
+    BuildContext? iconContext;
+    Widget anchoredIcon() => Builder(
+      builder: (anchorContext) {
+        iconContext = anchorContext;
+        return IconTheme(
+          data: IconThemeData(color: iconColor, size: 24),
+          child: icon,
+        );
+      },
+    );
+
     return Tooltip(
       message: extended ? '' : label,
       child: Padding(
@@ -245,17 +258,19 @@ class _NavigationRailItem extends StatelessWidget {
               borderRadius: context.shapes.borderRadius(16),
             ),
             onTap: onTap,
-            onLongPress: onLongPress,
+            onLongPress: onLongPress == null
+                ? null
+                : () {
+                    _recordAccountQuickSwitcherAnchor(iconContext ?? context);
+                    onLongPress!();
+                  },
             child: SizedBox(
               height: 56,
               child: extended
                   ? Row(
                       children: [
                         const SizedBox(width: 16),
-                        IconTheme(
-                          data: IconThemeData(color: iconColor, size: 24),
-                          child: icon,
-                        ),
+                        anchoredIcon(),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -270,12 +285,7 @@ class _NavigationRailItem extends StatelessWidget {
                         ),
                       ],
                     )
-                  : Center(
-                      child: IconTheme(
-                        data: IconThemeData(color: iconColor, size: 24),
-                        child: icon,
-                      ),
-                    ),
+                  : Center(child: anchoredIcon()),
             ),
           ),
         ),
@@ -585,8 +595,29 @@ abstract final class _CapsuleMetrics {
 ///
 /// 这样用户滚到深处后就能"预览"单击会发生什么，符合 Twitter/Telegram 的交互惯例。
 /// 只应放在 NavigationBar 的 selectedIcon 位置（或侧栏 selected 状态下）。
-class _ActiveDestinationIcon extends ConsumerWidget {
+class _ActiveDestinationIcon extends StatelessWidget {
   const _ActiveDestinationIcon({required this.dest, required this.defaultIcon});
+
+  final AdaptiveDestination dest;
+  final Widget defaultIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    // 独立组件预览/测试不一定挂在 ProviderScope 下，保持默认选中图标。
+    try {
+      ProviderScope.containerOf(context, listen: false);
+    } on StateError {
+      return _buildIcon(defaultIcon: defaultIcon);
+    }
+    return _ActiveDestinationIconConsumer(dest: dest, defaultIcon: defaultIcon);
+  }
+}
+
+class _ActiveDestinationIconConsumer extends ConsumerWidget {
+  const _ActiveDestinationIconConsumer({
+    required this.dest,
+    required this.defaultIcon,
+  });
 
   final AdaptiveDestination dest;
   final Widget defaultIcon;
@@ -597,31 +628,40 @@ class _ActiveDestinationIcon extends ConsumerWidget {
     final action = ref.watch(
       preferencesProvider.select((p) => p.bottomSingleTapAction),
     );
-
     final actionIcon = action.icon;
     final showActionIcon =
         progress >= navScrollIconThreshold &&
         action != NavTapAction.none &&
         actionIcon != null;
-
-    final child = showActionIcon
-        ? Icon(actionIcon, key: ValueKey('nav-action-${action.name}'))
-        : KeyedSubtree(key: const ValueKey('nav-default'), child: defaultIcon);
-
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 220),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (c, anim) => FadeTransition(
-        opacity: anim,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.7, end: 1.0).animate(anim),
-          child: c,
-        ),
-      ),
-      child: child,
+    return _buildIcon(
+      defaultIcon: defaultIcon,
+      actionIcon: showActionIcon ? actionIcon : null,
+      actionName: action.name,
     );
   }
+}
+
+Widget _buildIcon({
+  required Widget defaultIcon,
+  IconData? actionIcon,
+  String? actionName,
+}) {
+  final child = actionIcon == null
+      ? KeyedSubtree(key: const ValueKey('nav-default'), child: defaultIcon)
+      : Icon(actionIcon, key: ValueKey('nav-action-$actionName'));
+  return AnimatedSwitcher(
+    duration: const Duration(milliseconds: 220),
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeInCubic,
+    transitionBuilder: (child, animation) => FadeTransition(
+      opacity: animation,
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.7, end: 1.0).animate(animation),
+        child: child,
+      ),
+    ),
+    child: child,
+  );
 }
 
 /// 悬浮底栏外壳：宽度随入口数量自适应的胶囊，悬浮于内容之上（Scaffold

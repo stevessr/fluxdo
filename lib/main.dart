@@ -65,6 +65,7 @@ import 'services/network/vpn_auto_toggle_service.dart';
 import 'services/network/vpn_bypass_service.dart';
 import 'services/network/doh_proxy/proxy_certificate.dart';
 import 'services/cf_challenge_logger.dart';
+import 'services/cf_challenge_service.dart';
 import 'services/browser_trust_coordinator.dart';
 import 'services/fonts/font_catalog.dart';
 import 'services/fonts/font_download_service.dart';
@@ -77,6 +78,8 @@ import 'package:fluxdo_render/fluxdo_render.dart'
     show FlattenCache, ParagraphLayoutCache, FluxdoRenderShapes;
 
 import 'services/clipboard_topic_link_service.dart';
+import 'pages/webview_page.dart';
+import 'utils/link_launcher.dart';
 import 'services/deep_link_service.dart';
 import 'services/pico_vr_service.dart';
 import 'pages/topic_detail_page/topic_detail_page.dart';
@@ -499,6 +502,13 @@ Future<void> main() async {
   if (Platform.isAndroid) {
     unawaited(_applyAndroidDisplayMode(prefs));
   }
+
+  // 预加载先于 ProviderScope，因此要在此从磁盘恢复验证策略与自动过盾总开关。
+  final cfChallenge = CfChallengeService();
+  cfChallenge.autoVerifyEnabled =
+      prefs.getBool('pref_auto_cf_challenge') ?? true;
+  cfChallenge.proactiveVerifyBeforePreloadEnabled =
+      prefs.getBool(PreferencesNotifier.proactiveCfBeforePreloadKey) ?? false;
 
   // 提前触发预加载数据请求，与 runApp 并行执行。
   // PreheatGate 中的 ensurePreloaded() 会复用这个已在进行的请求。
@@ -1573,6 +1583,38 @@ class _MainPageState extends ConsumerState<MainPage>
         context.l10n.preferences_clipboardTopicLink_detected,
         duration: const Duration(seconds: 8),
         actionLabel: context.l10n.preferences_clipboardTopicLink_open,
+        actionOptions: [
+          ToastActionOption(
+            label: '使用内置浏览器打开',
+            icon: Icons.language_rounded,
+            onTap: () {
+              final navContext = navigatorKey.currentState?.context;
+              if (navContext != null) {
+                unawaited(
+                  WebViewPage.open<void>(navContext, candidate.normalizedUrl),
+                );
+              }
+            },
+          ),
+          ToastActionOption(
+            label: '选择浏览器打开',
+            icon: Icons.open_in_browser_rounded,
+            onTap: () {
+              final navContext = navigatorKey.currentState?.context;
+              if (navContext == null) return;
+              unawaited(
+                openLinkWithBrowserPicker(
+                  navContext,
+                  candidate.normalizedUrl,
+                ).then((success) {
+                  if (success == false) {
+                    ToastService.showError(S.current.webview_cannotOpenBrowser);
+                  }
+                }),
+              );
+            },
+          ),
+        ],
         // 宽屏且能解析成话题链接就进首页平行视界（选中 + 切 tab）；
         // 窄屏没有「写栈 → 推详情」的桥（同通知入口的窄屏问题），
         // 和解析失败一样退回深链通道全屏打开
@@ -1903,7 +1945,8 @@ class _MainPageState extends ConsumerState<MainPage>
     final resolved = <NavEntry>[];
     final seen = <String>{};
 
-    for (final id in ids) {
+    for (final storedId in ids) {
+      final id = NavEntryRegistry.canonicalId(storedId);
       final e = byId[id];
       if (e == null) continue;
       if (e.requiresLogin && user == null) continue;

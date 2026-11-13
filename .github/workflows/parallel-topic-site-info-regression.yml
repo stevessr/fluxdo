@@ -1,0 +1,56 @@
+name: Parallel Topic and Site Info Regression
+
+on:
+  pull_request:
+    paths:
+      - 'lib/pages/topic_detail_page/topic_detail_page.dart'
+      - 'lib/pages/site_info_page.dart'
+      - 'lib/pages/site_policy_page.dart'
+      - 'lib/models/site_info_section.dart'
+      - 'lib/utils/link_launcher.dart'
+      - 'lib/widgets/layout/master_detail_pane_host.dart'
+      - 'test/models/site_info_section_test.dart'
+      - 'test/pages/site_info_page_test.dart'
+      - 'test/providers/selected_topic_provider_test.dart'
+      - 'test/widgets/layout/unified_topic_tabs_test.dart'
+      - '.github/workflows/parallel-topic-site-info-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Prepare generated directories
+        run: mkdir -p assets/certs assets/images/llm
+      - name: Resolve packages and localizations
+        run: |
+          flutter pub get
+          dart run tool/gen_l10n.dart
+      - name: Analyze changed navigation paths
+        run: >-
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          lib/models/site_info_section.dart
+          lib/pages/site_info_page.dart
+          lib/pages/site_policy_page.dart
+          lib/pages/topic_detail_page/topic_detail_page.dart
+          lib/utils/link_launcher.dart
+          lib/widgets/layout/master_detail_pane_host.dart
+      - name: Test unified tabs and information routing
+        run: >-
+          flutter test
+          test/models/site_info_section_test.dart
+          test/pages/site_info_page_test.dart
+          test/providers/selected_topic_provider_test.dart
+          test/widgets/layout/unified_topic_tabs_test.dart
+          test/pages/topic_detail_page/topic_more_menu_actions_test.dart

@@ -79,6 +79,7 @@ class MasterDetailLayout extends StatefulWidget {
     this.preferredMasterRatio,
     this.resizableMaster = true,
     this.projectDetailWhenNarrow = false,
+    this.showMasterOnly = false,
     this.animatePanes = true,
   }) : assert(detail == null || panes == null, 'detail(单格兼容)与 panes(胶片带)二选一');
 
@@ -141,6 +142,9 @@ class MasterDetailLayout extends StatefulWidget {
   /// （master 收进带外保状态），不 push 合成路由。
   /// false（默认）保持旧语义：窄屏只显示 master，层格不渲染。
   final bool projectDetailWhenNarrow;
+
+  /// Reveal the master full-width while retaining all tab panes offstage.
+  final bool showMasterOnly;
 
   /// 层间过渡动画开关(逃生口:false 一律瞬切,结构不变)。
   final bool animatePanes;
@@ -243,13 +247,15 @@ class _MasterDetailLayoutState extends State<MasterDetailLayout> {
                 : const <Widget>[]);
         // 投影态:窄屏 + 栈非空,栈顶格全宽盖住 master。
         final projecting =
+            !widget.showMasterOnly &&
             !showBothPanes &&
             widget.projectDetailWhenNarrow &&
             panes.isNotEmpty;
         // masterFillsWhenEmpty 且栈空:master 独占视口(内容页自排版),
         // 此刻不存在"两栏"——空态与拖拽柄都不该出现。
         final masterFillsNow =
-            widget.masterFillsWhenEmpty && !widget.pinMaster && panes.isEmpty;
+            widget.showMasterOnly ||
+            (widget.masterFillsWhenEmpty && !widget.pinMaster && panes.isEmpty);
 
         final preferredWidth = _preferredMasterWidth(totalWidth);
         // 固定栏宽宿主(resizableMaster: false)不走比例/clamp,始终取
@@ -291,7 +297,8 @@ class _MasterDetailLayoutState extends State<MasterDetailLayout> {
 
         // 窄屏非投影(纯单栏):只渲染 master,层格不构建(旧语义,
         // 窄屏点列表走真路由,栈恒空)。
-        final narrowPlain = !showBothPanes && !projecting;
+        final narrowPlain =
+            !showBothPanes && !projecting && !widget.showMasterOnly;
 
         Widget strip = PaneFilmstrip(
           master: masterCell,
@@ -302,13 +309,14 @@ class _MasterDetailLayoutState extends State<MasterDetailLayout> {
                 )
               : null,
           masterFillsWhenEmpty: widget.masterFillsWhenEmpty,
+          showMasterOnly: widget.showMasterOnly,
           pinMaster: widget.pinMaster,
           viewportPanes: showBothPanes ? 2 : 1,
           masterWidth: showBothPanes ? masterWidth : totalWidth,
           // 分隔线画在格子左缘(随带平移,动画期淡出结束淡入),样式
           // 对齐项目竖线口径(page_dialog/profile 同款 outlineVariant
           // 40%)——theme.dividerColor 更重,双栏接缝显突兀。
-          dividerColor: showBothPanes && widget.showDivider
+          dividerColor: showBothPanes && widget.showDivider && !widget.showMasterOnly
               ? theme.colorScheme.outlineVariant.withValues(alpha: 0.4)
               : null,
           animate: widget.animatePanes,

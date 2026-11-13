@@ -3,7 +3,6 @@ import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/notification_category.dart';
-import '../utils/responsive.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/preferences_provider.dart';
 import '../utils/load_more_coordinator.dart';
@@ -204,9 +203,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     // A notification page nested inside a narrow parallel pane stays compact.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final showCategoryRail =
-            constraints.maxWidth >=
-            PaneBreakpoints.masterWidth + PaneBreakpoints.minDetailWidth;
+        // 平行视界中直接展示一级通知分类，不再折叠到二级选择。
+        final showCategoryRail = constraints.maxWidth >= 640;
         return Scaffold(
           appBar: AppBar(
             title: Text(context.l10n.common_notification),
@@ -403,7 +401,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                                   systemAvatarTemplate: systemAvatarTemplate,
                                   // siblings = 当前数据源已经正确分类后的列表。
                                   onTap: () {
-                                    notifier.markAsRead(notification.id);
+                                    // 已读状态统一由导航入口同步近期与完整列表。
                                     handleNotificationTap(
                                       context,
                                       ref,

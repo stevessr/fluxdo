@@ -1,5 +1,5 @@
-import 'package:fluxdo/utils/avatar_url.dart';
 import 'package:flutter/material.dart';
+import '../../utils/avatar_url.dart';
 
 import '../../models/topic.dart';
 import '../../utils/url_helper.dart';

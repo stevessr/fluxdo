@@ -1630,32 +1630,50 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     ];
   }
 
-  /// 将当前话题移入首页 Tab 工作区，并保留当前浏览楼层。
+  /// Maximize a topic into the first (home) destination as a real Tab.
+  /// Never leave a full-screen route above the bottom navigation shell.
   void _openTopicInTab(TopicDetail detail) {
     final home = ref.read(selectedTopicProvider);
+    final notifier = ref.read(selectedTopicProvider.notifier);
     final isHomePane =
         widget.embeddedMode &&
         (widget.stackProvider == null ||
             widget.stackProvider == selectedTopicProvider);
+
     if (isHomePane && home.topEntry?.topicId == widget.topicId) {
-      // 当前详情已在首页栈内：切换模式而不是复制同一个页面。
-      ref.read(selectedTopicProvider.notifier).enableTabMode();
-      return;
-    }
-    ref
-        .read(selectedTopicProvider.notifier)
-        .openTopicTab(
+      // Keep the existing pane instance, scroll position, and reply editor.
+      if (detail.isPrivateMessage) {
+        notifier.openTopicTab(
           topicId: widget.topicId,
           initialTitle: detail.title,
-          scrollToPostNumber: _resolvedViewportPostNumber,
+          isPrivateMessage: true,
         );
-    ref.requestNavDestination(NavEntryIds.home);
-    if (!widget.embeddedMode) {
-      // 全屏路由回到所属首页，由首页的 Tab 显示新话题。
-      final route = ModalRoute.of(context);
-      if (route?.isCurrent == true && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
+      } else {
+        notifier.enableTabMode();
       }
+    } else {
+      notifier.openTopicTab(
+        topicId: widget.topicId,
+        initialTitle: detail.title,
+        scrollToPostNumber: _resolvedViewportPostNumber,
+        isPrivateMessage: detail.isPrivateMessage,
+      );
+    }
+
+    // Always activate the first destination, even if this was already
+    // rendered in its home pane. The route can still be nested elsewhere.
+    ref.requestNavDestination(NavEntryIds.home);
+    if (widget.embeddedMode &&
+        widget.stackProvider == selectedMessageProvider) {
+      ref.read(selectedMessageProvider.notifier).clear();
+    }
+
+    // A pushed detail/search/profile route would otherwise cover the whole
+    // app even though the tab has been registered in the home workspace.
+    // The root shell stays mounted and owns all unified topic tabs.
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    if (rootNavigator.canPop()) {
+      rootNavigator.popUntil((route) => route.isFirst);
     }
   }
 
@@ -2067,27 +2085,26 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             ],
           ),
         ),
-        if (!detail.isPrivateMessage)
-          PopupMenuItem(
-            key: const ValueKey('topic-open-in-tab'),
-            value: 'open_in_tab',
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.tab_rounded,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  Localizations.localeOf(context).languageCode == 'zh'
-                      ? '在 Tab 中打开'
-                      : 'Open in tab',
-                ),
-              ],
-            ),
+        PopupMenuItem(
+          key: const ValueKey('topic-open-in-tab'),
+          value: 'open_in_tab',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.tab_rounded,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                Localizations.localeOf(context).languageCode == 'zh'
+                    ? '在 Tab 中打开'
+                    : 'Open in tab',
+              ),
+            ],
           ),
+        ),
         if (showNewWindow)
           PopupMenuItem(
             key: const ValueKey('topic-open-native-window'),

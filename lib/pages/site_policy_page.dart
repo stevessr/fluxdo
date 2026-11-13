@@ -7,14 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluxdo_render/fluxdo_render.dart';
 
 import '../models/site_policy_document.dart';
+import '../models/site_info_section.dart';
 import '../providers/discourse_providers.dart';
 import '../utils/link_launcher.dart';
 import '../utils/url_helper.dart';
-import '../widgets/common/site_info_tabs.dart';
-import 'site_about_page.dart';
-import 'webview_page.dart';
 
-/// Native Guidelines / Terms of Service / Privacy document reader.
+/// Content for the Guidelines / Terms of Service / Privacy tabs.
 ///
 /// Discourse StaticController renders cooked topic HTML for these URLs when
 /// X-Requested-With is XMLHttpRequest. There is no /guidelines.json or similar
@@ -23,11 +21,19 @@ class SitePolicyPage extends ConsumerStatefulWidget {
   const SitePolicyPage({
     super.key,
     required this.kind,
+    required this.onNavigate,
     this.isActive = true,
+    this.refreshToken = 0,
+    this.requestedFragment,
+    this.fragmentRequestId = 0,
   });
 
   final SitePolicyKind kind;
+  final void Function(int index, String? fragment) onNavigate;
   final bool isActive;
+  final int refreshToken;
+  final String? requestedFragment;
+  final int fragmentRequestId;
 
   @override
   ConsumerState<SitePolicyPage> createState() => _SitePolicyPageState();
@@ -63,9 +69,24 @@ class _SitePolicyPageState extends ConsumerState<SitePolicyPage> {
       _error = null;
       _sectionKeys = [];
       scheduleMicrotask(_load);
-    } else if (!oldWidget.isActive && widget.isActive && _document == null) {
+    } else if (widget.isActive &&
+        (oldWidget.refreshToken != widget.refreshToken ||
+            (!oldWidget.isActive && _document == null))) {
       scheduleMicrotask(_load);
     }
+    if (widget.isActive &&
+        (oldWidget.fragmentRequestId != widget.fragmentRequestId ||
+            !oldWidget.isActive)) {
+      _scheduleFragmentJump();
+    }
+  }
+
+  void _scheduleFragmentJump() {
+    final fragment = widget.requestedFragment;
+    if (!widget.isActive || fragment == null || fragment.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.isActive) unawaited(_jumpTo(fragment));
+    });
   }
 
   Future<void> _load() async {
@@ -96,6 +117,7 @@ class _SitePolicyPageState extends ConsumerState<SitePolicyPage> {
           (index) => GlobalKey(debugLabel: 'policy-section-' + '$index'),
         );
       });
+      _scheduleFragmentJump();
     } catch (error) {
       if (!mounted || widget.kind != requestedKind) return;
       setState(() => _error = error);
@@ -104,20 +126,9 @@ class _SitePolicyPageState extends ConsumerState<SitePolicyPage> {
     }
   }
 
-  void _selectTab(int index) {
-    if (index == 0) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SiteAboutPage()),
-      );
-      return;
-    }
-    final target = SitePolicyKind.values[index - 1];
-    if (target == widget.kind) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SitePolicyPage(kind: target),
-      ),
-    );
+  void _selectTab(int index, [String? fragment]) {
+    if (index == widget.kind.index + 1 && fragment == null) return;
+    widget.onNavigate(index, fragment);
   }
 
   Future<void> _jumpTo(String fragment) async {
@@ -147,20 +158,20 @@ class _SitePolicyPageState extends ConsumerState<SitePolicyPage> {
     final sameOrigin = uri.host == Uri.parse(
       UrlHelper.resolveUrl('/'),
     ).host;
-    if (sameOrigin && uri.path == '/' + widget.kind.path &&
-        uri.fragment.isNotEmpty) {
-      unawaited(_jumpTo(uri.fragment));
-      return;
-    }
-    if (sameOrigin && uri.fragment.isEmpty) {
-      for (final kind in SitePolicyKind.values) {
-        if (uri.path == '/' + kind.path) {
-          _selectTab(kind.index + 1);
-          return;
+    // A policy hyperlink changes the section of the existing workspace.
+    // Normalize trailing slashes so /tos/ cannot launch a nested page.
+    if (sameOrigin) {
+      final section = SiteInfoSection.fromPath(uri.path);
+      if (section != null) {
+        if (section.index == widget.kind.index + 1 &&
+            uri.fragment.isNotEmpty) {
+          unawaited(_jumpTo(uri.fragment));
+        } else {
+          _selectTab(
+            section.index,
+            uri.fragment.isEmpty ? null : uri.fragment,
+          );
         }
-      }
-      if (uri.path == '/about') {
-        _selectTab(0);
         return;
       }
     }
@@ -175,28 +186,7 @@ class _SitePolicyPageState extends ConsumerState<SitePolicyPage> {
   @override
   Widget build(BuildContext context) {
     if (!widget.isActive) return const SizedBox.shrink();
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_title),
-        actions: [
-          IconButton(
-            tooltip: _tr('刷新', 'Refresh'),
-            onPressed: _loading ? null : _load,
-            icon: const Icon(Symbols.refresh_rounded),
-          ),
-          IconButton(
-            tooltip: _tr('查看官方页面', 'View official page'),
-            onPressed: () => WebViewPage.open(
-              context,
-              UrlHelper.resolveUrl('/' + widget.kind.path),
-              title: _title,
-            ),
-            icon: const Icon(Symbols.open_in_new_rounded),
-          ),
-        ],
-      ),
-      body: _body(),
-    );
+    return _body();
   }
 
   Widget _body() {
@@ -248,11 +238,6 @@ class _SitePolicyPageState extends ConsumerState<SitePolicyPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SiteInfoTabs(
-              selected: widget.kind.index + 1,
-              onSelected: _selectTab,
-            ),
-            const SizedBox(height: 20),
             Text(
               _title,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(

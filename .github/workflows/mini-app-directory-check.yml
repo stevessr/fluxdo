@@ -5,6 +5,11 @@ on:
     paths:
       - 'lib/models/mini_app.dart'
       - 'lib/pages/mini_apps_page.dart'
+      - 'lib/pages/mini_app_runtime_page.dart'
+      - 'lib/models/mini_app_runtime.dart'
+      - 'lib/services/mini_app_runtime_repository.dart'
+      - 'test/models/mini_app_runtime_test.dart'
+      - 'test/services/mini_app_runtime_repository_test.dart'
       - 'lib/services/mini_app_directory_repository.dart'
       - 'test/models/mini_app_test.dart'
       - 'test/services/mini_app_directory_repository_test.dart'
@@ -46,9 +51,14 @@ jobs:
           flutter analyze --no-fatal-infos --no-fatal-warnings
           lib/models/mini_app.dart
           lib/pages/mini_apps_page.dart
+          lib/pages/mini_app_runtime_page.dart
+          lib/models/mini_app_runtime.dart
+          lib/services/mini_app_runtime_repository.dart
           lib/services/mini_app_directory_repository.dart
           test/models/mini_app_test.dart
+          test/models/mini_app_runtime_test.dart
           test/services/mini_app_directory_repository_test.dart
+          test/services/mini_app_runtime_repository_test.dart
 
       - name: Test directory parsing and fallback
         run: >-

@@ -310,6 +310,27 @@
       }
     }
   },
+  "notification_reactionByTwo": "{username} 和 {username2} 對你的貼文做出了反應",
+  "@notification_reactionByTwo": {
+    "placeholders": {
+      "username": {"type": "String"},
+      "username2": {"type": "String"}
+    }
+  },
+  "notification_reactionByMany": "{username} 和其他 {count} 人對你的貼文做出了反應",
+  "@notification_reactionByMany": {
+    "placeholders": {
+      "username": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "notification_reactionMultiplePosts": "{username} 對你的 {count} 篇貼文做出了反應",
+  "@notification_reactionMultiplePosts": {
+    "placeholders": {
+      "username": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
   "notification_replied": "{username} 回覆了你的帖子",
   "@notification_replied": {
     "placeholders": {

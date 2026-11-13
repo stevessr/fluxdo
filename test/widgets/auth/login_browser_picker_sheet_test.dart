@@ -35,6 +35,35 @@ void main() {
     return selected;
   }
 
+  testWidgets('普通网页选择浏览器时不显示登录授权引导', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showModalBottomSheet<LoginBrowser>(
+                context: context,
+                showDragHandle: true,
+                builder: (_) => const LoginBrowserPickerSheet(
+                  description: null,
+                  browsers: [
+                    LoginBrowser(id: 'default', name: '系统默认浏览器'),
+                  ],
+                ),
+              ),
+              child: const Text('选择'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('选择'));
+    await tester.pumpAndSettle();
+    expect(find.text('选择浏览器'), findsOneWidget);
+    expect(find.text('系统默认浏览器'), findsOneWidget);
+    expect(find.textContaining('在 LINUX DO 完成授权'), findsNothing);
+  });
+
   testWidgets('显示浏览器对应图标，系统打开方式在长列表底部仍可操作', (tester) async {
     final browsers = [
       LoginBrowser(

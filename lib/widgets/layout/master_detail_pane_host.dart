@@ -121,6 +121,10 @@ class _MasterDetailPaneHostState extends ConsumerState<MasterDetailPaneHost> {
                 ref.read(widget.stackProvider.notifier).activateTab(index),
             onClose: (index) =>
                 ref.read(widget.stackProvider.notifier).closeTab(index),
+            onCloseOthers: (index) =>
+                ref.read(widget.stackProvider.notifier).closeOtherTabs(index),
+            onCloseAll: () =>
+                ref.read(widget.stackProvider.notifier).closeAllTabs(),
           ),
           Expanded(
             child: MasterDetailLayout(
