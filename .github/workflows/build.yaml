@@ -9,7 +9,7 @@ on:
 env:
   IS_STABLE: ${{ !contains(github.ref, '-') }}
   FLUTTER_VERSION: '3.47.9'
-  # 与 Flutter 3.47.9 默认 NDK 对齐，避免 CI 重复下载多个 side-by-side NDK
+  # 跟随 upstream/dev 推荐的 Flutter 3.47.9 CI NDK 版本。
   ANDROID_NDK_VERSION: '27.3.13750724'
 
 jobs:

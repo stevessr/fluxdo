@@ -37,12 +37,11 @@ subprojects {
                 // 非 Android 子项目，跳过
             }
 
-            // 统一 NDK 到 Flutter 3.44 默认版本，避免插件各装一份 side-by-side NDK
-            // （CI 日志曾出现 28.2 + 27.0 双下载，白白多出数分钟）
+            // 统一应用与插件 NDK 版本；CI 按 Flutter 3.47.9 上游推荐预装。
             try {
                 androidExt.javaClass
                     .getMethod("setNdkVersion", String::class.java)
-                    .invoke(androidExt, "28.2.13676358")
+                    .invoke(androidExt, "27.3.13750724")
             } catch (_: Exception) {
                 // AGP API 不可用时跳过
             }

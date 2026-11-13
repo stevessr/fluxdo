@@ -8,6 +8,11 @@ on:
       - 'lib/**'
       - 'android/**'
       - 'core/doh_proxy/**'
+      - 'core/net_core/**'
+      - 'packages/**'
+      - 'assets/**'
+      - 'third_party/**'
+      - 'tool/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/build-apk.yaml'
@@ -31,10 +36,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: '3.47.5'
-  # 与 Flutter 3.47.5 默认 NDK 对齐（flutter.ndkVersion = 28.2.13676358）
-  # 旧值 27.3 会导致：先装 27.3，Gradle 再装 28.2，甚至再装 27.0
-  ANDROID_NDK_VERSION: '28.2.13676358'
+  # 与 pubspec.yaml / .fvmrc 及主构建工作流统一，避免旧版本不满足 SDK 约束。
+  FLUTTER_VERSION: '3.47.9'
+  # 与 upstream/dev 及主构建工作流的 NDK 版本保持一致。
+  ANDROID_NDK_VERSION: '27.3.13750724'
 
 jobs:
   # 根据触发方式动态决定要构建的架构，避免拉起无用的 matrix runner
@@ -47,6 +52,7 @@ jobs:
       - name: Resolve target architectures
         id: set
         run: |
+          # 默认使用项目既有的 arm64-v8a 产物；需要其它 ABI 时显式选择。
           target="${{ inputs.arch || 'arm64-v8a' }}"
 
           arm64='{"arch":"arm64-v8a","rust-target":"aarch64-linux-android","flutter-target":"android-arm64"}'
@@ -350,6 +356,53 @@ jobs:
               "dist/fluxdo-v${version}-${commit_sha}-${timestamp}-${{ matrix.arch }}.apk"
           fi
           ls -lh dist/
+
+      - name: Verify APK package metadata and ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          aapt="${build_tools}/aapt"
+          apksigner="${build_tools}/apksigner"
+          shopt -s nullglob
+          apks=(dist/*.apk)
+          if (( ${#apks[@]} == 0 )); then
+            echo "没有生成 APK" >&2
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            echo "验证安装元数据: ${apk}"
+            badging="$("${aapt}" dump badging "${apk}")"
+            if ! grep -Fq "package: name='com.github.lingyan000.fluxdo'" <<< "${badging}"; then
+              echo "APK 包名缺失或不匹配，Android 安装器可能无法读取 package info" >&2
+              printf '%s\n' "${badging}" | head -20 >&2
+              exit 1
+            fi
+            if ! grep -Eq "versionCode='[1-9][0-9]*'" <<< "${badging}"; then
+              echo "APK versionCode 缺失/null，拒绝发布不可覆盖安装的产物" >&2
+              printf '%s\n' "${badging}" | head -20 >&2
+              exit 1
+            fi
+            if ! grep -Fq "application-label:'FluxDO'" <<< "${badging}"; then
+              echo "APK 应用标签缺失/null，拒绝发布不可识别的产物" >&2
+              printf '%s\n' "${badging}" | head -20 >&2
+              exit 1
+            fi
+            "${apksigner}" verify --verbose "${apk}"
+            case "${apk##*/}" in
+              *-universal.apk) abis=(arm64-v8a armeabi-v7a x86_64) ;;
+              *-arm64-v8a.apk) abis=(arm64-v8a) ;;
+              *-armeabi-v7a.apk) abis=(armeabi-v7a) ;;
+              *-x86_64.apk) abis=(x86_64) ;;
+              *) echo "无法从 APK 文件名识别 ABI: ${apk}" >&2; exit 1 ;;
+            esac
+            for abi in "${abis[@]}"; do
+              if ! unzip -Z1 "${apk}" | grep -Fxq "lib/${abi}/libfluxdo_net.so"; then
+                echo "APK 缺少 ${abi} 的网络核心原生库" >&2
+                exit 1
+              fi
+            done
+          done
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
