@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../../l10n/s.dart';
 
 import 'package:m3e_ui/m3e_ui.dart';
+import '../../theme/app_colors.dart';
 
 class PagedListFooter extends StatelessWidget {
   const PagedListFooter({
@@ -33,14 +35,14 @@ class PagedListFooter extends StatelessWidget {
             Icon(
               Symbols.refresh_rounded,
               size: 16,
-              color: Theme.of(context).colorScheme.primary,
+              color: context.emphasis.accent,
             ),
             const SizedBox(width: 6),
             Text(
               context.l10n.common_loadFailedTapRetry,
               style: TextStyle(
                 fontSize: 14,
-                color: Theme.of(context).colorScheme.primary,
+                color: context.emphasis.accent,
               ),
             ),
           ],
@@ -51,7 +53,7 @@ class PagedListFooter extends StatelessWidget {
     } else if (!hasMore) {
       child = Text(
         context.l10n.common_noMore,
-        style: const TextStyle(color: Colors.grey),
+        style: TextStyle(color: context.appColors.grey),
       );
     } else {
       child = const SizedBox(height: 16);

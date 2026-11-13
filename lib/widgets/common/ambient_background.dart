@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 
 /// 极光环境背景。
@@ -102,7 +103,9 @@ class AmbientIconButton extends StatelessWidget {
       style: IconButton.styleFrom(
         backgroundColor: Theme.of(context).colorScheme.surface
             .withValues(alpha: 0.3),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(12),
+        ),
       ),
       onPressed: onPressed,
     );

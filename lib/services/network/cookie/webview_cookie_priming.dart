@@ -102,6 +102,8 @@ class WebViewCookiePriming {
   void invalidate() {
     _isPrimed = false;
     _primedGeneration = null;
+    // 预热状态失效时一并丢弃共享读取缓存，避免后续核对复用到旧快照。
+    _writer.invalidateReads();
   }
 
   /// 等待当前正在进行的 priming 完成（如有）。

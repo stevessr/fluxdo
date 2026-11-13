@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +24,7 @@ import '../../utils/fluxdo_render_callbacks.dart';
 import '../../pages/category_topics_page.dart';
 import '../../pages/tag_topics_page.dart';
 import '../../../../../l10n/s.dart';
+import '../../theme/app_colors.dart';
 
 /// 预览弹窗中的操作项
 class PreviewAction {
@@ -208,7 +210,9 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
               ? Material(type: MaterialType.transparency, child: sheetBody)
               : Material(
                   color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(20),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(20),
+                  ),
                   clipBehavior: Clip.antiAlias,
                   elevation: 8,
                   child: sheetBody,
@@ -266,7 +270,7 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
             return;
           }
           navigator.push(
-            MaterialPageRoute(
+            InteractionPageRoute(
               builder: (_) => TopicDetailPage(
                 topicId: topicId,
                 initialTitle: topicSlug,
@@ -377,7 +381,7 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
                 child: Icon(
                   Symbols.push_pin_rounded,
                   size: 17,
-                  color: theme.colorScheme.primary,
+                  color: context.emphasis.selected,
                 ),
               ),
             ),
@@ -389,7 +393,7 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
                 child: Icon(
                   Symbols.check_box_rounded,
                   size: 17,
-                  color: Colors.green,
+                  color: context.appColors.green,
                 ),
               ),
             ),
@@ -451,7 +455,7 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
                     onTap: () {
                       Navigator.of(context).pop();
                       Navigator.of(context).push(
-                        MaterialPageRoute(
+                        InteractionPageRoute(
                           builder: (_) =>
                               CategoryTopicsPage(category: category),
                         ),
@@ -543,7 +547,7 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
             onTap: () {
               Navigator.of(context).pop();
               Navigator.of(context).push(
-                MaterialPageRoute(
+                InteractionPageRoute(
                   builder: (_) => TagTopicsPage(tagName: tag.name),
                 ),
               );
@@ -634,7 +638,9 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
   Widget _buildCustomActions(BuildContext context, ThemeData theme) {
     return Material(
       color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(14),
+      shape: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(14),
+      ),
       clipBehavior: Clip.antiAlias,
       elevation: 8,
       child: Column(
@@ -692,21 +698,15 @@ class _TopicPreviewDialogState extends ConsumerState<TopicPreviewDialog> {
     return Container(
       width: 8,
       height: 8,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: ColorUtils.readableOn(
-          _parseColor(category.color),
+          ColorUtils.category(category.color, Theme.of(context)),
           theme.brightness,
         ),
-        borderRadius: BorderRadius.circular(2),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(2),
+        ),
       ),
     );
-  }
-
-  Color _parseColor(String hex) {
-    hex = hex.replaceAll('#', '');
-    if (hex.length == 6) {
-      return Color(int.parse('0xFF$hex'));
-    }
-    return Colors.grey;
   }
 }

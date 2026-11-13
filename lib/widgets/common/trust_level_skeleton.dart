@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -42,7 +43,7 @@ class TrustLevelSkeleton extends StatelessWidget {
                       child: Icon(
                         Symbols.verified_user_rounded,
                         size: 200,
-                        color: colorScheme.primary.withValues(alpha: 0.05),
+                        color: context.emphasis.accent.withValues(alpha: 0.05),
                       ),
                     ),
                     Positioned(
@@ -146,9 +147,11 @@ class TrustLevelSkeleton extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(16),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

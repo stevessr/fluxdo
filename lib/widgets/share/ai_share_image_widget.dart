@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:ai_model_manager/ai_model_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -217,9 +218,11 @@ class AiShareImageWidget extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(8),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+        ),
       ),
       child:
           FluxdoRenderCallbacks.generic(

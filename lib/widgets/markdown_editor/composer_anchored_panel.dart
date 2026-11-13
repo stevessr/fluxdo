@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble, SemanticsRole;
 
 import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/services.dart';
 
 import 'composer_object_surface.dart';
@@ -45,7 +46,7 @@ Future<T?> showComposerAnchoredPanel<T>({
   return value;
 }
 
-class _ComposerPanelRoute<T> extends PopupRoute<T> {
+class _ComposerPanelRoute<T> extends PopupRoute<T> with InterruptibleRoute<T> {
   _ComposerPanelRoute({
     required this.anchor,
     required this.viewport,
@@ -249,7 +250,10 @@ class _PanelReveal extends FlowDelegate {
         (anchor.left + size.width <= viewport.right
                 ? anchor.left
                 : anchor.right - size.width)
-            .clamp(viewport.left, viewport.right - size.width);
+            .clamp(
+              viewport.left,
+              math.max<double>(viewport.left, viewport.right - size.width),
+            );
     final below = anchor.bottom + 6;
     final above = anchor.top - 6 - size.height;
     final top =
@@ -260,7 +264,10 @@ class _PanelReveal extends FlowDelegate {
                 : above >= viewport.top
                 ? above
                 : below)
-            .clamp(viewport.top, viewport.bottom - size.height);
+            .clamp(
+              viewport.top,
+              math.max<double>(viewport.top, viewport.bottom - size.height),
+            );
     final target = Offset(left, top) & size;
     final t = reduceMotion
         ? 1.0
@@ -287,6 +294,13 @@ class _PanelReveal extends FlowDelegate {
       opacity: reduceMotion ? 1 : lerpDouble(0, 1, (t * 2.5).clamp(0, 1))!,
     );
   }
+
+  // 键盘和编辑区域变化会改变子项约束，重绘前必须更新测量尺寸。
+  @override
+  bool shouldRelayout(_PanelReveal old) =>
+      old.width != width ||
+      old.maxHeight != maxHeight ||
+      old.viewport.height != viewport.height;
 
   @override
   bool shouldRepaint(_PanelReveal old) =>

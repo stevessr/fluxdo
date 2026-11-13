@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -157,7 +158,7 @@ class _PostReactionUsersSheetState extends State<PostReactionUsersSheet> {
         children: [
           Icon(
             Symbols.emoji_emotions_rounded,
-            color: theme.colorScheme.primary,
+            color: context.emphasis.accent,
           ),
           const SizedBox(width: 8),
           Text(
@@ -222,17 +223,19 @@ class _PostReactionUsersSheetState extends State<PostReactionUsersSheet> {
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: isSelected
                 ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
                 : theme.colorScheme.surfaceContainerHighest.withValues(
                     alpha: 0.3,
                   ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isSelected
-                  ? theme.colorScheme.primary.withValues(alpha: 0.3)
-                  : Colors.transparent,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(16),
+              side: BorderSide(
+                color: isSelected
+                    ? theme.colorScheme.primary.withValues(alpha: 0.3)
+                    : Colors.transparent,
+              ),
             ),
           ),
           child: Row(

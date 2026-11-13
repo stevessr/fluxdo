@@ -7,7 +7,7 @@ import '../../cf_challenge_service.dart';
 import '../../cf_challenge_logger.dart';
 import '../../cf_clearance_refresh_service.dart';
 import '../../cf_clearance_authority.dart';
-import '../../app_logger.dart';
+import 'network_log_interceptor.dart';
 import '../adapters/platform_adapter.dart';
 import '../cookie/boundary_sync_service.dart';
 import '../cookie/cookie_jar_service.dart';
@@ -113,6 +113,8 @@ class CfChallengeInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
+    final cancelled = err.requestOptions.cancelToken?.cancelError;
+    if (cancelled != null) return handler.next(cancelled);
     final statusCode = err.response?.statusCode;
 
     // 检查是否标记跳过 CF 验证（防止重试后再次触发）
@@ -141,7 +143,7 @@ class CfChallengeInterceptor extends Interceptor {
           '(status=$statusCode, silent=${err.requestOptions.spec.isSilent}, '
           'tag=${requestTag ?? '-'}, skipCsrf=${err.requestOptions.spec.skipCsrf})';
       debugPrint('[Dio] $logMessage');
-      AppLogger.warning(logMessage, tag: 'CfChallengeInterceptor');
+      NetworkLogInterceptor.logCfChallenge(err);
       // 撞盾是排查网络问题的关键时刻:把此刻的通道健康全貌拍进日志,
       // 免得事后只有"某请求 403"这一条结果、没有引擎/降级/凭证状态。
       NetworkHealthController.instance.dumpToLog('cf_challenge_detected');
@@ -209,13 +211,24 @@ class CfChallengeInterceptor extends Interceptor {
         );
       }
 
-      // 静默请求只在后台尝试验证；页面数据/操作请求在前台展示验证。
+      // 自动触发的验证一律先在后台尝试：静默请求只显示胶囊；页面数据/操作
+      // 请求是用户正在等的，立即显示状态，需要人工操作时再弹出验证面板。
       // (Windows 曾因插件析构竞态崩溃 0xc0000005 禁用过静默后台验证;
       // vendored 插件的 aliveGuard/TextureBridge 修复落地后恢复。)
-      final result = await cfService.showManualVerify(null, !isSilent);
+      final result = await cfService.verify(
+        presentation: isSilent
+            ? CfVerifyPresentation.pill
+            : CfVerifyPresentation.blocking,
+      );
+      // 验证由多请求共享；本请求超时不关闭验证页面，但结束后不能
+      // 再重放已经取消的请求或切换它的传输方式。
+      final cancelled = err.requestOptions.cancelToken?.cancelError;
+      if (cancelled != null) return handler.next(cancelled);
 
       if (result == true) {
         await _syncCookiesOnce();
+        final cancelled = err.requestOptions.cancelToken?.cancelError;
+        if (cancelled != null) return handler.next(cancelled);
 
         // 各自重试自己的原始请求（每个请求 URL/参数不同，无法共享）
         final retryOptions = err.requestOptions;
@@ -252,6 +265,8 @@ class CfChallengeInterceptor extends Interceptor {
           cfService.clearanceResolvedAt.value = DateTime.now();
           return handler.resolve(response);
         } catch (e) {
+          final cancelled = retryOptions.cancelToken?.cancelError;
+          if (cancelled != null) return handler.next(cancelled);
           final retryStillBlockedByCf =
               e is DioException &&
               (e.response?.statusCode == 403 ||
@@ -268,6 +283,8 @@ class CfChallengeInterceptor extends Interceptor {
             final shouldFallback =
                 webViewSettings.effectiveEnabled ||
                 await cfService.confirmSessionCompatibilityMode();
+            final cancelled = retryOptions.cancelToken?.cancelError;
+            if (cancelled != null) return handler.next(cancelled);
             if (shouldFallback) {
               webViewSettings.enableSessionFallback();
               // 撤销原请求的"禁走 WebView 适配器"标记,这一行才是让重放

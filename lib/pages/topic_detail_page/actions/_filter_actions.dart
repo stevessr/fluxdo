@@ -252,10 +252,7 @@ extension _FilterActions on _TopicDetailPageState {
                 leading: const Icon(Symbols.history_rounded),
                 title: Text(context.l10n.topicDetail_sortByActivity),
                 trailing: notifier.isActivityMode
-                    ? Icon(
-                        Symbols.check_rounded,
-                        color: theme.colorScheme.primary,
-                      )
+                    ? Icon(Symbols.check_rounded, color: context.emphasis.selected)
                     : null,
                 onTap: () {
                   Navigator.pop(ctx);
@@ -275,10 +272,7 @@ extension _FilterActions on _TopicDetailPageState {
                 ),
                 title: Text(context.l10n.topicDetail_hotOnly),
                 trailing: notifier.isSummaryMode
-                    ? Icon(
-                        Symbols.check_rounded,
-                        color: theme.colorScheme.primary,
-                      )
+                    ? Icon(Symbols.check_rounded, color: context.emphasis.selected)
                     : null,
                 onTap: () {
                   Navigator.pop(ctx);
@@ -296,10 +290,7 @@ extension _FilterActions on _TopicDetailPageState {
               ),
               title: Text(context.l10n.topicDetail_authorOnly),
               trailing: isAuthorFilter
-                  ? Icon(
-                      Symbols.check_rounded,
-                      color: theme.colorScheme.primary,
-                    )
+                  ? Icon(Symbols.check_rounded, color: context.emphasis.selected)
                   : null,
               onTap: () {
                 Navigator.pop(ctx);
@@ -316,7 +307,7 @@ extension _FilterActions on _TopicDetailPageState {
                 title: Text(context.l10n.topicDetail_userOnly(userFilter)),
                 trailing: Icon(
                   Symbols.check_rounded,
-                  color: theme.colorScheme.primary,
+                  color: context.emphasis.selected,
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -331,10 +322,7 @@ extension _FilterActions on _TopicDetailPageState {
               ),
               title: Text(context.l10n.topicDetail_topLevelOnly),
               trailing: notifier.isTopLevelMode
-                  ? Icon(
-                      Symbols.check_rounded,
-                      color: theme.colorScheme.primary,
-                    )
+                  ? Icon(Symbols.check_rounded, color: context.emphasis.selected)
                   : null,
               onTap: () {
                 Navigator.pop(ctx);
@@ -350,10 +338,7 @@ extension _FilterActions on _TopicDetailPageState {
               leading: Icon(Symbols.forum_rounded, fill: _isNestedView ? 1 : 0),
               title: Text(context.l10n.nested_title),
               trailing: _isNestedView
-                  ? Icon(
-                      Symbols.check_rounded,
-                      color: theme.colorScheme.primary,
-                    )
+                  ? Icon(Symbols.check_rounded, color: context.emphasis.selected)
                   : null,
               onTap: () {
                 Navigator.pop(ctx);

@@ -10,6 +10,103 @@ import 'package:fluxdo/widgets/layout/pane_filmstrip.dart';
 /// - 投影(viewportPanes=1)只露栈顶格;
 /// - pinned 模式 master 恒在左栏。
 void main() {
+  testWidgets('预测返回提交后退出格从当前进度收尾，下层立即可滚动', (tester) async {
+    final scroll = ScrollController(initialScrollOffset: 400);
+    addTearDown(scroll.dispose);
+    addTearDown(() => PaneProjectionBack.progress.value = 0);
+    late BuildContext owner;
+    Widget page(bool detail) => MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) {
+            owner = context;
+            return PaneFilmstrip(
+              master: ListView.builder(
+                controller: scroll,
+                itemCount: 100,
+                itemExtent: 60,
+                itemBuilder: (_, i) => Text('row $i'),
+              ),
+              panes: detail
+                  ? [
+                      const ColoredBox(
+                        key: ValueKey('exit'),
+                        color: Colors.blue,
+                      ),
+                    ]
+                  : [],
+              masterWidth: 400,
+              viewportPanes: 1,
+              pinMaster: false,
+              bandDrag: PaneProjectionBack.progress,
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpWidget(page(true));
+    await tester.pumpAndSettle();
+    PaneProjectionBack.progress.value = .35;
+    await tester.pump();
+    final exiting = find.byWidgetPredicate(
+      (widget) => widget is ColoredBox && widget.key == const ValueKey('exit'),
+    );
+    final before = tester.getTopLeft(exiting).dx;
+    PaneProjectionBack.commitExit(owner, .35);
+    PaneProjectionBack.progress.value = 0;
+    await tester.pumpWidget(page(false));
+    expect(tester.getTopLeft(exiting).dx, closeTo(before, .1));
+    final start = scroll.offset;
+    final drag = await tester.startGesture(const Offset(600, 300));
+    await drag.moveBy(const Offset(3, -30));
+    await tester.pump();
+    await drag.moveBy(const Offset(4, -100));
+    await tester.pump();
+    expect(scroll.offset - start, greaterThan(60));
+    await drag.cancel();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('exit')), findsNothing);
+  });
+
+  for (final expire in [false, true]) {
+    testWidgets('退出进度仅归对应宿主且下一帧失效 expire=$expire', (tester) async {
+      late BuildContext owner;
+      Widget strip(int index, bool detail) => Builder(
+        builder: (context) {
+          if (index == 1) owner = context;
+          return PaneFilmstrip(
+            master: const SizedBox.expand(),
+            panes: detail
+                ? [ColoredBox(key: ValueKey(index), color: Colors.blue)]
+                : [],
+            viewportPanes: 1,
+            masterWidth: 400,
+            pinMaster: false,
+          );
+        },
+      );
+      Widget page(bool detail) => MaterialApp(
+        home: Row(
+          children: [
+            Expanded(child: strip(0, detail)),
+            Expanded(child: strip(1, detail)),
+          ],
+        ),
+      );
+      await tester.pumpWidget(page(true));
+      await tester.pumpAndSettle();
+      PaneProjectionBack.commitExit(owner, .5);
+      if (expire) await tester.pump();
+      await tester.pumpWidget(page(false));
+      Finder pane(int index) => find.byWidgetPredicate(
+        (widget) => widget is ColoredBox && widget.key == ValueKey(index),
+      );
+      expect(tester.getTopLeft(pane(0)).dx, 0, reason: '另一个宿主不得消费进度');
+      expect(tester.getTopLeft(pane(1)).dx, expire ? 400 : 600);
+      await tester.pumpAndSettle();
+    });
+  }
+
   Widget host({
     required List<Widget> panes,
     bool pinMaster = false,

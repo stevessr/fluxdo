@@ -70,7 +70,7 @@ class FilterDropdown extends ConsumerWidget {
     return SwipeDismissiblePopupMenuButton<TopicListFilter>(
       onSelected: onFilterChanged,
       offset: const Offset(0, 36),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedSuperellipseBorder(borderRadius: context.shapes.borderRadius(12)),
       tooltip: S.current.topic_filterTooltip(filterLabel(currentFilter)),
       itemBuilder: (context) {
         return filterOptions
@@ -90,7 +90,7 @@ class FilterDropdown extends ConsumerWidget {
                       Icon(
                         Symbols.check_rounded,
                         size: 16,
-                        color: colorScheme.primary,
+                        color: context.emphasis.selected,
                       )
                     else
                       const SizedBox(width: 16),
@@ -127,9 +127,11 @@ class FilterDropdown extends ConsumerWidget {
   Widget _buildNormalChild(ColorScheme colorScheme, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: UiShapes.current.borderRadius(8),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -207,7 +209,7 @@ class OrderDropdown extends StatelessWidget {
         }
       },
       offset: const Offset(0, 36),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedSuperellipseBorder(borderRadius: context.shapes.borderRadius(12)),
       tooltip: S.current.topic_sortTooltip(currentOrder.label),
       itemBuilder: (context) {
         return TopicSortOrder.values.map((order) {
@@ -220,7 +222,7 @@ class OrderDropdown extends StatelessWidget {
                   Icon(
                     Symbols.check_rounded,
                     size: 16,
-                    color: colorScheme.primary,
+                    color: context.emphasis.selected,
                   )
                 else
                   const SizedBox(width: 16),
@@ -233,7 +235,7 @@ class OrderDropdown extends StatelessWidget {
                         ? Symbols.arrow_upward_rounded
                         : Symbols.arrow_downward_rounded,
                     size: 14,
-                    color: colorScheme.primary,
+                    color: context.emphasis.selected,
                   ),
               ],
             ),
@@ -241,19 +243,25 @@ class OrderDropdown extends StatelessWidget {
         }).toList();
       },
       child: style == DropdownStyle.compact
-          ? _buildCompactChild(colorScheme, isActive)
-          : _buildNormalChild(colorScheme, isActive),
+          ? _buildCompactChild(context, colorScheme, isActive)
+          : _buildNormalChild(context, colorScheme, isActive),
     );
   }
 
-  Widget _buildNormalChild(ColorScheme colorScheme, bool isActive) {
+  Widget _buildNormalChild(
+    BuildContext context,
+    ColorScheme colorScheme,
+    bool isActive,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: isActive
             ? colorScheme.primaryContainer.withValues(alpha: 0.3)
             : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: UiShapes.current.borderRadius(8),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -263,7 +271,7 @@ class OrderDropdown extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: isActive ? colorScheme.primary : colorScheme.onSurface,
+              color: isActive ? context.emphasis.selected : colorScheme.onSurface,
             ),
           ),
           const SizedBox(width: 2),
@@ -273,7 +281,7 @@ class OrderDropdown extends StatelessWidget {
                   ? Symbols.arrow_upward_rounded
                   : Symbols.arrow_downward_rounded,
               size: 14,
-              color: colorScheme.primary,
+              color: context.emphasis.selected,
             )
           else
             Icon(
@@ -286,7 +294,11 @@ class OrderDropdown extends StatelessWidget {
     );
   }
 
-  Widget _buildCompactChild(ColorScheme colorScheme, bool isActive) {
+  Widget _buildCompactChild(
+    BuildContext context,
+    ColorScheme colorScheme,
+    bool isActive,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: Row(
@@ -296,21 +308,21 @@ class OrderDropdown extends StatelessWidget {
             Symbols.sort_rounded,
             size: 18,
             color: isActive
-                ? colorScheme.primary
+                ? context.emphasis.selected
                 : colorScheme.onSurfaceVariant,
           ),
           if (isActive) ...[
             const SizedBox(width: 2),
             Text(
               currentOrder.label,
-              style: TextStyle(fontSize: 12, color: colorScheme.primary),
+              style: TextStyle(fontSize: 12, color: context.emphasis.selected),
             ),
             Icon(
               ascending
                   ? Symbols.arrow_upward_rounded
                   : Symbols.arrow_downward_rounded,
               size: 12,
-              color: colorScheme.primary,
+              color: context.emphasis.selected,
             ),
           ],
         ],
@@ -351,7 +363,7 @@ class NewSubsetDropdown extends StatelessWidget {
     return SwipeDismissiblePopupMenuButton<NewSubset>(
       onSelected: onSubsetChanged,
       offset: const Offset(0, 36),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedSuperellipseBorder(borderRadius: context.shapes.borderRadius(12)),
       tooltip: _shortLabel(currentSubset),
       itemBuilder: (context) {
         return NewSubset.values.map((subset) {
@@ -364,7 +376,7 @@ class NewSubsetDropdown extends StatelessWidget {
                   Icon(
                     Symbols.check_rounded,
                     size: 16,
-                    color: colorScheme.primary,
+                    color: context.emphasis.selected,
                   )
                 else
                   const SizedBox(width: 16),
@@ -376,19 +388,25 @@ class NewSubsetDropdown extends StatelessWidget {
         }).toList();
       },
       child: compact
-          ? _buildCompactChild(colorScheme, isActive)
-          : _buildNormalChild(colorScheme, isActive),
+          ? _buildCompactChild(context, colorScheme, isActive)
+          : _buildNormalChild(context, colorScheme, isActive),
     );
   }
 
-  Widget _buildNormalChild(ColorScheme colorScheme, bool isActive) {
+  Widget _buildNormalChild(
+    BuildContext context,
+    ColorScheme colorScheme,
+    bool isActive,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: isActive
             ? colorScheme.primaryContainer.withValues(alpha: 0.3)
             : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: UiShapes.current.borderRadius(8),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -412,7 +430,11 @@ class NewSubsetDropdown extends StatelessWidget {
     );
   }
 
-  Widget _buildCompactChild(ColorScheme colorScheme, bool isActive) {
+  Widget _buildCompactChild(
+    BuildContext context,
+    ColorScheme colorScheme,
+    bool isActive,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: Row(

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -14,6 +15,7 @@ import '../common/smart_avatar.dart';
 import '../common/flair_badge.dart';
 import '../common/emoji_text.dart';
 import 'share_image_preview.dart';
+import '../../theme/app_colors.dart';
 
 /// 分享图片 Widget
 /// 用于生成可截图的分享图片
@@ -195,7 +197,7 @@ class ShareImageWidget extends ConsumerWidget {
             imageUrl: fullAvatarUrl,
             radius: 18,
             fallbackText: post.username,
-            backgroundColor: Colors.grey.shade300,
+            backgroundColor: context.appColors.grey.shade300,
             border: Border.all(color: borderColor, width: 1),
           ),
         ),
@@ -241,9 +243,11 @@ class ShareImageWidget extends ConsumerWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(8),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: UiShapes.current.borderRadius(8),
+        ),
       ),
       // 整帖非分块渲染:FluxdoRender 内部就是一个 Column(无虚拟化),适合离屏
       // RepaintBoundary 全量截图;超高图由 screenshot_utils 分块拼接处理。

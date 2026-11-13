@@ -1,3 +1,4 @@
+import '../utils/avatar_url.dart';
 import 'dart:convert';
 import 'dart:async';
 
@@ -564,6 +565,7 @@ class PreloadedDataService {
     _loadedFromPersistentCache = false;
     _currentUser = null;
     _siteSettings = null;
+    AvatarUrl.configure(_siteSettings?['avatar_sizes']);
     _site = null;
     _topicListData = null;
     _cachedTopicListResponse = null;
@@ -593,15 +595,17 @@ class PreloadedDataService {
   ///
   /// 静音过滤等逻辑依赖这两份预加载数据，而本类是单例、真实加载路径要发
   /// 网络请求。给测试开一个最小口子，好过把那些判定写成不可测。
+  /// [loaded] 为 true 时按已加载处理，页面测试里异步读取也不会去发首页请求。
   @visibleForTesting
   void debugSeed({
     Map<String, dynamic>? currentUser,
     Map<String, dynamic>? siteSettings,
-    bool markLoaded = false,
+    bool? loaded,
   }) {
     _currentUser = currentUser;
     _siteSettings = siteSettings;
-    _loaded = markLoaded;
+    if (loaded != null) _loaded = loaded;
+    AvatarUrl.configure(_siteSettings?['avatar_sizes']);
   }
 
   /// 测试用：模拟首屏放行后自定义表情才到达，以及站点切换。
@@ -1083,6 +1087,7 @@ class PreloadedDataService {
 
       if (hydrated.containsKey('siteSettings')) {
         _siteSettings = hydrated['siteSettings'] as Map<String, dynamic>;
+        AvatarUrl.configure(_siteSettings?['avatar_sizes']);
 
         final reactionsStr =
             _siteSettings?['discourse_reactions_enabled_reactions'] as String?;

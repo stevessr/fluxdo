@@ -20,6 +20,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 import '../widgets/post/reply_sheet.dart';
 import '../l10n/s.dart';
 import '../utils/dialog_utils.dart';
+import '../theme/app_colors.dart';
 
 /// 日志类型筛选（公开供调试工具等入口预设初始筛选）
 enum LogTypeFilter {
@@ -307,7 +308,7 @@ class _AppLogsPageState extends State<AppLogsPage> {
     if (level == 'error' || (statusCode is int && statusCode >= 400)) {
       return scheme.error;
     }
-    if (level == 'warning') return Colors.orange;
+    if (level == 'warning') return context.appColors.orange;
     return Colors.transparent;
   }
 
@@ -560,11 +561,13 @@ class _AppLogsPageState extends State<AppLogsPage> {
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: Theme.of(context)
                         .colorScheme
                         .surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(8),
+                    ),
                   ),
                   child: SelectableText(
                     stackTrace,
@@ -782,8 +785,7 @@ class _AppLogsPageState extends State<AppLogsPage> {
           autofocus: true,
           decoration: InputDecoration(
             hintText: context.l10n.appLogs_search,
-            border: InputBorder.none,
-          ),
+          ).withoutBorder(),
           textInputAction: TextInputAction.search,
           onChanged: (_) => setState(_applyFilters),
         ),
@@ -1070,8 +1072,8 @@ class _AppLogsPageState extends State<AppLogsPage> {
       final statusColor = statusCode >= 400
           ? scheme.error
           : statusCode >= 300
-          ? Colors.orange
-          : Colors.green;
+          ? context.appColors.orange
+          : context.appColors.green;
       final rest = subtitle.startsWith('$statusCode')
           ? subtitle.substring('$statusCode'.length)
           : ' $subtitle';
@@ -1115,21 +1117,27 @@ class _AppLogsPageState extends State<AppLogsPage> {
         color: selected
             ? theme.colorScheme.secondaryContainer
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+        ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          customBorder: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(8),
+          ),
           onTap: onTap,
           child: Container(
             height: 32,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: selected
-                    ? Colors.transparent
-                    : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+            decoration: ShapeDecoration(
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(8),
+                side: BorderSide(
+                  color: selected
+                      ? Colors.transparent
+                      : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+                ),
               ),
-              borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               label,
@@ -1235,16 +1243,18 @@ class _AppLogsPageState extends State<AppLogsPage> {
       child: Container(
         padding: const EdgeInsets.only(left: 10, right: 4),
         height: 32,
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: active ? theme.colorScheme.secondaryContainer : null,
-          border: active
-              ? null
-              : Border.all(
-                  color: theme.colorScheme.outlineVariant.withValues(
-                    alpha: 0.4,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(8),
+            side: active
+                ? BorderSide.none
+                : BorderSide(
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.4,
+                    ),
                   ),
-                ),
-          borderRadius: BorderRadius.circular(8),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

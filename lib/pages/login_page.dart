@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -270,20 +271,24 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   void _showFailureToast(LoginFailure f) {
     final msg = switch (f.kind) {
-      LoginErrorKind.invalidCredentials => '用户名或密码错误',
-      LoginErrorKind.secondFactorRequired => f.message ?? '二步验证失败',
-      LoginErrorKind.notActivated => '账号未激活,请到邮箱 ${f.sentToEmail ?? ''} 完成激活',
-      LoginErrorKind.notApproved => '账号尚未通过审核',
-      LoginErrorKind.passwordExpired => '密码已过期,请用浏览器登录重设密码',
-      LoginErrorKind.network => f.message ?? '网络异常',
-      LoginErrorKind.unknown => f.message ?? '登录失败',
+      LoginErrorKind.invalidCredentials =>
+        context.l10n.login_invalidCredentials,
+      LoginErrorKind.secondFactorRequired =>
+        f.message ?? context.l10n.login_secondFactorFailed,
+      LoginErrorKind.notActivated => context.l10n.login_notActivated(
+        f.sentToEmail ?? '',
+      ),
+      LoginErrorKind.notApproved => context.l10n.login_notApproved,
+      LoginErrorKind.passwordExpired => context.l10n.login_passwordExpired,
+      LoginErrorKind.network => f.message ?? context.l10n.login_networkError,
+      LoginErrorKind.unknown => f.message ?? context.l10n.login_failed,
     };
     ToastService.showError(msg);
   }
 
   Future<void> _loginWithWebView([String? initialUrl]) async {
     final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => WebViewLoginPage(initialUrl: initialUrl),
       ),
     );
@@ -300,7 +305,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       _savedUsername = null;
       _savedPassword = null;
     });
-    ToastService.showSuccess('已清除所有保存的账号密码');
+    ToastService.showSuccess(context.l10n.login_savedCredentialsCleared);
   }
 
   @override
@@ -323,7 +328,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     0,
                     AmbientIconButton(
                       icon: Symbols.arrow_back_rounded,
-                      tooltip: '返回',
+                      tooltip: context.l10n.common_back,
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                   ),
@@ -337,7 +342,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       0,
                       AmbientIconButton(
                         icon: Symbols.delete_rounded,
-                        tooltip: '清除所有保存的账号密码',
+                        tooltip: context.l10n.login_clearSavedCredentials,
                         onPressed: _clearSavedCredentials,
                       ),
                     ),
@@ -417,9 +422,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   /// 磨砂玻璃表单卡片
   Widget _buildFormCard(ThemeData theme, ColorScheme scheme) {
     return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
+      decoration: ShapeDecoration(
+        shadows: [
           BoxShadow(
             color: Colors.black.withValues(
               alpha: theme.brightness == Brightness.dark ? 0.4 : 0.1,
@@ -428,18 +432,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             offset: const Offset(0, 8),
           ),
         ],
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(24),
+        ),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+      child: ClipRSuperellipse(
+        borderRadius: context.shapes.borderRadius(24),
         child: BackdropFilter(
           filter: createBlurFilter(blurSigma),
           child: Container(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: scheme.surfaceContainer.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.4),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(24),
+                side: BorderSide(
+                  color: scheme.outlineVariant.withValues(alpha: 0.4),
+                ),
               ),
             ),
             child: !_credentialsLoaded
@@ -470,7 +479,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _DividerWithLabel(label: '或'),
+        _DividerWithLabel(label: context.l10n.login_or),
         const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: _loginWithQrScan,
@@ -478,8 +487,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           label: Text(context.l10n.login_scanToLogin),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(28),
             ),
             side: BorderSide(
               color: scheme.outlineVariant.withValues(alpha: 0.6),
@@ -496,11 +505,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   child: LoadingSpinner(size: 20),
                 )
               : const Icon(Symbols.verified_user_rounded, size: 20),
-          label: const Text('使用系统浏览器登录'),
+          label: Text(context.l10n.login_browserAuth),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(28),
             ),
             side: BorderSide(
               color: scheme.outlineVariant.withValues(alpha: 0.6),
@@ -511,11 +520,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         OutlinedButton.icon(
           onPressed: () => _loginWithWebView(),
           icon: const Icon(Symbols.open_in_browser_rounded, size: 20),
-          label: const Text('其他方式登录 (OAuth / Passkey / 注册)'),
+          label: Text(context.l10n.login_otherMethods),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(28),
             ),
             side: BorderSide(
               color: scheme.outlineVariant.withValues(alpha: 0.6),
@@ -536,8 +545,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   /// 扫码登录:跳转扫码页,成功后 pop 登录页
   Future<void> _loginWithQrScan() async {
-    final result = await Navigator.of(context)
-        .push<bool>(MaterialPageRoute(builder: (_) => const QrLoginScanPage()));
+    final result = await Navigator.of(
+      context,
+    ).push<bool>(InteractionPageRoute(builder: (_) => const QrLoginScanPage()));
     if (result == true && mounted) {
       Navigator.of(context).pop(true);
     }

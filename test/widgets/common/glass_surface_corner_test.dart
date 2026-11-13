@@ -49,7 +49,9 @@ void main() {
       BlendMode.src,
       reason: '局部纹理内仍替换主模糊结果，避免重复混合',
     );
-    final clip = tester.widget<ClipRRect>(find.byType(ClipRRect).first);
+    final clip = tester.widget<ClipRSuperellipse>(
+      find.byType(ClipRSuperellipse).first,
+    );
     expect(clip.borderRadius, BorderRadius.circular(20));
     expect(
       clip.clipBehavior,

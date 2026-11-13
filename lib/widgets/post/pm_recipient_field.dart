@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -194,7 +195,9 @@ class _PmRecipientFieldState extends State<PmRecipientField> {
           descendantsAreFocusable: false,
           child: Material(
             elevation: 8,
-            borderRadius: BorderRadius.circular(8),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(8),
+            ),
             clipBehavior: Clip.antiAlias,
             color: theme.colorScheme.surfaceContainerHigh,
             child: ConstrainedBox(
@@ -327,7 +330,9 @@ class _PmRecipientFieldState extends State<PmRecipientField> {
                       ),
                     )
                   : null,
-              border: const OutlineInputBorder(),
+              border: OutlineInputBorder(
+                borderRadius: context.shapes.borderRadius(4),
+              ),
             ),
             onChanged: _onTermChanged,
             // 回车 = 确认当前高亮候选(见 _handleKey)。**不再**把输入原样

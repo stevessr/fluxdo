@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +28,7 @@ import 'widgets/post_header_section.dart';
 import 'widgets/post_notice_widget.dart';
 import 'widgets/post_segment_frame.dart';
 import 'widgets/post_voting_control.dart';
+import '../../../theme/theme_style.dart';
 
 class PostItem extends ConsumerStatefulWidget {
   final Post post;
@@ -290,11 +292,13 @@ class _PostItemState extends ConsumerState<PostItem> {
                 ),
               Container(
                 decoration: isModeratorAction
-                    ? BoxDecoration(
+                    ? ShapeDecoration(
                         color: theme.colorScheme.tertiaryContainer.withValues(
                           alpha: 0.2,
                         ),
-                        borderRadius: BorderRadius.circular(8),
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: context.shapes.borderRadius(8),
+                        ),
                       )
                     : null,
                 padding: isModeratorAction
@@ -327,7 +331,10 @@ class _PostItemState extends ConsumerState<PostItem> {
                                 // (此前新引擎分支未接入,顺带修复)。
                                 baseTextStyle: theme.textTheme.bodyMedium
                                     ?.copyWith(
-                                      height: 1.5,
+                                      // 主题可放宽行高（如纸质的书页排版）
+                                      height:
+                                          context.themeStyle.bodyLineHeight ??
+                                          1.5,
                                       fontSize:
                                           (theme
                                                   .textTheme
@@ -425,7 +432,9 @@ class _PostItemState extends ConsumerState<PostItem> {
                   padding: const EdgeInsets.only(top: 8),
                   child: InkWell(
                     onTap: () => widget.onExpandHiddenPost!(post.id),
-                    borderRadius: BorderRadius.circular(6),
+                    customBorder: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(6),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         vertical: 4,
@@ -437,13 +446,13 @@ class _PostItemState extends ConsumerState<PostItem> {
                           Icon(
                             Symbols.visibility_rounded,
                             size: 15,
-                            color: theme.colorScheme.primary,
+                            color: context.emphasis.accent,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             context.l10n.post_viewHiddenInfo,
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.primary,
+                              color: context.emphasis.accent,
                             ),
                           ),
                         ],
@@ -527,7 +536,9 @@ class _PostAssignmentBadge extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(16),
+        ),
         onTap: () => showPostAssignDialog(
           context,
           ref,
@@ -537,9 +548,11 @@ class _PostAssignmentBadge extends ConsumerWidget {
         ),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(16),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(16),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -547,7 +560,7 @@ class _PostAssignmentBadge extends ConsumerWidget {
               Icon(
                 Icons.assignment_ind_rounded,
                 size: 16,
-                color: theme.colorScheme.primary,
+                color: context.emphasis.accent,
               ),
               const SizedBox(width: 6),
               Flexible(
@@ -555,7 +568,7 @@ class _PostAssignmentBadge extends ConsumerWidget {
                   '已指定给 ${info.displayName}',
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.primary,
+                    color: context.emphasis.accent,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -566,7 +579,7 @@ class _PostAssignmentBadge extends ConsumerWidget {
                 icon: Icon(
                   Icons.more_vert_rounded,
                   size: 16,
-                  color: theme.colorScheme.primary,
+                  color: context.emphasis.accent,
                 ),
                 onSelected: (value) {
                   if (value == 'edit') {

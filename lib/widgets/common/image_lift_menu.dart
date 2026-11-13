@@ -4,6 +4,7 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/foundation.dart' show ValueListenable;
 
 import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -280,6 +281,7 @@ class _ImageLiftMenuViewState extends State<_ImageLiftMenuView>
   final GlobalKey _panelKey = GlobalKey();
 
   _LiftPhase _phase = _LiftPhase.waitingMeasure;
+  final _acceptsInput = ValueNotifier(true);
 
   /// 源矩形(可变:窗口/旋转变化时重测并与窗口求交,见 [didChangeMetrics])。
   late Rect _sourceRect = widget.sourceRect;
@@ -422,6 +424,7 @@ class _ImageLiftMenuViewState extends State<_ImageLiftMenuView>
     WidgetsBinding.instance.removeObserver(this);
     _master.dispose();
     _dragReset.dispose();
+    _acceptsInput.dispose();
     super.dispose();
   }
 
@@ -611,6 +614,7 @@ class _ImageLiftMenuViewState extends State<_ImageLiftMenuView>
   /// (iOS 上下文菜单源视图不可用时的消散语义)。
   void _close({double? fromDrag}) {
     if (_phase != _LiftPhase.open && _phase != _LiftPhase.opening) return;
+    _acceptsInput.value = false;
     _dragReset.stop();
     if (_isSourceVisible()) {
       _frozenDrag = fromDrag ?? _dragOffset;
@@ -638,6 +642,7 @@ class _ImageLiftMenuViewState extends State<_ImageLiftMenuView>
   /// overlay 移除后执行回调。
   void _runAction(VoidCallback onTap) {
     if (_phase != _LiftPhase.open && _phase != _LiftPhase.opening) return;
+    _acceptsInput.value = false;
     HapticFeedback.selectionClick();
     // 选动作整体淡出:源图立即在底下恢复(iOS 交叉淡出语义,遮罩与
     // 预览一起淡去时露出完整页面),动作在淡出完成后执行。
@@ -751,7 +756,11 @@ class _ImageLiftMenuViewState extends State<_ImageLiftMenuView>
             ? _sourceRect
             : Rect.lerp(_sourceRect, target, liftT)!;
         final radius =
-            lerpDouble(widget.sourceRadius, _kPreviewTargetRadius, liftT) ??
+            lerpDouble(
+              context.shapes.resolve(widget.sourceRadius),
+              context.shapes.resolve(_kPreviewTargetRadius),
+              liftT,
+            ) ??
             _kPreviewTargetRadius;
 
         Widget stack = Stack(
@@ -778,11 +787,7 @@ class _ImageLiftMenuViewState extends State<_ImageLiftMenuView>
           stack = Opacity(opacity: 1 - m, child: stack);
         }
 
-        return IgnorePointer(
-          // 收回/淡出期间不再响应任何命中。
-          ignoring: _phase == _LiftPhase.closing || _phase == _LiftPhase.fading,
-          child: stack,
-        );
+        return InteractionGate(enabled: _acceptsInput, child: stack);
       },
     );
   }
@@ -815,21 +820,23 @@ class _ImageLiftMenuViewState extends State<_ImageLiftMenuView>
     double shadowT,
     double fadeT,
   ) {
-    Widget preview = ClipRRect(
+    Widget preview = ClipRSuperellipse(
       borderRadius: BorderRadius.circular(radius),
       child: SizedBox.expand(child: Builder(builder: widget.previewBuilder)),
     );
     if (shadowT > 0) {
       preview = DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          boxShadow: [
+        decoration: ShapeDecoration(
+          shadows: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.32 * shadowT),
               blurRadius: 44 * shadowT,
               offset: Offset(0, 14 * shadowT),
             ),
           ],
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(radius),
+          ),
         ),
         child: preview,
       );
@@ -856,8 +863,10 @@ class _ImageLiftMenuViewState extends State<_ImageLiftMenuView>
         child: Material(
           key: _panelKey,
           color: colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(_kPanelCornerRadius),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.vertical(
+              top: context.shapes.radius(_kPanelCornerRadius),
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           child: SafeArea(
@@ -912,7 +921,9 @@ class _LiftActionButton extends StatelessWidget {
     return SizedBox(
       width: 76,
       child: InkWell(
-        borderRadius: BorderRadius.circular(22),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(22),
+        ),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -922,15 +933,18 @@ class _LiftActionButton extends StatelessWidget {
               Container(
                 width: 60,
                 height: 60,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(18),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(18),
+                  ),
                 ),
                 child: Icon(
                   action.icon,
                   size: 26,
                   color: colorScheme.onSurface,
                 ),
+
               ),
               const SizedBox(height: 8),
               Text(

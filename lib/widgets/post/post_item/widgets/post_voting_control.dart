@@ -9,6 +9,7 @@
 /// null→up +1;null→down -1;up→null -1;down→null +1;up↔down ±2。
 library;
 
+import 'package:common_ui/common_ui.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +27,7 @@ import '../../../../utils/dialog_utils.dart';
 import '../../../common/app_bottom_sheet.dart';
 import '../../../common/smart_avatar.dart';
 import '../../../user/user_card.dart';
+import '../../../../theme/app_colors.dart';
 
 class PostVotingControl extends ConsumerStatefulWidget {
   final Post post;
@@ -165,7 +167,7 @@ class _PostVotingControlState extends ConsumerState<PostVotingControl> {
     final downActive = _direction == 'down';
     final muted = theme.colorScheme.onSurfaceVariant;
     // 官方配色:已投上=绿(--success),已投下=红(--danger)
-    final upColor = upActive ? Colors.green : muted;
+    final upColor = upActive ? context.appColors.green : muted;
     final downColor = downActive ? theme.colorScheme.error : muted;
     final vertical = widget.axis == Axis.vertical;
 
@@ -207,7 +209,7 @@ class _PostVotingControlState extends ConsumerState<PostVotingControl> {
             color: _count == 0
                 ? muted.withValues(alpha: 0.7)
                 : (upActive
-                      ? Colors.green
+                      ? context.appColors.green
                       : downActive
                       ? theme.colorScheme.error
                       : theme.colorScheme.onSurface),
@@ -242,15 +244,17 @@ class _PostVotingControlState extends ConsumerState<PostVotingControl> {
 
     return Container(
       height: 36,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: _direction != null
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
             : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: _direction != null
-              ? theme.colorScheme.primary.withValues(alpha: 0.2)
-              : Colors.transparent,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(18),
+          side: BorderSide(
+            color: _direction != null
+                ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                : Colors.transparent,
+          ),
         ),
       ),
       child: Row(
@@ -440,7 +444,7 @@ class _PostVotingVotersSheetState extends State<PostVotingVotersSheet> {
         children: [
           Icon(
             Symbols.thumbs_up_down_rounded,
-            color: theme.colorScheme.primary,
+            color: context.emphasis.accent,
           ),
           const SizedBox(width: 8),
           Text(

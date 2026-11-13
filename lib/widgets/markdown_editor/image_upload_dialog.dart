@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -141,7 +142,7 @@ class _ImageUploadDialogState extends State<ImageUploadDialog> {
     }
 
     final result = await Navigator.of(context).push<Uint8List>(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (context) => ProImageEditor.file(
           File(_currentImagePath),
           callbacks: ProImageEditorCallbacks(
@@ -231,9 +232,11 @@ class _ImageUploadDialogState extends State<ImageUploadDialog> {
               // 图片预览
               Container(
                 height: 200,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(8),
+                  ),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Image.file(
@@ -579,9 +582,11 @@ class _MultiImageUploadDialogState extends State<MultiImageUploadDialog> {
                       fit: StackFit.expand,
                       children: [
                         Container(
-                          decoration: BoxDecoration(
+                          decoration: ShapeDecoration(
                             color: theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(8),
+                            shape: RoundedSuperellipseBorder(
+                              borderRadius: context.shapes.borderRadius(8),
+                            ),
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: Image.file(
@@ -608,9 +613,11 @@ class _MultiImageUploadDialogState extends State<MultiImageUploadDialog> {
                                 : () => _removeItem(index),
                             child: Container(
                               padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
+                              decoration: ShapeDecoration(
                                 color: Colors.black54,
-                                borderRadius: BorderRadius.circular(12),
+                                shape: RoundedSuperellipseBorder(
+                                  borderRadius: context.shapes.borderRadius(12),
+                                ),
                               ),
                               child: const Icon(
                                 Symbols.close_rounded,
@@ -630,9 +637,11 @@ class _MultiImageUploadDialogState extends State<MultiImageUploadDialog> {
                                 horizontal: 4,
                                 vertical: 1,
                               ),
-                              decoration: BoxDecoration(
+                              decoration: ShapeDecoration(
                                 color: Colors.black54,
-                                borderRadius: BorderRadius.circular(4),
+                                shape: RoundedSuperellipseBorder(
+                                  borderRadius: context.shapes.borderRadius(4),
+                                ),
                               ),
                               child: Text(
                                 _formatFileSize(item.size!),
@@ -738,14 +747,14 @@ class _MultiImageUploadDialogState extends State<MultiImageUploadDialog> {
                         Icon(
                           Symbols.grid_view_rounded,
                           size: 16,
-                          color: theme.colorScheme.primary,
+                          color: context.emphasis.accent,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             S.current.imageUpload_gridLayoutHint,
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.primary,
+                              color: context.emphasis.accent,
                             ),
                           ),
                         ),

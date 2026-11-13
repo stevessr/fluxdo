@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'modules/mini_apps/mini_app_window_app.dart';
+
 import 'package:catcher_2/catcher_2.dart';
 import 'package:chinese_font_library/chinese_font_library.dart';
-import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,9 +27,10 @@ import 'services/auth_issue_notice_service.dart';
 import 'services/crash_context_reporter.dart';
 import 'providers/app_state_refresher.dart';
 import 'services/highlighter_service.dart';
+import 'services/launch_splash_handoff.dart';
 import 'widgets/common/notification_icon_button.dart';
+import 'widgets/common/app_glass_settings.dart';
 import 'widgets/user/account_switcher_sheet.dart';
-import 'widgets/common/fullscreen_swipe_back.dart';
 
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
@@ -39,7 +41,7 @@ import 'services/network/system_proxy_service.dart';
 import 'services/network/cookie/cookie_devtools_extension.dart';
 import 'services/network/cookie/cookie_jar_service.dart';
 import 'services/network/cookie/cookie_store_observer.dart';
-import 'services/network/adapters/cronet_fallback_service.dart';
+import 'services/network/adapters/core_fallback_service.dart';
 import 'services/local_notification_service.dart';
 import 'services/account_manager.dart';
 import 'services/data_management/cache_size_service.dart';
@@ -64,11 +66,15 @@ import 'services/network/vpn_bypass_service.dart';
 import 'services/network/doh_proxy/proxy_certificate.dart';
 import 'services/cf_challenge_logger.dart';
 import 'services/browser_trust_coordinator.dart';
+import 'services/fonts/font_catalog.dart';
+import 'services/fonts/font_download_service.dart';
 import 'services/update_service.dart';
+import 'widgets/fonts/font_migration_dialog.dart';
+import 'widgets/festival_greeting.dart';
 import 'services/update_checker_helper.dart';
 
 import 'package:fluxdo_render/fluxdo_render.dart'
-    show FlattenCache, ParagraphLayoutCache;
+    show FlattenCache, ParagraphLayoutCache, FluxdoRenderShapes;
 
 import 'services/clipboard_topic_link_service.dart';
 import 'services/deep_link_service.dart';
@@ -97,8 +103,17 @@ import 'utils/frame_jank_monitor.dart';
 import 'utils/image_decode_gate.dart';
 import 'widgets/post/post_item/render_parse_cache.dart';
 import 'utils/scroll_busy_signal.dart';
+import 'theme/app_theme.dart';
+import 'theme/festival_calendar.dart';
+import 'theme/shape_presets.dart';
+import 'theme/theme_registry.dart';
 import 'theme/theme_resolver.dart';
 import 'widgets/common/app_background_layer.dart';
+import 'widgets/common/paper_texture.dart';
+import 'widgets/festival/festival_decor.dart';
+import 'widgets/festival/festival_pattern.dart';
+import 'widgets/layout/immersive_insets_hold.dart';
+import 'theme/app_background.dart';
 import 'utils/time_utils.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -119,15 +134,26 @@ import 'widgets/onboarding_gate.dart';
 import 'widgets/layout/adaptive_scaffold.dart';
 import 'widgets/layout/adaptive_navigation.dart';
 import 'widgets/layout/master_detail_layout.dart';
+import 'widgets/layout/pane_projection_back_scope.dart';
 import 'widgets/notification/notification_quick_panel.dart';
 import 'widgets/topic/category_drawer.dart' show CategoryDrawerHost;
 import 'widgets/read_later/read_later_bubble.dart';
+import 'widgets/browser/browser_dock_host.dart';
+import 'modules/mini_apps/mini_app_tab_session.dart';
+import 'modules/mini_apps/mini_app_runner_page.dart';
+import 'modules/mini_apps/mini_app_icon.dart';
+import 'services/browser_tabs.dart';
+import 'services/navigation/browser_dock_observer.dart';
+import 'services/navigation/back_exit_guard.dart';
+import 'services/navigation/keyboard_focus_guard.dart';
+import 'pages/webview_page.dart';
 import 'navigation/nav_action_bus.dart';
 import 'navigation/nav_entry.dart';
 import 'navigation/nav_entry_registry.dart';
 import 'providers/read_later_provider.dart';
 import 'providers/shortcut_provider.dart';
 import 'widgets/keyboard_shortcut_handler.dart';
+import 'widgets/esc_fallback_observer.dart';
 import 'utils/platform_utils.dart';
 import 'utils/discourse_url_parser.dart';
 
@@ -167,11 +193,20 @@ Future<void> _applyAndroidDisplayMode(SharedPreferences prefs) async {
   }
 }
 
+// Android 新版嵌入层通过 FlutterEngineGroup 按根库函数名启动子引擎，
+// 不读取 Activity 的 libraryUri。入口必须实际声明在 main.dart 中。
+@pragma('vm:entry-point')
+Future<void> androidMiniAppWindowMain() async {
+  await miniAppWindowMain();
+}
+
 Future<void> main() async {
   // 自定义 binding:接管标准图片解码入口,全局限制解码并发(= 限制
   // Impeller 纹理上传并发,图密话题快滚 raster 尖峰的对症闸门,
   // 见 image_decode_gate.dart)。
   FluxdoWidgetsBinding.ensureInitialized();
+  // 子引擎只启动完整的微应用运行页，不重复启动消息总线、通知和网络核心。
+  if (await startMiniAppWindow()) return;
 
   // just_audio 不自带 Windows/Linux 实现,必须在创建 AudioPlayer 前注册
   // 后端,否则会落回不存在的 MethodChannel 实现。两平台后端不同:
@@ -273,7 +308,7 @@ Future<void> main() async {
   // 阶段 1：并行执行所有不相互依赖的初始化
   final futures = <Future<dynamic>>[
     SharedPreferences.getInstance(),
-    AppConstants.initUserAgent(),
+    if (!Platform.isWindows) AppConstants.initUserAgent(),
     LogWriter.init(),
     ProxyCertificate.initialize(),
     // Windows 深链协议注册(discourse:// / fluxdo://):写 HKCU 免管理员,
@@ -283,6 +318,12 @@ Future<void> main() async {
     CsrfTokenService().init(),
     BackgroundNotificationService().initialize(),
     TimeUtils.initialize(),
+    // 内置固定配色主题（JSON 资产），需在 themeProvider 首次读取前就绪
+    ThemeRegistry.loadBuiltins(),
+    // 可下载字体目录（随包内置），字体注册依赖它
+    FontCatalog.load(),
+    // 节日表（随包内置），节日主题判定依赖它
+    FestivalCalendar.load(),
     // 把 compat polyfill asset 读到内存，让 WebView 同步 getter 直接拿。
     // 失败不阻塞启动，仅影响老 WebView 兼容性。
     WebViewSettings.preloadPolyfill(),
@@ -296,6 +337,9 @@ Future<void> main() async {
   final prefs = results[0] as SharedPreferences;
   await VpnBypassService.instance.initialize(prefs);
   await AuthIssueNoticeService.instance.initialize(prefs);
+  // 已下载字体：扫描安装目录，并在首帧前注册已选字体，避免先闪系统字体
+  await FontDownloadService.instance.initialize(prefs);
+  await ThemeNotifier.preloadFonts(prefs);
 
   // release 下按设置开关启用性能监控(debug/profile 已在上方无条件启用)
   if (kReleaseMode && (prefs.getBool(FrameJankMonitor.prefKey) ?? false)) {
@@ -332,7 +376,7 @@ Future<void> main() async {
       }
     } else {
       // 冷启动：窗口保持隐藏，推迟到 Flutter 首帧光栅化后再恢复位置并显示，
-      // 避免 main() 后续初始化（迁移/网络栈/rhttp 等）期间露出空白窗口。
+      // 避免 main() 后续初始化（迁移/网络栈等）期间露出空白窗口。
       // Future.any 兜底：极端情况下首帧迟迟未到时也要把窗口显示出来。
       unawaited(() async {
         await Future.any([
@@ -370,7 +414,7 @@ Future<void> main() async {
   // 开发者模式下 debug 级日志落盘（高频追踪信息）
   AppLogger.setVerbose(developerMode);
   await Future.wait([
-    CronetFallbackService.instance.initialize(prefs),
+    CoreFallbackService.instance.initialize(prefs),
     ProxySettingsService.instance.initialize(prefs),
     if (Platform.isAndroid)
       MethodChannel(
@@ -398,8 +442,7 @@ Future<void> main() async {
     debugPrint('[rhttp] 初始化异常: $e');
     await RhttpSettingsService.instance.forceDisable();
   }
-
-  // Windows 固定系统代理必须先于本地 DoH/WebView 网关读取，网关才能按
+  // Windows 的系统代理必须先于网络核心读取，核心才能按
   // 「应用代理 > 系统代理 > 直连」选择首次启动的上游出口。
   if (Platform.isWindows) {
     SystemProxyService.instance.start();
@@ -408,13 +451,13 @@ Future<void> main() async {
   // WindowsWebViewEnvironmentService 必须等 NetworkSettingsService 把本次
   // 会话真正要用的代理端口定下来之后再创建 Environment。之前放在最早那批
   // 并行初始化里,等的是"猜的"8s 超时——NetworkSettingsService 前面还排
-  // 着 rhttp(自己就留了最多 5s 预算)等好几个服务,8s 经常等不到真实端口
-  // 就用旧端口摆烂,导致 WebView2 全程连着一个不存在的代理、CF 验证怎么
+  // 着好几个服务,8s 经常等不到真实端口就用旧端口摆烂,导致 WebView2 全程连着一个不存在的代理、CF 验证怎么
   // 也过不去。现在严格排在 NetworkSettingsService 完全初始化(本地代理
   // 已经启动、setProxy() 已经真正调用过)之后再建,proxyDecision 这时
   // 早就 complete 了,创建时直接读到确定值,不用再赌超时。
   if (Platform.isWindows) {
     await WindowsWebViewEnvironmentService.instance.initialize();
+    await AppConstants.initUserAgent();
   }
   VpnAutoToggleService.instance.initialize(prefs);
   try {
@@ -513,6 +556,9 @@ Future<void> main() async {
     await LocaleSettings.useDeviceLocale();
   }
 
+  // 启动页首帧要知道原生启动屏是否已画过 logo（Android 13+ 描线交接）
+  await LaunchSplashHandoff.init();
+
   // 过滤 Flutter 框架已知 bug（https://github.com/flutter/flutter/issues/115787）
   // SelectionArea + CustomScrollView 拖选时触发的断言错误，仅 debug 模式出现
   bool filterKnownFrameworkBugs(Report report) {
@@ -589,153 +635,70 @@ Future<void> main() async {
 
 /// 只给 textTheme/primaryTextTheme 注入中文 fallback，保留 ThemeData 原本的
 /// fontFamily 与 weight 配置（避免覆盖 Android OEM 字体导致视觉变粗）。
+///
+/// 已有 fallback 的样式（主题的宋体 / 等宽标题）保留原链，系统中文字体接在后面。
 ThemeData _withChineseFallback(ThemeData base) {
   final fallback = SystemChineseFont.fontFamilyFallback;
+  TextStyle? merge(TextStyle? style) => style?.copyWith(
+    fontFamilyFallback: [...?style.fontFamilyFallback, ...fallback],
+  );
+  TextTheme apply(TextTheme t) => t.copyWith(
+    displayLarge: merge(t.displayLarge),
+    displayMedium: merge(t.displayMedium),
+    displaySmall: merge(t.displaySmall),
+    headlineLarge: merge(t.headlineLarge),
+    headlineMedium: merge(t.headlineMedium),
+    headlineSmall: merge(t.headlineSmall),
+    titleLarge: merge(t.titleLarge),
+    titleMedium: merge(t.titleMedium),
+    titleSmall: merge(t.titleSmall),
+    bodyLarge: merge(t.bodyLarge),
+    bodyMedium: merge(t.bodyMedium),
+    bodySmall: merge(t.bodySmall),
+    labelLarge: merge(t.labelLarge),
+    labelMedium: merge(t.labelMedium),
+    labelSmall: merge(t.labelSmall),
+  );
   return base.copyWith(
-    textTheme: base.textTheme.apply(fontFamilyFallback: fallback),
-    primaryTextTheme: base.primaryTextTheme.apply(fontFamilyFallback: fallback),
+    textTheme: apply(base.textTheme),
+    primaryTextTheme: apply(base.primaryTextTheme),
   );
 }
 
-/// Material Symbols 全局轴默认：fill=0 走线框，weight/grade/opticalSize
-/// 给出与现有视觉匹配的中性值。状态类图标需在使用处显式传 `fill: 1`。
-IconThemeData _appIconTheme(Color color) => IconThemeData(
-  color: color,
-  size: 24,
-  fill: 0,
-  weight: 400,
-  grade: 0,
-  opticalSize: 24,
+/// 页面背景构建器需保持同一实例：[PageBackgroundScope] 按引用比较，
+/// 换实例会通知所有路由重建背景（顶层函数的引用恒定）。
+Widget _paperBackgroundBuilder(BuildContext context) => PaperBackground(
+  color: Theme.of(context).colorScheme.surface.withValues(alpha: 1),
 );
 
-/// 页面转场:框架在 Android 的默认(PredictiveBack,常规导航兜底到
-/// FadeForwards)是入场/离场两页各套一个整页 FadeTransition —— Impeller
-/// 下每个半透明整页 = 一次全屏 saveLayer 离屏,且 Impeller 没有 Skia 的
-/// raster cache,转场每帧都在重光栅化两个页面。详情页↔列表页这种复杂
-/// 内容在 120Hz(8.3ms 预算)下每帧 raster 10~50ms,整段转场连串掉帧
-/// (诊断日志里 NAV 后成串的纯 raster 大帧,即"一般场景动不动抽")。
-/// 统一换 Cupertino 滑动转场:纯平移 + 边缘阴影,零整页 saveLayer。
-/// Android 用拷贝改造的 PredictiveBackCupertinoPageTransitionsBuilder:
-/// 系统预测返回手势保留原生 shared-element 预览,其余导航(push/按钮
-/// 返回)降级到 Cupertino 而非官方硬编码的 FadeForwards。
-const _pageTransitionsTheme = PageTransitionsTheme(
-  builders: <TargetPlatform, PageTransitionsBuilder>{
-    TargetPlatform.android: PredictiveBackCupertinoPageTransitionsBuilder(),
-    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-    TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-    TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-    TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
-  },
-);
+final Map<FestivalPatternKind, WidgetBuilder> _festivalBackgrounds = {};
 
-/// 「全屏侧滑返回」开启时的转场:移动端在原转场树里追加整页 iOS 式
-/// 返回手势(转场视觉不变,仅扩大手势探测区);桌面端保持边缘手势。
-const _fullscreenSwipePageTransitionsTheme = PageTransitionsTheme(
-  builders: <TargetPlatform, PageTransitionsBuilder>{
-    TargetPlatform.android: FullscreenSwipeBackTransitionsBuilder(
-      PredictiveBackCupertinoPageTransitionsBuilder(),
-    ),
-    TargetPlatform.iOS: FullscreenSwipeBackTransitionsBuilder(
-      CupertinoPageTransitionsBuilder(),
-    ),
-    TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-    TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-    TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
-  },
-);
+WidgetBuilder _festivalBackgroundBuilder(FestivalPatternKind kind) =>
+    _festivalBackgrounds[kind] ??= (context) {
+      final scheme = Theme.of(context).colorScheme;
+      return FestivalPatternBackground(
+        kind: kind,
+        color: scheme.surface.withValues(alpha: 1),
+        ink: festivalPatternInk(scheme),
+      );
+    };
 
-/// M3E 按钮按压形变,参数对照 Compose ButtonSmallTokens 标准:
-/// ContainerShapeRound = CornerFull(Stadium)→ PressedContainerShape =
-/// CornerSmall(8dp)。形状插值由 Material 内部 ImplicitlyAnimatedWidget
-/// 完成,theme 注入全局生效;时长对齐规格用的 DefaultEffects 弹簧
-/// (spring(1.0, 1600) 收敛 ≈180ms,规格注释明确"不允许过冲",
-/// Material 的 fastOutSlowIn 曲线正好同为无过冲缓动)。
-ButtonStyle _m3ePressedShapeStyle() => ButtonStyle(
-  animationDuration: const Duration(milliseconds: 180),
-  shape: WidgetStateProperty.resolveWith(
-    (states) => states.contains(WidgetState.pressed)
-        ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-        : const StadiumBorder(),
-  ),
-);
+(AppBackground, WidgetBuilder)? _userBackground;
 
-/// IconButton 版本:在按压形变之上叠加 selected 态形状(Compose
-/// IconToggleButtonShapes 语义:pressed > checked > 默认)。选中的
-/// 切换图标按钮从全圆变小圆角方,给 36 处 isSelected 调用点免费的
-/// M3E 切换标志动效;时长同 DefaultEffects。
-ButtonStyle _m3eIconButtonShapeStyle() => ButtonStyle(
-  animationDuration: const Duration(milliseconds: 180),
-  shape: WidgetStateProperty.resolveWith((states) {
-    if (states.contains(WidgetState.pressed)) {
-      return RoundedRectangleBorder(borderRadius: BorderRadius.circular(8));
-    }
-    if (states.contains(WidgetState.selected)) {
-      return RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
-    }
-    return const StadiumBorder();
-  }),
-);
-
-/// light/dark 共用的 ThemeData 装配(两侧必须对称,尤其 M3eFlags ——
-/// ThemeData.lerp 对单边缺失的 extension 不插值而是瞬时并入)。
-ThemeData _buildAppTheme(
-  ColorScheme scheme,
-  ThemeState themeState, {
-  required bool fullscreenSwipeBack,
-  required bool transparent,
-}) {
-  final m3e = themeState.m3eEnabled;
-  final buttonStyle = m3e ? _m3ePressedShapeStyle() : null;
-  return ThemeData(
-    colorScheme: scheme,
-    useMaterial3: true,
-    fontFamily: themeState.fontFamilyName,
-    // 透明模式：脚手架让出背景，由根背景层的用户图片透出
-    scaffoldBackgroundColor: transparent ? Colors.transparent : null,
-    pageTransitionsTheme: fullscreenSwipeBack
-        ? _fullscreenSwipePageTransitionsTheme
-        : _pageTransitionsTheme,
-    iconTheme: _appIconTheme(scheme.onSurface),
-    primaryIconTheme: _appIconTheme(scheme.onPrimary),
-    extensions: [M3eFlags(enabled: m3e)],
-    // year2023: false 启用进度条/滑块的 M3E 翻新(圆角端点/track gap/
-    // stop indicator/16dp 滑轨+竖条 thumb)。字段虽标记 deprecated,但
-    // trackGap 等新样式只由它驱动,官方 M3E 独立包落地前只能走这里。
-    // circularTrackPadding 归零:新样式默认 4dp 内边距会把存量
-    // SizedBox(20) 小圈的可画区吃掉 8dp。
-    // ignore: deprecated_member_use
-    progressIndicatorTheme: ProgressIndicatorThemeData(
-      // ignore: deprecated_member_use
-      year2023: !m3e,
-      circularTrackPadding: EdgeInsets.zero,
-    ),
-    // ignore: deprecated_member_use
-    sliderTheme: SliderThemeData(year2023: !m3e),
-    filledButtonTheme: FilledButtonThemeData(style: buttonStyle),
-    elevatedButtonTheme: ElevatedButtonThemeData(style: buttonStyle),
-    outlinedButtonTheme: OutlinedButtonThemeData(style: buttonStyle),
-    textButtonTheme: TextButtonThemeData(style: buttonStyle),
-    iconButtonTheme: IconButtonThemeData(
-      style: m3e ? _m3eIconButtonShapeStyle() : null,
-    ),
-    cardTheme: CardThemeData(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: scheme.surfaceContainerLow,
-      margin: EdgeInsets.zero,
-    ),
-    popupMenuTheme: PopupMenuThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      elevation: 3,
-      color: scheme.surfaceContainerLow,
-      surfaceTintColor: Colors.transparent,
-      menuPadding: const EdgeInsets.symmetric(vertical: 8),
-    ),
-  );
+WidgetBuilder _userBackgroundBuilder(AppBackground background) {
+  final cached = _userBackground;
+  if (cached != null && identical(cached.$1, background)) return cached.$2;
+  Widget builder(BuildContext _) => AppBackgroundLayer(background: background);
+  _userBackground = (background, builder);
+  return builder;
 }
+
+final _routeInteractionObserver = RouteInteractionObserver();
 
 class MainApp extends ConsumerWidget {
-  const MainApp({super.key});
+  const MainApp({super.key, this.windowHome, this.windowTitle = 'FluxDO'});
+  final Widget? windowHome;
+  final String windowTitle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -758,17 +721,23 @@ class MainApp extends ConsumerWidget {
           ref.read(themeProvider.notifier).setDynamicPrimary(rawDynamicPrimary);
         });
 
-        // 默认走完整 fromSeed 方案（表面带种子色相）；中性/纯黑/透明
-        // 开关由 ThemeResolver 切换到"强调色 × 中性层"的合成路径。
+        // 主题与纯黑/透明修饰由 ThemeResolver 合成（Material 主题默认走
+        // 完整 fromSeed，表面带种子色相）。
         // 动态色路径只取系统动态色 primary 当种子，不用 OEM 原始 scheme。
+        // 配色取生效主题（节日期间为节日配色），圆角与字体仍跟随用户主题
+        final colorSpec = themeState.effectiveColorSpec;
         final resolvedTheme = ThemeResolver.resolve(
+          spec: colorSpec,
+          accentId: themeState.accentFor(colorSpec),
           mode: themeState.mode,
-          neutral: themeState.neutralEnabled,
           black: themeState.blackEnabled,
-          transparent: themeState.isTransparentActive,
           seed: themeState.effectiveSeedColor,
           variant: themeState.schemeVariant,
         );
+        // 形状 token：注入 ThemeData，并同步给拿不到 context 的绘制代码
+        final shapes = themeState.effectiveShapes;
+        UiShapes.current = shapes;
+        FluxdoRenderShapes.current = shapes.render;
         final lightScheme = resolvedTheme.light;
         final darkScheme = resolvedTheme.dark;
 
@@ -778,8 +747,20 @@ class MainApp extends ConsumerWidget {
               scrollBehavior: const DesktopScrollInteractionBehavior(),
               navigatorKey: navigatorKey,
               // JankNavObserver 给 [JANK] 日志加导航归因(debug/profile 观测用)
-              navigatorObservers: [appRouteObserver, JankNavObserver()],
-              title: 'FluxDO',
+              // KeyboardFocusGuard 压掉浮层关闭后键盘自弹(移动端)
+              // EscFallbackObserver 登记全屏页,桌面 ESC 路由级自动兜底
+              navigatorObservers: [
+                _routeInteractionObserver,
+                browserDockObserver,
+                appRouteObserver,
+                keyboardFocusGuard,
+                JankNavObserver(),
+                EscFallbackObserver(),
+                // 崩溃/ANR 现场带上当前页面与最近导航轨迹(Crashlytics
+                // custom keys);未开启崩溃采集时内部 no-op。
+                CrashContextNavObserver(),
+              ],
+              title: windowTitle,
               locale: TranslationProvider.of(context).flutterLocale,
               localizationsDelegates: const [
                 GlobalMaterialLocalizations.delegate,
@@ -792,35 +773,55 @@ class MainApp extends ConsumerWidget {
               // 系统字体（chinese_font_library 自带的 ThemeData.useSystemChineseFont
               // 会强制改为 Roboto，导致字体显得比之前粗）。
               theme: _withChineseFallback(
-                _buildAppTheme(
+                buildAppTheme(
                   lightScheme,
+                  resolvedTheme.lightColors,
+                  shapes,
                   themeState,
                   fullscreenSwipeBack: fullscreenSwipeBack,
-                  transparent: resolvedTheme.transparent,
+                  pageBackground: themeState.hasPageBackground,
+                  style: themeState.effectiveStyle,
                 ),
               ),
               darkTheme: _withChineseFallback(
-                _buildAppTheme(
+                buildAppTheme(
                   darkScheme,
+                  resolvedTheme.darkColors,
+                  shapes,
                   themeState,
                   fullscreenSwipeBack: fullscreenSwipeBack,
-                  transparent: resolvedTheme.transparent,
+                  pageBackground: themeState.hasPageBackground,
+                  style: themeState.effectiveStyle,
                 ),
               ),
               builder: (context, child) {
                 final brightness = Theme.of(context).brightness;
+                // 页面背景：用户背景图优先，其次是节日底纹、主题的纸张纹理
+                final WidgetBuilder? pageBackground = themeState
+                        .isTransparentActive
+                    ? _userBackgroundBuilder(themeState.background)
+                    : themeState.isFestivalPatternActive
+                    ? _festivalBackgroundBuilder(
+                        FestivalPatternKind.forFestival(
+                          themeState.activeFestival!.festival.id,
+                        ),
+                      )
+                    : themeState.isPaperTextureActive
+                    ? _paperBackgroundBuilder
+                    : null;
                 final iconBrightness = brightness == Brightness.light
                     ? Brightness.dark
                     : Brightness.light;
                 // 桌面平台：跟随应用主题明暗切换窗口效果
-                if (Platform.isMacOS ||
-                    Platform.isWindows ||
-                    Platform.isLinux) {
+                if (windowHome == null &&
+                    (Platform.isMacOS ||
+                        Platform.isWindows ||
+                        Platform.isLinux)) {
                   final isDark = brightness == Brightness.dark;
                   acrylic.Window.setEffect(
-                    // 透明模式下禁用系统窗口效果，避免桌面壁纸
-                    // 与用户背景图双重透出造成视觉混乱
-                    effect: resolvedTheme.transparent
+                    // 有页面背景（自定义背景、主题纹理）时禁用系统窗口
+                    // 效果，避免桌面壁纸与页面背景叠在一起
+                    effect: themeState.hasPageBackground
                         ? acrylic.WindowEffect.disabled
                         : Platform.isMacOS
                         ? acrylic.WindowEffect.sidebar
@@ -845,35 +846,85 @@ class MainApp extends ConsumerWidget {
                     // 关闭系统自动 scrim，实现完全沉浸
                     systemNavigationBarContrastEnforced: false,
                   ),
-                  child: Stack(
-                    fit: StackFit.passthrough,
-                    children: [
-                      // 透明模式的用户背景层，垫在 Navigator 之下
-                      if (resolvedTheme.transparent)
-                        Positioned.fill(
-                          child: AppBackgroundLayer(
-                            background: themeState.background,
+                  child: BrowserDockHost(
+                    enabled: windowHome == null,
+                    blurEnabled: ref.watch(
+                      preferencesProvider.select((p) => p.dialogBlur),
+                    ),
+                    controller: ref.read(browserTabsProvider),
+                    observer: browserDockObserver,
+                    iconBuilder: (context, session, size) =>
+                        session is MiniAppTabSession
+                        ? MiniAppIcon(session.details.app, size: size)
+                        : const Icon(Icons.language_rounded),
+                    subtitleBuilder: (context, session) =>
+                        session is MiniAppTabSession
+                        ? [
+                            context.l10n.miniApp_contentLabel,
+                            session.details.app.author,
+                          ].where((s) => s.isNotEmpty).join(' · ')
+                        : session.url,
+                    onRestore: (session) {
+                      final navigator = navigatorKey.currentState;
+                      if (navigator != null) {
+                        if (session is MiniAppTabSession) {
+                          unawaited(
+                            MiniAppRunnerPage.restore(navigator, session),
+                          );
+                        } else {
+                          WebViewPage.restore(navigator, session);
+                        }
+                      } else {
+                        unawaited(session.close());
+                      }
+                    },
+                    child: Stack(
+                      fit: StackFit.passthrough,
+                      children: [
+                        // 根背景只兜底路由间隙；各普通页面独立铺壁纸，隔离前后页。
+                        if (pageBackground != null)
+                          Positioned.fill(child: pageBackground(context)),
+                        PageBackgroundScope(
+                          backgroundBuilder: pageBackground,
+                          // 节日装饰：空状态与下拉刷新里的节日图案。
+                          // UiDecor 恒驻、只换内容，切换节日不会重建路由树
+                          child: UiDecor(
+                            cornerBadge: themeState.isFestivalDecorActive
+                                ? festivalCornerBadge
+                                : null,
+                            loadingIndicator: themeState.isFestivalDecorActive
+                                ? festivalLoadingIndicator
+                                : null,
+                            child: child!,
                           ),
                         ),
-                      child!,
-                      const ReadLaterBubble(),
-                    ],
+                        if (windowHome == null) const ReadLaterBubble(),
+                      ],
+                    ),
                   ),
                 );
 
                 result = Listener(
                   behavior: HitTestBehavior.translucent,
                   onPointerDown: (event) {
-                    UserPresenceService().markUserActivity();
+                    if (windowHome == null) {
+                      UserPresenceService().markUserActivity();
+                    }
                     // 鼠标侧键返回（第 4 按钮，bit flag 0x08）
                     if (PlatformUtils.isDesktop && event.buttons & 0x08 != 0) {
                       navigatorKey.currentState?.maybePop();
                     }
                   },
-                  onPointerMove: (_) =>
-                      UserPresenceService().markUserActivity(),
-                  onPointerSignal: (_) =>
-                      UserPresenceService().markUserActivity(),
+                  onPointerMove: (_) {
+                    if (windowHome == null) {
+                      UserPresenceService().markUserActivity();
+                    }
+                  },
+                  onPointerSignal: (_) {
+                    if (windowHome == null) {
+                      UserPresenceService().markUserActivity();
+                    }
+                  },
                   child: result,
                 );
 
@@ -891,12 +942,16 @@ class MainApp extends ConsumerWidget {
                 );
 
                 // 桌面端：全局键盘快捷键（HardwareKeyboard）
-                if (PlatformUtils.isDesktop) {
+                if (PlatformUtils.isDesktop && windowHome == null) {
                   result = KeyboardShortcutHandler(
                     navigatorKey: navigatorKey,
                     child: result,
                   );
                 }
+
+                // 图片查看器沉浸期间冻结安全区,底下页面不跟着塌陷;
+                // 须在 HyperOS 钳位之内,读到的是钳过的值
+                result = ImmersiveInsetsHoldScope(child: result);
 
                 // 修复小米 HyperOS 小窗(freeform)页面空白只剩底栏:
                 // 引擎(API 35+)把 viewPaddingTop 抬到 WindowInsets captionBar
@@ -924,9 +979,11 @@ class MainApp extends ConsumerWidget {
                   }
                 }
 
-                return result;
+                return AppGlassSettings(child: result);
               },
-              home: const OnboardingGate(child: PreheatGate(child: MainPage())),
+              home:
+                  windowHome ??
+                  const OnboardingGate(child: PreheatGate(child: MainPage())),
             ),
           ),
         );
@@ -986,7 +1043,7 @@ class _MainPageState extends ConsumerState<MainPage>
   Timer? _pendingSingleTap;
   List<NavEntry> _lastResolvedEntries = const [];
   Timer? _resumeDebounceTimer;
-  DateTime? _lastBackPressTime;
+  final BackExitGuard _backExitGuard = BackExitGuard();
   bool _clipboardCheckInFlight = false;
 
   // 不能是 const，需要传入 isActive
@@ -1169,6 +1226,14 @@ class _MainPageState extends ConsumerState<MainPage>
     await _autoCheckUpdate();
     if (!mounted) return;
 
+    // MiSans 已移出安装包：旧版选了它的用户引导下载（只弹一次）
+    await FontMigrationPrompt.maybeShow(context, ref);
+    if (!mounted) return;
+
+    // 节日主题：开启跨零点 / 回前台判定，节日期间首次打开问候一次
+    ref.read(themeProvider.notifier).startFestivalClock();
+    FestivalGreeting.maybeShow(context, ref);
+
     // 一次性数据收集告知（仅 Android）
     if (Platform.isAndroid) {
       await _showCrashlyticsNotice();
@@ -1189,6 +1254,7 @@ class _MainPageState extends ConsumerState<MainPage>
   Future<void> _maybeSuggestRenderCompatMode() async {
     // 已经开着了就不用建议了（原生侧也会做这个判断，这里是快速短路）
     if (ref.read(preferencesProvider).renderGlesBackend) return;
+
     final shouldSuggest = await RenderBackendService.shouldSuggestCompatMode();
     if (!shouldSuggest || !mounted) return;
     final enable = await showAppDialog<bool>(
@@ -1605,8 +1671,9 @@ class _MainPageState extends ConsumerState<MainPage>
       navigatorKey.currentState?.popUntil((route) => route.isFirst);
     }
     if (mounted && action == _AuthErrorDialogAction.clearData) {
-      await Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const DataManagementPage()));
+      await Navigator.of(
+        context,
+      ).push(InteractionPageRoute(builder: (_) => const DataManagementPage()));
     }
   }
 
@@ -1730,59 +1797,90 @@ class _MainPageState extends ConsumerState<MainPage>
         (activeEntryId == NavEntryIds.messages && messageParallelStacked) ||
         (activeEntryId == NavEntryIds.seeking && seekingParallelStacked);
 
-    // 首页的 FAB 由 TopicsScreen 内部处理，避免切换时闪烁
-    Widget page = PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (bool didPop, dynamic result) {
-        if (didPop) return;
-        // 分类侧栏开着：返回=关抽屉。抽屉自身的 LocalHistoryEntry 在
-        // 根路由 canPop:false 下不生效（PopScope 的 doNotPop 判定
-        // 优先于 LocalHistoryRoute 的内部消费），只能在这里兜底。
-        if (CategoryDrawerHost.isOpen) {
-          CategoryDrawerHost.close();
-          return;
-        }
-        if (NotificationQuickPanel.isVisible) {
-          NotificationQuickPanel.dismiss();
-          return;
-        }
-        final now = DateTime.now();
-        if (_lastBackPressTime != null &&
-            now.difference(_lastBackPressTime!).inMilliseconds < 2000) {
-          SystemNavigator.pop();
-        } else {
-          _lastBackPressTime = now;
-          ToastService.showInfo(S.current.toast_pressAgainToExit);
-        }
-      },
-      child: AdaptiveScaffold(
-        selectedIndex: selectedBottomIndex,
-        onDestinationSelected: _onDestinationSelected,
-        destinations: destinations,
-        railBottomLeading: (user != null && !hasNotificationEntry)
-            ? const NotificationIconButton()
-            : null,
-        hideNavigationRail: hideNavigationRail,
-        body: IndexedStack(
-          index: safePageIndex,
-          children: [
-            for (int i = 0; i < pageEntries.length; i++)
-              KeyedSubtree(
-                key: ValueKey('nav-entry-${pageEntries[i].id}'),
-                child: TickerMode(
-                  enabled: safePageIndex == i,
-                  child: ExcludeFocus(
-                    excluding: safePageIndex != i,
-                    child: pageEntries[i].pageBuilder!(
-                      context,
-                      safePageIndex == i,
-                    ),
-                  ),
+    final exitOnSingleBack = ref.watch(
+      preferencesProvider.select((preferences) => preferences.exitOnSingleBack),
+    );
+    final requireDoubleBackToExit = Platform.isAndroid && !exitOnSingleBack;
+    final routeCanPopInternally = ModalRoute.canPopOf(context) ?? false;
+
+    // 首页的 FAB 由 TopicsScreen 内部处理，避免切换时闪烁。
+    // 单次退出模式允许系统处理 bubble 以支持预测式退出；双击退出模式
+    // 则拦截根路由的第一次返回。面板在两种模式下都拥有更高优先级。
+    Widget page = ValueListenableBuilder<bool>(
+      valueListenable: NotificationQuickPanel.visible,
+      builder: (context, notificationPanelVisible, _) =>
+          ValueListenableBuilder<bool>(
+            // 平行视界投影态(窄屏详情全宽盖在 tab 体内)开着时返回由
+            // PaneProjectionBackScope 消费,根层完全让位:不弹退出 toast。
+            valueListenable: PaneProjectionBackScope.hasActiveProjection,
+            builder: (context, paneProjectionOpen, _) => PopScope(
+              canPop:
+                  routeCanPopInternally ||
+                  (!notificationPanelVisible &&
+                      !paneProjectionOpen &&
+                      !requireDoubleBackToExit),
+              onPopInvokedWithResult: (bool didPop, dynamic result) {
+                if (didPop) return;
+                // 分类侧栏通过 LocalHistoryEntry 消费返回；这里保留兜底，覆盖
+                // 抽屉正在收尾动画等 LocalHistory 尚未同步的短暂状态。
+                if (CategoryDrawerHost.isOpen) {
+                  CategoryDrawerHost.close();
+                  return;
+                }
+                if (NotificationQuickPanel.isVisible) {
+                  NotificationQuickPanel.dismiss();
+                  return;
+                }
+                // 投影态:PaneProjectionBackScope 的 PopEntry 自己消费本次
+                // 返回(关投影层),根层不做双击退出。
+                if (PaneProjectionBackScope.hasActiveProjection.value) {
+                  return;
+                }
+                if (requireDoubleBackToExit) {
+                  if (_backExitGuard.shouldExit()) {
+                    SystemNavigator.pop();
+                  } else {
+                    ToastService.showInfo(S.current.toast_pressAgainToExit);
+                  }
+                }
+              },
+              child: AdaptiveScaffold(
+                selectedIndex: selectedBottomIndex,
+                onDestinationSelected: _onDestinationSelected,
+                destinations: destinations,
+                railBottomLeading: (user != null && !hasNotificationEntry)
+                    ? const NotificationIconButton()
+                    : null,
+                hideNavigationRail: hideNavigationRail,
+                // 投影态底栏隐藏:详情全宽盖在 tab 体内,底栏还留着会像
+                // "详情页悬在 tab 骨架上";合成路由时代盖住一切,投影态
+                // 用显式谓词达成同样观感。
+                hideBottomNavigation: paneProjectionOpen,
+                body: IndexedStack(
+                  index: safePageIndex,
+                  children: [
+                    for (int i = 0; i < pageEntries.length; i++)
+                      KeyedSubtree(
+                        key: ValueKey('nav-entry-${pageEntries[i].id}'),
+                        child: TickerMode(
+                          enabled: safePageIndex == i,
+                          child: ExcludeFocus(
+                            excluding: safePageIndex != i,
+                            child: KeyboardInsetIsolation(
+                              active: safePageIndex == i,
+                              child: pageEntries[i].pageBuilder!(
+                                context,
+                                safePageIndex == i,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-          ],
-        ),
-      ),
+            ),
+          ),
     );
 
     // 桌面端需要 Focus 以接收全局快捷键
@@ -1824,6 +1922,8 @@ class _MainPageState extends ConsumerState<MainPage>
       seen.add(id);
     }
 
-    return resolved;
+    return PlatformUtils.isDesktop
+        ? NavEntryRegistry.desktopEntries(resolved)
+        : resolved;
   }
 }

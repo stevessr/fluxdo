@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,12 +9,13 @@ import '../../l10n/s.dart';
 import '../../models/category.dart';
 import '../../models/search_filter.dart';
 import '../../providers/category_provider.dart';
-import '../../theme/theme_resolver.dart';
 import '../../utils/dialog_utils.dart';
 import '../../utils/font_awesome_helper.dart';
 import '../../utils/tag_icon_list.dart';
 import '../common/tag_selection_sheet.dart';
 import '../common/topic_badges.dart';
+import '../../theme/app_colors.dart';
+import '../../utils/color_utils.dart';
 
 /// 搜索高级过滤器面板
 /// 作为 BottomSheet 显示，支持分类、标签、状态、时间范围过滤
@@ -174,9 +176,11 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
     final tagsAsync = ref.watch(tagsProvider);
 
     return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.overlaySurface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: ShapeDecoration(
+        color: colorScheme.surface,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.vertical(top: context.shapes.radius(20)),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -187,9 +191,11 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
               margin: const EdgeInsets.only(top: 12),
               width: 32,
               height: 4,
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(2),
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: context.shapes.borderRadius(2),
+                ),
               ),
             ),
           ),
@@ -369,8 +375,8 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
                   },
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(12),
                     ),
                   ),
                   child: Text(
@@ -530,14 +536,18 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
             // "全部" 选项
             _CategoryFilterItem(
               name: S.current.common_all,
-              color: Colors.grey,
+              color: context.appColors.grey,
               isSelected: selectedId == null,
               onTap: () => _setCategory(null),
               isAll: true,
             ),
             ...isolatedParents.map((category) {
               final isSelected = selectedId == category.id;
-              final categoryColor = _parseColor(category.color);
+              final categoryColor = ColorUtils.category(
+                category.color,
+                Theme.of(context),
+                fallback: context.appColors.grey,
+              );
               return _CategoryFilterItem(
                 name: category.name,
                 color: categoryColor,
@@ -555,7 +565,11 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
         ...groupParents.map((parent) {
           final subcategories = subcategoryMap[parent.id]!;
           final isParentSelected = selectedId == parent.id;
-          final parentColor = _parseColor(parent.color);
+          final parentColor = ColorUtils.category(
+            parent.color,
+            Theme.of(context),
+            fallback: context.appColors.grey,
+          );
 
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
@@ -585,9 +599,11 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
                           top: 4,
                           bottom: 4,
                         ),
-                        decoration: BoxDecoration(
+                        decoration: ShapeDecoration(
                           color: parentColor.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(1),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: context.shapes.borderRadius(1),
+                          ),
                         ),
                       ),
                       // 子分类 Wrap
@@ -597,7 +613,11 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
                           runSpacing: 8,
                           children: subcategories.map((sub) {
                             final isSubSelected = selectedId == sub.id;
-                            final subColor = _parseColor(sub.color);
+                            final subColor = ColorUtils.category(
+                              sub.color,
+                              Theme.of(context),
+                              fallback: context.appColors.grey,
+                            );
                             return _CategoryFilterItem(
                               name: sub.name,
                               color: subColor,
@@ -635,22 +655,26 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
           color: Colors.transparent,
           child: InkWell(
             onTap: () => _toggleTag(tag),
-            borderRadius: BorderRadius.circular(8),
+            customBorder: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(8),
+            ),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: isSelected
                     ? colorScheme.primaryContainer
                     : colorScheme.surfaceContainerHighest.withValues(
                         alpha: 0.5,
                       ),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isSelected
-                      ? colorScheme.primary.withValues(alpha: 0.5)
-                      : Colors.transparent,
-                  width: 1,
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: context.shapes.borderRadius(8),
+                  side: BorderSide(
+                    color: isSelected
+                        ? colorScheme.primary.withValues(alpha: 0.5)
+                        : Colors.transparent,
+                    width: 1,
+                  ),
                 ),
               ),
               child: Row(
@@ -667,12 +691,15 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
                               ? Icon(
                                   Symbols.check_rounded,
                                   size: 14,
-                                  color: colorScheme.primary,
+                                  color: context.emphasis.selected,
                                 )
                               : FaIcon(
                                   tagInfo!.icon,
                                   size: 12,
-                                  color: tagInfo.color,
+                                  color: ColorUtils.themed(
+                                    tagInfo.color,
+                                    Theme.of(context),
+                                  ),
                                 ),
                         ),
                       ),
@@ -695,14 +722,6 @@ class _SearchFilterPanelState extends ConsumerState<SearchFilterPanel> {
         );
       }).toList(),
     );
-  }
-
-  Color _parseColor(String hex) {
-    try {
-      return Color(int.parse('FF$hex', radix: 16));
-    } catch (e) {
-      return Colors.grey;
-    }
   }
 }
 
@@ -729,20 +748,24 @@ class _FilterChip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: isSelected
                 ? colorScheme.primaryContainer
                 : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isSelected
-                  ? colorScheme.primary.withValues(alpha: 0.5)
-                  : Colors.transparent,
-              width: 1,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(8),
+              side: BorderSide(
+                color: isSelected
+                    ? colorScheme.primary.withValues(alpha: 0.5)
+                    : Colors.transparent,
+                width: 1,
+              ),
             ),
           ),
           child: Row(
@@ -762,7 +785,7 @@ class _FilterChip extends StatelessWidget {
                 label,
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: isSelected
-                      ? colorScheme.primary
+                      ? context.emphasis.selected
                       : colorScheme.onSurfaceVariant,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),
@@ -772,7 +795,7 @@ class _FilterChip extends StatelessWidget {
                 Icon(
                   Symbols.check_rounded,
                   size: 14,
-                  color: colorScheme.primary,
+                  color: context.emphasis.selected,
                 ),
               ],
             ],
@@ -818,7 +841,9 @@ class _CategoryFilterItem extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(6),
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: EdgeInsets.only(
@@ -827,14 +852,16 @@ class _CategoryFilterItem extends StatelessWidget {
             top: 6,
             bottom: 6,
           ),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: isSelected
                 ? color.withValues(alpha: 0.15)
                 : color.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: isSelected ? color : color.withValues(alpha: 0.2),
-              width: 1,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(6),
+              side: BorderSide(
+                color: isSelected ? color : color.withValues(alpha: 0.2),
+                width: 1,
+              ),
             ),
           ),
           child: Row(
@@ -941,14 +968,14 @@ class ActiveSearchFiltersBar extends StatelessWidget {
                       Icon(
                         Symbols.filter_list_rounded,
                         size: 14,
-                        color: colorScheme.primary,
+                        color: context.emphasis.accent,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         context.l10n.search_currentFilter,
                         style: TextStyle(
                           fontSize: 12,
-                          color: colorScheme.primary,
+                          color: context.emphasis.accent,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -1078,9 +1105,11 @@ class _RemovableChip extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -1,3 +1,5 @@
+import 'package:common_ui/common_ui.dart';
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,21 +9,26 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/site_customization.dart';
 import '../constants.dart';
+import '../modules/mini_apps/mini_app_navigation.dart';
 import '../pages/badge_page.dart';
 import '../pages/boards_page.dart';
-import '../pages/mini_apps_page.dart';
+import '../pages/chat/chat_message_page.dart';
 import '../pages/community_events_page.dart';
 import '../pages/group_page.dart';
+import '../pages/groups_page.dart';
 import '../pages/image_viewer_page.dart';
+import '../pages/mini_apps_page.dart';
 import '../pages/webview_page.dart';
 import '../providers/preferences_provider.dart';
-import '../providers/category_provider.dart';
 import '../providers/selected_topic_provider.dart';
 import '../services/discourse/discourse_service.dart';
+import '../services/toast_service.dart';
+import '../l10n/s.dart';
 import '../widgets/common/external_link_confirm_dialog.dart';
 import '../widgets/content/discourse_html_content/image_utils.dart';
 import '../widgets/layout/home_workspace_scope.dart';
 import 'discourse_url_parser.dart';
+import 'category_navigation.dart';
 import 'link_security.dart';
 import 'url_helper.dart';
 
@@ -29,6 +36,7 @@ const _browserChannel = MethodChannel('com.github.lingyan000.fluxdo/browser');
 
 /// 检查 URL 是否属于站点内部链接（主域名或子域名）
 bool isInternalUrl(Uri uri) {
+  if (uri.scheme != 'http' && uri.scheme != 'https') return false;
   final baseUri = Uri.tryParse(AppConstants.baseUrl);
   if (baseUri == null) return false;
 
@@ -44,13 +52,10 @@ bool isInternalUrl(Uri uri) {
 /// 检查 URL 是否属于站点内部链接（字符串版本，支持相对路径）
 bool isInternalUrlString(String url) {
   // `//host/path` 是协议相对绝对 URL，不应因为首字符是 `/` 就被当站内。
-  if (url.startsWith('//')) {
-    final uri = Uri.tryParse('https:$url');
-    return uri != null && isInternalUrl(uri);
-  }
-  if (url.startsWith('/')) return true;
   final uri = Uri.tryParse(url);
   if (uri == null) return false;
+  if (url.startsWith('/') && !uri.hasAuthority) return true;
+  if (url.startsWith('//')) return isInternalUrl(uri.replace(scheme: 'https'));
   return isInternalUrl(uri);
 }
 
@@ -72,14 +77,20 @@ bool _isImageLinkUrl(String url) {
 
 /// 打开外部链接
 ///
-/// 根据用户偏好决定使用内置浏览器还是外部浏览器
-/// 如果启用了链接安全检查，会根据链接风险等级显示确认对话框
-Future<void> launchExternalLink(BuildContext context, String url) async {
+/// 需要安全确认时，由用户选择本次打开方式；其余链接按用户偏好分流。
+Future<void> launchExternalLink(
+  BuildContext context,
+  String url, {
+  Future<ExternalLinkOpenChoice?> Function(String url, LinkRiskLevel risk)?
+  confirm,
+  Future<void> Function(String url)? showBlocked,
+}) async {
   if (url.isEmpty) return;
   final uri = Uri.tryParse(url);
   if (uri == null) return;
 
   // 链接安全检查
+  ExternalLinkOpenChoice? explicitChoice;
   final config = AppConstants.siteCustomization.linkSecurityConfig;
   if (config != null && config.enableExitConfirmation) {
     final riskLevel = LinkSecurity.checkUrl(url, config);
@@ -91,18 +102,16 @@ Future<void> launchExternalLink(BuildContext context, String url) async {
         break;
       case LinkRiskLevel.blocked:
         // 阻止链接，显示阻止提示
-        await showLinkBlockedDialog(context, url);
+        await (showBlocked?.call(url) ?? showLinkBlockedDialog(context, url));
         return;
       case LinkRiskLevel.normal:
       case LinkRiskLevel.risky:
       case LinkRiskLevel.dangerous:
         // 需要确认的链接，显示确认对话框
-        final confirmed = await showExternalLinkConfirmDialog(
-          context,
-          url,
-          riskLevel,
-        );
-        if (confirmed != true) return;
+        explicitChoice =
+            await (confirm?.call(url, riskLevel) ??
+                showExternalLinkConfirmDialog(context, url, riskLevel));
+        if (explicitChoice == null) return;
         break;
     }
   }
@@ -110,19 +119,32 @@ Future<void> launchExternalLink(BuildContext context, String url) async {
   // 安全确认对话框关闭时，原帖子/页面可能已经被滚动回收或导航销毁。
   if (!context.mounted) return;
 
-  final prefs = ProviderScope.containerOf(
-    context,
-    listen: false,
-  ).read(preferencesProvider);
-  final preferInApp = prefs.openExternalLinksInAppBrowser;
+  final preferInApp = switch (explicitChoice) {
+    ExternalLinkOpenChoice.inAppBrowser => true,
+    ExternalLinkOpenChoice.systemBrowser => false,
+    null => ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(preferencesProvider).openExternalLinksInAppBrowser,
+  };
 
   if (preferInApp && (uri.scheme == 'http' || uri.scheme == 'https')) {
     WebViewPage.open(context, url);
     return;
   }
 
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  // Android 的包可见性查询可能返回 false，但实际 ACTION_VIEW 仍能打开。
+  // 确认之后直接尝试启动；网页失败则交给内置浏览器，不能悄悄丢掉点击。
+  try {
+    if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+  } catch (_) {
+    // 无可用处理程序、平台插件异常均进入同一兜底。
+  }
+  if (!context.mounted) return;
+  if (uri.scheme == 'https' || uri.scheme == 'http') {
+    WebViewPage.open(context, url);
+  } else {
+    ToastService.showError(context.l10n.common_cannotOpenBrowser);
   }
 }
 
@@ -130,7 +152,11 @@ Future<void> launchExternalLink(BuildContext context, String url) async {
 ///
 /// 处理所有类型的链接：
 /// - 用户链接 /u/username → 打开用户页面
-/// - 群组链接 /g/name → 打开原生群组页面
+/// - 用户组链接 /g/name → 原生用户组页面；/g?filter=... → 用户组列表页
+/// - 分类链接 /c/slug/id → 首页分类视图或独立分类页面
+/// - 聊天链接 /chat/c/... → 原生聊天频道页
+/// - 看板链接 → 原生看板详情页
+/// - 站内应用目录 / 应用直链 → 原生应用页
 /// - 话题链接 /t/topic/123 → 调用 onInternalLinkTap 或用 WebView 打开
 /// - 徽章链接 /badges/:id/:slug → 原生徽章详情
 /// - /upcoming-events、/cakeday/... → 原生近期活动 / 生日 / 周年纪念日
@@ -147,6 +173,7 @@ Future<void> launchContentLink(
   void Function(String url)? onDownloadAttachment,
 }) async {
   if (url.isEmpty) return;
+  if (url.startsWith('//')) url = UrlHelper.resolveUrl(url);
   if (url.startsWith('upload://')) {
     url = await DiscourseService().resolveShortUrlForLink(url) ?? url;
     // 短链解析期间列表项可能已离开缓存范围并被销毁，不能再使用旧 context。
@@ -155,11 +182,15 @@ Future<void> launchContentLink(
 
   final internal = isInternalUrlString(url);
 
+  // 站内应用：先交给小程序导航统一处理（应用广场 / 应用直链）。
+  if (internal && await openMiniAppLink(context, url)) return;
+  if (!context.mounted) return;
+
   // Site-hosted mini apps run in their original web origin with the active
   // account's primed cookies; they are not HTML post fragments.
   if (internal && DiscourseUrlParser.isMiniAppsDirectory(url)) {
     await Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const MiniAppsPage()));
+        .push(InteractionPageRoute(builder: (_) => const MiniAppsPage()));
     return;
   }
   if (internal && DiscourseUrlParser.parseMiniApp(url) != null) {
@@ -171,7 +202,7 @@ Future<void> launchContentLink(
   final boardInfo = DiscourseUrlParser.parseBoard(url);
   if (boardInfo != null && internal) {
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => BoardDetailPage(
           boardId: boardInfo.boardId,
           initialCardId: boardInfo.cardId,
@@ -188,33 +219,53 @@ Future<void> launchContentLink(
     return;
   }
 
-  // 1.5 识别群组链接 /g/name，避免内部群组页落回 WebView。
-  final groupInfo = DiscourseUrlParser.parseGroup(url);
-  if (groupInfo != null && internal) {
+  // 1.5 用户组目录 /g?filter=... → 原生用户组列表页。
+  final directoryInfo = DiscourseUrlParser.parseGroupDirectory(url);
+  if (directoryInfo != null && internal) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => GroupPage(groupName: groupInfo.name)),
+      InteractionPageRoute(
+        builder: (_) => GroupsPage(
+          initialFilter: directoryInfo.filter,
+          initialType: directoryInfo.type,
+          initialOrder: directoryInfo.order,
+          initialAscending: directoryInfo.ascending,
+          username: directoryInfo.username,
+        ),
+      ),
     );
     return;
   }
 
-  // 首页平行视界中的站点首页、分类和标签链接直接替换左栏，不再打开
+  // 1.6 识别群组链接 /g/name，避免内部群组页落回 WebView。
+  final groupInfo = DiscourseUrlParser.parseGroup(url);
+  if (groupInfo != null && internal) {
+    Navigator.of(context).push(
+      InteractionPageRoute(
+        builder: (_) => GroupPage(
+          name: groupInfo.name,
+          initialSection: groupInfo.section,
+          initialActivityFilter: groupInfo.activityFilter,
+          initialCategoryId: groupInfo.categoryId,
+        ),
+      ),
+    );
+    return;
+  }
+
+  // 1.7 分类链接 /c/slug/id → 首页分类视图或独立分类页。
+  final categoryInfo = DiscourseUrlParser.parseCategory(url);
+  if (categoryInfo != null && internal) {
+    await openCategoryPage(context, categoryInfo.categoryId);
+    return;
+  }
+
+  // 首页平行视界中的站点首页和标签链接直接替换左栏，不再打开
   // WebView。正文链接与话题头部 Badge 使用同一套行为。
   final workspace = HomeWorkspaceScope.maybeOf(context);
   if (workspace != null && internal) {
     if (DiscourseUrlParser.isHomepage(url)) {
       workspace.onShowFeed();
       return;
-    }
-    final categoryInfo = DiscourseUrlParser.parseCategory(url);
-    if (categoryInfo != null) {
-      final container = ProviderScope.containerOf(context, listen: false);
-      final category = container
-          .read(categoryMapProvider)
-          .value?[categoryInfo.categoryId];
-      if (category != null) {
-        workspace.onShowCategory(category);
-        return;
-      }
     }
     final tag = DiscourseUrlParser.parseTag(url);
     if (tag != null && tag.isNotEmpty) {
@@ -223,7 +274,25 @@ Future<void> launchContentLink(
     }
   }
 
-  // 2. 解析话题链接
+  // 2. 聊天链接(/chat/c/...):进原生频道页,消息 id 作定位锚点。
+  //    必须在话题分支之前——thread 形态 /chat/c/-/:cid/t/:tid/:mid 里的
+  //    "/t/数字" 会被话题正则误命中抢走
+  final chatInfo = DiscourseUrlParser.parseChat(url);
+  if (chatInfo != null && internal) {
+    await Navigator.push(
+      context,
+      InteractionPageRoute(
+        builder: (_) => ChatMessagePage(
+          channelId: chatInfo.channelId,
+          channelTitle: context.l10n.chat_unnamed_channel,
+          targetMessageId: chatInfo.messageId,
+        ),
+      ),
+    );
+    return;
+  }
+
+  // 3. 解析话题链接
   final topicInfo = DiscourseUrlParser.parseTopic(url);
   if (topicInfo != null && internal) {
     if (onInternalLinkTap != null) {
@@ -240,12 +309,12 @@ Future<void> launchContentLink(
     return;
   }
 
-  // 3. 徽章链接走已有原生 BadgePage。
+  // 4. 徽章链接走已有原生 BadgePage。
   // 必须先通过 internal 校验，避免把外站伪造的 /badges/128/- 当站内页面。
   final badgeInfo = DiscourseUrlParser.parseBadge(url);
   if (badgeInfo != null && internal) {
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) =>
             BadgePage(badgeId: badgeInfo.badgeId, badgeSlug: badgeInfo.slug),
       ),
@@ -253,10 +322,10 @@ Future<void> launchContentLink(
     return;
   }
 
-  // 4. discourse-events / discourse-cakeday 原生站点页。
+  // 5. discourse-events / discourse-cakeday 原生站点页。
   if (internal && DiscourseUrlParser.isUpcomingEvents(url)) {
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) =>
             const CommunityEventsPage(view: CommunityEventsView.upcoming),
       ),
@@ -267,7 +336,7 @@ Future<void> launchContentLink(
   final cakedayInfo = DiscourseUrlParser.parseCakeday(url);
   if (cakedayInfo != null && internal) {
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => CommunityEventsPage(
           view: cakedayInfo.birthdays
               ? CommunityEventsView.birthdays
@@ -280,7 +349,7 @@ Future<void> launchContentLink(
     return;
   }
 
-  // 5. 图片直链(站点自己的域名/CDN/S3 CDN)→ 直接用内置查看器打开,
+  // 6. 图片直链(站点自己的域名/CDN/S3 CDN)→ 直接用内置查看器打开,
   //    与网页端一致(点图直接看大图,不当"外部链接"走离站确认弹窗)。
   //    只信任站点自己配置的域名——不是随便一个图片后缀的外链都放行。
   if (_isImageLinkUrl(url)) {

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +20,7 @@ import '../widgets/layout/master_detail_layout.dart';
 import '../widgets/layout/master_detail_pane_host.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 import 'create_topic_page.dart';
+import '../theme/app_colors.dart';
 
 /// 待审核内容列表 Provider
 final pendingPostsProvider = FutureProvider.autoDispose<List<PendingPost>>((
@@ -57,15 +59,15 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
+                    Icon(
                       Symbols.pending_actions_rounded,
                       size: 64,
-                      color: Colors.grey,
+                      color: context.appColors.grey,
                     ),
                     const SizedBox(height: 16),
                     Text(
                       context.l10n.review_empty,
-                      style: const TextStyle(color: Colors.grey),
+                      style: TextStyle(color: context.appColors.grey),
                     ),
                   ],
                 ),
@@ -123,7 +125,7 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
     }
     Navigator.push(
       context,
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => TopicDetailPage(
           topicId: pending.topicId!,
           initialTitle: pending.title,
@@ -242,7 +244,7 @@ class _PendingPostsPageState extends ConsumerState<PendingPostsPage> {
       // 待审的新主题:原文带回创建话题页
       await Navigator.push(
         context,
-        MaterialPageRoute(
+        InteractionPageRoute(
           builder: (_) => CreateTopicPage(
             initialCategoryId: pending.categoryId,
             initialTags: initialTags,
@@ -321,9 +323,11 @@ class _PendingPostCard extends StatelessWidget {
                       horizontal: 8,
                       vertical: 4,
                     ),
-                    decoration: BoxDecoration(
+                    decoration: ShapeDecoration(
                       color: theme.colorScheme.tertiaryContainer,
-                      borderRadius: BorderRadius.circular(6),
+                      shape: RoundedSuperellipseBorder(
+                        borderRadius: context.shapes.borderRadius(6),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,

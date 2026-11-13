@@ -133,8 +133,8 @@ Future<T?> showComposerActionMenu<T>({
     ),
     menuPadding: const EdgeInsets.symmetric(vertical: 8),
     color: theme.colorScheme.surfaceContainerLow,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(cornerRadius),
+    shape: RoundedSuperellipseBorder(
+      borderRadius: context.shapes.borderRadius(cornerRadius),
       side: BorderSide(
         color: theme.colorScheme.outlineVariant.withValues(alpha: .5),
         width: .6,

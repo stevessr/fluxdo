@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,7 @@ import '../utils/font_awesome_helper.dart';
 import '../widgets/badge/badge_ui_utils.dart';
 import 'badge_page.dart';
 import '../l10n/s.dart';
+import '../theme/app_colors.dart';
 
 /// 用户徽章页面。
 ///
@@ -123,12 +125,14 @@ class _MyBadgesPageState extends ConsumerState<MyBadgesPage> {
                             Icon(
                               Symbols.military_tech_rounded,
                               size: 64,
-                              color: Colors.grey[400],
+                              color: context.appColors.grey[400],
                             ),
                             const SizedBox(height: 16),
                             Text(
                               context.l10n.myBadges_empty,
-                              style: TextStyle(color: Colors.grey[600]),
+                              style: TextStyle(
+                                color: context.appColors.grey[600],
+                              ),
                             ),
                           ],
                         ),
@@ -178,8 +182,7 @@ class _MyBadgesPageState extends ConsumerState<MyBadgesPage> {
                 child: FaIcon(
                   FontAwesomeIcons.medal,
                   size: 200,
-                  color: Theme.of(context).colorScheme.primary
-                      .withValues(alpha: 0.05),
+                  color: context.emphasis.accent.withValues(alpha: 0.05),
                 ),
               ),
               Positioned(
@@ -256,9 +259,11 @@ class _MyBadgesPageState extends ConsumerState<MyBadgesPage> {
                     horizontal: 10,
                     vertical: 4,
                   ),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: sectionColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(20),
+                    ),
                   ),
                   child: Text(
                     '${badges.length}',
@@ -301,7 +306,7 @@ class _MyBadgesPageState extends ConsumerState<MyBadgesPage> {
         final username = _targetUsername;
         if (username != null && username.isNotEmpty) {
           Navigator.of(context).push(
-            MaterialPageRoute(
+            InteractionPageRoute(
               builder: (context) => BadgePage(
                 badgeId: badge.id,
                 badgeSlug: badge.slug,
@@ -311,7 +316,9 @@ class _MyBadgesPageState extends ConsumerState<MyBadgesPage> {
           );
         }
       },
-      borderRadius: BorderRadius.circular(20),
+      customBorder: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(20),
+      ),
       child: Container(
         decoration: BadgeUIUtils.getCardDecoration(context, type),
         child: Stack(
@@ -327,12 +334,14 @@ class _MyBadgesPageState extends ConsumerState<MyBadgesPage> {
                     horizontal: 8,
                     vertical: 4,
                   ),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: iconColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: iconColor.withValues(alpha: 0.3),
-                      width: 1,
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(12),
+                      side: BorderSide(
+                        color: iconColor.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
                     ),
                   ),
                   child: Text(
@@ -349,24 +358,27 @@ class _MyBadgesPageState extends ConsumerState<MyBadgesPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment:
+                    MainAxisAlignment.center, // Center the rigid block
                 children: [
                   // Large Central Icon
                   Container(
                     width: 48,
                     height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
+                    decoration: ShapeDecoration(
                       color: theme.colorScheme.surface,
-                      boxShadow: [
+                      shadows: [
                         BoxShadow(
                           color: iconColor.withValues(alpha: 0.2),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
                       ],
+                      shape: context.shapes.circle(),
                     ),
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(
+                      8,
+                    ), // Padding to prevent image touching edges
                     child: Center(
                       child:
                           badge.imageUrl != null && badge.imageUrl!.isNotEmpty

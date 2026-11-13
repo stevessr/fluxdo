@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -30,21 +31,23 @@ class UpdateDialog extends StatelessWidget {
     final maxContentHeight = size.height * 0.5;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedSuperellipseBorder(borderRadius: context.shapes.borderRadius(24)),
       elevation: 0,
       backgroundColor: Colors.transparent,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 380),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
+          shadows: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 25,
               offset: const Offset(0, 10),
             ),
           ],
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(24),
+          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -56,7 +59,7 @@ class UpdateDialog extends StatelessWidget {
               child: Icon(
                 Symbols.rocket_launch_rounded,
                 size: 200,
-                color: colorScheme.primary.withValues(alpha: 0.05),
+                color: context.emphasis.accent.withValues(alpha: 0.05),
               ),
             ),
 
@@ -71,9 +74,11 @@ class UpdateDialog extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
+                        decoration: ShapeDecoration(
                           color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(12),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: context.shapes.borderRadius(12),
+                          ),
                         ),
                         child: Icon(
                           Symbols.auto_awesome_rounded,
@@ -171,8 +176,8 @@ class UpdateDialog extends StatelessWidget {
                         onPressed: onUpdate,
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: context.shapes.borderRadius(12),
                           ),
                         ),
                         child: Text(
@@ -253,11 +258,13 @@ class UpdateDialog extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: isNew
             ? colorScheme.primary.withValues(alpha: 0.1)
             : colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
       ),
       child: Text(
         'v$version',

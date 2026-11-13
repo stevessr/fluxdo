@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 
 import '../../../l10n/s.dart';
@@ -44,7 +45,7 @@ Future<double?> showPlaybackSpeedMenu(
       ? MediaOverlayStyle.foreground
       : theme.colorScheme.onSurface;
   final Color checkColor = darkOverlay
-      ? MediaOverlayStyle.accent
+      ? MediaOverlayStyle.accent(context)
       : theme.colorScheme.primary;
 
   return showMenu<double>(
@@ -53,8 +54,8 @@ Future<double?> showPlaybackSpeedMenu(
     color: menuColor,
     elevation: darkOverlay ? 12 : null,
     shape: darkOverlay
-        ? RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+        ? RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(12),
             side: const BorderSide(color: Color(0x1FFFFFFF)),
           )
         : null,
@@ -78,7 +79,7 @@ Future<double?> showPlaybackSpeedMenu(
                     : formatPlaybackSpeed(speed),
                 style: TextStyle(
                   color: speed == current && darkOverlay
-                      ? MediaOverlayStyle.accent
+                      ? MediaOverlayStyle.accent(context)
                       : itemColor,
                   fontSize: 14,
                   fontWeight: speed == current

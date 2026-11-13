@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../../l10n/s.dart';
@@ -144,7 +145,9 @@ class _LinkInsertDialogState extends State<LinkInsertDialog> {
                 decoration: InputDecoration(
                   labelText: 'URL / 搜索站内话题',
                   hintText: 'https://… 或输入关键词搜话题',
-                  border: const OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                    borderRadius: context.shapes.borderRadius(4),
+                  ),
                   suffixIcon: _searching
                       ? const Padding(
                           padding: EdgeInsets.all(12),
@@ -172,11 +175,13 @@ class _LinkInsertDialogState extends State<LinkInsertDialog> {
                 Container(
                   margin: const EdgeInsets.only(top: 6),
                   constraints: const BoxConstraints(maxHeight: 210),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: scheme.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: scheme.outlineVariant.withValues(alpha: 0.5),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(8),
+                      side: BorderSide(
+                        color: scheme.outlineVariant.withValues(alpha: 0.5),
+                      ),
                     ),
                   ),
                   child: ListView.builder(
@@ -223,7 +228,9 @@ class _LinkInsertDialogState extends State<LinkInsertDialog> {
                 decoration: InputDecoration(
                   labelText: S.current.link_textLabel,
                   hintText: '可空,默认用 URL',
-                  border: const OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                    borderRadius: context.shapes.borderRadius(4),
+                  ),
                 ),
                 textInputAction: TextInputAction.done,
                 onFieldSubmitted: (_) => _submit(),

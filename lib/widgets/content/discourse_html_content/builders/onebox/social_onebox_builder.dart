@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:app_icons/app_icons.dart';
@@ -106,11 +107,13 @@ class SocialOneboxBuilder {
               Container(
                 width: 24,
                 height: 24,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: theme.brightness == Brightness.dark
                       ? Colors.white
                       : Colors.black,
-                  borderRadius: BorderRadius.circular(12),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(12),
+                  ),
                 ),
                 child: Center(
                   child: Text(
@@ -140,8 +143,8 @@ class SocialOneboxBuilder {
           // 图片预览
           if (images.isNotEmpty) ...[
             const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+            ClipRSuperellipse(
+              borderRadius: context.shapes.borderRadius(8),
               child: OneboxAvatar(
                 imageUrl: images.first,
                 size: 150,
@@ -250,9 +253,11 @@ class SocialOneboxBuilder {
               Container(
                 width: 24,
                 height: 24,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: const Color(0xFFFF4500),
-                  borderRadius: BorderRadius.circular(12),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(12),
+                  ),
                 ),
                 child: const FaIcon(
                   FontAwesomeIcons.redditAlien,
@@ -303,8 +308,8 @@ class SocialOneboxBuilder {
                   !thumbnailUrl.contains('self') &&
                   !thumbnailUrl.contains('default')) ...[
                 const SizedBox(width: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
+                ClipRSuperellipse(
+                  borderRadius: context.shapes.borderRadius(6),
                   child: OneboxAvatar(
                     imageUrl: thumbnailUrl,
                     size: 70,
@@ -394,7 +399,7 @@ class SocialOneboxBuilder {
               Container(
                 width: 32,
                 height: 32,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   gradient: const LinearGradient(
                     colors: [
                       Color(0xFF833AB4),
@@ -404,7 +409,9 @@ class SocialOneboxBuilder {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(8),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(8),
+                  ),
                 ),
                 child: const Icon(
                   Symbols.camera_alt_rounded,
@@ -426,8 +433,8 @@ class SocialOneboxBuilder {
           // 图片
           if (imageUrl.isNotEmpty) ...[
             const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+            ClipRSuperellipse(
+              borderRadius: context.shapes.borderRadius(8),
               child: AspectRatio(
                 aspectRatio: 1,
                 child: OneboxAvatar(

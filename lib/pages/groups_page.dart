@@ -1,19 +1,34 @@
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/group.dart';
+import '../models/user_group.dart' show GroupDirectoryOrder;
 import '../providers/discourse_providers.dart';
 import '../widgets/common/group_leave_confirmation_dialog.dart';
 import 'group_page.dart';
 
 /// Discourse 原生群组目录（网页 `/g`，API `/groups.json`）。
 class GroupsPage extends ConsumerStatefulWidget {
-  const GroupsPage({super.key, this.isActive = true});
+  const GroupsPage({
+    super.key,
+    this.isActive = true,
+    this.initialFilter = '',
+    this.initialType,
+    this.initialOrder,
+    this.initialAscending = true,
+    this.username,
+  });
 
   final bool isActive;
+  final String initialFilter;
+  final String? initialType;
+  final GroupDirectoryOrder? initialOrder;
+  final bool initialAscending;
+  final String? username;
 
   @override
   ConsumerState<GroupsPage> createState() => _GroupsPageState();
@@ -37,6 +52,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   @override
   void initState() {
     super.initState();
+    _filter = widget.initialFilter;
+    _filterController.text = _filter;
     if (widget.isActive) scheduleMicrotask(() => _load(reset: true));
   }
 
@@ -76,6 +93,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
           .fetchGroups(
             page: page,
             filter: requestedFilter.isEmpty ? null : requestedFilter,
+            type: widget.initialType,
+            order: widget.initialOrder?.apiValue,
+            asc: widget.initialAscending,
+            username: widget.username,
           );
       if (!mounted ||
           requestedFilter != _filter ||
@@ -139,7 +160,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   Future<void> _openGroup(DiscourseGroup group) async {
     await Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => GroupPage(groupName: group.name)));
+    ).push(
+      InteractionPageRoute(builder: (_) => GroupPage(groupName: group.name)),
+    );
     if (mounted) _load(reset: true);
   }
 

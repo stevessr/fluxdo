@@ -32,7 +32,7 @@ void main() {
             recipe: recipe,
             child: const SizedBox(width: 200, height: 48),
           )
-        : ClipRRect(
+        : ClipRSuperellipse(
             key: surfaceKey,
             borderRadius: BorderRadius.circular(24),
             child: BackdropFilter(
@@ -247,8 +247,6 @@ void main() {
       // 固定诊断配方，使几何回归不随产品视觉配方调校而改变基线。
       blurSigmaPx: 9.2,
       tintAlpha: 0,
-      tintLightGray: base.tintLightGray,
-      tintDarkGray: base.tintDarkGray,
       saturation: 1,
       brightness: 0,
       contrast: 1,

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -105,11 +106,13 @@ class TechOneboxBuilder {
                         horizontal: 6,
                         vertical: 2,
                       ),
-                      decoration: BoxDecoration(
+                      decoration: ShapeDecoration(
                         color: isStackOverflow
                             ? const Color(0xFFf48024)
                             : const Color(0xFF0077cc),
-                        borderRadius: BorderRadius.circular(4),
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: context.shapes.borderRadius(4),
+                        ),
                       ),
                       child: Text(
                         isStackOverflow ? 'Stack Overflow' : 'Stack Exchange',
@@ -160,9 +163,11 @@ class TechOneboxBuilder {
                           horizontal: 6,
                           vertical: 2,
                         ),
-                        decoration: BoxDecoration(
+                        decoration: ShapeDecoration(
                           color: const Color(0xFFe1ecf4),
-                          borderRadius: BorderRadius.circular(4),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: context.shapes.borderRadius(4),
+                          ),
                         ),
                         child: Text(
                           tag,
@@ -250,9 +255,11 @@ class TechOneboxBuilder {
               Container(
                 width: 20,
                 height: 20,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: const Color(0xFFff6600),
-                  borderRadius: BorderRadius.circular(2),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(2),
+                  ),
                 ),
                 child: const Center(
                   child: Text(
@@ -370,24 +377,30 @@ class TechOneboxBuilder {
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+      decoration: ShapeDecoration(
         color: bgColor,
-        border: Border.all(color: borderColor),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+          side: BorderSide(color: borderColor),
+        ),
       ),
       child: InkWell(
         onTap: () => _launchUrl(context, url),
-        borderRadius: BorderRadius.circular(8),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // 头部
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: const Color(0xFF02589D),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(7),
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: BorderRadius.vertical(
+                    top: context.shapes.radius(7),
+                  ),
                 ),
               ),
               child: Row(
@@ -414,9 +427,11 @@ class TechOneboxBuilder {
                         horizontal: 6,
                         vertical: 2,
                       ),
-                      decoration: BoxDecoration(
+                      decoration: ShapeDecoration(
                         color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: context.shapes.borderRadius(4),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -446,9 +461,11 @@ class TechOneboxBuilder {
                         horizontal: 6,
                         vertical: 2,
                       ),
-                      decoration: BoxDecoration(
+                      decoration: ShapeDecoration(
                         color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: context.shapes.borderRadius(4),
+                        ),
                       ),
                       child: Text(
                         language.toUpperCase(),
@@ -518,12 +535,14 @@ class _StatBox extends StatelessWidget {
     return Container(
       width: 48,
       padding: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(6),
-        border: isHighlighted
-            ? null
-            : Border.all(color: theme.colorScheme.outlineVariant),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(6),
+          side: isHighlighted
+              ? BorderSide.none
+              : BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
       ),
       child: Column(
         children: [

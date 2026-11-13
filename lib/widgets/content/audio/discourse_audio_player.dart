@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -119,9 +120,13 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
           constraints: const BoxConstraints(maxWidth: 240),
           child: Material(
             color: scheme.primaryContainer,
-            borderRadius: BorderRadius.circular(22),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(22),
+            ),
             child: InkWell(
-              borderRadius: BorderRadius.circular(22),
+              customBorder: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(22),
+              ),
               onTap: !_ready
                   ? null
                   : () => _player.playing ? _player.pause() : _player.play(),
@@ -208,10 +213,12 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: scheme.outlineVariant, width: 1),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(8),
+            side: BorderSide(color: scheme.outlineVariant, width: 1),
+          ),
         ),
         child: _error != null
             ? Row(
@@ -244,7 +251,7 @@ class _DiscourseAudioPlayerState extends State<DiscourseAudioPlayer> {
                               ? Icons.pause_rounded
                               : Icons.play_arrow_rounded,
                         ),
-                        color: scheme.primary,
+                        color: context.emphasis.accent,
                         onPressed: !_ready
                             ? null
                             : () => playing ? _player.pause() : _player.play(),

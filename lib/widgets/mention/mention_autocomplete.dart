@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -358,16 +359,18 @@ class _MentionAutocompleteState extends State<MentionAutocomplete> {
           child: TapRegion(
             groupId: EditableText,
             child: Container(
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: theme.colorScheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
+                shadows: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.15),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ],
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: context.shapes.borderRadius(8),
+                ),
               ),
               child: Material(
                 color: Colors.transparent,
@@ -409,8 +412,8 @@ class _MentionAutocompleteState extends State<MentionAutocomplete> {
           )
         else if (_results.isNotEmpty)
           Flexible(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+            child: ClipRSuperellipse(
+              borderRadius: context.shapes.borderRadius(8),
               child: ListView.builder(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
@@ -547,9 +550,11 @@ class _MentionItemTile extends StatelessWidget {
   Widget _buildGroupBadge(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: UiShapes.current.borderRadius(4),
+        ),
       ),
       child: Text(
         S.current.mention_group,

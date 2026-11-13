@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -205,7 +206,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
             return ListTile(
               leading: Icon(
                 Symbols.tab_rounded,
-                color: Theme.of(context).colorScheme.primary,
+                color: context.emphasis.accent,
               ),
               title: Text(l.reading_bookmarksOpenMode),
               subtitle: Text(switch (currentMode) {
@@ -383,7 +384,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
               trailing: const Icon(Symbols.chevron_right_rounded),
               onTap: enabled
                   ? () => Navigator.of(context).push(
-                      MaterialPageRoute(
+                      InteractionPageRoute(
                         builder: (_) => const ProgressGestureMenuSettingsPage(),
                       ),
                     )
@@ -415,7 +416,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
             return ListTile(
               leading: Icon(
                 Symbols.linear_scale_rounded,
-                color: Theme.of(context).colorScheme.primary,
+                color: context.emphasis.accent,
               ),
               title: Text(l.nested_lineStyle),
               subtitle: Text(switch (currentStyle) {
@@ -445,7 +446,7 @@ void _showLineStylePicker(
     (NestedLineStyle.straight, l10n.nested_lineStyleStraight),
   ];
 
-  showDialog<NestedLineStyle>(
+  showInteractionDialog<NestedLineStyle>(
     context: context,
     builder: (context) => SimpleDialog(
       title: Text(l10n.nested_lineStyle),
@@ -492,7 +493,7 @@ void _showBookmarksOpenModePicker(
     ),
   ];
 
-  showDialog<BookmarksOpenMode>(
+  showInteractionDialog<BookmarksOpenMode>(
     context: context,
     builder: (context) => SimpleDialog(
       title: Text(l10n.reading_bookmarksOpenMode),
@@ -532,7 +533,7 @@ void _showGestureActionPicker(
   void Function(ProgressGestureAction) onPicked,
 ) {
   final l10n = context.l10n;
-  showDialog<ProgressGestureAction>(
+  showInteractionDialog<ProgressGestureAction>(
     context: context,
     builder: (dialogContext) {
       final screen = MediaQuery.of(dialogContext).size;
@@ -577,7 +578,9 @@ void _showGestureActionPicker(
                     final theme = Theme.of(context);
                     return InkWell(
                       onTap: () => Navigator.pop(dialogContext, action),
-                      borderRadius: BorderRadius.circular(8),
+                      customBorder: RoundedSuperellipseBorder(
+                        borderRadius: context.shapes.borderRadius(8),
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,

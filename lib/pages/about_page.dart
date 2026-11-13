@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:jovial_svg/jovial_svg.dart';
@@ -17,6 +18,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 import '../widgets/update_dialog.dart';
 import 'app_logs_page.dart';
 import 'perf_diagnostics_page.dart';
+import '../theme/app_colors.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -153,15 +155,15 @@ class _AboutPageState extends State<AboutPage> {
       if (updateInfo.hasUpdate) {
         showAppDialog(
           context: context,
-          builder: (context) => UpdateDialog(
+          builder: (dialogContext) => UpdateDialog(
             updateInfo: updateInfo,
             onUpdate: () {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               UpdateCheckerHelper.handleUpdate(context, updateInfo);
             },
-            onCancel: () => Navigator.of(context).pop(),
+            onCancel: () => Navigator.of(dialogContext).pop(),
             onOpenReleasePage: () {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               _openInBrowser(updateInfo.releaseUrl);
             },
           ),
@@ -185,11 +187,7 @@ class _AboutPageState extends State<AboutPage> {
     showAppDialog(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(
-          Symbols.check_circle_rounded,
-          size: 48,
-          color: Colors.green,
-        ),
+        icon: Icon(Symbols.check_circle_rounded, size: 48, color: context.appColors.green),
         title: Text(context.l10n.about_latestVersion),
         content: Text(context.l10n.about_noUpdateContent(currentVersion)),
         actions: [
@@ -206,7 +204,7 @@ class _AboutPageState extends State<AboutPage> {
     showAppDialog(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Symbols.error_rounded, size: 48, color: Colors.red),
+        icon: Icon(Symbols.error_rounded, size: 48, color: context.appColors.red),
         title: Text(context.l10n.about_checkUpdateFailed),
         content: Text(context.l10n.about_checkUpdateError(error)),
         actions: [
@@ -340,7 +338,7 @@ class _AboutPageState extends State<AboutPage> {
                   title: context.l10n.about_appLogs,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const AppLogsPage()),
+                    InteractionPageRoute(builder: (_) => const AppLogsPage()),
                   ),
                 ),
                 // 性能诊断(开发者向工具,文案暂不接入 l10n)
@@ -350,7 +348,7 @@ class _AboutPageState extends State<AboutPage> {
                   title: '性能诊断',
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(
+                    InteractionPageRoute(
                       builder: (_) => const PerfDiagnosticsPage(),
                     ),
                   ),
@@ -411,11 +409,7 @@ class _AboutPageState extends State<AboutPage> {
       ),
       title: Text(title),
       subtitle: subtitle != null ? Text(subtitle) : null,
-      trailing: const Icon(
-        Symbols.chevron_right_rounded,
-        size: 20,
-        color: Colors.grey,
-      ),
+      trailing: Icon(Symbols.chevron_right_rounded, size: 20, color: context.appColors.grey),
       onTap: onTap,
     );
   }

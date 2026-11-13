@@ -186,7 +186,7 @@ class _MediaProgressBarState extends State<MediaProgressBar>
   Widget _timeBubble(String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: MediaOverlayStyle.pill(radius: 6),
+      decoration: MediaOverlayStyle.pill(context, radius: 6),
       child: Text(
         text,
         style: const TextStyle(
@@ -409,8 +409,8 @@ class _ProgressPainter extends CustomPainter {
     final thumbW = 4.0 + 1.0 * emphasis;
     final thumbH = 16.0 + 6.0 * emphasis;
     final fill = Paint()..color = _playedColor;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
+    canvas.drawRSuperellipse(
+      RSuperellipse.fromRectAndRadius(
         Rect.fromCenter(
           center: Offset(playedX, centerY),
           width: thumbW,
@@ -429,8 +429,8 @@ class _ProgressPainter extends CustomPainter {
     final radius = Radius.circular(trackHeight / 2);
     final paint = Paint();
 
-    RRect trackRect(double startFraction, double endFraction) =>
-        RRect.fromLTRBR(
+    RSuperellipse trackRect(double startFraction, double endFraction) =>
+        RSuperellipse.fromLTRBR(
           size.width * startFraction,
           centerY - trackHeight / 2,
           size.width * endFraction,
@@ -440,7 +440,7 @@ class _ProgressPainter extends CustomPainter {
 
     // 轨道
     paint.color = _trackColor;
-    canvas.drawRRect(trackRect(0, 1), paint);
+    canvas.drawRSuperellipse(trackRect(0, 1), paint);
 
     // 缓冲段(可能多段)
     final totalMs = duration.inMilliseconds;
@@ -450,14 +450,14 @@ class _ProgressPainter extends CustomPainter {
         final start = (range.start.inMilliseconds / totalMs).clamp(0.0, 1.0);
         final end = (range.end.inMilliseconds / totalMs).clamp(0.0, 1.0);
         if (end > start) {
-          canvas.drawRRect(trackRect(start, end), paint);
+          canvas.drawRSuperellipse(trackRect(start, end), paint);
         }
       }
     }
 
     // 已播
     paint.color = _playedColor;
-    canvas.drawRRect(trackRect(0, played), paint);
+    canvas.drawRSuperellipse(trackRect(0, played), paint);
 
     // 把手:柔光晕(强调态渐显)+ 实心圆
     final thumbCenter = Offset(size.width * played, centerY);

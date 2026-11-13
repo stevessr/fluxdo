@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:common_ui/common_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
 
@@ -10,6 +11,7 @@ import '../../models/topic_card_style.dart';
 import '../../utils/color_utils.dart';
 import '../../utils/number_utils.dart';
 import '../../utils/time_utils.dart';
+import '../../theme/app_colors.dart';
 
 /// 话题自绘卡的排版产物:一张卡全部文本的 [ui.Paragraph] 成品 + 几何。
 ///
@@ -63,7 +65,7 @@ class TopicCardLayout {
 
   /// 通用装饰通道:圆角填充(徽章底/楼层 chip 底)与绝对定位小段落
   /// (徽章数字/AI 图标),渲染层顺序遍历直画
-  final List<(RRect, Color)> extraFills = [];
+  final List<(RSuperellipse, Color)> extraFills = [];
   final List<(Offset, ui.Paragraph)> extraTexts = [];
 
   // ── 几何 ────────────────────────────────────────────────────
@@ -214,7 +216,9 @@ class TopicCardLayout {
       if (topic.hasAcceptedAnswer)
         (
           Symbols.check_box_rounded,
-          isFullyRead ? Colors.green.withValues(alpha: 0.5) : Colors.green,
+          isFullyRead
+              ? theme.appColors.green.withValues(alpha: 0.5)
+              : theme.appColors.green,
         )
       else if (topic.canHaveAnswer)
         (Symbols.check_box_outline_blank_rounded, scheme.outline),
@@ -774,7 +778,7 @@ class TopicCardLayout {
         b.pop();
         first = false;
         var dot = ColorUtils.readableOn(
-          _parseCategoryColor(effCategory.color),
+          ColorUtils.category(effCategory.color, theme),
           theme.brightness,
         );
         categoryDotColor = dot.withValues(alpha: dot.a * dimF);
@@ -874,9 +878,9 @@ class TopicCardLayout {
           final h = p.height + 4;
           chipX -= w;
           extraFills.add((
-            RRect.fromRectAndRadius(
+            RSuperellipse.fromRectAndRadius(
               Rect.fromLTWH(chipX, y + 1, w, h),
-              const Radius.circular(10),
+              UiShapes.current.radius(10),
             ),
             scheme.surfaceContainerHighest,
           ));
@@ -1039,7 +1043,7 @@ class TopicCardLayout {
       final h = badge.height + 4;
       final r = Rect.fromLTWH(rightX - w, top, w, h);
       extraFills.add((
-        RRect.fromRectAndRadius(r, const Radius.circular(10)),
+        RSuperellipse.fromRectAndRadius(r, UiShapes.current.radius(10)),
         scheme.primary,
       ));
       extraTexts.add((
@@ -1051,7 +1055,7 @@ class TopicCardLayout {
     if (unseen) {
       final r = Rect.fromLTWH(rightX - 8, top, 8, 8);
       extraFills.add((
-        RRect.fromRectAndRadius(r, const Radius.circular(4)),
+        RSuperellipse.fromRectAndRadius(r, UiShapes.current.radius(4)),
         scheme.primary,
       ));
       return r.left;
@@ -1146,12 +1150,6 @@ class TopicCardLayout {
     if (ratio > 1.0) return const Color(0xFFCF7721);
     if (ratio > 0.5) return const Color(0xFF9B764F);
     return null;
-  }
-
-  static Color _parseCategoryColor(String hex) {
-    final clean = hex.replaceAll('#', '');
-    if (clean.length == 6) return Color(int.parse('0xFF$clean'));
-    return Colors.grey;
   }
 }
 

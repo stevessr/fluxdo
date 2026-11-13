@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -162,9 +163,11 @@ class _PostHeaderSectionState extends ConsumerState<PostHeaderSection> {
   ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
       ),
       child: Text(
         text,

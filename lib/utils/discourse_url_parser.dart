@@ -1,3 +1,6 @@
+import '../models/user_group.dart'
+    show GroupSection, GroupActivityFilter, GroupDirectoryOrder;
+
 /// 话题链接解析结果
 class TopicLinkInfo {
   final int topicId;
@@ -23,13 +26,6 @@ class UserLinkInfo {
   const UserLinkInfo({required this.username});
 }
 
-/// 群组链接解析结果（/g/:name）。
-class GroupLinkInfo {
-  final String name;
-
-  const GroupLinkInfo({required this.name});
-}
-
 /// 徽章链接解析结果：/badges/:id/:slug
 class BadgeLinkInfo {
   final int badgeId;
@@ -52,6 +48,37 @@ class CategoryLinkInfo {
   const CategoryLinkInfo({required this.categoryId});
 
   final int categoryId;
+}
+
+/// 用户组目录链接及其筛选条件。
+class GroupDirectoryLinkInfo {
+  const GroupDirectoryLinkInfo({
+    this.filter = '',
+    this.type,
+    this.order,
+    this.ascending = true,
+    this.username,
+  });
+  final String filter;
+  final String? type;
+  final GroupDirectoryOrder? order;
+  final bool ascending;
+  final String? username;
+}
+
+/// 用户组页面及其活动筛选链接。
+class GroupLinkInfo {
+  const GroupLinkInfo({
+    required this.name,
+    this.section = GroupSection.members,
+    this.activityFilter = GroupActivityFilter.posts,
+    this.categoryId,
+  });
+
+  final String name;
+  final GroupSection section;
+  final GroupActivityFilter activityFilter;
+  final int? categoryId;
 }
 
 /// 聊天链接解析结果(/chat/c/:slug/:channelId[/t/:threadId][/:messageId])
@@ -114,12 +141,6 @@ class DiscourseUrlParser {
   /// 用户链接格式：/u/username
   static final _userRegex = RegExp(r'/u/([^/?#]+)', caseSensitive: false);
 
-  /// 群组链接格式：/g/group-name、/g/group-name/members 等。
-  static final _groupRegex = RegExp(
-    r'/g/([^/?#]+)(?:[/?#]|$)',
-    caseSensitive: false,
-  );
-
   /// 徽章链接格式：/badges/128/-、/badges/128/devotee、/badges/128
   static final _badgeRegex = RegExp(
     r'/badges/(\d+)(?:/([^/?#]+))?(?:[/?#]|$)',
@@ -133,7 +154,7 @@ class DiscourseUrlParser {
   );
 
   static final _categoryRegex = RegExp(
-    r'/c/(?:[^/?#]+/)?(\d+)(?:[/?#]|$)',
+    r'^/c/(?:[^/]+/)*?(\d+)(?:/|$)',
     caseSensitive: false,
   );
 
@@ -213,14 +234,6 @@ class DiscourseUrlParser {
     return null;
   }
 
-  /// 解析群组链接，返回 [GroupLinkInfo] 或 null。
-  static GroupLinkInfo? parseGroup(String url) {
-    final match = _groupRegex.firstMatch(url);
-    final encoded = match?.group(1);
-    if (encoded == null || encoded.isEmpty) return null;
-    return GroupLinkInfo(name: Uri.decodeComponent(encoded));
-  }
-
   /// 解析徽章详情链接。slug 为 `-` 时按 Discourse 占位符处理为 null。
   static BadgeLinkInfo? parseBadge(String url) {
     final match = _badgeRegex.firstMatch(url);
@@ -259,9 +272,86 @@ class DiscourseUrlParser {
   }
 
   static CategoryLinkInfo? parseCategory(String url) {
-    final match = _categoryRegex.firstMatch(url);
+    final path = Uri.tryParse(url)?.path;
+    if (path == null) return null;
+    final match = _categoryRegex.firstMatch(path);
     final id = int.tryParse(match?.group(1) ?? '');
-    return id == null ? null : CategoryLinkInfo(categoryId: id);
+    return id == null || id <= 0 ? null : CategoryLinkInfo(categoryId: id);
+  }
+
+  static GroupDirectoryLinkInfo? parseGroupDirectory(String url) {
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri == null) return null;
+      final segments = uri.pathSegments.toList();
+      if (segments.isNotEmpty && segments.last.isEmpty) segments.removeLast();
+      if (segments.length != 1 ||
+          (segments.single != 'groups' && segments.single != 'g')) {
+        return null;
+      }
+      final query = uri.queryParameters;
+      return GroupDirectoryLinkInfo(
+        filter: query['filter'] ?? '',
+        type: query['type']?.isNotEmpty == true ? query['type'] : null,
+        order: GroupDirectoryOrder.values
+            .where((order) => order.apiValue == query['order'])
+            .firstOrNull,
+        ascending: query['asc'] == 'true',
+        username: query['username']?.isNotEmpty == true
+            ? query['username']
+            : null,
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static GroupLinkInfo? parseGroup(String url) {
+    try {
+      final uri = Uri.tryParse(url);
+      final segments = uri?.pathSegments.toList();
+      if (segments == null) return null;
+      if (segments.isNotEmpty && segments.last.isEmpty) segments.removeLast();
+      if (segments.length < 2 || segments.length > 4) return null;
+      if (segments.first != 'g' && segments.first != 'groups') return null;
+
+      final name = segments[1];
+      // 这些路径由 Discourse 的集合路由处理。
+      if (name.isEmpty ||
+          name.contains('/') ||
+          name == 'new' ||
+          name == 'search' ||
+          name == 'check-name' ||
+          name == 'by-id') {
+        return null;
+      }
+      final section = segments.length == 2
+          ? GroupSection.members
+          : GroupSection.values
+                .where((item) => item.name == segments[2])
+                .firstOrNull;
+      if (section == null) return null;
+      var activityFilter = GroupActivityFilter.posts;
+      if (segments.length == 4) {
+        if (section != GroupSection.activity) return null;
+        final filter = GroupActivityFilter.values
+            .where((item) => item.name == segments[3])
+            .firstOrNull;
+        if (filter == null) return null;
+        activityFilter = filter;
+      }
+      final categoryId = int.tryParse(
+        uri!.queryParameters['category_id'] ?? '',
+      );
+      return GroupLinkInfo(
+        name: name,
+        section: section,
+        activityFilter: activityFilter,
+        categoryId: categoryId != null && categoryId > 0 ? categoryId : null,
+      );
+    } on FormatException {
+      return null;
+    }
   }
 
   static String? parseTag(String url) {

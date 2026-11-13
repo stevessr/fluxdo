@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -107,22 +108,17 @@ class _SharedIssueButtonState extends ConsumerState<SharedIssueButton> {
       color: Colors.transparent,
       child: InkWell(
         onTap: (disabled || _isLoading) ? null : _handleTap,
-        borderRadius: BorderRadius.circular(24),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(24),
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: _userMarked
                 ? theme.colorScheme.primary
                 : theme.colorScheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: _userMarked
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.outlineVariant,
-              width: 1,
-            ),
-            boxShadow: _userMarked
+            shadows: _userMarked
                 ? [
                     BoxShadow(
                       color: theme.colorScheme.primary.withValues(alpha: 0.2),
@@ -131,6 +127,15 @@ class _SharedIssueButtonState extends ConsumerState<SharedIssueButton> {
                     ),
                   ]
                 : null,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(24),
+              side: BorderSide(
+                color: _userMarked
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outlineVariant,
+                width: 1,
+              ),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -176,11 +181,13 @@ class _SharedIssueButtonState extends ConsumerState<SharedIssueButton> {
                     horizontal: 6,
                     vertical: 2,
                   ),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: _userMarked
                         ? theme.colorScheme.onPrimary.withValues(alpha: 0.2)
                         : theme.colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(10),
+                    ),
                   ),
                   alignment: Alignment.center,
                   child: Text(

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -367,10 +368,12 @@ class _SvgSniffFallbackState extends State<SvgSniffFallback> {
         return Container(
           width: widget.width,
           height: widget.height,
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: Theme.of(context).colorScheme.surfaceContainerHighest
                 .withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(8),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(8),
+            ),
           ),
         );
     }

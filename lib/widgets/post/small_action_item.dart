@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:common_ui/common_ui.dart';
+
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -365,16 +367,16 @@ class SmallActionItem extends ConsumerWidget {
                       Container(
                         width: 32,
                         height: 32,
-                        decoration: BoxDecoration(
+                        decoration: ShapeDecoration(
                           color: theme.colorScheme.primaryContainer.withValues(
                             alpha: 0.3,
                           ),
-                          shape: BoxShape.circle,
+                          shape: context.shapes.circle(),
                         ),
                         child: Icon(
                           _icon,
                           size: 16,
-                          color: theme.colorScheme.primary,
+                          color: context.emphasis.accent,
                         ),
                       ),
                       const SizedBox(width: 12),

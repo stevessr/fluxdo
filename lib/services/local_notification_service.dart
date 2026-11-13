@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -122,7 +123,9 @@ class LocalNotificationService {
         openNotificationPage(context, page);
         return;
       }
-      navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => page));
+      navigatorKey.currentState?.push(
+        InteractionPageRoute(builder: (_) => page),
+      );
       return;
     }
 
@@ -151,7 +154,9 @@ class LocalNotificationService {
       openNotificationPage(context, page);
       return;
     }
-    navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => page));
+    navigatorKey.currentState?.push(
+      InteractionPageRoute(builder: (_) => page),
+    );
   }
 
   /// 请求通知权限

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -119,7 +120,7 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
   void _openHit(ChatGlobalSearchHit hit) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => ChatMessagePage(
           channelId: hit.channelId,
           channelTitle: hit.channelTitle,

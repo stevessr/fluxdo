@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -50,9 +51,11 @@ class PostRepliesList extends StatelessWidget {
                 Container(
                   width: 3,
                   height: 14,
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: theme.colorScheme.primary,
-                    borderRadius: BorderRadius.circular(1.5),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(1.5),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -71,14 +74,16 @@ class PostRepliesList extends StatelessWidget {
             final avatarUrl = reply.getAvatarUrl(size: 60);
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: theme.colorScheme.surfaceContainer.withValues(
                   alpha: 0.4,
                 ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.colorScheme.outlineVariant.withValues(
-                    alpha: 0.2,
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: context.shapes.borderRadius(12),
+                  side: BorderSide(
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.2,
+                    ),
                   ),
                 ),
               ),
@@ -86,7 +91,9 @@ class PostRepliesList extends StatelessWidget {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () => onJumpToPost?.call(reply.postNumber),
-                  borderRadius: BorderRadius.circular(12),
+                  customBorder: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(12),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
                     child: Row(

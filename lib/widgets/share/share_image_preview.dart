@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/foundation.dart';
@@ -286,15 +287,17 @@ class _ShareImagePreviewState extends ConsumerState<ShareImagePreview> {
       padding: const EdgeInsets.all(16),
       child: Center(
         child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
+          decoration: ShapeDecoration(
+            shadows: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 20,
                 offset: const Offset(0, 4),
               ),
             ],
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(12),
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           // 使用 Theme 包裹，基于当前主题但强制亮/暗模式
@@ -372,9 +375,11 @@ class _ShareImagePreviewState extends ConsumerState<ShareImagePreview> {
 
     return Container(
       height: screenHeight * 0.85,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
+        ),
       ),
       child: Column(
         children: [
@@ -383,9 +388,11 @@ class _ShareImagePreviewState extends ConsumerState<ShareImagePreview> {
             margin: const EdgeInsets.symmetric(vertical: 12),
             width: 40,
             height: 4,
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(2),
+              ),
             ),
           ),
 

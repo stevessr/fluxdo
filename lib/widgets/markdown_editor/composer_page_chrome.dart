@@ -70,15 +70,15 @@ class ComposerTopicKindPicker extends StatelessWidget {
       position: PopupMenuPosition.under,
       offset: const Offset(0, 6),
       padding: EdgeInsets.zero,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: context.shapes.borderRadius(8),
       tooltip: '',
       constraints: const BoxConstraints(minWidth: 180, maxWidth: 220),
       color: colors.surfaceContainer,
       elevation: 3,
       shadowColor: colors.shadow.withValues(alpha: .24),
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+      shape: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(12),
         side: BorderSide(
           color: colors.outlineVariant.withValues(alpha: .45),
           width: .6,
@@ -105,7 +105,7 @@ class ComposerTopicKindPicker extends StatelessWidget {
                   ),
                 ),
                 if (value == question)
-                  Icon(Symbols.check_rounded, size: 18, color: colors.primary),
+                  Icon(Symbols.check_rounded, size: 18, color: context.emphasis.selected),
               ],
             ),
           ),

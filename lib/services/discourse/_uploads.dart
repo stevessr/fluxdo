@@ -269,6 +269,7 @@ mixin _UploadsMixin on _DiscourseServiceBase {
   /// 请求体),契约见 test/services/network/recovery/non_replayable_body_test.dart。
   Future<UploadResult> uploadFile(
     String filePath, {
+    String uploadType = 'composer',
     String? filenameOverride,
     DioMediaType? contentTypeOverride,
     bool preserveImageFormat = false,
@@ -297,16 +298,17 @@ mixin _UploadsMixin on _DiscourseServiceBase {
           data = await S3MultipartUpload(_dio, trace: uploadTrace).upload(
             File(filePath),
             fileName,
+            uploadType: uploadType,
             cancelToken: cancelToken,
             onProgress: onProgress,
           );
         } else {
           final formData = FormData.fromMap({
-            // Discourse's UploadCreator may convert large PNGs to JPEG for normal
-            // composer uploads. topic_og_image is an upstream-supported upload type
-            // that explicitly skips that format conversion; use it only when the
-            // caller must preserve alpha/format byte-for-byte.
-            'upload_type': preserveImageFormat ? 'topic_og_image' : 'composer',
+            // topic_og_image 会跳过普通 composer 上传的格式转换，需保留原始
+            // 图片格式/透明度时使用；其它上传类型遵从上游调用方指定值。
+            'upload_type': preserveImageFormat
+                ? 'topic_og_image'
+                : uploadType,
             'synchronous': true,
             'file': await MultipartFile.fromFile(
               filePath,

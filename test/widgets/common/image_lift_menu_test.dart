@@ -66,7 +66,7 @@ Widget _host({required VoidCallback onOpen}) {
 }
 
 final Finder _previewFinder = find.descendant(
-  of: find.byType(ClipRRect),
+  of: find.byType(ClipRSuperellipse),
   matching: find.byKey(const ValueKey('lift_preview')),
 );
 
@@ -261,7 +261,7 @@ void main() {
 
     final rectBefore = tester.getRect(
       find.descendant(
-        of: find.byType(ClipRRect),
+        of: find.byType(ClipRSuperellipse),
         matching: find.byKey(const ValueKey('lift_preview')),
       ),
     );
@@ -275,7 +275,7 @@ void main() {
 
     final rectAfter = tester.getRect(
       find.descendant(
-        of: find.byType(ClipRRect),
+        of: find.byType(ClipRSuperellipse),
         matching: find.byKey(const ValueKey('lift_preview')),
       ),
     );

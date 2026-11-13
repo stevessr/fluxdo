@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -251,9 +252,11 @@ class _DiscourseImageState extends State<DiscourseImage> {
     return Container(
       width: widget.width,
       height: widget.height ?? 100,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
       ),
       child: Center(
         child: LoadingSpinner(
@@ -270,9 +273,11 @@ class _DiscourseImageState extends State<DiscourseImage> {
     return Container(
       width: widget.width,
       height: widget.height ?? 60,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
       ),
       child: Center(
         child: Icon(

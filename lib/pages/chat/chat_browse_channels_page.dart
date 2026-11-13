@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -307,7 +308,7 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
   void _openChannel() {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => ChatMessagePage(
           channelId: widget.channel.id,
           channelTitle: widget.channel.title ?? '未命名频道',

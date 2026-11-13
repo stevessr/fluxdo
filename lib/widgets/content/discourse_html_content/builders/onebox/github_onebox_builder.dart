@@ -1,8 +1,10 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../../services/highlighter_service.dart';
+import '../../../../../theme/app_colors.dart';
 import '../../../../../services/toast_service.dart';
 import '../../../../../utils/link_launcher.dart';
 import 'onebox_base.dart';
@@ -188,102 +190,110 @@ class GithubOneboxBuilder {
       // 从文件名检测语言
       final language = _detectLanguageFromFileName(fileName);
 
-      final bgColor = isDark
-          ? const Color(0xff282a36)
-          : const Color(0xfff6f8fa);
+      final bgColor = context.appColors.codeBackground;
       final borderColor = theme.colorScheme.outlineVariant.withValues(
         alpha: 0.3,
       );
 
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
+        decoration: ShapeDecoration(
           color: bgColor,
-          border: Border.all(color: borderColor),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(8),
+            side: BorderSide(color: borderColor),
+          ),
         ),
         child: InkWell(
           onTap: () => _launchUrl(context, url),
-          borderRadius: BorderRadius.circular(8),
+          customBorder: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(8),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // 文件头
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+              ClipRSuperellipse(
+                borderRadius: BorderRadius.vertical(
+                  top: context.shapes.radius(7),
                 ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.black.withValues(alpha: 0.03),
-                  border: Border(bottom: BorderSide(color: borderColor)),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(7),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
                   ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Symbols.description_rounded, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            fileName,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w500,
-                              color: theme.colorScheme.primary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (branch.isNotEmpty)
-                            Row(
-                              children: [
-                                Icon(
-                                  Symbols.call_split_rounded,
-                                  size: 12,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  branch,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                    fontFamily: 'monospace',
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ),
-                    // 点击数
-                    if (clickCount != null && clickCount.isNotEmpty) ...[
-                      OneboxClickCount(count: clickCount),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.black.withValues(alpha: 0.03),
+                    border: Border(bottom: BorderSide(color: borderColor)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Symbols.description_rounded, size: 16),
                       const SizedBox(width: 8),
-                    ],
-                    // 复制按钮
-                    if (codeText.isNotEmpty)
-                      InkWell(
-                        onTap: () {
-                          Clipboard.setData(ClipboardData(text: codeText));
-                          ToastService.showSuccess(S.current.common_codeCopied);
-                        },
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Icon(
-                            Symbols.content_copy_rounded,
-                            size: 16,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              fileName,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
+                                color: theme.colorScheme.primary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (branch.isNotEmpty)
+                              Row(
+                                children: [
+                                  Icon(
+                                    Symbols.call_split_rounded,
+                                    size: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    branch,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                      fontFamily: 'monospace',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                          ],
                         ),
                       ),
-                  ],
+                      // 点击数
+                      if (clickCount != null && clickCount.isNotEmpty) ...[
+                        OneboxClickCount(count: clickCount),
+                        const SizedBox(width: 8),
+                      ],
+                      // 复制按钮
+                      if (codeText.isNotEmpty)
+                        InkWell(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: codeText));
+                            ToastService.showSuccess(
+                              S.current.common_codeCopied,
+                            );
+                          },
+                          customBorder: RoundedSuperellipseBorder(
+                            borderRadius: context.shapes.borderRadius(4),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Symbols.content_copy_rounded,
+                              size: 16,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               // 代码预览
@@ -419,7 +429,6 @@ class GithubOneboxBuilder {
       return HighlighterService.instance.buildHighlightView(
         codeText,
         language: language,
-        isDark: isDark,
         backgroundColor: Colors.transparent,
         padding: const EdgeInsets.all(12),
       );
@@ -983,9 +992,11 @@ class GithubOneboxBuilder {
                           horizontal: 6,
                           vertical: 2,
                         ),
-                        decoration: BoxDecoration(
+                        decoration: ShapeDecoration(
                           color: theme.colorScheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(4),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: context.shapes.borderRadius(4),
+                          ),
                         ),
                         child: Text(
                           commitHash,
@@ -1053,65 +1064,74 @@ class GithubOneboxBuilder {
         element.querySelector('pre') ?? element.querySelector('code');
     final codeText = codeElement?.text ?? '';
 
-    final bgColor = isDark ? const Color(0xff282a36) : const Color(0xfff6f8fa);
+    final bgColor = context.appColors.codeBackground;
     final borderColor = theme.colorScheme.outlineVariant.withValues(alpha: 0.3);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+      decoration: ShapeDecoration(
         color: bgColor,
-        border: Border.all(color: borderColor),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+          side: BorderSide(color: borderColor),
+        ),
       ),
       child: InkWell(
         onTap: () => _launchUrl(context, url),
-        borderRadius: BorderRadius.circular(8),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // 头部
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : Colors.black.withValues(alpha: 0.03),
-                border: Border(bottom: BorderSide(color: borderColor)),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(7),
-                ),
+            ClipRSuperellipse(
+              borderRadius: BorderRadius.vertical(
+                top: context.shapes.radius(7),
               ),
-              child: Row(
-                children: [
-                  const Icon(Symbols.code_rounded, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: theme.colorScheme.primary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (description.isNotEmpty)
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : Colors.black.withValues(alpha: 0.03),
+                  border: Border(bottom: BorderSide(color: borderColor)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Symbols.code_rounded, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            description,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                            title,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                              color: theme.colorScheme.primary,
                             ),
-                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                      ],
+                          if (description.isNotEmpty)
+                            Text(
+                              description,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (clickCount != null && clickCount.isNotEmpty)
-                    OneboxClickCount(count: clickCount),
-                ],
+                    if (clickCount != null && clickCount.isNotEmpty)
+                      OneboxClickCount(count: clickCount),
+                  ],
+                ),
               ),
             ),
             // 代码预览
@@ -1123,7 +1143,6 @@ class GithubOneboxBuilder {
                     scrollDirection: Axis.horizontal,
                     child: HighlighterService.instance.buildHighlightView(
                       codeText,
-                      isDark: isDark,
                       backgroundColor: Colors.transparent,
                       padding: const EdgeInsets.all(12),
                     ),

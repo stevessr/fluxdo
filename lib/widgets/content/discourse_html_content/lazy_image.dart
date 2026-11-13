@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -7,7 +8,6 @@ import '../../../services/image_decode_spec_memo.dart';
 import '../../../services/media_geometry_memo.dart';
 import '../../../utils/frame_jank_monitor.dart';
 import '../../../utils/image_paint_gate.dart';
-import '../../common/anchor_guard_sliver.dart';
 import '../../common/first_paint_probe.dart';
 import '../../common/hero_image.dart';
 import '../svg_view.dart';
@@ -111,15 +111,13 @@ class _LazyImageState extends State<LazyImage> {
   ImageStream? _ratioStream;
   ImageStreamListener? _ratioListener;
 
-  /// 无声明尺寸的图,首帧落地会把占位换成真实高度 —— 只武装一次哨兵
-  bool _armedForFirstFrame = false;
-
   /// 首绘闸门:首帧解码完成后是否已获准真正上屏(见 [ImagePaintGate],
   /// 摊平多图同帧集中纹理上传的 raster 尖峰)。缓存同步命中不走闸门。
   bool _paintAdmitted = false;
 
   /// 非 null = 正在闸门队列中排队(防重复入队;dispose/换图时出队)
   VoidCallback? _gateWaiter;
+  VoidCallback? _releaseDownloadPriority;
 
   /// raster 大帧归因:本 State 是否已记过"缓存命中上屏"(挂载期一次,
   /// 防 rebuild 刷屏)。img+ = 新解码首绘(上传嫌疑);img≈ = 缓存图
@@ -142,6 +140,10 @@ class _LazyImageState extends State<LazyImage> {
   @override
   void didUpdateWidget(LazyImage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.cacheKey != widget.cacheKey) {
+      _releaseDownloadPriority?.call();
+      _releaseDownloadPriority = null;
+    }
     if (oldWidget.imageProvider != widget.imageProvider) {
       _stopRatioResolve();
       _resolvedRatio = null;
@@ -157,12 +159,7 @@ class _LazyImageState extends State<LazyImage> {
     _stopRatioResolve();
     _cancelGateWait();
     _scrollAwareContext.dispose();
-    // 滚出视口:仍在下载等待队列的请求沉回低优队尾,给新视野让路。
-    // 在途 HTTP 不取消 —— 下完写盘即缓存,滚回来直接命中。
-    final url = widget.cacheKey;
-    if (url != null && url.startsWith('http')) {
-      BlobImageCache.sink(BlobImageCache.contentBucket, url);
-    }
+    _releaseDownloadPriority?.call();
     super.dispose();
   }
 
@@ -200,12 +197,6 @@ class _LazyImageState extends State<LazyImage> {
         // 缓存命中的同步回调发生在首次 build 前,直接赋值即可
         _resolvedRatio = ratio;
       } else if (mounted) {
-        // 200 占位 → 真实比例的布局变化帧:武装哨兵,视口上方的图
-        // 加载完成不把内容拉走
-        if (!_armedForFirstFrame) {
-          _armedForFirstFrame = true;
-          AnchorGuardSliver.arm();
-        }
         setState(() => _resolvedRatio = ratio);
       }
     }
@@ -306,9 +297,11 @@ class _LazyImageState extends State<LazyImage> {
         width: width,
         height: height ?? 200,
         alignment: Alignment.center,
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: baseColor,
-          borderRadius: BorderRadius.circular(8),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(8),
+          ),
         ),
         child: RepaintBoundary(
           // 首字节前无进度 = 不定态用 LoadingSpinner;有进度走 wavy 圆环
@@ -368,11 +361,13 @@ class _LazyImageState extends State<LazyImage> {
           width: width,
           height: height ?? 200,
           alignment: Alignment.center,
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: theme.colorScheme.surfaceContainerHighest.withValues(
               alpha: 0.2,
             ),
-            borderRadius: BorderRadius.circular(8),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(8),
+            ),
           ),
           child: Icon(
             Symbols.broken_image_rounded,
@@ -414,8 +409,13 @@ class _LazyImageState extends State<LazyImage> {
     final bumpUrl = widget.cacheKey;
     if (bumpUrl != null && bumpUrl.startsWith('http')) {
       imageWidget = FirstPaintProbe(
-        onFirstPaint: () =>
-            BlobImageCache.bump(BlobImageCache.contentBucket, bumpUrl),
+        key: ValueKey(bumpUrl),
+        onFirstPaint: () {
+          _releaseDownloadPriority ??= BlobImageCache.retainForeground(
+            BlobImageCache.contentBucket,
+            bumpUrl,
+          );
+        },
         child: imageWidget,
       );
     }

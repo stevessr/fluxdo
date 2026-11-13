@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -86,7 +87,7 @@ class _PostLinksState extends State<PostLinks>
         return;
       }
       Navigator.of(context).push(
-        MaterialPageRoute(
+        InteractionPageRoute(
           builder: (_) => TopicDetailPage(
             topicId: topicInfo.topicId,
             initialTitle: link.title,
@@ -105,11 +106,13 @@ class _PostLinksState extends State<PostLinks>
 
     return Container(
       margin: const EdgeInsets.only(top: 16),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(12),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
         ),
       ),
       child: Column(
@@ -118,12 +121,14 @@ class _PostLinksState extends State<PostLinks>
           // 可点击的标题栏
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: _expanded
-                ? const BorderRadius.only(
-                    topLeft: Radius.circular(12),
-                    topRight: Radius.circular(12),
-                  )
-                : BorderRadius.circular(12),
+            customBorder: RoundedSuperellipseBorder(
+              borderRadius: _expanded
+                  ? BorderRadius.only(
+                      topLeft: context.shapes.radius(12),
+                      topRight: context.shapes.radius(12),
+                    )
+                  : context.shapes.borderRadius(12),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
@@ -147,11 +152,13 @@ class _PostLinksState extends State<PostLinks>
                       horizontal: 6,
                       vertical: 1,
                     ),
-                    decoration: BoxDecoration(
+                    decoration: ShapeDecoration(
                       color: theme.colorScheme.primaryContainer.withValues(
                         alpha: 0.5,
                       ),
-                      borderRadius: BorderRadius.circular(8),
+                      shape: RoundedSuperellipseBorder(
+                        borderRadius: context.shapes.borderRadius(8),
+                      ),
                     ),
                     child: Text(
                       '${links.length}',
@@ -200,9 +207,11 @@ class _PostLinksState extends State<PostLinks>
                       if (_canShowMore)
                         InkWell(
                           onTap: () => setState(() => _showAll = true),
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(12),
-                            bottomRight: Radius.circular(12),
+                          customBorder: RoundedSuperellipseBorder(
+                            borderRadius: BorderRadius.only(
+                              bottomLeft: context.shapes.radius(12),
+                              bottomRight: context.shapes.radius(12),
+                            ),
                           ),
                           child: Container(
                             width: double.infinity,
@@ -213,13 +222,13 @@ class _PostLinksState extends State<PostLinks>
                                 Icon(
                                   Symbols.more_horiz_rounded,
                                   size: 16,
-                                  color: theme.colorScheme.primary,
+                                  color: context.emphasis.accent,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   context.l10n.post_moreLinks(_remainingCount),
                                   style: theme.textTheme.labelMedium?.copyWith(
-                                    color: theme.colorScheme.primary,
+                                    color: context.emphasis.accent,
                                   ),
                                 ),
                               ],
@@ -261,9 +270,11 @@ class _PostLinksState extends State<PostLinks>
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(8),
+                  ),
                 ),
                 child: Text(
                   _formatClicks(link.clicks),

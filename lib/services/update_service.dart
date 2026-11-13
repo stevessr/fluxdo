@@ -6,7 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../l10n/s.dart';
+import '../l10n/app_localizations.dart';
 
 /// APK 资源信息
 class ApkAsset {
@@ -41,6 +41,42 @@ class ApkAsset {
   );
 }
 
+/// Windows Inno Setup 安装包；保留 GitHub API 提供的校验信息。
+class WindowsUpdateAsset {
+  final String name;
+  final String downloadUrl;
+  final String? sha256Url;
+  final String? sha256;
+  final int size;
+
+  const WindowsUpdateAsset({
+    required this.name,
+    required this.downloadUrl,
+    required this.size,
+    this.sha256Url,
+    this.sha256,
+  });
+
+  bool get canVerify => sha256 != null || sha256Url != null;
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'downloadUrl': downloadUrl,
+    'size': size,
+    'sha256Url': sha256Url,
+    'sha256': sha256,
+  };
+
+  factory WindowsUpdateAsset.fromJson(Map<String, dynamic> json) =>
+      WindowsUpdateAsset(
+        name: json['name'] as String,
+        downloadUrl: json['downloadUrl'] as String,
+        size: json['size'] as int,
+        sha256Url: json['sha256Url'] as String?,
+        sha256: json['sha256'] as String?,
+      );
+}
+
 /// 更新信息模型
 class UpdateInfo {
   final String currentVersion;
@@ -49,6 +85,7 @@ class UpdateInfo {
   final String releaseNotes;
   final bool hasUpdate;
   final List<ApkAsset> apkAssets;
+  final WindowsUpdateAsset? windowsAsset;
 
   UpdateInfo({
     required this.currentVersion,
@@ -57,6 +94,7 @@ class UpdateInfo {
     required this.releaseNotes,
     required this.hasUpdate,
     this.apkAssets = const [],
+    this.windowsAsset,
   });
 
   Map<String, dynamic> toJson() => {
@@ -66,6 +104,7 @@ class UpdateInfo {
     'releaseNotes': releaseNotes,
     'hasUpdate': hasUpdate,
     'apkAssets': apkAssets.map((e) => e.toJson()).toList(),
+    'windowsAsset': windowsAsset?.toJson(),
   };
 
   factory UpdateInfo.fromJson(Map<String, dynamic> json) => UpdateInfo(
@@ -79,6 +118,11 @@ class UpdateInfo {
             ?.map((e) => ApkAsset.fromJson(e as Map<String, dynamic>))
             .toList() ??
         [],
+    windowsAsset: json['windowsAsset'] == null
+        ? null
+        : WindowsUpdateAsset.fromJson(
+            json['windowsAsset'] as Map<String, dynamic>,
+          ),
   );
 }
 
@@ -287,7 +331,7 @@ class UpdateService {
         if (cachedInfo != null) {
           return cachedInfo;
         }
-        throw Exception(S.current.update_rateLimited);
+        throw Exception(t.update_rateLimited);
       }
       rethrow;
     }
@@ -329,6 +373,7 @@ class UpdateService {
         releaseNotes: cached.releaseNotes,
         hasUpdate: hasUpdate,
         apkAssets: cached.apkAssets,
+        windowsAsset: cached.windowsAsset,
       );
     } catch (e) {
       return null;
@@ -373,6 +418,31 @@ class UpdateService {
       releaseNotes: releaseNotes,
       hasUpdate: hasUpdate,
       apkAssets: apkAssets,
+      windowsAsset: _parseWindowsAsset(assets),
+    );
+  }
+
+  WindowsUpdateAsset? _parseWindowsAsset(List<dynamic> assets) {
+    const installerName = 'fluxdo-windows-x86_64-setup.exe';
+    Map<String, dynamic>? installer;
+    String? checksumUrl;
+    for (final value in assets) {
+      final asset = value as Map<String, dynamic>;
+      if (asset['name'] == installerName) installer = asset;
+      if (asset['name'] == '$installerName.sha256') {
+        checksumUrl = asset['browser_download_url'] as String?;
+      }
+    }
+    if (installer == null) return null;
+    final digest = installer['digest'] as String?;
+    final match = RegExp(r'^sha256:([a-fA-F0-9]{64})$')
+        .firstMatch(digest ?? '');
+    return WindowsUpdateAsset(
+      name: installerName,
+      downloadUrl: installer['browser_download_url'] as String,
+      size: installer['size'] as int? ?? 0,
+      sha256Url: checksumUrl,
+      sha256: match?.group(1)?.toLowerCase(),
     );
   }
 

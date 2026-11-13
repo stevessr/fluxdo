@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:intl/intl.dart';
@@ -260,11 +261,13 @@ class _LocalDatePopover extends StatelessWidget {
   Widget _buildRow(ThemeData theme, _TimezoneEntry entry) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: entry.isLocal
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
             : null,
-        borderRadius: BorderRadius.circular(6),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: UiShapes.current.borderRadius(6),
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

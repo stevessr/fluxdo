@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -479,8 +480,8 @@ class _SegmentedBarPainter extends CustomPainter {
     final total = segments.fold<int>(0, (a, s) => a + s.size);
     if (total <= 0 || segments.isEmpty) {
       paint.color = emptyColor;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(Offset.zero & size, radius),
+      canvas.drawRSuperellipse(
+        RSuperellipse.fromRectAndRadius(Offset.zero & size, radius),
         paint,
       );
       return;
@@ -511,8 +512,8 @@ class _SegmentedBarPainter extends CustomPainter {
     var x = 0.0;
     for (var i = 0; i < segments.length; i++) {
       paint.color = segments[i].color;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
+      canvas.drawRSuperellipse(
+        RSuperellipse.fromRectAndRadius(
           Rect.fromLTWH(x, 0, widths[i], size.height),
           radius,
         ),
@@ -544,9 +545,11 @@ class _ShimmerBox extends StatelessWidget {
     return Container(
       width: width,
       height: height,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
       ),
     );
   }

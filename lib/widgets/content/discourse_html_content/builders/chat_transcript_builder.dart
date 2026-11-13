@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -67,19 +68,21 @@ Widget buildChatTranscript({
     margin: isChained
         ? EdgeInsets.zero
         : const EdgeInsets.symmetric(vertical: 8),
-    decoration: BoxDecoration(
+    decoration: ShapeDecoration(
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-      border: isChained
-          ? null
-          : Border(
-              left: BorderSide(color: theme.colorScheme.outline, width: 4),
-            ),
-      borderRadius: isChained
-          ? null
-          : const BorderRadius.only(
-              topRight: Radius.circular(4),
-              bottomRight: Radius.circular(4),
-            ),
+      shape: RoundedSuperellipseBorder(
+        borderRadius: isChained
+            ? null
+            : BorderRadius.only(
+                topRight: context.shapes.radius(4),
+                bottomRight: context.shapes.radius(4),
+              ),
+        side: isChained
+            ? BorderSide.none
+            : (Border(
+                left: BorderSide(color: theme.colorScheme.outline, width: 4),
+              )).top,
+      ),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,12 +189,14 @@ Widget buildChatTranscript({
 Widget _buildReactionChip(ThemeData theme, _ChatReaction reaction) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
+    decoration: ShapeDecoration(
       color: theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(
-        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-        width: 1,
+      shape: RoundedSuperellipseBorder(
+        borderRadius: UiShapes.current.borderRadius(10),
+        side: BorderSide(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          width: 1,
+        ),
       ),
     ),
     child: Row(

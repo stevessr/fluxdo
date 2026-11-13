@@ -4,13 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/s.dart';
 import '../models/user.dart';
+import '../modules/mini_apps/mini_app_gallery_page.dart';
 import '../pages/ai_bot_conversations_page.dart';
 import '../pages/site_about_page.dart';
 import '../pages/site_policy_page.dart';
 import '../models/site_policy_document.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/boards_page.dart';
-import '../pages/mini_apps_page.dart';
 import '../pages/browsing_history_page.dart';
 import '../pages/community_events_page.dart';
 import '../pages/drafts_page.dart';
@@ -21,6 +21,7 @@ import '../pages/chat/chat_page.dart';
 import '../pages/seeking_page.dart';
 import '../pages/private_messages_page.dart';
 import '../pages/topics_screen.dart';
+import '../providers/chat_providers.dart';
 import '../providers/discourse_providers.dart';
 import '../widgets/common/smart_avatar.dart';
 import '../widgets/notification/notification_quick_panel.dart';
@@ -57,13 +58,13 @@ class NavEntryRegistry {
         defaultInBottomNav: false,
       ),
       NavEntry(
-        id: 'mini_apps',
+        id: NavEntryIds.miniApps,
         kind: NavEntryKind.page,
-        iconData: Icons.apps_outlined,
-        selectedIconData: Icons.apps_rounded,
-        label: (ctx) =>
-            Localizations.localeOf(ctx).languageCode == 'zh' ? '应用' : 'Apps',
-        pageBuilder: (ctx, isActive) => MiniAppsPage(isActive: isActive),
+        iconData: Symbols.apps_rounded,
+        selectedIconData: Symbols.apps_rounded,
+        label: (ctx) => ctx.l10n.miniApp_title,
+        pageBuilder: (ctx, isActive) =>
+            MiniAppGalleryPage(active: isActive, workspace: true),
         defaultInBottomNav: false,
       ),
       NavEntry(
@@ -75,6 +76,10 @@ class NavEntryRegistry {
         pageBuilder: (ctx, isActive) => const ChatPage(),
         defaultInBottomNav: true,
         requiresLogin: true,
+        // 未读徽章：watch 即激活 chatChannelsProvider（全局非 autoDispose），
+        // 使 new-channel / user-tracking-state 订阅随底栏常驻
+        customIconBuilder: (ctx, ref) => _chatIcon(ref, selected: false),
+        customSelectedIconBuilder: (ctx, ref) => _chatIcon(ref, selected: true),
       ),
       NavEntry(
         id: NavEntryIds.aiBot,
@@ -267,6 +272,16 @@ class NavEntryRegistry {
   static List<String> lockedIds() {
     return buildAll().where((e) => e.locked).map((e) => e.id).toList();
   }
+
+  /// 桌面固定首页和广场，其余沿用用户导航配置，不回写移动端底栏偏好。
+  static List<NavEntry> desktopEntries(List<NavEntry> entries) => [
+    byId(NavEntryIds.home)!,
+    byId(NavEntryIds.miniApps)!,
+    ...entries.where(
+      (entry) =>
+          entry.id != NavEntryIds.home && entry.id != NavEntryIds.miniApps,
+    ),
+  ];
 }
 
 String _boardsLabel(BuildContext context) {
@@ -320,6 +335,14 @@ String _communityEventLabel(BuildContext context, CommunityEventsView view) {
       zh ? '纪念日与生日' : 'Anniversaries & Birthdays',
     CommunityEventsView.birthdays => zh ? '生日' : 'Birthdays',
   };
+}
+
+/// 聊天入口图标：未读总数 > 0 时叠角标。
+Widget _chatIcon(WidgetRef ref, {required bool selected}) {
+  final unread = ref.watch(chatUnreadProvider);
+  final icon = Icon(Symbols.chat_rounded, fill: selected ? 1 : 0);
+  if (unread <= 0) return icon;
+  return Badge(label: Text(unread > 99 ? '99+' : '$unread'), child: icon);
 }
 
 Widget _profileIcon(

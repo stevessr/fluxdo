@@ -24,6 +24,14 @@ FluxDO 是为 [Linux.do](https://linux.do/) 社区打造的现代化移动和桌
 
 ![FluxDO 预览](screenshots/preview.png)
 
+### Homebrew 安装（macOS）
+
+已安装 Homebrew 的用户可运行以下命令，支持 Apple Silicon 和 Intel Mac。
+
+```sh
+brew install --cask Lingyan000/tap/fluxdo
+```
+
 ## 特性
 
 ### 核心功能
@@ -47,7 +55,7 @@ FluxDO 是为 [Linux.do](https://linux.do/) 社区打造的现代化移动和桌
 
 ### 前置要求
 
-- Flutter SDK ^3.10.4
+- Flutter SDK 3.47.9（版本由 `.fvmrc` 固定）
 - Rust 工具链（用于编译 DOH 代理）
 - Android Studio / Xcode（移动端开发）
 
@@ -82,6 +90,7 @@ FluxDO 是为 [Linux.do](https://linux.do/) 社区打造的现代化移动和桌
    ```bash
    just run -- -d windows
    just run -- -d macos
+   just run -- -d linux
    just run -- --dart-define=cronetHttpNoPlay=true
    ```
 

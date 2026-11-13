@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 // ignore_for_file: deprecated_member_use
 import 'dart:async';
 
@@ -122,7 +123,7 @@ class _OnboardingPageState extends State<OnboardingPage>
           tooltip: context.l10n.onboarding_networkSettings,
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const NetworkSettingsPage()),
+            InteractionPageRoute(builder: (_) => const NetworkSettingsPage()),
           ),
         ),
       ),
@@ -195,8 +196,8 @@ class _OnboardingPageState extends State<OnboardingPage>
                 style:
                     FilledButton.styleFrom(
                       minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
+                      shape: RoundedSuperellipseBorder(
+                        borderRadius: context.shapes.borderRadius(28),
                       ),
                       elevation: 0,
                       backgroundColor: theme.colorScheme.primary,
@@ -231,8 +232,8 @@ class _OnboardingPageState extends State<OnboardingPage>
                 onPressed: () => _continueAsGuest(context),
                 style: TextButton.styleFrom(
                   minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(28),
                   ),
                   foregroundColor: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -257,7 +258,7 @@ class _OnboardingPageState extends State<OnboardingPage>
   Future<void> _navigateToLogin(BuildContext context) async {
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
+      InteractionPageRoute(builder: (_) => const LoginPage()),
     );
 
     if (result == true && context.mounted) {

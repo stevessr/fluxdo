@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:popover/popover.dart';
@@ -265,9 +266,8 @@ class _BoostListState extends State<BoostList>
         final theme = Theme.of(context);
         return DecoratedBox(
           key: _highlightKey,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
+          decoration: ShapeDecoration(
+            shadows: [
               BoxShadow(
                 color: theme.colorScheme.primary.withValues(
                   alpha: 0.5 * _highlightOpacity.value,
@@ -276,6 +276,9 @@ class _BoostListState extends State<BoostList>
                 spreadRadius: 1,
               ),
             ],
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(12),
+            ),
           ),
           child: child,
         );
@@ -348,11 +351,11 @@ class _BoostListState extends State<BoostList>
         child: Container(
           height: 28,
           width: 28,
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: theme.colorScheme.surfaceContainerHighest.withValues(
               alpha: 0.3,
             ),
-            shape: BoxShape.circle,
+            shape: context.shapes.circle(),
           ),
           child: Icon(
             Symbols.rocket_launch_rounded,
@@ -547,11 +550,13 @@ class _InlineControlChip extends StatelessWidget {
           width: _BoostListState._controlChipWidth,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(vertical: 4),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: theme.colorScheme.surfaceContainerHighest.withValues(
               alpha: 0.4,
             ),
-            borderRadius: BorderRadius.circular(16),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(16),
+            ),
           ),
           child: Icon(
             icon,

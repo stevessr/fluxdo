@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -14,12 +15,14 @@ class WhisperIndicator extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.tertiary.withValues(alpha: 0.3),
-          width: 1,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(12),
+          side: BorderSide(
+            color: theme.colorScheme.tertiary.withValues(alpha: 0.3),
+            width: 1,
+          ),
         ),
       ),
       child: Row(

@@ -6,6 +6,7 @@
 /// 缺省 600)。提交在弹层内完成,失败不关闭不丢稿;成功返回新评论。
 library;
 
+import 'package:common_ui/common_ui.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -205,9 +206,11 @@ class _CommentInputSheetState extends State<_CommentInputSheet> {
           Container(
             width: 36,
             height: 4,
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(2),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -282,7 +285,7 @@ class _CommentInputSheetState extends State<_CommentInputSheet> {
                       fillColor: theme.colorScheme.surfaceContainerHighest
                           .withValues(alpha: 0.4),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: context.shapes.borderRadius(20),
                         borderSide: BorderSide.none,
                       ),
                       contentPadding: const EdgeInsets.symmetric(
@@ -349,10 +352,14 @@ class _CommentInputSheetState extends State<_CommentInputSheet> {
                       bottom: MediaQuery.of(context).padding.bottom + 8,
                       child: Material(
                         color: theme.colorScheme.surfaceContainerHighest,
-                        shape: const CircleBorder(),
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: context.shapes.borderRadius(9999),
+                        ),
                         elevation: 1,
                         child: InkWell(
-                          customBorder: const CircleBorder(),
+                          customBorder: RoundedSuperellipseBorder(
+                            borderRadius: context.shapes.borderRadius(9999),
+                          ),
                           onTap: _controller.text.isEmpty
                               ? null
                               : _deleteBackward,

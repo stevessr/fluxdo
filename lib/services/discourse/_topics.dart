@@ -521,16 +521,41 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     );
   }
 
-  /// 取消当前用户看到的置顶状态。
-  ///
-  /// 对齐 Discourse core 的 PUT /t/:id/clear-pin.json：只写当前用户的
-  /// TopicUser.cleared_pinned_at，不会替管理员把全站/分类置顶一起撤掉。
+  /// 取消当前用户看到的置顶状态，不影响管理员设置的全站/分类置顶。
   Future<void> clearTopicPin(int topicId) async {
     try {
       await _dio.put(
         '/t/$topicId/clear-pin.json',
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
+    } on DioException catch (e) {
+      _throwApiError(e);
+    }
+  }
+
+  /// 批量忽略指定话题，只返回服务端确认成功的 ID。
+  Future<List<int>> dismissTopicIds(
+    List<int> topicIds, {
+    required bool dismissPosts,
+  }) async {
+    if (topicIds.isEmpty) return [];
+    final ids = topicIds.toSet();
+    try {
+      final response = await _dio.put(
+        '/topics/bulk.json',
+        data: {
+          'topic_ids': ids.toList(),
+          'operation': {
+            'type': dismissPosts ? 'dismiss_posts' : 'dismiss_topics',
+          },
+        },
+      );
+      final data = response.data;
+      if (data is! Map || data['topic_ids'] is! List) return const [];
+      return (data['topic_ids'] as List)
+          .whereType<int>()
+          .where(ids.contains)
+          .toList(growable: false);
     } on DioException catch (e) {
       _throwApiError(e);
     }

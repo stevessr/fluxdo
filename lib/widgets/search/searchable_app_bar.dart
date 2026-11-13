@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -177,7 +178,6 @@ class _SearchableAppBarState extends State<SearchableAppBar>
                 hintText: widget.searchHint.isEmpty
                     ? context.l10n.common_searchHint
                     : widget.searchHint,
-                border: InputBorder.none,
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 8,
@@ -189,7 +189,7 @@ class _SearchableAppBarState extends State<SearchableAppBar>
                         onPressed: _handleClear,
                       )
                     : null,
-              ),
+              ).withoutBorder(),
             ),
           );
         },

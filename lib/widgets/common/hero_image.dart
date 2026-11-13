@@ -239,7 +239,9 @@ class _CoverContainPainter extends CustomPainter {
     final double r = r0 * (1 - t);
     if (r > 0) {
       canvas.save();
-      canvas.clipRRect(RRect.fromRectAndRadius(dst, Radius.circular(r)));
+      canvas.clipRSuperellipse(
+        RSuperellipse.fromRectAndRadius(dst, Radius.circular(r)),
+      );
     }
     canvas.drawImageRect(
       image,

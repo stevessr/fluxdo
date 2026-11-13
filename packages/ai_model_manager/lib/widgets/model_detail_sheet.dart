@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
@@ -17,8 +18,8 @@ Future<AiModel?> showModelDetailSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    shape: RoundedSuperellipseBorder(
+      borderRadius: BorderRadius.vertical(top: context.shapes.radius(20)),
     ),
     builder: (ctx) => SafeArea(
       top: false,
@@ -38,8 +39,8 @@ Future<AiModel?> showCreateModelSheet(BuildContext context) {
     context: context,
     isScrollControlled: true,
     backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    shape: RoundedSuperellipseBorder(
+      borderRadius: BorderRadius.vertical(top: context.shapes.radius(20)),
     ),
     builder: (ctx) => SafeArea(
       top: false,
@@ -172,21 +173,20 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
     Widget? suffix,
   }) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InputDecoration(
       filled: true,
-      fillColor: isDark ? Colors.white10 : cs.surfaceContainerLow,
+      fillColor: cs.surfaceContainerLow,
       hintText: hint,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: context.shapes.borderRadius(14),
         borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: context.shapes.borderRadius(14),
         borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: context.shapes.borderRadius(14),
         borderSide: BorderSide(color: cs.primary.withValues(alpha: 0.5)),
       ),
       suffixIcon: suffix,
@@ -210,9 +210,11 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
             Container(
               width: 40,
               height: 4,
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: cs.onSurface.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(999),
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: context.shapes.borderRadius(999),
+                ),
               ),
             ),
             Padding(
@@ -220,11 +222,8 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: Icon(
-                      Symbols.close_rounded,
-                      color: cs.onSurface,
-                      size: 22,
-                    ),
+                    icon: Icon(Symbols.close_rounded,
+                        color: cs.onSurface, size: 22),
                     onPressed: () => Navigator.of(context).pop(),
                     tooltip: AiL10n.current.cancel,
                   ),
@@ -388,10 +387,8 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                       Center(
                         child: TextButton.icon(
                           onPressed: _resetToAuto,
-                          icon: const Icon(
-                            Symbols.restart_alt_rounded,
-                            size: 18,
-                          ),
+                          icon:
+                              const Icon(Symbols.restart_alt_rounded, size: 18),
                           label: Text(AiL10n.current.modelDetailResetAuto),
                         ),
                       ),
@@ -414,9 +411,8 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                 child: FilledButton.icon(
                   onPressed: _save,
                   icon: Icon(
-                    isNew ? Symbols.add_rounded : Symbols.check_rounded,
-                    size: 20,
-                  ),
+                      isNew ? Symbols.add_rounded : Symbols.check_rounded,
+                      size: 20),
                   label: Text(
                     isNew
                         ? AiL10n.current.modelDetailAddTitle
@@ -424,8 +420,8 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
                   ),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(14),
                     ),
                   ),
                 ),
@@ -438,12 +434,12 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
   }
 
   Widget _label(BuildContext context, String text) => Text(
-    text,
-    style: TextStyle(
-      fontSize: 13,
-      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
-    ),
-  );
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+        ),
+      );
 }
 
 /// 新建模式的能力预览条：展示自动推断结果 + 展开按钮
@@ -472,8 +468,8 @@ class _CapabilityPreview extends StatelessWidget {
 
     for (final m in input) {
       if (m == Modality.image) {
-        chips.add(
-          _miniChip(
+        chips.add(_miniChip(
+            context,
             '${AiL10n.current.modelDetailInputLabel}: ${modName(m)}',
             cs.tertiary,
             isDark,
@@ -483,8 +479,8 @@ class _CapabilityPreview extends StatelessWidget {
     }
     for (final m in output) {
       if (m == Modality.image) {
-        chips.add(
-          _miniChip(
+        chips.add(_miniChip(
+            context,
             '${AiL10n.current.modelDetailOutputLabel}: ${modName(m)}',
             cs.secondary,
             isDark,
@@ -496,17 +492,20 @@ class _CapabilityPreview extends StatelessWidget {
       final label = a == ModelAbility.tool
           ? AiL10n.current.modelDetailToolAbility
           : AiL10n.current.modelDetailReasoningAbility;
-      chips.add(_miniChip(label, cs.primary, isDark));
+      chips.add(_miniChip(context, label, cs.primary, isDark));
     }
 
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
+      customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(12)),
       onTap: onExpand,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
-          borderRadius: BorderRadius.circular(12),
+        decoration: ShapeDecoration(
+          color: cs.surfaceContainerHigh,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(12),
+          ),
         ),
         child: Row(
           children: [
@@ -528,14 +527,17 @@ class _CapabilityPreview extends StatelessWidget {
     );
   }
 
-  Widget _miniChip(String label, Color color, bool isDark) {
+  Widget _miniChip(
+      BuildContext context, String label, Color color, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: isDark
             ? color.withValues(alpha: 0.2)
             : color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(999),
+        ),
       ),
       child: Text(
         label,
@@ -571,19 +573,23 @@ class _SegmentedMulti extends StatelessWidget {
     final bool allSelected =
         isSelected.isNotEmpty && isSelected.every((e) => e);
 
-    final base = isDark ? Colors.white10 : const Color(0xFFF2F3F5);
+    final base = cs.surfaceContainerHigh;
     final sel = isDark
         ? cs.primary.withValues(alpha: 0.20)
         : cs.primary.withValues(alpha: 0.14);
-    final r = BorderRadius.circular(12);
+    final r = context.shapes.borderRadius(12);
 
     return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: r,
+      decoration: ShapeDecoration(
         color: base,
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: r,
+          side: BorderSide(
+            color: cs.outlineVariant.withValues(alpha: 0.35),
+          ),
+        ),
       ),
-      child: ClipRRect(
+      child: ClipRSuperellipse(
         borderRadius: r,
         child: Stack(
           children: [
@@ -591,7 +597,12 @@ class _SegmentedMulti extends StatelessWidget {
               Positioned.fill(
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 160),
-                  decoration: BoxDecoration(color: sel, borderRadius: r),
+                  decoration: ShapeDecoration(
+                    color: sel,
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: r,
+                    ),
+                  ),
                 ),
               ),
             Row(
@@ -608,11 +619,14 @@ class _SegmentedMulti extends StatelessWidget {
                           horizontal: 12,
                           vertical: 10,
                         ),
-                        decoration: BoxDecoration(
+                        decoration: ShapeDecoration(
                           color: allSelected
                               ? Colors.transparent
                               : (isSelected[i] ? sel : Colors.transparent),
-                          borderRadius: _borderRadiusFor(i, options.length),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius:
+                                _borderRadiusFor(context, i, options.length),
+                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -646,14 +660,14 @@ class _SegmentedMulti extends StatelessWidget {
     );
   }
 
-  BorderRadius _borderRadiusFor(int index, int total) {
-    const r = Radius.circular(12);
+  BorderRadius _borderRadiusFor(BuildContext context, int index, int total) {
+    final r = context.shapes.radius(12);
     if (total == 1) return BorderRadius.all(r);
     if (index == 0) {
-      return const BorderRadius.only(topLeft: r, bottomLeft: r);
+      return BorderRadius.only(topLeft: r, bottomLeft: r);
     }
     if (index == total - 1) {
-      return const BorderRadius.only(topRight: r, bottomRight: r);
+      return BorderRadius.only(topRight: r, bottomRight: r);
     }
     return BorderRadius.zero;
   }
@@ -694,9 +708,11 @@ class _CopyButtonState extends State<_CopyButton> {
           onTap: widget.onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(10),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(10),
+              ),
             ),
             padding: const EdgeInsets.all(8),
             child: Icon(Symbols.content_copy_rounded, size: 18, color: color),

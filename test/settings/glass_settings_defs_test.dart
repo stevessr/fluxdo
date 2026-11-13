@@ -34,7 +34,7 @@ void main() {
             home: Scaffold(
               body: Builder(
                 builder: (context) {
-                  final groups = buildAppearanceGroups(context);
+                  final groups = buildAppearanceSearchGroups(context);
                   final group = groups.firstWhere(
                     (g) => g.items.any((i) => i.id == 'glassEnabled'),
                   );

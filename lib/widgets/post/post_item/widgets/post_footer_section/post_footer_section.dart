@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -15,6 +16,7 @@ import '../../../../../providers/discourse_providers.dart';
 import '../../../../../providers/ai_translation_provider.dart';
 import '../../../../../providers/preferences_provider.dart';
 import '../../../../../utils/blocked_user_filter.dart';
+import '../../../../../utils/reaction_toggle.dart';
 import '../../../../../utils/share_utils.dart';
 import '../../../../../utils/frame_jank_monitor.dart';
 
@@ -27,6 +29,7 @@ import '../../../../../services/log/bookmark_edit_trace.dart';
 import '../../../../../services/notion/notion_bookmark_auto_sync.dart';
 import '../../../../../services/toast_service.dart';
 import '../../../post_links.dart';
+import '../../../../common/app_bottom_sheet.dart';
 import '../post_action_bar.dart';
 import '../post_device_source.dart';
 import '../post_voting_control.dart';
@@ -41,8 +44,8 @@ import '../post_replies_list.dart';
 import '../post_solution_banner.dart';
 import '../../../../post/post_replies_sheet.dart';
 import '../../../../../utils/dialog_utils.dart';
-import '../../../../common/app_bottom_sheet.dart';
 import '../../../../ai/ai_translation_sheet.dart';
+import '../../../../../theme/app_colors.dart';
 
 part 'actions/bookmark_actions.dart';
 part 'actions/manage_actions.dart';
@@ -170,6 +173,13 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
   bool _isBookmarking = false;
   late List<PostReaction> _reactions;
   PostReaction? _currentUserReaction;
+
+  /// 回应提交序号:乐观更新后只认最后一次提交的结果(见 _submitReaction)
+  int _reactionSeq = 0;
+
+  /// 在途的回应提交数。期间帖子对象被别处换掉(MessageBus 的 liked 推送
+  /// 只改点赞数、acted 刷新等),回应字段以本地乐观状态为准,不回写成旧值。
+  int _pendingReactions = 0;
   late List<Boost> _boosts;
   late bool _canBoost;
   final List<Post> _replies = [];
@@ -261,8 +271,10 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
   }
 
   void _syncState() {
-    _reactions = List.from(widget.post.reactions ?? []);
-    _currentUserReaction = widget.post.currentUserReaction;
+    if (_pendingReactions == 0) {
+      _reactions = List.from(widget.post.reactions ?? []);
+      _currentUserReaction = widget.post.currentUserReaction;
+    }
     _isBookmarked = widget.post.bookmarked;
     _bookmarkId = widget.post.bookmarkId;
     _bookmarkName = widget.post.bookmarkName;
@@ -343,6 +355,7 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
         topicTitle: widget.topicTitle,
         onBoostChanged: _onBoostChangedLocal,
         onBoostDeleted: _onBoostDeletedLocal,
+        onReply: widget.onReply,
       );
 
   Future<void> _openBoostInput() async {

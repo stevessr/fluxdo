@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,7 +49,7 @@ List<SettingsGroup> buildBottomNavGroups(BuildContext context) {
           wrapSubtitle: true,
           onTap: (context, ref) => Navigator.push(
             context,
-            MaterialPageRoute(
+            InteractionPageRoute(
               builder: (_) => const AppearancePage(highlightId: 'glassEnabled'),
             ),
           ),
@@ -141,7 +142,7 @@ class _ActionOptionTile extends StatelessWidget {
           ? Icon(
               icon,
               color: selected
-                  ? theme.colorScheme.primary
+                  ? context.emphasis.selected
                   : theme.colorScheme.onSurfaceVariant,
             )
           : Icon(
@@ -150,7 +151,10 @@ class _ActionOptionTile extends StatelessWidget {
             ),
       title: Text(action.label),
       trailing: selected
-          ? Icon(Symbols.check_rounded, color: theme.colorScheme.primary)
+          ? Icon(
+              Symbols.check_rounded,
+              color: context.emphasis.selected,
+            )
           : null,
       onTap: onTap,
     );

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -28,14 +29,18 @@ class OneboxContainer extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       margin: margin,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: theme.colorScheme.outlineVariant, width: 1),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(borderRadius),
+          side: BorderSide(color: theme.colorScheme.outlineVariant, width: 1),
+        ),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(borderRadius),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(borderRadius),
+        ),
         child: Padding(padding: padding, child: child),
       ),
     );
@@ -66,14 +71,18 @@ class OneboxContainerWithHeader extends StatelessWidget {
 
     return Container(
       margin: margin,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: borderColor, width: 1),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(borderRadius),
+          side: BorderSide(color: borderColor, width: 1),
+        ),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(borderRadius),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(borderRadius),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -152,9 +161,11 @@ class OneboxLabel extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: backgroundColor ?? theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
       ),
       child: Text(
         text,
@@ -230,10 +241,12 @@ class OneboxStatusIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(12),
+          side: BorderSide(color: color.withValues(alpha: 0.3)),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -267,9 +280,11 @@ class OneboxClickCount extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -364,7 +379,7 @@ class OneboxAvatar extends StatelessWidget {
       return _buildFallback(theme);
     }
 
-    return ClipRRect(
+    return ClipRSuperellipse(
       borderRadius: BorderRadius.circular(borderRadius),
       child: Image(
         image: discourseImageProvider(imageUrl!),
@@ -380,9 +395,11 @@ class OneboxAvatar extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(borderRadius),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
       ),
       child: Icon(
         fallbackIcon,

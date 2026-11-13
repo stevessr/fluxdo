@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:common_ui/common_ui.dart';
 import 'package:ai_model_manager/ai_model_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -159,9 +160,11 @@ class _AiChatInputState extends State<AiChatInput> {
         top: 8,
         bottom: 4 + bottomPadding,
       ),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -201,15 +204,15 @@ class _AiChatInputState extends State<AiChatInput> {
                 ),
               ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: context.shapes.borderRadius(20),
                 borderSide: BorderSide.none,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: context.shapes.borderRadius(20),
                 borderSide: BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: context.shapes.borderRadius(20),
                 borderSide: BorderSide.none,
               ),
               contentPadding: const EdgeInsets.symmetric(
@@ -383,10 +386,14 @@ class _ToolCard extends StatelessWidget {
         height: 72,
         child: Material(
           color: baseColor,
-          borderRadius: BorderRadius.circular(14),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(14),
+          ),
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(14),
+            customBorder: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(14),
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -425,8 +432,8 @@ class _PendingAttachmentTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
+        ClipRSuperellipse(
+          borderRadius: context.shapes.borderRadius(6),
           child: _buildPreview(64),
         ),
         Positioned(
@@ -434,10 +441,14 @@ class _PendingAttachmentTile extends StatelessWidget {
           right: -4,
           child: Material(
             color: Colors.black54,
-            shape: const CircleBorder(),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(9999),
+            ),
             child: InkWell(
               onTap: onRemove,
-              customBorder: const CircleBorder(),
+              customBorder: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(9999),
+              ),
               child: const Padding(
                 padding: EdgeInsets.all(2),
                 child: Icon(

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 
 import '../../utils/dialog_utils.dart';
@@ -73,16 +74,18 @@ class _LoadingDialogContent extends StatelessWidget {
     return Center(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
+          shadows: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 20,
               offset: const Offset(0, 4),
             ),
           ],
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(16),
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

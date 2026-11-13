@@ -9,6 +9,8 @@
 /// 见 local_date_edit_dialog 同款注释)。
 library;
 
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
+
 import 'package:flutter/material.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
@@ -371,7 +373,9 @@ class _PollBuilderDialogState extends State<_PollBuilderDialog> {
         decoration: InputDecoration(
           labelText: label,
           isDense: true,
-          border: const OutlineInputBorder(),
+          border: OutlineInputBorder(
+            borderRadius: context.shapes.borderRadius(4),
+          ),
         ),
       ),
     );
@@ -408,10 +412,7 @@ class _PollBuilderDialogState extends State<_PollBuilderDialog> {
               const SizedBox(height: 12),
               TextField(
                 controller: _title,
-                decoration: const InputDecoration(
-                  labelText: '标题(可空)',
-                  isDense: true,
-                ),
+                decoration: InputDecoration(labelText: '标题(可空)', isDense: true),
               ),
               const SizedBox(height: 12),
               if (!isNumber) ...[
@@ -426,7 +427,9 @@ class _PollBuilderDialogState extends State<_PollBuilderDialog> {
                             decoration: InputDecoration(
                               labelText: '选项 ${i + 1}',
                               isDense: true,
-                              border: const OutlineInputBorder(),
+                              border: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(4),
+                              ),
                             ),
                           ),
                         ),
@@ -503,10 +506,12 @@ class _PollBuilderDialogState extends State<_PollBuilderDialog> {
               if (_showAdvanced) ...[
                 DropdownButtonFormField<String>(
                   initialValue: _results,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: '结果可见性',
                     isDense: true,
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: context.shapes.borderRadius(4),
+                    ),
                   ),
                   items: [
                     for (final (v, label) in kPollResults)

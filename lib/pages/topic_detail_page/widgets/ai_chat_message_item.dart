@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:common_ui/common_ui.dart';
 import 'package:ai_model_manager/ai_model_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -108,13 +109,15 @@ class AiChatMessageItem extends StatelessWidget {
             ? const EdgeInsets.only(top: 4, bottom: 4)
             : const EdgeInsets.only(left: 48, right: 16, top: 4, bottom: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: theme.colorScheme.primaryContainer,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-            bottomLeft: Radius.circular(16),
-            bottomRight: Radius.circular(4),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.only(
+              topLeft: context.shapes.radius(16),
+              topRight: context.shapes.radius(16),
+              bottomLeft: context.shapes.radius(16),
+              bottomRight: context.shapes.radius(4),
+            ),
           ),
         ),
         child: Column(
@@ -164,13 +167,15 @@ class AiChatMessageItem extends StatelessWidget {
             ? const EdgeInsets.only(top: 4, bottom: 4)
             : const EdgeInsets.only(left: 16, right: 48, top: 4, bottom: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: theme.colorScheme.surfaceContainerLow,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-            bottomLeft: Radius.circular(4),
-            bottomRight: Radius.circular(16),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.only(
+              topLeft: context.shapes.radius(16),
+              topRight: context.shapes.radius(16),
+              bottomLeft: context.shapes.radius(4),
+              bottomRight: context.shapes.radius(16),
+            ),
           ),
         ),
         child: Column(
@@ -290,13 +295,13 @@ class AiChatMessageItem extends StatelessWidget {
               icon: Icon(
                 Symbols.refresh_rounded,
                 size: 14,
-                color: theme.colorScheme.primary,
+                color: context.emphasis.accent,
               ),
               label: Text(
                 context.l10n.ai_retryLabel,
                 style: TextStyle(
                   fontSize: 12,
-                  color: theme.colorScheme.primary,
+                  color: context.emphasis.accent,
                 ),
               ),
               style: TextButton.styleFrom(
@@ -531,8 +536,8 @@ class _TappableImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+    return ClipRSuperellipse(
+      borderRadius: context.shapes.borderRadius(10),
       child: Material(
         color: Colors.transparent,
         child: Stack(
@@ -639,12 +644,14 @@ class _OptimizedPromptBlockState extends State<_OptimizedPromptBlock> {
     final color = theme.colorScheme.onSurfaceVariant;
 
     return Container(
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          width: 0.5,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            width: 0.5,
+          ),
         ),
       ),
       child: Column(
@@ -653,7 +660,9 @@ class _OptimizedPromptBlockState extends State<_OptimizedPromptBlock> {
         children: [
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(8),
+            customBorder: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(8),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               child: Row(
@@ -687,7 +696,9 @@ class _OptimizedPromptBlockState extends State<_OptimizedPromptBlock> {
                           context.l10n.ai_copiedToClipboard,
                         );
                       },
-                      borderRadius: BorderRadius.circular(4),
+                      customBorder: RoundedSuperellipseBorder(
+                        borderRadius: context.shapes.borderRadius(4),
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(2),
                         child: Icon(
@@ -727,9 +738,11 @@ class _PartialBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: Colors.black54,
-        borderRadius: BorderRadius.circular(10),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(10),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -826,8 +839,8 @@ class _ImageGenerationPlaceholderState
     // 主占位 280×280（接近常见的 1024×1024 缩略尺寸），compact 80×80
     final size = widget.compact ? 80.0 : 280.0;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+    return ClipRSuperellipse(
+      borderRadius: context.shapes.borderRadius(10),
       child: SizedBox(
         height: size,
         width: size,
@@ -930,12 +943,14 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
     final color = theme.colorScheme.onSurfaceVariant;
 
     return Container(
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          width: 0.5,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            width: 0.5,
+          ),
         ),
       ),
       child: Column(
@@ -944,7 +959,9 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
         children: [
           InkWell(
             onTap: () => setState(() => _userExpanded = !_expanded),
-            borderRadius: BorderRadius.circular(8),
+            customBorder: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(8),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               child: Row(
@@ -1003,8 +1020,8 @@ class _AttachmentThumbnails extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
           final att = attachments[index];
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+          return ClipRSuperellipse(
+            borderRadius: context.shapes.borderRadius(6),
             child: _attachmentImage(att, size: 80),
           );
         },
@@ -1076,7 +1093,9 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
+      customBorder: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(4),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         child: Row(

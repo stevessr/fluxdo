@@ -1,5 +1,23 @@
 // 用户操作记录
+import 'package:fluxdo/utils/avatar_url.dart';
+
 import '../utils/time_utils.dart';
+import 'topic.dart';
+
+/// 活动中的帖子作者与发起点赞、回应的用户是两个身份。
+TopicUser? _readPostAuthor(Map<String, dynamic>? post) {
+  if (post == null) return null;
+  final embeddedUser = post['user'] as Map<String, dynamic>?;
+  final user = embeddedUser ?? post;
+  final username = user['username'] as String?;
+  if (username == null || username.isEmpty) return null;
+  return TopicUser(
+    id: (embeddedUser?['id'] ?? post['user_id']) as int? ?? 0,
+    username: username,
+    name: user['name'] as String?,
+    avatarTemplate: user['avatar_template'] as String? ?? '',
+  );
+}
 
 /// 用户操作类型
 class UserActionType {
@@ -20,6 +38,7 @@ class UserAction {
   final DateTime? actingAt;
   final int? categoryId;
   final String? excerpt;
+  final TopicUser? author;
 
   const UserAction({
     this.actionType,
@@ -32,6 +51,7 @@ class UserAction {
     this.actingAt,
     this.categoryId,
     this.excerpt,
+    this.author,
   });
 
   factory UserAction.fromJson(Map<String, dynamic> json) {
@@ -51,12 +71,13 @@ class UserAction {
       ),
       categoryId: json['category_id'] as int?,
       excerpt: json['excerpt'] as String?,
+      author: _readPostAuthor(json),
     );
   }
 
   String getAvatarUrl({int size = 120}) {
     if (avatarTemplate == null) return '';
-    return avatarTemplate!.replaceAll('{size}', '$size');
+    return AvatarUrl.resolve(avatarTemplate!, size: size);
   }
 }
 
@@ -85,6 +106,8 @@ class UserReaction {
   final String? excerpt;
   final String? reactionValue;
   final DateTime? createdAt;
+  final TopicUser? author;
+  final int? categoryId;
 
   const UserReaction({
     required this.id,
@@ -95,6 +118,8 @@ class UserReaction {
     this.excerpt,
     this.reactionValue,
     this.createdAt,
+    this.author,
+    this.categoryId,
   });
 
   factory UserReaction.fromJson(Map<String, dynamic> json) {
@@ -110,6 +135,8 @@ class UserReaction {
       excerpt: post?['excerpt'] as String?,
       reactionValue: reaction?['reaction_value'] as String?,
       createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
+      author: _readPostAuthor(post),
+      categoryId: post?['category_id'] as int?,
     );
   }
 }
@@ -154,6 +181,8 @@ class UserBoost {
   final String? excerpt;
   final String cooked;
   final DateTime? createdAt;
+  final TopicUser? author;
+  final int? categoryId;
 
   const UserBoost({
     required this.id,
@@ -164,6 +193,8 @@ class UserBoost {
     this.excerpt,
     required this.cooked,
     this.createdAt,
+    this.author,
+    this.categoryId,
   });
 
   factory UserBoost.fromJson(Map<String, dynamic> json) {
@@ -190,6 +221,8 @@ class UserBoost {
       excerpt: post?['excerpt'] as String?,
       cooked: json['cooked'] as String? ?? '',
       createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
+      author: _readPostAuthor(post),
+      categoryId: post?['category_id'] as int?,
     );
   }
 }
@@ -217,6 +250,8 @@ class SolvedPost {
   final String? topicTitle;
   final String? excerpt;
   final DateTime? createdAt;
+  final TopicUser? author;
+  final int? categoryId;
 
   const SolvedPost({
     required this.postId,
@@ -225,6 +260,8 @@ class SolvedPost {
     this.topicTitle,
     this.excerpt,
     this.createdAt,
+    this.author,
+    this.categoryId,
   });
 
   factory SolvedPost.fromJson(Map<String, dynamic> json) {
@@ -235,6 +272,8 @@ class SolvedPost {
       topicTitle: json['topic_title'] as String?,
       excerpt: json['excerpt'] as String?,
       createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
+      author: _readPostAuthor(json),
+      categoryId: json['category_id'] as int?,
     );
   }
 }

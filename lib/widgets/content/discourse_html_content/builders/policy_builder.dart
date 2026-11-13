@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -276,11 +277,13 @@ class _PolicyWidgetState extends ConsumerState<_PolicyWidget> {
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+      decoration: ShapeDecoration(
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(6),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+          ),
         ),
-        borderRadius: BorderRadius.circular(6),
       ),
       clipBehavior: Clip.hardEdge,
       child: Column(
@@ -467,7 +470,9 @@ class _PolicyWidgetState extends ConsumerState<_PolicyWidget> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      customBorder: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(14),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         child: Row(
@@ -541,13 +546,17 @@ class _PolicyWidgetState extends ConsumerState<_PolicyWidget> {
     final theme = Theme.of(context);
     return InkWell(
       onTap: isLoading ? null : onTap,
-      borderRadius: BorderRadius.circular(12),
+      customBorder: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(12),
+      ),
       child: Container(
         constraints: const BoxConstraints(minWidth: 32, minHeight: 24),
         padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: theme.colorScheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(12),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(12),
+          ),
         ),
         alignment: Alignment.center,
         child: isLoading

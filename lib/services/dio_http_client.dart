@@ -1,3 +1,5 @@
+import 'log/log_policy.dart';
+import 'request_cancellation.dart';
 import 'download_request_queue.dart';
 import 'image_download_task_pools.dart';
 export 'download_request_queue.dart' show DownloadPriority;
@@ -8,11 +10,28 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart' as dio;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 
 import '../constants.dart';
+import 'app_logger.dart';
+import 'network/core/net_core_http_adapter.dart';
+import 'network/interceptors/redirect_interceptor.dart';
 import 'network/discourse_dio.dart';
+import 'network/deadline_dio.dart';
 import 'network/adapters/webview_http_adapter.dart';
+
+/// [DioHttpClient.fetchBytes] 的非 200 响应。
+///
+/// 继承 [http.ClientException] 保持既有 catch 语义不变;需要按状态码
+/// 分流的调用方(如 emoji 表情集缺图 404 回退)据 [statusCode] 判定,
+/// 不必解析消息文本。
+class HttpStatusException extends http.ClientException {
+  HttpStatusException(this.statusCode, Uri url)
+    : super('HTTP $statusCode for $url', url);
+
+  final int? statusCode;
+}
 
 /// 包装 Dio 的 http.BaseClient 实现,给 flutter_cache_manager / image 下载用。
 ///
@@ -37,6 +56,9 @@ class DioHttpClient extends http.BaseClient {
     return _instance!;
   }
 
+  @visibleForTesting
+  DioHttpClient.withClients(this._mainDomainDio, this._cdnDio);
+
   DioHttpClient._internal()
     : _mainDomainDio = DiscourseDio.create(
         defaultHeaders: _imageHeaders,
@@ -60,17 +82,32 @@ class DioHttpClient extends http.BaseClient {
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
   };
 
-  /// 图片按主站/CDN 和内容类型双维度分流，限制的是完整下载而非仅连接数。
-  /// - 主站（含子域）：small 12 / content 8 / sticker 3 个槽位；
-  /// - 第三方 CDN：沿用 small 12 / content 6 / sticker 3 个槽位。
-  /// 贴纸通道各预留 1 个 high 前台槽位，避免批量预取挤占用户主动操作。
-  ///
-  /// 所有主站图片继续使用带 Cookie 的 Dio，CDN 不带 Cookie。
-  /// 两类任务互不排队，主站的小图/正文/贴纸也不会互相占满下载槽。
+  /// 图片下载同时按主站/CDN、内容通道和组内并发分流：外层池隔离不同
+  /// host/channel，内层队列限制小图/正文/贴纸总数并预留前台槽位。
+  /// 主站图片继续走带 Cookie 的 Dio，第三方 CDN 不带 Cookie。
   static final ImageDownloadTaskPools _taskPools = ImageDownloadTaskPools(
     mainHost: Uri.parse(AppConstants.baseUrl).host,
   );
 
+  static final DownloadRequestQueue _smallSemaphore = DownloadRequestQueue(12);
+  static final DownloadRequestQueue _contentSemaphore = DownloadRequestQueue(
+    6,
+    reservedHighSlots: 1,
+  );
+  static final DownloadRequestQueue _stickerSemaphore = DownloadRequestQueue(
+    3,
+    reservedHighSlots: 1,
+  );
+
+  /// [send] 沿用内容通道。
+  static DownloadRequestQueue get _downloadSemaphore => _contentSemaphore;
+
+  static DownloadRequestQueue _semaphoreOf(DownloadChannel channel) =>
+      switch (channel) {
+        DownloadChannel.small => _smallSemaphore,
+        DownloadChannel.content => _contentSemaphore,
+        DownloadChannel.sticker => _stickerSemaphore,
+      };
   /// 把仍在 [channel] 等待队列中的 [url] 提到高优先级(滚入视野)。
   /// 在途/未排队/已完成均为无操作 —— 幂等,调用方无需判断状态。
   static void bumpPending(DownloadChannel channel, String url) =>
@@ -79,6 +116,11 @@ class DioHttpClient extends http.BaseClient {
   /// 把仍在 [channel] 等待队列中的 [url] 沉到低优先级队尾(滚出视野)。
   static void sinkPending(DownloadChannel channel, String url) =>
       _taskPools.sinkPending(channel, url);
+
+  static void Function() retainForeground(
+    DownloadChannel channel,
+    String url,
+  ) => _semaphoreOf(channel).retainForeground(url);
 
   /// 提取 [AppConstants.baseUrl] 的 host(例如 `linux.do`),用于判断主域。
   /// 注意是 host 比对而不是 URL prefix 比对 —— 子域(`auth.linux.do` 等)
@@ -186,12 +228,72 @@ class DioHttpClient extends http.BaseClient {
     DownloadChannel channel = DownloadChannel.content,
     DownloadPriority priority = DownloadPriority.normal,
     void Function(int received, int? total)? onProgress,
+    Future<void> Function(Uint8List bytes)? onBytesReady,
+    dio.CancelToken? cancellation,
+    Duration callTimeout = const Duration(minutes: 2),
   }) async {
-    final semaphore = _taskPools.queueFor(url, channel);
-    await semaphore.acquire(url.toString(), priority);
+    final taskQueue = _taskPools.queueFor(url, channel);
+    await taskQueue.acquire(url.toString(), priority);
     try {
+      return await DeadlineDio.withDeadline(
+        dio.RequestOptions(path: url.toString(), cancelToken: cancellation),
+        callTimeout,
+        (request) => _fetchBytes(
+          url,
+          channel: channel,
+          priority: priority,
+          onProgress: onProgress,
+          onBytesReady: onBytesReady,
+          cancellation: request.cancelToken,
+          requestExtra: request.extra,
+        ),
+      );
+    } on dio.DioException catch (error) {
+      throw http.ClientException('Dio error: ${error.message}', url);
+    } finally {
+      taskQueue.release();
+    }
+  }
+
+  Future<Uint8List> _fetchBytes(
+    Uri url, {
+    required DownloadChannel channel,
+    required DownloadPriority priority,
+    required void Function(int received, int? total)? onProgress,
+    required Future<void> Function(Uint8List bytes)? onBytesReady,
+    required dio.CancelToken? cancellation,
+    required Map<String, dynamic> requestExtra,
+  }) async {
+    final elapsed = Stopwatch()..start();
+    final semaphore = _semaphoreOf(channel);
+    final group = channel == DownloadChannel.small ? channel.name : null;
+    final cancelToken = cancellation ?? dio.CancelToken();
+    cancelToken.throwIfCancellationRequested();
+    await semaphore.acquire(
+      url.toString(),
+      priority,
+      cancelled: cancelToken.whenCancel.then((_) {}),
+      group: group,
+    );
+    final queueMs = elapsed.elapsedMilliseconds;
+    final foregroundAtStart =
+        priority == DownloadPriority.high ||
+        semaphore.isForeground(url.toString());
+    var completed = false;
+    int? headMs;
+    int? bodyMs;
+    int? status;
+    String? protocol;
+    Map<String, dynamic>? connection;
+    var receivedBytes = 0;
+    final diagnosticExtra = <String, dynamic>{
+      ...requestExtra,
+      'traceId': LogPolicy.newTraceId(),
+    };
+    try {
+      cancelToken.throwIfCancellationRequested();
       final isMainDomain = _isMainDomain(url);
-      final extra = <String, dynamic>{};
+      final extra = diagnosticExtra;
       if (isMainDomain) {
         extra[WebViewHttpAdapter.resourceKindExtraKey] =
             WebViewHttpAdapter.resourceKindImage;
@@ -200,14 +302,35 @@ class DioHttpClient extends http.BaseClient {
       }
       final response = await _selectDio(url).get<dio.ResponseBody>(
         url.toString(),
+        cancelToken: cancelToken,
         options: dio.Options(
           responseType: dio.ResponseType.stream,
           extra: extra,
           validateStatus: (status) => true,
         ),
       );
+      diagnosticExtra.addAll(response.requestOptions.extra);
+      headMs = elapsed.elapsedMilliseconds - queueMs;
+      status = response.statusCode;
+      protocol =
+          response.extra[dio.HttpClientAdapter.extraKeyHttpVersion] as String?;
+      final coreConnection = response.extra[netCoreConnectionExtraKey];
+      if (coreConnection is Map) {
+        connection = {
+          for (final key in [
+            'connectionId',
+            'reused',
+            'tlsResumed',
+            'echApplied',
+            'echAccepted',
+            'connectMs',
+            'ttfbMs',
+          ])
+            if (coreConnection.containsKey(key)) key: coreConnection[key],
+        };
+      }
       if (response.statusCode != 200) {
-        throw http.ClientException('HTTP ${response.statusCode} for $url', url);
+        throw HttpStatusException(response.statusCode, url);
       }
       final contentLength = int.tryParse(
         response.headers.value('content-length') ?? '',
@@ -221,14 +344,59 @@ class DioHttpClient extends http.BaseClient {
       if (body != null) {
         await for (final chunk in body.stream) {
           builder.add(chunk);
+          receivedBytes += chunk.length;
           onProgress?.call(builder.length, total);
         }
       }
-      return builder.takeBytes();
+      final bytes = builder.takeBytes();
+      bodyMs = elapsed.elapsedMilliseconds - queueMs - headMs;
+      completed = true;
+      // 落盘预算不足时保留下载槽进行背压；预算充足时回调只提交后台任务。
+      await onBytesReady?.call(bytes);
+      return bytes;
     } on dio.DioException catch (e) {
+      diagnosticExtra.addAll(e.requestOptions.extra);
       throw http.ClientException('Dio error: ${e.message}', url);
     } finally {
-      semaphore.release();
+      // 非 200、进度回调抛错等都可能早于响应 EOF；取消整个请求，
+      // 不依赖 Dio 包装流的订阅取消能否继续传递到适配器。
+      if (!completed) cancelToken.cancel('Image download abandoned');
+      semaphore.release(group: group);
+      elapsed.stop();
+      final totalMs = elapsed.elapsedMilliseconds;
+      // 快速成功不逐图落盘；慢请求/失败才记录阶段耗时，详细日志模式可看全量。
+      // 只记域名和数值，不记录图片路径、查询参数、Cookie 或令牌。
+      if (!completed || totalMs >= 1500 || AppLogger.verboseNotifier.value) {
+        AppLogger.info(
+          '图片下载阶段耗时',
+          tag: 'ImageDownload',
+          fields: {
+            'type': 'network',
+            'event': 'image_download_timing',
+            'traceId': diagnosticExtra['traceId'],
+            'attemptId': diagnosticExtra['attemptId'],
+            'coreRequestId': diagnosticExtra['coreRequestId'],
+            'host': url.host,
+            'channel': channel.name,
+            'foregroundAtStart': foregroundAtStart,
+            'queueMs': queueMs,
+            'headMs': headMs,
+            'redirectHops': diagnosticExtra[RedirectInterceptor.hopsKey],
+            'bodyMs':
+                bodyMs ?? (headMs == null ? null : totalMs - queueMs - headMs),
+            'consumerMs': bodyMs == null
+                ? null
+                : totalMs - queueMs - headMs! - bodyMs,
+            'totalMs': totalMs,
+            'bytes': receivedBytes,
+            'status': status,
+            'completed': completed,
+            'httpVersion': protocol,
+            'connection': connection,
+          },
+        );
+      }
     }
   }
 }
+

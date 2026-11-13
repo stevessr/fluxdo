@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -99,9 +100,11 @@ class TopicSummaryWidget extends ConsumerWidget {
   Widget _buildLoadingState(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: UiShapes.current.borderRadius(12),
+        ),
       ),
       child: Row(
         children: [
@@ -128,9 +131,11 @@ class TopicSummaryWidget extends ConsumerWidget {
   Widget _buildEmptyState(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: UiShapes.current.borderRadius(12),
+        ),
       ),
       child: Row(
         children: [
@@ -159,12 +164,14 @@ class TopicSummaryWidget extends ConsumerWidget {
   ) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          width: 0.5,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(12),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            width: 0.5,
+          ),
         ),
       ),
       child: Column(
@@ -176,14 +183,14 @@ class TopicSummaryWidget extends ConsumerWidget {
               Icon(
                 Symbols.auto_awesome_rounded,
                 size: 18,
-                color: theme.colorScheme.primary,
+                color: context.emphasis.accent,
               ),
               const SizedBox(width: 8),
               Text(
                 S.current.topic_aiSummary,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w500,
-                  color: theme.colorScheme.primary,
+                  color: context.emphasis.accent,
                 ),
               ),
               const Spacer(),
@@ -212,9 +219,11 @@ class TopicSummaryWidget extends ConsumerWidget {
                     horizontal: 8,
                     vertical: 2,
                   ),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: theme.colorScheme.tertiaryContainer,
-                    borderRadius: BorderRadius.circular(4),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(4),
+                    ),
                   ),
                   child: Text(
                     S.current.topic_newRepliesSinceSummary(
@@ -251,7 +260,7 @@ class TopicSummaryWidget extends ConsumerWidget {
                   return;
                 }
                 Navigator.of(context).push(
-                  MaterialPageRoute(
+                  InteractionPageRoute(
                     builder: (_) => TopicDetailPage(
                       topicId: linkTopicId,
                       initialTitle: topicSlug,
@@ -419,7 +428,8 @@ class _StreamingMarkdownBodyState extends State<_StreamingMarkdownBody> {
         if (nextLength < _targetText.length) {
           final currentCodeUnit = _targetText.codeUnitAt(nextLength - 1);
           final nextCodeUnit = _targetText.codeUnitAt(nextLength);
-          final splitsSurrogatePair = currentCodeUnit >= 0xD800 &&
+          final splitsSurrogatePair =
+              currentCodeUnit >= 0xD800 &&
               currentCodeUnit <= 0xDBFF &&
               nextCodeUnit >= 0xDC00 &&
               nextCodeUnit <= 0xDFFF;
@@ -549,17 +559,21 @@ class _CollapsibleTopicSummaryState
             // 摘要按钮
             InkWell(
               onTap: _toggleExpand,
-              borderRadius: BorderRadius.circular(8),
+              customBorder: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(8),
+              ),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 8,
                 ),
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: theme.colorScheme.primaryContainer.withValues(
                     alpha: 0.3,
                   ),
-                  borderRadius: BorderRadius.circular(8),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(8),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -567,7 +581,7 @@ class _CollapsibleTopicSummaryState
                     Icon(
                       Symbols.auto_awesome_rounded,
                       size: 16,
-                      color: theme.colorScheme.primary,
+                      color: context.emphasis.accent,
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -575,7 +589,7 @@ class _CollapsibleTopicSummaryState
                           ? S.current.topic_aiSummary
                           : S.current.topic_generateAiSummary,
                       style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.primary,
+                        color: context.emphasis.accent,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -588,7 +602,7 @@ class _CollapsibleTopicSummaryState
                       child: Icon(
                         Symbols.expand_more_rounded,
                         size: 18,
-                        color: theme.colorScheme.primary,
+                        color: context.emphasis.accent,
                       ),
                     ),
                     // 加载指示器
@@ -599,7 +613,7 @@ class _CollapsibleTopicSummaryState
                         height: 12,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: theme.colorScheme.primary,
+                          color: context.emphasis.accent,
                         ),
                       ),
                     ],

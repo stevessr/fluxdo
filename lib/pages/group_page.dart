@@ -1,10 +1,12 @@
 import 'dart:collection';
 
 import 'package:app_icons/app_icons.dart';
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/group.dart';
+import '../models/user_group.dart' show GroupActivityFilter, GroupSection;
 import '../providers/discourse_providers.dart';
 import '../widgets/common/group_leave_confirmation_dialog.dart';
 import '../widgets/common/smart_avatar.dart';
@@ -12,9 +14,28 @@ import 'user_profile_page.dart';
 
 /// Discourse 原生群组详情 / 成员页。
 class GroupPage extends ConsumerStatefulWidget {
-  const GroupPage({super.key, required this.groupName});
+  /// 合并兼容：fork 侧一直用 [groupName]，上游 dev 改成 [name] 并额外带
+  /// 初始分区/活动筛选参数。这里同时接受两种写法，避免两边调用点失效；
+  /// fork 版页面没有分栏，三个 initial* 参数目前只做兼容占位。
+  const GroupPage({
+    super.key,
+    String? groupName,
+    String? name,
+    this.initialSection = GroupSection.members,
+    this.initialActivityFilter = GroupActivityFilter.posts,
+    this.initialCategoryId,
+  }) : assert(
+         groupName != null || name != null,
+         'GroupPage 需要 groupName 或 name',
+       ),
+       groupName = groupName ?? name ?? '';
 
   final String groupName;
+
+  /// 上游入口参数（暂不生效，见构造函数注释）。
+  final GroupSection initialSection;
+  final GroupActivityFilter initialActivityFilter;
+  final int? initialCategoryId;
 
   @override
   ConsumerState<GroupPage> createState() => _GroupPageState();
@@ -522,7 +543,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
 
   void _openUser(GroupMember member) {
     Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => UserProfilePage(username: member.username),
       ),
     );

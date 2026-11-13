@@ -15,7 +15,6 @@ import '../../services/app_error_handler.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/preloaded_data_service.dart';
 import '../../services/toast_service.dart';
-import '../../theme/theme_resolver.dart';
 import '../../utils/dialog_utils.dart';
 import '../../utils/number_utils.dart';
 import '../../utils/platform_utils.dart';
@@ -29,6 +28,7 @@ import '../common/smart_avatar.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import 'avatar_action_menu.dart';
 import 'ignore_duration_picker.dart';
+import '../../theme/app_colors.dart';
 
 /// 卡片与锚点之间的间隙
 const double _kGap = 10.0;
@@ -112,6 +112,10 @@ void showUserCard({
     // 用 OverlayEntry（无 barrier）+ 半透明 Listener：卡外按下即关闭，
     // 滚轮/拖动等事件穿透到下层页面，背景照常滚动。
     final overlay = Overlay.of(context, rootOverlay: true);
+    final anchorBox = context.findRenderObject();
+    final anchorOffset = anchorBox is RenderBox && anchorBox.hasSize
+        ? anchorBox.globalToLocal(anchorRect.topLeft)
+        : null;
     OverlayEntry? entry;
     var removed = false;
     void close() {
@@ -123,26 +127,32 @@ void showUserCard({
     entry = OverlayEntry(
       builder: (ctx) {
         final animatedCard = _CardEntryAnimation(child: buildCard(close));
-        // 有 LayerLink：卡片跟随头像滚动（对齐网页版）；否则按锚点矩形静态定位
-        final Widget positioned = layerLink != null
-            ? CompositedTransformFollower(
-                link: layerLink,
-                showWhenUnlinked: false,
-                targetAnchor: Alignment.topRight,
-                followerAnchor: Alignment.topLeft,
-                offset: const Offset(_kGap, -8),
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: _kFloatingWidth,
-                      maxHeight: MediaQuery.of(ctx).size.height * 0.8,
-                    ),
-                    child: animatedCard,
-                  ),
-                ),
-              )
-            : _FloatingLayer(anchorRect: anchorRect, child: animatedCard);
+        final positioned = LayoutBuilder(
+          builder: (_, _) {
+            // 窗口缩放后头像可能换位，在布局阶段读取更新后的坐标。
+            final currentAnchorRect =
+                anchorBox is RenderBox &&
+                    anchorBox.attached &&
+                    anchorBox.hasSize &&
+                    anchorOffset != null
+                ? anchorBox.localToGlobal(anchorOffset) & anchorRect.size
+                : anchorRect;
+            final floatingLayer = _FloatingLayer(
+              anchorRect: currentAnchorRect,
+              child: animatedCard,
+            );
+            // 共用屏幕边界定位，再还原跟随层的坐标原点；
+            // 页面滚动仍由 LayerLink 直接跟随，无需逐帧重建卡片。
+            return layerLink != null
+                ? CompositedTransformFollower(
+                    link: layerLink,
+                    showWhenUnlinked: false,
+                    offset: -currentAnchorRect.topLeft,
+                    child: floatingLayer,
+                  )
+                : floatingLayer;
+          },
+        );
 
         return Stack(
           children: [
@@ -215,6 +225,7 @@ class _UserCardMenuNavigatorHost extends StatefulWidget {
 
 class _UserCardMenuNavigatorHostState
     extends State<_UserCardMenuNavigatorHost> {
+  final _routeInteractionObserver = RouteInteractionObserver();
   late final _UserCardMenuNavigatorObserver _observer =
       _UserCardMenuNavigatorObserver(_setMenuActive);
   bool _menuActive = false;
@@ -231,8 +242,8 @@ class _UserCardMenuNavigatorHostState
       child: Navigator(
         key: widget.navigatorKey,
         clipBehavior: Clip.none,
-        observers: [_observer],
-        onGenerateRoute: (_) => PageRouteBuilder<void>(
+        observers: [_routeInteractionObserver, _observer],
+        onGenerateRoute: (_) => InteractionPageRouteBuilder<void>(
           settings: const RouteSettings(
             name: _UserCardMenuNavigator._hostRouteName,
           ),
@@ -399,15 +410,21 @@ class _FloatingLayoutDelegate extends SingleChildLayoutDelegate {
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
     final maxWidth = math.min(
       _kFloatingWidth,
-      constraints.maxWidth - _kScreenMargin * 2,
+      math.max(
+        0.0,
+        constraints.maxWidth - safeInsets.horizontal - _kScreenMargin * 2,
+      ),
     );
     final maxHeight =
-        constraints.maxHeight - safeInsets.vertical - _kScreenMargin * 2;
+        constraints.maxHeight -
+        safeInsets.vertical -
+        _kScreenMargin * 2 -
+        _kAvatarOverflow;
     return BoxConstraints(
       minWidth: 0,
       maxWidth: maxWidth,
       minHeight: 0,
-      maxHeight: math.max(160.0, maxHeight),
+      maxHeight: math.max(0.0, maxHeight),
     );
   }
 
@@ -416,31 +433,32 @@ class _FloatingLayoutDelegate extends SingleChildLayoutDelegate {
     // 顶部额外留出头像戳出的高度，避免被裁
     final topLimit = safeInsets.top + _kScreenMargin + _kAvatarOverflow;
     final bottomLimit = size.height - safeInsets.bottom - _kScreenMargin;
+    final leftLimit = safeInsets.left + _kScreenMargin;
+    final rightLimit = size.width - safeInsets.right - _kScreenMargin;
 
     double clampY(double y) =>
         y.clamp(topLimit, math.max(topLimit, bottomLimit - childSize.height));
 
     // 优先右侧
     final rightX = anchorRect.right + _kGap;
-    if (rightX + childSize.width <= size.width - _kScreenMargin) {
+    if (rightX + childSize.width <= rightLimit) {
       return Offset(rightX, clampY(anchorRect.top));
     }
     // 其次左侧
     final leftX = anchorRect.left - _kGap - childSize.width;
-    if (leftX >= _kScreenMargin) {
+    if (leftX >= leftLimit) {
       return Offset(leftX, clampY(anchorRect.top));
     }
     // 再次下方/上方，水平以锚点居中并 clamp
-    final dx = (anchorRect.center.dx - childSize.width / 2).clamp(
-      _kScreenMargin,
-      size.width - childSize.width - _kScreenMargin,
-    );
+    final dx = (anchorRect.center.dx - childSize.width / 2)
+        .clamp(leftLimit, math.max(leftLimit, rightLimit - childSize.width))
+        .toDouble();
     final belowTop = anchorRect.bottom + _kGap;
     if (belowTop + childSize.height <= bottomLimit) {
-      return Offset(dx, belowTop);
+      return Offset(dx, clampY(belowTop));
     }
     final aboveTop = anchorRect.top - _kGap - childSize.height;
-    return Offset(dx, math.max(topLimit, aboveTop));
+    return Offset(dx, clampY(aboveTop));
   }
 
   @override
@@ -565,7 +583,7 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
 
       final title = user.name?.isNotEmpty == true ? user.name! : user.username;
       await Navigator.of(navContext).push(
-        MaterialPageRoute(
+        InteractionPageRoute(
           builder: (_) =>
               ChatMessagePage(channelId: channelId, channelTitle: title),
         ),
@@ -669,7 +687,9 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final user = _user;
+    final current = ref.watch(currentUserProvider.select((value) =>
+      value.value?.id == _user?.id ? value.value : null));
+    final user = current == null ? _user : _user?.copyWith(identity: current);
     final bg = user?.backgroundUrl;
     final hasBg = bg != null && bg.isNotEmpty;
     final surface = theme.colorScheme.surface;
@@ -703,10 +723,9 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
     );
 
     final card = Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.overlaySurface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
+      decoration: ShapeDecoration(
+        color: theme.colorScheme.surface,
+        shadows: [
           // 桌面端无遮罩，靠更重的投影把卡片从背景中托起来
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.28),
@@ -720,9 +739,12 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
             offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-          width: 0.5,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(20),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+            width: 0.5,
+          ),
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -783,10 +805,10 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
         flairSize: 18,
         flairRight: -2,
         flairBottom: -2,
-        flairUrl: user?.flairUrl ?? widget.flairUrl,
-        flairName: user?.flairName ?? widget.flairName,
-        flairBgColor: user?.flairBgColor ?? widget.flairBgColor,
-        flairColor: user?.flairColor ?? widget.flairColor,
+        flairUrl: user != null ? user.flairUrl : widget.flairUrl,
+        flairName: user != null ? user.flairName : widget.flairName,
+        flairBgColor: user != null ? user.flairBgColor : widget.flairBgColor,
+        flairColor: user != null ? user.flairColor : widget.flairColor,
         avatar: SmartAvatar(
           imageUrl: (avatarUrl?.isNotEmpty ?? false) ? avatarUrl : null,
           radius: _kAvatarRadius,
@@ -820,6 +842,7 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
         children: [
           GestureDetector(
             onTap: _openProfile,
+            onLongPress: () => copyUsernameToClipboard(widget.username),
             child: Text(
               displayName,
               style: theme.textTheme.titleLarge?.copyWith(
@@ -838,6 +861,7 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
                   behavior: HitTestBehavior.opaque,
                   // 点击 @username 复制用户名
                   onTap: () => copyUsernameToClipboard(widget.username),
+                  onLongPress: () => copyUsernameToClipboard(widget.username),
                   child: Text(
                     '@${widget.username}',
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -858,9 +882,11 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
                     horizontal: 6,
                     vertical: 1,
                   ),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(4),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(4),
+                    ),
                   ),
                   child: Text(
                     user.trustLevelString,
@@ -907,7 +933,7 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
 
   Widget _buildRestrictionBanner(ThemeData theme, User user) {
     final isSuspended = user.isSuspended;
-    final color = isSuspended ? theme.colorScheme.error : Colors.orange;
+    final color = isSuspended ? theme.colorScheme.error : context.appColors.orange;
     final label = isSuspended
         ? (user.isSuspendedForever
               ? S.current.userProfile_permanentlySuspended
@@ -922,10 +948,12 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(10),
+          side: BorderSide(color: color.withValues(alpha: 0.2)),
+        ),
       ),
       child: Row(
         children: [
@@ -1141,79 +1169,71 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
     final primary = <Widget>[];
     if (canChat) {
       primary.add(
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: _isOpeningChat ? null : _openChatWithUser,
-            icon: _isOpeningChat
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Symbols.chat_rounded, size: 18),
-            label: Text(S.current.chat_start),
-          ),
+        FilledButton.icon(
+          onPressed: _isOpeningChat ? null : _openChatWithUser,
+          icon: _isOpeningChat
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Symbols.chat_rounded, size: 18),
+          label: Text(S.current.chat_start),
         ),
       );
     }
     if (canMessage) {
       primary.add(
-        Expanded(
-          child: canChat
-              ? FilledButton.tonalIcon(
-                  onPressed: _composeMessage,
-                  icon: const Icon(Symbols.mail_rounded, size: 18),
-                  label: Text(S.current.userProfile_message),
-                )
-              : FilledButton.icon(
-                  onPressed: _composeMessage,
-                  icon: const Icon(Symbols.mail_rounded, size: 18),
-                  label: Text(S.current.userProfile_message),
-                ),
-        ),
+        canChat
+            ? FilledButton.tonalIcon(
+                onPressed: _composeMessage,
+                icon: const Icon(Symbols.mail_rounded, size: 18),
+                label: Text(S.current.userProfile_message),
+              )
+            : FilledButton.icon(
+                onPressed: _composeMessage,
+                icon: const Icon(Symbols.mail_rounded, size: 18),
+                label: Text(S.current.userProfile_message),
+              ),
       );
     }
     if (canFollow) {
       primary.add(
-        Expanded(
-          child: _isFollowed
-              ? OutlinedButton.icon(
-                  onPressed: _followLoading ? null : _toggleFollow,
-                  icon: const Icon(Symbols.how_to_reg_rounded, size: 18),
-                  label: Text(S.current.userProfile_followed),
-                )
-              : FilledButton.tonalIcon(
-                  onPressed: _followLoading ? null : _toggleFollow,
-                  icon: const Icon(Symbols.person_add_alt_rounded, size: 18),
-                  label: Text(S.current.userProfile_follow),
-                ),
-        ),
+        _isFollowed
+            ? OutlinedButton.icon(
+                onPressed: _followLoading ? null : _toggleFollow,
+                icon: const Icon(Symbols.how_to_reg_rounded, size: 18),
+                label: Text(S.current.userProfile_followed),
+              )
+            : FilledButton.tonalIcon(
+                onPressed: _followLoading ? null : _toggleFollow,
+                icon: const Icon(Symbols.person_add_alt_rounded, size: 18),
+                label: Text(S.current.userProfile_follow),
+              ),
       );
     }
 
-    // 主操作可能有 3 个（聊天/私信/关注）：两行排布，避免窄卡挤爆。
-    final primaryRows = <List<Widget>>[];
-    if (primary.length <= 2) {
-      if (primary.isNotEmpty) primaryRows.add(primary);
-    } else {
-      primaryRows.add(primary.sublist(0, 2));
-      primaryRows.add(primary.sublist(2));
+    // 窄卡里三个图标+中文文案的按钮塞一行必挤(实测已关注被压到
+    // 竖排折行),每行最多两个,超出的换行铺满
+    final primaryRows = <Widget>[];
+    for (var i = 0; i < primary.length; i += 2) {
+      final rowButtons = primary.sublist(i, (i + 2).clamp(0, primary.length));
+      primaryRows.add(
+        Row(
+          children: [
+            for (var j = 0; j < rowButtons.length; j++) ...[
+              if (j > 0) const SizedBox(width: 8),
+              Expanded(child: rowButtons[j]),
+            ],
+          ],
+        ),
+      );
     }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (var r = 0; r < primaryRows.length; r++) ...[
-          if (r > 0) const SizedBox(height: 8),
-          Row(
-            children: [
-              for (var i = 0; i < primaryRows[r].length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                primaryRows[r][i],
-              ],
-            ],
-          ),
-        ],
+        for (final row in primaryRows) ...[row, const SizedBox(height: 8)],
         if (canFilter) ...[
           OutlinedButton.icon(
             onPressed: _toggleFilterPosts,
@@ -1262,7 +1282,9 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
         side: BorderSide(
           color: theme.colorScheme.outline.withValues(alpha: 0.5),
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+        ),
         minimumSize: const Size(48, 40),
       ),
       onSelected: _setNotificationLevel,

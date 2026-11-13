@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/foundation.dart' hide Category;
@@ -514,7 +515,7 @@ class _CategoryTopicsPageState extends ConsumerState<CategoryTopicsPage>
   Future<void> _createTopic() async {
     final topicId = await Navigator.push<int>(
       context,
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => CreateTopicPage(
           initialCategoryId: widget.category.id,
           initialTags: _selectedTags.isNotEmpty ? _selectedTags : null,
@@ -547,7 +548,7 @@ class _CategoryTopicsPageState extends ConsumerState<CategoryTopicsPage>
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => TopicDetailPage(
           topicId: topic.id,
           initialTitle: topic.title,
@@ -589,7 +590,7 @@ class _CategoryTopicsPageState extends ConsumerState<CategoryTopicsPage>
             icon: const Icon(Symbols.search_rounded),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(
+              InteractionPageRoute(
                 builder: (_) => SearchPage(
                   initialFilter: SearchFilter(
                     categoryId: widget.category.id,
@@ -670,6 +671,7 @@ class _CategoryTopicsPageState extends ConsumerState<CategoryTopicsPage>
 
     return TopicCardPrewarmScope(
       topics: visible,
+      compactPinned: true,
       child: DesktopRefreshIndicator(
         onRefresh: _loadTopics,
         child: ListView.builder(
@@ -733,6 +735,9 @@ class _CategoryTopicsPageState extends ConsumerState<CategoryTopicsPage>
             return buildTopicItem(
               context: context,
               topic: topic,
+              style: topic.pinned
+                  ? TopicItemStyle.compact
+                  : TopicItemStyle.standard,
               isSelected: topic.id == selectedTopicId,
               onTap: () => _openTopic(topic),
               enableLongPress: enableLongPress,
@@ -760,12 +765,16 @@ class _CreateTopicButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(8),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+        ),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(8),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(8),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

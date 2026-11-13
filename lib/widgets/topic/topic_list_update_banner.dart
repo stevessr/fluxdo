@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
 
@@ -33,9 +34,13 @@ class TopicListUpdateBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: Material(
         color: colors.primaryContainer.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(8),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(8),
+        ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          customBorder: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(8),
+          ),
           onTap: loading ? null : onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -46,7 +51,7 @@ class TopicListUpdateBanner extends StatelessWidget {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: colors.primary,
+                        color: context.emphasis.accent,
                       ),
                     )
                   : Row(
@@ -57,13 +62,13 @@ class TopicListUpdateBanner extends StatelessWidget {
                         Icon(
                           Symbols.arrow_upward_rounded,
                           size: 14,
-                          color: colors.primary,
+                          color: context.emphasis.accent,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           label,
                           style: TextStyle(
-                            color: colors.primary,
+                            color: context.emphasis.accent,
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),

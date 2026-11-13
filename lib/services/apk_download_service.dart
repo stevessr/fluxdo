@@ -27,6 +27,7 @@ class ApkDownloadProgress {
 class ApkDownloadService {
   final Dio _dio;
   bool _cancelled = false;
+  OtaUpdate? _activeUpdate;
 
   ApkDownloadService({Dio? dio}) : _dio = dio ?? Dio();
 
@@ -68,11 +69,16 @@ class ApkDownloadService {
       progress: 0,
     );
 
+    final update = OtaUpdate();
+    _activeUpdate = update;
     try {
-      final otaEvent = OtaUpdate().execute(
+      final otaEvent = update.execute(
         downloadUrl,
         destinationFilename: asset.name,
         sha256checksum: expectedSha256,
+        // Android 12+ 尝试免确认自更新；系统要求确认时仍显示安装界面。
+        usePackageInstaller: true,
+        confirmationNotificationText: S.current.update_notification_ready,
       );
 
       await for (final event in otaEvent) {
@@ -159,6 +165,8 @@ class ApkDownloadService {
         status: ApkDownloadStatus.error,
         error: S.current.download_failed('$e'),
       );
+    } finally {
+      if (identical(_activeUpdate, update)) _activeUpdate = null;
     }
   }
 
@@ -179,7 +187,8 @@ class ApkDownloadService {
   }
 
   /// 取消下载
-  void cancelDownload() {
+  Future<void> cancelDownload() async {
     _cancelled = true;
+    await _activeUpdate?.cancel();
   }
 }

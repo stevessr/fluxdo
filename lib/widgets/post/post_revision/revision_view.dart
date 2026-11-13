@@ -403,7 +403,7 @@ class _RevisionToolbar extends StatelessWidget {
                           Icon(
                             Symbols.check_rounded,
                             size: 16,
-                            color: theme.colorScheme.primary,
+                            color: context.emphasis.selected,
                           ),
                         ],
                       ],
@@ -485,9 +485,11 @@ class _AuthorMeta extends StatelessWidget {
     final timeText = TimeUtils.formatDetailTime(revision.createdAt);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(10),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -525,9 +527,11 @@ class _AuthorMeta extends StatelessWidget {
                     horizontal: 6,
                     vertical: 2,
                   ),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: theme.colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(4),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(4),
+                    ),
                   ),
                   child: Text(
                     l10n.postRevision_revisionHidden,
@@ -657,11 +661,13 @@ class _MetaChanges extends ConsumerWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+      decoration: ShapeDecoration(
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(10),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+          ),
         ),
-        borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,9 +759,11 @@ class _MetaChip extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
       ),
       child: Text(
         text,
@@ -779,9 +787,11 @@ class _BodyDiff extends StatelessWidget {
     if (revision.diffError) {
       return Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(8),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(8),
+          ),
         ),
         child: Text(
           context.l10n.postRevision_diffError,
@@ -931,9 +941,11 @@ class _DiffColumn extends StatelessWidget {
     final processed = preformatted ? html.replaceAll('\n', '<br/>') : html;
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        border: Border.all(color: borderColor),
-        borderRadius: BorderRadius.circular(6),
+      decoration: ShapeDecoration(
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(6),
+          side: BorderSide(color: borderColor),
+        ),
       ),
       // 左右两列 processed 不同,用 hashCode 保证 heroTagNamespace 唯一。
       child:

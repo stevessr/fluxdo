@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -136,22 +137,17 @@ class _TopicVoteButtonState extends ConsumerState<TopicVoteButton> {
       color: Colors.transparent,
       child: InkWell(
         onTap: _isLoading ? null : _handleVote,
-        borderRadius: BorderRadius.circular(24),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(24),
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: _userVoted
                 ? theme.colorScheme.primary
                 : theme.colorScheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: _userVoted
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.outlineVariant,
-              width: 1,
-            ),
-            boxShadow: _userVoted
+            shadows: _userVoted
                 ? [
                     BoxShadow(
                       color: theme.colorScheme.primary.withValues(alpha: 0.2),
@@ -160,6 +156,15 @@ class _TopicVoteButtonState extends ConsumerState<TopicVoteButton> {
                     ),
                   ]
                 : null,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(24),
+              side: BorderSide(
+                color: _userVoted
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outlineVariant,
+                width: 1,
+              ),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -206,11 +211,13 @@ class _TopicVoteButtonState extends ConsumerState<TopicVoteButton> {
                     horizontal: 6,
                     vertical: 2,
                   ),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: _userVoted
                         ? theme.colorScheme.onPrimary.withValues(alpha: 0.2)
                         : theme.colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(10),
+                    ),
                   ),
                   alignment: Alignment.center,
                   child: Text(

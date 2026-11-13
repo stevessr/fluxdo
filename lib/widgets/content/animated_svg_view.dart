@@ -9,6 +9,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:ui' as ui;
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -836,11 +837,13 @@ class _AnimatedSvgViewState extends State<AnimatedSvgView> {
       // 离屏管线进行中 / 等待他人快照 / 未到驻留窗口:轻占位
       showBadge = false;
       body = DecoratedBox(
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: theme.colorScheme.surfaceContainerHighest.withValues(
             alpha: 0.3,
           ),
-          borderRadius: BorderRadius.circular(4),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(4),
+          ),
         ),
       );
     }

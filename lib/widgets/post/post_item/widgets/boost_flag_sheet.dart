@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -325,7 +326,7 @@ class _BoostFlagSheetState extends State<BoostFlagSheet> {
                 decoration: InputDecoration(
                   hintText: context.l10n.post_flagDescriptionHint,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: context.shapes.borderRadius(12),
                   ),
                   contentPadding: const EdgeInsets.all(12),
                 ),
@@ -355,19 +356,25 @@ class _BoostFlagSheetState extends State<BoostFlagSheet> {
     return InkWell(
       key: ValueKey('boost-flag-option-${type.nameKey}'),
       onTap: () => setState(() => _selectedType = type),
-      borderRadius: BorderRadius.circular(12),
+      customBorder: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(12),
+      ),
       child: Container(
         padding: const EdgeInsets.all(12),
         margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: isSelected
               ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
               : theme.colorScheme.surfaceContainerHighest.withValues(
                   alpha: 0.3,
                 ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(12),
+            side: BorderSide(
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : Colors.transparent,
+            ),
           ),
         ),
         child: Row(

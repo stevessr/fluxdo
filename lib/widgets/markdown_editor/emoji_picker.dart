@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
@@ -250,12 +251,13 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
 
     return ClipRect(
       child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          // 紧凑模式在弹层壳里,壳已裁圆角,自身不再画顶部圆角
-          borderRadius: widget.compact
-              ? null
-              : const BorderRadius.vertical(top: Radius.circular(16)),
+        decoration: ShapeDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: widget.compact
+                ? null
+                : BorderRadius.vertical(top: context.shapes.radius(16)),
+          ),
         ),
         child: (() {
           final emojis = emojisAsync.value;
@@ -380,11 +382,7 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
       child: Row(
         children: [
           IconButton(
-            icon: Icon(
-              Symbols.search_rounded,
-              size: 20,
-              color: theme.colorScheme.primary,
-            ),
+            icon: const Icon(Symbols.search_rounded, size: 20),
             visualDensity: compact ? VisualDensity.compact : null,
             onPressed: () => _onSearchPressed(context, emojiGroups),
             tooltip: S.current.emoji_searchTooltip,
@@ -419,10 +417,12 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
                             bottom: 4,
                             width: tabWidth,
                             child: DecoratedBox(
-                              decoration: BoxDecoration(
+                              decoration: ShapeDecoration(
                                 color: theme.colorScheme.primaryContainer
                                     .withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(8),
+                                shape: RoundedSuperellipseBorder(
+                                  borderRadius: context.shapes.borderRadius(8),
+                                ),
                               ),
                             ),
                           );
@@ -567,7 +567,9 @@ class _EmojiPickerState extends ConsumerState<EmojiPicker>
     return RepaintBoundary(
       child: InkWell(
         onTap: () => _onEmojiTap(emoji),
-        borderRadius: BorderRadius.circular(4),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
         child: Tooltip(
           message: ':${emoji.name}:',
           child: Padding(
@@ -635,7 +637,8 @@ class _EmojiCell extends StatelessWidget {
       serverUrl: serverUrl,
       width: width,
       height: height,
-      cacheWidth: decodeSize,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
       showPlaceholder: true,
       errorFallback: SizedBox(width: width, height: height),
     );
@@ -713,14 +716,12 @@ class _EmojiSearchViewState extends State<_EmojiSearchView> {
                 tooltip: S.current.common_cancel,
               ),
               Expanded(
-                child: Container(
+                child: InputFieldShell(
                   height: 36,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withValues(
-                      alpha: 0.5,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
                   ),
+                  radius: 10,
                   child: TextField(
                     controller: _searchController,
                     focusNode: _searchFocusNode,
@@ -732,7 +733,6 @@ class _EmojiSearchViewState extends State<_EmojiSearchView> {
                       hintStyle: TextStyle(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
-                      border: InputBorder.none,
                       isDense: true,
                       contentPadding: const EdgeInsets.only(right: 12),
                       prefixIcon: Icon(
@@ -750,7 +750,7 @@ class _EmojiSearchViewState extends State<_EmojiSearchView> {
                               onPressed: () => _searchController.clear(),
                             )
                           : null,
-                    ),
+                    ).withoutBorder(),
                   ),
                 ),
               ),
@@ -789,7 +789,9 @@ class _EmojiSearchViewState extends State<_EmojiSearchView> {
                     final emoji = results[index];
                     return InkWell(
                       onTap: () => widget.onSelected(emoji),
-                      borderRadius: BorderRadius.circular(4),
+                      customBorder: RoundedSuperellipseBorder(
+                        borderRadius: context.shapes.borderRadius(4),
+                      ),
                       child: Tooltip(
                         message: ':${emoji.name}:',
                         child: Padding(
@@ -886,13 +888,12 @@ class _EmojiSearchSheetState extends State<_EmojiSearchSheet> {
             child: Row(
               children: [
                 Expanded(
-                  child: Container(
+                  child: InputFieldShell(
                     height: 44,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
                     ),
+                    radius: 12,
                     child: TextField(
                       controller: _searchController,
                       focusNode: _searchFocusNode,
@@ -903,7 +904,6 @@ class _EmojiSearchSheetState extends State<_EmojiSearchSheet> {
                         hintStyle: TextStyle(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
-                        border: InputBorder.none,
                         isDense: true,
                         contentPadding: const EdgeInsets.only(
                           left: 0,
@@ -924,7 +924,7 @@ class _EmojiSearchSheetState extends State<_EmojiSearchSheet> {
                                 onPressed: () => _searchController.clear(),
                               )
                             : null,
-                      ),
+                      ).withoutBorder(),
                     ),
                   ),
                 ),
@@ -998,7 +998,9 @@ class _EmojiSearchSheetState extends State<_EmojiSearchSheet> {
                           FocusScope.of(context).unfocus();
                           Navigator.pop(context, emoji);
                         },
-                        borderRadius: BorderRadius.circular(8),
+                        customBorder: RoundedSuperellipseBorder(
+                          borderRadius: context.shapes.borderRadius(8),
+                        ),
                         child: Tooltip(
                           message: ':${emoji.name}:',
                           child: Padding(

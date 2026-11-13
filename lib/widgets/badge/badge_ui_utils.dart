@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -77,21 +78,19 @@ class BadgeUIUtils {
   // Card Decoration - Unified "Soft UI" Style
   // ---------------------------------------------------------------------------
 
-  static BoxDecoration getCardDecoration(BuildContext context, BadgeType type) {
+  static ShapeDecoration getCardDecoration(
+    BuildContext context,
+    BadgeType type,
+  ) {
     final theme = Theme.of(context);
     final isDark = _isDark(context);
     final gradient = getBadgeGradient(context, type);
     final borderColor = getBadgeColor(context, type);
 
-    return BoxDecoration(
+    return ShapeDecoration(
       color: theme.cardColor,
       gradient: gradient,
-      borderRadius: BorderRadius.circular(20), // Moderner, larger radius
-      border: Border.all(
-        color: borderColor.withValues(alpha: isDark ? 0.3 : 0.2),
-        width: 1.5,
-      ),
-      boxShadow: [
+      shadows: [
         BoxShadow(
           color: borderColor.withValues(alpha: isDark ? 0.1 : 0.08),
           blurRadius: 16,
@@ -99,6 +98,13 @@ class BadgeUIUtils {
           spreadRadius: -4,
         ),
       ],
+      shape: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(20),
+        side: BorderSide(
+          color: borderColor.withValues(alpha: isDark ? 0.3 : 0.2),
+          width: 1.5,
+        ),
+      ),
     );
   }
 

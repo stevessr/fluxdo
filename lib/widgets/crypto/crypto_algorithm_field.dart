@@ -9,6 +9,7 @@
 /// - 「最近使用」横向 chips（历史图标），支持列表/网格展示切换
 library;
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -183,7 +184,7 @@ class _CryptoAlgorithmPickerSheetState
           vertical: 12,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: context.shapes.borderRadius(12),
           borderSide: BorderSide.none,
         ),
       ),
@@ -247,7 +248,7 @@ class _CryptoAlgorithmPickerSheetState
                   avatar: Icon(
                     Icons.history_rounded,
                     size: 16,
-                    color: theme.colorScheme.primary,
+                    color: context.emphasis.accent,
                   ),
                   label: Text(algo.displayName),
                   visualDensity: VisualDensity.compact,
@@ -313,9 +314,13 @@ class _CryptoAlgorithmPickerSheetState
           color: selected
               ? theme.colorScheme.primaryContainer.withValues(alpha: 0.7)
               : theme.colorScheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(12),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(12),
+          ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(12),
+            customBorder: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(12),
+            ),
             onTap: () => _select(algo.id),
             child: Center(
               child: Text(
@@ -362,9 +367,13 @@ class _CryptoAlgorithmPickerSheetState
         color: selected
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(12),
+        ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          customBorder: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(12),
+          ),
           onTap: () => _select(algo.id),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -387,7 +396,7 @@ class _CryptoAlgorithmPickerSheetState
                   Icon(
                     Icons.check_rounded,
                     size: 18,
-                    color: theme.colorScheme.primary,
+                    color: context.emphasis.selected,
                   ),
               ],
             ),
@@ -425,9 +434,11 @@ class CryptoAlgorithmTile extends StatelessWidget {
     return Material(
       key: const ValueKey('crypto-algorithm-tile'),
       color: theme.colorScheme.surfaceContainerHigh,
-      borderRadius: BorderRadius.circular(12),
+      shape: RoundedSuperellipseBorder(borderRadius: context.shapes.borderRadius(12)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(12),
+        ),
         onTap: () async {
           final selected = await showCryptoAlgorithmPicker(
             context,
@@ -444,7 +455,7 @@ class CryptoAlgorithmTile extends StatelessWidget {
               Icon(
                 Icons.enhanced_encryption_rounded,
                 size: 18,
-                color: theme.colorScheme.primary,
+                color: context.emphasis.accent,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -461,9 +472,11 @@ class CryptoAlgorithmTile extends StatelessWidget {
                     horizontal: 6,
                     vertical: 1,
                   ),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: context.shapes.borderRadius(6),
+                    ),
                   ),
                   child: Text(
                     s.crypto_autoDetected,

@@ -11,6 +11,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:dio/dio.dart' show CancelToken;
+
 import 'dio_http_client.dart';
 
 /// Blob 图片缓存的磁盘使用统计。
@@ -135,6 +137,17 @@ class BlobImageCache {
 
   static String _hash(String value) =>
       md5.convert(utf8.encode(value)).toString();
+
+  /// 提升仍在下载队列中的图片优先级；离开视野时调用返回的释放回调。
+  /// Cache 不拥有队列，优先级由统一 Dio 下载队列维护。
+  static VoidCallback retainForeground(String bucket, String url) {
+    final channel = switch (bucket) {
+      emojiBucket || avatarBucket => DownloadChannel.small,
+      stickerOriginalBucket => DownloadChannel.sticker,
+      _ => DownloadChannel.content,
+    };
+    return DioHttpClient.retainForeground(channel, url);
+  }
 
   /// URL 对应的唯一物理对象文件名。
   ///
@@ -344,21 +357,39 @@ class BlobImageCache {
     String? cacheKey,
     DownloadPriority priority = DownloadPriority.normal,
     void Function(int received, int? total)? onProgress,
+    CancelToken? cancellation,
+    String? fallbackUrl,
   }) async {
     final key = cacheKey ?? url;
     final cached = await read(bucket, key, url: url);
     if (cached != null) return cached;
 
-    // 高优请求复用后台下载时仍需提升队列位置，而不是只复用 Future。
-    if (priority == DownloadPriority.high) bump(bucket, url);
-    final future = _inflight.putIfAbsent(
-      url,
-      () => _downloadObject(bucket, url, priority, onProgress).whenComplete(() {
-        _inflight.remove(url);
-      }),
-    );
-    final bytes = await future;
-    final object = await _objectFileFor(url);
+    Future<Uint8List> download(String sourceUrl) async {
+      if (cancellation?.isCancelled ?? false) throw cancellation!.cancelError!;
+      final existing = _inflight[sourceUrl];
+      final future = existing ?? _downloadObject(
+        bucket,
+        sourceUrl,
+        priority,
+        onProgress,
+      ).whenComplete(() => _inflight.remove(sourceUrl));
+      if (existing == null) _inflight[sourceUrl] = future;
+      return future;
+    }
+
+    late final Uint8List bytes;
+    var resolvedUrl = url;
+    try {
+      bytes = await download(url);
+    } on HttpStatusException catch (error) {
+      if (error.statusCode != 404 || fallbackUrl == null || fallbackUrl == url) {
+        rethrow;
+      }
+      resolvedUrl = fallbackUrl;
+      bytes = await download(fallbackUrl);
+    }
+    if (cancellation?.isCancelled ?? false) throw cancellation!.cancelError!;
+    final object = await _objectFileFor(resolvedUrl);
     await _ensureReference(bucket, key, object);
     return bytes;
   }
@@ -369,11 +400,13 @@ class BlobImageCache {
     _ => DownloadChannel.content,
   };
 
-  static void bump(String bucket, String url) =>
-      DioHttpClient.bumpPending(_channelOf(bucket), url);
+  static void bump(String bucket, String url) {
+    // 在途请求的排队优先级由 DioHttpClient 的下载调度器负责。
+  }
 
-  static void sink(String bucket, String url) =>
-      DioHttpClient.sinkPending(_channelOf(bucket), url);
+  static void sink(String bucket, String url) {
+    // 沉出视野时不取消已开始的下载。
+  }
 
   static Future<Uint8List> _downloadObject(
     String bucket,
@@ -843,6 +876,7 @@ class BlobImageProvider extends ImageProvider<BlobImageProvider> {
     this.cacheKey,
     this.scale = 1.0,
     this.priority = DownloadPriority.normal,
+    this.fallbackUrl,
   });
 
   final String url;
@@ -854,6 +888,7 @@ class BlobImageProvider extends ImageProvider<BlobImageProvider> {
 
   /// 调度提示，不参与图片内容身份。
   final DownloadPriority priority;
+  final String? fallbackUrl;
 
   @override
   Future<BlobImageProvider> obtainKey(ImageConfiguration configuration) {
@@ -891,6 +926,7 @@ class BlobImageProvider extends ImageProvider<BlobImageProvider> {
         key.url,
         cacheKey: key.cacheKey,
         priority: key.priority,
+        fallbackUrl: key.fallbackUrl,
         onProgress: (received, total) {
           if (chunkEvents.isClosed) return;
           chunkEvents.add(
@@ -920,11 +956,12 @@ class BlobImageProvider extends ImageProvider<BlobImageProvider> {
         other.url == url &&
         other.bucket == bucket &&
         other.cacheKey == cacheKey &&
-        other.scale == scale;
+        other.scale == scale &&
+        other.fallbackUrl == fallbackUrl;
   }
 
   @override
-  int get hashCode => Object.hash(url, bucket, cacheKey, scale);
+  int get hashCode => Object.hash(url, bucket, cacheKey, scale, fallbackUrl);
 
   @override
   String toString() =>

@@ -58,6 +58,34 @@
   "onboarding_guestAccess": "Guest access",
   "onboarding_networkSettings": "Network settings",
   "onboarding_slogan": "Sincere · Friendly · United · Professional",
+  "login_identifier": "Username / email",
+  "login_password": "Password",
+  "login_showPassword": "Show password",
+  "login_hidePassword": "Hide password",
+  "login_rememberPassword": "Remember password",
+  "login_forgotPassword": "Forgot password?",
+  "login_clearSavedCredentials": "Clear saved account",
+  "login_savedCredentialsCleared": "Saved account and password cleared",
+  "login_or": "or",
+  "login_browserAuth": "Sign in with browser authorization",
+  "login_otherMethods": "Other sign-in options (OAuth / Passkey / Sign up)",
+  "login_cfIncomplete": "Cloudflare verification incomplete. Please try again.",
+  "login_totpHint": "Enter the 6-digit code from your authenticator app",
+  "login_secondFactorRequired": "This account requires two-factor authentication",
+  "login_invalidCredentials": "Incorrect username or password",
+  "login_secondFactorFailed": "Two-factor authentication failed",
+  "login_notActivated": "Account not activated. Check {email} to activate it.",
+  "login_notApproved": "Your account has not been approved yet",
+  "login_passwordExpired": "Your password has expired. Sign in through a browser to reset it.",
+  "login_networkError": "Network error",
+  "login_failed": "Sign-in failed",
+  "@login_notActivated": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
   "login_qrExpired": "Login credential expired",
   "login_qrExpiryCustomHint": "Combine days, hours, and minutes; at least one must be greater than 0. The site may limit the maximum expiry.",
   "login_qrExpiryCustomInvalid": "Enter a duration greater than 0 (hours 0–23, minutes 0–59)",

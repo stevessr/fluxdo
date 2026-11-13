@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -121,9 +122,8 @@ class _AiChatHistoryPageState extends ConsumerState<AiChatHistoryPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(AiL10n.current.clearAllConversations),
-        content: Text(
-          AiL10n.current.confirmDeleteAllSessions(_totalSessionCount),
-        ),
+        content:
+            Text(AiL10n.current.confirmDeleteAllSessions(_totalSessionCount)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -292,13 +292,16 @@ class _MaxSessionsRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        customBorder: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(12)),
         onTap: () => _showPicker(context, storageService, maxSessions),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: theme.colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(12),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(12),
+            ),
           ),
           child: Row(
             children: [
@@ -327,13 +330,13 @@ class _MaxSessionsRow extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: ShapeDecoration(
                   color: theme.colorScheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(8),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(8),
+                  ),
                 ),
                 child: Text(
                   '$maxSessions',
@@ -362,19 +365,17 @@ class _MaxSessionsRow extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: options
-              .map(
-                (v) => ListTile(
-                  title: Text('$v'),
-                  trailing: v == currentValue
-                      ? const Icon(Symbols.check_rounded)
-                      : null,
-                  onTap: () {
-                    storageService.setMaxSessions(v);
-                    Navigator.pop(ctx);
-                    (context as Element).markNeedsBuild();
-                  },
-                ),
-              )
+              .map((v) => ListTile(
+                    title: Text('$v'),
+                    trailing: v == currentValue
+                        ? const Icon(Symbols.check_rounded)
+                        : null,
+                    onTap: () {
+                      storageService.setMaxSessions(v);
+                      Navigator.pop(ctx);
+                      (context as Element).markNeedsBuild();
+                    },
+                  ))
               .toList(),
         ),
       ),

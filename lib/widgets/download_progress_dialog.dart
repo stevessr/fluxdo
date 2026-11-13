@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,8 +26,8 @@ class DownloadProgressDialog extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       elevation: 0,
       insetPadding: const EdgeInsets.symmetric(horizontal: 40),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
+      child: ClipRSuperellipse(
+        borderRadius: context.shapes.borderRadius(32),
         child: SizedBox(
           width: dialogWidth,
           height: dialogHeight,
@@ -79,19 +80,16 @@ class DownloadProgressDialog extends ConsumerWidget {
   }
 
   Color _contentColor(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark ? Colors.white : const Color(0xFF1e293b);
+    return Theme.of(context).colorScheme.onSurface;
   }
 
   Color _subContentColor(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark ? Colors.white70 : const Color(0xFF64748b);
+    return Theme.of(context).colorScheme.onSurfaceVariant;
   }
 
   Widget _buildMainProgress(BuildContext context, ApkUpdateState state) {
     final status = state.status;
     final color = _contentColor(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (status == ApkDownloadStatus.downloading) {
       return Column(
@@ -130,7 +128,7 @@ class DownloadProgressDialog extends ConsumerWidget {
           break;
         case ApkDownloadStatus.error:
           icon = Symbols.error_rounded;
-          iconColor = isDark ? Colors.white : Colors.red.shade700;
+          iconColor = Theme.of(context).colorScheme.error;
           break;
         default:
           icon = Symbols.download_rounded;

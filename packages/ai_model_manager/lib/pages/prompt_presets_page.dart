@@ -399,7 +399,8 @@ class _ReorderableGroupState extends ConsumerState<_ReorderableGroup> {
               if (!preset.builtIn)
                 SwipeAction(
                   icon: Symbols.edit_rounded,
-                  color: Colors.blue,
+                  color: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
                   label: AiL10n.current.edit,
                   onPressed: () => widget.onEdit(preset),
                 ),
@@ -408,7 +409,8 @@ class _ReorderableGroupState extends ConsumerState<_ReorderableGroup> {
                   icon: preset.hidden
                       ? Symbols.visibility_rounded
                       : Symbols.visibility_off_rounded,
-                  color: Colors.orange,
+                  color: Theme.of(context).colorScheme.tertiary,
+                  foregroundColor: Theme.of(context).colorScheme.onTertiary,
                   label: preset.hidden
                       ? AiL10n.current.quickPromptsUnhide
                       : AiL10n.current.quickPromptsHide,
@@ -426,14 +428,16 @@ class _ReorderableGroupState extends ConsumerState<_ReorderableGroup> {
               if (!preset.builtIn)
                 SwipeAction(
                   icon: Symbols.content_copy_rounded,
-                  color: Colors.teal,
+                  color: Theme.of(context).colorScheme.secondary,
+                  foregroundColor: Theme.of(context).colorScheme.onSecondary,
                   label: AiL10n.current.presetExport,
                   onPressed: () => _PromptPresetsPageState.exportPreset(preset),
                 ),
               if (!preset.builtIn)
                 SwipeAction(
                   icon: Symbols.delete_rounded,
-                  color: Colors.red,
+                  color: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
                   label: AiL10n.current.delete,
                   onPressed: () async {
                     final ok = await _confirmDelete(context, preset.name);
@@ -447,8 +451,8 @@ class _ReorderableGroupState extends ConsumerState<_ReorderableGroup> {
             ],
             child: Card(
               clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(12),
               ),
               child: InkWell(
                 onTap: !preset.builtIn ? () => widget.onEdit(preset) : null,
@@ -470,9 +474,11 @@ class _ReorderableGroupState extends ConsumerState<_ReorderableGroup> {
                         width: 36,
                         height: 36,
                         alignment: Alignment.center,
-                        decoration: BoxDecoration(
+                        decoration: ShapeDecoration(
                           color: theme.colorScheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(8),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: context.shapes.borderRadius(8),
+                          ),
                         ),
                         child: PresetIcon(
                           iconRaw: preset.iconRaw,
@@ -559,11 +565,13 @@ class _ReorderableGroupState extends ConsumerState<_ReorderableGroup> {
   Widget _badge(ThemeData theme, String text, {bool dim = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: dim
             ? theme.colorScheme.surfaceContainerHighest
             : theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(4),
+        ),
       ),
       child: Text(
         text,

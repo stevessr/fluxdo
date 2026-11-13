@@ -1,3 +1,5 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
+
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
@@ -417,7 +419,7 @@ class _MediaControlsOverlayState extends State<MediaControlsOverlay>
                       horizontal: 14,
                       vertical: 8,
                     ),
-                    decoration: MediaOverlayStyle.pill(radius: 10),
+                    decoration: MediaOverlayStyle.pill(context, radius: 10),
                     child: _seekPreviewCancelArmed
                         ? Row(
                             mainAxisSize: MainAxisSize.min,
@@ -505,7 +507,7 @@ class _MediaControlsOverlayState extends State<MediaControlsOverlay>
                         horizontal: 10,
                         vertical: 6,
                       ),
-                      decoration: MediaOverlayStyle.pill(radius: 8),
+                      decoration: MediaOverlayStyle.pill(context, radius: 8),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -866,7 +868,7 @@ class _MediaControlsOverlayState extends State<MediaControlsOverlay>
           style: TextStyle(
             color: value.playbackSpeed == 1.0
                 ? MediaOverlayStyle.foreground
-                : MediaOverlayStyle.accent,
+                : MediaOverlayStyle.accent(context),
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
@@ -1067,10 +1069,12 @@ class _CenterPlayButtonState extends State<_CenterPlayButton> {
               curve: Curves.easeOutCubic,
               width: side,
               height: side,
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: const Color(0x8A000000),
-                borderRadius: BorderRadius.circular(radius),
-                border: Border.all(color: const Color(0x24FFFFFF)),
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: context.shapes.borderRadius(radius),
+                  side: BorderSide(color: const Color(0x24FFFFFF)),
+                ),
               ),
               child: Icon(
                 widget.isCompleted
@@ -1151,7 +1155,7 @@ class _MiniSliderPainter extends CustomPainter {
     final radius = Radius.circular(trackHeight / 2);
     final paint = Paint();
 
-    RRect track(double start, double end) => RRect.fromLTRBR(
+    RSuperellipse track(double start, double end) => RSuperellipse.fromLTRBR(
       size.width * start,
       centerY - trackHeight / 2,
       size.width * end,
@@ -1160,9 +1164,9 @@ class _MiniSliderPainter extends CustomPainter {
     );
 
     paint.color = const Color(0x4DFFFFFF);
-    canvas.drawRRect(track(0, 1), paint);
+    canvas.drawRSuperellipse(track(0, 1), paint);
     paint.color = Colors.white;
-    canvas.drawRRect(track(0, fraction), paint);
+    canvas.drawRSuperellipse(track(0, fraction), paint);
     canvas.drawCircle(
       Offset(size.width * fraction, centerY),
       active ? 6.5 : 5,
@@ -1202,7 +1206,7 @@ class _FastForwardBadge extends StatelessWidget {
                   horizontal: 10,
                   vertical: 4,
                 ),
-                decoration: MediaOverlayStyle.pill(radius: 14),
+                decoration: MediaOverlayStyle.pill(context, radius: 14),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

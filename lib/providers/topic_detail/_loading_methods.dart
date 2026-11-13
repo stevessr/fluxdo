@@ -297,15 +297,13 @@ extension LoadingMethods on TopicDetailNotifier {
       // 待审块)时属于"锚上方高度变化",武装哨兵做同帧补偿,避免被推跳
       AnchorGuardSliver.arm();
 
-      state = AsyncValue.data(
-        currentDetail.copyWith(
-          postStream: PostStream(
-            posts: mergedPosts,
-            stream: mergedStream,
-            gaps: currentDetail.postStream.gaps,
-          ),
+      state = AsyncValue.data(currentDetail.copyWith(
+        postStream: PostStream(
+          posts: mergedPosts,
+          stream: mergedStream,
+          gaps: currentDetail.postStream.gaps,
         ),
-      );
+      ));
     } catch (e) {
       // 失败时将 post IDs 放回队列,退避后由 finally 重试(无退避会在
       // 断网时立即重试打转)

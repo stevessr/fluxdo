@@ -9,6 +9,8 @@
 /// 状态自持有(预载 5 条为初值,加载/新增在本组件内追加)。
 library;
 
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +28,7 @@ import '../../../../utils/platform_utils.dart';
 import '../../../../utils/time_utils.dart';
 import '../../../common/emoji_text.dart';
 import '../post_voting_comment_sheet.dart';
+import '../../../../theme/app_colors.dart';
 
 class PostVotingCommentsView extends ConsumerStatefulWidget {
   final int postId;
@@ -242,7 +245,9 @@ class _PostVotingCommentsViewState
                     child: Icon(
                       Symbols.arrow_upward_rounded,
                       size: 14,
-                      color: comment.userVoted ? Colors.green : muted,
+                      color: comment.userVoted
+                          ? context.appColors.green
+                          : muted,
                       weight: comment.userVoted ? 700 : null,
                     ),
                   ),
@@ -318,7 +323,9 @@ class _PostVotingCommentsViewState
               decoration: InputDecoration(
                 hintText: S.current.postVoting_commentHint,
                 isDense: true,
-                border: const OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(4),
+                ),
               ),
               onChanged: (_) => setState(() {}),
             ),

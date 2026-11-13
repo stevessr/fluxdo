@@ -2,6 +2,7 @@ import 'dart:async' show unawaited;
 import 'dart:math' as math;
 import 'dart:ui' show PointerDeviceKind;
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -12,7 +13,7 @@ import '../../../common/hero_image.dart';
 import '../image_utils.dart';
 import 'image_grid_builder.dart';
 
-/// 轮播单页的展示方式:contain 完整展示(圆角属于轨道 ClipRRect,不是单图)。
+/// 轮播单页的展示方式:contain 完整展示(圆角属于轨道 ClipRSuperellipse,不是单图)。
 /// 一处给出,同时约束源端与 openViewer 两侧参数(见 ViewerSourceStyle)。
 const _slideStyle = ViewerSourceStyle.contain();
 
@@ -208,8 +209,8 @@ class _ImageCarouselState extends State<_ImageCarousel> {
         // 轮播轨道
         SizedBox(
           height: _carouselHeight,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+          child: ClipRSuperellipse(
+            borderRadius: context.shapes.borderRadius(8),
             child: Stack(
               children: [
                 // 背景色
@@ -464,15 +465,15 @@ class _NavButton extends StatelessWidget {
         child: Container(
           width: 32,
           height: 32,
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: theme.colorScheme.surface.withValues(alpha: 0.8),
-            shape: BoxShape.circle,
-            boxShadow: [
+            shadows: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 4,
               ),
             ],
+            shape: context.shapes.circle(),
           ),
           child: Icon(icon, size: 20, color: theme.colorScheme.onSurface),
         ),
@@ -508,11 +509,13 @@ class _DotsIndicator extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 3),
             width: isActive ? 20.0 : 8.0,
             height: 8.0,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
+            decoration: ShapeDecoration(
               color: isActive
                   ? theme.colorScheme.primary
                   : theme.colorScheme.outlineVariant,
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(4),
+              ),
             ),
           ),
         );

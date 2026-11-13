@@ -10,6 +10,7 @@ import '../../utils/url_helper.dart';
 import '../common/emoji_text.dart';
 import '../common/smart_avatar.dart';
 import '../common/relative_time_text.dart';
+import '../../theme/app_colors.dart';
 
 // discourse-follow 插件的自定义 SVG 图标
 const _followNewFollowerSvg =
@@ -226,23 +227,23 @@ class _NotificationItemState extends ConsumerState<NotificationItem> {
       case NotificationType.liked:
       case NotificationType.likedConsolidated:
       case NotificationType.reaction:
-        return Colors.red;
+        return context.appColors.red;
       case NotificationType.privateMessage:
       case NotificationType.invitedToPrivateMessage:
-        return Colors.blue;
+        return context.appColors.blue;
       case NotificationType.grantedBadge:
-        return Colors.amber;
+        return context.appColors.amber;
       case NotificationType.boost:
-        return Colors.deepPurple;
+        return context.appColors.deepPurple;
       case NotificationType.mentioned:
       case NotificationType.groupMentioned:
         return colorScheme.primary;
       case NotificationType.following:
-        return Colors.green;
+        return context.appColors.green;
       case NotificationType.adminProblems:
-        return Colors.red;
+        return context.appColors.red;
       case NotificationType.newFeatures:
-        return Colors.purple;
+        return context.appColors.purple;
       default:
         return colorScheme.onSurfaceVariant;
     }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:m3e_ui/m3e_ui.dart';
 
 import '../l10n/s.dart';
 import 'settings_model.dart';
@@ -10,7 +12,14 @@ import 'settings_model.dart';
 class SettingsRenderer extends ConsumerWidget {
   final SettingsModel model;
 
-  const SettingsRenderer({super.key, required this.model});
+  /// 分组已处理可见性时，退场动画继续渲染原内容。
+  final bool visibilityChecked;
+
+  const SettingsRenderer({
+    super.key,
+    required this.model,
+    this.visibilityChecked = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,10 +45,12 @@ class SettingsRenderer extends ConsumerWidget {
     SwitchModel m,
   ) {
     // 依赖的前置开关关闭时整行隐藏(展示无意义;前置开启当场出现)
-    if (!(m.enabledWhen?.call(ref) ?? true)) return const SizedBox.shrink();
+    if (!visibilityChecked && !(m.enabledWhen?.call(ref) ?? true)) {
+      return const SizedBox.shrink();
+    }
     final value = m.getValue(ref);
     final subtitle = m.subtitleBuilder?.call(ref) ?? m.subtitle;
-    return SwitchListTile(
+    return M3eSwitchListTile(
       title: Text(m.title),
       subtitle: subtitle != null ? Text(subtitle) : null,
       secondary: Icon(
@@ -70,7 +81,7 @@ class SettingsRenderer extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(m.icon, color: theme.colorScheme.primary),
+              Icon(m.icon, color: context.emphasis.accent),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(

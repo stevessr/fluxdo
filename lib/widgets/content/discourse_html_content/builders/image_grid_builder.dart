@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -227,8 +228,8 @@ class _GridImageTileState extends State<_GridImageTile> {
         child: SizedBox(
           width: widget.columnWidth,
           height: displayHeight,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+          child: ClipRSuperellipse(
+            borderRadius: context.shapes.borderRadius(4),
             child: Container(
               color: widget.theme.colorScheme.surfaceContainerHighest,
             ),
@@ -302,8 +303,8 @@ class _GridImageTileState extends State<_GridImageTile> {
     return SizedBox(
       width: widget.columnWidth,
       height: displayHeight,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
+      child: ClipRSuperellipse(
+        borderRadius: context.shapes.borderRadius(4),
         // HeroImage 统一件:源端隐藏/占位/飞行起点/裁切插值都由它保证;
         // _gridStyle 同时约束 openViewer 侧参数(见 ViewerSourceStyle)
         child: HeroImage(
@@ -394,8 +395,8 @@ class _GridImageTileState extends State<_GridImageTile> {
     return SizedBox(
       width: widget.columnWidth,
       height: displayHeight,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
+      child: ClipRSuperellipse(
+        borderRadius: context.shapes.borderRadius(4),
         child: Container(
           color: widget.theme.colorScheme.surfaceContainerHighest,
           child: const Center(child: LoadingSpinner(size: 24)),
@@ -408,8 +409,8 @@ class _GridImageTileState extends State<_GridImageTile> {
     return SizedBox(
       width: widget.columnWidth,
       height: displayHeight,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
+      child: ClipRSuperellipse(
+        borderRadius: context.shapes.borderRadius(4),
         child: Container(
           color: widget.theme.colorScheme.surfaceContainerHighest,
           child: Icon(

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 
@@ -67,9 +68,9 @@ class VideoOneboxBuilder {
               // 缩略图
               AspectRatio(
                 aspectRatio: 16 / 9,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(7),
+                child: ClipRSuperellipse(
+                  borderRadius: BorderRadius.vertical(
+                    top: context.shapes.radius(7),
                   ),
                   child: thumbnailUrl.isNotEmpty
                       ? Image(
@@ -104,9 +105,11 @@ class VideoOneboxBuilder {
               Container(
                 width: 60,
                 height: 42,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: const Color(0xFFFF0000),
-                  borderRadius: BorderRadius.circular(8),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(8),
+                  ),
                 ),
                 child: const Icon(
                   Symbols.play_arrow_rounded,
@@ -124,9 +127,11 @@ class VideoOneboxBuilder {
                       horizontal: 6,
                       vertical: 2,
                     ),
-                    decoration: BoxDecoration(
+                    decoration: ShapeDecoration(
                       color: Colors.black.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(4),
+                      shape: RoundedSuperellipseBorder(
+                        borderRadius: context.shapes.borderRadius(4),
+                      ),
                     ),
                     child: Text(
                       duration,
@@ -255,9 +260,9 @@ class VideoOneboxBuilder {
               // 缩略图
               AspectRatio(
                 aspectRatio: 16 / 9,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(7),
+                child: ClipRSuperellipse(
+                  borderRadius: BorderRadius.vertical(
+                    top: context.shapes.radius(7),
                   ),
                   child: thumbnailUrl.isNotEmpty
                       ? Image(
@@ -414,9 +419,9 @@ class VideoOneboxBuilder {
               // 缩略图
               AspectRatio(
                 aspectRatio: 16 / 9,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(7),
+                child: ClipRSuperellipse(
+                  borderRadius: BorderRadius.vertical(
+                    top: context.shapes.radius(7),
                   ),
                   child: thumbnailUrl.isNotEmpty
                       ? Image(
@@ -477,9 +482,11 @@ class VideoOneboxBuilder {
                         horizontal: 6,
                         vertical: 2,
                       ),
-                      decoration: BoxDecoration(
+                      decoration: ShapeDecoration(
                         color: const Color(0xFF625DF5),
-                        borderRadius: BorderRadius.circular(4),
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: context.shapes.borderRadius(4),
+                        ),
                       ),
                       child: const Text(
                         'Loom',

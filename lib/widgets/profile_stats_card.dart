@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,10 +33,14 @@ class ProfileStatsCard extends ConsumerWidget {
     // 空状态：显示占位卡片，引导用户添加
     if (config.enabledStats.isEmpty) {
       return Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(16),
+        ),
         child: InkWell(
           onTap: onEdit,
-          borderRadius: BorderRadius.circular(16),
+          customBorder: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
             child: Row(
@@ -44,13 +49,13 @@ class ProfileStatsCard extends ConsumerWidget {
                 Icon(
                   Symbols.add_chart_rounded,
                   size: 20,
-                  color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                  color: context.emphasis.accent.withValues(alpha: 0.6),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   S.current.profileStats_addItems,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.8),
+                    color: context.emphasis.accent.withValues(alpha: 0.8),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -93,12 +98,14 @@ class ProfileStatsCardPreview extends StatelessWidget {
       return SizedBox(
         width: double.infinity,
         child: Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(16),
           ),
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
+            customBorder: RoundedSuperellipseBorder(
+              borderRadius: context.shapes.borderRadius(16),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Center(
@@ -118,11 +125,15 @@ class ProfileStatsCardPreview extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(16),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          customBorder: RoundedSuperellipseBorder(
+            borderRadius: context.shapes.borderRadius(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
             child: _buildLayout(context),
@@ -550,7 +561,9 @@ class _DraggableStatItemState extends State<_DraggableStatItem> {
             child: Material(
               elevation: 8,
               color: Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(8),
+              ),
               child: DefaultTextStyle(
                 style: theme.textTheme.bodyMedium!,
                 child: widget.child,
@@ -561,11 +574,13 @@ class _DraggableStatItemState extends State<_DraggableStatItem> {
           // 用固定尺寸的 decoration 避免抖动：始终有 border，hover 时变色
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 100),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+            decoration: ShapeDecoration(
               color: isHovered
                   ? theme.colorScheme.primary.withValues(alpha: 0.08)
                   : Colors.transparent,
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(8),
+              ),
             ),
             child: Opacity(
               opacity: _isDragging ? 0.15 : 1.0,

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart' hide Badge;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -24,6 +25,7 @@ import 'user_profile_page.dart';
 import '../l10n/s.dart';
 
 import 'package:app_icons/app_icons.dart';
+import '../theme/app_colors.dart';
 
 /// 徽章详情页面
 class BadgePage extends ConsumerStatefulWidget {
@@ -130,7 +132,7 @@ class _BadgePageState extends ConsumerState<BadgePage> {
                         children: [
                           Icon(
                             Symbols.group_rounded,
-                            color: Theme.of(context).colorScheme.primary,
+                            color: context.emphasis.accent,
                             size: 22,
                           ),
                           const SizedBox(width: 8),
@@ -148,11 +150,13 @@ class _BadgePageState extends ConsumerState<BadgePage> {
                               horizontal: 10,
                               vertical: 4,
                             ),
-                            decoration: BoxDecoration(
+                            decoration: ShapeDecoration(
                               color: Theme.of(context)
                                   .colorScheme
                                   .surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(20),
+                              shape: RoundedSuperellipseBorder(
+                                borderRadius: context.shapes.borderRadius(20),
+                              ),
                             ),
                             child: Text(
                               context.l10n.badge_granteeCount(
@@ -288,19 +292,21 @@ class _BadgeInfoCard extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: theme.cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
-        ),
-        boxShadow: [
+        shadows: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
         ],
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(24),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -316,10 +322,12 @@ class _BadgeInfoCard extends StatelessWidget {
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: badgeColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: badgeColor.withValues(alpha: 0.2)),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: context.shapes.borderRadius(20),
+                side: BorderSide(color: badgeColor.withValues(alpha: 0.2)),
+              ),
             ),
             child: Text(
               typeName,
@@ -351,11 +359,13 @@ class _BadgeInfoCard extends StatelessWidget {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: theme.colorScheme.surfaceContainerHighest.withValues(
                   alpha: 0.3,
                 ),
-                borderRadius: BorderRadius.circular(16),
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: context.shapes.borderRadius(16),
+                ),
               ),
               child:
                   FluxdoRenderCallbacks.generic(
@@ -471,14 +481,14 @@ class _UserBadgeItem extends StatelessWidget {
                         Icon(
                           Symbols.shield_rounded,
                           size: 14,
-                          color: Colors.red.shade700,
+                          color: context.appColors.red.shade700,
                         ),
                       ] else if (user.moderator == true) ...[
                         const SizedBox(width: 4),
                         Icon(
                           Symbols.shield_rounded,
                           size: 14,
-                          color: Colors.blue.shade700,
+                          color: context.appColors.blue.shade700,
                         ),
                       ],
                     ],
@@ -503,17 +513,19 @@ class _UserBadgeItem extends StatelessWidget {
                         horizontal: 10,
                         vertical: 6,
                       ),
-                      decoration: BoxDecoration(
+                      decoration: ShapeDecoration(
                         color: theme.colorScheme.surfaceContainerHighest
                             .withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(8),
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: context.shapes.borderRadius(8),
+                        ),
                       ),
                       child: Row(
                         children: [
                           Icon(
                             Symbols.article_rounded,
                             size: 14,
-                            color: theme.colorScheme.primary,
+                            color: context.emphasis.accent,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -551,7 +563,7 @@ class _UserBadgeItem extends StatelessWidget {
     }
     Navigator.push(
       context,
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => UserProfilePage(username: user.username),
       ),
     );
@@ -570,7 +582,7 @@ class _UserBadgeItem extends StatelessWidget {
       }
       Navigator.push(
         context,
-        MaterialPageRoute(
+        InteractionPageRoute(
           builder: (_) => TopicDetailPage(
             topicId: userBadge.topicId!,
             scrollToPostNumber: userBadge.postNumber,

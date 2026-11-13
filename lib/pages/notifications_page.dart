@@ -16,6 +16,7 @@ import '../widgets/common/paged_list_footer.dart';
 import '../l10n/s.dart';
 import '../utils/blocked_user_filter.dart';
 import 'bookmarks_page.dart';
+import '../theme/app_colors.dart';
 
 /// 通知历史列表页面（独立分页，不受 messageBus 干扰）
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -344,16 +345,16 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Symbols.notifications_rounded,
                                       size: 64,
-                                      color: Colors.grey,
+                                      color: context.appColors.grey,
                                     ),
                                     const SizedBox(height: 16),
                                     Text(
                                       context.l10n.notification_empty,
-                                      style: const TextStyle(
-                                        color: Colors.grey,
+                                      style: TextStyle(
+                                        color: context.appColors.grey,
                                       ),
                                     ),
                                   ],

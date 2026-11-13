@@ -38,6 +38,22 @@ class AppLinkInfo {
 class AppLinkService {
   static const _channel = MethodChannel('com.github.lingyan000.fluxdo/browser');
 
+  static bool get supportsDefaultLinkSettings =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// 打开本应用的系统「默认打开链接」设置，不修改用户的关联选择。
+  static Future<bool> openDefaultLinkSettings() async {
+    if (!supportsDefaultLinkSettings) return false;
+    try {
+      return await _channel.invokeMethod<bool>('openDefaultLinkSettings') ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// 解析应用链接，获取目标应用信息
   static Future<AppLinkInfo> resolveAppLink(String url) async {
     debugPrint('[AppLink] resolveAppLink: $url');

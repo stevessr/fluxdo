@@ -1,4 +1,7 @@
-/// Chat 用户数据模型
+import 'package:fluxdo/utils/avatar_url.dart';
+import '../../utils/url_helper.dart';
+
+/// Chat 消息/频道成员的轻量用户模型
 class ChatUser {
   final int id;
   final String username;
@@ -29,6 +32,12 @@ class ChatUser {
   /// 判断是否为已删除用户（id=0 或 username 为空）。
   /// 已删除用户不应显示在成员列表中。
   bool get isDeleted => id <= 0 || username.isEmpty;
+
+  String getAvatarUrl({int size = 96}) {
+    if (avatarTemplate == null) return '';
+    final template = AvatarUrl.resolve(avatarTemplate!, size: size);
+    return UrlHelper.resolveUrlWithCdn(template);
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,

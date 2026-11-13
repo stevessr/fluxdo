@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -14,6 +15,7 @@ import '../../../../services/emoji_handler.dart';
 import '../../../../services/preloaded_data_service.dart';
 import '../../../../utils/platform_utils.dart';
 import 'post_reaction_picker.dart';
+import 'reaction_emoji.dart';
 
 /// 获取 emoji 图片 URL（未加载完成时返回空字符串，由 errorBuilder 处理）
 String _getEmojiUrl(String emojiName) {
@@ -118,9 +120,20 @@ class _PostActionBarState extends State<PostActionBar>
         vsync: this,
         onReactionSelected: (id) {
           widget.onReactionSelected(id);
-          _bounce.forward(from: 0);
+          _playLanding();
         },
       );
+
+  /// 按钮里的表情播一遍的触发令牌:选中的表情落地、点赞加上 ❤️ 时递增。
+  /// 滚动进出视口重建的按钮令牌为 0,不会无端播放。
+  int _emojiPlayToken = 0;
+
+  /// 表情落进按钮:按钮弹跳一下,按钮里的表情接着播一遍动画
+  void _playLanding() {
+    if (!mounted) return;
+    setState(() => _emojiPlayToken++);
+    _bounce.forward(from: 0);
+  }
 
   @override
   void initState() {
@@ -284,7 +297,7 @@ class _PostActionBarState extends State<PostActionBar>
               child: Container(
                 height: 36,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: showReplies
                       ? theme.colorScheme.primaryContainer.withValues(
                           alpha: 0.3,
@@ -292,11 +305,13 @@ class _PostActionBarState extends State<PostActionBar>
                       : theme.colorScheme.surfaceContainerHighest.withValues(
                           alpha: 0.3,
                         ),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: showReplies
-                        ? theme.colorScheme.primary.withValues(alpha: 0.2)
-                        : Colors.transparent,
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(18),
+                    side: BorderSide(
+                      color: showReplies
+                          ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                          : Colors.transparent,
+                    ),
                   ),
                 ),
                 child: Row(
@@ -406,11 +421,11 @@ class _PostActionBarState extends State<PostActionBar>
       child: Container(
         height: 36,
         width: 36,
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: theme.colorScheme.surfaceContainerHighest.withValues(
             alpha: 0.3,
           ),
-          shape: BoxShape.circle,
+          shape: context.shapes.circle(),
         ),
         child: Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
       ),
@@ -447,6 +462,7 @@ class _PostActionBarState extends State<PostActionBar>
                   left: i * step,
                   child: _OutlinedEmoji(
                     image: emojiImageProvider(_getEmojiUrl(shown[i].id)),
+                    // 描边的作用是「咬掉」压在下面的表情一圈，
                     // 最下层没有压着任何表情，无需描边
                     outlineColor: i == shown.length - 1
                         ? null
@@ -522,17 +538,11 @@ class _PostActionBarState extends State<PostActionBar>
       ),
       alignment: Alignment.center,
       child: widget.currentUserReaction != null
-          ? AnimatedBuilder(
-              animation: EmojiHandler(),
-              builder: (context, _) => Image(
-                image: emojiImageProvider(
-                  _getEmojiUrl(widget.currentUserReaction!.id),
-                ),
-                width: 20,
-                height: 20,
-                errorBuilder: (_, _, _) =>
-                    const Icon(Symbols.favorite_rounded, size: 20),
-              ),
+          ? ReactionEmoji(
+              reactionId: widget.currentUserReaction!.id,
+              size: 20,
+              playToken: _emojiPlayToken,
+              fallbackIcon: Symbols.favorite_rounded,
             )
           : Icon(
               Symbols.favorite_rounded,
@@ -548,22 +558,28 @@ class _PostActionBarState extends State<PostActionBar>
         : RawGestureDetector(
             behavior: HitTestBehavior.opaque,
             gestures: _touchGestures(() {
-              if (!widget.isLiking) widget.onToggleLike();
+              if (widget.isLiking) return;
+              final adding = widget.currentUserReaction == null;
+              widget.onToggleLike();
+              // 点赞是乐观更新,❤️ 当帧就出现,跟着播一遍
+              if (adding) setState(() => _emojiPlayToken++);
             }),
             child: likeIcon,
           );
 
     Widget area = Container(
       height: 36,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: widget.currentUserReaction != null
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
             : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: widget.currentUserReaction != null
-              ? theme.colorScheme.primary.withValues(alpha: 0.2)
-              : Colors.transparent,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(18),
+          side: BorderSide(
+            color: widget.currentUserReaction != null
+                ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                : Colors.transparent,
+          ),
         ),
       ),
       child: Row(

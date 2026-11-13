@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
@@ -301,7 +302,7 @@ class _ErrorViewState extends State<ErrorView> {
 
   void _openNetworkSettings(BuildContext context) {
     Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const NetworkSettingsPage()));
+        .push(InteractionPageRoute(builder: (_) => const NetworkSettingsPage()));
   }
 
   void _showErrorDetails(BuildContext context) {
@@ -451,11 +452,13 @@ class InlineErrorView extends StatelessWidget {
 
     return Container(
       padding: padding,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: isDark
             ? theme.colorScheme.error.withValues(alpha: 0.08)
             : theme.colorScheme.errorContainer.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(12),
+        ),
       ),
       child: Row(
         children: [
@@ -524,9 +527,11 @@ class _ErrorIconBadge extends StatelessWidget {
     return Container(
       width: 72,
       height: 72,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(22),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(22),
+        ),
       ),
       child: Icon(icon, size: 36, color: fgColor),
     );
@@ -554,7 +559,9 @@ class _PrimaryButton extends StatelessWidget {
       child: FilledButton(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          shape: const StadiumBorder(),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.all(context.shapes.radius(9999)),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 36),
           textStyle: theme.textTheme.bodyLarge?.copyWith(
             fontWeight: FontWeight.w600,
@@ -602,7 +609,9 @@ class _HelperAction extends StatelessWidget {
         : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45);
     return InkWell(
       onTap: onPressed,
-      borderRadius: BorderRadius.circular(12),
+      customBorder: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(12),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Column(

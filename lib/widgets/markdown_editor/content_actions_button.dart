@@ -16,6 +16,7 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:common_ui/common_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/material.dart';
 
@@ -243,8 +244,8 @@ class _ContentActionsGridEntryState extends State<_ContentActionsGridEntry> {
                                         horizontal: 6,
                                         vertical: 8,
                                       ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(18),
+                                      shape: RoundedSuperellipseBorder(
+                                        borderRadius: context.shapes.borderRadius(18),
                                       ),
                                       textStyle: widget.labelStyle,
                                     ),

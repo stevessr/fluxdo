@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
@@ -35,7 +36,9 @@ class TopicProgress extends StatelessWidget {
     return Card(
       elevation: 4,
       shadowColor: Colors.black26,
-      shape: const StadiumBorder(),
+      shape: RoundedSuperellipseBorder(
+        borderRadius: BorderRadius.all(context.shapes.radius(9999)),
+      ),
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
       child: InkWell(
@@ -261,9 +264,11 @@ class _TopicTimelineSheetState extends State<TopicTimelineSheet> {
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Container(
         height: contentHeight,
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: theme.colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.vertical(top: context.shapes.radius(28)),
+          ),
         ),
         child: SafeArea(
           child: Column(
@@ -272,11 +277,13 @@ class _TopicTimelineSheetState extends State<TopicTimelineSheet> {
               Container(
                 width: 36,
                 height: 4,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: theme.colorScheme.onSurfaceVariant.withValues(
                     alpha: 0.2,
                   ),
-                  borderRadius: BorderRadius.circular(2),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: context.shapes.borderRadius(2),
+                  ),
                 ),
               ),
               if (widget.title != null)
@@ -440,10 +447,14 @@ class _TopicTimelineSheetState extends State<TopicTimelineSheet> {
                                   horizontal: 12,
                                   vertical: 6,
                                 ),
-                                decoration: BoxDecoration(
+                                decoration: ShapeDecoration(
                                   color: theme.colorScheme.primaryContainer
                                       .withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(8),
+                                  shape: RoundedSuperellipseBorder(
+                                    borderRadius: context.shapes.borderRadius(
+                                      8,
+                                    ),
+                                  ),
                                 ),
                                 child: Text(
                                   _selectedIndex == widget.currentIndex
@@ -491,11 +502,14 @@ class _TopicTimelineSheetState extends State<TopicTimelineSheet> {
                                     bottom: padding,
                                     child: Container(
                                       width: 6,
-                                      decoration: BoxDecoration(
+                                      decoration: ShapeDecoration(
                                         color: theme
                                             .colorScheme
                                             .surfaceContainerHighest,
-                                        borderRadius: BorderRadius.circular(3),
+                                        shape: RoundedSuperellipseBorder(
+                                          borderRadius: context.shapes
+                                              .borderRadius(3),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -506,10 +520,13 @@ class _TopicTimelineSheetState extends State<TopicTimelineSheet> {
                                     height: percent * trackHeight,
                                     child: Container(
                                       width: 6,
-                                      decoration: BoxDecoration(
+                                      decoration: ShapeDecoration(
                                         color: theme.colorScheme.primary
                                             .withValues(alpha: 0.5),
-                                        borderRadius: BorderRadius.circular(3),
+                                        shape: RoundedSuperellipseBorder(
+                                          borderRadius: context.shapes
+                                              .borderRadius(3),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -565,8 +582,8 @@ class _TopicTimelineSheetState extends State<TopicTimelineSheet> {
                         onPressed: _commitJump,
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: context.shapes.borderRadius(16),
                           ),
                         ),
                         child: Text(

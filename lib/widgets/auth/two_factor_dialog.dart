@@ -1,4 +1,6 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart' show showInteractionDialog;
 import 'package:flutter/services.dart';
 
 /// Discourse 支持的非 WebAuthn 二步验证方式。
@@ -31,7 +33,7 @@ Future<TwoFactorSubmission?> showTwoFactorDialog(
   bool securityKeyEnabled = false,
   VoidCallback? onUseWebLogin,
 }) {
-  return showDialog<TwoFactorSubmission>(
+  return showInteractionDialog<TwoFactorSubmission>(
     context: context,
     barrierDismissible: false,
     builder: (_) => _TwoFactorDialog(
@@ -189,7 +191,9 @@ class _TwoFactorDialogState extends State<_TwoFactorDialog> {
                   : [LengthLimitingTextInputFormatter(64)],
               decoration: InputDecoration(
                 hintText: _isTotp ? '000000' : '备用验证码',
-                border: const OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(4),
+                ),
               ),
               onChanged: (value) {
                 if (_isTotp && _isValid(value)) {
