@@ -279,6 +279,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                               avatar: Icon(_categoryIcon(category), size: 18),
                               label: Text(_categoryLabel(context, category)),
                               selected: _category == category,
+                              showCheckmark: false,
                               onSelected: (_) => _setCategory(category),
                             );
                           },

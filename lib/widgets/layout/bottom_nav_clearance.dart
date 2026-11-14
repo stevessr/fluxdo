@@ -20,7 +20,8 @@ class BottomNavClearance extends StatelessWidget {
     );
     if (clearance == 0) return child;
     return Padding(
-      padding: EdgeInsets.only(bottom: clearance),
+      // 让 FAB 与底栏之间保留标准触控间距，避免底栏阴影/圆角压住按钮。
+      padding: EdgeInsets.only(bottom: clearance + 16),
       child: child,
     );
   }
