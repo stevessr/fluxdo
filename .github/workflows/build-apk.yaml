@@ -163,6 +163,10 @@ jobs:
           channel: stable
           cache: true
 
+      # flutterw imports dart_console before its own pub-get preparation.
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
       - name: Add Maven Central fallback for Flutter Gradle plugins
         shell: bash
         run: |
