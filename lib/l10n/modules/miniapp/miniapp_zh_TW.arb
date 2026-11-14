@@ -57,6 +57,7 @@
   "miniApp_metadataLoading": "正在取得應用名稱與介紹…",
   "miniApp_metadataFailed": "暫時無法取得應用資訊，請重試",
   "miniApp_expandPanel": "展開應用",
+  "miniApp_openInBrowser": "在內建瀏覽器開啟應用",
   "miniApp_openPage": "在頁面開啟",
   "miniApp_restorePanel": "還原面板",
   "miniApp_collapsePanel": "收起應用",

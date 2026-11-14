@@ -173,6 +173,7 @@
   "miniApp_metadataLoading": "正在获取应用名称与介绍…",
   "miniApp_metadataFailed": "暂时无法获取应用信息，请重试",
   "miniApp_expandPanel": "展开应用",
+  "miniApp_openInBrowser": "在内置浏览器打开应用",
   "miniApp_openPage": "在页面打开",
   "miniApp_restorePanel": "还原面板",
   "miniApp_collapsePanel": "收起应用",

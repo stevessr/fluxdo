@@ -168,6 +168,7 @@
   "miniApp_metadataLoading": "Loading app name and description…",
   "miniApp_metadataFailed": "App information is unavailable. Please retry.",
   "miniApp_expandPanel": "Expand app",
+  "miniApp_openInBrowser": "Open in built-in browser",
   "miniApp_openPage": "Open as page",
   "miniApp_restorePanel": "Restore panel",
   "miniApp_collapsePanel": "Collapse app",

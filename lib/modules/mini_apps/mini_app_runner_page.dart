@@ -20,6 +20,7 @@ import 'mini_app_window_bridge.dart';
 import 'mini_app_window_session.dart';
 
 import '../../constants.dart';
+import '../../pages/webview_page.dart';
 import '../../services/local_notification_service.dart' show navigatorKey;
 import '../../l10n/s.dart';
 import '../../providers/core_providers.dart';
@@ -1887,6 +1888,13 @@ class _MiniAppRunnerPageState extends ConsumerState<MiniAppRunnerPage>
     try {
       if (action == 'refresh') {
         await _restartEngine(_engine);
+        return;
+      }
+      if (action == 'openInBrowser') {
+        final entry = _entry!;
+        final parameters = {...entry.queryParametersAll}..remove('embed_mode');
+        final url = entry.replace(queryParameters: parameters).toString();
+        await WebViewPage.open(context, url, title: _details.app.name);
         return;
       }
       if (action == 'share') {

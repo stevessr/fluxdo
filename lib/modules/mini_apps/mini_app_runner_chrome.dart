@@ -170,6 +170,7 @@ enum MiniAppMenuAction {
   refresh,
   minimize,
   separateWindow,
+  openInBrowser,
   info,
   share,
   favorite,
@@ -234,6 +235,11 @@ Future<MiniAppMenuAction?> showMiniAppMenu(
         muted ? l.miniApp_unmute : l.miniApp_mute,
       ),
     (MiniAppMenuAction.share, Symbols.share_rounded, l.miniApp_share),
+    (
+      MiniAppMenuAction.openInBrowser,
+      Symbols.language_rounded,
+      l.miniApp_openInBrowser,
+    ),
     if (loggedIn)
       (
         MiniAppMenuAction.favorite,

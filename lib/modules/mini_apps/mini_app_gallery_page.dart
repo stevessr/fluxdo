@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
+import '../../constants.dart';
 import '../../l10n/s.dart';
 import '../../models/shortcut_binding.dart';
 import '../../navigation/nav_action_bus.dart';
@@ -18,6 +19,7 @@ import '../../services/auth_session.dart';
 import '../../utils/platform_utils.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/desktop_refresh_indicator.dart';
+import '../../pages/webview_page.dart';
 import 'mini_app.dart';
 import 'mini_app_directory_controller.dart';
 import 'mini_app_detail_page.dart';
@@ -471,6 +473,8 @@ class _MiniAppGalleryPageState extends ConsumerState<MiniAppGalleryPage> {
                                               opening: _openingAppId == app.id,
                                               onOpen: () => _open(app),
                                               onInfo: () => _info(app),
+                                              onBrowser: () =>
+                                                  _openInBrowser(app),
                                             ),
                                           ),
                                         );
@@ -513,9 +517,12 @@ class _MiniAppGalleryPageState extends ConsumerState<MiniAppGalleryPage> {
                                                       key: ValueKey(app.id),
                                                       app: app,
                                                       opening:
-                                                          _openingAppId == app.id,
+                                                          _openingAppId ==
+                                                          app.id,
                                                       onOpen: () => _open(app),
                                                       onInfo: () => _info(app),
+                                                      onBrowser: () =>
+                                                          _openInBrowser(app),
                                                     ),
                                                   ),
                                                 ),
@@ -607,6 +614,16 @@ class _MiniAppGalleryPageState extends ConsumerState<MiniAppGalleryPage> {
     } finally {
       _showingInfo = false;
     }
+  }
+
+  Future<void> _openInBrowser(MiniApp app) async {
+    if (_openingAppId != null || _showingInfo || !widget.active) return;
+    FocusScope.of(context).unfocus();
+    final base = Uri.parse(
+      '${AppConstants.baseUrl.replaceFirst(RegExp(r'/$'), '')}/',
+    );
+    final url = base.resolve('apps/${Uri.encodeComponent(app.id)}');
+    await WebViewPage.open(context, url.toString(), title: app.name);
   }
 
   Future<void> _open(MiniApp app) async {

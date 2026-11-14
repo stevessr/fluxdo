@@ -17,10 +17,11 @@ class MiniAppDiscoveryCard extends StatelessWidget {
     required this.app,
     required this.onOpen,
     required this.onInfo,
+    required this.onBrowser,
     this.opening = false,
   });
   final MiniApp app;
-  final VoidCallback onOpen, onInfo;
+  final VoidCallback onOpen, onInfo, onBrowser;
   final bool opening;
 
   @override
@@ -97,6 +98,12 @@ class MiniAppDiscoveryCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(child: MiniAppDeveloper(app: app)),
+                    IconButton(
+                      tooltip: context.l10n.miniApp_openInBrowser,
+                      onPressed: onBrowser,
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Symbols.language_rounded, size: 18),
+                    ),
                     if (app.favorited)
                       Icon(
                         Symbols.bookmark_rounded,
@@ -129,10 +136,11 @@ class MiniAppDiscoveryRow extends StatelessWidget {
     required this.app,
     required this.onOpen,
     required this.onInfo,
+    required this.onBrowser,
     this.opening = false,
   });
   final MiniApp app;
-  final VoidCallback onOpen, onInfo;
+  final VoidCallback onOpen, onInfo, onBrowser;
   final bool opening;
 
   @override
@@ -201,6 +209,12 @@ class MiniAppDiscoveryRow extends StatelessWidget {
               Row(
                 children: [
                   Expanded(child: MiniAppDeveloper(app: app)),
+                  IconButton(
+                    tooltip: context.l10n.miniApp_openInBrowser,
+                    onPressed: onBrowser,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Symbols.language_rounded, size: 22),
+                  ),
                   if (app.favorited)
                     Icon(
                       Symbols.bookmark_rounded,
