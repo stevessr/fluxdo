@@ -163,6 +163,35 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Add Maven Central fallback for Flutter Gradle plugins
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter_bin="$(readlink -f "$(command -v flutter)")"
+          flutter_root="$(cd "$(dirname "$flutter_bin")/.." && pwd)"
+          settings="$flutter_root/packages/flutter_tools/gradle/settings.gradle.kts"
+          test -f "$settings"
+          python3 - "$settings" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+          if "pluginManagement {" not in text:
+              block = """pluginManagement {
+              repositories {
+                  mavenCentral()
+                  gradlePluginPortal()
+                  google()
+              }
+          }
+
+          """
+              path.write_text(block + text)
+          elif "mavenCentral()" not in text.split("pluginManagement {", 1)[1].split("}", 1)[0]:
+              raise SystemExit("Flutter Gradle pluginManagement exists without Maven Central fallback")
+          print(f"Configured plugin repositories in {path}")
+          PY
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
