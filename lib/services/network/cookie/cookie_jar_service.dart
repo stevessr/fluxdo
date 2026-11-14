@@ -937,6 +937,24 @@ class CookieJarService {
   }
 
   /// Windows：通过页面级 controller 的 CDP 读取实时 cookie 值。
+  Future<Set<String>> readCookieValuesFromController(
+    InAppWebViewController controller,
+    String name, {
+    String? currentUrl,
+  }) async {
+    final cookies = await _readWindowsCookiesFromController(
+      controller,
+      currentUrl: currentUrl,
+    );
+    return {
+      for (final cookie in cookies)
+        if (cookie['name'] == name &&
+            (cookie['value']?.toString().isNotEmpty ?? false))
+          CookieValueCodec.decode(cookie['value'].toString()),
+    };
+  }
+
+  /// Windows：读取单个候选值，失败时由调用方决定回退行为。
   Future<String?> readCookieValueFromController(
     InAppWebViewController controller,
     String name, {
@@ -975,6 +993,7 @@ class CookieJarService {
     Set<String>? excludeCookieNames,
     Map<String, String>? acceptValues,
     bool trusted = false,
+    bool throwOnError = false,
     required Future<bool> Function(String name, String value) shouldSyncCookie,
   }) async {
     if (!io.Platform.isWindows) return 0;
@@ -998,7 +1017,10 @@ class CookieJarService {
           continue;
         }
         final onlyValue = acceptValues?[name];
-        if (onlyValue != null && value != onlyValue) continue;
+        if (onlyValue != null &&
+            CookieValueCodec.decode(value) != CookieValueCodec.decode(onlyValue)) {
+          continue;
+        }
         if (!matchesAppHost(raw['domain']?.toString())) continue;
         // CDP 快路径也必须经过边界同步的在位值判定，不能直接绕过闸门。
         if (!await shouldSyncCookie(name, value)) {
@@ -1091,6 +1113,7 @@ class CookieJarService {
       return toSave.length;
     } catch (e) {
       debugPrint('[CookieJar][Windows] Failed to sync live cookies: $e');
+      if (throwOnError) rethrow;
       return 0;
     }
   }
