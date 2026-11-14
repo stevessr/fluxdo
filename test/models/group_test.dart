@@ -87,13 +87,13 @@ void main() {
     });
   });
 
-  test('目录简介优先使用 bio_excerpt 并去除 HTML 标签', () {
+  test('目录简介优先使用完整 bio_cooked 并去除 HTML 标签', () {
     final group = DiscourseGroup.fromJson({
       'id': 105,
       'name': 'g-s-linux-desktop',
       'full_name': 'g/桌面GNU/Linux',
-      'bio_excerpt': '【桌面GNU/Linux】版块群组 <a href="https://gnu.org">GNU &amp; 自由软件</a>',
-      'bio_cooked': '<p>这是备用的简介</p>',
+      'bio_excerpt': '【桌面GNU/Linux】版块群组…',
+      'bio_cooked': '<p>【桌面GNU/Linux】版块群组 <a href="https://gnu.org">GNU &amp; 自由软件</a></p>',
       'flair_url': 'https://example.com/group.svg',
       'flair_bg_color': '3369FF',
     });

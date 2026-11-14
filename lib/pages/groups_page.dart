@@ -120,10 +120,15 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       final merged = reset
           ? result.groups
           : _mergeGroups(_groups, result.groups);
+      // 下一页地址可能始终存在，已达到总数或翻页没有新增群组时停止加载。
+      final hasMore =
+          result.hasMore &&
+          merged.length < result.total &&
+          (reset || merged.length > _groups.length);
       setState(() {
         _groups = merged;
         _total = result.total;
-        _hasMore = result.hasMore;
+        _hasMore = hasMore;
         _nextPage = page + 1;
       });
     } catch (error) {
@@ -448,68 +453,79 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       );
     }
 
-    final fontScale = MediaQuery.textScalerOf(context).scale(1);
-    final cardHeight = 312.0 +
-        (fontScale - 1.0).clamp(0.0, 2.0) * 175.0;
     return RefreshIndicator(
-        onRefresh: () => _load(reset: true),
-        child: CustomScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-              sliver: SliverGrid(
-                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 430,
-                  mainAxisExtent: cardHeight,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildGroupCard(
-                    context,
-                    _groups[index],
-                    copy,
-                  ),
-                  childCount: _groups.length,
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
-                child: Center(
-                  child: _loading
-                      ? const CircularProgressIndicator.adaptive()
-                      : _error != null
-                      ? Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              copy.loadMoreFailed,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => _load(reset: false),
-                              child: Text(copy.retry),
+      onRefresh: () => _load(reset: true),
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) {
+                final columns = (constraints.crossAxisExtent / 430).ceil();
+                return SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, row) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var column = 0; column < columns; column++) ...[
+                            if (column > 0) const SizedBox(width: 12),
+                            Expanded(
+                              child: row * columns + column < _groups.length
+                                  ? _buildGroupCard(
+                                      context,
+                                      _groups[row * columns + column],
+                                      copy,
+                                    )
+                                  : const SizedBox.shrink(),
                             ),
                           ],
-                        )
-                      : _hasMore
-                      ? FilledButton.tonal(
-                          onPressed: () => _load(reset: false),
-                          child: Text(copy.loadMore),
-                        )
-                      : const SizedBox(height: 12),
-                ),
+                        ],
+                      ),
+                    ),
+                    childCount: (_groups.length / columns).ceil(),
+                  ),
+                );
+              },
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
+              child: Center(
+                child: !_hasMore
+                    ? const SizedBox(height: 12)
+                    : _loading
+                    ? const CircularProgressIndicator.adaptive()
+                    : _error != null
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            copy.loadMoreFailed,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _load(reset: false),
+                            child: Text(copy.retry),
+                          ),
+                        ],
+                      )
+                    : FilledButton.tonal(
+                        onPressed: () => _load(reset: false),
+                        child: Text(copy.loadMore),
+                      ),
               ),
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildGroupCard(
@@ -537,6 +553,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -599,21 +616,16 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: Text(
-                    preview,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      height: 1.4,
-                    ),
+              if (preview.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  preview,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    height: 1.4,
                   ),
                 ),
-              ),
+              ],
               const SizedBox(height: 8),
               _buildMembershipControl(group, copy),
             ],

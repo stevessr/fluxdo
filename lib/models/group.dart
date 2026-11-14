@@ -63,10 +63,10 @@ class DiscourseGroup {
     return name;
   }
 
-  /// 目录接口通常只有 bio_excerpt / bio_cooked，bio_raw 仅在详情中出现。
+  /// 优先显示完整简介，目录接口仅返回摘要时再回退到 bio_excerpt。
   /// 用 HTML parser 解码链接、实体与标签，不将服务端 HTML 作为纯文本显示。
   String get bioPreview {
-    final candidates = [bioExcerpt, bioCooked, bioRaw];
+    final candidates = [bioCooked, bioRaw, bioExcerpt];
     String? source;
     for (final candidate in candidates) {
       if (candidate != null && candidate.trim().isNotEmpty) {

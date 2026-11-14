@@ -13,6 +13,7 @@ void main() {
   testWidgets('群组目录展示官方卡片、成员状态和服务端类型筛选', (tester) async {
     final types = <String?>[];
     final filters = <String?>[];
+    final fullBio = List.filled(8, '讨论装机配置，分享最新游戏技巧，寻找游戏伙伴。').join();
     final service = DiscourseService();
     final interceptor = InterceptorsWrapper(
       onRequest: (options, handler) {
@@ -32,7 +33,8 @@ void main() {
             'full_name': '无广告组',
             'user_count': 6529,
             'public_admission': true,
-            'bio_excerpt': '加入群组，页面不再展示广告。',
+            'bio_excerpt': '讨论装机配置…',
+            'bio_cooked': '<p>$fullBio</p>',
           },
           {
             'id': 116,
@@ -62,6 +64,7 @@ void main() {
             data: {
               'groups': selected,
               'total_rows_groups': selected.length,
+              'load_more_groups': '/groups.json?page=1',
             },
           ),
         );
@@ -90,13 +93,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('group-card-g-adsfree')), findsOneWidget);
     expect(find.byKey(const ValueKey('group-card-g-premium')), findsOneWidget);
-    expect(find.text('加入群组，页面不再展示广告。'), findsOneWidget);
+    expect(find.text(fullBio), findsOneWidget);
+    final longCard = find.byKey(const ValueKey('group-card-g-adsfree'));
+    final shortCard = find.byKey(const ValueKey('group-card-g-premium'));
+    expect(
+      tester.getSize(longCard).height,
+      greaterThan(tester.getSize(shortCard).height),
+    );
+    // 简介超过四行后仍完整排版，操作按钮位于正文下方且没有越出卡片。
+    expect(tester.getSize(find.text(fullBio)).height, greaterThan(100));
+    expect(
+      tester.getBottomLeft(find.text(fullBio)).dy,
+      lessThan(tester.getTopLeft(find.text('加入')).dy),
+    );
+    expect(
+      tester.getBottomLeft(find.text('加入')).dy,
+      lessThan(tester.getBottomLeft(longCard).dy),
+    );
     expect(find.text('6529'), findsOneWidget);
     expect(find.text('加入'), findsOneWidget);
     expect(find.text('成员'), findsOneWidget);
     expect(find.text('已关闭'), findsOneWidget);
     expect(types.last, isNull);
+    expect(find.text('加载更多'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(tester.takeException(), isNull);
+
+    await tester.binding.setSurfaceSize(const Size(320, 700));
+    await tester.pumpAndSettle();
+    expect(find.text('6529'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getBottomLeft(find.text(fullBio)).dy,
+      lessThan(tester.getBottomLeft(longCard).dy),
+    );
+    await tester.binding.setSurfaceSize(const Size(980, 780));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('groups-type-filter')));
     await tester.pumpAndSettle();
@@ -112,7 +144,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(types.last, 'close');
     expect(find.text('已关闭'), findsOneWidget);
-    expect(find.byKey(const ValueKey('group-card-g-verified-staff')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('group-card-g-verified-staff')),
+      findsOneWidget,
+    );
 
     // 搜索仍通过服务端 filter 参数，不仅仅过滤当前页面的数据。
     await tester.enterText(find.byType(TextField).first, '机构');
@@ -124,7 +159,66 @@ void main() {
     // 单列窄屏布局不应溢出。
     await tester.binding.setSurfaceSize(const Size(320, 700));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('group-card-g-verified-staff')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('group-card-g-verified-staff')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('群组全部加载后隐藏底部加载入口且不再请求下一页', (tester) async {
+    final pages = <int>[];
+    final service = DiscourseService();
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        final page = options.queryParameters['page'] as int;
+        pages.add(page);
+        handler.resolve(
+          Response(
+            requestOptions: options,
+            data: {
+              'groups': [
+                {'id': page + 1, 'name': 'group-$page', 'user_count': 10},
+              ],
+              'total_rows_groups': 2,
+              // 最后一页仍返回翻页地址，不能只用这个字段判断是否还有群组。
+              'load_more_groups': '/groups.json?page=${page + 1}',
+            },
+          ),
+        );
+      },
+    );
+    service.dio.interceptors.insert(0, interceptor);
+    addTearDown(() => service.dio.interceptors.remove(interceptor));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [discourseServiceProvider.overrideWithValue(service)],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          supportedLocales: [Locale('zh')],
+          localizationsDelegates: [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: GroupsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('加载更多'), findsOneWidget);
+    await tester.tap(find.text('加载更多'));
+    await tester.pumpAndSettle();
+
+    expect(pages, [0, 1]);
+    expect(find.byKey(const ValueKey('group-card-group-1')), findsOneWidget);
+    expect(find.text('加载更多'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(pages, [0, 1]);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -193,5 +287,4 @@ void main() {
     expect(find.text('过期群组结果'), findsNothing);
     expect(tester.takeException(), isNull);
   });
-
 }
