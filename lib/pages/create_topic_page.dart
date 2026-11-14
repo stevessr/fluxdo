@@ -1398,7 +1398,6 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                               bodyOverlay:
                                                   _buildCharCountOverlay(),
                                               controller: _contentController,
-                                              enableStevessr: true,
                                               focusNode: _contentFocusNode,
                                               hintText: context
                                                   .l10n

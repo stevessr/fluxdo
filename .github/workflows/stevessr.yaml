@@ -1,151 +1,149 @@
-name: StevesSR Composer
+name: StevesSR Generator Nightly
 
-# Feature-specific regression suite: run on demand, not on every PR/push.
 on:
+  schedule:
+    - cron: '17 2 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/stevessr_generator/**'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: stevessr-generator-nightly
+  cancel-in-progress: true
 
 jobs:
-  verify:
+  detect-changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    outputs:
+      build: ${{ steps.changes.outputs.build }}
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      - name: Check changes since previous nightly
+        id: changes
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" != "schedule" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          previous_tag="stevessr-nightly"
+          if ! previous_commit="$(git rev-parse --verify "refs/tags/${previous_tag}^{commit}" 2>/dev/null)"; then
+            echo "No previous nightly tag; building initial APK."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$previous_commit" HEAD -- packages/stevessr_generator/; then
+            echo "No package changes since ${previous_tag}; skipping build and upload."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Package changes found since ${previous_tag}."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-release:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          submodules: recursive
+          distribution: temurin
+          java-version: '17'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.5'
+          flutter-version: '3.47.9'
+          channel: stable
           cache: true
 
-      - name: Prepare generated asset directories
-        run: mkdir -p assets/certs assets/images/llm
+      - name: Verify generator package and source manifest
+        working-directory: packages/stevessr_generator
+        run: |
+          flutter pub get
+          dart run tool/gen_avatar_deltas.dart --check
+          dart analyze lib tool
 
-      - name: Install dependencies
+      - name: Get example dependencies
+        working-directory: packages/stevessr_generator/example
         run: flutter pub get
 
-      - name: Generate localization
-        run: dart run tool/gen_l10n.dart
-
-      - name: Generate and check character delta assets
+      - name: Run all test files
+        working-directory: packages/stevessr_generator/example
         run: |
-          dart tool/gen_avatar_deltas.dart
-          dart tool/gen_avatar_deltas.dart --check
+          for test_file in test/*_test.dart; do
+            flutter test --no-pub "$test_file"
+          done
 
-      - name: Check formatting
+      - name: Build arm64 release APK
+        working-directory: packages/stevessr_generator/example
+        run: flutter build apk --release --target-platform android-arm64 --build-number "$GITHUB_RUN_NUMBER"
+
+      - name: Verify APK contains arm64 libraries only
+        working-directory: packages/stevessr_generator/example
+        shell: bash
         run: |
-          dart format \
-            lib/services/avatar_delta_codec.dart \
-            lib/services/stevessr_character_assets.dart \
-            tool/gen_avatar_deltas.dart \
-            tool/import_avatar_expression.dart \
-            tool/pack_stevessr_sources.dart \
-            tool/optimize_avatar_bases.dart \
-            test/services/avatar_lossless_assets_test.dart \
-            lib/widgets/stevessr/stevessr_canvas.dart \
-            lib/models/stevessr_render_params.dart \
-            lib/pages/stevessr_generator_page.dart \
-            lib/widgets/stevessr/stevessr_interactive_preview.dart \
-            lib/services/stevessr_composer_service.dart \
-            lib/services/stevessr_export_service.dart \
-            lib/utils/screenshot_utils.dart \
-            lib/widgets/markdown_editor/editor_tools.dart \
-            lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart \
-            test/services/stevessr_composer_upload_alpha_test.dart \
-            test/widgets/stevessr_interactive_preview_test.dart \
-            test/models/stevessr_render_params_test.dart \
-            test/services/stevessr_character_assets_test.dart \
-            test/services/stevessr_export_alpha_test.dart \
-            test/services/stevessr_export_webp_test.dart \
-            test/services/stevessr_export_new_formats_test.dart \
-            test/utils/screenshot_utils_alpha_test.dart \
-            test/widgets/stevessr_quick_toolbar_test.dart
-          git diff --exit-code -- \
-            lib/services/avatar_delta_codec.dart \
-            lib/services/stevessr_character_assets.dart \
-            tool/gen_avatar_deltas.dart \
-            tool/import_avatar_expression.dart \
-            tool/pack_stevessr_sources.dart \
-            tool/optimize_avatar_bases.dart \
-            test/services/avatar_lossless_assets_test.dart \
-            lib/widgets/stevessr/stevessr_canvas.dart \
-            lib/models/stevessr_render_params.dart \
-            lib/pages/stevessr_generator_page.dart \
-            lib/widgets/stevessr/stevessr_interactive_preview.dart \
-            lib/services/stevessr_composer_service.dart \
-            lib/services/stevessr_export_service.dart \
-            lib/utils/screenshot_utils.dart \
-            lib/widgets/markdown_editor/editor_tools.dart \
-            lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart \
-            test/services/stevessr_composer_upload_alpha_test.dart \
-            test/widgets/stevessr_interactive_preview_test.dart \
-            test/models/stevessr_render_params_test.dart \
-            test/services/stevessr_character_assets_test.dart \
-            test/services/stevessr_export_alpha_test.dart \
-            test/services/stevessr_export_webp_test.dart \
-            test/services/stevessr_export_new_formats_test.dart \
-            test/utils/screenshot_utils_alpha_test.dart \
-            test/widgets/stevessr_quick_toolbar_test.dart
+          set -euo pipefail
+          unzip -Z1 build/app/outputs/flutter-apk/app-release.apk | awk -F/ '
+            $1 == "lib" && $2 != "" {
+              if ($2 == "arm64-v8a") {
+                found_arm64 = 1
+              } else {
+                print "Unexpected native ABI entry: " $0
+                failed = 1
+              }
+            }
+            END {
+              if (!found_arm64) {
+                print "APK contains no arm64-v8a native libraries"
+                failed = 1
+              }
+              exit failed
+            }
+          '
 
-      # editor_tools.dart 当前已有一批 nullable l10n analyzer baseline；
-      # 快捷栏测试仍会实际编译/执行该文件。这里对本 PR 其余改动做严格 analyze。
-      - name: Analyze StevesSR composer changes
-        run: >-
-          flutter analyze
-          lib/services/avatar_delta_codec.dart
-          lib/services/stevessr_character_assets.dart
-          tool/gen_avatar_deltas.dart
-          tool/import_avatar_expression.dart
-          tool/pack_stevessr_sources.dart
-          tool/optimize_avatar_bases.dart
-          test/services/avatar_lossless_assets_test.dart
-          lib/widgets/stevessr/stevessr_canvas.dart
-          lib/models/stevessr_render_params.dart
-          lib/pages/stevessr_generator_page.dart
-          lib/widgets/stevessr/stevessr_interactive_preview.dart
-          lib/services/stevessr_composer_service.dart
-          lib/services/stevessr_export_service.dart
-          lib/utils/screenshot_utils.dart
-          lib/widgets/markdown_editor/rich_composer/rich_editor_tools.dart
-          test/services/stevessr_composer_upload_alpha_test.dart
-          test/widgets/stevessr_interactive_preview_test.dart
-          test/models/stevessr_render_params_test.dart
-          test/services/stevessr_character_assets_test.dart
-          test/services/stevessr_export_alpha_test.dart
-          test/services/stevessr_export_webp_test.dart
-          test/services/stevessr_export_new_formats_test.dart
-          test/utils/screenshot_utils_alpha_test.dart
-          test/widgets/stevessr_quick_toolbar_test.dart
+      - name: Stage stable APK filename
+        run: cp packages/stevessr_generator/example/build/app/outputs/flutter-apk/app-release.apk stevessr-generator-android-arm64-v8a.apk
 
-      - name: Test interactive preview and canvas dimensions
-        run: flutter test test/widgets/stevessr_interactive_preview_test.dart test/models/stevessr_render_params_test.dart
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stevessr-generator-android-arm64-v8a
+          path: stevessr-generator-android-arm64-v8a.apk
+          if-no-files-found: error
+          retention-days: 30
 
-      - name: Test static avatar lossless compression
-        run: flutter test test/services/avatar_lossless_assets_test.dart
+      - name: Create or update nightly prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: stevessr-nightly
+          name: StevesSR Generator Nightly
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          files: stevessr-generator-android-arm64-v8a.apk
+          body: |
+            Automated nightly build of the standalone StevesSR Generator example.
 
-      - name: Test character delta reconstruction
-        run: flutter test test/services/stevessr_character_assets_test.dart
+            Source commit: ${{ github.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Test PNG export alpha
-        run: flutter test test/services/stevessr_export_alpha_test.dart
-
-      - name: Test WebP, AVIF and JPEG export
-        run: flutter test test/services/stevessr_export_webp_test.dart test/services/stevessr_export_new_formats_test.dart
-
-      - name: Test upload alpha guard
-        run: flutter test test/services/stevessr_composer_upload_alpha_test.dart
-
-      - name: Test chunked screenshot alpha
-        run: flutter test test/utils/screenshot_utils_alpha_test.dart
-
-      - name: Test generator UI
-        run: flutter test test/widgets/stevessr_generator_page_test.dart
-
-      - name: Test composer quick toolbar
-        run: flutter test test/widgets/stevessr_quick_toolbar_test.dart
+      - name: Move nightly tag to this commit
+        run: |
+          git tag -f stevessr-nightly "$GITHUB_SHA"
+          git push --force origin refs/tags/stevessr-nightly

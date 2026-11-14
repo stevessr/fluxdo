@@ -31,7 +31,6 @@ import '../../providers/download_provider.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
-import '../../services/stevessr_composer_service.dart';
 import '../../widgets/markdown_editor/long_image_upload_dialog.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
@@ -634,30 +633,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       );
     }
     setState(() => _showMentionSuggestions = false);
-  }
-
-  /// 打开 StevesSR 生成器，生成图片并作为聊天附件加入待发送列表。
-  Future<void> _createStevessrImage() async {
-    if (_isUploadingImage || !mounted) return;
-    setState(() => _isUploadingImage = true);
-    try {
-      final generated = await StevessrComposerService.openAndUpload(context);
-      if (!mounted || generated == null) return;
-      final uploadId = generated.upload.id;
-      if (uploadId == null) {
-        throw StateError('生成图片上传后没有附件 ID');
-      }
-      setState(() {
-        _pendingUploads.add((path: generated.path, uploadId: uploadId));
-      });
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('表情包图片上传失败: $error')));
-      }
-    } finally {
-      if (mounted) setState(() => _isUploadingImage = false);
-    }
   }
 
   /// 多选并逐张上传图片附件；每张选完立即进预览条（uploadId 为 null 表示上传中）
@@ -2232,8 +2207,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   _pickAndUploadImage();
                                 case 'long_image':
                                   _pickAndUploadLongImage();
-                                case 'stevessr':
-                                  _createStevessrImage();
                               }
                             },
                             itemBuilder: (context) => [
@@ -2255,15 +2228,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   contentPadding: EdgeInsets.zero,
                                   leading: Icon(Icons.content_cut_rounded),
                                   title: Text('长图上传'),
-                                ),
-                              ),
-                              const PopupMenuItem<String>(
-                                value: 'stevessr',
-                                child: ListTile(
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Icon(Icons.auto_awesome_rounded),
-                                  title: Text('生成表情包图片'),
                                 ),
                               ),
                             ],

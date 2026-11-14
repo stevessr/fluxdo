@@ -14,7 +14,6 @@ import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
-import '../../services/stevessr_composer_service.dart';
 import '../../widgets/markdown_editor/long_image_upload_dialog.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
@@ -389,30 +388,6 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     list.insert(0, emojiName);
     final trimmed = list.length > 30 ? list.sublist(0, 30) : list;
     await prefs.setStringList(_recentReactionEmojisKey, trimmed);
-  }
-
-  /// 打开 StevesSR 生成器并把生成图片作为消息串附件加入待发送列表。
-  Future<void> _createStevessrImage() async {
-    if (_isUploadingImage || !mounted) return;
-    setState(() => _isUploadingImage = true);
-    try {
-      final generated = await StevessrComposerService.openAndUpload(context);
-      if (!mounted || generated == null) return;
-      final uploadId = generated.upload.id;
-      if (uploadId == null) {
-        throw StateError('生成图片上传后没有附件 ID');
-      }
-      setState(() {
-        _pendingUploads.add((path: generated.path, uploadId: uploadId));
-      });
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('表情包图片上传失败: $error')));
-      }
-    } finally {
-      if (mounted) setState(() => _isUploadingImage = false);
-    }
   }
 
   /// 多选并逐张上传图片附件；每张选完立即进预览条（uploadId 为 null 表示上传中）
@@ -1133,14 +1108,6 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                               ? null
                               : _pickAndUploadLongImage,
                           icon: const Icon(Icons.content_cut_rounded),
-                        ),
-                        IconButton(
-                          tooltip: '生成表情包图片',
-                          onPressed: _isUploadingImage
-                              ? null
-                              : _createStevessrImage,
-                          icon: const Icon(Icons.auto_awesome_rounded),
-                          color: theme.colorScheme.primary,
                         ),
                         // 表情按钮
                         IconButton(

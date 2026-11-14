@@ -1,0 +1,26 @@
+name: stevessr_generator
+description: Standalone StevesSR image generator Flutter package.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: ^3.6.0
+  flutter: '>=3.27.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  file_picker: ^10.3.10
+  image: ^4.10.1
+  flutter_avif: ^3.1.0
+  cross_file: ^0.3.4+2
+  path_provider: ^2.1.5
+  share_plus: ^12.0.1
+dev_dependencies:
+  crypto: ^3.0.8
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/avater/stevessr/
+    - assets/images/avater/touhou/
+    - assets/images/avater/llm/
+    - assets/images/avater/blue_archive/
+    - assets/images/avater/witch_judgment/

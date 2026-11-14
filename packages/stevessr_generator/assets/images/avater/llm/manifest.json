@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "characters": {
+    "claude": {
+      "width": 1295,
+      "height": 1214,
+      "expressions": {
+        "happy": {
+          "asset": "claude_happy.webp",
+          "x": 451,
+          "y": 776,
+          "width": 342,
+          "height": 103
+        },
+        "surprised": {
+          "asset": "claude_surprised.webp",
+          "x": 451,
+          "y": 777,
+          "width": 342,
+          "height": 102
+        },
+        "love": {
+          "asset": "claude_love.webp",
+          "x": 451,
+          "y": 776,
+          "width": 342,
+          "height": 103
+        }
+      }
+    },
+    "deepseek": {
+      "width": 1254,
+      "height": 1254,
+      "expressions": {
+        "happy": {
+          "asset": "deepseek_happy.webp",
+          "x": 391,
+          "y": 864,
+          "width": 328,
+          "height": 102
+        },
+        "surprised": {
+          "asset": "deepseek_surprised.webp",
+          "x": 391,
+          "y": 864,
+          "width": 327,
+          "height": 102
+        },
+        "love": {
+          "asset": "deepseek_love.webp",
+          "x": 391,
+          "y": 863,
+          "width": 327,
+          "height": 103
+        }
+      }
+    }
+  },
+  "inputHash": "764426f38cfa668bf55449dc6a709fd55a951a5051c9d170b84b13090ae9816d",
+  "outputs": {
+    "claude.webp": "5c99cba501ab6364df6159fb30772fee5a8c286fb7dacac6f004dcf6460b1ee9",
+    "claude_happy.webp": "13e556c43dd2f7d55753ab492bbc0bf46a55ca681e2983485d9b318e33b42a52",
+    "claude_surprised.webp": "17b69a59d49334c57e28c3643a7224517a3bc3db9281921f83e3d0c8f7620992",
+    "claude_love.webp": "c862c23be01da31933a929c198ac3c4473f53fd9befcc350e5b422223a64f51b",
+    "deepseek.webp": "579501ff48005c9abe851dbb9bb20f3b7f2d2f623c0ada1801584e73758d4916",
+    "deepseek_happy.webp": "583b64e36d25e182948c3744f1e74a235a3c32363ef3059883083d438d466dec",
+    "deepseek_surprised.webp": "c346616aa9809d427244f6d493894288ff9f2e2655d7d511e45121aafa74dc14",
+    "deepseek_love.webp": "54555f4a4fea973e06cc35f10be930b8ec135ab1856043a9aa1f790a45a1ae1a"
+  }
+}

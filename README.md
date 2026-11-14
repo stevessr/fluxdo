@@ -45,6 +45,9 @@ brew install --cask Lingyan000/tap/fluxdo
 - **图片支持**：图片上传、查看、保存
 - **投票功能**：参与社区投票
 
+### 独立组件
+- **StevesSR 生成器**：已拆分为独立 Flutter package 与 Android/Web 示例应用，不再随 FluxDO 主程序打包。组件说明及独立构建命令见 [packages/stevessr_generator/README.md](packages/stevessr_generator/README.md)；nightly 仅在组件源码变更时构建 [Android ARM64 APK](https://github.com/lingyan000/fluxdo/releases/tag/stevessr-nightly)。
+
 ### 技术特性
 - **安全连接**：集成 Rust 实现的 DOH (DNS over HTTPS) 代理
 - **性能优化**：图片缓存、懒加载、代码高亮

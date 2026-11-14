@@ -83,6 +83,7 @@ packages/enhanced_cookie_jar/pubspec.lock
 packages/extended_image_lite/pubspec.lock
 packages/pangutext/pubspec.lock
 packages/paper_shaders/pubspec.lock
+packages/stevessr_generator/pubspec.lock
 
 # Firebase config (contains API keys)
 android/app/google-services.json
@@ -112,12 +113,5 @@ packages/flutter_inappwebview_*/example/*/flutter/ephemeral/
 packages/flutter_inappwebview_windows/pubspec.lock
 packages/flutter_inappwebview_windows/example/pubspec.lock
 
-# 编译前由 tool/gen_avatar_deltas.dart 生成，完整源稿在 tool/avatar_sources/。
-/assets/images/avater/llm/*.webp
-/assets/images/avater/llm/*.png
-/assets/images/avater/llm/manifest.json
-/assets/images/avater/stevessr/*.webp
-/assets/images/avater/stevessr/*.png
-/assets/images/avater/stevessr/manifest.json
-# 迁移差分源稿时保留的完整原图备份（原图也存在于 Git 历史）。
+# 迁移前遗留的本地生成器原图备份；独立组件正式源稿在 package 内。
 /tool/avatar_originals/

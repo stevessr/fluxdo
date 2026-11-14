@@ -16,11 +16,7 @@ export '../../../constants/composer_tool_defaults.dart'
 
 import 'package:flutter/material.dart';
 import 'package:fluxdo_render/editor.dart';
-import 'package:fluxdo_render/fluxdo_render.dart' show ImageRun;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
-import '../../../services/local_notification_service.dart' show navigatorKey;
-import '../../../services/stevessr_composer_service.dart';
 
 /// 富文本工具的执行上下文：命令目标 + 需要宿主配合的动作。
 class RichToolContext {
@@ -99,30 +95,6 @@ class RichToolSnapshot {
 
   bool has(MarkKind k) => marks.contains(k);
 }
-
-/// StevesSR 在富文本「更多工具」里由 RichComposerEditor 自己注册；这里仅
-/// 提供收起态快捷栏需要的桥接动作，避免面板重复项。
-final RichEditorTool _stevessrQuickTool = RichEditorTool(
-  id: 'stevessr',
-  icon: FontAwesomeIcons.image,
-  label: '生成表情包图片',
-  run: (c) async {
-    final context = navigatorKey.currentContext;
-    if (context == null) return;
-    final selection = c.state.selection;
-    final generated = await StevessrComposerService.openAndUpload(context);
-    if (generated == null) return;
-    if (selection != null) c.state.updateSelection(selection);
-    c.state.insertAtom(
-      ImageRun(
-        src: generated.upload.shortUrl,
-        alt: '表情包',
-        width: generated.upload.width?.toDouble(),
-        height: generated.upload.height?.toDouble(),
-      ),
-    );
-  },
-);
 
 /// 单块选区只有完整覆盖才高亮；折叠光标沿用内核的 pending marks。
 /// 跨块格式命令目前不支持，保持与其可操作范围一致。
@@ -251,20 +223,10 @@ final List<RichEditorTool> richEditorTools = [
 ];
 
 /// 按用户保存的顺序解析固定工具，忽略未知或已移除的 id。
-///
-/// 老版本保存的列表里没有 StevesSR；作为回复 composer 新增的一等快捷入口，
-/// 解析时补上它，保证升级后立即可见而不要求用户清偏好。
 List<RichEditorTool> resolveVisibleRichTools(List<String> ids) {
-  final byId = {
-    for (final tool in richEditorTools) tool.id: tool,
-    _stevessrQuickTool.id: _stevessrQuickTool,
-  };
-  final resolved = [
+  final byId = {for (final tool in richEditorTools) tool.id: tool};
+  return [
     for (final id in ids.toSet())
       if (byId[id] != null) byId[id]!,
   ];
-  if (!resolved.any((tool) => tool.id == _stevessrQuickTool.id)) {
-    resolved.add(_stevessrQuickTool);
-  }
-  return resolved;
 }

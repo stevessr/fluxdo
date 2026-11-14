@@ -10,6 +10,8 @@ on:
       - 'core/doh_proxy/**'
       - 'core/net_core/**'
       - 'packages/**'
+      # Standalone generator changes use stevessr.yaml; they do not affect FluxDO APKs.
+      - '!packages/stevessr_generator/**'
       - 'assets/**'
       - 'third_party/**'
       - 'tool/**'
