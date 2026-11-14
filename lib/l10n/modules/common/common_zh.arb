@@ -159,5 +159,32 @@
   "common_upload": "上传",
   "common_view": "查看",
   "common_viewAll": "查看全部",
-  "common_viewDetails": "查看详情"
+  "common_viewDetails": "查看详情",
+  "common_groupMembers": "成员",
+  "common_groupMembersCount": "成员({count})",
+  "@common_groupMembersCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "common_groupActivity": "活动",
+  "common_groupManage": "管理",
+  "common_groupActivityPosts": "帖子",
+  "common_groupActivityTopics": "话题",
+  "common_groupActivityMentions": "提及",
+  "common_groupManageProfile": "资料",
+  "common_groupManageMembership": "成员资格",
+  "common_groupManageInteractions": "互动",
+  "common_groupManageCategories": "类别",
+  "common_groupManageTags": "标签",
+  "common_groupManageLogs": "日志",
+  "common_groupPermissions": "权限",
+  "common_groupMakeOwner": "设为所有者",
+  "common_groupRemoveOwner": "取消所有者",
+  "common_groupConfirmMakeOwner": "确定要将 @{username} 设为群组所有者吗？所有者拥有更高的管理权限。",
+  "@common_groupConfirmMakeOwner": {
+    "placeholders": { "username": { "type": "String" } }
+  },
+  "common_groupConfirmRemoveOwner": "确定要移除 @{username} 的所有者身份吗？",
+  "@common_groupConfirmRemoveOwner": {
+    "placeholders": { "username": { "type": "String" } }
+  }
 }

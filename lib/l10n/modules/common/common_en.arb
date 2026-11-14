@@ -145,5 +145,32 @@
   "common_upload": "Upload",
   "common_view": "View",
   "common_viewAll": "View all",
-  "common_viewDetails": "View details"
+  "common_viewDetails": "View details",
+  "common_groupMembers": "Members",
+  "common_groupMembersCount": "Members ({count})",
+  "@common_groupMembersCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "common_groupActivity": "Activity",
+  "common_groupManage": "Manage",
+  "common_groupActivityPosts": "Posts",
+  "common_groupActivityTopics": "Topics",
+  "common_groupActivityMentions": "Mentions",
+  "common_groupManageProfile": "Profile",
+  "common_groupManageMembership": "Membership",
+  "common_groupManageInteractions": "Interactions",
+  "common_groupManageCategories": "Categories",
+  "common_groupManageTags": "Tags",
+  "common_groupManageLogs": "Logs",
+  "common_groupPermissions": "Permissions",
+  "common_groupMakeOwner": "Make owner",
+  "common_groupRemoveOwner": "Remove owner",
+  "common_groupConfirmMakeOwner": "Make @{username} a group owner? Owners have elevated management permissions.",
+  "@common_groupConfirmMakeOwner": {
+    "placeholders": { "username": { "type": "String" } }
+  },
+  "common_groupConfirmRemoveOwner": "Remove owner privileges from @{username}?",
+  "@common_groupConfirmRemoveOwner": {
+    "placeholders": { "username": { "type": "String" } }
+  }
 }

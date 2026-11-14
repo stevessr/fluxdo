@@ -5,6 +5,8 @@ import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../constants.dart';
+import '../l10n/s.dart';
 import '../models/group.dart';
 import '../models/user_group.dart' show GroupActivityFilter, GroupSection;
 import '../providers/discourse_providers.dart';
@@ -12,6 +14,7 @@ import '../widgets/common/flair_badge.dart';
 import '../widgets/common/group_leave_confirmation_dialog.dart';
 import '../widgets/common/smart_avatar.dart';
 import 'user_profile_page.dart';
+import 'webview_page.dart';
 
 /// Discourse 原生群组详情 / 成员页。
 class GroupPage extends ConsumerStatefulWidget {
@@ -375,7 +378,6 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     final group = _group;
     if (group == null ||
         !group.canManageMembers ||
-        member.owner ||
         _removingMemberIds.contains(member.id)) {
       return;
     }
@@ -437,6 +439,31 @@ class _GroupPageState extends ConsumerState<GroupPage> {
         _removingMemberIds.contains(member.id)) {
       return;
     }
+
+    final copy = _copy(context);
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(member.owner ? copy.removeOwner : copy.makeOwner),
+            content: Text(
+              member.owner
+                  ? copy.confirmRemoveOwner(member.username)
+                  : copy.confirmMakeOwner(member.username),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(copy.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(member.owner ? copy.removeOwner : copy.makeOwner),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
 
     setState(() => _removingMemberIds.add(member.id));
     try {
@@ -550,6 +577,14 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     );
   }
 
+  Future<void> _openGroupWebPage(String path, String title) async {
+    final group = _group;
+    if (group == null) return;
+    final url = '${AppConstants.baseUrl}/g/'
+        '${Uri.encodeComponent(group.name)}/$path';
+    await WebViewPage.open(context, url, title: title);
+  }
+
   @override
   Widget build(BuildContext context) {
     final copy = _copy(context);
@@ -632,6 +667,106 @@ class _GroupPageState extends ConsumerState<GroupPage> {
               onLeave: () => _changeMembership(join: false),
               onRequestMembership: _requestMembership,
               requestingMembership: _requestingMembership,
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  _GroupNavChip(
+                    label: group.userCount == null
+                        ? copy.members
+                        : copy.membersWithCount(group.userCount!),
+                    selected: true,
+                  ),
+                  const SizedBox(width: 8),
+                  _GroupNavLabel(label: copy.activityGroup),
+                  _GroupNavChip(
+                    label: copy.activityPosts,
+                    onPressed: () => _openGroupWebPage(
+                      'activity/posts',
+                      copy.activityPosts,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _GroupNavChip(
+                    label: copy.activityTopics,
+                    onPressed: () => _openGroupWebPage(
+                      'activity/topics',
+                      copy.activityTopics,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _GroupNavChip(
+                    label: copy.activityMentions,
+                    onPressed: () => _openGroupWebPage(
+                      'activity/mentions',
+                      copy.activityMentions,
+                    ),
+                  ),
+                  if (group.canManageMembers) ...[
+                    const SizedBox(width: 8),
+                    _GroupNavLabel(label: copy.manageGroup),
+                    _GroupNavChip(
+                      label: copy.manageProfile,
+                      onPressed: () => _openGroupWebPage(
+                        'manage/profile',
+                        copy.manageProfile,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _GroupNavChip(
+                      label: copy.manageMembership,
+                      onPressed: () => _openGroupWebPage(
+                        'manage/membership',
+                        copy.manageMembership,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _GroupNavChip(
+                      label: copy.manageInteractions,
+                      onPressed: () => _openGroupWebPage(
+                        'manage/interactions',
+                        copy.manageInteractions,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _GroupNavChip(
+                      label: copy.manageCategories,
+                      onPressed: () => _openGroupWebPage(
+                        'manage/categories',
+                        copy.manageCategories,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _GroupNavChip(
+                      label: copy.manageTags,
+                      onPressed: () => _openGroupWebPage(
+                        'manage/tags',
+                        copy.manageTags,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _GroupNavChip(
+                      label: copy.manageLogs,
+                      onPressed: () => _openGroupWebPage(
+                        'manage/logs',
+                        copy.manageLogs,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _GroupNavChip(
+                      label: copy.permissions,
+                      onPressed: () => _openGroupWebPage(
+                        'manage/permissions',
+                        copy.permissions,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
           if (group.canSeeMembers) ...[
@@ -818,11 +953,10 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                                         : copy.setPrimaryGroup,
                                   ),
                                 ),
-                              if (!member.owner)
-                                PopupMenuItem(
-                                  value: 'remove',
-                                  child: Text(copy.removeMember),
-                                ),
+                              PopupMenuItem(
+                                value: 'remove',
+                                child: Text(copy.removeMember),
+                              ),
                             ],
                           )
                   : const Icon(Symbols.chevron_right_rounded),
@@ -833,6 +967,45 @@ class _GroupPageState extends ConsumerState<GroupPage> {
       ),
     ];
   }
+}
+
+class _GroupNavLabel extends StatelessWidget {
+  const _GroupNavLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: Text(
+      label,
+      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    ),
+  );
+}
+
+class _GroupNavChip extends StatelessWidget {
+  const _GroupNavChip({
+    required this.label,
+    this.selected = false,
+    this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => ActionChip(
+    label: Text(label),
+    avatar: selected ? const Icon(Symbols.group_rounded, size: 18) : null,
+    onPressed: onPressed,
+    backgroundColor: selected
+        ? Theme.of(context).colorScheme.secondaryContainer
+        : null,
+  );
 }
 
 class _GroupHeader extends StatelessWidget {
@@ -1287,8 +1460,9 @@ String _formatGroupRequestDateTime(BuildContext context, DateTime value) {
 }
 
 class _GroupCopy {
-  const _GroupCopy({required this.zh});
+  const _GroupCopy({required this.zh, required this.l10n});
   final bool zh;
+  final AppLocalizations l10n;
 
   String get refresh => zh ? '刷新' : 'Refresh';
   String get retry => zh ? '重试' : 'Retry';
@@ -1310,17 +1484,35 @@ class _GroupCopy {
       zh ? '加入申请已提交' : 'Membership request submitted';
   String get submit => zh ? '提交' : 'Submit';
   String get searchMembers => zh ? '搜索成员' : 'Search members';
+  String get members => l10n.common_groupMembers;
+  String membersWithCount(int count) => l10n.common_groupMembersCount(count);
+  String get activityGroup => l10n.common_groupActivity;
+  String get manageGroup => l10n.common_groupManage;
+  String get activityPosts => l10n.common_groupActivityPosts;
+  String get activityTopics => l10n.common_groupActivityTopics;
+  String get activityMentions => l10n.common_groupActivityMentions;
+  String get manageProfile => l10n.common_groupManageProfile;
+  String get manageMembership => l10n.common_groupManageMembership;
+  String get manageInteractions => l10n.common_groupManageInteractions;
+  String get manageCategories => l10n.common_groupManageCategories;
+  String get manageTags => l10n.common_groupManageTags;
+  String get manageLogs => l10n.common_groupManageLogs;
+  String get permissions => l10n.common_groupPermissions;
   String get membersHidden => zh ? '该群组的成员列表不可见' : 'Members are hidden';
   String get noMembers => zh ? '没有成员' : 'No members';
   String get loadMore => zh ? '加载更多' : 'Load more';
   String get owner => zh ? '所有者' : 'Owner';
   String get memberManagement => zh ? '成员管理' : 'Member management';
-  String get makeOwner => zh ? '设为所有者' : 'Make owner';
-  String get removeOwner => zh ? '取消所有者' : 'Remove owner';
+  String get makeOwner => l10n.common_groupMakeOwner;
+  String get removeOwner => l10n.common_groupRemoveOwner;
   String ownerAdded(String username) =>
       zh ? '已将 @$username 设为所有者' : '@$username is now an owner';
   String ownerRemoved(String username) =>
       zh ? '已取消 @$username 的所有者身份' : 'Removed owner role from @$username';
+  String confirmMakeOwner(String username) =>
+      l10n.common_groupConfirmMakeOwner(username);
+  String confirmRemoveOwner(String username) =>
+      l10n.common_groupConfirmRemoveOwner(username);
   String get setPrimaryGroup => zh ? '设为主要群组' : 'Set as primary group';
   String get clearPrimaryGroup => zh ? '取消主要群组' : 'Clear primary group';
   String primaryGroupSet(String username) =>
@@ -1358,4 +1550,5 @@ class _GroupCopy {
 
 _GroupCopy _copy(BuildContext context) => _GroupCopy(
   zh: Localizations.localeOf(context).languageCode.toLowerCase() == 'zh',
+  l10n: context.l10n,
 );

@@ -159,5 +159,32 @@
   "common_upload": "上傳",
   "common_view": "查看",
   "common_viewAll": "查看全部",
-  "common_viewDetails": "查看詳情"
+  "common_viewDetails": "查看詳情",
+  "common_groupMembers": "成員",
+  "common_groupMembersCount": "成員({count})",
+  "@common_groupMembersCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "common_groupActivity": "活動",
+  "common_groupManage": "管理",
+  "common_groupActivityPosts": "帖子",
+  "common_groupActivityTopics": "話題",
+  "common_groupActivityMentions": "提及",
+  "common_groupManageProfile": "資料",
+  "common_groupManageMembership": "成員資格",
+  "common_groupManageInteractions": "互動",
+  "common_groupManageCategories": "類別",
+  "common_groupManageTags": "標籤",
+  "common_groupManageLogs": "記錄",
+  "common_groupPermissions": "權限",
+  "common_groupMakeOwner": "設為擁有者",
+  "common_groupRemoveOwner": "移除擁有者",
+  "common_groupConfirmMakeOwner": "確定要將 @{username} 設為群組擁有者嗎？擁有者有更高的管理權限。",
+  "@common_groupConfirmMakeOwner": {
+    "placeholders": { "username": { "type": "String" } }
+  },
+  "common_groupConfirmRemoveOwner": "確定要移除 @{username} 的擁有者身份嗎？",
+  "@common_groupConfirmRemoveOwner": {
+    "placeholders": { "username": { "type": "String" } }
+  }
 }
