@@ -10,6 +10,10 @@ repository and are not removed by this CI change.
   dispatch. Successful APK builds update the `nightly` Release. Version tags do
   **not** trigger it; `build.yaml` handles tagged multi-platform releases.
 - `build.yaml`: `v*` tags and manual dispatch; do not weaken release checks.
+- `stevessr.yaml`: generator package or workflow changes on `main`, daily schedule,
+  and manual dispatch. Builds the standalone generator ARM64 APK and publishes it
+  to both `stevessr-nightly` and the shared `nightly` Release. Scheduled runs skip
+  unchanged inputs only when the shared Release already contains the generator APK.
 - `account-runtime-switch.yaml`, `direct-login.yaml`,
   `discourse-compat-pr-check.yml`, and `webview-cookie-manager.yaml`:
   path-scoped pull request regression checks. There is no duplicate `main` push
@@ -29,7 +33,6 @@ on the branch whose behavior needs verification:
 - `image-provider-cache-keys.yaml` — shared image provider/cache keys
 - `preload-startup.yaml` — startup/preload contracts
 - `request-cache.yaml` — Discourse network request caches
-- `stevessr.yaml` — StevesSR composer / asset / export tests
 
 These checks do not run automatically on unrelated PRs or after merge.
 Run relevant ones before merging changes to these subsystems. The blob cache

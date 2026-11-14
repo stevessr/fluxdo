@@ -503,7 +503,8 @@ jobs:
           fail_on_unmatched_files: true
           files: nightly/*.apk
           body: |
-            Automatically built Android APKs from the latest successful build-apk workflow.
+            Automatically built Android APKs for FluxDO and standalone components.
+            The generator APK is updated independently by the StevesSR Generator Nightly workflow.
 
             Commit: `${{ github.sha }}`
             Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
