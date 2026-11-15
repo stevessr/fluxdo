@@ -101,6 +101,63 @@ void main() {
     expect(masterSize.width, closeTo(408, 1));
   });
 
+  testWidgets('多 Tab 打开、切换、关闭不顶掉左侧信息流', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1600, 800);
+    addTearDown(tester.view.reset);
+
+    Widget layout(List<String> tabs) => MaterialApp(
+      home: Scaffold(
+        body: MasterDetailLayout(
+          pinMaster: true,
+          preferredMasterRatio: 0.25,
+          animatePanes: false,
+          master: const SizedBox.expand(
+            key: ValueKey('feed-master'),
+            child: ColoredBox(color: Colors.blue),
+          ),
+          panes: [
+            for (final tab in tabs)
+              ColoredBox(key: ValueKey('tab-$tab'), color: Colors.green),
+          ],
+        ),
+      ),
+    );
+
+    void expectFeedAndTab(String activeTab) {
+      final feed = find.byKey(const ValueKey('feed-master'));
+      final detail = find.byKey(ValueKey('tab-$activeTab'));
+      expect(feed, findsOneWidget);
+      expect(tester.getTopLeft(feed).dx, closeTo(0, 0.1));
+      expect(tester.getSize(feed).width, closeTo(400, 0.1));
+      expect(detail, findsOneWidget);
+    }
+
+    await tester.pumpWidget(layout(['a']));
+    await tester.pumpAndSettle();
+    expectFeedAndTab('a');
+
+    // 第二个 Tab 只替换右栏的可见内容，旧 Tab 仍挂载。
+    await tester.pumpWidget(layout(['a', 'b']));
+    await tester.pumpAndSettle();
+    expectFeedAndTab('b');
+    expect(find.byKey(const ValueKey('tab-a')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('tab-a'), skipOffstage: false),
+      findsOneWidget,
+    );
+
+    // 切换时左栏尺寸、位置保持原样。
+    await tester.pumpWidget(layout(['b', 'a']));
+    await tester.pumpAndSettle();
+    expectFeedAndTab('a');
+
+    // 关闭一个 Tab 仍不影响左侧信息流。
+    await tester.pumpWidget(layout(['b']));
+    await tester.pumpAndSettle();
+    expectFeedAndTab('b');
+  });
+
   testWidgets('detail slot paints an opaque scaffold background', (
     tester,
   ) async {

@@ -124,12 +124,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
   @override
   Widget build(BuildContext context) {
     final selectedTopic = ref.watch(selectedTopicProvider);
-    // 左栏本质是不是"列表"（信息流）——决定给窄栏还是对半分
-    final adjacentTabs = selectedTopic.tabMode &&
-        selectedTopic.stack.length > 1 &&
-        !selectedTopic.showingFeed;
-    _masterIsListLike =
-        !adjacentTabs && (!selectedTopic.isStacked || selectedTopic.tabMode);
+    // 独立 Tab 模式下左栏始终是信息流，Tab 数量只改变右栏内容。
+    // 普通压栈模式仍允许上一层内容占据左栏。
+    _masterIsListLike = selectedTopic.tabMode || !selectedTopic.isStacked;
     final user = ref.watch(currentUserProvider).value;
 
     // 左侧导航栏的板块快捷入口位于平行视界布局之外。切换板块时除了让
@@ -222,10 +219,9 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                 preferredMasterRatio:
                     selectedTopic.isStacked && !_masterIsListLike ? 0.5 : 0.25,
                 projectDetailWhenNarrow: true,
-                // 胶片带:列表也在带上,压栈时被顶出左侧、倒二层格顶上左栏
-                // (旧"上一层预览"形态,由容器统一承担,预览格 State 全保)。
-                // The two most recent tabs share the two parallel-view panes.
-                pinMaster: selectedTopic.tabMode && !adjacentTabs,
+                // 独立 Tab 始终固定左侧信息流，所有 Tab 只在右栏切换；
+                // 普通压栈继续使用倒二层占据左栏的历史预览模式。
+                pinMaster: selectedTopic.tabMode,
                 master: _wrapPaneTap(
                   ActivePane.master,
                   _buildMasterPane(selectedTopic),
@@ -249,7 +245,7 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
                   canCreate: user != null,
                   isActive:
                       widget.isActive &&
-                      (!selectedTopic.isStacked || selectedTopic.showingFeed) &&
+                      (_masterIsListLike || selectedTopic.showingFeed) &&
                       !_showEmbeddedSearch &&
                       (!selectedTopic.hasSelection ||
                           selectedTopic.showingFeed ||
@@ -303,9 +299,8 @@ class _TopicsScreenState extends ConsumerState<TopicsScreen> {
               : entry,
           stackProvider: selectedTopicProvider,
           parentActive: widget.isActive,
-          // 非顶格 = "上一层预览":内部点击走截断替换语义。
-          // In independent Tab mode the left pane is another live Tab,
-          // not navigation history. A link must never replace its neighbor.
+          // 普通压栈非顶格是"上一层预览"，内部点击使用截断替换语义；
+          // 独立 Tab 的非活跃格保持状态，但不占左栏，也不能替换相邻 Tab。
           truncateOnPush: !isTop && !selectedTopic.tabMode,
           // 基础层（栈仅一层）也给 clear：ESC/返回按钮清空右栏回到
           // 空态，与 search/seeking 行为一致（平行视界 ESC 统一）。
