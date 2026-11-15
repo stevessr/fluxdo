@@ -112,9 +112,9 @@ void main() {
           pinMaster: true,
           preferredMasterRatio: 0.25,
           animatePanes: false,
-          master: const ColoredBox(
+          master: const SizedBox.expand(
             key: ValueKey('feed-master'),
-            color: Colors.blue,
+            child: ColoredBox(color: Colors.blue),
           ),
           panes: [
             for (final tab in tabs)
