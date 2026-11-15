@@ -600,9 +600,9 @@ class AppCookieManager extends Interceptor {
         response.requestOptions.headers[HttpHeaders.cookieHeader]?.toString() ??
         response.requestOptions.headers['Cookie']?.toString() ??
         '';
-    final sentTToken = RegExp(
-      r'(?:^|;\s*)_t=([^;]*)',
-    ).firstMatch(sentCookieHeader)?.group(1);
+    final sentTToken = RegExp(r'(?:^|;\s*)_t=([^;]*)')
+        .firstMatch(sentCookieHeader)
+        ?.group(1);
     String? currentTToken;
     if (isMainSite &&
         cookies.any(
