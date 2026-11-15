@@ -110,6 +110,11 @@ class LoginTokenRedeemer {
       return const LoginTokenRedeemResult.pendingSession();
     } on DioException catch (e) {
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
+      if (!otpSubmitted) {
+        return isChallengeError(e)
+            ? const LoginTokenRedeemResult.blockedByChallenge()
+            : const LoginTokenRedeemResult.failed();
+      }
 
       // OTP 可能已经在服务端成功消费，只是后续响应/同步链路抛错。
       // 在分类原始网络错误之前先对账 cookie，避免把“已经登录成功”误报为失败，
