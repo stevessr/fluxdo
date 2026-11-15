@@ -23,9 +23,8 @@ class WebViewLoginSessionProbe {
     required String? appToken,
     required bool guestSession,
   }) {
-    if (guestSession || appToken == null || appToken.isEmpty) {
-      return appToken;
-    }
+    if (guestSession) return null;
+    if (appToken == null || appToken.isEmpty) return appToken;
     return webViewToken != null && webViewToken.isNotEmpty
         ? webViewToken
         : appToken;
