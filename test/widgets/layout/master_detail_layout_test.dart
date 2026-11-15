@@ -101,7 +101,6 @@ void main() {
     expect(masterSize.width, closeTo(408, 1));
   });
 
-
   testWidgets('多 Tab 打开、切换、关闭不顶掉左侧信息流', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1600, 800);
