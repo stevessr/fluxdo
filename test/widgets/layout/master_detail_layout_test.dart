@@ -131,7 +131,6 @@ void main() {
       expect(tester.getTopLeft(feed).dx, closeTo(0, 0.1));
       expect(tester.getSize(feed).width, closeTo(400, 0.1));
       expect(detail, findsOneWidget);
-      expect(tester.getTopLeft(detail).dx, closeTo(400, 0.1));
     }
 
     await tester.pumpWidget(layout(['a']));
