@@ -64,10 +64,10 @@ class UserApiKeyLoginFlow {
   }) {
     if (authorizedKey == null || authorizedKey.isEmpty) return;
     unawaited(
-      keys.burnAfterLoginIfUseless(
-        dio,
-        expectedKey: authorizedKey,
-      ).catchError((Object error, StackTrace stackTrace) {
+      keys.burnAfterLoginIfUseless(dio, expectedKey: authorizedKey).catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
         debugPrint('[UserApiKeyLoginFlow] 授权 key 后台清理失败: $error');
       }),
     );
@@ -202,9 +202,7 @@ class UserApiKeyLoginFlow {
           if (redeemResult.needsSessionVerification) {
             // OTP 是一次性的；请求结果不确定时，不得重复兑换或
             // 清理可能有效的授权 key。可用内置浏览器恢复已登录会话。
-            ToastService.showError(
-              '兑换请求已提交，但应用会话尚未确认；请打开内置浏览器并点击“检查登录状态”',
-            );
+            ToastService.showError('兑换请求已提交，但应用会话尚未确认；请打开内置浏览器并点击“检查登录状态”');
             onFlowFinished?.call(false);
             return;
           }
@@ -254,9 +252,7 @@ class UserApiKeyLoginFlow {
                 try {
                   verifiedUser = User.fromJson(currentUser);
                 } catch (e) {
-                  debugPrint(
-                    '[UserApiKeyLoginFlow] 用户资料解析失败，保留已确认用户名: $e',
-                  );
+                  debugPrint('[UserApiKeyLoginFlow] 用户资料解析失败，保留已确认用户名: $e');
                 }
               }
             }
@@ -296,9 +292,7 @@ class UserApiKeyLoginFlow {
           }
           // 兑换已经提交，但服务端仍返回匿名态；暂不清理授权 key，
           // 避免误将延迟生效的会话判成令牌兑换失败。
-          ToastService.showError(
-            '令牌已兑换，但暂未确认登录身份；请打开内置浏览器并点击“检查登录状态”',
-          );
+          ToastService.showError('令牌已兑换，但暂未确认登录身份；请打开内置浏览器并点击“检查登录状态”');
           onFlowFinished?.call(false);
           return;
         }
