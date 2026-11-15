@@ -46,6 +46,14 @@ void main() {
       );
       expect(baseline, isNull);
       expect(
+        WebViewLoginSessionProbe.baselineToken(
+          webViewToken: 'browser-session',
+          appToken: 'uncommitted-session',
+          guestSession: true,
+        ),
+        isNull,
+      );
+      expect(
         WebViewLoginSessionProbe.isNewSessionToken(
           'browser-session',
           baseline,
