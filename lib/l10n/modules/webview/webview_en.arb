@@ -54,6 +54,8 @@
   "webviewLogin_lastLogin": "Last login: @{username}",
   "webviewLogin_loginSuccess": "Login successful!",
   "webviewLogin_savedPassword": "Saved password",
+  "webviewLogin_checkSession": "Check login status",
+  "webviewLogin_noNewSession": "No new authenticated session was found. Finish signing in and try again.",
   "webviewLogin_title": "Log in to LINUX.DO",
   "webview_addressHint": "Search or enter address",
   "webview_editAddress": "Edit address or search",
