@@ -260,12 +260,12 @@ class UserApiKeyLoginFlow {
               }
             }
           }
-        } on DioException catch (e) {
-          currentUserProbeFailed = isTransientCurrentUserProbeError(e);
-          debugPrint(
-            '[UserApiKeyLoginFlow] 取 current_user 失败: $e '
-            '(recoverable=$currentUserProbeFailed)',
-          );
+          } on DioException catch (e) {
+            currentUserProbeFailed = isTransientCurrentUserProbeError(e);
+            debugPrint(
+              '[UserApiKeyLoginFlow] 取 current_user 失败: $e '
+              '(recoverable=$currentUserProbeFailed)',
+            );
           } catch (e) {
             currentUserProbeFailed = true;
             debugPrint('[UserApiKeyLoginFlow] 取 current_user 失败: $e');
