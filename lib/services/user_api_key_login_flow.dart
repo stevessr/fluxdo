@@ -200,8 +200,8 @@ class UserApiKeyLoginFlow {
         final token = redeemResult.token;
         if (token == null) {
           if (redeemResult.needsSessionVerification) {
-            // OTP 是一次性的；响应已到达或网络结果不确定时，不得重发或
-            // 清理可能有效的授权 key。用户可用内置浏览器恢复已登录会话。
+            // OTP 是一次性的；请求结果不确定时，不得重复兑换或
+            // 清理可能有效的授权 key。可用内置浏览器恢复已登录会话。
             ToastService.showError(
               '兑换请求已提交，但应用会话尚未确认；请打开内置浏览器并点击“检查登录状态”',
             );
@@ -253,13 +253,13 @@ class UserApiKeyLoginFlow {
               if (username.isNotEmpty) {
                 try {
                   verifiedUser = User.fromJson(currentUser);
-              } catch (e) {
-                debugPrint(
-                  '[UserApiKeyLoginFlow] 用户资料解析失败，保留已确认用户名: $e',
-                );
+                } catch (e) {
+                  debugPrint(
+                    '[UserApiKeyLoginFlow] 用户资料解析失败，保留已确认用户名: $e',
+                  );
+                }
               }
             }
-          }
           } on DioException catch (e) {
             currentUserProbeFailed = isTransientCurrentUserProbeError(e);
             debugPrint(
