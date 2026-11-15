@@ -38,6 +38,42 @@ void main() {
       );
     });
 
+    test('guest can adopt a pre-existing authenticated WebView session', () {
+      final baseline = WebViewLoginSessionProbe.baselineToken(
+        webViewToken: 'browser-session',
+        appToken: null,
+        guestSession: true,
+      );
+      expect(baseline, isNull);
+      expect(
+        WebViewLoginSessionProbe.isNewSessionToken(
+          'browser-session',
+          baseline,
+        ),
+        isTrue,
+      );
+    });
+
+    test('account switch cannot adopt an unchanged old WebView session', () {
+      final baseline = WebViewLoginSessionProbe.baselineToken(
+        webViewToken: 'previous-browser-session',
+        appToken: 'current-app-session',
+        guestSession: false,
+      );
+      expect(baseline, 'previous-browser-session');
+      expect(
+        WebViewLoginSessionProbe.isNewSessionToken(
+          'previous-browser-session',
+          baseline,
+        ),
+        isFalse,
+      );
+      expect(
+        WebViewLoginSessionProbe.isNewSessionToken('new-session', baseline),
+        isTrue,
+      );
+    });
+
     test('valid current_user response establishes a verified username', () {
       final evidence = {
         'probeComplete': true,
