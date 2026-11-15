@@ -265,13 +265,13 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                         // 记住进入登录页前的会话，避免账号切换时把旧账户
                         // 误判为本次 OAuth / Passkey 登录成功。
                         try {
-                          // Use the WebView cookie as the baseline: the Dio
-                          // jar may still contain a different account before
-                          // boundary synchronization has completed.
+                          // 未登录/guest 可以接管 WebView 中已有的有效会话；
+                          // 切换已登录账号时仍以浏览器旧 Cookie 为基线。
                           final webViewToken =
                               await _readTTokenFromWebView(controller);
                           final appToken = await _cookieJar.getTToken();
-                          _loginStartToken = WebViewLoginSessionProbe.baselineToken(
+                          _loginStartToken =
+                              WebViewLoginSessionProbe.baselineToken(
                             webViewToken: webViewToken,
                             appToken: appToken,
                             guestSession: await AccountManager().isGuestSession(),
