@@ -298,9 +298,7 @@ class LoginTokenRedeemer {
     if (issuedToken != null &&
         _isFreshToken(beforeToken, snapshot.token) &&
         snapshot.token != issuedToken) {
-      return _TTokenSnapshot.failed(
-        StateError('另一次登录已更新会话，不能将其视为本次 OTP 成功'),
-      );
+      return _TTokenSnapshot.failed(StateError('另一次登录已更新会话，不能将其视为本次 OTP 成功'));
     }
     if (_isExpectedFreshToken(beforeToken, snapshot.token, issuedToken)) {
       return snapshot;
@@ -339,8 +337,7 @@ class LoginTokenRedeemer {
     String? beforeToken,
     String? afterToken, {
     String? issuedToken,
-  }) =>
-      _isExpectedFreshToken(beforeToken, afterToken, issuedToken);
+  }) => _isExpectedFreshToken(beforeToken, afterToken, issuedToken);
 
   static bool _isExpectedFreshToken(
     String? beforeToken,
