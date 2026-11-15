@@ -227,34 +227,32 @@ class UserApiKeyLoginFlow {
         var currentUserProbeFailed = false;
         for (var attempt = 0; attempt < 3; attempt++) {
           if (attempt > 0) {
-            await Future<void>.delayed(
-              Duration(milliseconds: 250 * attempt),
-            );
+            await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
           }
           if (!AuthSession().isValid(requestGeneration)) return;
           currentUserProbeFailed = false;
           try {
-          final response = await service.dio.get(
-            '/session/current.json',
-            options: Options(
-              extra: const {
-                FluxRequestKeys.skipAuthCheck: true,
-                FluxRequestKeys.skipCsrf: true,
-                FluxRequestKeys.skipSessionStateSync: true,
-                FluxRequestKeys.noRecovery: true,
-              },
-            ),
-          );
-          if (!AuthSession().isValid(requestGeneration)) return;
-          final data = response.data;
-          final currentUser = data is Map<String, dynamic>
-              ? data['current_user']
-              : null;
-          if (currentUser is Map<String, dynamic>) {
-            username = currentUser['username']?.toString() ?? '';
-            if (username.isNotEmpty) {
-              try {
-                verifiedUser = User.fromJson(currentUser);
+            final response = await service.dio.get(
+              '/session/current.json',
+              options: Options(
+                extra: const {
+                  FluxRequestKeys.skipAuthCheck: true,
+                  FluxRequestKeys.skipCsrf: true,
+                  FluxRequestKeys.skipSessionStateSync: true,
+                  FluxRequestKeys.noRecovery: true,
+                },
+              ),
+            );
+            if (!AuthSession().isValid(requestGeneration)) return;
+            final data = response.data;
+            final currentUser = data is Map<String, dynamic>
+                ? data['current_user']
+                : null;
+            if (currentUser is Map<String, dynamic>) {
+              username = currentUser['username']?.toString() ?? '';
+              if (username.isNotEmpty) {
+                try {
+                  verifiedUser = User.fromJson(currentUser);
               } catch (e) {
                 debugPrint(
                   '[UserApiKeyLoginFlow] 用户资料解析失败，保留已确认用户名: $e',
