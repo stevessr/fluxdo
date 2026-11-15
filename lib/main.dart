@@ -1766,10 +1766,22 @@ class _MainPageState extends ConsumerState<MainPage>
     final entries = _resolveEntries(bottomNavIds, user);
     _lastResolvedEntries = entries;
 
-    // page kind 的子集用于 IndexedStack
-    final pageEntries = entries
-        .where((e) => e.kind == NavEntryKind.page)
-        .toList();
+    final hasNotificationEntry = entries.any(
+      (e) => e.id == NavEntryIds.notifications,
+    );
+    // 平行视界中的通知角标也要进入主工作区，而非在根 Navigator
+    // 上另开完整通知页。未固定通知入口时，仅为工作区补一个隐藏页面。
+    final hasImplicitNotificationPage =
+        user != null &&
+        !hasNotificationEntry &&
+        MasterDetailLayout.canShowBothPanesFor(context);
+
+    // page kind 的子集用于 IndexedStack。隐藏通知页不占用底栏配置。
+    final pageEntries = [
+      ...entries.where((e) => e.kind == NavEntryKind.page),
+      if (hasImplicitNotificationPage)
+        NavEntryRegistry.byId(NavEntryIds.notifications)!,
+    ];
 
     // 按稳定 id 定位当前页；当前页被过滤（如退出登录后 requiresLogin
     // entry 消失）时回退到第一个 page，下标绝不残留旧语义
@@ -1821,13 +1833,7 @@ class _MainPageState extends ConsumerState<MainPage>
         ),
     ];
 
-    // 通知入口在桌面侧栏可能出现两处：
-    // 1) 用户把 notifications 加入底栏布局，作为 NavEntry 渲染
-    // 2) railBottomLeading 默认提供的 NotificationIconButton
-    // 已在底栏配置时不再额外渲染，避免重复。
-    final hasNotificationEntry = entries.any(
-      (e) => e.id == NavEntryIds.notifications,
-    );
+    // 用户固定了通知入口时不再显示额外角标，避免侧栏出现重复入口。
     final activeEntryId = pageEntries[safePageIndex].id;
     final topicState = ref.watch(selectedTopicProvider);
     final topicParallelStacked = topicState.isStacked && !topicState.tabMode;
@@ -1909,10 +1915,18 @@ class _MainPageState extends ConsumerState<MainPage>
                             excluding: safePageIndex != i,
                             child: KeyboardInsetIsolation(
                               active: safePageIndex == i,
-                              child: pageEntries[i].pageBuilder!(
-                                context,
-                                safePageIndex == i,
-                              ),
+                              child:
+                                  // 隐藏的角标工作区按需挂载，避免宽屏启动
+                                  // 时立即预取整页历史通知。
+                                  hasImplicitNotificationPage &&
+                                      pageEntries[i].id ==
+                                          NavEntryIds.notifications &&
+                                      safePageIndex != i
+                                  ? const SizedBox.shrink()
+                                  : pageEntries[i].pageBuilder!(
+                                      context,
+                                      safePageIndex == i,
+                                    ),
                             ),
                           ),
                         ),

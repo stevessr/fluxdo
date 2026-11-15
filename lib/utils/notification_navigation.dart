@@ -45,12 +45,22 @@ void _closeNotificationRouteIfNeeded(
   }
 }
 
-/// 打开通知页面。完整列表使用稳定路由名；其他页面维持大屏弹窗体验。
+/// 打开通知页面。平行视界下进入主工作区；窄屏仍使用独立路由。
 void openNotificationPage(
   BuildContext context,
   Widget page, {
   bool isNotificationList = false,
 }) {
+  if (isNotificationList && MasterDetailLayout.canShowBothPanesFor(context)) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final previous = container.read(navDestinationRequestProvider);
+    container.read(navDestinationRequestProvider.notifier).state =
+        NavDestinationRequest(
+          targetId: NavEntryIds.notifications,
+          nonce: (previous?.nonce ?? 0) + 1,
+        );
+    return;
+  }
   if (!isNotificationList && MasterDetailLayout.canShowBothPanesFor(context)) {
     showPageDialog(context: context, builder: (_) => page);
     return;
