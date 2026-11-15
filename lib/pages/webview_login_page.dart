@@ -12,6 +12,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 
 import '../constants.dart';
 import '../providers/preferences_provider.dart';
+import '../services/account_manager.dart';
 import '../services/credential_store_service.dart';
 import '../services/auth_session.dart';
 import '../services/discourse/discourse_service.dart';
@@ -57,6 +58,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
   bool _isLoading = true;
   bool _loginHandled = false;
   bool _loginInProgress = false;
+  bool _manualCheckInProgress = false;
   bool _isCompletingLogin = false;
   String? _lastHomeResponseUrl;
   String _url = AppConstants.baseUrl;
@@ -141,6 +143,19 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                 ),
               ],
             ),
+          IconButton(
+            icon: _manualCheckInProgress
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Symbols.verified_user_rounded),
+            onPressed: _manualCheckInProgress || _loginHandled || _isCompletingLogin
+                ? null
+                : _checkLoginManually,
+            tooltip: context.l10n.webviewLogin_checkSession,
+          ),
           IconButton(
             icon: const Icon(Symbols.refresh_rounded),
             onPressed: () => _controller?.reload(),
@@ -253,9 +268,14 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                           // Use the WebView cookie as the baseline: the Dio
                           // jar may still contain a different account before
                           // boundary synchronization has completed.
-                          _loginStartToken =
-                              await _readTTokenFromWebView(controller) ??
-                              await _cookieJar.getTToken();
+                          final webViewToken =
+                              await _readTTokenFromWebView(controller);
+                          final appToken = await _cookieJar.getTToken();
+                          _loginStartToken = WebViewLoginSessionProbe.baselineToken(
+                            webViewToken: webViewToken,
+                            appToken: appToken,
+                            guestSession: await AccountManager().isGuestSession(),
+                          );
                         } catch (e) {
                           debugPrint('[Login] 读取登录前会话失败: $e');
                         }
@@ -500,6 +520,29 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
     );
   }
 
+  /// 自动检测漏报时，允许用户主动重试同一条已验证的登录收口路径。
+  Future<void> _checkLoginManually() async {
+    final controller = _controller;
+    if (controller == null ||
+        _manualCheckInProgress ||
+        _loginInProgress ||
+        _loginHandled) {
+      return;
+    }
+    setState(() => _manualCheckInProgress = true);
+    try {
+      _recheckCount = 0;
+      await _checkLoginStatus(controller);
+      if (mounted && !_loginHandled) {
+        ToastService.showError(context.l10n.webviewLogin_noNewSession);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _manualCheckInProgress = false);
+      }
+    }
+  }
+
   /// 检测登录状态，登录成功自动关闭
   Future<void> _checkLoginStatus(
     InAppWebViewController controller, {
@@ -542,7 +585,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       );
       // 旧 _t 存在并不意味着这次登录完成。特别是账号切换时，
       // /session/current.json 可能仍返回前一个账号。
-      if (tToken != null && tToken == _loginStartToken) {
+      if (tToken != null &&
+          !WebViewLoginSessionProbe.isNewSessionToken(tToken, _loginStartToken)) {
         if (mounted && _isCompletingLogin) {
           setState(() {
             _isCompletingLogin = false;
@@ -1023,7 +1067,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       controller,
       currentUrl: currentUrl,
     );
-    if (token == null || token.isEmpty || token == _loginStartToken) {
+    if (!WebViewLoginSessionProbe.isNewSessionToken(token, _loginStartToken)) {
       return null;
     }
 
@@ -1051,6 +1095,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       ).timeout(const Duration(seconds: 5));
       final evidence = response?.value;
       if (WebViewLoginSessionProbe.isCompletedProbe(evidence)) {
+        // 服务端已明确返回匿名状态时，不能回退读取可能过期的页面用户名。
         return WebViewLoginSessionProbe.usernameFromSession(evidence);
       }
     } catch (e) {
