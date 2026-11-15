@@ -1004,7 +1004,11 @@ class _Header extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Symbols.verified_user_rounded, size: 20, color: context.emphasis.accent),
+          Icon(
+            Symbols.verified_user_rounded,
+            size: 20,
+            color: context.emphasis.accent,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
