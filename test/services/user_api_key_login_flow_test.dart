@@ -10,24 +10,17 @@ void main() {
         requestOptions: request,
         response: status == null
             ? null
-            : Response<dynamic>(
-                requestOptions: request,
-                statusCode: status,
-              ),
+            : Response<dynamic>(requestOptions: request, statusCode: status),
       );
     }
 
     test('transient network and server failures permit OTP reconciliation', () {
       expect(
-        UserApiKeyLoginFlow.isTransientCurrentUserProbeError(
-          probeError(null),
-        ),
+        UserApiKeyLoginFlow.isTransientCurrentUserProbeError(probeError(null)),
         isTrue,
       );
       expect(
-        UserApiKeyLoginFlow.isTransientCurrentUserProbeError(
-          probeError(503),
-        ),
+        UserApiKeyLoginFlow.isTransientCurrentUserProbeError(probeError(503)),
         isTrue,
       );
     });
