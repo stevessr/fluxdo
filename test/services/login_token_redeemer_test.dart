@@ -72,6 +72,26 @@ void main() {
       );
     });
 
+    test('accepted OTP response may still need session verification', () {
+      expect(LoginTokenRedeemer.isAcceptedOtpResponse(otpResponse()), isTrue);
+      expect(
+        LoginTokenRedeemer.isAcceptedOtpResponse(
+          otpResponse(status: 403),
+        ),
+        isFalse,
+      );
+      expect(
+        LoginTokenRedeemer.isAcceptedOtpResponse(
+          otpResponse(host: 'external.example'),
+        ),
+        isFalse,
+      );
+      const pending = LoginTokenRedeemResult.pendingSession();
+      expect(pending.succeeded, isFalse);
+      expect(pending.needsSessionVerification, isTrue);
+      expect(pending.challengeBlocked, isFalse);
+    });
+
     test('never trusts challenge, unrelated origin, or ordinary API response', () {
       expect(
         LoginTokenRedeemer.issuedTokenFromOtpResponse(
