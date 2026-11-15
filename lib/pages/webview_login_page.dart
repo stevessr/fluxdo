@@ -151,7 +151,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Symbols.verified_user_rounded),
-            onPressed: _manualCheckInProgress || _loginHandled || _isCompletingLogin
+            onPressed:
+                _manualCheckInProgress || _loginHandled || _isCompletingLogin
                 ? null
                 : _checkLoginManually,
             tooltip: context.l10n.webviewLogin_checkSession,
@@ -267,15 +268,17 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
                         try {
                           // 未登录/guest 可以接管 WebView 中已有的有效会话；
                           // 切换已登录账号时仍以浏览器旧 Cookie 为基线。
-                          final webViewToken =
-                              await _readTTokenFromWebView(controller);
+                          final webViewToken = await _readTTokenFromWebView(
+                            controller,
+                          );
                           final appToken = await _cookieJar.getTToken();
                           _loginStartToken =
                               WebViewLoginSessionProbe.baselineToken(
-                            webViewToken: webViewToken,
-                            appToken: appToken,
-                            guestSession: await AccountManager().isGuestSession(),
-                          );
+                                webViewToken: webViewToken,
+                                appToken: appToken,
+                                guestSession: await AccountManager()
+                                    .isGuestSession(),
+                              );
                         } catch (e) {
                           debugPrint('[Login] 读取登录前会话失败: $e');
                         }
@@ -586,7 +589,10 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
       // 旧 _t 存在并不意味着这次登录完成。特别是账号切换时，
       // /session/current.json 可能仍返回前一个账号。
       if (tToken != null &&
-          !WebViewLoginSessionProbe.isNewSessionToken(tToken, _loginStartToken)) {
+          !WebViewLoginSessionProbe.isNewSessionToken(
+            tToken,
+            _loginStartToken,
+          )) {
         if (mounted && _isCompletingLogin) {
           setState(() {
             _isCompletingLogin = false;
@@ -660,10 +666,7 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
           AuthSession().isValid(committedGeneration)) {
         // Authentication was already committed; a later optional bootstrap
         // failure must not leave the user stuck on the login WebView.
-        _service.onLoginSuccess(
-          committedToken,
-          forceBrowserSessionSync: true,
-        );
+        _service.onLoginSuccess(committedToken, forceBrowserSessionSync: true);
         if (mounted) {
           _loginProbeTimer?.cancel();
           ToastService.showSuccess(S.current.webviewLogin_loginSuccess);
@@ -1072,8 +1075,9 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
     }
 
     try {
-      final response = await controller.callAsyncJavaScript(
-        functionBody: '''
+      final response = await controller
+          .callAsyncJavaScript(
+            functionBody: '''
           try {
             var response = await fetch('/session/current.json', {
               method: 'GET',
@@ -1092,7 +1096,8 @@ class _WebViewLoginPageState extends ConsumerState<WebViewLoginPage> {
             return {probeComplete: false};
           }
         ''',
-      ).timeout(const Duration(seconds: 5));
+          )
+          .timeout(const Duration(seconds: 5));
       final evidence = response?.value;
       if (WebViewLoginSessionProbe.isCompletedProbe(evidence)) {
         // 服务端已明确返回匿名状态时，不能回退读取可能过期的页面用户名。
