@@ -61,6 +61,8 @@
   },
   "webviewLogin_loginSuccess": "登录成功！",
   "webviewLogin_savedPassword": "已保存的密码",
+  "webviewLogin_checkSession": "检查登录状态",
+  "webviewLogin_noNewSession": "暂未检测到新的有效登录会话，请完成网页登录后重试",
   "webviewLogin_title": "登录 LINUX.DO",
   "webview_addressHint": "搜索或输入网址",
   "webview_editAddress": "编辑网址或搜索",
