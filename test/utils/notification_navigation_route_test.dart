@@ -21,7 +21,6 @@ class _RouteProbe extends StatelessWidget {
 }
 
 void main() {
-
   testWidgets('平行视界通知入口切换工作区而不叠加旧通知路由', (tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
@@ -64,6 +63,7 @@ void main() {
     expect(container.read(navDestinationRequestProvider)?.nonce, first!.nonce + 1);
     expect(find.text(notificationPageRouteName), findsNothing);
   });
+
   testWidgets('只有完整通知页使用独立通知路由名', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
