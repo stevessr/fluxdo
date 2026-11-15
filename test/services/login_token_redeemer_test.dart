@@ -75,9 +75,7 @@ void main() {
     test('accepted OTP response may still need session verification', () {
       expect(LoginTokenRedeemer.isAcceptedOtpResponse(otpResponse()), isTrue);
       expect(
-        LoginTokenRedeemer.isAcceptedOtpResponse(
-          otpResponse(status: 403),
-        ),
+        LoginTokenRedeemer.isAcceptedOtpResponse(otpResponse(status: 403)),
         isFalse,
       );
       expect(
@@ -92,37 +90,40 @@ void main() {
       expect(pending.challengeBlocked, isFalse);
     });
 
-    test('never trusts challenge, unrelated origin, or ordinary API response', () {
-      expect(
-        LoginTokenRedeemer.issuedTokenFromOtpResponse(
-          otpResponse(status: 403),
-        ),
-        isNull,
-      );
-      expect(
-        LoginTokenRedeemer.issuedTokenFromOtpResponse(
-          otpResponse(host: 'external.example'),
-        ),
-        isNull,
-      );
-      expect(
-        LoginTokenRedeemer.issuedTokenFromOtpResponse(
-          otpResponse(path: '/session/current.json'),
-        ),
-        isNull,
-      );
-      expect(
-        LoginTokenRedeemer.issuedTokenFromOtpResponse(
-          otpResponse(method: 'GET'),
-        ),
-        isNull,
-      );
-      expect(
-        LoginTokenRedeemer.issuedTokenFromOtpResponse(
-          otpResponse(setCookies: ['_t=del; Max-Age=0']),
-        ),
-        isNull,
-      );
-    });
+    test(
+      'never trusts challenge, unrelated origin, or ordinary API response',
+      () {
+        expect(
+          LoginTokenRedeemer.issuedTokenFromOtpResponse(
+            otpResponse(status: 403),
+          ),
+          isNull,
+        );
+        expect(
+          LoginTokenRedeemer.issuedTokenFromOtpResponse(
+            otpResponse(host: 'external.example'),
+          ),
+          isNull,
+        );
+        expect(
+          LoginTokenRedeemer.issuedTokenFromOtpResponse(
+            otpResponse(path: '/session/current.json'),
+          ),
+          isNull,
+        );
+        expect(
+          LoginTokenRedeemer.issuedTokenFromOtpResponse(
+            otpResponse(method: 'GET'),
+          ),
+          isNull,
+        );
+        expect(
+          LoginTokenRedeemer.issuedTokenFromOtpResponse(
+            otpResponse(setCookies: ['_t=del; Max-Age=0']),
+          ),
+          isNull,
+        );
+      },
+    );
   });
 }
