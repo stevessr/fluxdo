@@ -51,6 +51,7 @@ class LoginTokenRedeemer {
       return const LoginTokenRedeemResult.failed();
     }
     final beforeToken = beforeSnapshot.token;
+    var otpSubmitted = false;
 
     try {
       final csrf = await _fetchCsrf(dio);
@@ -60,6 +61,7 @@ class LoginTokenRedeemer {
         return const LoginTokenRedeemResult.failed();
       }
 
+      otpSubmitted = true;
       final response = await dio.post<dynamic>(
         '/session/otp/$otp',
         options: Options(
@@ -91,7 +93,7 @@ class LoginTokenRedeemer {
           '登录 OTP 请求完成，但读取兑换后的 _t 失败；不会重放一次性 OTP',
           {'error': afterSnapshot.error.toString()},
         );
-        return const LoginTokenRedeemResult.failed();
+        return const LoginTokenRedeemResult.pendingSession();
       }
 
       final afterToken = afterSnapshot.token;
@@ -105,9 +107,14 @@ class LoginTokenRedeemer {
         'login_otp_no_session_cookie',
         '登录 OTP 请求完成，但未观察到新的 _t；不会重放一次性 OTP',
       );
-      return const LoginTokenRedeemResult.failed();
+      return const LoginTokenRedeemResult.pendingSession();
     } on DioException catch (e) {
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
+      if (!otpSubmitted) {
+        return isChallengeError(e)
+            ? const LoginTokenRedeemResult.blockedByChallenge()
+            : const LoginTokenRedeemResult.failed();
+      }
 
       // OTP 可能已经在服务端成功消费，只是后续响应/同步链路抛错。
       // 在分类原始网络错误之前先对账 cookie，避免把“已经登录成功”误报为失败，
@@ -115,12 +122,17 @@ class LoginTokenRedeemer {
       //
       // 注意：对账读取本身也可能失败。它不能覆盖原始 DioException，更不能
       // 逃出本方法；读取失败时继续按原始异常分类即可。
-      final afterSnapshot = await _reconcileTToken(
-        cookieJar,
-        beforeToken: beforeToken,
-        generation: generation,
-        response: e.response,
-      );
+      _TTokenSnapshot afterSnapshot;
+      try {
+        afterSnapshot = await _reconcileTToken(
+          cookieJar,
+          beforeToken: beforeToken,
+          generation: generation,
+          response: e.response,
+        );
+      } catch (error) {
+        afterSnapshot = _TTokenSnapshot.failed(error);
+      }
       if (!isCurrent()) return const LoginTokenRedeemResult.failed();
       if (afterSnapshot.succeeded &&
           _isFreshToken(beforeToken, afterSnapshot.token)) {
@@ -161,6 +173,20 @@ class LoginTokenRedeemer {
         return const LoginTokenRedeemResult.blockedByChallenge();
       }
 
+      // 网络断开/超时可能发生在 OTP 已被消费之后，绝不能让调用方
+      // 把不可确认的结果当成令牌失效并销毁授权材料。
+      if (otpSubmitted &&
+          (e.response == null ||
+              (e.response?.statusCode ?? 0) >= 500 ||
+              isAcceptedOtpResponse(e.response))) {
+        _log(
+          'warning',
+          'login_otp_pending_session',
+          '一次性 OTP 请求结果无法确认，保留凭据供用户手动检查会话',
+        );
+        return const LoginTokenRedeemResult.pendingSession();
+      }
+
       _log('warning', 'login_otp_redeem_failed', '登录 OTP 兑换请求失败', {
         'statusCode': e.response?.statusCode,
         'errorType': e.type.toString(),
@@ -170,7 +196,9 @@ class LoginTokenRedeemer {
       _log('warning', 'login_otp_redeem_failed', '登录 OTP 兑换发生非网络异常', {
         'error': e.toString(),
       });
-      return const LoginTokenRedeemResult.failed();
+      return otpSubmitted
+          ? const LoginTokenRedeemResult.pendingSession()
+          : const LoginTokenRedeemResult.failed();
     }
   }
 
@@ -218,22 +246,27 @@ class LoginTokenRedeemer {
     }
   }
 
+  /// 判断一次性 OTP 的同源 POST 是否已得到成功 HTTP 响应。
+  /// 成功响应不等于已获得会话，只能用于将结果标记为待核验。
+  @visibleForTesting
+  static bool isAcceptedOtpResponse(Response<dynamic>? response) {
+    if (response == null) return false;
+    final uri = response.requestOptions.uri;
+    final status = response.statusCode;
+    return response.requestOptions.method.toUpperCase() == 'POST' &&
+        uri.scheme == 'https' &&
+        uri.host.toLowerCase() == CookieJarService.appBaseHost &&
+        RegExp(r'^/session/otp/[0-9a-f]+$').hasMatch(uri.path) &&
+        status != null &&
+        status >= 200 &&
+        status < 400;
+  }
+
   /// Extract the server-issued _t if the OTP response was successful. This
   /// covers a transport/cookie sync failure *after* the server consumed the OTP.
   static String? issuedTokenFromOtpResponse(Response<dynamic>? response) {
     if (response == null) return null;
-    final request = response.requestOptions;
-    final uri = request.uri;
-    final status = response.statusCode;
-    if (request.method.toUpperCase() != 'POST' ||
-        uri.scheme != 'https' ||
-        uri.host.toLowerCase() != CookieJarService.appBaseHost ||
-        !RegExp(r'^/session/otp/[0-9a-f]+$').hasMatch(uri.path) ||
-        status == null ||
-        status < 200 ||
-        status >= 400) {
-      return null;
-    }
+    if (!isAcceptedOtpResponse(response)) return null;
 
     final headers = response.headers[HttpHeaders.setCookieHeader] ?? const [];
     for (final raw in headers) {
@@ -265,9 +298,7 @@ class LoginTokenRedeemer {
     if (issuedToken != null &&
         _isFreshToken(beforeToken, snapshot.token) &&
         snapshot.token != issuedToken) {
-      return _TTokenSnapshot.failed(
-        StateError('另一次登录已更新会话，不能将其视为本次 OTP 成功'),
-      );
+      return _TTokenSnapshot.failed(StateError('另一次登录已更新会话，不能将其视为本次 OTP 成功'));
     }
     if (_isExpectedFreshToken(beforeToken, snapshot.token, issuedToken)) {
       return snapshot;
@@ -306,8 +337,7 @@ class LoginTokenRedeemer {
     String? beforeToken,
     String? afterToken, {
     String? issuedToken,
-  }) =>
-      _isExpectedFreshToken(beforeToken, afterToken, issuedToken);
+  }) => _isExpectedFreshToken(beforeToken, afterToken, issuedToken);
 
   static bool _isExpectedFreshToken(
     String? beforeToken,
@@ -342,7 +372,11 @@ class LoginTokenRedeemer {
 }
 
 class LoginTokenRedeemResult {
-  const LoginTokenRedeemResult._({this.token, this.challengeBlocked = false});
+  const LoginTokenRedeemResult._({
+    this.token,
+    this.challengeBlocked = false,
+    this.needsSessionVerification = false,
+  });
 
   const LoginTokenRedeemResult.success(String token) : this._(token: token);
 
@@ -351,8 +385,12 @@ class LoginTokenRedeemResult {
   const LoginTokenRedeemResult.blockedByChallenge()
     : this._(challengeBlocked: true);
 
+  const LoginTokenRedeemResult.pendingSession()
+    : this._(needsSessionVerification: true);
+
   final String? token;
   final bool challengeBlocked;
+  final bool needsSessionVerification;
 
   bool get succeeded => token != null && token!.isNotEmpty;
 }
