@@ -199,6 +199,15 @@ class UserApiKeyLoginFlow {
         if (!AuthSession().isValid(requestGeneration)) return;
         final token = redeemResult.token;
         if (token == null) {
+          if (redeemResult.needsSessionVerification) {
+            // OTP 是一次性的；响应已到达或网络结果不确定时，不得重发或
+            // 清理可能有效的授权 key。用户可用内置浏览器恢复已登录会话。
+            ToastService.showError(
+              '兑换请求已提交，但应用会话尚未确认；请打开内置浏览器并点击“检查登录状态”',
+            );
+            onFlowFinished?.call(false);
+            return;
+          }
           if (redeemResult.challengeBlocked) {
             // 盾不是 OTP/Key 失效。不要在这里焚毁刚拿到的 key，也不要把
             // 用户误导成“令牌兑换失败”；重新授权时同 client_id 会自然替换旧 key。
@@ -216,7 +225,15 @@ class UserApiKeyLoginFlow {
         var username = '';
         User? verifiedUser;
         var currentUserProbeFailed = false;
-        try {
+        for (var attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) {
+            await Future<void>.delayed(
+              Duration(milliseconds: 250 * attempt),
+            );
+          }
+          if (!AuthSession().isValid(requestGeneration)) return;
+          currentUserProbeFailed = false;
+          try {
           final response = await service.dio.get(
             '/session/current.json',
             options: Options(
@@ -251,9 +268,11 @@ class UserApiKeyLoginFlow {
             '[UserApiKeyLoginFlow] 取 current_user 失败: $e '
             '(recoverable=$currentUserProbeFailed)',
           );
-        } catch (e) {
-          currentUserProbeFailed = true;
-          debugPrint('[UserApiKeyLoginFlow] 取 current_user 失败: $e');
+          } catch (e) {
+            currentUserProbeFailed = true;
+            debugPrint('[UserApiKeyLoginFlow] 取 current_user 失败: $e');
+          }
+          if (username.isNotEmpty) break;
         }
 
         if (username.isEmpty) {
@@ -277,9 +296,11 @@ class UserApiKeyLoginFlow {
             onFlowFinished?.call(true);
             return;
           }
-          // _t 已落 jar 但确认请求失败;不带空用户名走收口(会写坏本地状态)
-          await userApiKeyService.burnAfterLoginIfUseless(service.dio);
-          ToastService.showError('登录状态确认失败,请重试');
+          // 兑换已经提交，但服务端仍返回匿名态；暂不清理授权 key，
+          // 避免误将延迟生效的会话判成令牌兑换失败。
+          ToastService.showError(
+            '令牌已兑换，但暂未确认登录身份；请打开内置浏览器并点击“检查登录状态”',
+          );
           onFlowFinished?.call(false);
           return;
         }
