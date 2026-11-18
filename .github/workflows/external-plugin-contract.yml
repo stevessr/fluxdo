@@ -24,3 +24,31 @@ jobs:
       - uses: actions/checkout@v4
       - name: 检查插件注册和桌面图标
         run: python3 scripts/check_external_plugin_contract.py
+
+  flutter-plugin:
+    name: Flutter plugin discovery and editor checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          cache: true
+      - name: Prepare Flutter workspace
+        run: |
+          mkdir -p assets/certs assets/images/llm
+          flutter pub get
+          dart run tool/gen_l10n.dart
+      - name: Analyze plugin UI and service
+        run: >-
+          flutter analyze
+          lib/services/external_plugin_service.dart
+          lib/pages/installed_plugins_page.dart
+          lib/pages/settings_page.dart
+          lib/widgets/markdown_editor/emoji_sticker_panel.dart
+          test/services/external_plugin_service_test.dart
+      - name: Test native channel adapter
+        run: flutter test test/services/external_plugin_service_test.dart
