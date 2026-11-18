@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'lib/constants.dart'
+      - 'lib/services/network/client_hints.dart'
+      - 'test/services/network/client_hints_test.dart'
       - 'lib/services/cf_challenge_service.dart'
       - 'lib/services/network/cf/**'
       - 'lib/services/network/interceptors/**'
@@ -33,6 +35,6 @@ jobs:
       - run: flutter pub get
       - run: dart run tool/gen_l10n.dart
       - name: Analyze changed code
-        run: flutter analyze lib/constants.dart lib/services/cf_challenge_service.dart lib/services/network/cf/cf_challenge_classifier.dart lib/services/network/interceptors/cf_challenge_interceptor.dart lib/services/network/interceptors/request_header_interceptor.dart lib/services/network/recovery/policies.dart lib/services/network/discourse_dio.dart test/accept_language_test.dart test/services/network/cf/cf_challenge_classifier_test.dart test/services/network/recovery/recovery_test.dart
+        run: flutter analyze lib/constants.dart lib/services/cf_challenge_service.dart lib/services/network/cf/cf_challenge_classifier.dart lib/services/network/interceptors/cf_challenge_interceptor.dart lib/services/network/interceptors/request_header_interceptor.dart lib/services/network/recovery/policies.dart lib/services/network/discourse_dio.dart lib/services/network/client_hints.dart test/services/network/client_hints_test.dart test/accept_language_test.dart test/services/network/cf/cf_challenge_classifier_test.dart test/services/network/recovery/recovery_test.dart
       - name: Run targeted regressions
-        run: dart tool/flutterw.dart test test/accept_language_test.dart test/services/network/cf/cf_challenge_classifier_test.dart test/services/network/recovery/recovery_test.dart test/services/network/interceptors/cf_challenge_interceptor_test.dart
+        run: dart tool/flutterw.dart test test/services/network/client_hints_test.dart test/accept_language_test.dart test/services/network/cf/cf_challenge_classifier_test.dart test/services/network/recovery/recovery_test.dart test/services/network/interceptors/cf_challenge_interceptor_test.dart
