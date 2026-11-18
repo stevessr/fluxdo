@@ -201,6 +201,10 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- 通过公开契约发现已安装的外部插件，不依赖应用包名白名单。 -->
+        <intent>
+            <action android:name="com.github.lingyan000.fluxdo.action.PLUGIN" />
+        </intent>
         <!-- Optional ZXing-compatible QR scanner Activity. This is not XR passthrough. -->
         <intent>
             <action android:name="com.google.zxing.client.android.SCAN" />

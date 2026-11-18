@@ -3,6 +3,7 @@
         android:label="StevesSR Generator"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- 插件通过 FluxDO 的公开动作发现；不注册桌面启动器入口。 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -20,9 +21,12 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <meta-data
+                android:name="com.github.lingyan000.fluxdo.plugin.API_VERSION"
+                android:value="1" />
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="com.github.lingyan000.fluxdo.action.PLUGIN" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
