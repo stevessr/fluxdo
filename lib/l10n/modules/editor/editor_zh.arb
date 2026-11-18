@@ -26,6 +26,7 @@
   "composer_aiCode": "代码 Code",
   "composer_aiQuote": "引用 Quote",
   "composer_aiDetails": "折叠 Details",
+  "composer_specialSelectionUnsupported": "当前选区包含不可直接包装的内容，请使用源码模式",
   "composer_draftLocal": "草稿已存本机，待同步",
   "composer_draftConflict": "草稿版本冲突",
   "composer_draftConflictTitle": "草稿版本冲突",
