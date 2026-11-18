@@ -4228,6 +4228,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         uploading: _uploadingCount > 0,
         onPickImage: _pickAndUploadImages,
         onInsertLink: _insertLink,
+        onInsertSpecialContent: (buttonContext) =>
+            _insertSpecialContent(menuContext: buttonContext),
         // 手势光标(虚拟指针):幽灵光标跟手+实光标吸附+贴边自动滚;
         // 桌面有物理键盘,不占工具栏
         onPointerStart: ({required extend}) =>
@@ -4398,6 +4400,7 @@ class _RichToolbar extends StatefulWidget {
     required this.uploading,
     required this.onPickImage,
     required this.onInsertLink,
+    this.onInsertSpecialContent,
     this.onPointerStart,
     this.onPointerMove,
     this.onPointerEnd,
@@ -4424,6 +4427,7 @@ class _RichToolbar extends StatefulWidget {
   final bool uploading;
   final VoidCallback onPickImage;
   final VoidCallback onInsertLink;
+  final ValueChanged<BuildContext>? onInsertSpecialContent;
 
   /// 桌面端表情悬浮弹层控制器(非 null 时表情按钮被锚点包裹)
   final EmojiPopoverController? emojiPopover;
@@ -4753,12 +4757,24 @@ class _RichToolbarState extends State<_RichToolbar> {
       data: const IconThemeData(size: 20),
       child: action.icon,
     );
-    final button = IconButton(
-      tooltip: action.label,
-      icon: icon,
-      onPressed: anchored ? action.run : () => _desktopAction(action.run),
+    return Builder(
+      builder: (buttonContext) {
+        void run() {
+          if (action.searchText == 'special-content' &&
+              widget.onInsertSpecialContent != null) {
+            widget.onInsertSpecialContent!(buttonContext);
+          } else {
+            action.run();
+          }
+        }
+
+        return IconButton(
+          tooltip: action.label,
+          icon: icon,
+          onPressed: anchored ? run : () => _desktopAction(run),
+        );
+      },
     );
-    return button;
   }
 
   /// 标准工具按钮(MarkdownToolbar._ToolbarButton 同参:FaIcon 16 +
