@@ -356,38 +356,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     if (!mounted || kind == null) return;
 
     final currentText = widget.controller.text;
-    final selection = originalSelection.isValid &&
-            originalSelection.end <= currentText.length
-        ? originalSelection
-        : TextSelection.collapsed(offset: currentText.length);
-    final start = selection.start;
-    final end = selection.end;
-    final selectedText = currentText.substring(start, end);
-    final snippet = buildComposerSpecialSnippet(
-      kind,
-      selectedText: selectedText,
-    );
-    final prefix = start > 0 && currentText[start - 1] != '\n' ? '\n' : '';
-    final suffix = end < currentText.length && currentText[end] != '\n'
-        ? '\n'
-        : '';
-    final inserted = '$prefix${snippet.markdown}$suffix';
-    final updated = currentText.replaceRange(start, end, inserted);
-    final editableIndex = selectedText.isEmpty
-        ? snippet.markdown.indexOf(snippet.editableContent)
-        : -1;
-    final newSelection = editableIndex >= 0
-        ? TextSelection(
-            baseOffset: start + prefix.length + editableIndex,
-            extentOffset: start +
-                prefix.length +
-                editableIndex +
-                snippet.editableContent.length,
-          )
-        : TextSelection.collapsed(offset: start + inserted.length);
-    widget.controller.value = TextEditingValue(
-      text: updated,
-      selection: newSelection,
+    widget.controller.value = applyComposerSpecialContent(
+      text: currentText,
+      selection: originalSelection,
+      kind: kind,
     );
     widget.focusNode?.requestFocus();
   }
