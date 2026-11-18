@@ -12,7 +12,8 @@ class LoginBrowserPickerSheet extends StatelessWidget {
   const LoginBrowserPickerSheet({
     super.key,
     required this.browsers,
-    this.description = '选择已登录 Google / GitHub 等账号的浏览器，'
+    this.description =
+        '选择已登录 Google / GitHub 等账号的浏览器，'
         '在 LINUX DO 完成授权后将自动返回 FluxDO。',
   });
 

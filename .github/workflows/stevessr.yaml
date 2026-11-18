@@ -105,6 +105,21 @@ jobs:
         working-directory: packages/stevessr_generator/example
         run: flutter build apk --release --target-platform android-arm64 --build-number "$GITHUB_RUN_NUMBER"
 
+      - name: Verify plugin APK has no launcher entry
+        working-directory: packages/stevessr_generator/example
+        shell: bash
+        run: |
+          set -euo pipefail
+          aapt="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$aapt"
+          "$aapt" dump xmltree build/app/outputs/flutter-apk/app-release.apk AndroidManifest.xml > /tmp/stevessr-manifest.txt
+          grep -Fq 'com.github.lingyan000.fluxdo.action.PLUGIN' /tmp/stevessr-manifest.txt
+          grep -Fq 'com.github.lingyan000.fluxdo.plugin.API_VERSION' /tmp/stevessr-manifest.txt
+          if grep -Fq 'android.intent.category.LAUNCHER' /tmp/stevessr-manifest.txt; then
+            echo '插件 APK 不应带桌面启动器图标'
+            exit 1
+          fi
+
       - name: Verify APK contains arm64 libraries only
         working-directory: packages/stevessr_generator/example
         shell: bash
@@ -150,7 +165,7 @@ jobs:
           fail_on_unmatched_files: true
           files: stevessr-generator-android-arm64-v8a.apk
           body: |
-            Automated nightly build of the standalone StevesSR Generator example.
+            Automated nightly build of the FluxDO external StevesSR Generator plugin APK.
 
             Source commit: ${{ github.sha }}
         env:

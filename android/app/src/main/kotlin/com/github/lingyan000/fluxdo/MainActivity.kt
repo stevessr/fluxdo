@@ -272,6 +272,7 @@ open class MainActivity : FlutterActivity() {
     private var publicFileChannel: PublicFileChannel? = null
     private var mediaTranscodeChannel: MediaTranscodeChannel? = null
     private var browserSafeAreaChannel: BrowserSafeAreaChannel? = null
+    private var externalPluginChannel: ExternalPluginChannel? = null
 
     // Cookie IPC 专用后台线程。CookieManager 的 getCookie / setCookie /
     // getCookieInfo 可从任意线程调用(Chromium cookie store 在自己的 IO
@@ -331,6 +332,8 @@ open class MainActivity : FlutterActivity() {
         mediaTranscodeChannel = null
         browserSafeAreaChannel?.dispose()
         browserSafeAreaChannel = null
+        externalPluginChannel?.dispose()
+        externalPluginChannel = null
         MiniAppWindows.detach()
         FairMemoryReceiver.detachEngine(flutterEngine)
         super.cleanUpFlutterEngine(flutterEngine)
@@ -375,6 +378,8 @@ open class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         browserSafeAreaChannel?.dispose()
         browserSafeAreaChannel = BrowserSafeAreaChannel(flutterEngine)
+        externalPluginChannel?.dispose()
+        externalPluginChannel = ExternalPluginChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         splashChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SPLASH_CHANNEL).also {
             it.setMethodCallHandler { call, result ->
                 when (call.method) {

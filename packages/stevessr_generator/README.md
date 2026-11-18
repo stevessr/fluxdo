@@ -2,15 +2,30 @@
 
 Standalone Flutter package containing the StevesSR image generator UI, render model, interactive preview, canvas painter, text layout, character asset/delta decoding, and PNG/WebP/AVIF/JPEG/SVG export. Assets are registered by this package at `assets/images/avater/`; the package does not import FluxDO, its services, or its localization layer.
 
+## Android 插件安装与入口
+
+Android ARM64 APK 是供 Fluxdo 安装的外部插件包，并非桌面独立应用。安装到设备后：
+
+1. 在 Fluxdo 的「设置 → 插件」里查看已安装的插件并打开。
+2. 在编辑器的表情/表情包面板里，安装成功后自动出现「插件」分页，可从中启动 StevesSR 表情生成器。
+3. 生成器可保存图片，再作为图片附件上传。跨 APK 的「生成并插入」回传暂未提供；此功能需要独立的安全文件交接协议。
+
+安装、更新和卸载均由 Android 系统管理。升级前安装的版本如果带桌面图标，使用相同包名及签名覆盖安装新 APK 后，桌面入口会随新的 Manifest 消失。
+
+Android 插件入口契约：导出的 Activity 注册 `com.github.lingyan000.fluxdo.action.PLUGIN` + `android.intent.category.DEFAULT`，并在 Activity 的 meta-data 中声明 `com.github.lingyan000.fluxdo.plugin.API_VERSION=1`。请勿在插件 APK 中声明 `MAIN + LAUNCHER`。
+
 ## Run the example independently
 
 ```sh
 cd packages/stevessr_generator/example
 flutter pub get
 for test_file in test/*_test.dart; do flutter test "$test_file"; done
-flutter run
-# Standalone Android ARM64 APK:
+flutter run -d linux
+# Android ARM64 插件 APK（安装后无桌面图标）:
 flutter build apk --release --target-platform android-arm64
+adb install -r build/app/outputs/flutter-apk/app-release.apk
+# 开发调试时可通过显式组件直接启动:
+adb shell am start -n com.github.lingyan000.stevessr_generator/com.github.lingyan000.stevessr_generator_example.MainActivity
 # Desktop and web builds:
 flutter build linux
 flutter build web

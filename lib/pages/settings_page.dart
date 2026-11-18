@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:common_ui/common_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +23,7 @@ import 'account_manage_page.dart';
 import 'appearance_page.dart';
 import 'bottom_nav_settings_page.dart';
 import 'custom_settings_page.dart';
+import 'installed_plugins_page.dart';
 import 'data_management_page.dart';
 import 'network_settings_page/network_settings_page.dart';
 import 'notion_settings_page.dart';
@@ -416,6 +418,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: CustomSettingsPage.titleFor(context),
               onTap: () => _openSettingsPage((_) => const CustomSettingsPage()),
             ),
+            if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+              _buildOptionTile(
+                icon: Icons.extension_rounded,
+                iconColor: Colors.teal,
+                title: l10n.externalPlugin_title,
+                onTap: () => _openSettingsPage((_) => const InstalledPluginsPage()),
+              ),
             _buildOptionTile(
               icon: Symbols.network_check_rounded,
               iconColor: context.appColors.blueGrey,

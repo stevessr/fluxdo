@@ -8,5 +8,10 @@
       }
     }
   },
-  "charCount_noPaddingWarning": "勿用各类字数补丁"
+  "charCount_noPaddingWarning": "勿用各类字数补丁",
+  "externalPlugin_title": "插件",
+  "externalPlugin_empty": "未发现已安装的兼容插件",
+  "externalPlugin_refresh": "刷新插件列表",
+  "externalPlugin_openHint": "点击打开插件",
+  "externalPlugin_openFailed": "插件已卸载或无法启动，请刷新后重试"
 }

@@ -8,5 +8,10 @@
       }
     }
   },
-  "charCount_noPaddingWarning": "Don't use character-padding tricks"
+  "charCount_noPaddingWarning": "Don't use character-padding tricks",
+  "externalPlugin_title": "Plugins",
+  "externalPlugin_empty": "No compatible installed plugins found",
+  "externalPlugin_refresh": "Refresh plugins",
+  "externalPlugin_openHint": "Tap to open plugin",
+  "externalPlugin_openFailed": "Plugin is unavailable. Refresh and try again."
 }
