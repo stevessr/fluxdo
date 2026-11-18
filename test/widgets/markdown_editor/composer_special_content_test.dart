@@ -60,7 +60,7 @@ void main() {
     );
     expect(
       next.text,
-      '[details="AI content" ai]\\nAI content\\n[/details]',
+      '[details="AI content" ai]\nAI content\n[/details]',
     );
     expect(next.selection.textInside(next.text), 'AI content');
     expect(next.selection.start, greaterThan(next.text.indexOf('ai]')));
@@ -86,5 +86,4 @@ void main() {
     expect(next.text, contains('原文\n<div data-theme-scrollable="true">'));
     expect(next.selection.textInside(next.text), '滚动内容');
   });
-
 }
