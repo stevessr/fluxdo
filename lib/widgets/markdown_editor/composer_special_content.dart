@@ -49,6 +49,43 @@ ComposerSpecialSnippet buildComposerSpecialSnippet(
   }
 }
 
+/// 统一处理编辑器源码选区，预留块级换行并准确定位可替换的正文占位符。
+TextEditingValue applyComposerSpecialContent({
+  required String text,
+  required TextSelection selection,
+  required String kind,
+}) {
+  final range = selection.isValid && selection.end <= text.length
+      ? selection
+      : TextSelection.collapsed(offset: text.length);
+  final start = range.start;
+  final end = range.end;
+  final selectedText = text.substring(start, end);
+  final snippet = buildComposerSpecialSnippet(
+    kind,
+    selectedText: selectedText,
+  );
+  final prefix = start > 0 && text[start - 1] != '\n' ? '\n' : '';
+  final suffix = end < text.length && text[end] != '\n' ? '\n' : '';
+  final inserted = '$prefix${snippet.markdown}$suffix';
+  final updated = text.replaceRange(start, end, inserted);
+
+  // details 标题和正文有相同占位字样：必须匹配最后一次出现的位置。
+  final editableIndex = selectedText.isEmpty
+      ? snippet.markdown.lastIndexOf(snippet.editableContent)
+      : -1;
+  final updatedSelection = editableIndex >= 0
+      ? TextSelection(
+          baseOffset: start + prefix.length + editableIndex,
+          extentOffset: start +
+              prefix.length +
+              editableIndex +
+              snippet.editableContent.length,
+        )
+      : TextSelection.collapsed(offset: start + inserted.length);
+  return TextEditingValue(text: updated, selection: updatedSelection);
+}
+
 /// 单个入口的两级菜单：AI 内容细分为 Code、Quote、Details。
 Future<String?> showComposerSpecialContentMenu(BuildContext context) async {
   final s = S.current;
