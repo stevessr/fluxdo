@@ -19,13 +19,14 @@ class ClientHints {
   ];
 
   /// 推导 Client Hints 请求头；UA 不是 Chromium 内核时返回 null。
-  static Map<String, String>? fromUserAgent(String userAgent) {
+  /// [brand] 可强制指定 WebView 实际发送的品牌（UA 已被清理时仍需一致）。
+  static Map<String, String>? fromUserAgent(String userAgent, {String? brand}) {
     final match = _chromeMajor.firstMatch(userAgent);
     if (match == null) return null;
     final major = int.parse(match.group(1)!);
 
     return {
-      'sec-ch-ua': brandList(major, _brandOf(userAgent)),
+      'sec-ch-ua': brandList(major, brand ?? _brandOf(userAgent)),
       'sec-ch-ua-mobile': userAgent.contains(' Mobile') ? '?1' : '?0',
       'sec-ch-ua-platform': '"${_platformOf(userAgent)}"',
     };

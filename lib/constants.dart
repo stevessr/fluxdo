@@ -37,6 +37,9 @@ class AppConstants {
   /// 缓存的 Client Hints 请求头（仅安卓；iOS 的 Safari 内核不支持 Client Hints）
   static Map<String, String>? _cachedClientHints;
 
+  /// 只在取得真实 WebView UA 后发送对应的浏览器 Client Hints。
+  static bool _uaFromWebView = false;
+
   static const String _defaultAcceptLanguage = 'zh-CN,zh;q=0.9,en;q=0.8';
 
   static String get acceptLanguage =>
@@ -119,11 +122,13 @@ class AppConstants {
       final webViewUA = await InAppWebViewController.getDefaultUserAgent();
       // 清理 UA，使其看起来像普通浏览器
       _cachedUserAgent = _sanitizeUserAgent(webViewUA);
+      _uaFromWebView = webViewUA.isNotEmpty;
       debugPrint('[AppConstants] WebView UA: $webViewUA');
       debugPrint('[AppConstants] Sanitized UA: $_cachedUserAgent');
     } catch (e) {
       debugPrint('[AppConstants] 获取 WebView UA 失败: $e');
       _cachedUserAgent = _buildDefaultUserAgent();
+      _uaFromWebView = false;
     }
     _uaCompleter.complete(_cachedUserAgent!);
 
@@ -191,8 +196,11 @@ class AppConstants {
   /// iOS 的 UA 不含 Chrome 内核标识，推导结果为 null（Safari 不发 Client Hints）。
   /// 桌面端暂不发送，WebView2 的品牌列表未实测，留给网络核心按采样模板处理。
   static void _initClientHints() {
-    if (!Platform.isAndroid && !Platform.isIOS) return;
-    _cachedClientHints = ClientHints.fromUserAgent(_cachedUserAgent!);
+    if (!Platform.isAndroid || !_uaFromWebView) return;
+    _cachedClientHints = ClientHints.fromUserAgent(
+      _cachedUserAgent!,
+      brand: 'Android WebView',
+    );
     debugPrint('[AppConstants] Client Hints: $_cachedClientHints');
   }
 

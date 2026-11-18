@@ -19,6 +19,19 @@ void main() {
   });
 
   group('ClientHints.fromUserAgent', () {
+    test('安卓 WebView 覆写成 Chrome UA 后仍按 Android WebView 品牌发（与 124 实测一致）', () {
+      const ua =
+          'Mozilla/5.0 (Linux; Android 15; sdk_gphone64_x86_64 '
+          'Build/AE3A.240806.043) AppleWebKit/537.36 (KHTML, like Gecko) '
+          'Chrome/124.0.6367.219 Mobile Safari/537.36';
+      expect(ClientHints.fromUserAgent(ua, brand: 'Android WebView'), {
+        'sec-ch-ua':
+            '"Chromium";v="124", "Android WebView";v="124", "Not-A.Brand";v="99"',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua-platform': '"Android"',
+      });
+    });
+
     test('安卓清理后的 UA 推导出 Chrome 低熵三件套', () {
       const ua =
           'Mozilla/5.0 (Linux; Android 16; Pixel 7 Build/BP2A.250605.031) '
