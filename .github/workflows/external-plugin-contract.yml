@@ -1,0 +1,26 @@
+name: Android External Plugin Contract
+
+on:
+  pull_request:
+    paths:
+      - 'packages/stevessr_generator/example/android/**'
+      - 'android/app/src/main/AndroidManifest.xml'
+      - 'android/app/src/main/kotlin/**'
+      - 'lib/services/external_plugin_service.dart'
+      - 'lib/pages/installed_plugins_page.dart'
+      - 'lib/widgets/markdown_editor/emoji_sticker_panel.dart'
+      - 'test/services/external_plugin_service_test.dart'
+      - 'scripts/check_external_plugin_contract.py'
+      - '.github/workflows/external-plugin-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 检查插件注册和桌面图标
+        run: python3 scripts/check_external_plugin_contract.py
