@@ -26,6 +26,7 @@
   "composer_aiCode": "Code",
   "composer_aiQuote": "Quote",
   "composer_aiDetails": "Details",
+  "composer_specialSelectionUnsupported": "This selection contains content that cannot be wrapped. Use Markdown source mode.",
   "composer_draftLocal": "Draft saved on this device; sync pending",
   "composer_draftConflict": "Draft version conflict",
   "composer_draftConflictTitle": "Draft version conflict",
