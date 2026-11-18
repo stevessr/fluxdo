@@ -119,7 +119,15 @@ void main() {
           isNotNull,
           reason: '入口无盾即可结束页面，不被当前快照读取阻塞',
         );
-        expect(adapter.requests, 1, reason: '原生重试需复用当前快照，不能抢发旧 jar');
+        // 如果同步服务已经写入并采用新 Cookie，可以在测试替身的
+        // 独立 readValue Future 完成前重试；重要的是不能发送旧 jar。
+        if (adapter.requests > 1) {
+          expect(
+            adapter.lastCookieHeader,
+            contains('cf_clearance=current-webview-value'),
+            reason: '提前重试必须已经拿到当前验证产生的 Cookie',
+          );
+        }
         pendingValue.complete(cfTestCookie('current-webview-value'));
       }
       for (var i = 0; i < 20 && !completed; i++) {

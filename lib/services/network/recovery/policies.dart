@@ -131,12 +131,16 @@ class RateLimitPolicy implements RecoveryPolicy {
 /// 后者对所有方法一视同仁)。
 class TransientRetryPolicy implements RecoveryPolicy {
   const TransientRetryPolicy({
+    this.isChallengeResponse,
     this.delays = const [
       Duration(seconds: 1),
       Duration(seconds: 2),
       Duration(seconds: 4),
     ],
   });
+
+  /// 挑战型 503 交给验证链，不消耗 5xx 重试预算。
+  final bool Function(Response<dynamic>? response)? isChallengeResponse;
 
   /// 第 N 次重放前的等待时长(指数退避)。
   final List<Duration> delays;
@@ -155,7 +159,12 @@ class TransientRetryPolicy implements RecoveryPolicy {
       return false;
     }
     final status = outcome.statusCode;
-    if (status != null) return _retryableStatuses.contains(status);
+    if (status != null) {
+      if (status == 503 && isChallengeResponse?.call(err.response) == true) {
+        return false;
+      }
+      return _retryableStatuses.contains(status);
+    }
     return _isTransientNetworkError(err);
   }
 

@@ -14,7 +14,7 @@ class RequestHeaderInterceptor extends Interceptor {
   RequestHeaderInterceptor(
     this._cookieSync, {
     Future<void> Function(RequestOptions)? reloadCookies,
-  }) : _reloadCookies = reloadCookies;
+  }) : _reloadCookies = reloadCookies; // ignore: prefer_initializing_formals
 
   final Future<void> Function(RequestOptions)? _reloadCookies;
 
@@ -27,6 +27,7 @@ class RequestHeaderInterceptor extends Interceptor {
   ) async {
     // 1. 设置 User-Agent
     options.headers['User-Agent'] = await AppConstants.getUserAgent();
+    options.headers['Accept-Language'] = AppConstants.acceptLanguage;
 
     // 2. 注入 Client Hints 请求头（由 UA 推导的低熵三件套，仅安卓有值）
     final hints = AppConstants.clientHints;
@@ -96,7 +97,14 @@ class RequestHeaderInterceptor extends Interceptor {
 
     // 4. API 请求（XHR）设置 Origin、Referer 和 Sec-Fetch-* 头
     if (options.headers['X-Requested-With'] == 'XMLHttpRequest') {
-      options.headers['Origin'] = AppConstants.baseUrl;
+      // 同源 GET / HEAD 不带 Origin，跨源请求保留 CORS Origin。
+      final method = options.method.toUpperCase();
+      final sameOrigin = options.uri.origin == Uri.parse(AppConstants.baseUrl).origin;
+      if ((method == 'GET' || method == 'HEAD') && sameOrigin) {
+        options.headers.remove('Origin');
+      } else {
+        options.headers['Origin'] = AppConstants.baseUrl;
+      }
       options.headers['Referer'] = '${AppConstants.baseUrl}/';
       // Sec-Fetch-* 系列头：Chrome 从 2019 年起每个请求都自动添加，
       // 缺失会被 Cloudflare Bot Management 识别为非浏览器客户端

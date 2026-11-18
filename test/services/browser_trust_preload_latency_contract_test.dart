@@ -30,36 +30,31 @@ void main() {
     expect(body, isNot(contains('_isNativePreloadTrusted')));
   });
 
-  test('startup WebView preload avoids full-load and bootstrap waits', () {
+  test('startup WebView preload reads snapshot before conditional bootstrap', () {
     final start = source.indexOf('Future<bool> _hydratePreloadThroughWebView');
     final end = source.indexOf('Future<void> _navigateToHome', start);
-
     expect(start, greaterThanOrEqualTo(0));
     expect(end, greaterThan(start));
 
-    final preloadBody = source.substring(start, end);
-    expect(preloadBody, isNot(contains('.runOnController(')));
-    expect(preloadBody, isNot(contains('getCookieDiagnosticsForRequest')));
-    expect(preloadBody, isNot(contains('_waitForLoad(')));
-    expect(preloadBody, contains('await _readPreloadedSnapshot('));
-    final syncStart = preloadBody.indexOf(
-      'final cookieSyncFuture = _syncCookiesFromController(c);',
-    );
-    final hydrateStart = preloadBody.indexOf(
-      'final hydrateFuture = hasSnapshot',
-    );
-    final hydrateWait = preloadBody.indexOf(
-      'final hydrated = await hydrateFuture;',
-    );
-    final syncWait = preloadBody.indexOf('await cookieSyncFuture;');
-    expect(syncStart, greaterThanOrEqualTo(0));
-    expect(hydrateStart, greaterThan(syncStart));
-    expect(hydrateWait, greaterThan(hydrateStart));
-    expect(syncWait, greaterThan(hydrateWait));
-    expect(
-      preloadBody,
-      contains('if (platformViewStarted && io.Platform.isWindows)'),
-    );
+    final body = source.substring(start, end);
+    // 仍不等待整页 onLoadStop；HTML 快照优先完成首屏 hydration。
+    expect(body, isNot(contains('_waitForLoad(')));
+    final snapshot = body.indexOf('final html = await _readPreloadedSnapshot(');
+    final hydrate = body.indexOf('await _preload.hydrateFromHtml(html)');
+    final token = body.indexOf('final tToken = await _jar.getTToken();');
+    final bootstrap = body.indexOf('.runOnController(');
+    expect(snapshot, greaterThanOrEqualTo(0));
+    expect(hydrate, greaterThan(snapshot));
+    expect(token, greaterThan(hydrate));
+    expect(bootstrap, greaterThan(token));
+
+    // 当账号带 _t 时才维护 WebView 的会话；bootstrap 必须可取消。
+    expect(body, contains('if (tToken != null && tToken.isNotEmpty)'));
+    expect(body, contains('cancellationSignal: cancelled'));
+    expect(body, contains('if (cancellation.isCancelled || !lease.isCurrent)'));
+    expect(body, contains('await _syncCookiesFromController(c, generation)'));
+    expect(body, contains("names: const {'_rt'}"));
+    expect(body, contains('if (bootstrapped && hasRuntimeCookie)'));
   });
 
   test('preload snapshot polling is eager first and bounded later', () {

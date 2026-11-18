@@ -117,7 +117,9 @@ class DiscourseDio {
             RateLimitPolicy(
               isChallengeResponse: CfChallengeService.isCfChallengeResponse,
             ),
-            const TransientRetryPolicy(),
+            TransientRetryPolicy(
+              isChallengeResponse: CfChallengeService.isCfChallengeResponse,
+            ),
           ],
         ),
       );
