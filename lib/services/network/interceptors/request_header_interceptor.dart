@@ -14,7 +14,7 @@ class RequestHeaderInterceptor extends Interceptor {
   RequestHeaderInterceptor(
     this._cookieSync, {
     Future<void> Function(RequestOptions)? reloadCookies,
-  }) : _reloadCookies = reloadCookies;
+  }) : _reloadCookies = reloadCookies; // ignore: prefer_initializing_formals
 
   final Future<void> Function(RequestOptions)? _reloadCookies;
 
