@@ -24,6 +24,7 @@ internal class ExternalPluginChannel(
         private const val CHANNEL = "com.github.lingyan000.fluxdo/external_plugins"
         private const val ACTION = "com.github.lingyan000.fluxdo.action.PLUGIN"
         private const val API_VERSION = "com.github.lingyan000.fluxdo.plugin.API_VERSION"
+        private const val CATEGORY = "com.github.lingyan000.fluxdo.plugin.CATEGORY"
     }
 
     private val channel = MethodChannel(messenger, CHANNEL).also { channel ->
@@ -36,6 +37,8 @@ internal class ExternalPluginChannel(
                                 "id" to component.flattenToString(),
                                 "packageName" to component.packageName,
                                 "label" to info.loadLabel(activity.packageManager).toString(),
+                                "category" to (info.activityInfo.metaData
+                                    ?.getString(CATEGORY)?.takeIf { it == "editor" } ?: "app"),
                             )
                         })
                     } catch (error: Exception) {

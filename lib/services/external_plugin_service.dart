@@ -8,25 +8,36 @@ class ExternalPlugin {
     required this.id,
     required this.packageName,
     required this.label,
+    this.category = 'app',
   });
 
   /// Android ComponentName.flattenToString，作为本次发现结果的启动标识。
   final String id;
   final String packageName;
   final String label;
+  /// 只有编辑器型插件显示在表情/贴纸面板。
+  final String category;
+
+  bool get appearsInEditor => category == 'editor';
 
   static ExternalPlugin? fromPlatformValue(Object? value) {
     if (value is! Map) return null;
     final id = value['id'];
     final packageName = value['packageName'];
     final label = value['label'];
+    final category = value['category'];
     if (id is! String || id.isEmpty ||
         packageName is! String || packageName.isEmpty ||
         label is! String || label.trim().isEmpty ||
         !id.startsWith('$packageName/')) {
       return null;
     }
-    return ExternalPlugin(id: id, packageName: packageName, label: label);
+    return ExternalPlugin(
+      id: id,
+      packageName: packageName,
+      label: label,
+      category: category == 'editor' ? 'editor' : 'app',
+    );
   }
 }
 
