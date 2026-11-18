@@ -12,6 +12,7 @@ ANDROID_NS = "http://schemas.android.com/apk/res/android"
 ANDROID = "{" + ANDROID_NS + "}"
 ACTION = "com.github.lingyan000.fluxdo.action.PLUGIN"
 API_META = "com.github.lingyan000.fluxdo.plugin.API_VERSION"
+CATEGORY_META = "com.github.lingyan000.fluxdo.plugin.CATEGORY"
 ET.register_namespace("android", ANDROID_NS)
 
 PLUGINS = {
@@ -59,6 +60,9 @@ def patch(root: Path, plugin: str) -> None:
     metadata = ET.SubElement(main, "meta-data")
     metadata.set(ANDROID + "name", API_META)
     metadata.set(ANDROID + "value", "1")
+    category_meta = ET.SubElement(main, "meta-data")
+    category_meta.set(ANDROID + "name", CATEGORY_META)
+    category_meta.set(ANDROID + "value", "app")
 
     entry = ET.SubElement(main, "intent-filter")
     action = ET.SubElement(entry, "action")
@@ -110,6 +114,11 @@ def verify(root: Path, plugin: str) -> None:
         and child.get(ANDROID + "value") == "1"
         for child in matches[0].findall("meta-data")
     ), "missing API version metadata"
+    assert any(
+        child.get(ANDROID + "name") == CATEGORY_META
+        and child.get(ANDROID + "value") == "app"
+        for child in matches[0].findall("meta-data")
+    ), "business plugins must be categorized as app"
     gradle = (root / "android/app/build.gradle.kts").read_text(encoding="utf-8")
     assert 'applicationId = "' + config["package"] + '"' in gradle
     print(f"{plugin}: plugin manifest OK; package={config['package']}")

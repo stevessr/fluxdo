@@ -24,6 +24,9 @@
             <meta-data
                 android:name="com.github.lingyan000.fluxdo.plugin.API_VERSION"
                 android:value="1" />
+            <meta-data
+                android:name="com.github.lingyan000.fluxdo.plugin.CATEGORY"
+                android:value="editor" />
             <intent-filter>
                 <action android:name="com.github.lingyan000.fluxdo.action.PLUGIN" />
                 <category android:name="android.intent.category.DEFAULT" />

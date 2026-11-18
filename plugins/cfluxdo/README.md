@@ -7,7 +7,7 @@
 - 原生页面、表单、请求、OAuth/PKCE、hCaptcha、购买幂等和恢复逻辑均来自 [1molchuan/CFluxDo](https://github.com/1molchuan/CFluxDo)，按固定提交 `e5b8ea9ee43cd64469760fa99b99ed0c4e2f772e` 构建。
 - 两个不同 APK 使用独立包名 `com.github.lingyan000.fluxdo.plugin.cdk` 与 `com.github.lingyan000.fluxdo.plugin.ldshop`。
 - 两者保留原生 Flutter 页面（`CdkHomePage` / `LdStoreHomePage`），通过专属启动入口替换原 CFluxDo 主界面路由；底层复用原仓库网络与账号运行时，避免删掉 OAuth/支付相关安全行为。
-- AndroidManifest 只公开 `com.github.lingyan000.fluxdo.action.PLUGIN` / DEFAULT / API_VERSION=1，**无 LAUNCHER、无主站 HTTPS 深链拦截**。安装后从 Fluxdo「设置 → 插件」或编辑器插件分页打开。
+- AndroidManifest 只公开 `com.github.lingyan000.fluxdo.action.PLUGIN` / DEFAULT / API_VERSION=1，**无 LAUNCHER、无主站 HTTPS 深链拦截**。安装后从 Fluxdo「设置 → 插件」打开（工具插件不占用编辑器表情分页）。
 - 插件进程、Android 沙箱、Cookie 和账号与 Fluxdo **不共享**；第一次使用各自登录 Linux.do。LD 士多的商品浏览无需登录，其余受保护的功能仍走原生 OAuth。
 - 本版为了准确保留上游业务行为，两个 APK 构建时仍链接 CFluxDo 通用运行时，**并非精简版独立依赖包**，包体及部分后台初始化有后续缩减空间。
 
