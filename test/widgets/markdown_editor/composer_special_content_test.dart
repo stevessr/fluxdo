@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/widgets/markdown_editor/composer_special_content.dart';
 
@@ -50,4 +51,40 @@ void main() {
       '```mermaid\nsequenceDiagram\n```',
     );
   });
+
+  test('AI Details 的占位选区必须落在正文而不是标题', () {
+    final next = applyComposerSpecialContent(
+      text: '',
+      selection: const TextSelection.collapsed(offset: 0),
+      kind: 'aiDetails',
+    );
+    expect(
+      next.text,
+      '[details="AI content" ai]\\nAI content\\n[/details]',
+    );
+    expect(next.selection.textInside(next.text), 'AI content');
+    expect(next.selection.start, greaterThan(next.text.indexOf('ai]')));
+  });
+
+  test('扩展菜单用选中文字替换正文，且不覆盖两侧已有内容', () {
+    final next = applyComposerSpecialContent(
+      text: '之前 中间 之后',
+      selection: const TextSelection(baseOffset: 3, extentOffset: 5),
+      kind: 'mermaid',
+    );
+    expect(next.text, '之前 \n```mermaid\n中间\n```\n 之后');
+    expect(next.selection.isCollapsed, isTrue);
+    expect(next.selection.extentOffset, '之前 \n```mermaid\n中间\n```\n'.length);
+  });
+
+  test('没有有效选区时安全追加到末尾', () {
+    final next = applyComposerSpecialContent(
+      text: '原文',
+      selection: const TextSelection.collapsed(offset: -1),
+      kind: 'scroll',
+    );
+    expect(next.text, contains('原文\n<div data-theme-scrollable="true">'));
+    expect(next.selection.textInside(next.text), '滚动内容');
+  });
+
 }
