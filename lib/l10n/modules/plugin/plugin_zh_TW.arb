@@ -8,5 +8,10 @@
       }
     }
   },
-  "charCount_noPaddingWarning": "勿用各類字數補丁"
+  "charCount_noPaddingWarning": "勿用各類字數補丁",
+  "externalPlugin_title": "外掛程式",
+  "externalPlugin_empty": "找不到已安裝的相容外掛程式",
+  "externalPlugin_refresh": "重新整理外掛程式",
+  "externalPlugin_openHint": "點擊開啟外掛程式",
+  "externalPlugin_openFailed": "外掛程式已移除或無法啟動，請重新整理後重試"
 }

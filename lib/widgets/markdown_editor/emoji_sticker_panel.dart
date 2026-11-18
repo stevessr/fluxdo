@@ -1,12 +1,14 @@
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter/material.dart';
+
+import '../../services/external_plugin_service.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../../models/emoji.dart';
 import '../../utils/platform_utils.dart';
 import 'emoji_picker.dart';
 import 'sticker_picker.dart';
-import '../../../../../l10n/s.dart';
+import '../../l10n/s.dart';
 
 /// 悬浮 Tab 的高度（含上下内边距），用于给内容区预留底部空间
 const double floatingTabHeight = 48;
@@ -61,7 +63,8 @@ class EmojiStickerPanel extends StatefulWidget {
   State<EmojiStickerPanel> createState() => _EmojiStickerPanelState();
 }
 
-class _EmojiStickerPanelState extends State<EmojiStickerPanel> {
+class _EmojiStickerPanelState extends State<EmojiStickerPanel>
+    with WidgetsBindingObserver {
   late final PageController _pageController;
   int _currentPage = 0;
 
@@ -79,6 +82,41 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel> {
   /// 重建,体感就是"滚一段卡一下"。缓存实例后 updateChild 直接跳过子树。
   List<Widget>? _pages;
   double? _pagesBottomPadding;
+  List<ExternalPlugin> _externalPlugins = const [];
+
+  Future<void> _refreshExternalPlugins() async {
+    final plugins = await ExternalPluginService.instance.installedPlugins();
+    if (!mounted) return;
+    final unchanged = plugins.length == _externalPlugins.length &&
+        plugins.asMap().entries.every((entry) =>
+            entry.value.id == _externalPlugins[entry.key].id &&
+            entry.value.label == _externalPlugins[entry.key].label);
+    if (unchanged) return;
+    if (plugins.isEmpty && _currentPage > 1) {
+      if (_pageController.hasClients) _pageController.jumpToPage(1);
+      _currentPage = 1;
+    }
+    setState(() {
+      _externalPlugins = plugins;
+      _pages = null;
+    });
+  }
+
+  Future<void> _openExternalPlugin(ExternalPlugin plugin) async {
+    final opened = await ExternalPluginService.instance.launchPlugin(plugin);
+    if (!mounted) return;
+    if (!opened) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.externalPlugin_openFailed)),
+      );
+      await _refreshExternalPlugins();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshExternalPlugins();
+  }
 
   List<Widget> _buildPages(double bottomPadding) {
     if (_pages == null || _pagesBottomPadding != bottomPadding) {
@@ -97,6 +135,20 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel> {
           compact: widget.compact,
           onDismissRequested: widget.onDismissRequested,
         ),
+        if (_externalPlugins.isNotEmpty)
+          ListView(
+            padding: EdgeInsets.fromLTRB(8, 8, 8, bottomPadding),
+            children: [
+              for (final plugin in _externalPlugins)
+                ListTile(
+                  leading: const Icon(Icons.extension_rounded),
+                  title: Text(plugin.label),
+                  subtitle: Text(context.l10n.externalPlugin_openHint),
+                  trailing: const Icon(Icons.open_in_new_rounded),
+                  onTap: () => _openExternalPlugin(plugin),
+                ),
+            ],
+          ),
       ];
     }
     return _pages!;
@@ -116,10 +168,15 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel> {
   void initState() {
     super.initState();
     _pageController = PageController();
+    if (ExternalPluginService.isSupported) {
+      WidgetsBinding.instance.addObserver(this);
+      _refreshExternalPlugins();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     super.dispose();
   }
@@ -325,6 +382,21 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel> {
                         curve: Curves.easeInOut,
                       ),
                     ),
+                    if (_externalPlugins.isNotEmpty) ...[
+                      const SizedBox(width: gap),
+                      _buildTabLabel(
+                        theme: theme,
+                        icon: Icons.extension_rounded,
+                        label: context.l10n.externalPlugin_title,
+                        selected: _currentPage == 2,
+                        width: buttonWidth,
+                        onTap: () => _pageController.animateToPage(
+                          2,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
