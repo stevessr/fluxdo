@@ -4745,21 +4745,12 @@ class _RichToolbarState extends State<_RichToolbar> {
       data: const IconThemeData(size: 20),
       child: action.icon,
     );
-    return Builder(
-      builder: (buttonContext) => IconButton(
-        tooltip: action.label,
-        icon: icon,
-        onPressed: anchored
-            ? action.searchText == 'special-content'
-                ? () => _insertSpecialContent(menuContext: buttonContext)
-                : action.run
-            : () => _desktopAction(
-                action.searchText == 'special-content'
-                    ? () => _insertSpecialContent(menuContext: buttonContext)
-                    : action.run,
-              ),
-      ),
+    final button = IconButton(
+      tooltip: action.label,
+      icon: icon,
+      onPressed: anchored ? action.run : () => _desktopAction(action.run),
     );
+    return button;
   }
 
   /// 标准工具按钮(MarkdownToolbar._ToolbarButton 同参:FaIcon 16 +
