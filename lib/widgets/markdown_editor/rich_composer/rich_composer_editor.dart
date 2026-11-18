@@ -2616,6 +2616,32 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     await insertMarkdownSnippet('[${text.isEmpty ? url : text}]($url)');
   }
 
+  /// 将可编辑文本选区转换成模板正文；遇到嵌入式原子或不可编辑块时拒绝覆盖。
+  String? _selectedTextForSpecialContent(EditorState editor) {
+    final selection = editor.selection;
+    if (selection == null || selection.isCollapsed) return '';
+    final normalized = editor.normalizedSelection();
+    if (normalized == null) return null;
+    final firstIndex = editor.indexOfBlock(normalized.$1.blockId);
+    final lastIndex = editor.indexOfBlock(normalized.$2.blockId);
+    if (firstIndex < 0 || lastIndex < firstIndex) return null;
+
+    final parts = <String>[];
+    for (var index = firstIndex; index <= lastIndex; index++) {
+      final block = editor.blocks[index];
+      if (block is! TextBlock) return null;
+      final content = block.content;
+      final start = index == firstIndex ? normalized.$1.offset : 0;
+      final end = index == lastIndex ? normalized.$2.offset : content.length;
+      if (start < 0 || end > content.length || end < start) return null;
+      if (content.atoms.keys.any((offset) => start <= offset && offset < end)) {
+        return null;
+      }
+      parts.add(content.text.substring(start, end));
+    }
+    return parts.join('\n');
+  }
+
   /// 富文本模式也通过同一菜单插入，使用选区书签避免异步菜单后位置漂移。
   Future<void> _insertSpecialContent({BuildContext? menuContext}) async {
     final editor = _editor;
@@ -2628,12 +2654,17 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         ),
       );
     }
+    final selectedText = _selectedTextForSpecialContent(editor);
+    if (selectedText == null) {
+      ToastService.showError(S.current.composer_specialSelectionUnsupported);
+      return;
+    }
     final bookmark = InsertionBookmark(editor);
     try {
       final kind = await showComposerSpecialContentMenu(menuContext ?? context);
       if (kind == null || !mounted || !bookmark.valid) return;
       await insertMarkdownSnippet(
-        buildComposerSpecialSnippet(kind).markdown,
+        buildComposerSpecialSnippet(kind, selectedText: selectedText).markdown,
         insertionBookmark: bookmark,
       );
     } finally {
