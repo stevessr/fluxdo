@@ -7,6 +7,7 @@ const kDefaultSourceVisibleTools = <String>[
   'link',
   'bulletList',
   'quote',
+  'specialContent',
 ];
 
 const kDefaultRichVisibleTools = <String>[
@@ -17,4 +18,5 @@ const kDefaultRichVisibleTools = <String>[
   'link',
   'bulletList',
   'quote',
+  'insert:special-content',
 ];

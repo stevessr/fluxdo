@@ -34,6 +34,7 @@ import 'composer_tools_anchor.dart';
 import 'composer_view_mode_switcher.dart';
 import 'cursor_swipe_control.dart';
 import 'composer_shortcuts.dart';
+import 'composer_special_content.dart';
 import 'editor_tools.dart';
 import 'emoji_popover.dart';
 import 'media_upload_helper.dart';
@@ -346,6 +347,21 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         selection: TextSelection.collapsed(offset: newText.length),
       );
     }
+  }
+
+  /// 一个扩展内容入口，按选区替换或插入对应的 Discourse 模板。
+  Future<void> insertSpecialContent({BuildContext? menuContext}) async {
+    final originalSelection = widget.controller.selection;
+    final kind = await showComposerSpecialContentMenu(menuContext ?? context);
+    if (!mounted || kind == null) return;
+
+    final currentText = widget.controller.text;
+    widget.controller.value = applyComposerSpecialContent(
+      text: currentText,
+      selection: originalSelection,
+      kind: kind,
+    );
+    widget.focusNode?.requestFocus();
   }
 
   /// 插入已上传的表情包图片，不再弹出确认框。
@@ -1227,6 +1243,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   List<Widget> _buildToolButtons({bool anchored = true}) {
     final ids = widget.visibleToolIds;
     final tools = ids == null ? editorTools : resolveVisibleTools(ids);
+    // 扩展内容入口始终占一个位置，旧用户的自定义配置也能直接使用。
+    if (!tools.any((tool) => tool.id == 'specialContent')) {
+      tools.add(editorTools.firstWhere((tool) => tool.id == 'specialContent'));
+    }
 
     return [
       for (final tool in tools) _buildToolButton(tool, anchored: anchored),
@@ -1239,6 +1259,28 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     // 桌面端 tooltip 标注快捷键(如「粗体 (⌘B)」;移动端无物理键盘不标)
     final hint = PlatformUtils.isDesktop ? composerShortcutHint(tool.id) : null;
     final tooltip = '${tool.label(s)}${hint ?? ''}';
+
+    if (tool.id == 'specialContent') {
+      return Builder(
+        builder: (buttonContext) => IconButton(
+          icon: IconTheme.merge(
+            data: const IconThemeData(size: 16),
+            child: icon,
+          ),
+          tooltip: tooltip,
+          style: composerToolButtonStyle(context),
+          onPressed: () {
+            if (anchored) {
+              insertSpecialContent(menuContext: buttonContext);
+            } else {
+              _desktopAction(
+                () => insertSpecialContent(menuContext: buttonContext),
+              );
+            }
+          },
+        ),
+      );
+    }
 
     if (tool.hasMenu) {
       final theme = Theme.of(context);

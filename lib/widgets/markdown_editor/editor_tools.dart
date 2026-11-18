@@ -213,6 +213,12 @@ final List<EditorTool> editorTools = [
     }),
   ),
   EditorTool(
+    id: 'specialContent',
+    icon: const FaIcon(FontAwesomeIcons.wandMagicSparkles),
+    label: (s) => s.composer_specialContent,
+    action: (t) => t.insertSpecialContent(),
+  ),
+  EditorTool(
     id: 'spoiler',
     icon: const FaIcon(FontAwesomeIcons.eyeSlash),
     label: (s) => s.toolPanel_spoiler,
