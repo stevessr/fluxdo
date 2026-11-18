@@ -1297,11 +1297,15 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
           ),
           tooltip: tooltip,
           style: composerToolButtonStyle(context),
-          onPressed: () => anchored
-              ? insertSpecialContent(menuContext: buttonContext)
-              : _desktopAction(
-                  () => insertSpecialContent(menuContext: buttonContext),
-                ),
+          onPressed: () {
+            if (anchored) {
+              insertSpecialContent(menuContext: buttonContext);
+            } else {
+              _desktopAction(
+                () => insertSpecialContent(menuContext: buttonContext),
+              );
+            }
+          },
         ),
       );
     }
