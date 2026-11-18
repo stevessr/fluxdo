@@ -34,6 +34,7 @@ import 'composer_tools_anchor.dart';
 import 'composer_view_mode_switcher.dart';
 import 'cursor_swipe_control.dart';
 import 'composer_shortcuts.dart';
+import 'composer_special_content.dart';
 import 'editor_tools.dart';
 import 'emoji_popover.dart';
 import 'media_upload_helper.dart';
@@ -346,6 +347,49 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         selection: TextSelection.collapsed(offset: newText.length),
       );
     }
+  }
+
+  /// 一个扩展内容入口，按选区替换或插入对应的 Discourse 模板。
+  Future<void> insertSpecialContent({BuildContext? menuContext}) async {
+    final originalSelection = widget.controller.selection;
+    final kind = await showComposerSpecialContentMenu(menuContext ?? context);
+    if (!mounted || kind == null) return;
+
+    final currentText = widget.controller.text;
+    final selection = originalSelection.isValid &&
+            originalSelection.end <= currentText.length
+        ? originalSelection
+        : TextSelection.collapsed(offset: currentText.length);
+    final start = selection.start;
+    final end = selection.end;
+    final selectedText = currentText.substring(start, end);
+    final snippet = buildComposerSpecialSnippet(
+      kind,
+      selectedText: selectedText,
+    );
+    final prefix = start > 0 && currentText[start - 1] != '\n' ? '\n' : '';
+    final suffix = end < currentText.length && currentText[end] != '\n'
+        ? '\n'
+        : '';
+    final inserted = '$prefix${snippet.markdown}$suffix';
+    final updated = currentText.replaceRange(start, end, inserted);
+    final editableIndex = selectedText.isEmpty
+        ? snippet.markdown.indexOf(snippet.editableContent)
+        : -1;
+    final newSelection = editableIndex >= 0
+        ? TextSelection(
+            baseOffset: start + prefix.length + editableIndex,
+            extentOffset: start +
+                prefix.length +
+                editableIndex +
+                snippet.editableContent.length,
+          )
+        : TextSelection.collapsed(offset: start + inserted.length);
+    widget.controller.value = TextEditingValue(
+      text: updated,
+      selection: newSelection,
+    );
+    widget.focusNode?.requestFocus();
   }
 
   /// 插入已上传的表情包图片，不再弹出确认框。
@@ -1227,6 +1271,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   List<Widget> _buildToolButtons({bool anchored = true}) {
     final ids = widget.visibleToolIds;
     final tools = ids == null ? editorTools : resolveVisibleTools(ids);
+    // 扩展内容入口始终占一个位置，旧用户的自定义配置也能直接使用。
+    if (!tools.any((tool) => tool.id == 'specialContent')) {
+      tools.add(editorTools.firstWhere((tool) => tool.id == 'specialContent'));
+    }
 
     return [
       for (final tool in tools) _buildToolButton(tool, anchored: anchored),
@@ -1239,6 +1287,24 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     // 桌面端 tooltip 标注快捷键(如「粗体 (⌘B)」;移动端无物理键盘不标)
     final hint = PlatformUtils.isDesktop ? composerShortcutHint(tool.id) : null;
     final tooltip = '${tool.label(s)}${hint ?? ''}';
+
+    if (tool.id == 'specialContent') {
+      return Builder(
+        builder: (buttonContext) => IconButton(
+          icon: IconTheme.merge(
+            data: const IconThemeData(size: 16),
+            child: icon,
+          ),
+          tooltip: tooltip,
+          style: composerToolButtonStyle(context),
+          onPressed: () => anchored
+              ? insertSpecialContent(menuContext: buttonContext)
+              : _desktopAction(
+                  () => insertSpecialContent(menuContext: buttonContext),
+                ),
+        ),
+      );
+    }
 
     if (tool.hasMenu) {
       final theme = Theme.of(context);
