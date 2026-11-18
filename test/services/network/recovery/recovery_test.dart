@@ -104,6 +104,18 @@ void main() {
       expect((decision as RecoveryRetry).delay, const Duration(seconds: 1));
     });
 
+    test('Cloudflare 挑战型 503 不做普通瞬态重试', () {
+      final policy = TransientRetryPolicy(
+        isChallengeResponse: (response) =>
+            response?.headers.value('cf-mitigated') == 'challenge',
+      );
+      final challenged = _failure(503, method: 'GET');
+      challenged.error!.response!.headers.add('cf-mitigated', 'challenge');
+      expect(policy.canHandle(challenged), isFalse);
+      expect(policy.canHandle(_failure(503, method: 'GET')), isTrue);
+      expect(policy.canHandle(_failure(502, method: 'GET')), isTrue);
+    });
+
     test('退避时长随尝试序号递增', () async {
       const policy = TransientRetryPolicy();
       for (final (index, expected) in [

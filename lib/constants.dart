@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show Locale, PlatformDispatcher;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -35,6 +36,45 @@ class AppConstants {
 
   /// 缓存的 Client Hints 请求头（仅安卓；iOS 的 Safari 内核不支持 Client Hints）
   static Map<String, String>? _cachedClientHints;
+
+  static const String _defaultAcceptLanguage = 'zh-CN,zh;q=0.9,en;q=0.8';
+
+  static String get acceptLanguage =>
+      buildAcceptLanguage(PlatformDispatcher.instance.locales);
+
+  /// [acceptLanguage] 的纯函数版本，便于测试。
+  @visibleForTesting
+  static String buildAcceptLanguage(List<Locale> locales) {
+    final tags = <String>[];
+    void add(String tag) {
+      if (!tags.contains(tag)) tags.add(tag);
+    }
+
+    final normalized = <({String tag, String base})>[];
+    for (final locale in locales) {
+      final language = locale.languageCode.toLowerCase();
+      if (language.isEmpty || language == 'und') continue;
+      final country = locale.countryCode;
+      final tag = (country == null || country.isEmpty)
+          ? language
+          : '$language-${country.toUpperCase()}';
+      normalized.add((tag: tag, base: language));
+    }
+    for (var i = 0; i < normalized.length; i++) {
+      add(normalized[i].tag);
+      final next = i + 1 < normalized.length ? normalized[i + 1].base : null;
+      if (next != normalized[i].base) add(normalized[i].base);
+    }
+    if (tags.isEmpty) return _defaultAcceptLanguage;
+
+    final buffer = StringBuffer(tags.first);
+    var q = 9;
+    for (final tag in tags.skip(1)) {
+      buffer.write(',$tag;q=0.$q');
+      if (q > 1) q--;
+    }
+    return buffer.toString();
+  }
 
   /// 初始化 User-Agent（应用启动时调用一次）
   /// 获取 WebView 的真实 UA 并移除 wv 标识（解决 Google 登录问题）

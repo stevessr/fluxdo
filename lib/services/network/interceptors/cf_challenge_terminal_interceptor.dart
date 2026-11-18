@@ -8,7 +8,7 @@ import '../flux_request_spec.dart';
 ///
 /// [CfChallengeInterceptor] 会负责展示验证、同步 clearance、重放原请求和必要时
 /// 切换 WebView 网络栈。但“验证成功后重放仍然撞盾”等终态此前可能把原始
-/// 403/429 DioException 继续抛给业务层，最终被 UI 误显示为“无权限访问资源”。
+/// 403/429/503 DioException 继续抛给业务层，最终被 UI 误显示为“无权限访问资源”。
 ///
 /// 这里不再做任何重试，也不展示 UI；只把最终仍带 Cloudflare challenge 特征
 /// 的响应转换成 [CfChallengeException]，并刻意移除 HTTP response，防止上层
