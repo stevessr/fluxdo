@@ -2620,6 +2620,14 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   Future<void> _insertSpecialContent({BuildContext? menuContext}) async {
     final editor = _editor;
     if (editor == null) return;
+    if (editor.selection == null) {
+      final last = editor.blocks.last;
+      editor.updateSelection(
+        EditorSelection.collapsed(
+          EditorPosition(blockId: last.id, offset: last.selectionLength),
+        ),
+      );
+    }
     final bookmark = InsertionBookmark(editor);
     try {
       final kind = await showComposerSpecialContentMenu(menuContext ?? context);
