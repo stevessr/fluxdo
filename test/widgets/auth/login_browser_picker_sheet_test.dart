@@ -46,9 +46,7 @@ void main() {
                 showDragHandle: true,
                 builder: (_) => const LoginBrowserPickerSheet(
                   description: null,
-                  browsers: [
-                    LoginBrowser(id: 'default', name: '系统默认浏览器'),
-                  ],
+                  browsers: [LoginBrowser(id: 'default', name: '系统默认浏览器')],
                 ),
               ),
               child: const Text('选择'),
