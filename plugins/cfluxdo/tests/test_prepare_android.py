@@ -66,6 +66,12 @@ class PrepareAndroidTest(unittest.TestCase):
             'applicationId = "com.github.molchuan.cfluxdo"\n',
             encoding="utf-8",
         )
+        auth_service = self.root / "lib/services/user_api_key_service.dart"
+        auth_service.parent.mkdir(parents=True)
+        auth_service.write_text(
+            "static const String applicationName = 'CFluxDo';\\n",
+            encoding="utf-8",
+        )
 
     def _main(self) -> ET.Element:
         app = ET.parse(self.manifest).getroot().find("application")
@@ -111,6 +117,14 @@ class PrepareAndroidTest(unittest.TestCase):
                 }
                 self.assertEqual(metadata[API_META], "1")
                 self.assertEqual(metadata[CATEGORY_META], "app")
+                auth_service = (
+                    self.root / "lib/services/user_api_key_service.dart"
+                ).read_text(encoding="utf-8")
+                self.assertIn(
+                    "static const String applicationName = '"
+                    + PLUGINS[kind]["auth_name"] + "';",
+                    auth_service,
+                )
                 all_permissions = {
                     element.get(ANDROID + "name")
                     for element in ET.parse(self.manifest).getroot().findall(
