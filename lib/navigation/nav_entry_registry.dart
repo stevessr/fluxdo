@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,7 +16,7 @@ import '../pages/groups_page.dart';
 import '../pages/leaderboard_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/chat/chat_page.dart';
-import '../pages/seeking_page.dart';
+import '../pages/following_feed_page.dart';
 import '../pages/private_messages_page.dart';
 import '../pages/topics_screen.dart';
 import '../providers/chat_providers.dart';
@@ -183,12 +183,12 @@ class NavEntryRegistry {
         requiresLogin: true,
       ),
       NavEntry(
-        id: NavEntryIds.seeking,
+        id: NavEntryIds.followingFeed,
         kind: NavEntryKind.page,
-        iconData: Symbols.visibility_rounded,
-        selectedIconData: Symbols.visibility_rounded,
-        label: (ctx) => ctx.l10n.seeking_title,
-        pageBuilder: (ctx, isActive) => SeekingPage(isActive: isActive),
+        iconData: Symbols.rss_feed_rounded,
+        selectedIconData: Symbols.rss_feed_rounded,
+        label: (ctx) => ctx.l10n.followingFeed_title,
+        pageBuilder: (ctx, isActive) => FollowingFeedPage(isActive: isActive),
         requiresLogin: true,
       ),
       NavEntry(
@@ -215,6 +215,7 @@ class NavEntryRegistry {
   /// Map legacy saved navigation IDs to the single site information entry.
   /// Retain compatibility with users who pinned a policy in older versions.
   static String canonicalId(String id) {
+    if (id == 'seeking') return NavEntryIds.followingFeed;
     if (id == 'birthdays') return 'anniversaries';
     if (id == 'site_guidelines' ||
         id == 'site_terms' ||

@@ -6,13 +6,12 @@ import 'modules/mini_apps/mini_app_window_app.dart';
 import 'package:catcher_2/catcher_2.dart';
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageProvider;
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/legacy.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart' as acrylic;
 
 import 'pages/topics_page.dart';
@@ -75,7 +74,7 @@ import 'widgets/festival_greeting.dart';
 import 'services/update_checker_helper.dart';
 
 import 'package:fluxdo_render/fluxdo_render.dart'
-    show FlattenCache, ParagraphLayoutCache, FluxdoRenderShapes;
+    show FlattenCache, ParagraphLayoutCache, FluxdoRenderShapes, SpoilerShader;
 
 import 'services/clipboard_topic_link_service.dart';
 import 'pages/webview_page.dart';
@@ -103,6 +102,8 @@ import 'constants.dart';
 import 'providers/connectivity_provider.dart';
 import 'utils/dialog_utils.dart';
 import 'utils/frame_jank_monitor.dart';
+import 'utils/hashtag_handlers.dart';
+import 'utils/idle_task.dart';
 import 'utils/image_decode_gate.dart';
 import 'widgets/post/post_item/render_parse_cache.dart';
 import 'utils/scroll_busy_signal.dart';
@@ -411,6 +412,7 @@ Future<void> main() async {
 
   // 阶段 2：依赖 prefs 的步骤并行
   final crashlyticsEnabled = prefs.getBool('pref_crashlytics') ?? true;
+  var crashContextEnabled = false;
   final developerMode = prefs.getBool('developer_mode') ?? false;
   CfChallengeLogger.setEnabled(developerMode);
   // 开发者模式下 debug 级日志落盘（高频追踪信息）
@@ -419,12 +421,19 @@ Future<void> main() async {
     CoreFallbackService.instance.initialize(prefs),
     ProxySettingsService.instance.initialize(prefs),
     if (Platform.isAndroid)
-      MethodChannel(
+      const MethodChannel(
         'com.github.lingyan000.fluxdo/crashlytics',
-      ).invokeMethod('setCrashlyticsEnabled', {'enabled': crashlyticsEnabled}),
+      ).invokeMethod<void>('setCrashlyticsEnabled', {
+        'enabled': crashlyticsEnabled,
+      }).then<void>((_) {
+        crashContextEnabled = crashlyticsEnabled;
+      }).catchError((Object error) {
+        // 崩溃上报不可用时仍要绘制首屏。
+        debugPrint('[Main] Crashlytics 初始化失败: $error');
+      }),
   ]);
   // 跟随同一开关:关闭时导航上下文也不再上报
-  CrashContextReporter.setEnabled(Platform.isAndroid && crashlyticsEnabled);
+  CrashContextReporter.setEnabled(crashContextEnabled);
   // rhttp (Rust reqwest) 初始化：在 ProxySettingsService 之后、NetworkSettingsService 之前
   await RhttpSettingsService.instance.initialize(prefs);
   // WebView 适配器设置
@@ -771,11 +780,7 @@ class MainApp extends ConsumerWidget {
               ],
               title: windowTitle,
               locale: TranslationProvider.of(context).flutterLocale,
-              localizationsDelegates: const [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
               supportedLocales: AppLocaleUtils.supportedLocales,
               themeMode: resolvedTheme.mode,
               // 仅注入 fontFamilyFallback，不替换 textTheme，避免覆盖 Android OEM
@@ -806,8 +811,8 @@ class MainApp extends ConsumerWidget {
               builder: (context, child) {
                 final brightness = Theme.of(context).brightness;
                 // 页面背景：用户背景图优先，其次是节日底纹、主题的纸张纹理
-                final WidgetBuilder? pageBackground = themeState
-                        .isTransparentActive
+                final WidgetBuilder? pageBackground =
+                    themeState.isTransparentActive
                     ? _userBackgroundBuilder(themeState.background)
                     : themeState.isFestivalPatternActive
                     ? _festivalBackgroundBuilder(
@@ -988,7 +993,21 @@ class MainApp extends ConsumerWidget {
                   }
                 }
 
-                return AppGlassSettings(child: result);
+                // 第三方组件迁移期间同步旧 Material 的主题和本地化。
+                // ignore: deprecated_member_use
+                return MaterialUiCompatibilityBridge(
+                  child: AppGlassSettings(
+                    // 玻璃的背景统一在这里每帧截取一次，包住导航与弹层
+                    child: Builder(
+                      builder: (context) => GlassCaptureHost(
+                        enabled: GlassSettingsScope.of(context).allowsBlur(
+                          highContrast: MediaQuery.highContrastOf(context),
+                        ),
+                        child: result,
+                      ),
+                    ),
+                  ),
+                );
               },
               home:
                   windowHome ??
@@ -1075,6 +1094,7 @@ class _MainPageState extends ConsumerState<MainPage>
 
       // 初始化 Deep Link 服务
       DeepLinkService.instance.initialize(context);
+      _precacheShaders();
       // Secondary native Android tasks carry a one-shot, per-Activity topic
       // request. MainPage is mounted only after onboarding/preheat is ready.
       unawaited(_consumePicoLaunchRequest());
@@ -1228,6 +1248,26 @@ class _MainPageState extends ConsumerState<MainPage>
     final prefs = ref.read(sharedPreferencesProvider);
     final updateService = UpdateService(prefs: prefs);
     await UpdateCheckerHelper.checkUpdateOnStartup(context, updateService);
+  }
+
+  /// 首个玻璃组件、首个剧透出现时要加载 shader：`FragmentProgram.fromAsset`
+  /// 实际在 UI 线程上同步读资产并交给渲染后端，首次可达数百毫秒，会卡在
+  /// 它所在页面的入场动画里（如编辑器工具岛、首页之外的第一个提示条）。
+  /// 首屏稳定后趁空闲逐个提前加载，两次加载分开礼让，不叠在同一刻；
+  /// 只加载、不提前离屏渲染，不在冷启动时抢光栅线程编译管线
+  void _precacheShaders() {
+    const patience = Duration(seconds: 10);
+    final glass = GlassSettingsScope.of(context).allowsOptics(
+      shaderSupported: GlassSurface.opticalEdgeAvailable,
+      highContrast: MediaQuery.highContrastOf(context),
+    );
+    scheduleIdleTask(() {
+      if (glass) GlassSurface.precacheProgram();
+      scheduleIdleTask(
+        () => unawaited(SpoilerShader.ensureLoaded()),
+        maxDeferral: patience,
+      );
+    }, maxDeferral: patience);
   }
 
   Future<void> _runStartupUiTasks() async {
@@ -1838,11 +1878,13 @@ class _MainPageState extends ConsumerState<MainPage>
     final topicState = ref.watch(selectedTopicProvider);
     final topicParallelStacked = topicState.isStacked && !topicState.tabMode;
     final messageParallelStacked = ref.watch(selectedMessageProvider).isStacked;
-    final seekingParallelStacked = ref.watch(selectedSeekingProvider).isStacked;
+    final followingFeedParallelStacked =
+        ref.watch(selectedFollowingFeedProvider).isStacked;
     final hideNavigationRail =
         (activeEntryId == NavEntryIds.home && topicParallelStacked) ||
         (activeEntryId == NavEntryIds.messages && messageParallelStacked) ||
-        (activeEntryId == NavEntryIds.seeking && seekingParallelStacked);
+        (activeEntryId == NavEntryIds.followingFeed &&
+            followingFeedParallelStacked);
 
     final exitOnSingleBack = ref.watch(
       preferencesProvider.select((preferences) => preferences.exitOnSingleBack),

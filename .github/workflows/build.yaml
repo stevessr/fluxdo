@@ -8,8 +8,7 @@ on:
 
 env:
   IS_STABLE: ${{ !contains(github.ref, '-') }}
-  FLUTTER_VERSION: '3.47.9'
-  # 跟随 upstream/dev 推荐的 Flutter 3.47.9 CI NDK 版本。
+  FLUTTER_VERSION: '3.50.0'
   ANDROID_NDK_VERSION: '27.3.13750724'
 
 jobs:
@@ -90,7 +89,7 @@ jobs:
         with:
           distribution: temurin
           # Gradle 缓存交给 setup-gradle，避免双重缓存互相踩
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Gradle Cache
         if: startsWith(matrix.platform, 'android')

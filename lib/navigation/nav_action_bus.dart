@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore: depend_on_referenced_packages
@@ -192,5 +192,16 @@ class NavEntryIds {
   static const String messages = 'messages';
   static const String chat = 'chat';
   static const String aiBot = 'ai_bot';
-  static const String seeking = 'seeking';
+  static const String followingFeed = 'following_feed';
+
+  static List<String> migrateLegacyIds(List<String> ids) => ids
+      .map(
+        (id) => switch (id) {
+          'seeking' => followingFeed,
+          'birthdays' => 'anniversaries',
+          _ => id,
+        },
+      )
+      .toSet()
+      .toList();
 }

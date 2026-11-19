@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scroll_to_index/scroll_to_index.dart';
@@ -19,6 +18,7 @@ import 'package:fluxdo/providers/message_bus_providers.dart';
 import 'package:fluxdo/providers/theme_provider.dart';
 import 'package:fluxdo/providers/category_provider.dart';
 import 'package:fluxdo/widgets/nested/nested_post_card.dart';
+import 'package:fluxdo/widgets/post/post_item/post_item.dart';
 import 'package:fluxdo/widgets/nested/nested_reading_scope.dart';
 import 'package:fluxdo/widgets/nested/nested_thread_sheet.dart';
 import 'package:fluxdo/widgets/common/positioned_stream_list.dart';
@@ -69,6 +69,7 @@ Future<void> _pump(
   WidgetTester tester, {
   required NestedTopicState state,
   TopicDetail? detail,
+  VoidCallback? onShowMembers,
   void Function(PendingPost)? onWithdraw,
   void Function(PendingPost)? onWithdrawAndEdit,
   Size size = const Size(375, 812),
@@ -121,11 +122,7 @@ Future<void> _pump(
           ),
           locale: const Locale('zh'),
           supportedLocales: AppLocaleUtils.supportedLocales,
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
           home: MediaQuery(
             data: MediaQueryData(
               size: size,
@@ -145,6 +142,7 @@ Future<void> _pump(
                       state,
                   params: const NestedTopicParams(topicId: 1),
                   detail: detail ?? _detail,
+                  onShowMembers: onShowMembers,
                   onWithdrawPendingPost: onWithdraw,
                   onWithdrawAndEditPendingPost: onWithdrawAndEdit,
                   blockedUsernames: const {},
@@ -208,6 +206,30 @@ void main() {
     await tester.tap(find.text('撤回并重新编辑'));
     expect(withdrawn, 9);
     expect(edited, 9);
+  });
+
+  testWidgets('嵌套私信的成员行在页头和首帖分隔线之上', (tester) async {
+    await _pump(
+      tester,
+      state: NestedTopicState(
+        opPost: _post(1),
+        roots: [NestedNode(post: _post(2))],
+      ),
+      detail: TopicDetail.fromJson({
+        'id': 1, 'title': '读书会', 'archetype': 'private_message',
+        'post_stream': {'posts': [], 'stream': []},
+        'details': {'allowed_users': [{'id': 1, 'username': 'reader'}]},
+      }),
+      onShowMembers: () {},
+    );
+    final firstPost = find.byWidgetPredicate(
+      (w) => w is PostItem && w.post.postNumber == 1,
+    );
+    final entry = find.byTooltip('会话成员');
+    expect(entry, findsOneWidget);
+    final row = tester.getRect(entry);
+    expect(row.top, greaterThan(tester.getRect(find.text('私人讨论')).bottom));
+    expect(row.bottom, lessThanOrEqualTo(tester.getRect(firstPost).top));
   });
 
   for (final hasMore in [true, false]) {

@@ -41,11 +41,7 @@ class ThinkingDelta extends AiChatChunk {
 
 /// Token 用量报告，流结束时发送
 class UsageReport extends AiChatChunk {
-  const UsageReport({
-    this.promptTokens,
-    this.responseTokens,
-    this.cachedTokens,
-  });
+  const UsageReport({this.promptTokens, this.responseTokens, this.cachedTokens});
   final int? promptTokens;
   final int? responseTokens;
   final int? cachedTokens;
@@ -95,7 +91,10 @@ class ChatStreamStats {
 ///
 /// 所有 SDK 都基于 `package:http`，通过 [bridgedClient] 注入应用 dio 网络栈。
 class AiChatService {
-  AiChatService({this.bridgedClient, this.enablePartialImages = false});
+  AiChatService({
+    this.bridgedClient,
+    this.enablePartialImages = false,
+  });
 
   /// 可选 http.Client。传 [DioBackedHttpClient] 即可让所有请求复用应用网络栈。
   final http.Client? bridgedClient;
@@ -112,20 +111,16 @@ class AiChatService {
     required List<AiChatMessage> messages,
     String? systemPrompt,
     ThinkingConfig thinkingConfig = const ThinkingConfig(),
-
     /// 仅图像生成路径使用：话题上下文摘要（含标题+正文楼层），
     /// 会被前置拼接到 image prompt 之前，让生成的图与话题相关。
     /// 文本聊天路径忽略此参数（话题上下文走 [messages] 注入）。
     String? imagePromptContext,
-
     /// 仅图像生成路径使用：用户在 PromptPreset 维度面板选择的 aspect。
     /// 取值 '1:1' / '16:9' / '9:16' / '4:3' / '3:4'，null = 用模型默认。
     String? imageAspect,
-
     /// 可取消的 HTTP client。外部 close 后底层 HTTP 连接立即断开，
     /// 不再等 stream 自然结束。未传则 fallback 到 [bridgedClient]。
     http.Client? requestClient,
-
     /// 可选的诊断统计对象,各 _stream 内部会写入 SDK 收到的原始 event 数。
     ChatStreamStats? stats,
   }) {
@@ -317,10 +312,10 @@ class AiChatService {
       // 502 / 503 / 504 是典型的上游瞬时问题，500 可能是 OpenAI 真的故障也重试
       return e.statusCode >= 500 && e.statusCode < 600;
     }
-    if (e is a.AnthropicClientException) {
+    if (e is a.ApiException) {
       // Anthropic 走代理同样会遇到 5xx 瞬时问题(one-api / 自建反代)
-      final code = e.code;
-      return code != null && code >= 500 && code < 600;
+      final code = e.statusCode;
+      return code >= 500 && code < 600;
     }
     return false;
   }
@@ -384,17 +379,15 @@ class AiChatService {
             );
           } else {
             // 504/502/503 自动重试 3 次（绕过 openai_dart 4.x 对 POST 不重试的限制）
-            final response = await _withServerErrorRetry(
-              () => client.images.edit(
-                o.ImageEditRequest(
-                  model: model,
-                  prompt: prompt,
-                  image: bytes,
-                  imageFilename: 'input.${_extFromMime(att.mimeType)}',
-                  size: size,
-                ),
+            final response = await _withServerErrorRetry(() => client.images.edit(
+              o.ImageEditRequest(
+                model: model,
+                prompt: prompt,
+                image: bytes,
+                imageFilename: 'input.${_extFromMime(att.mimeType)}',
+                size: size,
               ),
-            );
+            ));
             yield* _emitImageResponse(response);
           }
         } else {
@@ -411,15 +404,9 @@ class AiChatService {
               stats: stats,
             );
           } else {
-            final response = await _withServerErrorRetry(
-              () => client.images.generate(
-                o.ImageGenerationRequest(
-                  model: model,
-                  prompt: prompt,
-                  size: size,
-                ),
-              ),
-            );
+            final response = await _withServerErrorRetry(() => client.images.generate(
+              o.ImageGenerationRequest(model: model, prompt: prompt, size: size),
+            ));
             yield* _emitImageResponse(response);
           }
         }
@@ -612,8 +599,7 @@ class AiChatService {
     final imagesDir = Directory(p.join(dir.path, 'ai_generated_images'));
     if (!imagesDir.existsSync()) imagesDir.createSync(recursive: true);
     final ext = _extFromMime(mime);
-    final filename =
-        '${DateTime.now().millisecondsSinceEpoch}_'
+    final filename = '${DateTime.now().millisecondsSinceEpoch}_'
         '${const Uuid().v4().substring(0, 8)}.$ext';
     final file = File(p.join(imagesDir.path, filename));
     await file.writeAsBytes(bytes);
@@ -701,11 +687,8 @@ class AiChatService {
     }
   }
 
-  o.OpenAIClient _createOpenAIClient(
-    String baseUrl,
-    String apiKey, {
-    http.Client? httpClient,
-  }) {
+  o.OpenAIClient _createOpenAIClient(String baseUrl, String apiKey,
+      {http.Client? httpClient}) {
     return o.OpenAIClient(
       config: o.OpenAIConfig(
         authProvider: o.ApiKeyProvider(apiKey),
@@ -846,16 +829,13 @@ class AiChatService {
     try {
       // 复用普通 chat 的消息转换（带附件作为输入图，也支持 image edit 场景）；
       // 但要把最后一条 user 文本替换成增强版 prompt（拼了话题上下文）
-      final messagesWithEnhancedPrompt = _replaceLastUserContent(
-        messages,
-        prompt,
-      );
+      final messagesWithEnhancedPrompt = _replaceLastUserContent(messages, prompt);
       final contents = _toGeminiContents(messagesWithEnhancedPrompt);
       final request = g.GenerateContentRequest(
         contents: contents,
         generationConfig: g.GenerationConfig(
           // 关键：要求模型同时输出图像和文本（image-only 会拒绝纯文本 prompt）
-          responseModalities: const ['IMAGE', 'TEXT'],
+          responseModalities: const [g.ResponseModality.image, g.ResponseModality.text],
           // aspect ratio 用 imageConfig.aspectRatio 透传（gemini-3-image preview 支持）
           imageConfig: imageAspect != null
               ? g.ImageConfig(aspectRatio: imageAspect)
@@ -881,9 +861,7 @@ class AiChatService {
               final cleaned = blob.data.replaceAll(RegExp(r'\s'), '');
               try {
                 final bytes = base64Decode(cleaned);
-                final mime = blob.mimeType.isEmpty
-                    ? 'image/png'
-                    : blob.mimeType;
+                final mime = blob.mimeType.isEmpty ? 'image/png' : blob.mimeType;
                 final localPath = await _saveImageBytes(bytes, mime);
                 yield ImageGenerated(localPath: localPath, mimeType: mime);
               } catch (_) {
@@ -925,36 +903,35 @@ class AiChatService {
     ChatStreamStats? stats,
   }) async* {
     final effectiveClient = httpClient ?? bridgedClient;
-    // anthropic_sdk_dart 拼 URL 是 `baseUrl + /messages`,不自动补 /v1,
-    // 所以这里要预先 format 好。formatApiHost 已包含 /v1,SDK 直接拼出
-    // baseUrl/v1/messages。
-    final formattedBaseUrl = ApiHostFormatter.format(baseUrl);
+    final base = ApiHostFormatter.format(baseUrl);
+    final uri = Uri.parse(base.isEmpty ? 'https://api.anthropic.com/v1' : base);
+    final endpoint = uri.replace(path: '${uri.path}/messages');
+    final transport = effectiveClient ?? http.Client();
     final client = a.AnthropicClient(
-      apiKey: apiKey,
-      baseUrl: formattedBaseUrl.isEmpty ? null : formattedBaseUrl,
-      // 包一层统计 client,把 HTTP 层的真实 status / 字节数记到 stats,
-      // 区分「上游 200 但 body 立即关」vs「SDK 解析器跟上游 SSE 格式不兼容」。
-      client: stats == null
-          ? effectiveClient
-          : _StatsHttpClient(effectiveClient ?? http.Client(), stats),
+      config: a.AnthropicConfig(
+        baseUrl: uri.origin,
+        apiVersion: a.AnthropicConfig.legacyApiVersion,
+        authProvider: a.ApiKeyProvider(apiKey),
+        retryPolicy: const a.RetryPolicy(maxRetries: 0),
+      ),
+      httpClient: _AnthropicMessagesClient(transport, stats, endpoint),
     );
 
     final budgetTokens = _toAnthropicBudget(thinkingConfig);
-    final request = a.CreateMessageRequest(
-      model: a.Model.modelId(model),
+    final request = a.MessageCreateRequest(
+      model: model,
       messages: _toAnthropicMessages(messages),
       maxTokens: thinkingConfig.isEnabled ? 16384 : 8192,
       system: systemPrompt == null
           ? null
-          : a.CreateMessageRequestSystem.blocks([
-              a.Block.text(
+          : a.SystemPrompt.blocks([
+              a.SystemTextBlock(
                 text: systemPrompt,
                 cacheControl: const a.CacheControlEphemeral(),
               ),
             ]),
       thinking: budgetTokens != null
           ? a.ThinkingConfig.enabled(
-              type: a.ThinkingConfigEnabledType.enabled,
               budgetTokens: budgetTokens,
             )
           : null,
@@ -972,23 +949,22 @@ class AiChatService {
       const maxAttempts = 3;
       for (var i = 1; i <= maxAttempts; i++) {
         try {
-          await for (final event in client.createMessageStream(
-            request: request,
-          )) {
+          await for (final event
+              in client.messages.createStream(request)) {
             stats?.sdkEvents++;
             switch (event) {
               case final a.MessageStartEvent e:
-                promptTokens = e.message.usage?.inputTokens;
-                responseTokens = e.message.usage?.outputTokens;
-                cachedTokens = e.message.usage?.cacheReadInputTokens;
+                promptTokens = e.message.usage.inputTokens;
+                responseTokens = e.message.usage.outputTokens;
+                cachedTokens = e.message.usage.cacheReadInputTokens;
               case final a.ContentBlockDeltaEvent e:
                 switch (e.delta) {
-                  case final a.TextBlockDelta d:
+                  case final a.TextDelta d:
                     if (d.text.isNotEmpty) {
                       hasYielded = true;
                       yield TextDelta(d.text);
                     }
-                  case final a.ThinkingBlockDelta d:
+                  case final a.ThinkingDelta d:
                     if (d.thinking.isNotEmpty) {
                       hasYielded = true;
                       yield ThinkingDelta(d.thinking);
@@ -996,6 +972,8 @@ class AiChatService {
                   default:
                     break;
                 }
+              case final a.ErrorEvent e:
+                throw Exception(e.message);
               case final a.MessageDeltaEvent e:
                 // MessageDelta 阶段的 usage 是 output 的最终值
                 responseTokens = e.usage.outputTokens;
@@ -1015,12 +993,8 @@ class AiChatService {
       }
       if (lastError != null) throw _mapError(lastError);
     } finally {
-      // 仅当我们没传入外部 client 时才关闭 SDK 内部 client。
-      // anthropic_sdk_dart 的 endSession() 会无脑 close 我们传入的
-      // bridgedClient / requestClient,否则会污染后续请求。
-      if (httpClient == null && bridgedClient == null) {
-        client.endSession();
-      }
+      client.close();
+      if (effectiveClient == null) transport.close();
     }
 
     if (promptTokens != null || responseTokens != null) {
@@ -1130,7 +1104,9 @@ class AiChatService {
     }
     final base64Data = att.base64Data;
     if (base64Data != null && base64Data.isNotEmpty) {
-      return o.InputContent.imageUrl('data:${att.mimeType};base64,$base64Data');
+      return o.InputContent.imageUrl(
+        'data:${att.mimeType};base64,$base64Data',
+      );
     }
     final localPath = att.localPath;
     if (localPath != null && localPath.isNotEmpty) {
@@ -1189,17 +1165,16 @@ class AiChatService {
 
   // ────────────────────────── 消息转换：Anthropic ──────────────────────────
 
-  List<a.Message> _toAnthropicMessages(List<AiChatMessage> history) {
-    final result = <a.Message>[];
+  List<a.InputMessage> _toAnthropicMessages(List<AiChatMessage> history) {
+    final result = <a.InputMessage>[];
     for (final msg in history) {
-      final isContext =
-          msg.id == 'context-user' || msg.id == 'context-assistant';
+      final isContext = msg.id == 'context-user' || msg.id == 'context-assistant';
       switch (msg.role) {
         case ChatRole.system:
           continue;
         case ChatRole.user:
           result.add(
-            a.Message(
+            a.InputMessage(
               role: a.MessageRole.user,
               content: _toAnthropicContent(msg, cache: isContext),
             ),
@@ -1207,12 +1182,12 @@ class AiChatService {
         case ChatRole.assistant:
           if (msg.content.isEmpty) continue;
           result.add(
-            a.Message(
+            a.InputMessage(
               role: a.MessageRole.assistant,
               content: isContext
                   ? a.MessageContent.blocks([
-                      a.Block.text(
-                        text: msg.content,
+                      a.InputContentBlock.text(
+                        msg.content,
                         cacheControl: const a.CacheControlEphemeral(),
                       ),
                     ])
@@ -1224,26 +1199,24 @@ class AiChatService {
     return result;
   }
 
-  a.MessageContent _toAnthropicContent(
-    AiChatMessage msg, {
-    bool cache = false,
-  }) {
+  a.MessageContent _toAnthropicContent(AiChatMessage msg,
+      {bool cache = false}) {
     final attachments = msg.attachments;
     if (attachments == null || attachments.isEmpty) {
       if (cache) {
         return a.MessageContent.blocks([
-          a.Block.text(
-            text: msg.content,
+          a.InputContentBlock.text(
+            msg.content,
             cacheControl: const a.CacheControlEphemeral(),
           ),
         ]);
       }
       return a.MessageContent.text(msg.content);
     }
-    final blocks = <a.Block>[
+    final blocks = <a.InputContentBlock>[
       if (msg.content.isNotEmpty)
-        a.Block.text(
-          text: msg.content,
+        a.InputContentBlock.text(
+          msg.content,
           cacheControl: cache ? const a.CacheControlEphemeral() : null,
         ),
       for (final att in attachments)
@@ -1253,20 +1226,19 @@ class AiChatService {
     return a.MessageContent.blocks(blocks);
   }
 
-  a.Block? _anthropicImageBlock(AiChatAttachment att) {
+  a.InputContentBlock? _anthropicImageBlock(AiChatAttachment att) {
     final mediaType = _toAnthropicMediaType(att.mimeType);
     if (mediaType == null) return null;
     final remote = att.remoteUrl;
     if (remote != null && remote.isNotEmpty) {
-      return a.Block.image(
-        source: a.ImageBlockSource.urlImageSource(type: 'url', url: remote),
+      return a.InputContentBlock.image(
+        a.ImageSource.url(remote),
       );
     }
     final base64Data = att.base64Data;
     if (base64Data != null && base64Data.isNotEmpty) {
-      return a.Block.image(
-        source: a.ImageBlockSource.base64ImageSource(
-          type: 'base64',
+      return a.InputContentBlock.image(
+        a.ImageSource.base64(
           mediaType: mediaType,
           data: base64Data,
         ),
@@ -1275,9 +1247,8 @@ class AiChatService {
     final localPath = att.localPath;
     if (localPath != null && localPath.isNotEmpty) {
       final bytes = File(localPath).readAsBytesSync();
-      return a.Block.image(
-        source: a.ImageBlockSource.base64ImageSource(
-          type: 'base64',
+      return a.InputContentBlock.image(
+        a.ImageSource.base64(
           mediaType: mediaType,
           data: base64Encode(bytes),
         ),
@@ -1286,17 +1257,17 @@ class AiChatService {
     return null;
   }
 
-  a.Base64ImageSourceMediaType? _toAnthropicMediaType(String mime) {
+  a.ImageMediaType? _toAnthropicMediaType(String mime) {
     switch (mime.toLowerCase()) {
       case 'image/jpeg':
       case 'image/jpg':
-        return a.Base64ImageSourceMediaType.imageJpeg;
+        return a.ImageMediaType.jpeg;
       case 'image/png':
-        return a.Base64ImageSourceMediaType.imagePng;
+        return a.ImageMediaType.png;
       case 'image/gif':
-        return a.Base64ImageSourceMediaType.imageGif;
+        return a.ImageMediaType.gif;
       case 'image/webp':
-        return a.Base64ImageSourceMediaType.imageWebp;
+        return a.ImageMediaType.webp;
     }
     return null;
   }
@@ -1357,28 +1328,18 @@ class AiChatService {
       // 兜底：包含 status 信息的通用错误
       return Exception(error.toString());
     }
-    if (error is a.AnthropicClientException) {
+    if (error is a.ApiException) {
       return _mapAnthropicError(error);
     }
     return Exception(error.toString());
   }
 
-  /// Anthropic SDK 把上游所有非 2xx 都简单包成 `'Unsuccessful response'`,
-  /// 字符串本身没信息。这里按 status code 给出跟 OpenAI 一致的友好提示,
-  /// 并把 body 里的 message 抠出来透传(代理返回的诸如「余额不足」「模型不存在」
-  /// 等具体说明)。
-  Exception _mapAnthropicError(a.AnthropicClientException error) {
+  Exception _mapAnthropicError(a.ApiException error) {
     final l10n = AiL10n.current;
-    final code = error.code;
-    final upstreamMsg = _extractAnthropicErrorMessage(error.body);
-    final suffix = upstreamMsg == null ? '' : ': $upstreamMsg';
-    // 写到应用日志,排查「每次第一次必败重试就好」类问题时能拿到真实 status。
-    // Anthropic SDK 把所有非 2xx 都包成 'Unsuccessful response',
-    // 不打这条日志就看不到 code 到底是几。
-    AiPackageLogger.warning(
-      'AiChat',
-      'anthropicError code=$code msg=${upstreamMsg ?? error.message}',
-    );
+    final code = error.statusCode;
+    final upstreamMsg = error.message;
+    final suffix = upstreamMsg.isEmpty ? '' : ': $upstreamMsg';
+    AiPackageLogger.warning('AiChat', 'anthropicError code=$code msg=$upstreamMsg');
     switch (code) {
       case 401:
         return Exception(l10n.apiKeyInvalidError);
@@ -1389,47 +1350,15 @@ class AiChatService {
       case 429:
         return Exception('${l10n.tooManyRequestsError}$suffix');
       case 400:
-        return Exception(upstreamMsg ?? error.message);
+        return Exception(upstreamMsg);
       case 500:
       case 502:
       case 503:
       case 504:
-        return Exception(_serverErrorMessage(code!, upstreamMsg));
+        return Exception(_serverErrorMessage(code, upstreamMsg));
       default:
-        if (code != null) {
-          return Exception('HTTP $code$suffix');
-        }
-        return Exception(error.message);
+        return Exception('HTTP $code$suffix');
     }
-  }
-
-  /// 从 Anthropic 错误响应 body 里提取真正的错误说明。
-  /// body 形态因代理而异:
-  /// - 官方 `{"type":"error","error":{"type":"invalid_request_error","message":"..."}}`
-  /// - 部分代理 `{"error":{"message":"..."}}`
-  /// - 部分代理 `{"message":"..."}` / 纯字符串
-  String? _extractAnthropicErrorMessage(Object? body) {
-    if (body == null) return null;
-    try {
-      final decoded = body is String ? jsonDecode(body) : body;
-      if (decoded is Map<String, dynamic>) {
-        final err = decoded['error'];
-        if (err is Map<String, dynamic>) {
-          final msg = err['message'];
-          if (msg is String && msg.isNotEmpty) return msg;
-        }
-        if (err is String && err.isNotEmpty) return err;
-        final topMsg = decoded['message'];
-        if (topMsg is String && topMsg.isNotEmpty) return topMsg;
-      }
-      if (decoded is String && decoded.isNotEmpty) return decoded;
-    } catch (_) {
-      // body 不是合法 JSON,退化用原始字符串(截断防过长)
-      final raw = body.toString();
-      if (raw.isEmpty) return null;
-      return raw.length > 200 ? '${raw.substring(0, 200)}…' : raw;
-    }
-    return null;
   }
 
   /// 5xx 错误细分。代理服务器（one-api / aihubmix / 自建反代）转 OpenAI 时
@@ -1563,19 +1492,37 @@ class AiChatService {
 /// - status>=400                  → 上游真的返回了错误,但 SDK 没正确抛
 ///
 /// 字节统计是流式累加,不缓冲响应体。
-class _StatsHttpClient extends http.BaseClient {
-  _StatsHttpClient(this._inner, this._stats);
+class _AnthropicMessagesClient extends http.BaseClient {
+  _AnthropicMessagesClient(this._inner, this._stats, this.endpoint);
 
   final http.Client _inner;
-  final ChatStreamStats _stats;
+  final ChatStreamStats? _stats;
+  final Uri endpoint;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    // SDK 固定追加 /v1/messages；保留用户已配置的版本和代理路径。
+    if (request.url != endpoint) {
+      if (request is! http.Request || request.url.origin != endpoint.origin ||
+          request.url.path != '/v1/messages') {
+        throw StateError('Unexpected Anthropic endpoint');
+      }
+      final forwarded = http.AbortableRequest(request.method, endpoint,
+          abortTrigger: request is http.Abortable ? (request as http.Abortable).abortTrigger : null)
+        ..followRedirects = request.followRedirects
+        ..maxRedirects = request.maxRedirects
+        ..persistentConnection = request.persistentConnection
+        ..headers.addAll(request.headers)
+        ..bodyBytes = request.bodyBytes;
+      request = forwarded;
+    }
     final response = await _inner.send(request);
-    _stats.httpStatus = response.statusCode;
-    _stats.respContentType = response.headers['content-type'];
+    final stats = _stats;
+    if (stats == null) return response;
+    stats.httpStatus = response.statusCode;
+    stats.respContentType = response.headers['content-type'];
     final countedStream = response.stream.map<List<int>>((chunk) {
-      _stats.respBytes += chunk.length;
+      stats.respBytes += chunk.length;
       return chunk;
     });
     return http.StreamedResponse(

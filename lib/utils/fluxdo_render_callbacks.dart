@@ -4,7 +4,7 @@ import 'dart:convert';
 
 import 'package:archive/archive.dart' show ZLibEncoder;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_icons/app_icons.dart';
@@ -706,18 +706,21 @@ class FluxdoRenderCallbacks {
           );
         },
         direction: PopoverDirection.bottom,
-        arrowHeight: 8,
-        arrowWidth: 12,
-        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
-        barrierColor: Colors.transparent,
-        radius: 8,
-        shadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        style: PopoverStyle(
+          arrowStyle: PopoverArrowStyle.triangle,
+          arrowHeight: 8,
+          arrowWidth: 12,
+          backgroundColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+          barrierColor: Colors.transparent,
+          radius: 8,
+          shadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
       );
     };
   }

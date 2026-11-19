@@ -3,7 +3,7 @@ import 'package:common_ui/common_ui.dart';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../utils/idle_task.dart';
 
@@ -47,7 +47,7 @@ import 'topic_more_topics.dart';
 import 'topic_status_notices.dart';
 import 'typing_indicator.dart';
 import 'pending_posts_section.dart';
-import 'private_message_participants.dart';
+import 'topic_bottom_bar.dart';
 
 /// 话题帖子列表
 /// 负责构建 CustomScrollView 及其 Slivers
@@ -64,11 +64,7 @@ class TopicPostList extends StatefulWidget {
   final int? selectedPostNumber;
   final int? highlightPostNumber;
   final bool isLoggedIn;
-  final int? removingPrivateMessageParticipantId;
-  final String? removingPrivateMessageGroupName;
-  final ValueChanged<TopicUser>? onRemovePrivateMessageParticipant;
-  final ValueChanged<TopicGroup>? onRemovePrivateMessageGroup;
-  final VoidCallback? onInvitePrivateMessageParticipants;
+  final VoidCallback? onShowMembers;
   final bool hasMoreBefore;
   final bool hasMoreAfter;
 
@@ -122,6 +118,13 @@ class TopicPostList extends StatefulWidget {
   final void Function(PendingPost pending)? onWithdrawPendingPost;
   final void Function(PendingPost pending)? onWithdrawAndEditPendingPost;
 
+  /// 帖子流读到底后的内联回复入口（宽屏阅读栏形态下提供）
+  final Widget? trailingReplyEntry;
+
+  /// 额外的末尾留白（宽屏停靠编辑器打开时的高度），编辑器开着也能把
+  /// 最后的帖子滚到它上方
+  final ValueListenable<double>? extraBottomInset;
+
   /// 高亮指定用户的 boost（从 boost 通知跳转时使用）
   final String? highlightBoostUsername;
   final bool hideHeaderTitle;
@@ -152,11 +155,7 @@ class TopicPostList extends StatefulWidget {
     this.hideHeaderTitle = false,
     this.canAssignPost = false,
     required this.isLoggedIn,
-    this.removingPrivateMessageParticipantId,
-    this.removingPrivateMessageGroupName,
-    this.onRemovePrivateMessageParticipant,
-    this.onRemovePrivateMessageGroup,
-    this.onInvitePrivateMessageParticipants,
+    this.onShowMembers,
     required this.hasMoreBefore,
     required this.hasMoreAfter,
     required this.loadingPreviousListenable,
@@ -193,6 +192,8 @@ class TopicPostList extends StatefulWidget {
     this.onShowPostDetail,
     this.onWithdrawPendingPost,
     this.onWithdrawAndEditPendingPost,
+    this.trailingReplyEntry,
+    this.extraBottomInset,
     this.isActivitySort = false,
     this.onAnswerSortChanged,
     this.headingAnchorRegistry,
@@ -241,20 +242,6 @@ class _TopicPostListState extends State<TopicPostList> {
   /// 长帖正文 chunk 的 widget 实例缓存(key: (post.id, chunkIndex)),
   /// 语义同上;data 实例由 [_longPostDataFor] 的内容签名保证稳定。
   final Map<(int, int), _ChunkWidgetCacheEntry> _chunkWidgetCache = {};
-
-  PrivateMessageParticipants _buildPrivateMessageParticipants(
-    PrivateMessageParticipantsLocation location,
-  ) {
-    return PrivateMessageParticipants.fromDetail(
-      location: location,
-      detail: detail,
-      removingParticipantId: widget.removingPrivateMessageParticipantId,
-      removingGroupName: widget.removingPrivateMessageGroupName,
-      onRemoveParticipant: widget.onRemovePrivateMessageParticipant,
-      onRemoveGroup: widget.onRemovePrivateMessageGroup,
-      onInvite: widget.onInvitePrivateMessageParticipants,
-    );
-  }
 
   @override
   void initState() {
@@ -1002,7 +989,6 @@ class _TopicPostListState extends State<TopicPostList> {
       'load-more',
       'topic-status-notices',
       'suggested-topics',
-      'pm-participants',
       'bottom-padding',
     ];
 
@@ -1047,6 +1033,7 @@ class _TopicPostListState extends State<TopicPostList> {
                         context,
                         TopicDetailHeader(
                           detail: detail,
+                          onShowMembers: widget.onShowMembers,
                           headerKey: headerKey,
                           showTitle: !widget.hideHeaderTitle,
                           onVoteChanged: onVoteChanged,
@@ -1098,8 +1085,16 @@ class _TopicPostListState extends State<TopicPostList> {
   }
 
   Widget _buildTrailingRow(BuildContext context, int index) {
-    if (index == 6) {
-      return SizedBox(height: 80 + MediaQuery.paddingOf(context).bottom);
+    if (index == 5) {
+      // 末尾留出底栏展开态的高度，读到底时最后的内容不被栏遮住
+      final base = TopicBottomBarMetrics.occupiedHeight(context);
+      final extra = widget.extraBottomInset;
+      if (extra == null) return SizedBox(height: base);
+      return ValueListenableBuilder<double>(
+        valueListenable: extra,
+        builder: (context, inset, _) =>
+            SizedBox(height: inset > base ? inset : base),
+      );
     }
     if (hasMoreAfter) {
       return index == 2
@@ -1143,18 +1138,24 @@ class _TopicPostListState extends State<TopicPostList> {
           ),
         );
       case 3:
-        return _wrapContent(context, TopicStatusNotices(detail: detail));
+        final replyEntry = widget.trailingReplyEntry;
+        return _wrapContent(
+          context,
+          replyEntry == null
+              ? TopicStatusNotices(detail: detail)
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TopicStatusNotices(detail: detail),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: replyEntry,
+                    ),
+                  ],
+                ),
+        );
       case 4:
         return _wrapContent(context, MoreTopicsSection(detail: detail));
-      case 5:
-        return PrivateMessageParticipants.shouldShowAtBottom(detail)
-            ? _wrapContent(
-                context,
-                _buildPrivateMessageParticipants(
-                  PrivateMessageParticipantsLocation.bottom,
-                ),
-              )
-            : const SizedBox.shrink();
       default:
         return const SizedBox.shrink();
     }
@@ -1422,31 +1423,15 @@ class _TopicPostListState extends State<TopicPostList> {
         break;
     }
 
-    final childWithParticipants =
-        PrivateMessageParticipants.shouldShow(detail) &&
-            post.postNumber == 1 &&
-            (segment.type == _PostRenderSegmentType.shortPost ||
-                segment.type == _PostRenderSegmentType.longFooter)
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              child,
-              _buildPrivateMessageParticipants(
-                PrivateMessageParticipantsLocation.firstPost,
-              ),
-            ],
-          )
-        : child;
-
     // TOC 锚点作用域只挂 1 楼:节点 id 跨帖重复,其他楼的标题不能进
     // 注册表(见 HeadingAnchorRegistrar/headingAnchorKey)。
     final anchorRegistry = widget.headingAnchorRegistry;
     final scopedChild = anchorRegistry != null && post.postNumber == 1
         ? HeadingAnchorScope(
             registry: anchorRegistry,
-            child: childWithParticipants,
+            child: child,
           )
-        : childWithParticipants;
+        : child;
 
     final wrapped = _wrapContent(
       context,
@@ -1762,7 +1747,7 @@ class _LoadMoreIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.symmetric(vertical: 16),
-      child: Center(child: LoadingSpinner(size: 24)),
+      child: Center(child: LoadingSpinner.standard()),
     );
   }
 }

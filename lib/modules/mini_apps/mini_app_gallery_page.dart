@@ -4,7 +4,7 @@ import '../../services/toast_service.dart';
 
 import 'package:app_icons/app_icons.dart';
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -553,7 +553,7 @@ class _MiniAppGalleryPageState extends ConsumerState<MiniAppGalleryPage> {
                                   child:
                                       _directory.loadingMore ||
                                           _directory.loading
-                                      ? const LoadingSpinner(size: 28)
+                                      ? const LoadingSpinner.standard()
                                       : _directory.error != null
                                       ? TextButton.icon(
                                           onPressed: () => _directory.hasMore

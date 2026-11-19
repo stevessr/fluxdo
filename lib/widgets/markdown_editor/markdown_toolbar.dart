@@ -6,7 +6,7 @@ import 'package:fluxdo_render/editor.dart'
         observeModifierKeyEvent,
         primaryModifierHeldForReversibleAction,
         shiftModifierHeld;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 
@@ -1112,9 +1112,9 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     var registered = false;
     _uploadingCount++;
     try {
-      final result = await FilePicker.platform.pickFiles();
-      if (!mounted || result == null || result.files.isEmpty) return;
-      final file = result.files.first;
+      final result = await FilePicker.pickFile();
+      if (!mounted || result == null) return;
+      final file = result;
       if (file.path == null) return;
       _enqueueUpload(
         path: file.path!,
@@ -1166,11 +1166,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     var registered = false;
     _uploadingCount++;
     try {
-      final picked = await FilePicker.platform.pickFiles(
+      final file = await FilePicker.pickFile(
         type: isAudio ? FileType.audio : FileType.video,
       );
-      if (!mounted || picked == null || picked.files.isEmpty) return;
-      final file = picked.files.first;
+      if (!mounted || file == null) return;
       if (file.path == null) return;
       registered = await _prepareMediaTask(
         path: file.path!,

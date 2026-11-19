@@ -1,6 +1,5 @@
 import 'dart:ui' as ui show Image;
-
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'gesture/utils.dart';
 import 'gesture/slide_page.dart';
@@ -13,20 +12,12 @@ import 'gesture/slide_page.dart';
 
 /// [rect] is render size
 /// if return true, it will not paint original image,
-typedef BeforePaintImage = bool Function(
-  Canvas canvas,
-  Rect rect,
-  ui.Image image,
-  Paint paint,
-);
+typedef BeforePaintImage =
+    bool Function(Canvas canvas, Rect rect, ui.Image image, Paint paint);
 
 /// Call after paint image
-typedef AfterPaintImage = void Function(
-  Canvas canvas,
-  Rect rect,
-  ui.Image image,
-  Paint paint,
-);
+typedef AfterPaintImage =
+    void Function(Canvas canvas, Rect rect, ui.Image image, Paint paint);
 
 /// Animation call back for inertia drag
 typedef GestureOffsetAnimationCallBack = void Function(Offset offset);
@@ -35,30 +26,25 @@ typedef GestureOffsetAnimationCallBack = void Function(Offset offset);
 typedef GestureScaleAnimationCallBack = void Function(double scale);
 
 /// Build page background when slide page
-typedef SlidePageBackgroundHandler = Color Function(
-  Offset offset,
-  Size pageSize,
-);
+typedef SlidePageBackgroundHandler =
+    Color Function(Offset offset, Size pageSize);
 
 /// customize offset of page when slide page
-typedef SlideOffsetHandler = Offset? Function(
-  Offset offset, {
-  ExtendedImageSlidePageState state,
-});
+typedef SlideOffsetHandler =
+    Offset? Function(Offset offset, {ExtendedImageSlidePageState state});
 
 /// if return true ,pop page
 /// else reset page state
-typedef SlideEndHandler = bool? Function(
-  Offset offset, {
-  required ExtendedImageSlidePageState state,
-  required ScaleEndDetails details,
-});
+typedef SlideEndHandler =
+    bool? Function(
+      Offset offset, {
+      required ExtendedImageSlidePageState state,
+      required ScaleEndDetails details,
+    });
 
 /// Customize scale of page when slide page
-typedef SlideScaleHandler = double? Function(
-  Offset offset, {
-  ExtendedImageSlidePageState state,
-});
+typedef SlideScaleHandler =
+    double? Function(Offset offset, {ExtendedImageSlidePageState state});
 
 /// Call on sliding page
 typedef OnSlidingPage = void Function(ExtendedImageSlidePageState state);

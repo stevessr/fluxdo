@@ -139,16 +139,13 @@ class MobilePostSourceService {
   static _DesktopHardwareInfo _readWindowsHardwareInfo() {
     RegistryKey? key;
     try {
-      key = Registry.openPath(
-        RegistryHive.localMachine,
-        path: r'HARDWARE\DESCRIPTION\System\BIOS',
-      );
+      key = LOCAL_MACHINE.open(r'HARDWARE\DESCRIPTION\System\BIOS');
       return _DesktopHardwareInfo(
         brand: _normalizeHardwareText(
-          key.getStringValue('SystemManufacturer'),
+          key.getString('SystemManufacturer'),
         ),
         model: _normalizeHardwareText(
-          key.getStringValue('SystemProductName'),
+          key.getString('SystemProductName'),
         ),
       );
     } catch (_) {

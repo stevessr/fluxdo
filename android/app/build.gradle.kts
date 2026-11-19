@@ -56,8 +56,7 @@ println(
 
 android {
     namespace = "com.github.lingyan000.fluxdo"
-    compileSdk = flutter.compileSdkVersion
-    // 使用 Flutter SDK 管理的 NDK 版本，与 CI 预装的上游推荐版本一致。
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -67,7 +67,8 @@ bool _isAvatarUrl(String url) {
 /// 头像例外只影响 avatar，不把正文动图重新暴露给旧的 GIF disposal bug；
 /// [MultiFrameImageStreamCompleter] 仍会让 GIF/APNG/WebP 正常播放。
 ///
-/// 需要限制解码尺寸时在外层包 decode-time 的 `ResizeImage(policy: fit)`。
+/// Flutter 静态解码路径可在外层包 `ResizeImage(policy: fit)` 限制尺寸。
+/// 原生动图不消费 Flutter 的 decode 回调；AVIF 使用自身的尺寸上限。
 ImageProvider discourseImageProvider(
   String url, {
   double scale = 1.0,

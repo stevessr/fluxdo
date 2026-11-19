@@ -1,7 +1,8 @@
 import 'package:common_ui/common_ui.dart';
+
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -12,6 +13,7 @@ import '../../../providers/discourse_providers.dart';
 import '../../../utils/font_awesome_helper.dart';
 import '../../../widgets/topic/topic_summary_widget.dart';
 import '../../../widgets/common/emoji_text.dart';
+import '../../../widgets/common/inline_icon_span.dart';
 import '../../../utils/time_utils.dart';
 import '../../../widgets/common/relative_time_text.dart';
 import '../../../utils/number_utils.dart';
@@ -27,6 +29,8 @@ import '../../../theme/app_colors.dart';
 import '../../../services/preloaded_data_service.dart';
 import 'topic_state_summary.dart';
 import 'topic_statistics.dart';
+import 'private_message_participants.dart';
+import 'topic_view_stats_sheet.dart';
 
 /// 话题详情页头部组件
 class TopicDetailHeader extends ConsumerWidget {
@@ -35,6 +39,8 @@ class TopicDetailHeader extends ConsumerWidget {
   final void Function(int, bool)? onVoteChanged;
   final void Function(TopicNotificationLevel)? onNotificationLevelChanged;
   final bool showTitle;
+  final bool expanded;
+  final VoidCallback? onShowMembers;
 
   /// 跳转到当前话题的指定帖子
   final void Function(int postNumber)? onJumpToPost;
@@ -46,6 +52,8 @@ class TopicDetailHeader extends ConsumerWidget {
     this.onVoteChanged,
     this.onNotificationLevelChanged,
     this.showTitle = true,
+    this.expanded = false,
+    this.onShowMembers,
     this.onJumpToPost,
   });
 
@@ -90,6 +98,25 @@ class TopicDetailHeader extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (detail.isPrivateMessage) ...[
+            Row(
+              children: [
+                Icon(
+                  Icons.lock_outline_rounded,
+                  size: 14,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  context.l10n.pm_privateDiscussion,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            if (showTitle) const SizedBox(height: 6),
+          ],
           if (showTitle)
             SelectableText.rich(
               TextSpan(
@@ -99,18 +126,6 @@ class TopicDetailHeader extends ConsumerWidget {
                   letterSpacing: 0.2,
                 ),
                 children: [
-                  if (detail.isPrivateMessage)
-                    WidgetSpan(
-                      alignment: PlaceholderAlignment.middle,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Icon(
-                          Symbols.mail_rounded,
-                          size: 20,
-                          color: context.emphasis.accent,
-                        ),
-                      ),
-                    ),
                   if (detail.closed)
                     WidgetSpan(
                       alignment: PlaceholderAlignment.middle,
@@ -256,92 +271,107 @@ class TopicDetailHeader extends ConsumerWidget {
             const SizedBox(height: 12),
           ],
 
-          // Metadata Row (Replies, Views, Date, Vote Button)
-          Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 4,
-                  children: [
-                    _buildMetadataItem(
-                      context,
-                      Symbols.chat_bubble_rounded,
-                      '${detail.postsCount - 1}',
-                      label: context.l10n.topicDetail_replyLabel,
-                    ),
-                    _buildMetadataItem(
-                      context,
-                      Symbols.visibility_rounded,
-                      NumberUtils.formatCount(detail.views),
-                      label: context.l10n.topicDetail_viewsLabel,
-                    ),
-                    Tooltip(
-                      message: TimeUtils.formatTooltipTime(detail.createdAt),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Symbols.schedule_rounded,
-                            size: 14,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant
-                                .withValues(alpha: 0.7),
-                          ),
-                          const SizedBox(width: 4),
-                          RelativeTimeText(
-                            dateTime: detail.createdAt,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant
-                                      .withValues(alpha: 0.8),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // 投票按钮
-              TopicVoteButton(topic: detail, onVoteChanged: onVoteChanged),
-            ],
-          ),
-
-          TopicStatistics(
-            detail: detail,
-            wordsPerMinute: PreloadedDataService()
-                .siteSettingsSync?['read_time_word_count'] as num?,
-          ),
-
-          // AI 摘要、个人置顶与订阅按钮
-          const SizedBox(height: 16),
-          CollapsibleTopicSummary(
-            topicId: detail.id,
-            topicDetail: detail,
-            onJumpToPost: onJumpToPost,
-            headerExtra: Row(
-              mainAxisSize: MainAxisSize.min,
+          if (PrivateMessageMemberSummary.isAvailable(detail) &&
+              onShowMembers != null)
+            PrivateMessageMemberSummary(detail: detail, onTap: onShowMembers!),
+          // 私信正文上方只保留会话信息，展开页头仍可查看统计和订阅设置。
+          if (!detail.isPrivateMessage || expanded) ...[
+            Row(
               children: [
-                if (!detail.isPrivateMessage) ...[
-                  TopicPersonalPinButton(
-                    topicId: detail.id,
-                    categoryId: detail.categoryId,
+                Expanded(
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 4,
+                    children: [
+                      _buildMetadataItem(
+                        context,
+                        Symbols.chat_bubble_rounded,
+                        '${detail.postsCount - 1}',
+                        label: context.l10n.topicDetail_replyLabel,
+                      ),
+                      _buildMetadataItem(
+                        context,
+                        Symbols.visibility_rounded,
+                        NumberUtils.formatCount(detail.views),
+                        label: context.l10n.topicDetail_viewsLabel,
+                        onTap: () => showTopicViewStatsSheet(
+                          context,
+                          topicId: detail.id,
+                          totalViews: detail.views,
+                        ),
+                      ),
+                      Tooltip(
+                        message: TimeUtils.formatTooltipTime(detail.createdAt),
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              _metadataIconSpan(
+                                Theme.of(context),
+                                Symbols.schedule_rounded,
+                              ),
+                              // 相对时间是独立组件，按基线嵌入与其他项对齐
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.baseline,
+                                baseline: TextBaseline.alphabetic,
+                                child: RelativeTimeText(
+                                  dateTime: detail.createdAt,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                            .withValues(alpha: 0.8),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                ],
-                TopicNotificationButton(
-                  level: detail.notificationLevel,
-                  onChanged: onNotificationLevelChanged,
-                  style: TopicNotificationButtonStyle.chip,
                 ),
+                // 投票按钮
+                TopicVoteButton(topic: detail, onVoteChanged: onVoteChanged),
               ],
             ),
-          ),
+
+            TopicStatistics(
+              detail: detail,
+              wordsPerMinute:
+                  PreloadedDataService()
+                          .siteSettingsSync?['read_time_word_count']
+                      as num?,
+              onJumpToPost: onJumpToPost,
+            ),
+
+            // AI 摘要、个人置顶与订阅按钮
+            const SizedBox(height: 16),
+            CollapsibleTopicSummary(
+              topicId: detail.id,
+              topicDetail: detail,
+              onJumpToPost: onJumpToPost,
+              headerExtra: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!detail.isPrivateMessage) ...[
+                    TopicPersonalPinButton(
+                      topicId: detail.id,
+                      categoryId: detail.categoryId,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  TopicNotificationButton(
+                    level: detail.notificationLevel,
+                    onChanged: onNotificationLevelChanged,
+                    style: TopicNotificationButtonStyle.chip,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -352,34 +382,63 @@ class TopicDetailHeader extends ConsumerWidget {
     IconData icon,
     String text, {
     String? label,
+    VoidCallback? onTap,
   }) {
     final theme = Theme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          size: 14,
-          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        if (label != null) ...[
-          const SizedBox(width: 2),
-          Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+    final muted = theme.colorScheme.onSurfaceVariant;
+    // 图标、数值与标签同段排版：数值与标签共用基线，图标经
+    // inlineIconSpan 按基线定位。拆成 Row 里的多个组件各自居中时，西文
+    // 数字与中文回退字体的行高不同会让两段文字上下错开
+    final content = Text.rich(
+      TextSpan(
+        children: [
+          _metadataIconSpan(theme, icon),
+          TextSpan(
+            text: text,
+            style: TextStyle(
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+              fontWeight: FontWeight.w500,
             ),
           ),
+          if (label != null) ...[
+            const WidgetSpan(child: SizedBox(width: 2)),
+            TextSpan(
+              text: label,
+              style: TextStyle(color: muted.withValues(alpha: 0.5)),
+            ),
+          ],
+          // 可点开明细的项末尾带小箭头，与统计行一致
+          if (onTap != null)
+            inlineIconSpan(
+              Symbols.chevron_right_rounded,
+              size: 14,
+              color: muted.withValues(alpha: 0.5),
+              textStyle: theme.textTheme.bodySmall ?? const TextStyle(),
+            ),
         ],
-      ],
+      ),
+      style: theme.textTheme.bodySmall,
+    );
+    if (onTap == null) return content;
+    return InkWell(
+      customBorder: RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(8),
+      ),
+      onTap: onTap,
+      child: content,
     );
   }
+
+  /// 元数据项前的图标及其后间距
+  InlineSpan _metadataIconSpan(ThemeData theme, IconData icon) => TextSpan(
+    children: [
+      inlineIconSpan(
+        icon,
+        size: 14,
+        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+        textStyle: theme.textTheme.bodySmall ?? const TextStyle(),
+      ),
+      const WidgetSpan(child: SizedBox(width: 4)),
+    ],
+  );
 }

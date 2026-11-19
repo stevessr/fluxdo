@@ -5,7 +5,8 @@ import 'dart:math';
 
 import 'package:chat_bottom_container/chat_bottom_container.dart';
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -150,11 +151,11 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   final _panelController =
       ChatBottomPanelContainerController<EditorPanelType>();
   EditorPanelType _currentPanelType = EditorPanelType.none;
+  bool _returningToKeyboard = false;
   bool _readOnly = false;
   // 面板意图状态：用户希望打开的自定义面板（表情/工具），
   // 用于防止焦点变化导致的面板状态竞争
   EditorPanelType _intendedPanel = EditorPanelType.none;
-  bool _returningToKeyboard = false;
 
   /// EmojiStickerPanel 实例缓存。
   ///
@@ -184,7 +185,6 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       _emojiPopover = EmojiPopoverController()
         ..addListener(_onEmojiPopoverChanged);
     }
-    _focusNode.addListener(_onEditorFocusChanged);
     EmojiHandler().init();
     // 预热 1:1 cook 引擎(eval bundle + 注入站点数据),
     // 让首次切预览时 JS cook 已就绪
@@ -208,10 +208,6 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     }
   }
 
-  void _onEditorFocusChanged() {
-    if (mounted) setState(() {});
-  }
-
   /// 预览返回时恢复输入连接；关闭面板留下的只读状态不能带回来。
   void resumeEditing() {
     _intendedPanel = EditorPanelType.none;
@@ -219,6 +215,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     _focusNode.requestFocus();
     if (!_isDesktop) {
       _panelController.updatePanelType(ChatBottomPanelType.keyboard);
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
     }
   }
 
@@ -388,7 +385,6 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
   @override
   void dispose() {
-    _focusNode.removeListener(_onEditorFocusChanged);
     _toolsAnchor.dispose();
     _emojiPopover?.dispose();
     _undoController.dispose();
@@ -641,6 +637,10 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   /// 外滚结构下 TextField 只占内容高,旧 expands 的整区可点由此兜底;
   /// readOnly(表情面板开)时与 TextField 的 Listener 同款切回键盘。
   void _onBlankAreaTap() {
+    if (_toolsAnchor.presenting) {
+      _toolsAnchor.collapse();
+      resumeEditing();
+    }
     if (_readOnly) {
       _intendedPanel = EditorPanelType.none;
       _updateReadOnly(false);
@@ -940,6 +940,10 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     // 用 Listener 捕获点击：readOnly 模式下点击切回键盘
     final wrappedField = Listener(
       onPointerUp: (_) {
+        if (_toolsAnchor.presenting) {
+          _toolsAnchor.collapse();
+          resumeEditing();
+        }
         if (_readOnly) {
           _intendedPanel = EditorPanelType.none;
           _updateReadOnly(false);
@@ -1026,9 +1030,6 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       child: SizedBox(height: _panelHeight, child: _ensureEmojiPanelChild()),
     );
   }
-
-  /// 构建当前意图面板对应的组件（用于焦点竞争时维持面板显示）
-  Widget _buildIntendedPanel() => _buildEmojiPanel();
 
   @override
   Widget build(BuildContext context) {
@@ -1232,7 +1233,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
               panelType != ChatBottomPanelType.other) {
             return ColoredBox(
               color: theme.colorScheme.surface,
-              child: _buildIntendedPanel(),
+              child: _buildEmojiPanel(),
             );
           }
           switch (panelType) {

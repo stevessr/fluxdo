@@ -177,21 +177,12 @@ class _CustomHostsCardState extends State<CustomHostsCard> {
 
   Future<void> _importFromFile() async {
     await _runImport(() async {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return null;
+      final file = await FilePicker.pickFile(type: FileType.any);
+      if (file == null) return null;
 
-      final file = result.files.single;
-      final content = file.bytes != null
-          ? CustomHostsService.decodeBytes(file.bytes!)
-          : file.path != null
+      final content = file.path != null
           ? await CustomHostsService.readFile(file.path!)
-          : null;
-      if (content == null) {
-        throw const FormatException('无法读取所选文件');
-      }
+          : CustomHostsService.decodeBytes(await file.xFile.readAsBytes());
 
       final source = file.name.trim().isNotEmpty
           ? file.name.trim()

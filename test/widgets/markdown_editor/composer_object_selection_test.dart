@@ -1,13 +1,10 @@
 import 'package:common_ui/common_ui.dart';
-
 import 'dart:convert';
 import 'dart:async' show unawaited;
-
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/gestures.dart'
     show PointerDeviceKind, kSecondaryMouseButton;
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/l10n/s.dart';
@@ -89,11 +86,7 @@ Future<void> _pump(
           locale: const Locale('zh'),
           navigatorKey: navigatorKey,
           navigatorObservers: [if (focusGuard) KeyboardFocusGuard()],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
           supportedLocales: AppLocaleUtils.supportedLocales,
           theme: ThemeData(
             platform: desktop ? TargetPlatform.macOS : TargetPlatform.android,
@@ -1597,9 +1590,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
     await tester.pump();
     ImageGridNode grid() =>
-        (editor.state.blocks.firstWhere(
-              (b) => b.id == group.id,
-            ) as IslandBlock).node
+        (editor.state.blocks.firstWhere((b) => b.id == group.id) as IslandBlock)
+                .node
             as ImageGridNode;
     expect(grid().images.map((image) => image.src), ['b', 'a']);
     final paragraph = editor.state.blocks.whereType<TextBlock>().last;
