@@ -66,6 +66,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Test Android plugin packaging and OAuth callback contract
+        run: python3 -m unittest discover -s fluxdo/plugins/cfluxdo/tests -p 'test_*.py' -v
+
       - name: Overlay native plugin entrypoints
         shell: bash
         run: |
@@ -147,6 +150,14 @@ jobs:
           grep -Fq "package: name='$PACKAGE_NAME'" /tmp/plugin-badging.txt
           grep -Fq 'com.github.lingyan000.fluxdo.action.PLUGIN' /tmp/plugin-xmltree.txt
           grep -Fq 'com.github.lingyan000.fluxdo.plugin.API_VERSION' /tmp/plugin-xmltree.txt
+          grep -Fq 'android.intent.action.VIEW' /tmp/plugin-xmltree.txt
+          grep -Fq 'discourse' /tmp/plugin-xmltree.txt
+          grep -Fq 'auth_redirect' /tmp/plugin-xmltree.txt
+          if grep -Fq 'android.permission.QUERY_ALL_PACKAGES' /tmp/plugin-badging.txt || \
+             grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' /tmp/plugin-badging.txt; then
+            echo '工具插件不得拥有扫描所有应用或安装 APK 的权限'
+            exit 1
+          fi
           if grep -Fq 'launchable-activity:' /tmp/plugin-badging.txt || \
              grep -Fq 'android.intent.category.LAUNCHER' /tmp/plugin-xmltree.txt; then
             echo '插件 APK 不能出现在 Android 桌面应用抽屉'
@@ -169,7 +180,7 @@ jobs:
 
   publish:
     name: Publish two plugin APKs to Fluxdo Nightly
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
