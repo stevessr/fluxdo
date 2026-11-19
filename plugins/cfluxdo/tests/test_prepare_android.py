@@ -69,7 +69,7 @@ class PrepareAndroidTest(unittest.TestCase):
         auth_service = self.root / "lib/services/user_api_key_service.dart"
         auth_service.parent.mkdir(parents=True)
         auth_service.write_text(
-            "static const String applicationName = 'CFluxDo';\\n",
+            "static const String applicationName = 'CFluxDo';\n",
             encoding="utf-8",
         )
 
