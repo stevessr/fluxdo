@@ -22,11 +22,13 @@ PLUGINS = {
         "package": "com.github.lingyan000.fluxdo.plugin.cdk",
         "label": "LINUX DO CDK",
         "target": "plugin_cdk_main.dart",
+        "auth_name": "Fluxdo CDK Plugin",
     },
     "ldshop": {
         "package": "com.github.lingyan000.fluxdo.plugin.ldshop",
         "label": "LD 士多",
         "target": "plugin_ldshop_main.dart",
+        "auth_name": "Fluxdo LD Shop Plugin",
     },
 }
 
@@ -106,6 +108,20 @@ def patch(root: Path, plugin: str) -> None:
     if count != 1:
         raise RuntimeError("CFluxDo Gradle applicationId changed; review upstream")
     gradle.write_text(updated, encoding="utf-8")
+
+    # 授权页面/API Key 列表显示各自的应用名称，避免两个插件被当成上游主客户端。
+    auth_service = root / "lib/services/user_api_key_service.dart"
+    original = auth_service.read_text(encoding="utf-8")
+    current = "static const String applicationName = 'CFluxDo';"
+    if original.count(current) != 1:
+        raise RuntimeError("CFluxDo OAuth application name changed; review upstream")
+    auth_service.write_text(
+        original.replace(
+            current,
+            "static const String applicationName = '" + config["auth_name"] + "';",
+        ),
+        encoding="utf-8",
+    )
     verify(root, plugin)
 
 
@@ -170,6 +186,12 @@ def verify(root: Path, plugin: str) -> None:
     assert "android.permission.REQUEST_INSTALL_PACKAGES" not in permissions
     gradle = (root / "android/app/build.gradle.kts").read_text(encoding="utf-8")
     assert 'applicationId = "' + config["package"] + '"' in gradle
+    auth_service = (root / "lib/services/user_api_key_service.dart").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "static const String applicationName = '" + config["auth_name"] + "';"
+    ) in auth_service
     print(f"{plugin}: plugin manifest OK; package={config['package']}")
 
 
