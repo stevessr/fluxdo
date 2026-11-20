@@ -85,7 +85,9 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel>
   List<ExternalPlugin> _externalPlugins = const [];
 
   Future<void> _refreshExternalPlugins() async {
-    final plugins = await ExternalPluginService.instance.installedPlugins();
+    final plugins = (await ExternalPluginService.instance.installedPlugins())
+        .where((plugin) => plugin.appearsInEditor)
+        .toList();
     if (!mounted) return;
     final unchanged = plugins.length == _externalPlugins.length &&
         plugins.asMap().entries.every((entry) =>
