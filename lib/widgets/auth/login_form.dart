@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:common_ui/common_ui.dart';
+import 'package:m3e_ui/m3e_ui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
-
-import 'package:m3e_ui/m3e_ui.dart';
 
 import '../../l10n/s.dart';
 
@@ -12,6 +13,7 @@ class LoginForm extends StatefulWidget {
   const LoginForm({
     super.key,
     required this.onSubmit,
+    this.progressLabel,
     this.onForgotPassword,
     this.savedUsername,
     this.savedPassword,
@@ -25,6 +27,8 @@ class LoginForm extends StatefulWidget {
     required bool rememberCredentials,
   })
   onSubmit;
+
+  final String? progressLabel;
 
   /// 忘记密码点击 (一般跳 webview)。
   final VoidCallback? onForgotPassword;
@@ -49,6 +53,8 @@ class _LoginFormState extends State<LoginForm> {
   bool _remember = false;
   bool _submitting = false;
   String? _autofilledPassword;
+  Timer? _feedbackDelay;
+  String? _visibleProgress;
 
   @override
   void initState() {
@@ -63,6 +69,18 @@ class _LoginFormState extends State<LoginForm> {
   @override
   void didUpdateWidget(covariant LoginForm oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.progressLabel != oldWidget.progressLabel) {
+      _feedbackDelay?.cancel();
+      final label = widget.progressLabel;
+      if (label == null) {
+        _visibleProgress = null;
+      } else {
+        // 仅延迟提示的显示，快速请求直接结束，慢请求仍能说明当前在等什么。
+        _feedbackDelay = Timer(const Duration(milliseconds: 250), () {
+          if (mounted && _submitting) setState(() => _visibleProgress = label);
+        });
+      }
+    }
     if (oldWidget.savedUsername == widget.savedUsername &&
         oldWidget.savedPassword == widget.savedPassword) {
       return;
@@ -84,6 +102,7 @@ class _LoginFormState extends State<LoginForm> {
 
   @override
   void dispose() {
+    _feedbackDelay?.cancel();
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
     _usernameFocus.dispose();
@@ -155,7 +174,13 @@ class _LoginFormState extends State<LoginForm> {
         _autofilledPassword = null;
       }
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      _feedbackDelay?.cancel();
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _visibleProgress = null;
+        });
+      }
     }
   }
 
@@ -199,6 +224,33 @@ class _LoginFormState extends State<LoginForm> {
             ),
           )
           .toList(growable: false),
+    );
+  }
+
+  Widget _submissionFeedback(ColorScheme scheme) {
+    final progress = _visibleProgress;
+    final label = progress ?? context.l10n.common_loading;
+    final reduceMotion =
+        MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.reduceMotionOf(context);
+    return Semantics(
+      liveRegion: true,
+      label: label,
+      excludeSemantics: true,
+      child: reduceMotion
+          ? Text(label, textAlign: TextAlign.center)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 8,
+              children: [
+                TickerMode(
+                  enabled: ModalRoute.isCurrentOf(context) ?? true,
+                  child: LoadingSpinner(size: 24, color: scheme.primary),
+                ),
+                if (progress != null)
+                  Flexible(child: Text(progress, textAlign: TextAlign.center)),
+              ],
+            ),
     );
   }
 
@@ -285,14 +337,15 @@ class _LoginFormState extends State<LoginForm> {
             onPressed: _submitting ? null : _submit,
             style: FilledButton.styleFrom(
               minimumSize: const Size(double.infinity, 56),
+              disabledForegroundColor: scheme.onSurfaceVariant,
               shape: RoundedSuperellipseBorder(
                 borderRadius: context.shapes.borderRadius(28),
               ),
-              elevation: 8,
+              elevation: _submitting ? 0 : 8,
               shadowColor: scheme.primary.withValues(alpha: 0.4),
             ),
             child: _submitting
-                ? LoadingSpinner(size: 24, color: scheme.onPrimary)
+                ? _submissionFeedback(scheme)
                 : Text(
                     context.l10n.common_login,
                     style: const TextStyle(
