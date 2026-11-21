@@ -18,6 +18,7 @@ import 'package:fluxdo/providers/topic_list/topic_list_provider.dart';
 import 'package:fluxdo/services/discourse/discourse_service.dart';
 import 'package:fluxdo/services/local_notification_service.dart';
 import 'package:fluxdo/utils/platform_utils.dart';
+import 'package:fluxdo/widgets/topic/topic_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _CurrentUser extends CurrentUserNotifier {
@@ -45,6 +46,28 @@ class _TopicsService extends Fake implements DiscourseService {
   List<Topic>? seedTopics;
   Completer<void>? pendingRead;
   final readIds = <int>[];
+  final clearedPinIds = <int>[];
+  bool failClearPin = false;
+
+  @override
+  Future<void> clearTopicPin(int topicId) async {
+    clearedPinIds.add(topicId);
+    if (failClearPin) throw StateError('请求失败');
+    seedTopics = [
+      for (final topic in seedTopics!)
+        if (topic.id == topicId)
+          Topic.fromJson({
+            'id': topic.id,
+            'title': topic.title,
+            'category_id': int.parse(topic.categoryId),
+            'pinned': false,
+            'unpinned': true,
+            'unseen': topic.unseen,
+          })
+        else
+          topic,
+    ];
+  }
 
   @override
   Future<List<int>> dismissTopicIds(
@@ -100,6 +123,84 @@ class _TopicsService extends Fake implements DiscourseService {
 }
 
 void main() {
+  testWidgets('首页取消置顶失败可重试，成功后回到普通话题且刷新不恢复置顶', (tester) async {
+    PlatformUtils.debugDesktopOverride = false;
+    addTearDown(() => PlatformUtils.debugDesktopOverride = null);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final service = _TopicsService()
+      ..seedTopics = [
+        Topic.fromJson({
+          'id': 10,
+          'title': '待取消置顶的话题',
+          'category_id': 2,
+          'pinned': true,
+          'unseen': true,
+        }),
+        Topic.fromJson({'id': 11, 'title': '普通话题', 'category_id': 2}),
+      ]
+      ..failClearPin = true;
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        discourseServiceProvider.overrideWithValue(service),
+        currentUserProvider.overrideWith(_LoggedInUser.new),
+        topicTrackingStateProvider.overrideWith(_Tracking.new),
+        messageBusInitProvider.overrideWith(_MessageBusInit.new),
+        categoryMapProvider.overrideWith(
+          (ref) => const AsyncData(<int, Category>{}),
+        ),
+        visibleCategoryIdsProvider.overrideWith((ref) => <int>{}),
+        miniAppPullEnabledProvider.overrideWithValue(false),
+      ],
+    );
+    addTearDown(container.dispose);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: TranslationProvider(
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            home: const Scaffold(body: TopicsPage()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(CompactTopicCard), findsOneWidget);
+    await tester.tap(find.byTooltip('取消置顶'));
+    await tester.pumpAndSettle();
+    expect(service.clearedPinIds, [10]);
+    expect(find.byType(CompactTopicCard), findsOneWidget);
+    expect(
+      container.read(topicListProvider(null)).requireValue.first.pinned,
+      isTrue,
+    );
+
+    service.failClearPin = false;
+    await tester.tap(find.byTooltip('取消置顶'));
+    await tester.pumpAndSettle();
+    expect(service.clearedPinIds, [10, 10]);
+    expect(find.byType(CompactTopicCard), findsNothing);
+    expect(find.byKey(const ValueKey('pinned-topics-toggle')), findsNothing);
+    expect(find.byKey(const ValueKey('topic-10')), findsOneWidget);
+    expect(find.byKey(const ValueKey('topic-11')), findsOneWidget);
+    expect(
+      container.read(topicListProvider(null)).requireValue.first.pinned,
+      isFalse,
+    );
+
+    await container.read(topicListProvider(null).notifier).refresh();
+    await tester.pumpAndSettle();
+    expect(find.byType(CompactTopicCard), findsNothing);
+    expect(find.byKey(const ValueKey('topic-10')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('首页一键已读有加载反馈，成功后自动折叠且普通话题不受影响', (tester) async {
     PlatformUtils.debugDesktopOverride = false;
     addTearDown(() => PlatformUtils.debugDesktopOverride = null);

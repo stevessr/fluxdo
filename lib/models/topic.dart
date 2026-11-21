@@ -495,9 +495,9 @@ class Topic {
       lastPostedAt: TimeUtils.parseUtcTime(json['last_posted_at'] as String?),
       lastPosterUsername: json['last_poster_username'] as String?,
       categoryId: (json['category_id'] ?? 0).toString(),
-      // unpinned 表示用户读过后取消了个人置顶，站点本身仍置顶。
-      // 首页通过折叠收纳已读置顶，避免读完后掉进普通话题流。
-      pinned: json['pinned'] == true || json['unpinned'] == true,
+      // pinned 是当前用户视角的有效置顶状态；unpinned 表示已取消个人置顶。
+      // 即使管理员仍保留站点置顶，也不能将已取消的话题重新放入置顶分组。
+      pinned: json['pinned'] == true,
       visible: json['visible'] as bool? ?? true,
       closed: json['closed'] as bool? ?? false,
       archived: json['archived'] as bool? ?? false,
