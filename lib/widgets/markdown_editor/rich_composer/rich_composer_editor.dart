@@ -112,6 +112,8 @@ import '../content_actions_providers.dart';
 import '../emoji_popover.dart';
 import '../emoji_sticker_panel.dart';
 import '../image_upload_dialog.dart';
+import '../long_image_upload_dialog.dart';
+import '../color_insert_dialog.dart';
 import '../uploads/task_controller.dart';
 import '../uploads/upload_task_panel.dart';
 import '../link_insert_dialog.dart';
@@ -2102,9 +2104,55 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     state: editor,
     onInsertLink: _insertLink,
     onPickImage: _pickAndUploadImages,
+    onPickLongImage: _pickAndUploadLongImage,
     onToggleInlineSpoiler: () => toggleInlineSpoilerOn(editor),
     onSetHeading: (level) => editor.setHeading(level),
+    onApplyTextColor: () => unawaited(_applyTextColor(editor)),
   );
+
+  Future<void> _applyTextColor(EditorState editor) async {
+    final value = await showColorInsertDialog(context);
+    if (!mounted || value == null || editor != _editor) return;
+    editor.applyTextColor(value);
+  }
+
+  /// 独立长图上传:单选图片,通过宽高比检查后选择切片数量再入队上传。
+  Future<void> _pickAndUploadLongImage() async {
+    final editor = _editor;
+    if (editor == null) return;
+    final bookmark = InsertionBookmark(editor);
+    try {
+      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (image == null || !mounted || !identical(editor, _editor)) return;
+
+      final results = await showLongImageUploadDialog(
+        context,
+        imagePath: image.path,
+        imageName: image.name,
+      );
+      if (results == null ||
+          results.isEmpty ||
+          !mounted ||
+          !identical(editor, _editor) ||
+          !bookmark.valid) {
+        return;
+      }
+
+      for (final image in results) {
+        _queueUpload(
+          image.path,
+          image.originalName,
+          image: true,
+          insertionSelection: bookmark.selection,
+        );
+        bookmark.moveTo(editor.selection);
+      }
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    } finally {
+      bookmark.dispose();
+    }
+  }
 
   /// 光标状态快照，驱动工具格子/按钮的激活态。
   RichToolSnapshot _buildToolSnapshot(EditorState editor) {

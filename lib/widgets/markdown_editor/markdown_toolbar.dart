@@ -34,6 +34,7 @@ import 'composer_tools_anchor.dart';
 import 'composer_view_mode_switcher.dart';
 import 'cursor_swipe_control.dart';
 import 'composer_shortcuts.dart';
+import 'composer_special_content.dart';
 import 'ai_content_block.dart';
 import 'editor_tools.dart';
 import 'emoji_popover.dart';
@@ -43,6 +44,8 @@ import 'uploads/upload_task_panel.dart';
 import 'uploads/markdown_insertion_anchor.dart';
 import 'voice_recorder_sheet.dart';
 import 'image_upload_dialog.dart';
+import 'long_image_upload_dialog.dart';
+import 'color_insert_dialog.dart';
 import 'content_actions_button.dart';
 import 'content_actions_providers.dart';
 import 'link_insert_dialog.dart';
@@ -347,6 +350,51 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
+  /// 一个扩展内容入口，按选区替换或插入对应的 Discourse 模板。
+  Future<void> insertSpecialContent({BuildContext? menuContext}) async {
+    final originalSelection = widget.controller.selection;
+    final kind = await showComposerSpecialContentMenu(menuContext ?? context);
+    if (!mounted || kind == null) return;
+
+    final currentText = widget.controller.text;
+    widget.controller.value = applyComposerSpecialContent(
+      text: currentText,
+      selection: originalSelection,
+      kind: kind,
+    );
+    widget.focusNode?.requestFocus();
+  }
+
+  /// 插入已上传的表情包图片，不再弹出确认框。
+  void insertUploadedImage(UploadResult uploadResult, {String alt = '表情包'}) {
+    _seedUploadCache(uploadResult);
+    final selection = widget.controller.selection;
+    final text = widget.controller.text;
+    final needsLeadingNewline =
+        selection.isValid &&
+        selection.start > 0 &&
+        text[selection.start - 1] != '\n';
+    final prefix = needsLeadingNewline ? '\n' : '';
+    insertText('$prefix${uploadResult.toMarkdown(alt: alt)}\n');
+    widget.focusNode?.requestFocus();
+  }
+
+  /// 插入 AI 生成内容块标记,并带上选中文本作为初始内容。
+  void insertAiContent(AiContentBlock block) {
+    final value = widget.controller.value;
+    final range = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final before = range.textBefore(value.text);
+    final after = range.textAfter(value.text);
+    // 前后各留一个空行，避免相邻正文被 Markdown 的引用续行规则纳入标识。
+    final prefix = before.isEmpty || before.endsWith('\n\n')
+        ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+    final suffix = after.startsWith('\n\n')
+        ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+    insertText('$prefix${block.markdown(context.l10n, range.textInside(value.text))}$suffix');
+  }
+
   /// 用指定前后缀包裹选中文本（无选中时插入占位符并选中）
   void wrapSelection(String start, String end, {String? placeholder}) {
     final selection = widget.controller.selection;
@@ -612,6 +660,15 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       );
     }
 
+    widget.focusNode?.requestFocus();
+  }
+
+  /// 文字颜色：选色对话框后以 `[color=…]` BBCode 包裹选区。
+  /// 无选区时插入并选中占位文字，和其它格式工具保持一致。
+  Future<void> insertColor(BuildContext context) async {
+    final value = await showColorInsertDialog(context);
+    if (!mounted || value == null) return;
+    wrapSelection('[color=$value]', '[/color]', placeholder: '彩色文字');
     widget.focusNode?.requestFocus();
   }
 
@@ -1035,6 +1092,38 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
+  /// 独立长图上传：只允许单选，并在读取宽高比通过后显示切片数量选择。
+  Future<void> pickAndUploadLongImage() async {
+    final anchor = _uploadAnchors.capture();
+    _uploadingCount++;
+    try {
+      final image = await _picker.pickImage(source: ImageSource.gallery);
+      if (!mounted || image == null) return;
+
+      final results = await showLongImageUploadDialog(
+        context,
+        imagePath: image.path,
+        imageName: image.name,
+      );
+      if (!mounted || results == null || results.isEmpty) return;
+
+      final anchors = [for (final _ in results) _uploadAnchors.fork(anchor)];
+      for (var i = 0; i < results.length; i++) {
+        _enqueueUpload(
+          path: results[i].path,
+          name: results[i].originalName,
+          anchor: anchors[i],
+          image: true,
+        );
+      }
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    } finally {
+      _uploadingCount--;
+      _uploadAnchors.release(anchor);
+    }
+  }
+
   Future<void> pickAndUploadFile() async {
     final anchor = _uploadAnchors.capture();
     var registered = false;
@@ -1113,21 +1202,6 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
-  void insertAiContent(AiContentBlock block) {
-    final value = widget.controller.value;
-    final range = value.selection.isValid
-        ? value.selection
-        : TextSelection.collapsed(offset: value.text.length);
-    final before = range.textBefore(value.text);
-    final after = range.textAfter(value.text);
-    // 前后各留一个空行，避免相邻正文被 Markdown 的引用续行规则纳入标识。
-    final prefix = before.isEmpty || before.endsWith('\n\n')
-        ? '' : before.endsWith('\n') ? '\n' : '\n\n';
-    final suffix = after.startsWith('\n\n')
-        ? '' : after.startsWith('\n') ? '\n' : '\n\n';
-    insertText('$prefix${block.markdown(context.l10n, range.textInside(value.text))}$suffix');
-  }
-
   /// 插入块级模板(表格/公式/分隔线/details):独占行语义,光标前
   /// 非行首先补换行(与媒体标签插入同款;模板文本与富 composer 的
   /// 「+」插入菜单一致)。
@@ -1185,6 +1259,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   List<Widget> _buildToolButtons({bool anchored = true}) {
     final ids = widget.visibleToolIds;
     final tools = ids == null ? editorTools : resolveVisibleTools(ids);
+    // 扩展内容入口始终占一个位置，旧用户的自定义配置也能直接使用。
+    if (!tools.any((tool) => tool.id == 'specialContent')) {
+      tools.add(editorTools.firstWhere((tool) => tool.id == 'specialContent'));
+    }
 
     return [
       for (final tool in tools) _buildToolButton(tool, anchored: anchored),
@@ -1197,6 +1275,28 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     // 桌面端 tooltip 标注快捷键(如「粗体 (⌘B)」;移动端无物理键盘不标)
     final hint = PlatformUtils.isDesktop ? composerShortcutHint(tool.id) : null;
     final tooltip = '${tool.label(s)}${hint ?? ''}';
+
+    if (tool.id == 'specialContent') {
+      return Builder(
+        builder: (buttonContext) => IconButton(
+          icon: IconTheme.merge(
+            data: const IconThemeData(size: 16),
+            child: icon,
+          ),
+          tooltip: tooltip,
+          style: composerToolButtonStyle(context),
+          onPressed: () {
+            if (anchored) {
+              insertSpecialContent(menuContext: buttonContext);
+            } else {
+              _desktopAction(
+                () => insertSpecialContent(menuContext: buttonContext),
+              );
+            }
+          },
+        ),
+      );
+    }
 
     if (tool.hasMenu) {
       final theme = Theme.of(context);
@@ -1361,6 +1461,7 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       toolsAnchor: widget.toolsAnchor,
       onExpandTools: widget.onToggleTools,
       metadata: widget.metaBar,
+
       controls: [
         if (!PlatformUtils.isDesktop)
           ComposerEditingControls(
