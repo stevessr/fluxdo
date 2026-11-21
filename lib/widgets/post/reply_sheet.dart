@@ -12,7 +12,6 @@ import '../../utils/platform_utils.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,6 +20,7 @@ import '../../providers/draft_store_provider.dart';
 import 'pm_recipient_field.dart';
 import 'reply_submission.dart';
 import '../markdown_editor/composer_shortcuts.dart';
+import '../markdown_editor/composer_close_confirmation.dart';
 import '../markdown_editor/composer_switch_fade.dart';
 import '../markdown_editor/composer_workbench.dart';
 import '../markdown_editor/composer_header_actions.dart';
@@ -35,8 +35,6 @@ import '../../models/draft.dart';
 import '../../providers/category_provider.dart';
 import '../../services/composer_min_length_resolver.dart';
 import '../../models/pending_post.dart';
-import '../../pages/create_topic_page.dart';
-import '../../services/local_notification_service.dart' show navigatorKey;
 import '../../services/discourse/discourse_service.dart';
 import '../../services/ai_post_review_service.dart';
 import '../../services/presence_service.dart';
@@ -53,14 +51,11 @@ import '../../services/toast_service.dart';
 import '../common/smart_avatar.dart';
 import '../../l10n/s.dart';
 import '../../utils/dialog_utils.dart';
-import '../../utils/url_helper.dart';
 import '../../providers/shortcut_provider.dart';
 import '../ai/ai_post_review_button.dart';
 import '../common/emoji_text.dart';
 
 import 'package:m3e_ui/m3e_ui.dart';
-
-enum _ComposerAction { replyToTopic, replyToPost, newTopic, newPrivateMessage }
 
 /// Windows 平台视图从 Widget 树移除到 WebView2 Controller 真正析构存在
 /// 明显时间差。若立即弹出编辑器，旧 SVG WebView 的析构会和输入框首帧、
@@ -108,7 +103,6 @@ Future<Post?> showReplySheet({
   String? initialTitle,
   String? topicTitle,
   bool isPrivateMessageTopic = false,
-  List<String> privateMessageRecipients = const <String>[],
   bool isPmWithNonHumanUser = false,
   ShortcutSurfaceConfig? shortcutSurface,
   ValueChanged<PendingPost>? onEnqueued,
@@ -144,7 +138,6 @@ Future<Post?> showReplySheet({
       initialTitle: initialTitle,
       topicTitle: topicTitle,
       isPrivateMessageTopic: isPrivateMessageTopic,
-      privateMessageRecipients: privateMessageRecipients,
       isPmWithNonHumanUser: isPmWithNonHumanUser,
       onEnqueued: onEnqueued,
     );
@@ -165,6 +158,7 @@ Future<Post?> showReplySheet({
     return await showAppBottomSheet<Post?>(
       context: context,
       isScrollControlled: true,
+      respectPopScopeOnDrag: true,
       useSafeArea: false,
       backgroundColor: Colors.transparent,
       shortcutSurface: shortcutSurface,
@@ -201,6 +195,7 @@ Future<Post?> showEditSheet({
     return await showAppBottomSheet<Post?>(
       context: context,
       isScrollControlled: true,
+      respectPopScopeOnDrag: true,
       useSafeArea: false,
       backgroundColor: Colors.transparent,
       shortcutSurface: shortcutSurface,
@@ -236,7 +231,6 @@ class ReplySheet extends ConsumerStatefulWidget {
   final String? initialTitle; // 预填标题（私信模式时使用）
   final String? topicTitle; // 普通回帖审核时带上的话题标题
   final bool isPrivateMessageTopic; // 当前话题是否为私信话题
-  final List<String> privateMessageRecipients; // 原私信用户/群组
   final bool isPmWithNonHumanUser; // 当前私信话题是否包含非真人用户
   final ValueChanged<PendingPost>? onEnqueued; // 帖子被送审时回调
 
@@ -259,7 +253,6 @@ class ReplySheet extends ConsumerStatefulWidget {
     this.initialTitle,
     this.topicTitle,
     this.isPrivateMessageTopic = false,
-    this.privateMessageRecipients = const <String>[],
     this.isPmWithNonHumanUser = false,
     this.onEnqueued,
     this.onDockedClose,
@@ -340,15 +333,38 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
   /// 富文本导入失败(cook 不可用)时本次会话降级纯文本
   bool _richFallback = false;
   bool _allowClose = false;
+  bool _closePending = false;
   bool _richModeEnabled = false;
 
-  void _closeWithCurrentContent(dynamic result) {
-    if (!_submitted && !_discarded && !_flushRichContent()) return;
-    setState(() => _allowClose = true);
-    // 等待 PopScope 更新许可；dispose 随后保存刚刚同步的草稿。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _finish(result);
-    });
+  Future<void> _closeWithCurrentContent(dynamic result) async {
+    if (_closePending || _allowClose) return;
+    _closePending = true;
+    try {
+      if (!_submitted && !_discarded && !_isSubmitting) {
+        final ready = _richKey.currentState?.prepareToClose() ?? true;
+        final hasEdits =
+            _isEditMode && _contentController.text != (_originalContent ?? '');
+        if (!ready || hasEdits) {
+          final discard = await confirmComposerDiscard(
+            context,
+            synchronizationFailed: !ready,
+          );
+          if (!mounted || !discard) return;
+          // 放弃未保存的修改后，卸载不能再用旧镜像触发草稿保存。
+          _discarded = true;
+          _draftController?.disable();
+          _richKey.currentState?.prepareForDocumentReplacement();
+        }
+      }
+      if (!mounted) return;
+      setState(() => _allowClose = true);
+      // 等待 PopScope 更新许可；dispose 随后保存刚刚同步的草稿。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _finish(result);
+      });
+    } finally {
+      _closePending = false;
+    }
   }
 
   /// 富文本未就绪或导出失败时，绝不能消费 controller 中的旧镜像。
@@ -360,7 +376,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
               _richFallback ||
               !ref.read(preferencesProvider).useRichComposer);
     if (!ready) {
-      ToastService.showError('正文尚未同步，已停止操作；请稍后重试，勿关闭编辑器');
+      ToastService.showError(S.current.composer_syncFailed);
     }
     return ready;
   }
@@ -433,7 +449,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
 
   Widget _buildReplyContext() {
     final theme = Theme.of(context);
-    final target = _replyToPost;
+    final target = widget.replyToPost;
     final title = widget.topicTitle?.trim();
     final (label, icon) = _isEditMode
         ? ('#${widget.editPost!.postNumber}', Symbols.edit_rounded)
@@ -532,93 +548,12 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
         : null,
   );
 
-  /// 恢复 Discourse 的 composer 动作菜单；当前回复目标与最初的回链来源独立。
-  Widget _buildComposerActionMenu() {
-    final origin = widget.replyToPost;
-    final actions = <_ComposerAction>[
-      _ComposerAction.replyToTopic,
-      if (origin != null && origin.postNumber > 1) _ComposerAction.replyToPost,
-      if (!widget.isPrivateMessageTopic) _ComposerAction.newTopic,
-      _ComposerAction.newPrivateMessage,
-    ];
-    final selected = _isPrivateMessage
-        ? _ComposerAction.newPrivateMessage
-        : _replyToPost == null
-        ? _ComposerAction.replyToTopic
-        : _ComposerAction.replyToPost;
-
-    String label(_ComposerAction action) => switch (action) {
-      _ComposerAction.replyToTopic => context.l10n.post_replyToTopic,
-      _ComposerAction.replyToPost =>
-        '${context.l10n.post_replyToUser(origin!.username)} · #${origin.postNumber}',
-      _ComposerAction.newTopic => context.l10n.drafts_newTopic,
-      _ComposerAction.newPrivateMessage => context.l10n.pm_newTitle,
-    };
-    IconData actionIcon(_ComposerAction action) => switch (action) {
-      _ComposerAction.replyToTopic => Icons.reply_all_rounded,
-      _ComposerAction.replyToPost => Icons.reply_rounded,
-      _ComposerAction.newTopic => Icons.post_add_rounded,
-      _ComposerAction.newPrivateMessage => Icons.mail_outline_rounded,
-    };
-
-    return PopupMenuButton<_ComposerAction>(
-      key: const ValueKey('reply-composer-action-menu'),
-      tooltip: context.l10n.postRevision_replyToChange,
-      enabled:
-          !_isSubmitting &&
-          !_isLoadingDraft &&
-          !_isLoadingRaw &&
-          !_switchingComposerAction,
-      icon: const Icon(Icons.swap_horiz_rounded),
-      onSelected: (action) async {
-        if (_switchingComposerAction || action == selected) return;
-        setState(() => _switchingComposerAction = true);
-        try {
-          switch (action) {
-            case _ComposerAction.replyToTopic:
-              await _switchToTopicReply();
-              break;
-            case _ComposerAction.replyToPost:
-              if (origin != null) await _switchToTopicReply(target: origin);
-              break;
-            case _ComposerAction.newTopic:
-              await _convertToNewTopic();
-              break;
-            case _ComposerAction.newPrivateMessage:
-              await _switchToPrivateMessage();
-              break;
-          }
-        } finally {
-          if (mounted) setState(() => _switchingComposerAction = false);
-        }
-      },
-      itemBuilder: (_) => [
-        for (final action in actions)
-          PopupMenuItem<_ComposerAction>(
-            key: ValueKey('reply-composer-action-${action.name}'),
-            value: action,
-            child: Row(
-              children: [
-                Icon(actionIcon(action), size: 20),
-                const SizedBox(width: 12),
-                Expanded(child: Text(label(action))),
-                if (action == selected) ...[
-                  const SizedBox(width: 8),
-                  const Icon(Icons.check_rounded, size: 18),
-                ],
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
   Widget _buildHeaderTitle(
     ThemeData theme, {
     TextStyle? style,
     bool wrapTarget = false,
   }) {
-    final target = _replyToPost;
+    final target = widget.replyToPost;
     final label = _isEditMode
         ? context.l10n.post_editPostTitle(widget.editPost!.postNumber)
         : _isPrivateMessage
@@ -660,7 +595,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
   }
 
   Widget _buildResponsiveHeader(ThemeData theme, double width) {
-    final target = _replyToPost;
+    final target = widget.replyToPost;
     final compactTarget =
         (width < 600 || !PlatformUtils.isDesktop) &&
         !_isEditMode &&
@@ -686,9 +621,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
     // 56 navigation + 32 title margins + 44 more + 8 gap + 48 submit + 16 trailing.
     // When even the compact action row cannot fit the recipient, give it its
     // own full-width row instead of truncating the identity or shrinking taps.
-    final separateTarget =
-        compactTarget &&
-        titleWidth! > width - (_canSwitchComposerAction ? 252 : 204);
+    final separateTarget = compactTarget && titleWidth! > width - 204;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -712,9 +645,8 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
             elevation: 0,
             scrolledUnderElevation: 0,
             actions: [
-              if (_canSwitchComposerAction) _buildComposerActionMenu(),
               _buildHeaderActions(
-                width - (_canSwitchComposerAction ? 48 : 0),
+                width,
                 minimumTitleWidth: separateTarget ? width : titleWidth,
               ),
             ],
@@ -737,18 +669,12 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
   final _contentFocusNode = FocusNode();
   var _editorKey = GlobalKey<MarkdownEditorState>();
 
-  // 编辑帖子时允许调整“回复至”目标楼层。
-  final _editReplyTargetController = TextEditingController();
-  final Map<int, Post> _editReplyTargetPreviewCache = <int, Post>{};
-  Post? _editReplyTargetPreview;
-  bool _isLoadingEditReplyTargetPreview = false;
-  int _editReplyTargetPreviewGeneration = 0;
-
   bool _isSubmitting = false;
   bool _submitted = false; // 提交成功标志，防止 dispose 重新保存草稿
   bool _discarded = false; // 用户明确舍弃，防止 dispose 重新保存草稿
   bool _showEmojiPanel = false;
   bool _isLoadingRaw = false; // 编辑模式：加载原始内容中
+  String? _originalContent;
   bool _isLoadingDraft = false; // 加载草稿中
 
   /// 草稿加载遮罩是否显示：加载很快结束（多数情况，点回复时已预取）时
@@ -777,14 +703,9 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
   late List<String> _recipients = [
     if (widget.targetUsername != null) widget.targetUsername!,
   ];
-  Post? _replyToPost;
-  bool _composePrivateMessage = false;
-  String? _syntheticContinuationPrefix;
 
-  bool get _isPrivateMessage => _composePrivateMessage;
-
-  bool get _canSwitchComposerAction => !_isEditMode && widget.topicId != null;
-  bool _switchingComposerAction = false;
+  bool get _isPrivateMessage =>
+      widget.targetUsername != null || widget.composePrivateMessage;
 
   /// 所有新建私信入口都允许继续增删收件人；已有私信话题回复不走这里。
   bool get _canEditRecipients => _isPrivateMessage && !_isEditMode;
@@ -812,24 +733,10 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
       !_isInPrivateMessageContext &&
       widget.topicId != null;
 
-  int get _editReplyTargetNumber =>
-      int.tryParse(_editReplyTargetController.text.trim()) ?? 0;
-
   @override
   void initState() {
     super.initState();
     EmojiHandler().init();
-    _replyToPost = widget.replyToPost;
-    _composePrivateMessage =
-        widget.targetUsername != null || widget.composePrivateMessage;
-
-    if (_isEditMode) {
-      final replyTarget = widget.editPost!.replyToPostNumber;
-      _editReplyTargetController.text = replyTarget > 0 ? '$replyTarget' : '';
-      if (replyTarget > 0) {
-        _scheduleEditReplyTargetPreview(replyTarget, notify: false);
-      }
-    }
 
     // 编辑模式：加载帖子原始内容
     if (_isEditMode) {
@@ -880,260 +787,6 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
     }
   }
 
-  void _setEditReplyTargetNumber(int target) {
-    if (!_isEditMode || widget.editPost!.postNumber <= 1) return;
-    final maxTarget = widget.editPost!.postNumber - 1;
-    final normalized = target < 0
-        ? 0
-        : target > maxTarget
-        ? maxTarget
-        : target;
-    if (_editReplyTargetNumber == normalized) return;
-    _editReplyTargetController.text = normalized == 0 ? '' : '$normalized';
-    _scheduleEditReplyTargetPreview(normalized);
-  }
-
-  void _onEditReplyTargetInputChanged(String text) {
-    final target = text.isEmpty ? 0 : int.tryParse(text);
-    if (target == null || target < 0 || target >= widget.editPost!.postNumber) {
-      ++_editReplyTargetPreviewGeneration;
-      setState(() {
-        _editReplyTargetPreview = null;
-        _isLoadingEditReplyTargetPreview = false;
-      });
-      return;
-    }
-    _scheduleEditReplyTargetPreview(target);
-  }
-
-  void _scheduleEditReplyTargetPreview(int target, {bool notify = true}) {
-    final generation = ++_editReplyTargetPreviewGeneration;
-    if (target <= 0 || widget.topicId == null) {
-      _editReplyTargetPreview = null;
-      _isLoadingEditReplyTargetPreview = false;
-      if (notify && mounted) setState(() {});
-      return;
-    }
-
-    final cached = _editReplyTargetPreviewCache[target];
-    if (cached != null) {
-      _editReplyTargetPreview = cached;
-      _isLoadingEditReplyTargetPreview = false;
-      if (notify && mounted) setState(() {});
-      return;
-    }
-
-    _editReplyTargetPreview = null;
-    _isLoadingEditReplyTargetPreview = true;
-    if (notify && mounted) setState(() {});
-
-    Future<void>.delayed(const Duration(milliseconds: 120), () async {
-      if (!mounted || generation != _editReplyTargetPreviewGeneration) return;
-      try {
-        final post = await DiscourseService().getPostByNumber(
-          widget.topicId!,
-          target,
-        );
-        if (!mounted ||
-            generation != _editReplyTargetPreviewGeneration ||
-            _editReplyTargetNumber != target) {
-          return;
-        }
-        _editReplyTargetPreviewCache[target] = post;
-        setState(() {
-          _editReplyTargetPreview = post;
-          _isLoadingEditReplyTargetPreview = false;
-        });
-      } catch (_) {
-        if (!mounted ||
-            generation != _editReplyTargetPreviewGeneration ||
-            _editReplyTargetNumber != target) {
-          return;
-        }
-        setState(() {
-          _editReplyTargetPreview = null;
-          _isLoadingEditReplyTargetPreview = false;
-        });
-      }
-    });
-  }
-
-  String _editReplyTargetPreviewText(Post post) {
-    return post.cooked
-        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), ' ')
-        .replaceAll(RegExp(r'</p\s*>', caseSensitive: false), ' ')
-        .replaceAll(RegExp(r'<[^>]+>'), ' ')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-  }
-
-  Widget _buildEditReplyTargetSelector(ThemeData theme) {
-    final maxTarget = widget.editPost!.postNumber - 1;
-    final selected = _editReplyTargetNumber;
-    final preview = _editReplyTargetPreview;
-    final isTopicReply = selected == 0;
-    final previewText = preview == null
-        ? ''
-        : _editReplyTargetPreviewText(preview);
-    final previewName = preview == null
-        ? null
-        : ((preview.name?.trim().isNotEmpty ?? false)
-              ? preview.name!.trim()
-              : preview.username);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(
-            alpha: 0.45,
-          ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 140),
-              child: Row(
-                key: ValueKey<int>(selected),
-                children: [
-                  if (isTopicReply)
-                    CircleAvatar(
-                      radius: 17,
-                      backgroundColor: theme.colorScheme.secondaryContainer,
-                      child: Icon(
-                        Icons.reply_all_rounded,
-                        size: 18,
-                        color: theme.colorScheme.onSecondaryContainer,
-                      ),
-                    )
-                  else if (preview != null)
-                    SmartAvatar(
-                      imageUrl: preview.getAvatarUrl().isNotEmpty
-                          ? preview.getAvatarUrl()
-                          : null,
-                      radius: 17,
-                      fallbackText: preview.username,
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                    )
-                  else
-                    CircleAvatar(
-                      radius: 17,
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                      child: _isLoadingEditReplyTargetPreview
-                          ? SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                            )
-                          : Icon(
-                              Icons.reply_rounded,
-                              size: 18,
-                              color: theme.colorScheme.onPrimaryContainer,
-                            ),
-                    ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          isTopicReply
-                              ? context.l10n.post_replyToTopic
-                              : preview == null
-                              ? '${context.l10n.postRevision_replyToChange} · #$selected'
-                              : '@${preview.username} · #$selected',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (!isTopicReply && preview != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            previewText.isEmpty
-                                ? previewName!
-                                : '$previewName · $previewText',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 6),
-            // 大话题直接输入楼层号，避免上千个 slider 分段难以精确操作。
-            if (maxTarget <= 100)
-              Slider(
-                min: 0,
-                max: maxTarget.toDouble(),
-                divisions: maxTarget,
-                value: selected
-                    .toDouble()
-                    .clamp(0.0, maxTarget.toDouble())
-                    .toDouble(),
-                label: isTopicReply
-                    ? context.l10n.post_replyToTopic
-                    : '#$selected',
-                onChanged: _isSubmitting
-                    ? null
-                    : (value) => _setEditReplyTargetNumber(value.round()),
-              ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    key: const ValueKey('edit-reply-target-number'),
-                    controller: _editReplyTargetController,
-                    enabled: !_isSubmitting,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: InputDecoration(
-                      isDense: true,
-                      prefixText: '#',
-                      labelText: context.l10n.postRevision_replyToChange,
-                      hintText: '1–$maxTarget',
-                    ),
-                    onChanged: _onEditReplyTargetInputChanged,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: _isSubmitting
-                      ? null
-                      : () => _setEditReplyTargetNumber(0),
-                  child: Text(context.l10n.post_replyToTopic),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// 初始化草稿控制器
   void _initDraftController() {
     String draftKey;
@@ -1151,7 +804,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
       // 区分回复话题和回复帖子
       draftKey = Draft.replyKey(
         widget.topicId!,
-        replyToPostNumber: _replyToPost?.postNumber,
+        replyToPostNumber: widget.replyToPost?.postNumber,
       );
     } else {
       return;
@@ -1162,6 +815,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
       localStore: ref.read(localDraftStoreProvider),
       onRemoteDraftChanged: (data) {
         if (mounted &&
+            !_allowClose &&
             !_submitted &&
             !_discarded &&
             (!_isLoadingDraft || _reloadingDraft)) {
@@ -1197,7 +851,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
       final draft = await _draftController?.loadDraft(
         preloadedDraftFuture: widget.preloadedDraftFuture,
       );
-      if (!mounted) return;
+      if (!mounted || _allowClose) return;
 
       // 从快捷回复展开时正文已是最新，草稿只用于建立同步基线
       if (draft != null &&
@@ -1208,7 +862,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
       }
     } finally {
       _loadingOverlayTimer?.cancel();
-      if (mounted) {
+      if (mounted && !_allowClose) {
         setState(() {
           _isLoadingDraft = false;
           _loadingOverlayVisible = false;
@@ -1307,7 +961,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
     reply: _contentController.text,
     title: _isPrivateMessage ? _titleController.text : null,
     action: _isPrivateMessage ? 'privateMessage' : 'reply',
-    replyToPostNumber: _replyToPost?.postNumber,
+    replyToPostNumber: widget.replyToPost?.postNumber,
     recipients: _isPrivateMessage ? _recipients : null,
     archetypeId: _isPrivateMessage ? 'private_message' : 'regular',
   );
@@ -1378,193 +1032,17 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
     _onContentChanged();
   }
 
-  Future<void> _dropCurrentDraftForConversion() async {
-    final previous = _draftController;
-    _draftController = null;
-    if (previous == null) return;
-    previous.disable();
-    try {
-      await previous.deleteDraft();
-    } catch (_) {
-      // 动作切换不应被旧草稿清理失败阻塞；新模式会使用独立 draft key。
-    } finally {
-      previous.dispose();
-    }
-  }
-
-  Future<void> _replaceComposerContent(String content) async {
-    final restoreRich =
-        ref.read(preferencesProvider).useRichComposer && !_richFallback;
-    if (restoreRich) {
-      // RichComposer 只在挂载时从 controller 导入。转换动作若仅修改
-      // controller，仍在屏幕上的 WYSIWYG 文档会在下一次 flush 时把回链
-      // 覆盖掉。因此先卸载并等待其 dispose flush，再写入并重新挂载。
-      _richKey.currentState?.flushToController();
-      setState(() => _richFallback = true);
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted) return;
-    }
-
-    _contentController.value = TextEditingValue(
-      text: content,
-      selection: TextSelection.collapsed(offset: content.length),
-    );
-
-    if (restoreRich && mounted) {
-      setState(() => _richFallback = false);
-      await WidgetsBinding.instance.endOfFrame;
-    }
-  }
-
-  String _escapeContinuationLinkText(String value) {
-    // 对齐 Discourse escapeExpression，再保留当前 Markdown 链接文本对 ]
-    // 的转义，避免标题本身含方括号时截断链接。
-    return value
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;')
-        .replaceAll(']', r'\]');
-  }
-
-  String? _buildContinuationPrefix() {
-    final topicId = widget.topicId;
-    final topicTitle = widget.topicTitle?.trim();
-    if (topicId == null || topicTitle == null || topicTitle.isEmpty) {
-      return null;
-    }
-
-    // Discourse ComposerActionState 保留打开 composer 时的 post snapshot；
-    // 即使用户先切到“回复话题”再转为新话题/私信，继续讨论链接仍应
-    // 指向最初回复的楼层，而不是被可变的当前 action 清空。
-    final postNumber = widget.replyToPost?.postNumber;
-    final sourcePath = postNumber != null && postNumber > 0
-        ? '/t/-/$topicId/$postNumber'
-        : '/t/-/$topicId';
-    final escapedTitle = _escapeContinuationLinkText(topicTitle);
-    final sourceLink = '[$escapedTitle](${UrlHelper.resolveUrl(sourcePath)})';
-    return context.l10n.post_continueDiscussion(sourceLink);
-  }
-
-  String _contentWithContinuation(String content) {
-    final prefix = _buildContinuationPrefix();
-    // 对齐 Discourse composer.open：已含同一 prependText 时不重复插入。
-    if (prefix == null || prefix.isEmpty || content.contains(prefix)) {
-      return content;
-    }
-    return content.isEmpty ? prefix : '$prefix\n\n$content';
-  }
-
-  Future<void> _applySyntheticContinuation() async {
-    final prefix = _buildContinuationPrefix();
-    if (prefix == null || prefix.isEmpty) return;
-    final current = _contentController.text;
-    if (current.contains(prefix)) {
-      // 不是本次 action 切换插入的内容，切回回复时也不应擅自删除。
-      _syntheticContinuationPrefix = null;
-      return;
-    }
-    final next = current.isEmpty ? prefix : '$prefix\n\n$current';
-    _syntheticContinuationPrefix = prefix;
-    await _replaceComposerContent(next);
-  }
-
-  Future<void> _removeSyntheticContinuation() async {
-    final prefix = _syntheticContinuationPrefix;
-    if (prefix == null) return;
-    final current = _contentController.text;
-    final prefixed = '$prefix\n\n';
-    final next = current == prefix
-        ? ''
-        : current.startsWith(prefixed)
-        ? current.substring(prefixed.length)
-        : current;
-    _syntheticContinuationPrefix = null;
-    if (next == current) return;
-    await _replaceComposerContent(next);
-  }
-
-  Future<void> _switchToTopicReply({Post? target}) async {
-    if (_isEditMode || widget.topicId == null) return;
-    _richKey.currentState?.flushToController();
-    await _dropCurrentDraftForConversion();
-    if (!mounted) return;
-    await _removeSyntheticContinuation();
-    if (!mounted) return;
-
-    setState(() {
-      _composePrivateMessage = false;
-      _replyToPost = target;
-      _recipients = [if (widget.targetUsername != null) widget.targetUsername!];
-      _draftController = DraftController(
-        draftKey: Draft.replyKey(
-          widget.topicId!,
-          replyToPostNumber: target?.postNumber,
-        ),
-        localStore: ref.read(localDraftStoreProvider),
-      );
-      _titleController.clear();
-    });
-    _onContentChanged();
-    _contentFocusNode.requestFocus();
-  }
-
-  Future<void> _switchToPrivateMessage() async {
-    if (_isEditMode || widget.topicId == null) return;
-    _richKey.currentState?.flushToController();
-    await _dropCurrentDraftForConversion();
-    if (!mounted) return;
-    await _applySyntheticContinuation();
-    if (!mounted) return;
-
-    setState(() {
-      _composePrivateMessage = true;
-      _replyToPost = null;
-      _recipients = widget.privateMessageRecipients.toSet().toList();
-      _draftController = DraftController(
-        draftKey: Draft.generateNewPrivateMessageKey(),
-        localStore: ref.read(localDraftStoreProvider),
-      );
-      if (_titleController.text.trim().isEmpty &&
-          (widget.topicTitle?.trim().isNotEmpty ?? false)) {
-        _titleController.text = widget.topicTitle!.trim();
-      }
-    });
-    _onContentChanged();
-    _contentFocusNode.requestFocus();
-  }
-
-  Future<void> _convertToNewTopic() async {
-    if (_isEditMode) return;
-    _richKey.currentState?.flushToController();
-    final content = _contentWithContinuation(_contentController.text);
-    await _dropCurrentDraftForConversion();
-    if (!mounted) return;
-
-    _submitted = true;
-    final appNavigator = navigatorKey.currentState;
-    Navigator.of(context).pop();
-    await Future<void>.delayed(Duration.zero);
-    appNavigator?.push(
-      MaterialPageRoute(
-        builder: (_) => CreateTopicPage(
-          initialCategoryId: widget.categoryId,
-          initialContent: content,
-        ),
-      ),
-    );
-  }
-
   /// 加载帖子原始内容
   Future<void> _loadPostRaw() async {
     setState(() => _isLoadingRaw = true);
     try {
       final raw = await DiscourseService().getPostRaw(widget.editPost!.id);
-      if (mounted && raw != null) {
+      if (mounted && !_allowClose && raw != null) {
+        _originalContent = raw;
         _contentController.text = raw;
         // 加载完成后聚焦并将光标移到末尾
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _allowClose) return;
           _contentFocusNode.requestFocus();
           _contentController.selection = TextSelection.fromPosition(
             TextPosition(offset: _contentController.text.length),
@@ -1572,7 +1050,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !_allowClose) {
         _showError(
           S.current.post_loadContentFailed(
             e.toString().replaceAll('Exception: ', ''),
@@ -1612,7 +1090,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
           reply: _contentController.text,
           title: _isPrivateMessage ? _titleController.text : null,
           action: _isPrivateMessage ? 'privateMessage' : 'reply',
-          replyToPostNumber: _replyToPost?.postNumber,
+          replyToPostNumber: widget.replyToPost?.postNumber,
           recipients: _isPrivateMessage ? _recipients : null,
           archetypeId: _isPrivateMessage ? 'private_message' : 'regular',
         );
@@ -1628,10 +1106,8 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
     // 释放 Presence 服务（会自动离开频道）
     _presenceService?.dispose();
 
-    _editReplyTargetPreviewGeneration++;
     _titleController.dispose();
     _contentController.dispose();
-    _editReplyTargetController.dispose();
     _contentFocusNode.dispose();
     super.dispose();
   }
@@ -1652,27 +1128,6 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
     );
   }
 
-  Future<Post> _updateEditedPostWithReplyTarget({
-    required String raw,
-    required int? replyToPostNumber,
-  }) async {
-    final response = await DiscourseService().dio.put(
-      '/posts/${widget.editPost!.id}.json',
-      data: <String, dynamic>{
-        'post[raw]': raw,
-        // Discourse PostsController 检查 key 是否存在；空值会规范化为 null。
-        'post[reply_to_post_number]': replyToPostNumber?.toString() ?? '',
-      },
-      options: Options(contentType: Headers.formUrlEncodedContentType),
-    );
-
-    final data = response.data;
-    if (data is Map && data['post'] is Map) {
-      return Post.fromJson(Map<String, dynamic>.from(data['post'] as Map));
-    }
-    throw Exception(S.current.error_updatePostFailed);
-  }
-
   List<Object?> _submissionValues() => [
     _contentController.text,
     _titleController.text,
@@ -1682,7 +1137,9 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
   bool _submissionPending = false;
 
   Future<void> _submit() async {
-    if (_submissionPending || _isSubmitting) return;
+    if (_submissionPending || _isSubmitting || _closePending || _allowClose) {
+      return;
+    }
     _submissionPending = true;
     try {
       await _submitChecked();
@@ -1706,42 +1163,6 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
     final content = _contentController.text.trim();
     if (content.isEmpty) {
       _showError(S.current.post_contentRequired);
-      return;
-    }
-
-    int? editedReplyTarget;
-    var editedReplyTargetChanged = false;
-    if (_isEditMode && widget.editPost!.postNumber > 1) {
-      final targetText = _editReplyTargetController.text.trim();
-      if (targetText.isNotEmpty) {
-        final parsed = int.tryParse(targetText);
-        final maxTarget = widget.editPost!.postNumber - 1;
-        if (parsed == null || parsed < 1 || parsed > maxTarget) {
-          _showError('${context.l10n.postRevision_replyToChange}: #1 - #$maxTarget');
-          return;
-        }
-        editedReplyTarget = parsed;
-      }
-      final currentTarget = widget.editPost!.replyToPostNumber > 0
-          ? widget.editPost!.replyToPostNumber
-          : null;
-      editedReplyTargetChanged = editedReplyTarget != currentTarget;
-    }
-
-    // 最小字数校验：与计数器共用同一份解析结果（含 warden 按分类改写），
-    // 否则在搞七捻三（16）这类分类下会出现计数器与校验不一致
-    final minLength =
-        _minPostLength ??
-        await ComposerMinLengthResolver.resolve(
-          category: widget.categoryId == null
-              ? null
-              : ref.read(categoryMapProvider).value?[widget.categoryId],
-          isFirstPost: _isFirstPost,
-          isPrivateMessage: _isInPrivateMessageContext,
-          isPmWithNonHumanUser: widget.isPmWithNonHumanUser,
-        );
-    if (content.length < minLength) {
-      ToastService.showInfo(S.current.createTopic_minContentLength(minLength));
       return;
     }
 
@@ -1776,7 +1197,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
     )) {
       return;
     }
-    if (!mounted) return;
+    if (!mounted || _closePending || _allowClose) return;
     if (!approved.verify(
       synchronize: _flushRichContent,
       read: _submissionValues,
@@ -1790,17 +1211,13 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
 
     try {
       if (_isEditMode) {
-        // 编辑模式：更新帖子；回复目标变化时使用带目标字段的请求。
-        final updatedPost = editedReplyTargetChanged
-            ? await _updateEditedPostWithReplyTarget(
-                raw: content,
-                replyToPostNumber: editedReplyTarget,
-              )
-            : await DiscourseService().updatePost(
-                postId: widget.editPost!.id,
-                raw: content,
-              );
-        if (!mounted) return;
+        // 编辑模式：更新帖子
+        final updatedPost = await DiscourseService().updatePost(
+          postId: widget.editPost!.id,
+          raw: content,
+        );
+        _submitted = true;
+        if (!mounted || _allowClose) return;
         _finish(updatedPost);
       } else if (_isPrivateMessage) {
         await DiscourseService().createPrivateMessage(
@@ -1813,30 +1230,30 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
         // 发送成功后删除草稿
         await _draftController?.deleteDraft();
         _submitted = true;
-        if (!mounted) return;
+        if (!mounted || _allowClose) return;
         _finish(); // 私信模式不返回 Post
       } else {
         // 回复模式：返回创建的 Post 对象（送审时为 null）
         final result = await ReplySubmission.createReply(
           topicId: widget.topicId!,
           raw: content,
-          replyToPostNumber: _replyToPost?.postNumber,
+          replyToPostNumber: widget.replyToPost?.postNumber,
           draftController: _draftController,
           onEnqueued: widget.onEnqueued,
         );
         if (!result.succeeded) return;
         _submitted = true;
-        if (!mounted) return;
+        if (!mounted || _allowClose) return;
         _finish(result.post);
       }
     } on PostEnqueuedException catch (e) {
       // 审核场景：删除草稿，提示用户，关闭编辑器
       await _draftController?.deleteDraft();
       _submitted = true;
-      if (!mounted) return;
+      if (!mounted || _allowClose) return;
       ReplySubmission.announceEnqueued(
         e.pendingPost,
-        replyToPostNumber: _replyToPost?.postNumber,
+        replyToPostNumber: widget.replyToPost?.postNumber,
         recordReplyTarget: widget.editPost == null && widget.topicId != null,
         onEnqueued: widget.onEnqueued,
       );
@@ -1940,9 +1357,6 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
                           ),
                         ],
                       ),
-
-                      if (_isEditMode && widget.editPost!.postNumber > 1)
-                        _buildEditReplyTargetSelector(theme),
 
                       // 新建私信：所有入口都可增删收件人，预设对象保留为首个 chip。
                       if (_canEditRecipients)

@@ -14,6 +14,7 @@ import '../../../widgets/common/emoji_text.dart';
 import '../controllers/topic_position_info.dart';
 import 'topic_bar_gestures.dart';
 import 'topic_filter_controls.dart';
+import 'topic_floating_bar_edge.dart';
 import 'topic_progress_track.dart';
 
 /// 话题底栏尺寸：列表末尾留白、回顶 / 目录按钮定位都从这里推导，
@@ -28,7 +29,10 @@ abstract final class TopicBottomBarMetrics {
   /// 悬浮形态（非手机宽度）离底边的距离
   static const double floatingMargin = 16;
   static const double floatingRadius = 24;
-  static const double floatingLineTop = 3;
+  static RoundedSuperellipseBorder floatingShape(BuildContext context) =>
+      RoundedSuperellipseBorder(
+        borderRadius: context.shapes.borderRadius(floatingRadius),
+      );
 
   /// 悬浮于栏上方的按钮与栏之间的间距
   static const double gap = 12;
@@ -74,6 +78,7 @@ enum TopicReplyEntryState {
 /// 长按菜单触发可配置动作。
 class TopicBottomBar extends ConsumerStatefulWidget {
   final ValueListenable<int> streamIndexListenable;
+  final ValueListenable<double>? readingPositionListenable;
   final int totalCount;
   final TopicReplyEntryState replyEntryState;
   final ValueListenable<String?>? replyDraftListenable;
@@ -85,8 +90,6 @@ class TopicBottomBar extends ConsumerStatefulWidget {
   final ValueChanged<int> onScrubCommit;
   final TopicPositionInfoSource? infoSource;
 
-  /// 上次阅读位置（stream 索引），在进度线上标出
-  final int? lastReadIndex;
   final VoidCallback? onScrubStart;
   final TopicFilterControls filter;
 
@@ -99,6 +102,7 @@ class TopicBottomBar extends ConsumerStatefulWidget {
   const TopicBottomBar({
     super.key,
     required this.streamIndexListenable,
+    this.readingPositionListenable,
     required this.totalCount,
     required this.replyEntryState,
     this.replyDraftListenable,
@@ -109,7 +113,6 @@ class TopicBottomBar extends ConsumerStatefulWidget {
     required this.onGestureAction,
     required this.onScrubCommit,
     this.infoSource,
-    this.lastReadIndex,
     this.onScrubStart,
     required this.filter,
     this.replyEntryKey,
@@ -294,12 +297,12 @@ class _TopicBottomBarState extends ConsumerState<TopicBottomBar> {
         ? TopicBarGestures(
             onAction: widget.onGestureAction,
             streamIndexListenable: widget.streamIndexListenable,
+            readingPositionListenable: widget.readingPositionListenable,
             totalCount: widget.totalCount,
             scrubIndexNotifier: _scrubIndex,
             onScrubCommit: widget.onScrubCommit,
             infoSource: widget.infoSource,
             onScrubStart: widget.onScrubStart,
-            markerIndex: widget.lastReadIndex,
             child: row,
           )
         : Padding(
@@ -314,11 +317,7 @@ class _TopicBottomBarState extends ConsumerState<TopicBottomBar> {
     if (floating) {
       return Material(
         color: theme.colorScheme.surfaceContainer,
-        shape: RoundedSuperellipseBorder(
-          borderRadius: context.shapes.borderRadius(
-            TopicBottomBarMetrics.floatingRadius,
-          ),
-        ),
+        shape: TopicBottomBarMetrics.floatingShape(context),
         clipBehavior: Clip.antiAlias,
         elevation: 3,
         shadowColor: Colors.black26,
@@ -586,51 +585,46 @@ class _FloorCounter extends StatelessWidget {
   }
 }
 
-/// 阅读进度线：栏的顶边，收起后单独贴在页面底边。
-/// 当前进度与 [markerIndex]（上次阅读位置）之间画浅色段，标出以前读过的范围。
+/// 已读色和未读色沿底栏顶边相接，底栏收起后沿页面底边显示。
 class TopicProgressLine extends StatelessWidget {
   const TopicProgressLine({
     super.key,
     required this.streamIndexListenable,
+    this.readingPositionListenable,
     required this.totalCount,
-    this.markerIndex,
-    this.handleInsets,
-    this.floating = false,
-    this.showHandle = true,
+    this.floatingEdge,
   });
 
   final ValueListenable<int> streamIndexListenable;
+  final ValueListenable<double>? readingPositionListenable;
   final int totalCount;
-  final int? markerIndex;
-  final EdgeInsets? handleInsets;
-  final bool floating, showHandle;
-  static const double handleHeight = 6;
-
-  static double heightFor(bool hasHandle) =>
-      hasHandle ? handleHeight : TopicBottomBarMetrics.progressLineHeight;
-
-  static double centerFromBarTop(bool floating, bool hasHandle) => floating
-      ? TopicBottomBarMetrics.floatingLineTop + heightFor(hasHandle) / 2
-      : TopicBottomBarMetrics.progressLineHeight / 2;
+  final TopicFloatingBarEdge? floatingEdge;
 
   @override
   Widget build(BuildContext context) {
-    final insets = handleInsets ?? EdgeInsets.zero;
+    final reading = readingPositionListenable;
+    final progress = reading == null
+        ? null
+        : Animation<double>.fromValueListenable(
+            reading,
+            transformer: (value) => TopicProgressTrack.readingFraction(
+              streamIndexListenable.value,
+              totalCount,
+              value,
+            ),
+          );
     return SizedBox(
-      height: heightFor(showHandle && handleInsets != null),
+      height:
+          floatingEdge?.size.height ?? TopicBottomBarMetrics.progressLineHeight,
       child: ValueListenableBuilder<int>(
         valueListenable: streamIndexListenable,
         builder: (context, index, _) => TopicProgressTrack(
-          surface: floating
+          surface: floatingEdge != null
               ? TopicProgressSurface.floating
               : TopicProgressSurface.docked,
+          floatingEdge: floatingEdge,
           progress: TopicProgressTrack.fraction(index, totalCount),
-          lastRead: markerIndex == null
-              ? null
-              : TopicProgressTrack.fraction(markerIndex!, totalCount),
-          startInset: insets.left,
-          endInset: insets.right,
-          showHandle: showHandle && handleInsets != null,
+          readingProgress: progress,
         ),
       ),
     );

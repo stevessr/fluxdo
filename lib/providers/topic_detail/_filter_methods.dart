@@ -193,7 +193,7 @@ extension FilterMethods on TopicDetailNotifier {
           arg.topicId,
           nextIds,
           // 过滤模式下服务端同样不下发推荐话题,靠这一次翻页补
-          includeSuggested: currentDetail.suggestedTopics.isEmpty,
+          includeSuggested: currentDetail.needsFooterTopics,
         );
 
         final existingIds = currentPosts.map((p) => p.id).toSet();
@@ -214,21 +214,16 @@ extension FilterMethods on TopicDetailNotifier {
         final newLastIndex = stream.indexOf(newLastId);
         _hasMoreAfter = newLastIndex < stream.length - 1;
 
-        return _withSuggestedCache(
-          currentDetail.copyWith(
-            postStream: PostStream(
-              posts: mergedPosts,
-              stream: stream,
-              gaps: currentDetail.postStream.gaps,
-            ),
-            suggestedTopics: newPostStream.suggestedTopics.isNotEmpty
-                ? newPostStream.suggestedTopics
-                : null,
-            relatedTopics: newPostStream.relatedTopics.isNotEmpty
-                ? newPostStream.relatedTopics
-                : null,
-          ),
-        );
+        return _withSuggestedCache(currentDetail.copyWith(
+          postStream: PostStream(posts: mergedPosts, stream: stream, gaps: currentDetail.postStream.gaps),
+          suggestedTopics: newPostStream.suggestedTopics.isNotEmpty
+              ? newPostStream.suggestedTopics
+              : null,
+          relatedTopics: newPostStream.relatedTopics.isNotEmpty
+              ? newPostStream.relatedTopics
+              : null,
+          relatedMessages: newPostStream.relatedMessages,
+        ));
       });
       if (!ref.mounted) return;
       if (result.hasError) {

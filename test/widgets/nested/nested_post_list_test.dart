@@ -228,11 +228,33 @@ void main() {
     final entry = find.byTooltip('会话成员');
     expect(entry, findsOneWidget);
     final row = tester.getRect(entry);
-    expect(row.top, greaterThan(tester.getRect(find.text('私人讨论')).bottom));
+    expect(
+      row.top,
+      greaterThanOrEqualTo(tester.getRect(find.textContaining('私信')).bottom),
+    );
     expect(row.bottom, lessThanOrEqualTo(tester.getRect(firstPost).top));
   });
 
   for (final hasMore in [true, false]) {
+    testWidgets('嵌套私信在根回复末页展示相关消息 hasMore=$hasMore', (tester) async {
+      final lastPage = NestedRootsResponse.fromJson({
+        'has_more_roots': hasMore,
+        'related_messages': [
+          {'id': 43, 'title': '树形末页的私信'},
+        ],
+      });
+      await _pump(
+        tester,
+        state: NestedTopicState(
+          hasMoreRoots: lastPage.hasMoreRoots,
+          relatedMessages: lastPage.relatedMessages,
+        ),
+        detail: _detail.copyWith(archetype: 'private_message'),
+      );
+      expect(find.text('相关消息'), hasMore ? findsNothing : findsOneWidget);
+      expect(find.text('树形末页的私信'), hasMore ? findsNothing : findsOneWidget);
+    });
+
     testWidgets('嵌套列表只在加载到末尾后展示话题提示 hasMore=$hasMore', (tester) async {
       await _pump(
         tester,

@@ -18,9 +18,9 @@ import '../widgets/layout/master_detail_layout.dart';
 import '../widgets/layout/master_detail_pane_host.dart';
 import '../widgets/user/activity_card_layout.dart';
 import '../widgets/user/activity_post_card.dart';
+import '../widgets/user/following_feed_migration_sheet.dart';
 import 'follow_list_page.dart';
 import 'topic_detail_page/topic_detail_page.dart';
-import 'user_profile_page.dart';
 
 class FollowingFeedPage extends ConsumerStatefulWidget {
   const FollowingFeedPage({super.key, this.isActive = true});
@@ -31,12 +31,49 @@ class FollowingFeedPage extends ConsumerStatefulWidget {
 
 class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
   final _scroll = ScrollController();
+  final _refreshIndicatorKey = GlobalKey<M3eRefreshIndicatorState>();
+  FollowingFeedNotifier? _refreshingNotifier;
   bool _activated = false;
   bool _wide = false;
   @override
   void dispose() {
     _scroll.dispose();
     super.dispose();
+  }
+
+  Future<void> _refresh(FollowingFeedNotifier notifier) async {
+    setState(() => _refreshingNotifier = notifier);
+    try {
+      await notifier.refresh();
+    } finally {
+      if (mounted && _refreshingNotifier == notifier) {
+        setState(() => _refreshingNotifier = null);
+      }
+    }
+  }
+
+  Future<void> _showMigrationGuide(String username) async {
+    if (!mounted ||
+        !widget.isActive ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        ref.read(currentUserProvider).value?.username != username) {
+      return;
+    }
+    final migration = ref.read(followingFeedMigrationProvider);
+    if (!migration.showGuide) return;
+
+    final result = showFollowingFeedMigrationSheet(
+      context,
+      hasLegacyUsers: migration.users.isNotEmpty,
+    );
+    // 实际展示后记录，关闭、返回和下滑都结束本次引导。
+    await ref.read(followingFeedMigrationProvider.notifier).markSeen();
+    if (await result == true &&
+        mounted &&
+        widget.isActive &&
+        ref.read(currentUserProvider).value?.username == username) {
+      await showFollowingFeedLegacyUsers(context, migration.users);
+    }
   }
 
   void _openPost(FollowingPost post) {
@@ -80,7 +117,7 @@ class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
         return;
       }
       if (event.action == NavAction.refresh) {
-        ref.read(followingFeedProvider(username).notifier).refresh();
+        _refreshIndicatorKey.currentState?.show();
       } else if (_scroll.hasClients) {
         _scroll.animateTo(
           0,
@@ -91,7 +128,15 @@ class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
     });
     final state = ref.watch(followingFeedProvider(username));
     final notifier = ref.read(followingFeedProvider(username).notifier);
+    final refreshing = _refreshingNotifier == notifier;
     final migration = ref.watch(followingFeedMigrationProvider);
+    if (widget.isActive &&
+        migration.showGuide &&
+        ModalRoute.isCurrentOf(context) == true) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showMigrationGuide(username),
+      );
+    }
     _wide = MasterDetailLayout.canShowBothPanesFor(context);
     final page = Scaffold(
       appBar: AppBar(
@@ -110,14 +155,10 @@ class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
           IconButton(
             tooltip: context.l10n.common_refresh,
             icon: const Icon(Symbols.refresh_rounded),
-            onPressed: state.loading ? null : notifier.refresh,
+            onPressed: state.loading
+                ? null
+                : () => _refreshIndicatorKey.currentState?.show(),
           ),
-          if (migration.usedSeeking)
-            IconButton(
-              tooltip: context.l10n.followingFeed_migrationTitle,
-              icon: const Icon(Symbols.info_rounded),
-              onPressed: () => _showMigration(context),
-            ),
         ],
       ),
       body: ActivityCardList(
@@ -132,8 +173,9 @@ class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
             return false;
           },
           child: DesktopRefreshIndicator(
+            refreshIndicatorKey: _refreshIndicatorKey,
             shouldRefresh: () => widget.isActive,
-            onRefresh: notifier.refresh,
+            onRefresh: () => _refresh(notifier),
             child: ListView.builder(
               key: PageStorageKey('following_feed_$username'),
               controller: _scroll,
@@ -142,34 +184,33 @@ class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
               itemCount: state.posts.length + 2,
               itemBuilder: (context, index) {
                 if (index == 0) {
-                  return Column(
-                    children: [
-                      if (migration.showGuide)
-                        _FollowingFeedMigrationCard(
-                          onOpen: () => _showMigration(context),
-                        ),
-                      if (state.loading)
-                        const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Center(child: LoadingSpinner()),
-                        ),
-                      if (state.error != null)
-                        ErrorView(
-                          error: state.error!,
-                          onRetry: notifier.refresh,
-                        ),
-                      if (!state.loading &&
-                          state.error == null &&
-                          state.posts.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: AppEmptyState(
-                            icon: const Icon(Symbols.group_rounded),
-                            title: context.l10n.followingFeed_empty,
-                            message: context.l10n.followingFeed_emptyHint,
+                  // 首次加载占位；刷新保留原状态，由下拉指示器反馈。
+                  return AppLoadingSwitcher(
+                    identity: username,
+                    loading: state.loading,
+                    delay: Duration.zero,
+                    loadingBuilder: (_) => refreshing
+                        ? const SizedBox.shrink()
+                        : const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Center(child: LoadingSpinner()),
                           ),
-                        ),
-                    ],
+                    child: state.error != null
+                        ? ErrorView(
+                            error: state.error!,
+                            onRetry: () =>
+                                _refreshIndicatorKey.currentState?.show(),
+                          )
+                        : state.posts.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: AppEmptyState(
+                              icon: const Icon(Symbols.group_rounded),
+                              title: context.l10n.followingFeed_empty,
+                              message: context.l10n.followingFeed_emptyHint,
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   );
                 }
                 if (index == state.posts.length + 1) {
@@ -223,69 +264,6 @@ class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
               child: page,
             )
           : page,
-    );
-  }
-
-  void _showMigration(BuildContext context) => Navigator.of(context).push(
-    InteractionPageRoute(builder: (_) => const FollowingFeedMigrationPage()),
-  );
-}
-
-/// 动态页内的追觅迁移入口。
-class _FollowingFeedMigrationCard extends StatelessWidget {
-  const _FollowingFeedMigrationCard({required this.onOpen});
-  final VoidCallback onOpen;
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: const Icon(Symbols.info_rounded),
-        title: Text(context.l10n.followingFeed_migrationTitle),
-        subtitle: Text(context.l10n.followingFeed_migrationSummary),
-        trailing: const Icon(Symbols.chevron_right_rounded),
-        onTap: onOpen,
-      ),
-    );
-  }
-}
-
-class FollowingFeedMigrationPage extends ConsumerWidget {
-  const FollowingFeedMigrationPage({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final migration = ref.watch(followingFeedMigrationProvider);
-    return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.followingFeed_migrationTitle)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(context.l10n.followingFeed_migrationBody),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: () async {
-              await ref.read(followingFeedMigrationProvider.notifier).dismiss();
-              if (context.mounted) Navigator.of(context).pop();
-            },
-            child: Text(context.l10n.common_gotIt),
-          ),
-          if (migration.users.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text(context.l10n.followingFeed_legacyUsers),
-            const SizedBox(height: 8),
-            Text(context.l10n.followingFeed_legacyHint),
-            for (final username in migration.users)
-              ListTile(
-                title: Text(username),
-                trailing: const Icon(Symbols.chevron_right_rounded),
-                onTap: () => Navigator.of(context).push(
-                  InteractionPageRoute(
-                    builder: (_) => UserProfilePage(username: username),
-                  ),
-                ),
-              ),
-          ],
-        ],
-      ),
     );
   }
 }

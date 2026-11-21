@@ -1,7 +1,7 @@
 name: fluxdo
 description: "A new Flutter project."
 publish_to: 'none'
-version: 0.2.31-beta.8+2026111723
+version: 0.2.31+2026112011
 
 environment:
   sdk: ^3.14.0
@@ -230,6 +230,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  jovial_svg_transformer: ^1.0.5
   melos: ^8.6.0
   dart_console: ^5.1.2
 
@@ -244,13 +245,22 @@ flutter:
     enable-swift-package-manager: false
   uses-material-design: true
   assets:
-    - assets/logo.svg
-    - assets/logo_modern.svg
-    - assets/logo_modern_light.svg
+    - path: assets/icons/
+      transformers: &svgToSi
+        - package: jovial_svg_transformer
+    - path: assets/icons/thinking/
+      transformers: *svgToSi
+    - path: assets/ai_brands/
+      transformers: *svgToSi
+    - assets/ai_brands/licenses/
+    - path: assets/logo.svg
+      transformers: *svgToSi
+    - path: assets/logo_modern.svg
+      transformers: *svgToSi
+    - path: assets/logo_modern_light.svg
+      transformers: *svgToSi
     - assets/images/
     - assets/certs/
-    - assets/ai_brands/
-    - assets/icons/thinking/
     - assets/polyfill/
     - assets/cook/
     - assets/themes/

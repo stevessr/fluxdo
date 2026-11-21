@@ -3,7 +3,8 @@ import 'package:app_icons/app_icons.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 
 import '../../services/discourse_cache_manager.dart';
-import '../../services/avatar_cache_pool.dart';
+import '../../services/image_decode_spec_memo.dart';
+import '../../services/svg_image_cache.dart';
 import '../../utils/svg_utils.dart';
 import 'first_paint_probe.dart';
 
@@ -11,9 +12,7 @@ import 'first_paint_probe.dart';
 ///
 /// 静态头像走 [BlobImageProvider](Telegram 式 MD5 直寻址,零 sqlite
 /// 索引,且不再与正文大图挤 DiscourseCacheManager 的 500 条 LRU);
-/// 动图头像也固定使用 avatar bucket，并由 discourseImageProvider 的
-/// alpha-safe avatar 路由选择标准 encoded-image codec，避免透明像素被
-/// raw RGBA 动图管线错误合成为黑色。
+/// 动图头像走 discourseImageProvider 的 Rust pipeline。
 /// 静态头像会先检测内容是否为 SVG，避免伪装成 PNG 的 SVG 进入位图解码器。
 class SmartAvatar extends StatefulWidget {
   final String? imageUrl;
@@ -78,6 +77,25 @@ class _SmartAvatarState extends State<SmartAvatar> {
     super.dispose();
   }
 
+  /// SVG 探测结果的全局记忆(URL → svg 内容,null = 已确认非 SVG)。
+  ///
+  /// 绝大多数头像不是 SVG,却在**每次挂载**付一次缓存探测(文件读)
+  /// + FutureBuilder 两阶段 rebuild(loading → Image)—— 列表快滚一屏
+  /// 十几个头像张张交税,是单卡首建成本的组成部分。记忆后重访头像
+  /// 同步单阶段直达;URL 版本化(带 hash),换头像即新条目。
+  /// "未下载时记为非 SVG"不破坏语义:下载后若真是 SVG,仍由
+  /// errorBuilder → _SvgFallbackBuilder 内容嗅探兜底。
+  static final Map<String, String?> _svgProbeMemo = {};
+  static const int _svgProbeMemoCap = 1500;
+
+  static void _memoizeSvgProbe(String url, String? content) {
+    _svgProbeMemo.remove(url);
+    _svgProbeMemo[url] = content;
+    if (_svgProbeMemo.length > _svgProbeMemoCap) {
+      _svgProbeMemo.remove(_svgProbeMemo.keys.first);
+    }
+  }
+
   Future<String?>? _svgProbeFuture;
 
   /// memo 命中(或无需探测)时为 true:build 走同步单阶段,零 FutureBuilder
@@ -101,35 +119,42 @@ class _SmartAvatarState extends State<SmartAvatar> {
   }
 
   void _setupSvgProbe(String? imageUrl) {
-    final pool = AvatarCachePool.instance;
     if (imageUrl == null || imageUrl.isEmpty || isNativeAnimatedUrl(imageUrl)) {
       _svgProbeResolved = true;
       _svgProbeSync = null;
       _svgProbeFuture = null;
       return;
     }
-
-    if (pool.hasSvgResult(imageUrl)) {
+    if (_svgProbeMemo.containsKey(imageUrl)) {
       _svgProbeResolved = true;
-      _svgProbeSync = pool.cachedSvg(imageUrl);
+      _svgProbeSync = _svgProbeMemo[imageUrl];
       _svgProbeFuture = null;
       return;
     }
-
-    // Most avatar URLs are bitmaps. Avoid an asynchronous disk probe and a
-    // FutureBuilder on every account switch / newly-mounted list row. Invalid
-    // bitmap decoding still reaches _SvgFallbackBuilder, which remembers SVGs
-    // disguised as .png or other formats in the same process-wide pool.
-    if (!AvatarCachePool.isExplicitSvg(imageUrl)) {
-      _svgProbeResolved = true;
-      _svgProbeSync = null;
-      _svgProbeFuture = null;
-      return;
-    }
-
     _svgProbeResolved = false;
     _svgProbeSync = null;
-    _svgProbeFuture = pool.probeCachedSvg(imageUrl);
+    _svgProbeFuture = _loadSvgContentIfPresent(imageUrl).then((content) {
+      _memoizeSvgProbe(imageUrl, content);
+      return content;
+    });
+  }
+
+  Future<String?> _loadSvgContentIfPresent(String imageUrl) async {
+    try {
+      // 只读 blob 缓存,不主动触发下载(下载由后面的 Image 负责,避免
+      // 重复请求)。blob 文件无扩展名,靠字节嗅探判断 SVG。
+      final bytes = await BlobImageCache.read(
+        BlobImageCache.avatarBucket,
+        imageUrl,
+      );
+      if (bytes == null || bytes.isEmpty) return null;
+      if (!SvgUtils.isSvgBytes(bytes)) return null;
+      final content = SvgUtils.sanitize(SvgUtils.decodeSvgBytes(bytes));
+      await _preparse(content);
+      return content;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 静态图路径:BlobImageProvider,解码失败时再次嗅探 SVG 兜底。
@@ -138,17 +163,25 @@ class _SmartAvatarState extends State<SmartAvatar> {
     double innerRadius,
     double innerSize,
   ) {
-    // Shared decode-size buckets ensure that nearby avatar radii use the
-    // same decoded ImageCache entry across accounts, lists and profiles.
-    final imageUrl = widget.imageUrl!;
+    // 解码尺寸约束:头像显示直径 innerSize(常见 32~72dp),但服务端
+    // 返回的头像位图可能远大于显示尺寸,不约束就按原图解码上传 —— 快滚
+    // 多头像同帧首绘时纹理上传叠加成 raster 尖峰(书签/话题列表 raster
+    // 大帧的头像份额)。按显示直径 × dpr 解码,单张纹理量降一到两个
+    // 数量级;× 2 留一档清晰度余量,cover 裁切不糊。
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final decodeSide = (innerSize * dpr * 2).round().clamp(1, 512);
     return Image(
-      // A retained avatar widget must not paint A's last frame while B's
-      // distinct URL is loading during an account switch.
-      key: ValueKey(imageUrl),
-      image: AvatarCachePool.instance.imageProvider(
-        imageUrl,
-        logicalDiameter: innerSize,
-        devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+      image: ImageDecodeSpecMemo.remember(
+        widget.imageUrl!,
+        ResizeImage(
+          BlobImageProvider(
+            widget.imageUrl!,
+            bucket: BlobImageCache.avatarBucket,
+          ),
+          width: decodeSide,
+          height: decodeSide,
+          policy: ResizeImagePolicy.fit,
+        ),
       ),
       width: innerSize,
       height: innerSize,
@@ -172,7 +205,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
         );
       },
       errorBuilder: (context, error, stack) => _SvgFallbackBuilder(
-        imageUrl: imageUrl,
+        imageUrl: widget.imageUrl!,
         size: innerSize,
         fallback: _buildFallback(fgColor, innerRadius),
       ),
@@ -182,7 +215,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // 图片层默认绝对透明；fallback 自己负责内容，不给透明像素垫主题色。
+    // 默认透明背景，只有在需要 fallback 时才用主题色
     final bgColor = widget.backgroundColor ?? Colors.transparent;
     final fgColor =
         widget.foregroundColor ?? theme.colorScheme.onPrimaryContainer;
@@ -199,16 +232,18 @@ class _SmartAvatarState extends State<SmartAvatar> {
     if (widget.imageUrl == null || widget.imageUrl!.isEmpty) {
       child = _buildFallback(fgColor, innerRadius);
     } else if (isNativeAnimatedUrl(widget.imageUrl!)) {
-      // 头像动图必须显式声明 avatar bucket：animated_avatar 并不保证 URL
-      // 含 `/user_avatar/`，不能依赖 URL 猜测。provider router 对 avatar
-      // 使用 Flutter 标准 encoded-image codec，保留透明 alpha；正文动图
-      // 仍走 native Rust pipeline，继续规避旧 multi_frame disposal bug。
+      // 动图(GIF/APNG/动画 WebP)走 native_animated_image Rust pipeline,
+      // 绕开 Flutter Skia multi_frame_codec 的 #85831 bug。
+      // RepaintBoundary 将每帧 setImage 触发的重绘限制在头像区域内,
+      // 避免列表中多个动图头像同时连累整个 list item 重绘。
       child = RepaintBoundary(
         child: Image(
-          key: ValueKey(widget.imageUrl),
-          image: discourseImageProvider(
+          image: ImageDecodeSpecMemo.remember(
             widget.imageUrl!,
-            bucket: BlobImageCache.avatarBucket,
+            discourseImageProvider(
+              widget.imageUrl!,
+              bucket: BlobImageCache.avatarBucket,
+            ),
           ),
           width: innerSize,
           height: innerSize,
@@ -219,6 +254,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
             return _buildLoading(fgColor, innerRadius);
           },
           errorBuilder: (context, error, stack) {
+            // 动图链路出错(网络 / Rust 解码失败),退化到字母 fallback
             return _buildFallback(fgColor, innerRadius);
           },
         ),
@@ -244,6 +280,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
             return _buildLoading(fgColor, innerRadius);
           }
 
+          // 静态图使用 CachedNetworkImage，解码失败时再次嗅探 SVG 兜底。
           return _buildStaticImage(fgColor, innerRadius, innerSize);
         },
       );
@@ -297,7 +334,7 @@ class _SmartAvatarState extends State<SmartAvatar> {
 
   Widget? _buildSvg(String svgContent, double size) {
     try {
-      final si = ScalableImage.fromSvgString(svgContent, warnF: (_) {});
+      final si = SvgImageCache.sync(svgContent);
       return SizedBox(
         width: size,
         height: size,
@@ -309,10 +346,12 @@ class _SmartAvatarState extends State<SmartAvatar> {
   }
 
   Widget _buildLoading(Color fgColor, double radius) {
-    // 图片本身的背景保持透明。加载态不再铺一层主题灰，避免用户头像的
-    // 透明区域在首帧前后发生“有底色 → 无底色”的闪变，也让 alpha 语义
-    // 从 loading 到最终图片保持一致。
-    return const ColoredBox(color: Colors.transparent);
+    // 静态灰底占位 — 头像 loading 时间极短,
+    // 用 CircularProgressIndicator 会带来 60fps 自转 + InheritedTheme 查询,
+    // 在列表多头像同时占位时是热点开销。
+    // 不在这里加自己的 shape:外层 Container 已经按圆形/方形裁切,这里
+    // 铺满矩形即可,否则方形头像 loading 时会露出"圆形补丁"的错位。
+    return Container(color: fgColor.withValues(alpha: 0.08));
   }
 
   Widget _buildFallback(Color fgColor, double radius) {
@@ -359,58 +398,34 @@ class _SvgFallbackBuilderState extends State<_SvgFallbackBuilder> {
   @override
   void initState() {
     super.initState();
-    _startSvgCheck();
-  }
-
-  @override
-  void didUpdateWidget(covariant _SvgFallbackBuilder oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageUrl != widget.imageUrl) {
-      _svgContent = null;
-      _checked = false;
-      _startSvgCheck();
-    }
-  }
-
-  void _startSvgCheck() {
-    final cached = AvatarCachePool.instance.cachedSvg(widget.imageUrl);
-    if (cached != null) {
-      _svgContent = cached;
-      _checked = true;
-    } else {
-      _checkForSvg();
-    }
+    _checkForSvg();
   }
 
   Future<void> _checkForSvg() async {
-    final imageUrl = widget.imageUrl;
     try {
-      // This is a decoder fallback: BlobImageProvider has already attempted
-      // the download. Read only the shared object instead of immediately
-      // retrying a failed network request (e.g. during a Cloudflare challenge).
-      final bytes = await BlobImageCache.read(
+      final bytes = await BlobImageCache.fetch(
         BlobImageCache.avatarBucket,
-        imageUrl,
+        widget.imageUrl,
       );
-      // Old async completions must never paint a different account's URL.
-      if (!mounted || imageUrl != widget.imageUrl) return;
-      if (bytes == null || bytes.isEmpty) {
-        setState(() => _checked = true);
-        return;
-      }
+
+      if (bytes.isEmpty || !mounted) return;
 
       if (SvgUtils.isSvgBytes(bytes)) {
         final svgString = SvgUtils.sanitize(SvgUtils.decodeSvgBytes(bytes));
-        AvatarCachePool.instance.rememberSvg(imageUrl, svgString);
-        setState(() {
-          _svgContent = svgString;
-          _checked = true;
-        });
+        await _preparse(svgString);
+        if (mounted) {
+          setState(() {
+            _svgContent = svgString;
+            _checked = true;
+          });
+        }
       } else {
-        setState(() => _checked = true);
+        if (mounted) {
+          setState(() => _checked = true);
+        }
       }
-    } catch (_) {
-      if (mounted && imageUrl == widget.imageUrl) {
+    } catch (e) {
+      if (mounted) {
         setState(() => _checked = true);
       }
     }
@@ -420,7 +435,7 @@ class _SvgFallbackBuilderState extends State<_SvgFallbackBuilder> {
   Widget build(BuildContext context) {
     if (_svgContent != null) {
       try {
-        final si = ScalableImage.fromSvgString(_svgContent!, warnF: (_) {});
+        final si = SvgImageCache.sync(_svgContent!);
         return SizedBox(
           width: widget.size,
           height: widget.size,
@@ -432,10 +447,17 @@ class _SvgFallbackBuilderState extends State<_SvgFallbackBuilder> {
     }
 
     if (!_checked) {
-      // 检测中保持透明，避免黑/灰占位污染头像透明背景。
+      // 检测中，显示空白避免闪烁
       return const SizedBox.shrink();
     }
 
     return widget.fallback;
   }
+}
+
+/// 在异步探测阶段预先解析，构建时只做缓存命中；解析失败留给构建期兜底处理。
+Future<void> _preparse(String content) async {
+  try {
+    await SvgImageCache.load(content);
+  } catch (_) {}
 }
