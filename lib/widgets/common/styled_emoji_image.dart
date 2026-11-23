@@ -77,6 +77,7 @@ class StyledEmojiImage extends ConsumerWidget {
     super.key,
     required this.name,
     this.serverUrl,
+    this.usePostStyle = false,
     this.width,
     this.height,
     this.cacheWidth,
@@ -88,6 +89,10 @@ class StyledEmojiImage extends ConsumerWidget {
 
   final String name;
   final String? serverUrl;
+
+  /// Opt-in only for actual floor/post body HTML. Picker, composer, reactions,
+  /// notifications, profile pages and chat always use the site's normal emoji.
+  final bool usePostStyle;
   final double? width;
   final double? height;
   final int? cacheWidth;
@@ -98,9 +103,9 @@ class StyledEmojiImage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final style = ref.watch(
-      preferencesProvider.select((p) => p.emojiRenderStyle),
-    );
+    final style = usePostStyle
+        ? ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle))
+        : EmojiRenderStyle.normal;
     return AnimatedBuilder(
       animation: EmojiHandler(),
       builder: (context, _) {
