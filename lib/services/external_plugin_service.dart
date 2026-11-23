@@ -38,6 +38,20 @@ class GeneratedPluginImage {
   const GeneratedPluginImage({required this.bytes, required this.fileName});
   final Uint8List bytes;
   final String fileName;
+
+  static GeneratedPluginImage? fromPlatformValue(Object? value) {
+    if (value is! Map) return null;
+    final bytes = value['bytes'];
+    final fileName = value['fileName'];
+    if (bytes is! Uint8List ||
+        bytes.isEmpty ||
+        bytes.length > 12 * 1024 * 1024 ||
+        fileName is! String ||
+        !RegExp(r'^stevessr_generated\.(png|jpg|webp|avif)$').hasMatch(fileName)) {
+      return null;
+    }
+    return GeneratedPluginImage(bytes: bytes, fileName: fileName);
+  }
 }
 
 /// 外部插件只在 Android 上安装与发现；站点侧 SitePlugin 为独立机制。
@@ -64,18 +78,8 @@ class ExternalPluginService {
 
   Future<void> _onPlatformMethod(MethodCall call) async {
     if (call.method != 'generatedImage') return;
-    final args = call.arguments;
-    if (args is! Map) return;
-    final bytes = args['bytes'];
-    final fileName = args['fileName'];
-    if (bytes is! Uint8List ||
-        bytes.isEmpty ||
-        bytes.length > 12 * 1024 * 1024 ||
-        fileName is! String ||
-        !RegExp(r'^stevessr_generated\.(png|jpg|webp|avif)$').hasMatch(fileName)) {
-      return;
-    }
-    pendingImage.value = GeneratedPluginImage(bytes: bytes, fileName: fileName);
+    final image = GeneratedPluginImage.fromPlatformValue(call.arguments);
+    if (image != null) pendingImage.value = image;
   }
 
   Future<List<ExternalPlugin>> installedPlugins() async {
