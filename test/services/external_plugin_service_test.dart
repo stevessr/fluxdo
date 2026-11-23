@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -67,6 +69,30 @@ void main() {
       label: '表情生成器',
     );
     expect(await service.launchPlugin(plugin), isFalse);
+  });
+
+  test('generated image handoff validates name, type and size', () {
+    final bytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+    final image = GeneratedPluginImage.fromPlatformValue({
+      'bytes': bytes,
+      'fileName': 'stevessr_generated.png',
+    });
+    expect(image, isNotNull);
+    expect(image!.bytes, same(bytes));
+    expect(image.fileName, 'stevessr_generated.png');
+
+    expect(GeneratedPluginImage.fromPlatformValue({
+      'bytes': bytes,
+      'fileName': '../unsafe.png',
+    }), isNull);
+    expect(GeneratedPluginImage.fromPlatformValue({
+      'bytes': bytes,
+      'fileName': 'stevessr_generated.svg',
+    }), isNull);
+    expect(GeneratedPluginImage.fromPlatformValue({
+      'bytes': Uint8List(12 * 1024 * 1024 + 1),
+      'fileName': 'stevessr_generated.png',
+    }), isNull);
   });
 
   test('非 Android 平台不会尝试调用原生插件通道', () async {
