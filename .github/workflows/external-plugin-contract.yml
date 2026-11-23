@@ -7,6 +7,10 @@ on:
       - 'android/app/src/main/AndroidManifest.xml'
       - 'android/app/src/main/kotlin/**'
       - 'lib/services/external_plugin_service.dart'
+      - 'lib/widgets/markdown_editor/markdown_editor.dart'
+      - 'lib/widgets/markdown_editor/rich_composer/rich_composer_editor.dart'
+      - 'packages/stevessr_generator/example/lib/main.dart'
+      - 'packages/stevessr_generator/lib/src/pages/stevessr_generator_page.dart'
       - 'lib/pages/installed_plugins_page.dart'
       - 'lib/widgets/markdown_editor/emoji_sticker_panel.dart'
       - 'test/services/external_plugin_service_test.dart'
@@ -49,6 +53,32 @@ jobs:
           lib/pages/installed_plugins_page.dart
           lib/pages/settings_page.dart
           lib/widgets/markdown_editor/emoji_sticker_panel.dart
+          lib/widgets/markdown_editor/markdown_editor.dart
+          lib/widgets/markdown_editor/rich_composer/rich_composer_editor.dart
           test/services/external_plugin_service_test.dart
       - name: Test native channel adapter
         run: flutter test test/services/external_plugin_service_test.dart
+
+  generator-apk:
+    name: Build standalone generator plugin APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          cache: true
+      - name: Resolve generator dependencies
+        working-directory: packages/stevessr_generator/example
+        run: flutter pub get
+      - name: Analyze generator entry point
+        working-directory: packages/stevessr_generator/example
+        run: flutter analyze lib/main.dart
+      - name: Compile standalone plugin APK
+        working-directory: packages/stevessr_generator/example
+        run: flutter build apk --debug --target-platform android-arm64
