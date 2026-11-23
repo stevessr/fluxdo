@@ -59,7 +59,7 @@ assert any(
 generated_paths = ET.parse(
     ROOT / "packages/stevessr_generator/example/android/app/src/main/res/xml/generator_file_paths.xml"
 ).getroot()
-assert [(elem.tag, attrs(elem, "path")) for elem in generated_paths] == [
+assert [(elem.tag, elem.get("path")) for elem in generated_paths] == [
     ("cache-path", "generated/")
 ], "图片 provider 只能暴露指定的临时缓存目录"
 print("Android external plugin manifest contract OK")
