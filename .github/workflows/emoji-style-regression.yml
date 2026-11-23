@@ -12,6 +12,10 @@ on:
       - 'lib/widgets/content/collapsed_html_content.dart'
       - 'lib/widgets/markdown_editor/emoji_picker.dart'
       - 'test/emoji_render_style_test.dart'
+      - 'lib/widgets/common/smart_avatar.dart'
+      - 'lib/widgets/content/discourse_html_content/image_utils.dart'
+      - 'test/services/emoji_handler_late_preload_test.dart'
+      - 'test/widgets/content/image_utils_test.dart'
       - '.github/workflows/emoji-style-regression.yml'
   workflow_dispatch:
 
@@ -45,9 +49,13 @@ jobs:
             lib/utils/fluxdo_render_callbacks.dart \
             lib/widgets/common/emoji_text.dart \
             lib/widgets/common/styled_emoji_image.dart \
+            lib/widgets/common/smart_avatar.dart \
+            lib/widgets/content/discourse_html_content/image_utils.dart \
             lib/widgets/content/collapsed_html_content.dart \
             lib/widgets/markdown_editor/emoji_picker.dart \
-            test/emoji_render_style_test.dart
+            test/emoji_render_style_test.dart \
+            test/services/emoji_handler_late_preload_test.dart \
+            test/widgets/content/image_utils_test.dart
       - name: Smoke-check official Google Noto CDN artwork
         shell: bash
         run: |
@@ -59,4 +67,8 @@ jobs:
               --retry 2 --retry-delay 1 --output /dev/null "$url"
           done
       - name: Test emoji style and artwork routing
-        run: dart tool/flutterw.dart test test/emoji_render_style_test.dart
+        run: >-
+          dart tool/flutterw.dart test
+          test/emoji_render_style_test.dart
+          test/services/emoji_handler_late_preload_test.dart
+          test/widgets/content/image_utils_test.dart
