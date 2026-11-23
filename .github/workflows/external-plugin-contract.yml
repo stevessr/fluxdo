@@ -9,6 +9,8 @@ on:
       - 'lib/services/external_plugin_service.dart'
       - 'lib/widgets/markdown_editor/markdown_editor.dart'
       - 'lib/widgets/markdown_editor/rich_composer/rich_composer_editor.dart'
+      - 'lib/pages/chat/chat_message_page.dart'
+      - 'lib/pages/chat/chat_thread_sheet.dart'
       - 'packages/stevessr_generator/example/lib/main.dart'
       - 'packages/stevessr_generator/lib/src/pages/stevessr_generator_page.dart'
       - 'lib/pages/installed_plugins_page.dart'
@@ -55,6 +57,8 @@ jobs:
           lib/widgets/markdown_editor/emoji_sticker_panel.dart
           lib/widgets/markdown_editor/markdown_editor.dart
           lib/widgets/markdown_editor/rich_composer/rich_composer_editor.dart
+          lib/pages/chat/chat_message_page.dart
+          lib/pages/chat/chat_thread_sheet.dart
           test/services/external_plugin_service_test.dart
       - name: Test native channel adapter
         run: flutter test test/services/external_plugin_service_test.dart
