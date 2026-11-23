@@ -815,7 +815,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       final image = ExternalPluginService.instance.pendingImage.value;
       if (image == null) return;
       ExternalPluginService.instance.consumeImage(image);
-      unawaited(_uploadPastedImage(image.bytes, image.fileName.split('.').last));
+      unawaited(_insertGeneratedImage(image));
     });
   }
 
@@ -3103,6 +3103,38 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       }
     }
     return false;
+  }
+
+  /// Generator Insert goes directly into the editor's resumable upload queue.
+  /// Ordinary clipboard images still use the confirmation dialog below.
+  Future<void> _insertGeneratedImage(GeneratedPluginImage image) async {
+    final editor = _editor;
+    if (editor == null) return;
+    final bookmark = InsertionBookmark(editor);
+    try {
+      final directory = await getTemporaryDirectory();
+      final file = File(p.join(
+        directory.path,
+        '${DateTime.now().microsecondsSinceEpoch}_${image.fileName}',
+      ));
+      await file.writeAsBytes(image.bytes);
+      if (!mounted ||
+          _documentReplaced ||
+          !identical(editor, _editor) ||
+          !bookmark.valid) {
+        return;
+      }
+      _queueUpload(
+        file.path,
+        image.fileName,
+        image: true,
+        insertionSelection: bookmark.selection,
+      );
+    } catch (error, stackTrace) {
+      AppErrorHandler.handleUnexpected(error, stackTrace);
+    } finally {
+      bookmark.dispose();
+    }
   }
 
   /// 粘贴位图上传:临时文件 → 确认框(与选图插入同 UX,可改名/取消误粘)
