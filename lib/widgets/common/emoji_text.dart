@@ -3,7 +3,6 @@ import 'package:material_ui/material_ui.dart';
 import 'styled_emoji_image.dart';
 import '../../services/emoji_handler.dart';
 import '../../services/discourse_cache_manager.dart';
-import '../../utils/emoji_shortcodes.dart';
 
 /// 轻量级 Emoji 文本组件
 ///
