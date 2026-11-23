@@ -335,7 +335,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     _uploadingCount++;
     try {
       final tempDir = await getTemporaryDirectory();
-      final file = File(p.join(tempDir.path, fileName));
+      final file = File(p.join(
+        tempDir.path,
+        '${DateTime.now().microsecondsSinceEpoch}_$fileName',
+      ));
       await file.writeAsBytes(bytes);
       if (!mounted) return;
       _enqueueUpload(
