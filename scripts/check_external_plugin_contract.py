@@ -43,4 +43,23 @@ assert not any(
 assert any(
     has_action(query, ACTION) for query in host.findall("./queries/intent")
 ), "Fluxdo 必须声明插件可见性查询"
+providers = plugin.findall("./application/provider")
+handoff = [
+    provider for provider in providers
+    if attrs(provider, "name") == "androidx.core.content.FileProvider"
+]
+assert len(handoff) == 1, "图片回传必须使用一个私有 FileProvider"
+assert attrs(handoff[0], "exported") == "false", "图片 provider 不能被直接导出"
+assert attrs(handoff[0], "grantUriPermissions") == "true", "图片回传必须使用临时 URI 授权"
+assert attrs(handoff[0], "authorities") == "${applicationId}.generated_images"
+assert any(
+    attrs(meta, "name") == "android.support.FILE_PROVIDER_PATHS"
+    for meta in handoff[0].findall("meta-data")
+), "图片回传未注册私有缓存目录"
+generated_paths = ET.parse(
+    ROOT / "packages/stevessr_generator/example/android/app/src/main/res/xml/generator_file_paths.xml"
+).getroot()
+assert [(elem.tag, attrs(elem, "path")) for elem in generated_paths] == [
+    ("cache-path", "generated/")
+], "图片 provider 只能暴露指定的临时缓存目录"
 print("Android external plugin manifest contract OK")
