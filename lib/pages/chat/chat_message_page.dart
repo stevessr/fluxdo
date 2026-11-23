@@ -31,6 +31,7 @@ import '../../providers/download_provider.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/external_plugin_service.dart';
 import '../../widgets/markdown_editor/long_image_upload_dialog.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
@@ -328,6 +329,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _textController.addListener(_onTextChanged);
+    ExternalPluginService.instance.pendingImage.addListener(_onPluginImageAvailable);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPluginImageAvailable());
     // 上报用户进入聊天（用于在线状态追踪），并启动周期性心跳
     _reportPresence();
     _presenceTimer = Timer.periodic(
@@ -365,6 +368,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   @override
   void dispose() {
+    ExternalPluginService.instance.pendingImage.removeListener(_onPluginImageAvailable);
     _presenceTimer?.cancel();
     _markAsReadTimer?.cancel();
     _scrollController.removeListener(_onScroll);
@@ -633,6 +637,51 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       );
     }
     setState(() => _showMentionSuggestions = false);
+  }
+
+  /// Companion images are chat attachments, not post markdown.
+  /// Do not consume a result while a thread dialog or another composer owns
+  /// the topmost route.
+  void _onPluginImageAvailable() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !(ModalRoute.of(context)?.isCurrent ?? true) ||
+          _isUploadingImage) {
+        return;
+      }
+      final image = ExternalPluginService.instance.pendingImage.value;
+      if (image == null) return;
+      ExternalPluginService.instance.consumeImage(image);
+      unawaited(_attachGeneratedImage(image));
+    });
+  }
+
+  Future<void> _attachGeneratedImage(GeneratedPluginImage image) async {
+    if (!mounted) return;
+    setState(() => _isUploadingImage = true);
+    try {
+      final directory = await getTemporaryDirectory();
+      final file = File(p.join(
+        directory.path,
+        '${DateTime.now().microsecondsSinceEpoch}_${image.fileName}',
+      ));
+      await file.writeAsBytes(image.bytes);
+      if (!mounted) return;
+      final ok = await _uploadAndTrackImage(file.path);
+      if (mounted && !ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.chat_upload_failed('1/1'))),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.chat_upload_failed('1/1'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
+    }
   }
 
   /// 多选并逐张上传图片附件；每张选完立即进预览条（uploadId 为 null 表示上传中）
