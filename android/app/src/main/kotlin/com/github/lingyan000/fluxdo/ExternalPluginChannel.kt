@@ -1,6 +1,8 @@
 package com.github.lingyan000.fluxdo
 
 import android.app.Activity
+import android.net.Uri
+import java.io.ByteArrayOutputStream
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
@@ -24,6 +26,8 @@ internal class ExternalPluginChannel(
         private const val CHANNEL = "com.github.lingyan000.fluxdo/external_plugins"
         private const val ACTION = "com.github.lingyan000.fluxdo.action.PLUGIN"
         private const val API_VERSION = "com.github.lingyan000.fluxdo.plugin.API_VERSION"
+        private const val INSERT_IMAGE_REQUEST = 0xF1D0
+        private const val MAX_GENERATED_IMAGE_BYTES = 12 * 1024 * 1024
     }
 
     private val channel = MethodChannel(messenger, CHANNEL).also { channel ->
@@ -59,6 +63,56 @@ internal class ExternalPluginChannel(
         channel.setMethodCallHandler(null)
     }
 
+    /**
+     * Accept image results only from activities launched via the verified
+     * catalog. Reject arbitrary file paths and unbounded URI content.
+     */
+    fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode != INSERT_IMAGE_REQUEST) return false
+        if (resultCode != Activity.RESULT_OK) return true
+
+        val uri: Uri = data?.data ?: return true
+        if (uri.scheme != "content") return true
+        val mimeType = data.type ?: activity.contentResolver.getType(uri) ?: return true
+        val extension = when (mimeType) {
+            "image/png" -> "png"
+            "image/jpeg" -> "jpg"
+            "image/webp" -> "webp"
+            "image/avif" -> "avif"
+            else -> return true
+        }
+        Thread {
+            try {
+                val bytes = activity.contentResolver.openInputStream(uri)?.use { input ->
+                    val buffer = ByteArray(8192)
+                    val output = ByteArrayOutputStream()
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        if (output.size() + count > MAX_GENERATED_IMAGE_BYTES) {
+                            throw IllegalArgumentException("Generated image is too large")
+                        }
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                } ?: return@Thread
+                if (bytes.isEmpty()) return@Thread
+                activity.runOnUiThread {
+                    channel.invokeMethod(
+                        "generatedImage",
+                        mapOf(
+                            "bytes" to bytes,
+                            "fileName" to "stevessr_generated.$extension",
+                        ),
+                    )
+                }
+            } catch (_: Exception) {
+                // Invalid or withdrawn URI grants must not crash the host.
+            }
+        }.start()
+        return true
+    }
+
     private fun discover(): List<Pair<ResolveInfo, ComponentName>> {
         val manager = activity.packageManager
         val intent = Intent(ACTION).addCategory(Intent.CATEGORY_DEFAULT)
@@ -86,10 +140,12 @@ internal class ExternalPluginChannel(
         // 每次启动均重新解析：安装、升级、卸载时不会留下过期入口。
         if (discover().none { it.second == component }) return false
         return try {
-            activity.startActivity(
+            @Suppress("DEPRECATION")
+            activity.startActivityForResult(
                 Intent(ACTION)
                     .addCategory(Intent.CATEGORY_DEFAULT)
-                    .setComponent(component)
+                    .setComponent(component),
+                INSERT_IMAGE_REQUEST,
             )
             true
         } catch (_: ActivityNotFoundException) {
