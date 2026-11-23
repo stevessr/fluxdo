@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/preferences_provider.dart';
 import '../../services/discourse_cook_service.dart';
 import '../../services/emoji_handler.dart';
+import '../../services/external_plugin_service.dart';
 import '../../utils/emoji_shortcodes.dart';
 import '../../utils/platform_utils.dart';
 import '../mention/mention_autocomplete.dart';
@@ -191,6 +192,24 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     DiscourseCookService().warmUp();
     _previousText = widget.controller.text;
     widget.controller.addListener(_handleTextChange);
+    ExternalPluginService.instance.pendingImage.addListener(_onPluginImageAvailable);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPluginImageAvailable());
+  }
+
+  /// The companion APK returns bytes, not a post URL. Use the normal upload
+  /// dialog and anchored Markdown insertion so the editor owns the draft.
+  void _onPluginImageAvailable() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      final toolbar = _toolbarKey.currentState;
+      final image = ExternalPluginService.instance.pendingImage.value;
+      if (toolbar == null || image == null) return;
+      ExternalPluginService.instance.consumeImage(image);
+      unawaited(toolbar.uploadImageFromBytes(
+        bytes: image.bytes,
+        fileName: image.fileName,
+      ));
+    });
   }
 
   @override
@@ -385,6 +404,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
   @override
   void dispose() {
+    ExternalPluginService.instance.pendingImage.removeListener(_onPluginImageAvailable);
     _toolsAnchor.dispose();
     _emojiPopover?.dispose();
     _undoController.dispose();
