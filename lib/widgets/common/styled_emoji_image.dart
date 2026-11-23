@@ -16,6 +16,12 @@ class EmojiStyleAssets {
 
   static final Map<String, String?> _unicodeCache = <String, String?>{};
 
+  /// Only cooked floor/post content may use the optional dynamic/3D artwork.
+  static EmojiRenderStyle effectiveStyle(
+    EmojiRenderStyle requested, {
+    required bool usePostStyle,
+  }) => usePostStyle ? requested : EmojiRenderStyle.normal;
+
   static String? unicodeFor(String name) {
     final normalized = name.trim().replaceAll(RegExp(r'^:+|:+$'), '').toLowerCase();
     if (normalized.isEmpty) return null;
@@ -103,9 +109,13 @@ class StyledEmojiImage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final style = usePostStyle
+    final requestedStyle = usePostStyle
         ? ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle))
         : EmojiRenderStyle.normal;
+    final style = EmojiStyleAssets.effectiveStyle(
+      requestedStyle,
+      usePostStyle: usePostStyle,
+    );
     return AnimatedBuilder(
       animation: EmojiHandler(),
       builder: (context, _) {
