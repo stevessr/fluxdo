@@ -222,7 +222,10 @@ class EmojiHandler extends ChangeNotifier {
   /// 格式像短代码,但不是表情,保持原文。
   bool exists(String name) {
     final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
-    if (_customEmojiMap?.containsKey(normalized) ?? false) return true;
+    if (_customEmojiMap.containsKey(normalized) ||
+        _catalogEmojiMap.containsKey(normalized)) {
+      return true;
+    }
     final toneMatch = _toneRegex.firstMatch(normalized);
     return standardEmojiNames.contains(toneMatch?.group(1) ?? normalized);
   }
@@ -247,9 +250,11 @@ class EmojiHandler extends ChangeNotifier {
   }
 
   /// Explicit server-uploaded custom emojis must not be restyled or replaced.
-  bool isCustomEmoji(String name) => _customEmojiMap.containsKey(
-    normalizeEmojiShortcodeName(name).toLowerCase(),
-  );
+  bool isCustomEmoji(String name) {
+    final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
+    return _customEmojiMap.containsKey(normalized) ||
+        _catalogEmojiMap.containsKey(normalized);
+  }
 
   /// 获取 emoji 的完整 URL
   ///
@@ -303,7 +308,7 @@ class EmojiHandler extends ChangeNotifier {
   String? animatedUrl(String name) {
     if (!animationEnabled) return null;
     final normalized = normalizeEmojiShortcodeName(name);
-    if (_customEmojiMap.containsKey(normalized)) return null;
+    if (isCustomEmoji(normalized)) return null;
     return UrlHelper.resolveUrlWithCdn(
       '/images/emoji/$_animatedSet/${_standardName(normalized)}.avif'
       '?v=$_imageVersion',
