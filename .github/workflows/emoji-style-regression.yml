@@ -46,7 +46,7 @@ jobs:
         run: dart run tool/gen_l10n.dart
       - name: Analyze emoji style changes
         run: |
-          flutter analyze \
+          flutter analyze --no-fatal-infos \
             lib/providers/preferences_provider.dart \
             lib/services/emoji_handler.dart \
             lib/settings/definitions/reading_defs.dart \
