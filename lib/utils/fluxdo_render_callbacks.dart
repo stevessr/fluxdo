@@ -310,7 +310,8 @@ class FluxdoRenderCallbacks {
   // ==========================================================================
 
   /// Emoji 图片:走主项目 emojiImageProvider(鉴权 + CDN)。
-  static EmojiImageBuilder get _emojiBuilder => (ctx, emoji, size) {
+  static EmojiImageBuilder _emojiBuilder({bool usePostStyle = false}) =>
+      (ctx, emoji, size) {
     if (emoji.url.isEmpty) {
       return Text(emoji.name.isEmpty ? ':?:' : ':${emoji.name}:');
     }
@@ -318,6 +319,7 @@ class FluxdoRenderCallbacks {
     final image = StyledEmojiImage(
       name: emoji.name,
       serverUrl: emoji.url,
+      usePostStyle: usePostStyle,
       width: size,
       height: size,
       cacheWidth: (size * dpr).round(),
@@ -991,7 +993,7 @@ class FluxdoRenderCallbacks {
           },
         );
       },
-      emojiImageBuilder: _emojiBuilder,
+      emojiImageBuilder: _emojiBuilder(usePostStyle: true),
       mentionTapHandler: _mentionTapHandler,
       imageContentBuilder: _imageContentBuilder(
         heroNamespace: heroNamespace,
@@ -1089,7 +1091,7 @@ class FluxdoRenderCallbacks {
           },
         );
       },
-      emojiImageBuilder: _emojiBuilder,
+      emojiImageBuilder: _emojiBuilder(),
       mentionTapHandler: _mentionTapHandler,
       imageContentBuilder: _imageContentBuilder(
         heroNamespace: heroTagNamespace,
