@@ -205,7 +205,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       final image = ExternalPluginService.instance.pendingImage.value;
       if (toolbar == null || image == null) return;
       ExternalPluginService.instance.consumeImage(image);
-      unawaited(toolbar.uploadImageFromBytes(
+      unawaited(toolbar.insertGeneratedImageFromBytes(
         bytes: image.bytes,
         fileName: image.fileName,
       ));
