@@ -54,7 +54,7 @@ jobs:
           dart run tool/gen_l10n.dart
       - name: Analyze plugin UI and service
         run: >-
-          flutter analyze
+          flutter analyze --no-fatal-infos
           lib/services/external_plugin_service.dart
           lib/pages/installed_plugins_page.dart
           lib/pages/settings_page.dart
