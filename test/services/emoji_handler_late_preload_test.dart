@@ -116,6 +116,9 @@ void main() {
         handler.getEmojiUrl(name),
         'https://cdn.example.com/reactions/real.png',
       );
+      expect(handler.exists(name), isTrue);
+      expect(handler.isCustomEmoji(name), isTrue);
+      expect(handler.animatedUrl(name), isNull);
       expect(
         handler.getEmojiUrl('deleted_fixture'),
         contains('/images/emoji/twitter/deleted_fixture.png'),
