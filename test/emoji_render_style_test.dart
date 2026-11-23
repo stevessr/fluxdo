@@ -10,6 +10,22 @@ void main() {
     expect(EmojiRenderStyle.fromString('threeD'), EmojiRenderStyle.threeD);
   });
 
+  test('selected Google style is strictly scoped to floor body', () {
+    for (final selected in [
+      EmojiRenderStyle.animated,
+      EmojiRenderStyle.threeD,
+    ]) {
+      expect(
+        EmojiStyleAssets.effectiveStyle(selected, usePostStyle: false),
+        EmojiRenderStyle.normal,
+      );
+      expect(
+        EmojiStyleAssets.effectiveStyle(selected, usePostStyle: true),
+        selected,
+      );
+    }
+  });
+
   test('normal style does not request third-party artwork', () {
     expect(EmojiStyleAssets.urlForUnicode('1f600', EmojiRenderStyle.normal), isNull);
   });
