@@ -136,6 +136,21 @@ void main() {
     },
   );
 
+  test('standard entries in /emojis.json remain eligible for post artwork', () {
+    handler.registerCatalog({
+      'people': [
+        Emoji(
+          name: 'grinning',
+          url: 'https://cdn.example.com/emoji/standard.png',
+          group: 'people',
+        ),
+      ],
+    });
+    expect(handler.exists('grinning'), isTrue);
+    expect(handler.isCustomEmoji('grinning'), isFalse);
+    expect(handler.animatedUrl('grinning'), contains('noto_animated'));
+  });
+
   test('session reset drops server catalog URLs from the previous session', () {
     const name = 'stale_reaction_fixture';
     handler.registerCatalog({
