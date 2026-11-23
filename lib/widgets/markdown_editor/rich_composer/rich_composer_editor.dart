@@ -81,6 +81,7 @@ import '../../../services/discourse/discourse_service.dart';
 import '../../../services/discourse_cook_service.dart';
 import '../../../services/emoji_alias_service.dart';
 import '../../../services/emoji_handler.dart';
+import '../../../services/external_plugin_service.dart';
 import '../../../utils/clipboard_image_native.dart';
 import '../../../utils/dialog_utils.dart';
 import '../../../utils/fluxdo_render_callbacks.dart';
@@ -799,7 +800,23 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         ..addListener(_onEmojiPopoverChanged);
     }
     if (kDebugMode) EditorImeClient.debugLogging = true;
+    ExternalPluginService.instance.pendingImage.addListener(_onPluginImageAvailable);
     _importInitial();
+  }
+
+  void _onPluginImageAvailable() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _documentReplaced ||
+          _editor == null ||
+          !(ModalRoute.of(context)?.isCurrent ?? true)) {
+        return;
+      }
+      final image = ExternalPluginService.instance.pendingImage.value;
+      if (image == null) return;
+      ExternalPluginService.instance.consumeImage(image);
+      unawaited(_uploadPastedImage(image.bytes, image.fileName.split('.').last));
+    });
   }
 
   /// 弹层开合同步 _showEmojiPanel(驱动工具栏表情按钮高亮)
@@ -850,6 +867,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         _importing = false;
       });
       pendingSession = null;
+      _onPluginImageAvailable();
       _recoveryScope ??= _currentRecoveryScope();
       await _readRecoveries();
     } catch (error) {
@@ -885,6 +903,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
 
   @override
   void dispose() {
+    ExternalPluginService.instance.pendingImage.removeListener(_onPluginImageAvailable);
     _uploads.dispose();
     _recoveryUserSub?.close();
     _prefsSub?.close();
