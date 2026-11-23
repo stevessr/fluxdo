@@ -32,8 +32,7 @@ class ExternalPlugin {
   }
 }
 
-/// An image returned by a verified Android companion. The upload is still
-/// performed by the host editor through its regular Discourse workflow.
+/// A companion-generated image to be uploaded by Fluxdo's active composer.
 @immutable
 class GeneratedPluginImage {
   const GeneratedPluginImage({required this.bytes, required this.fileName});
@@ -56,8 +55,7 @@ class ExternalPluginService {
 
   final MethodChannel _channel;
 
-  /// Retain the image until an actual composer becomes available. Returning
-  /// from the companion app must not silently discard it on a non-editor page.
+  /// Preserve the result until a composer mounts, even after the plugin exits.
   final ValueNotifier<GeneratedPluginImage?> pendingImage = ValueNotifier(null);
 
   void consumeImage(GeneratedPluginImage image) {
@@ -74,42 +72,7 @@ class ExternalPluginService {
         bytes.isEmpty ||
         bytes.length > 12 * 1024 * 1024 ||
         fileName is! String ||
-        !RegExp(r'^stevessr_generated\\.(png|jpg|webp|avif)
-    if (!isSupported) return const [];
-    try {
-      final values = await _channel.invokeListMethod<dynamic>('listPlugins');
-      final found = <ExternalPlugin>[];
-      final ids = <String>{};
-      for (final value in values ?? const <dynamic>[]) {
-        final plugin = ExternalPlugin.fromPlatformValue(value);
-        if (plugin != null && ids.add(plugin.id)) found.add(plugin);
-      }
-      return List.unmodifiable(found);
-    } on MissingPluginException {
-      return const [];
-    } on PlatformException catch (error) {
-      debugPrint('插件发现失败: ${error.message}');
-      return const [];
-    }
-  }
-
-  Future<bool> launchPlugin(ExternalPlugin plugin) async {
-    if (!isSupported) return false;
-    try {
-      return await _channel.invokeMethod<bool>(
-            'launchPlugin',
-            {'id': plugin.id},
-          ) ??
-          false;
-    } on MissingPluginException {
-      return false;
-    } on PlatformException catch (error) {
-      debugPrint('插件启动失败: ${error.message}');
-      return false;
-    }
-  }
-}
-).hasMatch(fileName)) {
+        !RegExp(r'^stevessr_generated\.(png|jpg|webp|avif)$').hasMatch(fileName)) {
       return;
     }
     pendingImage.value = GeneratedPluginImage(bytes: bytes, fileName: fileName);
