@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -14,6 +15,7 @@ import '../../providers/chat_providers.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/external_plugin_service.dart';
 import '../../widgets/markdown_editor/long_image_upload_dialog.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
@@ -108,7 +110,57 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
       PreloadedDataService().siteSettingsSync?['chat_pinned_messages'] == true;
 
   @override
+  void initState() {
+    super.initState();
+    ExternalPluginService.instance.pendingImage.addListener(_onPluginImageAvailable);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPluginImageAvailable());
+  }
+
+  void _onPluginImageAvailable() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !(ModalRoute.of(context)?.isCurrent ?? true) ||
+          _isUploadingImage) {
+        return;
+      }
+      final image = ExternalPluginService.instance.pendingImage.value;
+      if (image == null) return;
+      ExternalPluginService.instance.consumeImage(image);
+      unawaited(_attachGeneratedImage(image));
+    });
+  }
+
+  Future<void> _attachGeneratedImage(GeneratedPluginImage image) async {
+    if (!mounted) return;
+    setState(() => _isUploadingImage = true);
+    try {
+      final directory = await getTemporaryDirectory();
+      final file = File(p.join(
+        directory.path,
+        '${DateTime.now().microsecondsSinceEpoch}_${image.fileName}',
+      ));
+      await file.writeAsBytes(image.bytes);
+      if (!mounted) return;
+      final ok = await _uploadAndTrackImage(file.path);
+      if (mounted && !ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('上传失败: 1/1')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('上传失败: 1/1')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
+    }
+  }
+
+  @override
   void dispose() {
+    ExternalPluginService.instance.pendingImage.removeListener(_onPluginImageAvailable);
     _textController.dispose();
     _inputFocusNode.dispose();
     _scrollController.dispose();
