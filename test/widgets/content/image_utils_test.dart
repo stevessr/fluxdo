@@ -100,4 +100,33 @@ void main() {
       );
     });
   });
+
+  group('image viewer original URL recovery', () {
+    test('removes optimized dimensions with query and fragment intact', () {
+      const optimized =
+          'https://cdn.example.com/uploads/default/optimized/4X/a/b/c/abc_2_690x270.png?v=12#pic';
+      expect(
+        DiscourseImageUtils.getOriginalUrl(optimized),
+        'https://cdn.example.com/uploads/default/original/4X/a/b/c/abc.png?v=12#pic',
+      );
+    });
+
+    test('never mutates an already-original image', () {
+      const original =
+          'https://cdn.example.com/uploads/default/original/4X/a/b/c/abc.png?v=16';
+      expect(DiscourseImageUtils.getOriginalUrl(original), original);
+    });
+
+    test('gallery opens original images but also indexes thumbnails', () {
+      const thumbnail = '/uploads/default/optimized/4X/a/b/c/abc_2_690x270.png';
+      final gallery = GalleryInfo.fromImages([thumbnail]);
+      expect(
+        gallery.originalUrls.single,
+        '/uploads/default/original/4X/a/b/c/abc.png',
+      );
+      expect(gallery.findIndex(thumbnail), 0);
+      expect(gallery.findIndex(gallery.originalUrls.single), 0);
+    });
+  });
+
 }
