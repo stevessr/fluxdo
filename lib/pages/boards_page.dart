@@ -952,11 +952,12 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {
-                      final updated = await showInteractionDialog<List<BoardAclEntry>>(
-                        context: context,
-                        builder: (_) =>
-                            _BoardAclEditorDialog(initialEntries: acl),
-                      );
+                      final updated =
+                          await showInteractionDialog<List<BoardAclEntry>>(
+                            context: context,
+                            builder: (_) =>
+                                _BoardAclEditorDialog(initialEntries: acl),
+                          );
                       if (updated != null) {
                         setDialogState(
                           () => acl = updated.toList(growable: true),
