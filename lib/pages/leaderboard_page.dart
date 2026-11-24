@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute, showInteractionDialog;
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, showInteractionDialog, UiShapesContext;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -535,7 +535,7 @@ class _LeaderboardPodium extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 20, 8, 22),
       decoration: BoxDecoration(
         color: colors.primaryContainer.withValues(alpha: 0.30),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: context.shapes.borderRadius(24),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -592,7 +592,7 @@ class _LeaderboardWinner extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: context.shapes.borderRadius(16),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2),
         child: Column(
@@ -724,7 +724,7 @@ class _PersonalLeaderboardRank extends StatelessWidget {
 
     return Material(
       color: colors.primary,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: context.shapes.borderRadius(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -796,7 +796,7 @@ class _LeaderboardTile extends StatelessWidget {
       color: isCurrentUser
           ? colors.secondaryContainer.withValues(alpha: 0.45)
           : Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: context.shapes.borderRadius(12),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
         onTap: onTap,

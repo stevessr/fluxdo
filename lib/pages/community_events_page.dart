@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'package:dio/dio.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:intl/intl.dart';
@@ -404,7 +405,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       selectedColor: scheme.onPrimary,
       color: scheme.onSurface,
       selectedBorderColor: scheme.primary,
-      borderRadius: BorderRadius.circular(5),
+      borderRadius: context.shapes.borderRadius(5),
       constraints: const BoxConstraints(minHeight: 36, minWidth: 56),
       children: [
         Padding(
@@ -467,7 +468,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       selectedColor: scheme.onPrimary,
       color: scheme.onSurface,
       selectedBorderColor: scheme.primary,
-      borderRadius: BorderRadius.circular(5),
+      borderRadius: context.shapes.borderRadius(5),
       constraints: const BoxConstraints(minHeight: 36, minWidth: 32),
       children: [
         for (final scale in EventCalendarScale.values)

@@ -1,7 +1,7 @@
 import 'dart:collection';
 
 import 'package:app_icons/app_icons.dart';
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -1165,7 +1165,7 @@ class _SmallBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: scheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: context.shapes.borderRadius(999),
       ),
       child: Text(
         label,

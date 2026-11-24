@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -205,7 +205,7 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
   Widget _buildBanner(String url) {
     final theme = Theme.of(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: context.shapes.borderRadius(16),
       child: Image(
         image: sharedImageProvider(UrlHelper.resolveUrlWithCdn(url)),
         height: 152,
@@ -260,7 +260,7 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
     final theme = Theme.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: context.shapes.borderRadius(14),
         color: theme.colorScheme.surfaceContainerLow,
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),

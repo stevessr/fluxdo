@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -476,7 +477,7 @@ class _QrLoginDisplayPageState extends State<QrLoginDisplayPage> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: scheme.errorContainer.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: context.shapes.borderRadius(14),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -540,7 +541,7 @@ class _QrLoginDisplayPageState extends State<QrLoginDisplayPage> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: context.shapes.borderRadius(20),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(

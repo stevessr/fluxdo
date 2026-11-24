@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -220,7 +221,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
                                 color: theme.colorScheme.primary.withValues(
                                   alpha: 0.1,
                                 ),
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: context.shapes.borderRadius(10),
                               ),
                               child: Icon(
                                 Symbols.person_add_rounded,
@@ -294,7 +295,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: context.shapes.borderRadius(999),
                 ),
                 child: Text(
                   l10n.accountManage_currentChip,

@@ -554,8 +554,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
           return Container(
             decoration: BoxDecoration(
               color: theme.scaffoldBackgroundColor,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+              borderRadius: BorderRadius.vertical(
+                top: context.shapes.radius(24),
               ),
               boxShadow: [
                 BoxShadow(
@@ -574,7 +574,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                   height: 4,
                   decoration: BoxDecoration(
                     color: theme.colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: context.shapes.borderRadius(2),
                   ),
                 ),
 
@@ -733,7 +733,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: context.shapes.borderRadius(12),
               border: Border.all(color: color.withValues(alpha: 0.2)),
             ),
             child: Column(
@@ -785,7 +785,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       padding: const EdgeInsets.only(bottom: 16),
       child: InkWell(
         onTap: isLink && url != null ? () => launchUrl(Uri.parse(url)) : null,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: context.shapes.borderRadius(8),
         child: Row(
           children: [
             Container(
@@ -794,7 +794,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                 color: theme.colorScheme.surfaceContainerHighest.withValues(
                   alpha: 0.5,
                 ),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: context.shapes.borderRadius(8),
               ),
               child: Icon(
                 icon,
@@ -1467,8 +1467,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(36),
         child: Container(
-          decoration: const BoxDecoration(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
           ),
           clipBehavior: Clip.antiAlias,
           child: Material(
@@ -1616,7 +1616,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                                         ? BoxShape.rectangle
                                         : BoxShape.circle,
                                     borderRadius: isSquare
-                                        ? BorderRadius.circular(8)
+                                        ? context.shapes.borderRadius(8)
                                         : null,
                                     border: Border.all(
                                       color: Colors.white,
@@ -1723,7 +1723,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                                   ),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: context.shapes.borderRadius(12),
                                   ),
                                   child: Text(
                                     _getTrustLevelLabel(_user?.trustLevel ?? 0),
@@ -1803,7 +1803,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: context.shapes.borderRadius(8),
                             ),
                             child: Row(
                               children: [
@@ -1948,7 +1948,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                           ),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: context.shapes.borderRadius(12),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -2105,7 +2105,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                   : Colors.white,
               foregroundColor: _isFollowed ? Colors.white : Colors.black87,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: context.shapes.borderRadius(18),
                 side: _isFollowed
                     ? const BorderSide(color: Colors.white38)
                     : BorderSide.none,
@@ -2131,7 +2131,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: context.shapes.borderRadius(8),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
@@ -2626,12 +2626,12 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
             (user) => InkWell(
               onTap: () =>
                   EmbeddedStackScope.openProfile(context, user.username),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: context.shapes.borderRadius(20),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: context.shapes.borderRadius(20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -2658,7 +2658,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                       ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: context.shapes.borderRadius(10),
                       ),
                       child: Text(
                         '${user.count}',
@@ -2694,7 +2694,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
               height: 12,
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: context.shapes.borderRadius(3),
               ),
             ),
             const SizedBox(width: 10),
@@ -2742,7 +2742,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               gradient: BadgeUIUtils.getBadgeGradient(context, badgeType),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: context.shapes.borderRadius(12),
               border: Border.all(color: color.withValues(alpha: 0.3)),
             ),
             child: Row(
@@ -3053,7 +3053,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(16)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _openTopic(
@@ -3136,7 +3136,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(16)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _openTopic(
@@ -3212,7 +3212,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(16)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _openTopic(
@@ -3295,7 +3295,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(16)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _openTopic(

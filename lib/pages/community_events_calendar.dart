@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
@@ -345,7 +346,7 @@ class CommunityEventsCalendar extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
                       decoration: BoxDecoration(
                         color: scheme.primary.withValues(alpha: .10),
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: context.shapes.borderRadius(3),
                       ),
                       child: Text(
                         compact ? '•' : _name(context, event),
@@ -689,7 +690,7 @@ class _CalendarTimelineState extends State<_CalendarTimeline> {
       ),
       child: Material(
         color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: context.shapes.borderRadius(4),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => widget.onTapEvent(placement.event),

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -377,7 +377,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: context.shapes.borderRadius(12),
                       border: Border.all(color: scheme.outlineVariant),
                     ),
                     child: Row(
@@ -551,7 +551,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       elevation: 0,
       color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: context.shapes.borderRadius(12),
         side: BorderSide(color: scheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,

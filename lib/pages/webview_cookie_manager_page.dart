@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -744,7 +745,7 @@ class _CookieFlag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: context.shapes.borderRadius(6),
       ),
       child: Text(label, style: Theme.of(context).textTheme.labelSmall),
     );

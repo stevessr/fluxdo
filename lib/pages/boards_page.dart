@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -1370,7 +1371,7 @@ class _BoardColumnView extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: context.shapes.borderRadius(16),
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
         ),
@@ -1386,7 +1387,7 @@ class _BoardColumnView extends StatelessWidget {
                   height: 10,
                   decoration: BoxDecoration(
                     color: accent,
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: context.shapes.borderRadius(3),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1606,7 +1607,7 @@ class _BoardCardTile extends StatelessWidget {
                   card.topic?.imageUrl?.isNotEmpty == true) ...[
                 const SizedBox(height: 8),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: context.shapes.borderRadius(8),
                   child: Image.network(
                     UrlHelper.resolveUrlWithCdn(card.topic!.imageUrl!),
                     height: 132,
