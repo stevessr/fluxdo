@@ -289,12 +289,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
             );
             return ListTile(
               enabled: enabled,
-              leading: Icon(
-                Symbols.swap_horiz_rounded,
-                color: enabled
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).disabledColor,
-              ),
+              leading: const Icon(Symbols.swap_horiz_rounded),
               title: Text(context.l10n.progressGesture_dragToLocate),
               subtitle: Text(context.l10n.progressGesture_dragToLocateDesc),
             );
@@ -313,12 +308,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
             final meta = progressGestureActionMeta(context, current);
             return ListTile(
               enabled: enabled,
-              leading: Icon(
-                Symbols.swipe_up_rounded,
-                color: enabled
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).disabledColor,
-              ),
+              leading: const Icon(Symbols.swipe_up_rounded),
               title: Text(context.l10n.progressGesture_swipeUp),
               subtitle: Text(meta.label),
               trailing: const Icon(Symbols.chevron_right_rounded),
@@ -348,12 +338,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
             );
             return ListTile(
               enabled: enabled,
-              leading: Icon(
-                Symbols.fingerprint_rounded,
-                color: enabled
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).disabledColor,
-              ),
+              leading: const Icon(Symbols.fingerprint_rounded),
               title: Text(context.l10n.progressGesture_longPressMenu),
               subtitle: Text(
                 '${items.length}/$kProgressGestureMenuMax · '
