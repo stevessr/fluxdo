@@ -111,6 +111,37 @@ void main() {
     });
   });
 
+  group('UrlHelper.resolveMediaUrl', () {
+    test('normalizes artwork URLs without dropping signatures', () {
+      expect(
+        UrlHelper.resolveMediaUrl(' uploads/default/icon.png?token=a%2Fb '),
+        'https://cdn.example.com/uploads/default/icon.png?token=a%2Fb',
+      );
+      expect(
+        UrlHelper.resolveMediaUrl('//uploads.example.com/icon.svg?v=3'),
+        'https://cdn3.example.com/icon.svg?v=3',
+      );
+      expect(UrlHelper.resolveMediaUrl('upload://abc.png'), 'upload://abc.png');
+      expect(UrlHelper.resolveMediaUrl(' '), '');
+    });
+
+    test('authenticated artwork stays on the forum origin', () {
+      UrlHelper.debugSetOverrides(baseUri: '/forum');
+      expect(
+        UrlHelper.resolveMediaUrl('/mini-app-api/production/icon.svg?v=1'),
+        'https://linux.do/forum/mini-app-api/production/icon.svg?v=1',
+      );
+      expect(
+        UrlHelper.resolveMediaUrl('/forum/secure-uploads/icon.png?sig=1'),
+        'https://linux.do/forum/secure-uploads/icon.png?sig=1',
+      );
+      expect(
+        UrlHelper.resolveMediaUrl('/secure-media-uploads/icon.png'),
+        'https://linux.do/forum/secure-media-uploads/icon.png',
+      );
+    });
+  });
+
   group('ResolvedUploadUrl', () {
     test('uses full media URL for images', () {
       final resolved = ResolvedUploadUrl(
