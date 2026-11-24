@@ -1,4 +1,5 @@
 import 'package:common_ui/common_ui.dart';
+import 'package:m3e_ui/m3e_ui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,8 +51,7 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
     _selectedType = widget.provider?.type ?? AiProviderType.openai;
     _nameCtrl = TextEditingController(text: widget.provider?.name ?? '');
     _baseUrlCtrl = TextEditingController(
-      text: widget.provider?.baseUrl ?? _selectedType.defaultBaseUrl,
-    );
+        text: widget.provider?.baseUrl ?? _selectedType.defaultBaseUrl);
     _apiKeyCtrl = TextEditingController();
     _models = List.from(widget.provider?.models ?? []);
     _modelRowIds = List.generate(_models.length, (_) => _nextModelRowId++);
@@ -78,9 +78,8 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
     if (type == null) return;
     setState(() {
       if (_baseUrlCtrl.text.isEmpty ||
-          AiProviderType.values.any(
-            (t) => t.defaultBaseUrl == _baseUrlCtrl.text,
-          )) {
+          AiProviderType.values
+              .any((t) => t.defaultBaseUrl == _baseUrlCtrl.text)) {
         _baseUrlCtrl.text = type.defaultBaseUrl;
       }
       _selectedType = type;
@@ -100,12 +99,8 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
     });
     try {
       final service = ref.read(aiProviderApiServiceProvider);
-      final error = await service.testModel(
-        _selectedType,
-        baseUrl,
-        apiKey,
-        modelId,
-      );
+      final error =
+          await service.testModel(_selectedType, baseUrl, apiKey, modelId);
       if (mounted) {
         setState(() {
           _modelTestResults[modelId] = error;
@@ -115,8 +110,7 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
           AiToastDelegate.showSuccess(AiL10n.current.modelAvailable(modelId));
         } else {
           AiToastDelegate.showError(
-            AiL10n.current.modelUnavailable(modelId, error),
-          );
+              AiL10n.current.modelUnavailable(modelId, error));
         }
       }
     } catch (e) {
@@ -129,56 +123,40 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
     }
   }
 
-  void _showTestModelPicker() {
+  Future<void> _showTestModelPicker() async {
     if (_models.isEmpty) {
       AiToastDelegate.showInfo(AiL10n.current.selectModelToTest);
       return;
     }
-    showAppBottomSheet<void>(
+    final modelId = await showAppBottomSheet<String>(
       context: context,
-      isScrollControlled: true,
       useSafeArea: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                AiL10n.current.selectModelToTest,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      builder: (ctx) => AppSheetScaffold(
+        title: AiL10n.current.selectModelToTest,
+        contentPadding: const EdgeInsets.only(bottom: 8),
+        child: ListView.builder(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          itemCount: _models.length,
+          itemBuilder: (ctx, index) {
+            final model = _models[index];
+            return ListTile(
+              leading: ModelIcon(
+                providerName: widget.provider?.name ?? '',
+                modelName: model.name ?? model.id,
+                size: 24,
               ),
-            ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _models.length,
-                itemBuilder: (ctx, i) {
-                  final m = _models[i];
-                  return ListTile(
-                    leading: ModelIcon(
-                      providerName: widget.provider?.name ?? '',
-                      modelName: m.name ?? m.id,
-                      size: 24,
-                    ),
-                    title: Text(m.name ?? m.id),
-                    subtitle: m.name != null
-                        ? Text(m.id, style: const TextStyle(fontSize: 12))
-                        : null,
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _testModel(m.id);
-                    },
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
+              title: Text(model.name ?? model.id),
+              subtitle: model.name != null
+                  ? Text(model.id, style: const TextStyle(fontSize: 12))
+                  : null,
+              onTap: () => Navigator.pop(ctx, model.id),
+            );
+          },
         ),
       ),
     );
+    if (modelId != null && mounted) await _testModel(modelId);
   }
 
   Future<void> _fetchAndSelectModels() async {
@@ -194,12 +172,7 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
 
     await showAppBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: RoundedSuperellipseBorder(
-        borderRadius: BorderRadius.vertical(top: context.shapes.radius(20)),
-      ),
       builder: (ctx) => _FetchedModelsSelector(
         fetchFuture: fetchFuture,
         currentModels: _models,
@@ -322,9 +295,9 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _isEditing ? AiL10n.current.editProvider : AiL10n.current.addProvider,
-        ),
+        title: Text(_isEditing
+            ? AiL10n.current.editProvider
+            : AiL10n.current.addProvider),
         actions: [
           // 测试模型快捷入口:放 AppBar 避免在配置表单中段塞按钮显得割裂,
           // 两个 tab(配置 / 模型)都能用同一个入口。
@@ -332,13 +305,9 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
             tooltip: AiL10n.current.testModel,
             onPressed: _testingModelId != null ? null : _showTestModelPicker,
             icon: _testingModelId != null
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                ? AiToastDelegate.buildLoading(
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
                   )
                 : const Icon(Symbols.bolt_rounded),
           ),
@@ -347,12 +316,9 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
             child: FilledButton(
               onPressed: _isSaving ? null : _save,
               child: _isSaving
-                  ? SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Theme.of(context).colorScheme.onPrimary),
+                  ? AiToastDelegate.buildLoading(
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onPrimary,
                     )
                   : Text(AiL10n.current.save),
             ),
@@ -369,7 +335,10 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
             child: PageView(
               controller: _pageCtrl,
               onPageChanged: (i) => setState(() => _tabIndex = i),
-              children: [_buildConfigTab(), _buildModelsTab()],
+              children: [
+                _buildConfigTab(),
+                _buildModelsTab(),
+              ],
             ),
           ),
         ],
@@ -398,10 +367,8 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
               final d = e.value;
               final selected = i == _tabIndex;
               return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: Material(
                   color: selected ? cs.secondaryContainer : Colors.transparent,
                   shape: RoundedSuperellipseBorder(
@@ -435,7 +402,7 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
   // ────────────────── BottomNav (手机) ──────────────────
 
   Widget _buildBottomNav() {
-    return NavigationBar(
+    return M3eNavigationBar(
       selectedIndex: _tabIndex,
       onDestinationSelected: _switchTab,
       destinations: [
@@ -499,7 +466,10 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
           onChanged: _onTypeChanged,
         ),
         const SizedBox(height: 14),
-        TextField(controller: _baseUrlCtrl, decoration: inputDeco('Base URL')),
+        TextField(
+          controller: _baseUrlCtrl,
+          decoration: inputDeco('Base URL'),
+        ),
         // 实时预览实际请求路径,让用户看清自己配的 baseUrl 在补 /v1 后
         // 会拼成什么。借鉴 Cherry Studio 的 host preview。
         // 跟 SDK 行为一致:OpenAI / Anthropic 走 /v1,Gemini 走 /v1beta。
@@ -525,9 +495,11 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
               child: Text(
                 AiL10n.current.baseUrlPreview('$formatted$endpoint'),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface
-                      .withValues(alpha: 0.6),
-                ),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.6),
+                    ),
               ),
             );
           },
@@ -536,17 +508,14 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
         TextField(
           controller: _apiKeyCtrl,
           obscureText: _obscureApiKey,
-          decoration: inputDeco(
-            'API Key',
-            suffix: IconButton(
-              icon: Icon(
-                _obscureApiKey
+          decoration: inputDeco('API Key',
+              suffix: IconButton(
+                icon: Icon(_obscureApiKey
                     ? Symbols.visibility_off_rounded
-                    : Symbols.visibility_rounded,
-              ),
-              onPressed: () => setState(() => _obscureApiKey = !_obscureApiKey),
-            ),
-          ),
+                    : Symbols.visibility_rounded),
+                onPressed: () =>
+                    setState(() => _obscureApiKey = !_obscureApiKey),
+              )),
         ),
         // 测试模型按钮挪到 AppBar 右上角(闪电图标),避免表单中段塞按钮
         // 显得割裂,且两个 tab 都能复用同一个入口。
@@ -565,22 +534,9 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
       children: [
         // 模型列表
         _models.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Symbols.layers_rounded,
-                      size: 48,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      AiL10n.current.addModelManually,
-                      style: TextStyle(color: cs.onSurfaceVariant),
-                    ),
-                  ],
-                ),
+            ? AppEmptyState(
+                icon: const Icon(Symbols.layers_rounded),
+                title: AiL10n.current.addModelManually,
               )
             : ReorderableListView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
@@ -690,9 +646,8 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
                     children: [
                       Text(
                         model.name ?? model.id,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -714,11 +669,8 @@ class _AiProviderEditPageState extends ConsumerState<AiProviderEditPage> {
                   ),
                 ),
                 IconButton(
-                  icon: Icon(
-                    Symbols.delete_rounded,
-                    color: cs.error.withValues(alpha: 0.7),
-                    size: 20,
-                  ),
+                  icon: Icon(Symbols.delete_rounded,
+                      color: cs.error.withValues(alpha: 0.7), size: 20),
                   tooltip: AiL10n.current.remove,
                   visualDensity: VisualDensity.compact,
                   onPressed: () => setState(() => _removeModelAt(index)),
@@ -847,15 +799,13 @@ class _FetchedModelsSelectorState extends State<_FetchedModelsSelector> {
   @override
   void initState() {
     super.initState();
-    widget.fetchFuture
-        .then((result) {
-          if (mounted) setState(() => _fetched = result);
-        })
-        .catchError((e) {
-          if (mounted) {
-            setState(() => _error = AiProviderApiService.friendlyError(e));
-          }
-        });
+    widget.fetchFuture.then((result) {
+      if (mounted) setState(() => _fetched = result);
+    }).catchError((e) {
+      if (mounted) {
+        setState(() => _error = AiProviderApiService.friendlyError(e));
+      }
+    });
   }
 
   List<AiModel> get _filtered {
@@ -864,11 +814,9 @@ class _FetchedModelsSelectorState extends State<_FetchedModelsSelector> {
     if (_search.isEmpty) return models;
     final q = _search.toLowerCase();
     return models
-        .where(
-          (m) =>
-              m.id.toLowerCase().contains(q) ||
-              (m.name?.toLowerCase().contains(q) ?? false),
-        )
+        .where((m) =>
+            m.id.toLowerCase().contains(q) ||
+            (m.name?.toLowerCase().contains(q) ?? false))
         .toList();
   }
 
@@ -922,78 +870,64 @@ class _FetchedModelsSelectorState extends State<_FetchedModelsSelector> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isLoading = _fetched == null && _error == null;
     final filtered = _filtered;
     final active = _activeIds;
     final allActive =
         filtered.isNotEmpty && filtered.every((m) => active.contains(m.id));
 
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.8,
-      maxChildSize: 0.95,
-      minChildSize: 0.4,
-      builder: (c, scrollController) {
-        return Column(
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: ShapeDecoration(
-                color: cs.onSurface.withValues(alpha: 0.2),
-                shape: RoundedSuperellipseBorder(
-                  borderRadius: context.shapes.borderRadius(999),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (!isLoading && _error == null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                child: TextField(
-                  onChanged: (v) => setState(() => _search = v),
-                  decoration: InputDecoration(
-                    hintText: AiL10n.current.searchModelsHint,
-                    prefixIcon: const Icon(Symbols.search_rounded, size: 20),
-                    isDense: true,
-                    filled: true,
-                    fillColor: cs.surfaceContainerHigh,
-                    border: OutlineInputBorder(
-                      borderRadius: context.shapes.borderRadius(12),
-                      borderSide: BorderSide.none,
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.8,
+        maxChildSize: 0.95,
+        minChildSize: 0.4,
+        builder: (context, scrollController) => AppSheetScaffold(
+          expandToFill: true,
+          contentPadding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              if (!isLoading && _error == null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                  child: InputFieldShell(
+                    color: cs.surfaceContainerHigh,
+                    child: TextField(
+                      onChanged: (value) => setState(() => _search = value),
+                      decoration: InputDecoration(
+                        hintText: AiL10n.current.searchModelsHint,
+                        prefixIcon:
+                            const Icon(Symbols.search_rounded, size: 20),
+                        isDense: true,
+                        suffixIcon: filtered.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: Icon(
+                                  allActive
+                                      ? Symbols.deselect_rounded
+                                      : Symbols.select_all_rounded,
+                                  size: 22,
+                                  color: cs.onSurface.withValues(alpha: 0.7),
+                                ),
+                                tooltip: allActive
+                                    ? AiL10n.current.fetchModelsDeselectAll
+                                    : AiL10n.current.fetchModelsSelectAll,
+                                onPressed: _toggleAll,
+                              ),
+                      ),
                     ),
-                    suffixIcon: filtered.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(
-                              allActive
-                                  ? Symbols.deselect_rounded
-                                  : Symbols.select_all_rounded,
-                              size: 22,
-                              color: cs.onSurface.withValues(alpha: 0.7),
-                            ),
-                            tooltip: allActive
-                                ? AiL10n.current.fetchModelsDeselectAll
-                                : AiL10n.current.fetchModelsSelectAll,
-                            onPressed: _toggleAll,
-                          )
-                        : null,
                   ),
                 ),
-              ),
-            Expanded(child: _buildBody(cs, isDark, scrollController)),
-          ],
-        );
-      },
+              Expanded(child: _buildBody(cs, scrollController)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildBody(
-    ColorScheme cs,
-    bool isDark,
-    ScrollController scrollController,
-  ) {
+  Widget _buildBody(ColorScheme cs, ScrollController scrollController) {
     if (_error != null) {
       return Center(
         child: Padding(
@@ -1019,10 +953,8 @@ class _FetchedModelsSelectorState extends State<_FetchedModelsSelector> {
           children: [
             AiToastDelegate.buildLoading(color: cs.primary, size: 48),
             const SizedBox(height: 16),
-            Text(
-              AiL10n.current.fetchModels,
-              style: TextStyle(color: cs.onSurfaceVariant),
-            ),
+            Text(AiL10n.current.fetchModels,
+                style: TextStyle(color: cs.onSurfaceVariant)),
           ],
         ),
       );
@@ -1031,10 +963,8 @@ class _FetchedModelsSelectorState extends State<_FetchedModelsSelector> {
     final grouped = _grouped;
     if (grouped.isEmpty) {
       return Center(
-        child: Text(
-          AiL10n.current.searchModelsHint,
-          style: TextStyle(color: cs.onSurfaceVariant),
-        ),
+        child: Text(AiL10n.current.searchModelsHint,
+            style: TextStyle(color: cs.onSurfaceVariant)),
       );
     }
 
@@ -1050,9 +980,8 @@ class _FetchedModelsSelectorState extends State<_FetchedModelsSelector> {
         final group = groupKeys[gi];
         final models = grouped[group]!;
         final isCollapsed = _collapsed.contains(group);
-        final groupActiveCount = models
-            .where((m) => active.contains(m.id))
-            .length;
+        final groupActiveCount =
+            models.where((m) => active.contains(m.id)).length;
         final groupAllActive = groupActiveCount == models.length;
 
         return Column(
@@ -1101,15 +1030,13 @@ class _FetchedModelsSelectorState extends State<_FetchedModelsSelector> {
                       onTap: () => _toggleGroup(group),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
+                            horizontal: 8, vertical: 2),
                         child: Icon(
                           groupAllActive
                               ? Symbols.check_box_rounded
                               : (groupActiveCount > 0
-                                    ? Symbols.indeterminate_check_box_rounded
-                                    : Symbols.check_box_outline_blank_rounded),
+                                  ? Symbols.indeterminate_check_box_rounded
+                                  : Symbols.check_box_outline_blank_rounded),
                           size: 20,
                           color: groupAllActive || groupActiveCount > 0
                               ? cs.primary
@@ -1137,9 +1064,7 @@ class _FetchedModelsSelectorState extends State<_FetchedModelsSelector> {
                       onTap: () => _toggle(m),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 10,
-                        ),
+                            horizontal: 10, vertical: 10),
                         child: Row(
                           children: [
                             Checkbox(
@@ -1173,9 +1098,8 @@ class _FetchedModelsSelectorState extends State<_FetchedModelsSelector> {
                                       m.id,
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: cs.onSurfaceVariant.withValues(
-                                          alpha: 0.6,
-                                        ),
+                                        color: cs.onSurfaceVariant
+                                            .withValues(alpha: 0.6),
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,

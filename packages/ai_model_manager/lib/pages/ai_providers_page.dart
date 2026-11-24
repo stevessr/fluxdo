@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -32,11 +33,7 @@ class AiProvidersPage extends ConsumerWidget {
               // 供应商管理
               _SettingsEntry(
                 icon: Symbols.dns_rounded,
-                title:
-                    AiL10n.current.addProvider
-                        .replaceAll('添加', '')
-                        .trim()
-                        .isEmpty
+                title: AiL10n.current.addProvider.replaceAll('添加', '').trim().isEmpty
                     ? 'Providers'
                     : AiL10n.current.addProvider.replaceAll('添加', '').trim(),
                 subtitle: providerCount > 0
@@ -44,7 +41,7 @@ class AiProvidersPage extends ConsumerWidget {
                     : AiL10n.current.noProviderConfigured,
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const AiProviderListPage()),
+                  InteractionPageRoute(builder: (_) => const AiProviderListPage()),
                 ),
               ),
               // 模型配置
@@ -54,9 +51,8 @@ class AiProvidersPage extends ConsumerWidget {
                   title: AiL10n.current.modelConfig,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const AiModelConfigPage(),
-                    ),
+                    InteractionPageRoute(
+                        builder: (_) => const AiModelConfigPage()),
                   ),
                 ),
               // 聊天记录
@@ -65,7 +61,7 @@ class AiProvidersPage extends ConsumerWidget {
                 title: AiL10n.current.chatHistory,
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  InteractionPageRoute(
                     builder: (_) =>
                         AiChatHistoryPage(onOpenSession: onOpenSession),
                   ),
@@ -78,7 +74,8 @@ class AiProvidersPage extends ConsumerWidget {
                 subtitle: AiL10n.current.quickPromptsManageHint,
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const PromptPresetsPage()),
+                  InteractionPageRoute(
+                      builder: (_) => const PromptPresetsPage()),
                 ),
               ),
               // 高级设置
@@ -87,9 +84,8 @@ class AiProvidersPage extends ConsumerWidget {
                 title: AiL10n.current.advancedSettings,
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const AiAdvancedSettingsPage(),
-                  ),
+                  InteractionPageRoute(
+                      builder: (_) => const AiAdvancedSettingsPage()),
                 ),
               ),
             ],
