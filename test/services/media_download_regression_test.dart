@@ -18,6 +18,7 @@ class _ImageAdapter implements HttpClientAdapter {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('small image channels accept emoji and both avatar groups', () async {
     final dio = Dio()..httpClientAdapter = _ImageAdapter();
     final client = DioHttpClient.withClients(dio, dio);
