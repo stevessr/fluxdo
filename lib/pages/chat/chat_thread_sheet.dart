@@ -234,6 +234,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
         .loadMessages(preferLatest: true)
         .catchError((_) {});
     ref.invalidate(chatChannelThreadsProvider(widget.channelId));
+    ref.invalidate(chatAllThreadsProvider);
   }
 
   Future<void> _toggleReaction(ChatMessage message, String emoji) async {

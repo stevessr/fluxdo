@@ -1,5 +1,5 @@
 import 'package:emoji_extension/emoji_extension.dart' hide Emoji;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/preferences_provider.dart';
@@ -96,7 +96,7 @@ class EmojiStyleAssets {
 
 /// One widget for post HTML, chat reactions, editor/picker and inline text.
 /// Any unsupported/missing Google Noto asset falls back to the server's real emoji.
-class StyledEmojiImage extends ConsumerWidget {
+class StyledEmojiImage extends StatelessWidget {
   const StyledEmojiImage({
     super.key,
     required this.name,
@@ -126,17 +126,20 @@ class StyledEmojiImage extends ConsumerWidget {
   final Widget? errorFallback;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final requestedStyle = usePostStyle
-        ? ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle))
-        : EmojiRenderStyle.normal;
-    final style = EmojiStyleAssets.effectiveStyle(
-      requestedStyle,
-      usePostStyle: usePostStyle,
+  Widget build(BuildContext context) {
+    if (!usePostStyle) {
+      return _buildImage(context, EmojiRenderStyle.normal, EmojiHandler.followSite);
+    }
+    return Consumer(
+      builder: (context, ref, _) => _buildImage(
+        context,
+        ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle)),
+        ref.watch(preferencesProvider.select((p) => p.emojiStyle)),
+      ),
     );
-    final set = usePostStyle
-        ? ref.watch(preferencesProvider.select((p) => p.emojiStyle))
-        : EmojiHandler.followSite;
+  }
+
+  Widget _buildImage(BuildContext context, EmojiRenderStyle style, String set) {
     return AnimatedBuilder(
       animation: EmojiHandler(),
       builder: (context, _) {

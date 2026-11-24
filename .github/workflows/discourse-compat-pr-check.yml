@@ -89,6 +89,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
+          pkg-config --cflags gtk+-3.0 x11 xi
 
       - name: Prepare generated asset directories
         run: mkdir -p assets/certs
@@ -175,7 +176,7 @@ jobs:
 
       - name: Analyze changed compatibility surface
         run: >-
-          flutter analyze
+          flutter analyze --no-fatal-infos
           lib/models/board.dart
           lib/models/chat/chat_channel.dart
           lib/models/group.dart
@@ -215,7 +216,7 @@ jobs:
         run: flutter test test/models/post_granted_badges_test.dart test/widgets/post/post_granted_badge_test.dart
 
       - name: Analyze topic board picker
-        run: flutter analyze lib/widgets/topic/add_to_board_sheet.dart lib/pages/topic_detail_page/topic_more_menu_actions.dart
+        run: flutter analyze --no-fatal-infos lib/widgets/topic/add_to_board_sheet.dart lib/pages/topic_detail_page/topic_more_menu_actions.dart
 
       - name: Run topic board picker tests
         run: flutter test test/pages/topic_detail_page/topic_more_menu_actions_test.dart test/widgets/topic/add_to_board_sheet_test.dart

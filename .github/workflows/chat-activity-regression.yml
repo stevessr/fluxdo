@@ -1,0 +1,79 @@
+name: Chat Activity Regression
+
+on:
+  pull_request:
+    paths:
+      - 'lib/models/chat/**'
+      - 'lib/providers/chat_providers.dart'
+      - 'lib/pages/chat/**'
+      - 'lib/widgets/chat/**'
+      - 'lib/widgets/common/emoji_text.dart'
+      - 'lib/widgets/common/styled_emoji_image.dart'
+      - 'test/pages/chat/**'
+      - '.github/workflows/chat-activity-regression.yml'
+      - 'test/pages/chat_message_bubble_layout_test.dart'
+      - 'test/pages/chat_conversation_tabs_test.dart'
+      - 'lib/services/emoji_handler.dart'
+      - 'lib/services/discourse/_chat.dart'
+      - 'lib/utils/fluxdo_render_callbacks.dart'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/chat-activity-regression.yml
+      patterns: >-
+        ["lib/models/chat/**","lib/providers/chat_providers.dart","lib/pages/chat/**","lib/widgets/chat/**","lib/widgets/common/emoji_text.dart","lib/widgets/common/styled_emoji_image.dart","test/pages/chat/**",".github/workflows/chat-activity-regression.yml","test/pages/chat_message_bubble_layout_test.dart","test/pages/chat_conversation_tabs_test.dart","lib/services/emoji_handler.dart","lib/services/discourse/_chat.dart","lib/utils/fluxdo_render_callbacks.dart","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
+  chat-activity:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.1'
+          cache: true
+      - name: Install Linux native dependencies for Flutter tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
+          pkg-config --cflags gtk+-3.0 x11 xi
+      - name: Prepare assets
+        run: mkdir -p assets/certs
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Generate localizations
+        run: dart run tool/gen_l10n.dart
+      - name: Analyze chat changes
+        run: |
+          flutter analyze --no-fatal-infos \
+            lib/models/chat/chat_channel.dart \
+            lib/models/chat/chat_thread.dart \
+            lib/providers/chat_providers.dart \
+            lib/pages/chat/chat_page.dart \
+            lib/pages/chat/chat_message_page.dart \
+            lib/pages/chat/chat_thread_list_sheet.dart \
+            lib/pages/chat/chat_thread_sheet.dart \
+            lib/widgets/chat/chat_thread_preview_card.dart \
+            test/pages/chat/chat_thread_activity_test.dart
+      - name: Run chat regression tests
+        run: dart tool/flutterw.dart test test/pages/chat/chat_thread_activity_test.dart test/pages/chat_message_bubble_layout_test.dart test/pages/chat_conversation_tabs_test.dart
