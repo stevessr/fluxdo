@@ -77,7 +77,10 @@ class UrlHelper {
         : sitePath;
     if (unprefixed.startsWith('/mini-app-api/') ||
         unprefixed.startsWith('/secure-uploads/') ||
-        unprefixed.startsWith('/secure-media-uploads/')) {
+        unprefixed.startsWith('/secure-media-uploads/') ||
+        unprefixed.startsWith('/uploads/secure-uploads/') ||
+        unprefixed.startsWith('/uploads/secure-media-uploads/') ||
+        unprefixed.startsWith('/uploads/short-url/')) {
       return resolveUrl(path);
     }
     return resolveUrlWithCdn(path);
