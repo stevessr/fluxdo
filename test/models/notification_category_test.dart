@@ -14,6 +14,23 @@ DiscourseNotification notificationOf(NotificationType type, {int id = 1}) {
 }
 
 void main() {
+  test('every known type has one native category; unknown ids survive', () {
+    for (final type in NotificationType.values) {
+      final notification = notificationOf(type);
+      expect(NotificationCategory.values.where((category) =>
+          category != NotificationCategory.all && category.matches(notification)),
+          hasLength(1), reason: '$type');
+    }
+    final unknown = DiscourseNotification.fromJson({
+      'id': 5,
+      'user_id': 1,
+      'notification_type': 1234,
+      'created_at': '2026-08-31T00:00:00.000Z',
+    });
+    expect(NotificationCategory.other.matches(unknown), isTrue);
+    expect(unknown.copyWith(read: true).notificationTypeId, 1234);
+  });
+
   test('notification tabs use the updated Discourse user-menu order', () {
     expect(NotificationCategory.values, [
       NotificationCategory.all,

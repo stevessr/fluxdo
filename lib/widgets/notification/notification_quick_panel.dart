@@ -728,19 +728,25 @@ class _NotificationBodyState extends ConsumerState<_NotificationBody>
   String _label(NotificationPanelTab tab) => switch (tab) {
     NotificationPanelTab.all => context.l10n.common_all,
     NotificationPanelTab.replies => context.l10n.notification_tabReplies,
+    NotificationPanelTab.mentions => context.l10n.notification_categoryMentions,
     NotificationPanelTab.likes => context.l10n.notification_tabLikes,
     NotificationPanelTab.messages =>
       context.l10n.notification_typePrivateMessage,
     NotificationPanelTab.bookmarks => context.l10n.notification_tabBookmarks,
+    NotificationPanelTab.assigned => context.l10n.notification_categoryAssigned,
+    NotificationPanelTab.chat => context.l10n.notification_categoryChat,
     NotificationPanelTab.other => context.l10n.notification_tabOther,
   };
 
   static IconData _icon(NotificationPanelTab tab) => switch (tab) {
     NotificationPanelTab.all => Symbols.notifications_rounded,
     NotificationPanelTab.replies => Symbols.reply_rounded,
+    NotificationPanelTab.mentions => Symbols.alternate_email_rounded,
     NotificationPanelTab.likes => Symbols.favorite_rounded,
     NotificationPanelTab.messages => Symbols.mail_rounded,
     NotificationPanelTab.bookmarks => Symbols.bookmark_rounded,
+    NotificationPanelTab.assigned => Symbols.assignment_rounded,
+    NotificationPanelTab.chat => Symbols.chat_rounded,
     NotificationPanelTab.other => Symbols.more_horiz_rounded,
   };
 

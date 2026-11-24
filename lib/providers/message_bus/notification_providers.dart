@@ -87,8 +87,7 @@ class NotificationCountNotifier extends Notifier<NotificationCountState> {
         ref.read(provider.notifier).markAllLocalRead();
       }
     }
-    for (final filter in NotificationReadFilter.values) {
-      final provider = notificationListProvider(filter);
+    for (final provider in notificationHistoryProviders()) {
       if (ref.read(provider.exists)) {
         ref.read(provider.notifier).markAllLocalRead();
       }
@@ -219,8 +218,7 @@ class NotificationChannelNotifier extends Notifier<void> {
 
         // Full history is independent of the recent panel. Update only
         // mounted history providers and reconcile count-only events quietly.
-        for (final filter in NotificationReadFilter.values) {
-          final provider = notificationListProvider(filter);
+        for (final provider in notificationHistoryProviders()) {
           if (!ref.read(provider.exists)) continue;
           final history = ref.read(provider);
           final notifier = ref.read(provider.notifier);
