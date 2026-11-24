@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -816,8 +817,12 @@ class _ChatChannelListView extends ConsumerWidget {
         itemCount: channels.length,
         itemBuilder: (context, index) {
           final channel = channels[index];
-          return ChatChannelTile(
+          return SegmentedCardItem(
             key: ValueKey('chat-channel-${channel.id}'),
+            index: index,
+            count: channels.length,
+            gap: 3,
+            child: ChatChannelTile(
             channel: channel,
             onTap: () {
               Navigator.push(
@@ -839,6 +844,7 @@ class _ChatChannelListView extends ConsumerWidget {
                 ),
               );
             },
+          ),
           );
         },
       ),

@@ -260,10 +260,9 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
         }
         return false;
       },
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         itemCount: _hits.length + (_isLoadingMore ? 1 : 0),
-        separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
           if (index >= _hits.length) {
             return const Padding(
@@ -278,7 +277,12 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
             );
           }
           final hit = _hits[index];
-          return _SearchHitTile(hit: hit, onTap: () => _openHit(hit));
+          return SegmentedCardItem(
+            index: index,
+            count: _hits.length,
+            gap: 3,
+            child: _SearchHitTile(hit: hit, onTap: () => _openHit(hit)),
+          );
         },
       ),
     );

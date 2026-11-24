@@ -204,11 +204,16 @@ class _BrowseChannelListView extends ConsumerWidget {
               // 优先用频道自身 current_user_membership.following
               final isJoined =
                   channel.following || followedIds.contains(channel.id);
-              return _BrowseChannelTile(
+              return SegmentedCardItem(
                 key: ValueKey('browse-channel-${channel.id}'),
-                channel: channel,
-                isJoined: isJoined,
-                browseParams: params,
+                index: index,
+                count: channels.length,
+                gap: 3,
+                child: _BrowseChannelTile(
+                  channel: channel,
+                  isJoined: isJoined,
+                  browseParams: params,
+                ),
               );
             },
           ),
@@ -473,7 +478,7 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
         tileColor: _isJoined
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.08)
             : null,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(12)),
         leading: _buildLeading(context, dimmed: dimmed),
         title: Row(
           children: [
