@@ -1,0 +1,106 @@
+name: Build StevesSR Generator APK
+description: Shared release build and validation for PRs and Nightly
+runs:
+  using: composite
+  steps:
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - name: Read Flutter version from .fvmrc
+      id: sdk
+      shell: bash
+      run: |
+        version="$(jq -er '.flutter | strings | select(length > 0)' .fvmrc)"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: ${{ steps.sdk.outputs.version }}
+        channel: stable
+        cache: true
+
+    - name: Verify generator package and source manifest
+      shell: bash
+      working-directory: packages/stevessr_generator
+      run: |
+        flutter pub get
+        dart run tool/gen_avatar_deltas.dart --check
+        dart analyze lib tool
+
+    - name: Get example dependencies
+      shell: bash
+      working-directory: packages/stevessr_generator/example
+      run: flutter pub get
+
+    - name: Analyze generator entry point
+      shell: bash
+      working-directory: packages/stevessr_generator/example
+      run: flutter analyze --no-fatal-infos lib/main.dart
+
+    - name: Run all test files
+      shell: bash
+      working-directory: packages/stevessr_generator/example
+      run: |
+        for test_file in test/*_test.dart; do
+          flutter test --no-pub "$test_file"
+        done
+
+    - name: Build arm64 release APK
+      shell: bash
+      working-directory: packages/stevessr_generator/example
+      run: flutter build apk --release --target-platform android-arm64 --build-number "$GITHUB_RUN_NUMBER"
+
+    - name: Verify plugin APK has no launcher entry
+      working-directory: packages/stevessr_generator/example
+      shell: bash
+      run: |
+        set -euo pipefail
+        aapt="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)"
+        test -n "$aapt"
+        "$aapt" dump xmltree build/app/outputs/flutter-apk/app-release.apk AndroidManifest.xml > /tmp/stevessr-manifest.txt
+        grep -Fq 'com.github.lingyan000.fluxdo.action.PLUGIN' /tmp/stevessr-manifest.txt
+        grep -Fq 'com.github.lingyan000.fluxdo.plugin.API_VERSION' /tmp/stevessr-manifest.txt
+        if grep -Fq 'android.intent.category.LAUNCHER' /tmp/stevessr-manifest.txt; then
+          echo '插件 APK 不应带桌面启动器图标'
+          exit 1
+        fi
+
+    - name: Verify APK contains arm64 libraries only
+      working-directory: packages/stevessr_generator/example
+      shell: bash
+      run: |
+        set -euo pipefail
+        unzip -Z1 build/app/outputs/flutter-apk/app-release.apk | awk -F/ '
+          $1 == "lib" && $2 != "" {
+            if ($2 == "arm64-v8a") {
+              found_arm64 = 1
+            } else {
+              print "Unexpected native ABI entry: " $0
+              failed = 1
+            }
+          }
+          END {
+            if (!found_arm64) {
+              print "APK contains no arm64-v8a native libraries"
+              failed = 1
+            }
+            exit failed
+          }
+        '
+
+    - name: Verify APK signature
+      shell: bash
+      working-directory: packages/stevessr_generator/example
+      run: |
+        set -euo pipefail
+        apksigner="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)"
+        test -n "$apksigner"
+        "$apksigner" verify build/app/outputs/flutter-apk/app-release.apk
+
+    - name: Stage stable APK filename
+      shell: bash
+      run: cp packages/stevessr_generator/example/build/app/outputs/flutter-apk/app-release.apk stevessr-generator-android-arm64-v8a.apk
