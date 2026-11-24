@@ -5,6 +5,10 @@ on:
     paths:
       - 'lib/pages/topic_detail_page/topic_detail_page.dart'
       - 'lib/pages/site_info_page.dart'
+      - 'lib/widgets/common/site_info_tabs.dart'
+      - 'lib/pages/site_about_page.dart'
+      - 'lib/models/site_about.dart'
+      - 'lib/models/site_policy_document.dart'
       - 'lib/pages/site_policy_page.dart'
       - 'lib/models/site_info_section.dart'
       - 'lib/utils/link_launcher.dart'
@@ -38,7 +42,7 @@ jobs:
     with:
       workflow_file: .github/workflows/parallel-topic-site-info-regression.yml
       patterns: >-
-        ["lib/pages/topic_detail_page/topic_detail_page.dart","lib/pages/site_info_page.dart","lib/pages/site_policy_page.dart","lib/models/site_info_section.dart","lib/utils/link_launcher.dart","lib/widgets/layout/master_detail_pane_host.dart","test/models/site_info_section_test.dart","test/pages/site_info_page_test.dart","test/providers/selected_topic_provider_test.dart","test/widgets/layout/unified_topic_tabs_test.dart",".github/workflows/parallel-topic-site-info-regression.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml","lib/widgets/layout/pico_parallel_tabs.dart","lib/providers/selected_topic_provider.dart","test/pages/topic_detail_page/topic_more_menu_actions_test.dart"]
+        ["lib/pages/topic_detail_page/topic_detail_page.dart","lib/pages/site_info_page.dart","lib/pages/site_policy_page.dart","lib/models/site_info_section.dart","lib/utils/link_launcher.dart","lib/widgets/layout/master_detail_pane_host.dart","test/models/site_info_section_test.dart","test/pages/site_info_page_test.dart","test/providers/selected_topic_provider_test.dart","test/widgets/layout/unified_topic_tabs_test.dart",".github/workflows/parallel-topic-site-info-regression.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml","lib/widgets/layout/pico_parallel_tabs.dart","lib/providers/selected_topic_provider.dart","test/pages/topic_detail_page/topic_more_menu_actions_test.dart","lib/widgets/common/site_info_tabs.dart","lib/pages/site_about_page.dart","lib/models/site_about.dart","lib/models/site_policy_document.dart"]
 
   verify:
     needs: scope
