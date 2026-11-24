@@ -1,7 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../l10n/s.dart';
 import '../models/stevessr_render_params.dart';
@@ -355,7 +356,6 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
       initialValue: presetKeys.contains(current) ? current : 'custom',
       decoration: const InputDecoration(
         labelText: '生成尺寸（像素）',
-        border: OutlineInputBorder(),
       ),
       items: [
         for (final size in _sizePresets)
@@ -528,17 +528,17 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
-            TextField(
-              controller: _textController,
-              enabled: _params.bubbleContent == StevessrBubbleContent.text,
-              minLines: 3,
-              maxLines: 8,
-              maxLength: 500,
-              decoration: InputDecoration(
-                labelText: l10n.text,
-                border: const OutlineInputBorder(),
+            InputFieldShell(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: TextField(
+                controller: _textController,
+                enabled: _params.bubbleContent == StevessrBubbleContent.text,
+                minLines: 3,
+                maxLines: 8,
+                maxLength: 500,
+                decoration: InputDecoration(labelText: l10n.text).withoutBorder(),
+                onChanged: _setText,
               ),
-              onChanged: _setText,
             ),
             const SizedBox(height: 8),
             _buildBubbleContentControls(),
@@ -824,7 +824,7 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
                 border: Border.all(
                   color: Theme.of(context).colorScheme.outlineVariant,
                 ),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: context.shapes.borderRadius(12),
               ),
               child: Image.memory(
                 imageBytes,
@@ -959,7 +959,6 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: const Icon(Icons.palette_outlined),
-          border: const OutlineInputBorder(),
         ),
         onChanged: onChanged,
       ),
@@ -981,7 +980,6 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
       keyboardType: TextInputType.number,
       decoration: InputDecoration(
         labelText: label,
-        border: const OutlineInputBorder(),
       ),
       onChanged: (value) => onChanged(_parseInt(value)),
     );
@@ -997,7 +995,6 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       decoration: InputDecoration(
         labelText: label,
-        border: const OutlineInputBorder(),
       ),
       onChanged: (value) => onChanged(_parseDouble(value)),
     );
@@ -1014,7 +1011,6 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
       initialValue: value,
       decoration: InputDecoration(
         labelText: label,
-        border: const OutlineInputBorder(),
       ),
       items: [
         for (final item in values)

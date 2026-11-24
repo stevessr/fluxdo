@@ -19,6 +19,11 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "com.github.lingyan000.fluxdo/generator_insert",
         ).setMethodCallHandler { call, result ->
+            if (call.method == "getHostTheme") {
+                val theme = intent.getStringExtra("com.github.lingyan000.fluxdo.plugin.THEME")
+                result.success(theme?.takeIf { it.length <= 8192 })
+                return@setMethodCallHandler
+            }
             if (call.method != "insertGeneratedImage") {
                 result.notImplemented()
                 return@setMethodCallHandler

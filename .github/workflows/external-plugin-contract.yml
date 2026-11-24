@@ -11,7 +11,7 @@ on:
       - 'lib/widgets/markdown_editor/rich_composer/rich_composer_editor.dart'
       - 'lib/pages/chat/chat_message_page.dart'
       - 'lib/pages/chat/chat_thread_sheet.dart'
-      - 'packages/stevessr_generator/example/lib/main.dart'
+      - 'packages/stevessr_generator/**'
       - 'packages/stevessr_generator/lib/src/pages/stevessr_generator_page.dart'
       - 'lib/pages/installed_plugins_page.dart'
       - 'lib/widgets/markdown_editor/emoji_sticker_panel.dart'
@@ -39,7 +39,7 @@ jobs:
     with:
       workflow_file: .github/workflows/external-plugin-contract.yml
       patterns: >-
-        ["packages/stevessr_generator/example/android/**","android/app/src/main/AndroidManifest.xml","android/app/src/main/kotlin/**","lib/services/external_plugin_service.dart","lib/widgets/markdown_editor/markdown_editor.dart","lib/widgets/markdown_editor/rich_composer/rich_composer_editor.dart","lib/pages/chat/chat_message_page.dart","lib/pages/chat/chat_thread_sheet.dart","packages/stevessr_generator/example/lib/main.dart","packages/stevessr_generator/lib/src/pages/stevessr_generator_page.dart","lib/pages/installed_plugins_page.dart","lib/widgets/markdown_editor/emoji_sticker_panel.dart","test/services/external_plugin_service_test.dart","scripts/check_external_plugin_contract.py",".github/workflows/external-plugin-contract.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+        ["packages/stevessr_generator/example/android/**","android/app/src/main/AndroidManifest.xml","android/app/src/main/kotlin/**","lib/services/external_plugin_service.dart","lib/widgets/markdown_editor/markdown_editor.dart","lib/widgets/markdown_editor/rich_composer/rich_composer_editor.dart","lib/pages/chat/chat_message_page.dart","lib/pages/chat/chat_thread_sheet.dart","packages/stevessr_generator/**","packages/stevessr_generator/lib/src/pages/stevessr_generator_page.dart","lib/pages/installed_plugins_page.dart","lib/widgets/markdown_editor/emoji_sticker_panel.dart","test/services/external_plugin_service_test.dart","scripts/check_external_plugin_contract.py",".github/workflows/external-plugin-contract.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
 
   contract:
     needs: scope
@@ -110,6 +110,9 @@ jobs:
       - name: Analyze generator entry point
         working-directory: packages/stevessr_generator/example
         run: flutter analyze --no-fatal-infos lib/main.dart
+      - name: Test plugin appearance and generator page
+        working-directory: packages/stevessr_generator/example
+        run: flutter test test/plugin_theme_test.dart test/generator_page_test.dart test/interactive_preview_test.dart
       - name: Compile standalone plugin APK
         working-directory: packages/stevessr_generator/example
         run: flutter build apk --debug --target-platform android-arm64

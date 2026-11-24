@@ -51,7 +51,7 @@ internal class ExternalPluginChannel(
                     if (id.isNullOrBlank()) {
                         result.error("INVALID_PLUGIN", "插件标识不能为空", null)
                     } else {
-                        result.success(launch(id))
+                        result.success(launch(id, call.argument<String>("theme")))
                     }
                 }
                 else -> result.notImplemented()
@@ -138,7 +138,7 @@ internal class ExternalPluginChannel(
             .sortedBy { it.first.loadLabel(manager).toString().lowercase() }
     }
 
-    private fun launch(id: String): Boolean {
+    private fun launch(id: String, theme: String?): Boolean {
         val component = ComponentName.unflattenFromString(id) ?: return false
         // 每次启动均重新解析：安装、升级、卸载时不会留下过期入口。
         if (discover().none { it.second == component }) return false
@@ -147,7 +147,12 @@ internal class ExternalPluginChannel(
             activity.startActivityForResult(
                 Intent(ACTION)
                     .addCategory(Intent.CATEGORY_DEFAULT)
-                    .setComponent(component),
+                    .setComponent(component)
+                    .apply {
+                        if (theme != null && theme.length <= 8192) {
+                            putExtra("com.github.lingyan000.fluxdo.plugin.THEME", theme)
+                        }
+                    },
                 INSERT_IMAGE_REQUEST,
             )
             true

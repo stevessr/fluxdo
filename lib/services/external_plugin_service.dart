@@ -100,13 +100,14 @@ class ExternalPluginService {
 
   Future<bool> launchPlugin(ExternalPlugin plugin, {
     ValueChanged<GeneratedPluginImage>? onGeneratedImage,
+    String? themeSnapshot,
   }) async {
     if (!isSupported) return false;
     _imageReceiver = onGeneratedImage;
     try {
       final launched = await _channel.invokeMethod<bool>(
             'launchPlugin',
-            {'id': plugin.id},
+            {'id': plugin.id, if (themeSnapshot != null) 'theme': themeSnapshot},
           ) ??
           false;
       if (!launched) _imageReceiver = null;

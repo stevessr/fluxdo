@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../models/stevessr_render_params.dart';
 import 'stevessr_canvas.dart';
@@ -175,8 +176,8 @@ class _StevessrInteractivePreviewState
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: color,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(8),
+                      borderRadius: BorderRadius.only(
+                        topLeft: context.shapes.radius(8),
                       ),
                     ),
                     child: const Icon(
