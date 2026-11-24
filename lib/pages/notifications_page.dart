@@ -124,9 +124,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage>
       notificationCountStateProvider.select((s) => s.totalUnread),
     );
     final hasUnreadInList = ref.watch(
-      notificationListProvider(
-        _readFilter,
-      ).select((v) => v.value?.any((n) => !n.read) ?? false),
+      notificationListProvider(_readFilter)
+          .select((v) => v.value?.any((n) => !n.read) ?? false),
     );
     final canMarkRead = totalUnread > 0 || hasUnreadInList;
     return LayoutBuilder(

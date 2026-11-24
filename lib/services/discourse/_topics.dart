@@ -866,7 +866,8 @@ PostStream _parsePostStreamJson(String body) {
   final suggested = parseSuggestedTopicList(data['suggested_topics']);
   final related = parseSuggestedTopicList(data['related_topics']);
   final messages = parseRelatedMessages(data);
-  if (suggested.isEmpty && related.isEmpty && messages == null) return postStream;
+  if (suggested.isEmpty && related.isEmpty && messages == null)
+    return postStream;
   return PostStream(
     posts: postStream.posts,
     stream: postStream.stream,

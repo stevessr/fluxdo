@@ -347,10 +347,7 @@ mixin _UsersMixin on _DiscourseServiceBase {
   }) async {
     final response = await _dio.get(
       '/follow/posts/${Uri.encodeComponent(username)}.json',
-      queryParameters: {
-        'limit': 20,
-        'created_before': ?before,
-      },
+      queryParameters: {'limit': 20, 'created_before': ?before},
     );
     return FollowingFeedResponse.fromJson(
       response.data as Map<String, dynamic>,
@@ -621,8 +618,7 @@ mixin _UsersMixin on _DiscourseServiceBase {
         if (description != null && description.trim().isNotEmpty)
           'description': description.trim(),
         if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
-        if (domain != null && domain.trim().isNotEmpty)
-          'domain': domain.trim(),
+        if (domain != null && domain.trim().isNotEmpty) 'domain': domain.trim(),
         if (customMessage != null && customMessage.trim().isNotEmpty)
           'custom_message': customMessage.trim(),
       },

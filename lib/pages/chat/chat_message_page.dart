@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter/rendering.dart'
     show
@@ -650,10 +650,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     setState(() => _isUploadingImage = true);
     try {
       final directory = await getTemporaryDirectory();
-      final file = File(p.join(
-        directory.path,
-        '${DateTime.now().microsecondsSinceEpoch}_${image.fileName}',
-      ));
+      final file = File(
+        p.join(
+          directory.path,
+          '${DateTime.now().microsecondsSinceEpoch}_${image.fileName}',
+        ),
+      );
       await file.writeAsBytes(image.bytes);
       if (!mounted) return;
       final ok = await _uploadAndTrackImage(file.path);

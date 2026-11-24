@@ -51,6 +51,7 @@ bool _isAvatarUrl(String url) {
     return url.toLowerCase().contains('/user_avatar/');
   }
 }
+
 /// 创建 Discourse 图片 Provider
 ///
 /// 用于需要 ImageProvider 的场景（CircleAvatar、DecorationImage 等）
@@ -202,7 +203,11 @@ ImageProvider siteAssetImageProvider(
 ///
 /// 标准 emoji 地址(含 cooked 里的站点表情集地址)统一改写到展示表情集
 /// [EmojiHandler.displaySet],缺图 404 回退站点表情集。
-ImageProvider emojiImageProvider(String url, {double scale = 1.0, bool usePostStyle = false}) {
+ImageProvider emojiImageProvider(
+  String url, {
+  double scale = 1.0,
+  bool usePostStyle = false,
+}) {
   // 先按用户偏好改写标准 emoji，再走统一格式分流，保留站点自定义动图与
   // AVIF 的解码能力；标准表情缺图时回退到站点表情集。
   final displayUrl = usePostStyle ? EmojiHandler.displayUrl(url) : url;
@@ -215,10 +220,8 @@ ImageProvider emojiImageProvider(String url, {double scale = 1.0, bool usePostSt
   }
   if (isNativeAnimatedUrl(displayUrl)) {
     return NativeAnimatedImageProvider.fromBytesProvider(
-      loader: () => BlobImageCache.fetch(
-        BlobImageCache.emojiBucket,
-        displayUrl,
-      ),
+      loader: () =>
+          BlobImageCache.fetch(BlobImageCache.emojiBucket, displayUrl),
       tag: displayUrl,
       scale: scale,
     );

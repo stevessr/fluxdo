@@ -1,4 +1,5 @@
 import 'package:fluxdo/utils/avatar_url.dart';
+
 import 'notification.dart';
 import '../l10n/s.dart';
 import '../utils/time_utils.dart';
@@ -224,7 +225,8 @@ class User {
       id: id,
       username: username,
       name: identity != null ? identity.name : name,
-      avatarTemplate: avatarTemplate ??
+      avatarTemplate:
+          avatarTemplate ??
           (identity != null ? identity.avatarTemplate : this.avatarTemplate),
       animatedAvatar: avatarTemplate != null
           ? null
@@ -536,6 +538,7 @@ class User {
 class UserStatus {
   final String? description;
   final String? emoji;
+
   /// 状态结束时间（UTC），到期后状态不再展示。
   final DateTime? endsAt;
 
