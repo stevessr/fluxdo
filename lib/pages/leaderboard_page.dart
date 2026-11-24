@@ -221,7 +221,6 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     final snapshot = _cache[_period];
     final error = _errors[_period];
     final currentUsername = ref.watch(currentUserProvider).value?.username;
-    final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -698,7 +697,6 @@ class _LeaderboardRankingHeading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Row(

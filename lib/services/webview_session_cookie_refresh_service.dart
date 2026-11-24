@@ -8,7 +8,6 @@ import '../constants.dart';
 import 'auth_session.dart';
 import 'network/webview/site_webview_runtime.dart';
 import 'network/webview/shared_browser_resource.dart';
-import '../utils/frame_jank_monitor.dart';
 import 'log/log_writer.dart';
 import 'network/cookie/boundary_sync_service.dart';
 import 'network/cookie/cookie_jar_service.dart';
