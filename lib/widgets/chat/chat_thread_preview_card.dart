@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
 
@@ -131,16 +132,16 @@ class ChatThreadReplyCard extends StatelessWidget {
             : TimeUtils.formatSmartDate(time);
     final excerpt = chatThreadPreviewText(preview?.lastReplyExcerpt ?? '');
     final participants = <int, ChatUser>{};
-    for (final participant in [...?preview?.participantUsers, if (last != null) last]) {
+    for (final participant in [...?preview?.participantUsers, ?last]) {
       if (participant.id > 0) participants[participant.id] = participant;
     }
     final avatars = participants.values.take(3).toList();
     return Material(
       color: theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: context.shapes.borderRadius(12),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: context.shapes.borderRadius(12),
         child: Padding(
           padding: const EdgeInsets.all(10),
           child: Row(

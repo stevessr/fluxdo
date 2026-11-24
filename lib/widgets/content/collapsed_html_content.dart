@@ -41,7 +41,7 @@ class CollapsedHtmlContent extends StatelessWidget {
       if (spans.isEmpty) value = value.trimLeft();
       if (last) value = value.trimRight();
       if (value.isNotEmpty) {
-        spans.addAll(EmojiText.buildEmojiSpans(context, value, style));
+        spans.addAll(EmojiText.buildEmojiSpans(context, value, style, useRenderStyle: true));
       }
       text.clear();
     }
@@ -71,6 +71,7 @@ class CollapsedHtmlContent extends StatelessWidget {
               WidgetSpan(
                 alignment: PlaceholderAlignment.middle,
                 child: StyledEmojiImage(
+                   useRenderStyle: true,
                   name: alt,
                   serverUrl: UrlHelper.resolveUrlWithCdn(src!),
                   width: size,

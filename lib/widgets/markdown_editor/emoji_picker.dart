@@ -1,7 +1,6 @@
 import 'package:common_ui/common_ui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,7 +9,6 @@ import '../../models/emoji.dart';
 import '../../providers/discourse_providers.dart';
 import '../common/styled_emoji_image.dart';
 import '../../utils/dialog_utils.dart';
-import '../common/app_bottom_sheet.dart';
 
 import 'package:m3e_ui/m3e_ui.dart';
 

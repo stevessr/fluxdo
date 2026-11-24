@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/rendering.dart'
     show
         BoxHitTestResult,
@@ -1479,8 +1480,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 textInputAction: TextInputAction.search,
                 decoration: const InputDecoration(
                   hintText: '搜索此对话中的消息',
-                  border: InputBorder.none,
-                ),
+                ).withoutBorder(),
                 onSubmitted: _runChannelSearch,
               ),
               actions: [

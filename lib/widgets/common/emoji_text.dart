@@ -3,7 +3,6 @@ import 'package:material_ui/material_ui.dart';
 import 'styled_emoji_image.dart';
 import '../../services/emoji_handler.dart';
 import '../../services/discourse_cache_manager.dart';
-import '../../utils/emoji_shortcodes.dart';
 
 /// 轻量级 Emoji 文本组件
 ///
@@ -30,7 +29,7 @@ class EmojiText extends StatelessWidget {
     this.textAlign,
     this.softWrap,
     this.inline,
-    this.useRenderStyle = true,
+    this.useRenderStyle = false,
   });
 
   @override
@@ -60,7 +59,13 @@ class EmojiText extends StatelessWidget {
   }
 
   List<InlineSpan> _buildSpans(BuildContext context) {
-    return buildEmojiSpans(context, text, style, inline: inline, useRenderStyle: useRenderStyle);
+    return buildEmojiSpans(
+      context,
+      text,
+      style,
+      inline: inline,
+      useRenderStyle: useRenderStyle,
+    );
   }
 
   /// 输入框里表情图之后的等长补位字符样式（字符数与短代码对齐，光标与
@@ -83,7 +88,7 @@ class EmojiText extends StatelessWidget {
     TextStyle? style, {
     bool preserveSourceLength = false,
     bool? inline,
-    bool useRenderStyle = true,
+    bool useRenderStyle = false,
   }) {
     if (!text.contains(':')) {
       return [TextSpan(text: text)];

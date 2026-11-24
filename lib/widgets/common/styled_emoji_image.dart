@@ -1,5 +1,6 @@
 import 'package:emoji_extension/emoji_extension.dart' hide Emoji;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/preferences_provider.dart';
@@ -72,7 +73,7 @@ class EmojiStyleAssets {
 
 /// One widget for post HTML, chat reactions, editor/picker and inline text.
 /// Any unsupported/missing Google Noto asset falls back to the server's real emoji.
-class StyledEmojiImage extends ConsumerWidget {
+class StyledEmojiImage extends StatelessWidget {
   const StyledEmojiImage({
     super.key,
     required this.name,
@@ -84,7 +85,7 @@ class StyledEmojiImage extends ConsumerWidget {
     this.gaplessPlayback = true,
     this.showPlaceholder = false,
     this.errorFallback,
-    this.useRenderStyle = true,
+    this.useRenderStyle = false,
   });
 
   final String name;
@@ -99,10 +100,19 @@ class StyledEmojiImage extends ConsumerWidget {
   final bool useRenderStyle;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final style = useRenderStyle
-        ? ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle))
-        : EmojiRenderStyle.normal;
+  Widget build(BuildContext context) {
+    if (!useRenderStyle) {
+      return _buildImage(context, EmojiRenderStyle.normal);
+    }
+    return Consumer(
+      builder: (context, ref, _) => _buildImage(
+        context,
+        ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle)),
+      ),
+    );
+  }
+
+  Widget _buildImage(BuildContext context, EmojiRenderStyle style) {
     return AnimatedBuilder(
       animation: EmojiHandler(),
       builder: (context, _) {
@@ -145,7 +155,7 @@ class StyledEmojiImage extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.onSurfaceVariant
                     .withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: context.shapes.borderRadius(8),
               ),
               child: SizedBox(width: width, height: height),
             );

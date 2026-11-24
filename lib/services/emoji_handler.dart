@@ -222,7 +222,7 @@ class EmojiHandler extends ChangeNotifier {
   /// 格式像短代码,但不是表情,保持原文。
   bool exists(String name) {
     final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
-    if (_customEmojiMap?.containsKey(normalized) ?? false) return true;
+    if (_customEmojiMap.containsKey(normalized)) return true;
     final toneMatch = _toneRegex.firstMatch(normalized);
     return standardEmojiNames.contains(toneMatch?.group(1) ?? normalized);
   }
