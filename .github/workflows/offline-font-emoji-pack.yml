@@ -40,9 +40,19 @@ jobs:
         with:
           python-version: '3.12'
       - uses: android-actions/setup-android@v3
-      - run: |
-          pip install pillow==12.3.0
-          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        with:
+          # Legacy SDK package "tools" was removed from the repository.
+          # Install only the modern SDK packages used by build.sh.
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Verify Android SDK and install asset tooling
+        run: |
+          set -euo pipefail
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          for tool in aapt aapt2 d8 zipalign apksigner; do
+            test -x "$ANDROID_HOME/build-tools/35.0.0/$tool"
+          done
+          python -m pip install pillow==12.3.0
       - name: Prepare signing configuration
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

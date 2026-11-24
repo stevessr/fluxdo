@@ -28,6 +28,8 @@ internal class ExternalPluginChannel(
         private const val CHANNEL = "com.github.lingyan000.fluxdo/external_plugins"
         private const val ACTION = "com.github.lingyan000.fluxdo.action.PLUGIN"
         private const val API_VERSION = "com.github.lingyan000.fluxdo.plugin.API_VERSION"
+        private const val CATEGORY = "com.github.lingyan000.fluxdo.plugin.CATEGORY"
+        private const val LEGACY_GENERATOR = "com.github.lingyan000.stevessr_generator"
         private const val INSERT_IMAGE_REQUEST = 0xF1D0
         private const val MAX_GENERATED_IMAGE_BYTES = 12 * 1024 * 1024
         private const val PACK_PACKAGE = "com.github.stevessr.fluxdo.resources"
@@ -59,6 +61,7 @@ internal class ExternalPluginChannel(
                                 "id" to component.flattenToString(),
                                 "packageName" to component.packageName,
                                 "label" to info.loadLabel(activity.packageManager).toString(),
+                                "category" to pluginCategory(info),
                             )
                         })
                     } catch (error: Exception) {
@@ -182,6 +185,15 @@ internal class ExternalPluginChannel(
             }
         }.start()
         return true
+    }
+
+    private fun pluginCategory(info: ResolveInfo): String {
+        val declared = info.activityInfo.metaData?.getString(CATEGORY)
+        return when {
+            declared == "editor" -> "editor"
+            declared == null && info.activityInfo.packageName == LEGACY_GENERATOR -> "editor"
+            else -> "app"
+        }
     }
 
     private fun discover(): List<Pair<ResolveInfo, ComponentName>> {

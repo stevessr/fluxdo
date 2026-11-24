@@ -31,6 +31,11 @@ assert any(
     for m in activity.findall("meta-data")
 ), "插件入口缺少 API 版本声明"
 assert any(
+    attrs(m, "name") == "com.github.lingyan000.fluxdo.plugin.CATEGORY"
+    and attrs(m, "value") == "editor"
+    for m in activity.findall("meta-data")
+), "表情生成器必须声明 editor 插件类型"
+assert any(
     any(attrs(c, "name") == "android.intent.category.DEFAULT" for c in f.findall("category"))
     for f in activity.findall("intent-filter") if has_action(f, ACTION)
 ), "插件发现入口必须声明 DEFAULT 类别"

@@ -1,0 +1,218 @@
+name: CFluxDo Native Plugin APKs
+
+on:
+  pull_request:
+    paths:
+      - 'plugins/cfluxdo/**'
+      - '.github/workflows/cfluxdo-native-plugins.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/cfluxdo/**'
+      - '.github/workflows/cfluxdo-native-plugins.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cfluxdo-native-plugin-apks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.plugin }} Android plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - plugin: cdk
+            target: plugin_cdk_main.dart
+            package_name: com.github.lingyan000.fluxdo.plugin.cdk
+            artifact: fluxdo-cdk-plugin-android-arm64
+          - plugin: ldshop
+            target: plugin_ldshop_main.dart
+            package_name: com.github.lingyan000.fluxdo.plugin.ldshop
+            artifact: fluxdo-ldshop-plugin-android-arm64
+
+    steps:
+      - name: Checkout Fluxdo plugin adapter
+        uses: actions/checkout@v4
+        with:
+          path: fluxdo
+
+      # 固定上游提交：构建与安全审核可重现，不允许浮动 main。
+      - name: Checkout CFluxDo native feature source
+        uses: actions/checkout@v4
+        with:
+          repository: 1molchuan/CFluxDo
+          ref: e5b8ea9ee43cd64469760fa99b99ed0c4e2f772e
+          path: cfluxdo
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+
+      - name: Test Android plugin packaging and OAuth callback contract
+        run: python3 -m unittest discover -s fluxdo/plugins/cfluxdo/tests -p 'test_*.py' -v
+
+      - name: Overlay native plugin entrypoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fluxdo/plugins/cfluxdo/entrypoints/*.dart cfluxdo/lib/
+          python3 fluxdo/plugins/cfluxdo/prepare_android.py \
+            --root cfluxdo --plugin "${{ matrix.plugin }}"
+          python3 fluxdo/plugins/cfluxdo/prepare_android.py \
+            --root cfluxdo --plugin "${{ matrix.plugin }}" --verify-only
+
+      - name: Use stable test signing key for plugin Nightly
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp fluxdo/packages/stevessr_generator/example/android/app/stevessr-generator-test.keystore \
+            cfluxdo/android/app/plugin-test.keystore
+          cat > cfluxdo/android/key.properties <<'KEYS'
+          storeFile=plugin-test.keystore
+          storePassword=stevessr-generator-dev-key
+          keyAlias=stevessr-generator-test
+          keyPassword=stevessr-generator-dev-key
+          KEYS
+
+      - name: Prepare CFluxDo assets and ephemeral network CA
+        shell: bash
+        working-directory: cfluxdo
+        run: |
+          set -euo pipefail
+          mkdir -p assets/certs assets/images/llm
+          cert_dir="core/doh_proxy/certs"
+          mkdir -p "$cert_dir" android/app/src/main/res/raw
+          if [ ! -f "$cert_dir/ca.crt" ] || [ ! -f "$cert_dir/ca.key" ]; then
+            openssl req -x509 -newkey ec \
+              -pkeyopt ec_paramgen_curve:prime256v1 \
+              -keyout "$cert_dir/ca.key" \
+              -out "$cert_dir/ca.crt" \
+              -days 3650 -nodes \
+              -subj "/CN=DOH Proxy CA/O=DOH Proxy/C=CN"
+          fi
+          openssl x509 -in "$cert_dir/ca.crt" -outform DER \
+            -out "$cert_dir/ca.der"
+          cp "$cert_dir/ca.crt" assets/certs/proxy_ca.pem
+          cp "$cert_dir/ca.der" android/app/src/main/res/raw/proxy_ca.der
+
+      - name: Resolve packages and generate Chinese localizations
+        working-directory: cfluxdo
+        run: |
+          flutter pub get
+          dart run tool/gen_l10n.dart
+
+      - name: Analyze native plugin entrypoint
+        working-directory: cfluxdo
+        run: |
+          flutter analyze \
+            lib/plugin_community_shell.dart \
+            lib/plugin_cdk_main.dart \
+            lib/plugin_ldshop_main.dart
+
+      - name: Build independent arm64 APK
+        working-directory: cfluxdo
+        run: |
+          flutter build apk --release --target-platform android-arm64 \
+            --target="lib/${{ matrix.target }}" \
+            --build-number="${{ github.run_number }}"
+
+      - name: Check APK package name and hidden launcher
+        shell: bash
+        working-directory: cfluxdo
+        env:
+          PACKAGE_NAME: ${{ matrix.package_name }}
+        run: |
+          set -euo pipefail
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          aapt="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 \
+            -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$aapt"
+          "$aapt" dump badging "$apk" > /tmp/plugin-badging.txt
+          "$aapt" dump xmltree "$apk" AndroidManifest.xml > /tmp/plugin-xmltree.txt
+          grep -Fq "package: name='$PACKAGE_NAME'" /tmp/plugin-badging.txt
+          grep -Fq 'com.github.lingyan000.fluxdo.action.PLUGIN' /tmp/plugin-xmltree.txt
+          grep -Fq 'com.github.lingyan000.fluxdo.plugin.API_VERSION' /tmp/plugin-xmltree.txt
+          grep -Fq 'com.github.lingyan000.fluxdo.plugin.CATEGORY' /tmp/plugin-xmltree.txt
+          grep -Fq 'android.intent.action.VIEW' /tmp/plugin-xmltree.txt
+          grep -Fq 'discourse' /tmp/plugin-xmltree.txt
+          grep -Fq 'auth_redirect' /tmp/plugin-xmltree.txt
+          if grep -Fq 'android.permission.QUERY_ALL_PACKAGES' /tmp/plugin-badging.txt || \
+             grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' /tmp/plugin-badging.txt; then
+            grep -E 'android.permission.(QUERY_ALL_PACKAGES|REQUEST_INSTALL_PACKAGES)' /tmp/plugin-badging.txt
+            echo '工具插件不得拥有扫描所有应用或安装 APK 的权限'
+            exit 1
+          fi
+          if grep -Fq 'launchable-activity:' /tmp/plugin-badging.txt || \
+             grep -Fq 'android.intent.category.LAUNCHER' /tmp/plugin-xmltree.txt; then
+            echo '插件 APK 不能出现在 Android 桌面应用抽屉'
+            exit 1
+          fi
+
+      - name: Stage directly installable APK
+        run: |
+          cp cfluxdo/build/app/outputs/flutter-apk/app-release.apk \
+            "${{ matrix.artifact }}.apk"
+
+      - name: Upload independent APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.apk
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  publish:
+    name: Publish two plugin APKs to Fluxdo Nightly
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: fluxdo-nightly-release
+      cancel-in-progress: false
+    steps:
+      - name: Download both APKs (no extra archive wrapper)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fluxdo-*-plugin-android-arm64
+          path: release
+          merge-multiple: true
+
+      - name: Attach APK files to shared Nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release/fluxdo-cdk-plugin-android-arm64.apk
+          test -s release/fluxdo-ldshop-plugin-android-arm64.apk
+          if ! gh release view nightly --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create nightly --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "Fluxdo Nightly" \
+              --prerelease --latest=false \
+              --notes "Automated Android APKs for FluxDO and external plugins."
+          fi
+          gh release upload nightly \
+            release/fluxdo-cdk-plugin-android-arm64.apk \
+            release/fluxdo-ldshop-plugin-android-arm64.apk \
+            --repo "$GITHUB_REPOSITORY" --clobber

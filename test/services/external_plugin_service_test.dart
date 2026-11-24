@@ -26,6 +26,7 @@ void main() {
           'id': 'example.plugin/example.plugin.MainActivity',
           'packageName': 'example.plugin',
           'label': 'StevesSR 表情生成器',
+          'category': 'editor',
         },
         {
           'id': 'example.plugin/example.plugin.MainActivity',
@@ -41,6 +42,19 @@ void main() {
     expect(plugins, hasLength(1));
     expect(plugins.single.label, 'StevesSR 表情生成器');
     expect(plugins.single.packageName, 'example.plugin');
+    expect(plugins.single.appearsInEditor, isTrue);
+  });
+
+  test('仅 editor 类别显示在表情面板', () {
+    for (final category in ['editor', 'app', 'unknown', null, 1]) {
+      final plugin = ExternalPlugin.fromPlatformValue({
+        'id': 'example.plugin/Main',
+        'packageName': 'example.plugin',
+        'label': 'Plugin',
+        if (category != null) 'category': category,
+      });
+      expect(plugin!.appearsInEditor, category == 'editor');
+    }
   });
 
   test('启动只向原生层提交已发现的组件标识', () async {

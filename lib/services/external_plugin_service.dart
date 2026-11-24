@@ -8,12 +8,16 @@ class ExternalPlugin {
     required this.id,
     required this.packageName,
     required this.label,
+    this.category = 'app',
   });
 
   /// Android ComponentName.flattenToString，作为本次发现结果的启动标识。
   final String id;
   final String packageName;
   final String label;
+  final String category;
+
+  bool get appearsInEditor => category == 'editor';
 
   static ExternalPlugin? fromPlatformValue(Object? value) {
     if (value is! Map) return null;
@@ -26,7 +30,12 @@ class ExternalPlugin {
         !id.startsWith('$packageName/')) {
       return null;
     }
-    return ExternalPlugin(id: id, packageName: packageName, label: label);
+    return ExternalPlugin(
+      id: id,
+      packageName: packageName,
+      label: label,
+      category: value['category'] == 'editor' ? 'editor' : 'app',
+    );
   }
 }
 
