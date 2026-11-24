@@ -66,6 +66,8 @@ def emoji_font(spec):
     assert len(data) == size
     assert hashlib.sha1(f"blob {size}\0".encode() + data).hexdigest() == sha
     write(DEST / "emoji_fonts" / (sha + ".ttf"), data)
+    notice = {"googlefonts/noto-emoji": "2D/fonts/LICENSE", "googlefonts/color-fonts": "LICENSE", "hfg-gmuend/openmoji": "LICENSE.txt"}[repo]
+    write(DEST / "licenses" / (sha + "-LICENSE.txt"), get(f"https://raw.githubusercontent.com/{repo}/{rev}/{notice}"))
 
 def convert(source, target):
     with Image.open(source) as image:
@@ -127,7 +129,10 @@ def artwork(work):
 
 def main():
     DEST.mkdir(parents=True, exist_ok=True)
-    entries = json.loads((ROOT / "assets/fonts/catalog.json").read_text())["fonts"]
+    # A separately distributed resource APK must not rebundle MiSans, whose
+    # license restricts standalone redistribution. Keep its existing app path.
+    entries = [e for e in json.loads((ROOT / "assets/fonts/catalog.json").read_text())["fonts"]
+               if e["license"] in {"OFL-1.1", "IPA-1.0"}]
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(normal_font, entries))
         list(pool.map(emoji_font, FONT_SPECS))

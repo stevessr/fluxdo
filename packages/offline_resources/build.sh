@@ -39,7 +39,7 @@ from PIL import Image
 import io
 with zipfile.ZipFile(sys.argv[1]) as z:
     names = z.namelist()
-    assert len([n for n in names if n.startswith("assets/fonts/")]) == 5
+    assert len([n for n in names if n.startswith("assets/fonts/")]) == 4
     assert len([n for n in names if n.startswith("assets/emoji_fonts/")]) == 3
     assert "assets/emoji/noto_3d/grinning.png" in names
     with Image.open(io.BytesIO(z.read("assets/emoji/noto_animated/grinning.webp"))) as im:
