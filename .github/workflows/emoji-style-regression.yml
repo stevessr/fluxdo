@@ -8,6 +8,8 @@ on:
       - 'lib/settings/definitions/appearance_defs.dart'
       - 'test/services/display_refresh_service_test.dart'
       - 'lib/services/emoji_handler.dart'
+      - 'lib/services/fonts/emoji_font_service.dart'
+      - 'test/services/emoji_font_coverage_test.dart'
       - 'lib/settings/definitions/reading_defs.dart'
       - 'lib/utils/fluxdo_render_callbacks.dart'
       - 'lib/widgets/common/emoji_text.dart'
@@ -55,6 +57,8 @@ jobs:
             lib/settings/definitions/appearance_defs.dart \
             test/services/display_refresh_service_test.dart \
             lib/services/emoji_handler.dart \
+            lib/services/fonts/emoji_font_service.dart \
+            test/services/emoji_font_coverage_test.dart \
             lib/settings/definitions/reading_defs.dart \
             lib/utils/fluxdo_render_callbacks.dart \
             lib/widgets/common/emoji_text.dart \
@@ -85,6 +89,7 @@ jobs:
         run: >-
           dart tool/flutterw.dart test
           test/emoji_render_style_test.dart
+          test/services/emoji_font_coverage_test.dart
           test/services/display_refresh_service_test.dart
           test/services/emoji_handler_late_preload_test.dart
           test/widgets/content/image_utils_test.dart

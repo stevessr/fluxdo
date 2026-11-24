@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/preferences_provider.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/emoji_handler.dart';
+import '../../services/fonts/emoji_font_service.dart';
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import '../../utils/emoji_shortcodes.dart';
 
 /// Maps standard emoji shortcodes to Google Noto Emoji artwork without changing the
@@ -162,155 +164,62 @@ class StyledEmojiImage extends ConsumerWidget {
               : _image(context, pinnedUrl, onError: normalImage());
           return _image(context, staticUrl, onError: fallback);
         }
-        if (dynamicUrl == null) return selectedStatic();
-        return _image(context, dynamicUrl, onError: selectedStatic());
-      },
-    );
-  }
-
-  Widget _image(BuildContext context, String url, {required Widget onError}) => Image(
-    image: ResizeImage.resizeIfNeeded(
-      // The native multi-frame WebP/GIF/APNG provider has its own decode path.
-      // ResizeImage would wrap it in the static image resize pipeline, which
-      // the shared image router deliberately skips for animated sources.
-      isNativeAnimatedUrl(url) ? null : cacheWidth,
-      null,
-      emojiImageProvider(url),
-    ),
-    width: width,
-    height: height,
-    fit: fit,
-    gaplessPlayback: gaplessPlayback,
-    frameBuilder: showPlaceholder
-        ? (context, child, frame, wasSynchronouslyLoaded) {
-            if (wasSynchronouslyLoaded || frame != null) return child;
-            return DecoratedBox(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.onSurfaceVariant
-                    .withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: SizedBox(width: width, height: height),
-            );
-          }
-        : null,
-    errorBuilder: (_, _, _) => onError,
-  );
-}
-).hasMatch(normalized)) return null;
-    final path = normalized.replaceFirst(':t', '/');
-    final encoded = path.split('/').map(Uri.encodeComponent).join('/');
-    return pinned
-        ? 'https://raw.githubusercontent.com/discourse/discourse-emojis/$_artworkRevision/dist/emoji/$set/$encoded.png'
-        : 'https://emoji.discourse-cdn.com/$set/$encoded.png?v=16';
-  }
-
-  static String? urlFor(String name, EmojiRenderStyle style) {
-    if (style == EmojiRenderStyle.normal) return null;
-    if (EmojiHandler().isCustomEmoji(name)) return null;
-    final unicode = unicodeFor(name);
-    if (unicode == null) return null;
-    return urlForUnicode(unicode, style);
-  }
-
-  /// A separate, pure URL builder makes source style routing testable.
-  static String? urlForUnicode(String unicode, EmojiRenderStyle style) {
-    if (style == EmojiRenderStyle.normal || unicode.isEmpty) return null;
-    // Official Google Fonts Emoji CDN:
-    // Animated Noto Emoji: https://googlefonts.github.io/noto-emoji-animation/
-    // Noto 3D: https://googlefonts.github.io/noto-emoji-files/
-    // Both use underscore-separated Unicode scalar values, including ZWJ
-    // and variation selectors where present.
-    if (!RegExp(r'^[0-9a-f]+(?:_[0-9a-f]+)*$').hasMatch(unicode)) {
-      return null;
-    }
-    return switch (style) {
-      EmojiRenderStyle.normal => null,
-      EmojiRenderStyle.animated =>
-        'https://fonts.gstatic.com/s/e/notoemoji/latest/$unicode/512.webp',
-      EmojiRenderStyle.threeD =>
-        'https://fonts.gstatic.com/s/e/noto3demoji/latest/$unicode/512.png',
-    };
-  }
-}
-
-/// One widget for post HTML, chat reactions, editor/picker and inline text.
-/// Any unsupported/missing Google Noto asset falls back to the server's real emoji.
-class StyledEmojiImage extends ConsumerWidget {
-  const StyledEmojiImage({
-    super.key,
-    required this.name,
-    this.serverUrl,
-    this.usePostStyle = false,
-    this.width,
-    this.height,
-    this.cacheWidth,
-    this.fit = BoxFit.contain,
-    this.gaplessPlayback = true,
-    this.showPlaceholder = false,
-    this.errorFallback,
-  });
-
-  final String name;
-  final String? serverUrl;
-
-  /// Opt-in only for actual floor/post body HTML. Picker, composer, reactions,
-  /// notifications, profile pages and chat always use the site's normal emoji.
-  final bool usePostStyle;
-  final double? width;
-  final double? height;
-  final int? cacheWidth;
-  final BoxFit fit;
-  final bool gaplessPlayback;
-  final bool showPlaceholder;
-  final Widget? errorFallback;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final requestedStyle = usePostStyle
-        ? ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle))
-        : EmojiRenderStyle.normal;
-    final style = EmojiStyleAssets.effectiveStyle(
-      requestedStyle,
-      usePostStyle: usePostStyle,
-    );
-    final set = usePostStyle
-        ? ref.watch(preferencesProvider.select((p) => p.emojiStyle))
-        : EmojiHandler.followSite;
-    return AnimatedBuilder(
-      animation: EmojiHandler(),
-      builder: (context, _) {
-        final regularUrl = EmojiHandler().getEmojiUrl(name, serverUrl: serverUrl);
-        final custom = EmojiHandler().isCustomEmoji(name);
-        final styledUrl = custom || !usePostStyle ? null :
-            EmojiStyleAssets.urlFor(name, style) ??
-            EmojiStyleAssets.staticUrlFor(name, set) ??
-            (set == EmojiHandler.followSite || set == 'unicode'
-                ? null : EmojiHandler.displayUrl(regularUrl));
-        if (!custom && usePostStyle && set == 'unicode' &&
-            style == EmojiRenderStyle.normal) {
-          final unicode = EmojiStyleAssets.unicodeFor(name);
-          if (unicode != null) {
-            final glyph = String.fromCharCodes(
-              unicode.split('_').map((part) => int.parse(part, radix: 16)),
-            );
-            return Text(glyph, style: TextStyle(fontSize: height ?? width));
-          }
+        if (dynamicUrl != null) {
+          return _image(context, dynamicUrl, onError: selectedStatic());
         }
-        Widget normalImage() => _image(
-          context,
-          regularUrl,
-          onError: errorFallback ?? Text(
-            name.isEmpty ? ':?:' : ':$name:',
-            maxLines: 1,
-            overflow: TextOverflow.clip,
-          ),
+        if (custom || !usePostStyle || style != EmojiRenderStyle.normal) {
+          return selectedStatic();
+        }
+        final unicode = EmojiStyleAssets.unicodeFor(name);
+        final cp = EmojiFontFace.simpleScalar(unicode);
+        if (set == 'unicode' && cp != null) {
+          return _glyph(String.fromCharCode(cp));
+        }
+        if (cp == null || !EmojiFontSpec.bySet.containsKey(set)) {
+          return selectedStatic();
+        }
+        final ready = EmojiFontService.instance.ready(set);
+        if (ready != null) {
+          final glyph = ready.glyphFor(unicode);
+          return glyph == null ? selectedStatic() : _glyph(glyph, family: ready.family);
+        }
+        return FutureBuilder<EmojiFontFace?>(
+          future: EmojiFontService.instance.ensure(set),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              // Keep the layout stable without requesting one PNG per emoji
+              // while the selected font is being downloaded.
+              return SizedBox(width: width ?? height ?? 18, height: height ?? width ?? 18);
+            }
+            final face = snapshot.data;
+            final glyph = face?.glyphFor(unicode);
+            return glyph == null ? selectedStatic() : _glyph(glyph, family: face!.family);
+          },
         );
-        if (styledUrl == null || styledUrl == regularUrl) {
-          return normalImage();
-        }
-        return _image(context, styledUrl, onError: normalImage());
       },
+    );
+  }
+
+  Widget _glyph(String glyph, {String? family}) {
+    final size = height ?? width ?? 18;
+    return SizedBox(
+      width: width ?? size,
+      height: height ?? size,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: Text(
+          glyph,
+          maxLines: 1,
+          textScaler: TextScaler.noScaling,
+          style: TextStyle(
+            inherit: false,
+            fontFamily: family,
+            fontSize: size,
+            height: 1,
+            color: Colors.black,
+          ),
+        ),
+      ),
     );
   }
 
@@ -334,7 +243,7 @@ class StyledEmojiImage extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.onSurfaceVariant
                     .withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: context.shapes.borderRadius(8),
               ),
               child: SizedBox(width: width, height: height),
             );
