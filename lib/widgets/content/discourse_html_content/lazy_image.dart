@@ -42,6 +42,10 @@ class LazyImage extends StatefulWidget {
   final ImageProvider imageProvider;
   final ImageProvider? fallbackImageProvider;
   final String? fallbackCacheKey;
+
+  /// Last resort: the same original URL used by the full-screen viewer.
+  final ImageProvider? originalImageProvider;
+  final String? originalCacheKey;
   final double? width;
   final double? height;
   final BoxFit fit;
@@ -83,6 +87,8 @@ class LazyImage extends StatefulWidget {
     required this.imageProvider,
     this.fallbackImageProvider,
     this.fallbackCacheKey,
+    this.originalImageProvider,
+    this.originalCacheKey,
     this.width,
     this.height,
     this.fit = BoxFit.contain,
@@ -124,19 +130,31 @@ class _LazyImageState extends State<LazyImage> {
   /// 非 null = 正在闸门队列中排队(防重复入队;dispose/换图时出队)
   VoidCallback? _gateWaiter;
   VoidCallback? _releaseDownloadPriority;
-  bool _usingFallback = false;
+  int _sourceIndex = 0;
   bool _fallbackScheduled = false;
   int _imageGeneration = 0;
 
-  String? get _activeKey =>
-      _usingFallback ? widget.fallbackCacheKey : widget.cacheKey;
-  ImageProvider get _activeImage => _usingFallback
-      ? widget.fallbackImageProvider!
-      : widget.imageProvider;
+  String? get _activeKey => switch (_sourceIndex) {
+    1 => widget.fallbackCacheKey,
+    2 => widget.originalCacheKey,
+    _ => widget.cacheKey,
+  };
+
+  ImageProvider get _activeImage => switch (_sourceIndex) {
+    1 => widget.fallbackImageProvider!,
+    2 => widget.originalImageProvider!,
+    _ => widget.imageProvider,
+  };
+
+  int? get _nextSourceIndex {
+    if (_sourceIndex == 0 && widget.fallbackImageProvider != null) return 1;
+    if (_sourceIndex < 2 && widget.originalImageProvider != null) return 2;
+    return null;
+  }
 
   void _scheduleFallback() {
-    if (_usingFallback || _fallbackScheduled ||
-        widget.fallbackImageProvider == null) return;
+    final next = _nextSourceIndex;
+    if (next == null || _fallbackScheduled) return;
     _fallbackScheduled = true;
     final generation = _imageGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -147,7 +165,7 @@ class _LazyImageState extends State<LazyImage> {
       _stopRatioResolve();
       _cancelGateWait();
       setState(() {
-        _usingFallback = true;
+        _sourceIndex = next;
         _paintAdmitted = false;
         _syncPaintNoted = false;
         _resolvedRatio = null;
@@ -180,10 +198,13 @@ class _LazyImageState extends State<LazyImage> {
     final changed = oldWidget.cacheKey != widget.cacheKey ||
         oldWidget.imageProvider != widget.imageProvider ||
         oldWidget.fallbackImageProvider != widget.fallbackImageProvider ||
-        oldWidget.fallbackCacheKey != widget.fallbackCacheKey;
+        oldWidget.fallbackCacheKey != widget.fallbackCacheKey ||
+        oldWidget.originalImageProvider != widget.originalImageProvider ||
+        oldWidget.originalCacheKey != widget.originalCacheKey;
     if (changed) {
       _imageGeneration++;
-      _usingFallback = false;
+      _sourceIndex = 0;
+      _syncPaintNoted = false;
       _fallbackScheduled = false;
       _releaseDownloadPriority?.call();
       _releaseDownloadPriority = null;
@@ -395,7 +416,7 @@ class _LazyImageState extends State<LazyImage> {
         );
       },
       errorBuilder: (context, error, stackTrace) {
-        if (!_usingFallback && widget.fallbackImageProvider != null) {
+        if (_nextSourceIndex != null) {
           _scheduleFallback();
           return placeholderBox();
         }
