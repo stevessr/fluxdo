@@ -1165,7 +1165,8 @@ _LeaderboardCopy _copy(BuildContext context) {
       globalTitle: 'Global leaderboard',
       rank: 'Rank',
       about: 'About the leaderboard',
-      aboutBody: 'Community points are calculated by the Discourse gamification plugin. Each time period has its own ranking.',
+      aboutBody:
+          'Community points are calculated by the Discourse gamification plugin. Each time period has its own ranking.',
       refresh: 'Refresh',
       empty: 'No leaderboard data',
       points: 'points',
