@@ -4,6 +4,7 @@ import 'package:common_ui/common_ui.dart'
         showInteractionDialog,
         UiShapesContext,
         UiEmphasisContext;
+
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -1165,8 +1166,7 @@ _LeaderboardCopy _copy(BuildContext context) {
       globalTitle: 'Global leaderboard',
       rank: 'Rank',
       about: 'About the leaderboard',
-      aboutBody:
-          'Community points are calculated by the Discourse gamification plugin. Each time period has its own ranking.',
+      aboutBody: 'Community points are calculated by the Discourse gamification plugin. Each time period has its own ranking.',
       refresh: 'Refresh',
       empty: 'No leaderboard data',
       points: 'points',
