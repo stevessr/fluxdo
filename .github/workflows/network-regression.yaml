@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: network-regression-${{ github.event.pull_request.number || github.ref }}
@@ -25,7 +26,15 @@ env:
   CARGO_PROFILE_TEST_DEBUG: '0'
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/network-regression.yaml
+      patterns: >-
+        ["lib/**","test/**","packages/**","core/net_core/**","linux/**","android/**","ios/**","macos/**","windows/**","tool/**",".agents/**","AGENTS.md",".gitmodules","analysis_options.yaml","pubspec.yaml","pubspec.lock",".fvmrc",".github/workflows/network-**",".github/workflows/_check-scope.yml"]
+
   changes:
+    needs: scope
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -42,10 +51,15 @@ jobs:
       - name: Select checks from changed paths
         id: plan
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ needs.scope.outputs.previous_head || github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           ALL_PLATFORMS: ${{ inputs.platforms }}
+          SCOPE_RUN: ${{ needs.scope.outputs.run }}
         run: |
+          if [ "$SCOPE_RUN" = false ]; then
+            printf 'dart=false\nrust=false\npython=false\nplatforms={"include":[]}\nhas_platforms=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           args=()
           if [ -n "$BASE_SHA" ]; then args+=(--base "$BASE_SHA"); fi
           if [ "$ALL_PLATFORMS" = true ]; then args+=(--all-platforms); fi
@@ -172,7 +186,7 @@ jobs:
 
   result:
     name: Network regression result
-    needs: [changes, dart, rust, python, native]
+    needs: [scope, changes, dart, rust, python, native]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 2

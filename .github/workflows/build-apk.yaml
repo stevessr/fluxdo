@@ -23,10 +23,20 @@ on:
     paths:
       - 'lib/**'
       - 'android/**'
+      - 'core/doh_proxy'
+      - 'core/doh_proxy/**'
+      - 'core/net_core/**'
       - 'packages/**'
+      - '!packages/stevessr_generator/**'
+      - 'assets/**'
+      - 'third_party/**'
+      - 'tool/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
+      - '.fvmrc'
+      - '.gitmodules'
       - '.github/workflows/build-apk.yaml'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
     inputs:
       arch:
@@ -41,6 +51,10 @@ on:
           - 'universal'
           - 'all'
 
+permissions:
+  contents: read
+  actions: read
+
 # 同分支新 push 取消旧构建，避免排队浪费 runner 分钟
 concurrency:
   group: build-apk-${{ github.workflow }}-${{ github.ref }}
@@ -53,8 +67,17 @@ env:
   ANDROID_NDK_VERSION: '27.3.13750724'
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/build-apk.yaml
+      patterns: >-
+        ["lib/**","android/**","core/doh_proxy","core/doh_proxy/**","core/net_core/**","packages/**","!packages/stevessr_generator/**","assets/**","third_party/**","tool/**","pubspec.yaml","pubspec.lock",".fvmrc",".gitmodules",".github/workflows/build-apk.yaml",".github/workflows/_check-scope.yml"]
+
   # 根据触发方式动态决定要构建的架构，避免拉起无用的 matrix runner
   prepare:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     name: prepare-matrix
     runs-on: ubuntu-latest
     outputs:
