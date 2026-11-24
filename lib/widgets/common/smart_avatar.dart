@@ -6,8 +6,8 @@ import '../../services/avatar_cache_pool.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/image_decode_spec_memo.dart';
 import '../../services/svg_image_cache.dart';
-import '../../utils/svg_utils.dart';
 import '../../utils/avatar_url.dart';
+import '../../utils/svg_utils.dart';
 import '../../utils/url_helper.dart';
 import 'first_paint_probe.dart';
 
@@ -201,15 +201,17 @@ class _SmartAvatarState extends State<SmartAvatar> {
     if (widget.border is Border) {
       borderWidth = (widget.border as Border).top.width;
     }
-    final innerRadius = widget.radius - borderWidth;
+    final innerRadius = (widget.radius - borderWidth).clamp(
+      0.0,
+      double.infinity,
+    );
     final innerSize = innerRadius * 2;
 
     Widget child;
     if (_imageUrl == null || _imageUrl!.isEmpty) {
       child = _buildFallback(fgColor, innerRadius);
     } else if (isNativeAnimatedUrl(_imageUrl!)) {
-      // 动图(GIF/APNG/动画 WebP)走 native_animated_image Rust pipeline,
-      // 绕开 Flutter Skia multi_frame_codec 的 #85831 bug。
+      // 头像动图使用 alpha-safe provider，防止透明区产生黑边。
       // RepaintBoundary 将每帧 setImage 触发的重绘限制在头像区域内,
       // 避免列表中多个动图头像同时连累整个 list item 重绘。
       child = RepaintBoundary(
@@ -231,8 +233,12 @@ class _SmartAvatarState extends State<SmartAvatar> {
             return _buildLoading(fgColor, innerRadius);
           },
           errorBuilder: (context, error, stack) {
-            // 动图链路出错(网络 / Rust 解码失败),退化到字母 fallback
-            return _buildFallback(fgColor, innerRadius);
+            return _SvgFallbackBuilder(
+              key: ValueKey(_imageUrl),
+              imageUrl: _imageUrl!,
+              size: innerSize,
+              fallback: _buildFallback(fgColor, innerRadius),
+            );
           },
         ),
       );

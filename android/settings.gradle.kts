@@ -30,8 +30,7 @@ buildCache {
     local {
         isEnabled = true
         directory = file("${System.getProperty("user.home")}/.gradle/caches/build-cache")
-        // 限制缓存大小，防止无限增长
-        removeUnusedEntriesAfterDays = 7
+        // Gradle 9 uses its own cache cleanup policy.
     }
 }
 
