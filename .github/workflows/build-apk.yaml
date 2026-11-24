@@ -436,6 +436,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Ensure project preparation did not replace the CA embedded by net_core.
+          cmp -s core/net_core/certs/ca.der android/app/src/main/res/raw/proxy_ca.der
+          cmp -s core/net_core/certs/ca.crt assets/certs/proxy_ca.pem
           build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           aapt="${build_tools}/aapt"
           apksigner="${build_tools}/apksigner"
