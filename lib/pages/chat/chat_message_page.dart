@@ -2628,7 +2628,7 @@ class _StickyChatMessageGroup extends StatelessWidget {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
+            InteractionPageRoute(
               builder: (_) => UserProfilePage(username: avatarUser.username),
             ),
           );
@@ -2905,7 +2905,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
+              InteractionPageRoute(
                 builder: (_) =>
                     UserProfilePage(username: message.user!.username),
               ),
@@ -3739,7 +3739,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  InteractionPageRoute(
                     builder: (_) => UserProfilePage(username: user.username),
                   ),
                 );

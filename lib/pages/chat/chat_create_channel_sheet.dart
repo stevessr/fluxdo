@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -121,7 +122,7 @@ class _ChatCreateChannelBodyState
       Navigator.of(context).pop();
       Navigator.push(
         context,
-        MaterialPageRoute(
+        InteractionPageRoute(
           builder: (_) => ChatMessagePage(
             channelId: channel.id,
             channelTitle: channel.title ?? _nameController.text.trim(),

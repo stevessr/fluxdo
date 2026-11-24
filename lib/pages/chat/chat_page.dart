@@ -127,7 +127,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _openGlobalSearch() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ChatSearchPage()),
+      InteractionPageRoute(builder: (_) => const ChatSearchPage()),
     );
   }
 
@@ -263,7 +263,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _openBrowseChannels() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ChatBrowseChannelsPage()),
+      InteractionPageRoute(builder: (_) => const ChatBrowseChannelsPage()),
     );
   }
 
@@ -836,7 +836,7 @@ class _ChatChannelListView extends ConsumerWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
+                InteractionPageRoute(
                   builder: (_) {
                     final title = channel.chatableType == 'DirectMessage'
                         ? (channel.title?.isNotEmpty == true
@@ -1458,7 +1458,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     Navigator.of(context).pop();
     Navigator.push(
       context,
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) =>
             ChatMessagePage(channelId: channel.id, channelTitle: title),
       ),
@@ -1504,7 +1504,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
 
       Navigator.push(
         context,
-        MaterialPageRoute(
+        InteractionPageRoute(
           builder: (_) =>
               ChatMessagePage(channelId: channelId, channelTitle: title),
         ),

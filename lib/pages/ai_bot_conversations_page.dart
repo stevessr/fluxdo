@@ -1,5 +1,5 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute;
 
 import '../services/discourse/discourse_service.dart';
 import '../services/preloaded_data_service.dart';
@@ -311,7 +311,7 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
 
   Future<void> _openConversation(AiBotConversation item) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      InteractionPageRoute<void>(
         builder: (_) =>
             TopicDetailPage(topicId: item.id, initialTitle: item.title),
       ),

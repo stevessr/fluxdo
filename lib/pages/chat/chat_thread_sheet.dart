@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:material_ui/material_ui.dart';
-import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1485,7 +1485,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            InteractionPageRoute(
                               builder: (_) => UserProfilePage(
                                 username: message.user!.username,
                               ),

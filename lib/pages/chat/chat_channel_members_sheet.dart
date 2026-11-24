@@ -1,5 +1,5 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/s.dart';
@@ -141,7 +141,7 @@ class _ChatChannelMembersSheetState
   void _navigateToUserProfile(String username) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => UserProfilePage(username: username)),
+      InteractionPageRoute(builder: (_) => UserProfilePage(username: username)),
     );
   }
 
