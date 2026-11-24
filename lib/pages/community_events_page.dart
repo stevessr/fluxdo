@@ -572,14 +572,22 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
                   children: [
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: _calendarFilters(context),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _calendarFilters(context),
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _calendarNavigation(context),
-                        const Spacer(),
-                        _calendarScales(context),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: _calendarScales(context),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
