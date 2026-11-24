@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
@@ -155,5 +157,68 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     tester.binding.imageCache.evict(key);
+  });
+
+  testWidgets('正文缩略图失败时直接显示 lightbox 原图，无需点击', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const thumb = 'https://test.invalid/failed-thumbnail.jpg';
+    const original = 'https://test.invalid/original-image.jpg';
+    Future<Object> cacheKey(String url) async => ResizeImage(
+      discourseImageProvider(url),
+      width: 80,
+      height: 4096,
+      policy: ResizeImagePolicy.fit,
+    ).obtainKey(ImageConfiguration.empty);
+
+    final thumbKey = await cacheKey(thumb);
+    final originalKey = await cacheKey(original);
+    final failure = Completer<ImageInfo>();
+    tester.binding.imageCache.putIfAbsent(
+      thumbKey,
+      () => OneFrameImageStreamCompleter(failure.future),
+    );
+    final pixels = (await tester.runAsync(
+      () => createTestImage(width: 80, height: 60, cache: false),
+    ))!;
+    tester.binding.imageCache.putIfAbsent(
+      originalKey,
+      () => OneFrameImageStreamCompleter(
+        Future.value(ImageInfo(image: pixels)),
+      ),
+    );
+    final render = FluxdoRenderCallbacks.generic(heroTagNamespace: 'fallback');
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          home: Center(
+            child: Builder(
+              builder: (context) => render.imageContentBuilder(
+                context,
+                const ImageRun(
+                  src: thumb,
+                  lightboxUrl: original,
+                  width: 80,
+                  height: 60,
+                ),
+                1,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    failure.completeError(StateError('thumbnail unavailable'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(await image.image.obtainKey(ImageConfiguration.empty), originalKey);
+    final raw = tester.widget<RawImage>(find.byType(RawImage));
+    expect(raw.image, isNotNull);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.binding.imageCache.evict(thumbKey);
+    tester.binding.imageCache.evict(originalKey);
   });
 }
