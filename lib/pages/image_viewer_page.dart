@@ -1231,8 +1231,9 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
                           ),
                         );
                       },
-                      failedBuilder: (context, _) =>
-                          _buildSvgFallback(widget.imageUrl!),
+                      failedBuilder: (context, _) => _buildThumbnailFallback(
+                        widget.imageUrl!, widget.thumbnailUrl,
+                      ),
                       progressBuilder: _buildImageLoadingProgress,
                     ),
                   )
@@ -1320,7 +1321,7 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
                                 );
                               },
                               failedBuilder: (context, _) =>
-                                  _buildSvgFallback(url),
+                                  _buildThumbnailFallback(url, thumbUrl),
                               progressBuilder: _buildImageLoadingProgress,
                             );
                           },
@@ -1597,6 +1598,17 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
       );
 
   /// 构建图片解码 fallback 组件（SVG / AVIF）
+  Widget _buildThumbnailFallback(String url, String? thumbnail) {
+    if (thumbnail == null || thumbnail.isEmpty || thumbnail == url) {
+      return _buildSvgFallback(url);
+    }
+    return Image(
+      image: _thumbnailProvider(thumbnail),
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => _buildSvgFallback(url),
+    );
+  }
+
   Widget _buildSvgFallback(String imageUrl) {
     return _ImageDecodeFallback(imageUrl: imageUrl);
   }

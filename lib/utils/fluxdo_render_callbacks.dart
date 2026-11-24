@@ -381,7 +381,7 @@ class FluxdoRenderCallbacks {
       (ctx, username, avatarUrl, size) {
         final resolvedUrl = (avatarUrl ?? '').isEmpty
             ? null
-            : UrlHelper.resolveUrlWithCdn(avatarUrl!);
+            : UrlHelper.resolveMediaUrl(avatarUrl!);
         return SmartAvatar(
           imageUrl: resolvedUrl,
           radius: size / 2,
@@ -459,7 +459,7 @@ class FluxdoRenderCallbacks {
     if (rawPoster != null && rawPoster.isNotEmpty) {
       final resolved = DiscourseImageUtils.isUploadUrl(rawPoster)
           ? DiscourseImageUtils.getCachedUploadUrl(rawPoster)
-          : UrlHelper.resolveUrlWithCdn(rawPoster);
+          : UrlHelper.resolveMediaUrl(rawPoster);
       final uri = resolved == null ? null : Uri.tryParse(resolved);
       if (uri != null && (uri.isScheme('http') || uri.isScheme('https'))) {
         posterUrl = resolved;
@@ -669,7 +669,7 @@ class FluxdoRenderCallbacks {
           final full = img.lightboxUrl ?? img.src;
           return DiscourseImageUtils.isUploadUrl(full)
               ? full
-              : UrlHelper.resolveUrlWithCdn(full);
+              : UrlHelper.resolveMediaUrl(full);
         }(),
     ];
     return legacy_carousel.buildImageCarousel(
@@ -799,7 +799,7 @@ class FluxdoRenderCallbacks {
       //   2. upload:// 短链 —— 需要 ImageBuildAddon 异步解析为真实 URL
       // 这里同步用缓存命中(普通帖滚到第二次起命中);未命中走 FutureBuilder。
       if (!DiscourseImageUtils.isUploadUrl(image.src)) {
-        final resolvedUrl = UrlHelper.resolveUrlWithCdn(image.src);
+        final resolvedUrl = UrlHelper.resolveMediaUrl(image.src);
         return _buildImageWidget(
           resolvedUrl: resolvedUrl,
           originalUrl: image.src,
@@ -968,10 +968,10 @@ class FluxdoRenderCallbacks {
         final full = img.lightboxUrl ?? img.src;
         final resolvedFull = DiscourseImageUtils.isUploadUrl(full)
             ? (DiscourseImageUtils.getCachedUploadUrl(full) ?? full)
-            : UrlHelper.resolveUrlWithCdn(full);
+            : UrlHelper.resolveMediaUrl(full);
         final resolvedThumb = DiscourseImageUtils.isUploadUrl(img.src)
             ? (DiscourseImageUtils.getCachedUploadUrl(img.src) ?? img.src)
-            : UrlHelper.resolveUrlWithCdn(img.src);
+            : UrlHelper.resolveMediaUrl(img.src);
         galleryUrls.add(DiscourseImageUtils.getOriginalUrl(resolvedFull));
         galleryThumbs.add(resolvedThumb);
         galleryHeroTags.add('${heroNamespace}_img_${img.indexInPost}');
@@ -1317,12 +1317,18 @@ class FluxdoRenderCallbacks {
               final srcsetUrl = DiscourseImageUtils.isUploadUrl(image.src)
                   ? null
                   : _pickSrcsetUrl(image, MediaQuery.devicePixelRatioOf(ctx));
-              final displayUrl = srcsetUrl == null
-                  ? resolvedUrl
-                  : UrlHelper.resolveUrlWithCdn(srcsetUrl);
+              final displayUrl = srcsetUrl == null ||
+                      DiscourseImageUtils.isUploadUrl(srcsetUrl)
+                  ? UrlHelper.resolveMediaUrl(resolvedUrl)
+                  : UrlHelper.resolveMediaUrl(srcsetUrl);
+              final baseUrl = UrlHelper.resolveMediaUrl(resolvedUrl);
               final dominant = image.dominantColor;
               Widget img = LazyImage(
                 imageProvider: discourseImageProvider(displayUrl),
+                fallbackImageProvider: displayUrl == baseUrl
+                    ? null
+                    : discourseImageProvider(baseUrl),
+                fallbackCacheKey: displayUrl == baseUrl ? null : baseUrl,
                 placeholderColor: dominant == null
                     ? null
                     : Color(
@@ -1363,7 +1369,7 @@ class FluxdoRenderCallbacks {
                   var resolvedFullUrl = DiscourseImageUtils.isUploadUrl(fullUrl)
                       ? (DiscourseImageUtils.getCachedUploadUrl(fullUrl) ??
                             fullUrl)
-                      : UrlHelper.resolveUrlWithCdn(fullUrl);
+                      : UrlHelper.resolveMediaUrl(fullUrl);
                   if (!hasLightbox) {
                     resolvedFullUrl = DiscourseImageUtils.getOriginalUrl(
                       resolvedFullUrl,
@@ -1473,7 +1479,7 @@ class FluxdoRenderCallbacks {
     final fullUrl = image.lightboxUrl ?? resolvedUrl;
     final resolvedFullUrl = DiscourseImageUtils.isUploadUrl(fullUrl)
         ? (DiscourseImageUtils.getCachedUploadUrl(fullUrl) ?? fullUrl)
-        : UrlHelper.resolveUrlWithCdn(fullUrl);
+        : UrlHelper.resolveMediaUrl(fullUrl);
     final menuUrl = DiscourseImageUtils.getOriginalUrl(resolvedFullUrl);
     ImageContextMenu.show(
       context: context,
