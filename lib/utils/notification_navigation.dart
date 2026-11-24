@@ -184,8 +184,7 @@ void _markNotificationRead(
       .read(recentNotificationsProvider.notifier)
       .markAsRead(notification.id);
   // 历史通知页按已读筛选分别缓存，只同步当前存活的那几份
-  for (final filter in NotificationReadFilter.values) {
-    final provider = notificationListProvider(filter);
+  for (final provider in notificationHistoryProviders()) {
     if (container.exists(provider)) {
       container.read(provider.notifier).markAsRead(notification.id);
     }

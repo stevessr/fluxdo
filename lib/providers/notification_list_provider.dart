@@ -38,10 +38,12 @@ class NotificationListNotifier
   int _historyOffset = 0;
   int _refreshGeneration = 0;
   bool _needsManualLoadMore = false;
-  NotificationListNotifier(NotificationReadFilter filter) : _filter = filter;
+  NotificationListNotifier(this._filter, [
+    this._category = NotificationCategory.all,
+  ]);
 
   NotificationReadFilter _filter;
-  NotificationCategory _category = NotificationCategory.all;
+  NotificationCategory _category;
 
   NotificationReadFilter get filter => _filter;
   NotificationCategory get category => _category;
@@ -463,3 +465,31 @@ final notificationListProvider = AsyncNotifierProvider.family
       List<DiscourseNotification>,
       NotificationReadFilter
     >(NotificationListNotifier.new);
+
+/// Each category owns its history cursor and scroll-independent data.
+final notificationCategoryHistoryProvider = AsyncNotifierProvider.family
+    .autoDispose<
+      NotificationListNotifier,
+      List<DiscourseNotification>,
+      NotificationCategory
+    >(
+      (category) => NotificationListNotifier(
+        NotificationReadFilter.all,
+        category,
+      ),
+    );
+
+/// Iterate without reading providers so background events never instantiate tabs.
+Iterable<
+  AsyncNotifierProvider<NotificationListNotifier, List<DiscourseNotification>>
+>
+notificationHistoryProviders() sync* {
+  for (final filter in NotificationReadFilter.values) {
+    yield notificationListProvider(filter);
+  }
+  for (final category in NotificationCategory.values) {
+    if (category != NotificationCategory.all) {
+      yield notificationCategoryHistoryProvider(category);
+    }
+  }
+}

@@ -6,6 +6,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 
 import '../l10n/s.dart';
 import '../models/notification.dart';
+import '../models/notification_category.dart';
 import '../models/user_action.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/message_bus_providers.dart';
@@ -34,10 +35,24 @@ enum _NotificationTab {
   replies,
   mentions,
   likes,
+  messages,
+  bookmarks,
+  assigned,
+  chat,
   reactions,
   boosts,
   edits,
-  links;
+  links,
+  other;
+
+  NotificationCategory? get category => switch (this) {
+    messages => NotificationCategory.messages,
+    bookmarks => NotificationCategory.bookmarks,
+    assigned => NotificationCategory.assigned,
+    chat => NotificationCategory.chat,
+    other => NotificationCategory.other,
+    _ => null,
+  };
 
   NotificationActionStream? get stream => switch (this) {
     replies => NotificationActionStream.replies,
@@ -45,7 +60,14 @@ enum _NotificationTab {
     likes => NotificationActionStream.likes,
     edits => NotificationActionStream.edits,
     links => NotificationActionStream.links,
-    all || reactions || boosts => null,
+    all ||
+    messages ||
+    bookmarks ||
+    assigned ||
+    chat ||
+    reactions ||
+    boosts ||
+    other => null,
   };
 
   IconData get icon => switch (this) {
@@ -53,6 +75,11 @@ enum _NotificationTab {
     replies => Symbols.reply_rounded,
     mentions => Symbols.alternate_email_rounded,
     likes => Symbols.favorite_rounded,
+    messages => Symbols.mail_rounded,
+    bookmarks => Symbols.bookmark_rounded,
+    assigned => Symbols.assignment_rounded,
+    chat => Symbols.chat_rounded,
+    other => Symbols.more_horiz_rounded,
     reactions => Symbols.add_reaction_rounded,
     boosts => Symbols.rocket_launch_rounded,
     edits => Symbols.edit_rounded,
@@ -64,6 +91,11 @@ enum _NotificationTab {
     replies => context.l10n.notification_tabReplies,
     mentions => context.l10n.notification_tabMentions,
     likes => context.l10n.notification_tabLikes,
+    messages => context.l10n.notification_categoryMessages,
+    bookmarks => context.l10n.notification_categoryBookmarks,
+    assigned => context.l10n.notification_categoryAssigned,
+    chat => context.l10n.notification_categoryChat,
+    other => context.l10n.notification_categoryOther,
     reactions => context.l10n.notification_tabReactions,
     boosts => context.l10n.notification_typeBoost,
     edits => context.l10n.notification_tabEdits,
@@ -138,6 +170,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage>
           ),
           _NotificationTab.reactions => const _ReceivedReactionsTab(),
           _NotificationTab.boosts => const _ReceivedBoostsTab(),
+          _ when tab.category != null => _NotificationStreamTab(
+            key: ValueKey(tab),
+            filter: NotificationReadFilter.all,
+            category: tab.category!,
+          ),
           _ => _ActionStreamTab(stream: tab.stream!),
         };
         final current = _NotificationTab.values[_tabController.index];
@@ -321,6 +358,8 @@ class _PagedTab<T> extends StatefulWidget {
     required this.emptyTitle,
     required this.visibleItems,
     required this.list,
+    this.onContinue,
+    this.needsManualLoadMore,
   });
 
   final AsyncValue<List<T>> value;
@@ -330,6 +369,8 @@ class _PagedTab<T> extends StatefulWidget {
   final Future<void> Function() onRetry;
   final Widget skeleton;
   final String emptyTitle;
+  final Future<void> Function()? onContinue;
+  final bool Function()? needsManualLoadMore;
 
   /// 过滤掉本地屏蔽用户后的条目
   final List<T> Function(List<T> items) visibleItems;
@@ -372,12 +413,18 @@ class _PagedTabState<T> extends State<_PagedTab<T>>
           final visible = widget.visibleItems(items);
           // 已加载页全部被本地屏蔽时列表不可滚，滚动触发的翻页永远不会
           // 发生；主动补载下一页（coordinator 自带冷却，不会打转）
-          if (visible.isEmpty && items.isNotEmpty && notifier.hasMore) {
+          final manual = widget.needsManualLoadMore?.call() ?? false;
+          if (visible.isEmpty &&
+              notifier.hasMore &&
+              !manual &&
+              (items.isNotEmpty || widget.onContinue != null)) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _loadMore();
             });
           }
-          if (visible.isEmpty && (items.isEmpty || !notifier.hasMore)) {
+          if (visible.isEmpty &&
+              (!notifier.hasMore ||
+                  (items.isEmpty && widget.onContinue == null))) {
             return AppEmptyState(
               icon: const Icon(Symbols.notifications_rounded),
               title: widget.emptyTitle,
@@ -401,6 +448,20 @@ class _PagedTabState<T> extends State<_PagedTab<T>>
                 itemCount: list.count + 1,
                 itemBuilder: (context, index) {
                   if (index == list.count) {
+                    if (widget.onContinue != null &&
+                        notifier.hasMore &&
+                        !notifier.isLoadingMore &&
+                        !notifier.isLoadMoreFailed) {
+                      return Center(
+                        child: TextButton(
+                          onPressed: () {
+                            _coordinator.resetCooldown();
+                            widget.onContinue!();
+                          },
+                          child: Text(context.l10n.common_searchMore),
+                        ),
+                      );
+                    }
                     return PagedListFooter(
                       hasMore: notifier.hasMore,
                       isLoadingMore: notifier.isLoadingMore,
@@ -424,13 +485,20 @@ class _PagedTabState<T> extends State<_PagedTab<T>>
 
 /// 「全部」栏目：按日期分组的通知卡
 class _NotificationStreamTab extends ConsumerWidget {
-  const _NotificationStreamTab({super.key, required this.filter});
+  const _NotificationStreamTab({
+    super.key,
+    required this.filter,
+    this.category = NotificationCategory.all,
+  });
 
   final NotificationReadFilter filter;
+  final NotificationCategory category;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final provider = notificationListProvider(filter);
+    final provider = category == NotificationCategory.all
+        ? notificationListProvider(filter)
+        : notificationCategoryHistoryProvider(category);
     final notifier = ref.read(provider.notifier);
     final systemAvatarTemplate = ref
         .watch(systemUserAvatarTemplateProvider)
@@ -444,6 +512,13 @@ class _NotificationStreamTab extends ConsumerWidget {
       onRefresh: notifier.refresh,
       onLoadMore: notifier.loadMore,
       onRetry: notifier.retryLoadMore,
+      needsManualLoadMore: () => notifier.needsManualLoadMore,
+      onContinue: category == NotificationCategory.all
+          ? null
+          : () async {
+              notifier.allowMoreHistoryScan();
+              await notifier.loadMore();
+            },
       skeleton: const NotificationCardListSkeleton(),
       emptyTitle: filter == NotificationReadFilter.unread
           ? context.l10n.notification_emptyUnread

@@ -12,22 +12,26 @@ void main() {
     'granted_badge': 12,
     'bookmark_reminder': 24,
     'assigned': 34,
+    'chat_message': 30,
+    'future_plugin_type': 1234,
   };
 
   test('分类只请求站点存在的类型', () {
     expect(NotificationPanelTab.all.typeNames(siteTypes), isNull);
     expect(NotificationPanelTab.replies.typeNames(siteTypes), [
-      'mentioned',
       'quoted',
       'replied',
     ]);
     expect(NotificationPanelTab.likes.typeNames(siteTypes), ['liked']);
+    expect(NotificationPanelTab.mentions.typeNames(siteTypes), ['mentioned']);
+    expect(NotificationPanelTab.assigned.typeNames(siteTypes), ['assigned']);
+    expect(NotificationPanelTab.chat.typeNames(siteTypes), ['chat_message']);
   });
 
   test('「其他」由站点类型减去其余分类推导', () {
     expect(NotificationPanelTab.other.typeNames(siteTypes), [
       'granted_badge',
-      'assigned',
+      'future_plugin_type',
     ]);
     expect(NotificationPanelTab.other.typeNames(const {}), isEmpty);
   });
@@ -36,7 +40,8 @@ void main() {
     final grouped = parseGroupedUnread({'1': 2, '2': 3, '12': 1, 'x': 9});
     expect(grouped, {1: 2, 2: 3, 12: 1});
     expect(NotificationPanelTab.all.unreadCount(siteTypes, grouped), isNull);
-    expect(NotificationPanelTab.replies.unreadCount(siteTypes, grouped), 5);
+    expect(NotificationPanelTab.replies.unreadCount(siteTypes, grouped), 3);
+    expect(NotificationPanelTab.mentions.unreadCount(siteTypes, grouped), 2);
     expect(NotificationPanelTab.likes.unreadCount(siteTypes, grouped), 0);
     expect(NotificationPanelTab.other.unreadCount(siteTypes, grouped), 1);
   });
