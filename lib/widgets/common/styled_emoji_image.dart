@@ -55,7 +55,15 @@ class EmojiStyleAssets {
   static String? staticUrlFor(String name, String set, {bool pinned = false}) {
     if (!EmojiHandler.selectableSets.contains(set)) return null;
     final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
-    if (!RegExp(r'^[a-z0-9_+-]+(?::t[1-6])?String name, EmojiRenderStyle style) {
+    if (!RegExp(r'^[a-z0-9_+-]+(?::t[1-6])?$').hasMatch(normalized)) return null;
+    final path = normalized.replaceFirst(':t', '/');
+    final encoded = path.split('/').map(Uri.encodeComponent).join('/');
+    return pinned
+        ? 'https://raw.githubusercontent.com/discourse/discourse-emojis/$_artworkRevision/dist/emoji/$set/$encoded.png'
+        : 'https://emoji.discourse-cdn.com/$set/$encoded.png?v=16';
+  }
+
+  static String? urlFor(String name, EmojiRenderStyle style) {
     if (style == EmojiRenderStyle.normal) return null;
     if (EmojiHandler().isCustomEmoji(name)) return null;
     final unicode = unicodeFor(name);
