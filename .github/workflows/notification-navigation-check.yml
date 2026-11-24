@@ -14,16 +14,37 @@ on:
       - 'test/utils/notification_navigation_route_test.dart'
       - 'test/providers/selected_topic_provider_test.dart'
       - '.github/workflows/notification-navigation-check.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
+
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: notification-nav-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/notification-navigation-check.yml
+      patterns: >-
+        ["lib/navigation/nav_entry_registry.dart","lib/models/notification.dart","lib/pages/notifications_page.dart","lib/providers/selected_topic_provider.dart","lib/utils/notification_navigation.dart","lib/widgets/common/notification_icon_button.dart","lib/l10n/modules/notification/**","test/models/notification_reaction_aggregation_test.dart","test/utils/notification_navigation_route_test.dart","test/providers/selected_topic_provider_test.dart",".github/workflows/notification-navigation-check.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

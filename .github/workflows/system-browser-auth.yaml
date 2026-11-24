@@ -20,13 +20,30 @@ on:
       - 'android/app/src/main/kotlin/com/github/lingyan000/fluxdo/MainActivity.kt'
       - 'test/services/system_browser_service_test.dart'
       - '.github/workflows/system-browser-auth.yaml'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/system-browser-auth.yaml
+      patterns: >-
+        ["lib/services/system_browser_service.dart","lib/pages/login_page.dart","lib/widgets/auth/login_browser_picker_sheet.dart","test/widgets/auth/login_browser_picker_sheet_test.dart","lib/services/desktop_browser_discovery.dart","lib/services/xdg_browser_discovery.dart","lib/services/xdg_browser_icon_loader.dart","lib/services/browser_discovery_cache.dart","tool/verify_browser_discovery_cache.dart","tool/verify_browser_discovery.dart","tool/verify_xdg_browser_discovery.dart","android/app/src/main/AndroidManifest.xml","pubspec.yaml","pubspec.lock","android/app/src/main/kotlin/com/github/lingyan000/fluxdo/MainActivity.kt","test/services/system_browser_service_test.dart",".github/workflows/system-browser-auth.yaml",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   desktop-discovery:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +66,8 @@ jobs:
         run: dart analyze lib/services/desktop_browser_discovery.dart lib/services/xdg_browser_discovery.dart lib/services/xdg_browser_icon_loader.dart lib/services/browser_discovery_cache.dart tool/verify_browser_discovery.dart tool/verify_xdg_browser_discovery.dart tool/verify_browser_discovery_cache.dart
 
   dart-browser-auth:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

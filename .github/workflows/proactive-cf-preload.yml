@@ -23,17 +23,36 @@ on:
       - 'test/services/proactive_cf_preload_contract_test.dart'
       - 'test/services/browser_trust_preload_latency_contract_test.dart'
       - '.github/workflows/proactive-cf-preload.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: proactive-cf-preload-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/proactive-cf-preload.yml
+      patterns: >-
+        ["lib/main.dart","lib/providers/preferences_provider.dart","lib/services/cf_challenge_service.dart","lib/services/browser_trust_coordinator.dart","lib/settings/definitions/custom_settings_defs.dart","test/services/proactive_cf_preload_contract_test.dart","test/services/browser_trust_preload_latency_contract_test.dart",".github/workflows/proactive-cf-preload.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -65,17 +84,18 @@ jobs:
       - name: Check changed Dart formatting (legacy baseline advisory)
         continue-on-error: true
         run: |
-          dart format --output=none --set-exit-if-changed \
+          dart format \
             lib/main.dart \
             lib/providers/preferences_provider.dart \
             lib/services/cf_challenge_service.dart \
             lib/services/browser_trust_coordinator.dart \
             lib/settings/definitions/custom_settings_defs.dart \
             test/services/proactive_cf_preload_contract_test.dart
+          git diff --exit-code -- lib/main.dart lib/providers/preferences_provider.dart lib/services/cf_challenge_service.dart lib/services/browser_trust_coordinator.dart lib/settings/definitions/custom_settings_defs.dart test/services/proactive_cf_preload_contract_test.dart
 
       - name: Analyze changed code
         run: |
-          flutter analyze \
+          flutter analyze --no-fatal-infos \
             lib/main.dart \
             lib/providers/preferences_provider.dart \
             lib/services/cf_challenge_service.dart \

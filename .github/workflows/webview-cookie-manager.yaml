@@ -12,13 +12,32 @@ on:
       - 'packages/enhanced_cookie_jar/test/delete_cookie_identity_test.dart'
       - 'test/services/site_cookie_manager_service_test.dart'
       - '.github/workflows/webview-cookie-manager.yaml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/webview-cookie-manager.yaml
+      patterns: >-
+        ["lib/pages/webview_page.dart","lib/pages/webview_cookie_manager_page.dart","lib/services/network/cookie/site_cookie_cleanup_service.dart","lib/services/network/cookie/site_cookie_manager_service.dart","lib/services/network/cookie/raw_cookie_writer.dart","packages/enhanced_cookie_jar/lib/src/enhanced_persist_cookie_jar.dart","packages/enhanced_cookie_jar/test/delete_cookie_identity_test.dart","test/services/site_cookie_manager_service_test.dart",".github/workflows/webview-cookie-manager.yaml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

@@ -18,13 +18,36 @@ on:
       - 'android/app/src/main/**'
       - 'test/services/pico_vr_service_test.dart'
       - '.github/workflows/pico-vr-compatibility.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
+      - 'android/settings.gradle.kts'
+      - 'android/app/build.gradle.kts'
+      - 'android/gradle/wrapper/gradle-wrapper.properties'
+      - 'test/widgets/layout/unified_topic_tabs_test.dart'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/pico-vr-compatibility.yml
+      patterns: >-
+        ["lib/services/pico_vr_service.dart","lib/main.dart","lib/pages/topic_detail_page/**","lib/pages/topics_screen.dart","lib/providers/selected_topic_provider.dart","lib/widgets/layout/pico_parallel_tabs.dart","lib/widgets/layout/pane_filmstrip.dart","lib/widgets/layout/master_detail_pane_host.dart","test/providers/selected_topic_provider_test.dart","test/pages/topic_detail_page/topic_more_menu_actions_test.dart","lib/pages/qr_login_scan_page.dart","lib/pages/settings_page.dart","android/app/src/main/**","test/services/pico_vr_service_test.dart",".github/workflows/pico-vr-compatibility.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml","android/settings.gradle.kts","android/app/build.gradle.kts","android/gradle/wrapper/gradle-wrapper.properties","test/widgets/layout/unified_topic_tabs_test.dart"]
+
   flutter-vr:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     name: Flutter VR capability checks
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -71,6 +94,8 @@ jobs:
           test/pages/topic_detail_page/topic_more_menu_actions_test.dart
 
   kotlin-vr:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     name: Compile native Android VR bridge
     runs-on: ubuntu-latest
     timeout-minutes: 35
