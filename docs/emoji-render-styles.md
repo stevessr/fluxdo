@@ -54,7 +54,9 @@ COLRv0 (2,759,076 bytes) use the private dynamically registered font families
 in EmojiFontService. Only the chosen style is downloaded on first eligible
 post-body glyph. Downloads are shared, persisted across launches, checked by
 exact length and pinned Git blob hash, and use cookie-free external requests.
-Unicode uses the system font for simple glyphs. Fluent remains image-based
+While the chosen font loads, simple glyphs temporarily use the system font
+without issuing individual image requests. Unicode uses the system font for
+simple glyphs. Fluent remains image-based
 because the official Fluent artwork repository does not ship a color font.
 Complex sequences, absent glyphs, custom emoji, animated and 3D artwork use
 the original image pipeline. Font failures fall back to artwork, with a five

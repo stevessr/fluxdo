@@ -173,7 +173,7 @@ class StyledEmojiImage extends ConsumerWidget {
         final unicode = EmojiStyleAssets.unicodeFor(name);
         final cp = EmojiFontFace.simpleScalar(unicode);
         if (set == 'unicode' && cp != null) {
-          return _glyph(String.fromCharCode(cp));
+          return _glyph(context, String.fromCharCodes([cp, 0xfe0f]));
         }
         if (cp == null || !EmojiFontSpec.bySet.containsKey(set)) {
           return selectedStatic();
@@ -181,26 +181,26 @@ class StyledEmojiImage extends ConsumerWidget {
         final ready = EmojiFontService.instance.ready(set);
         if (ready != null) {
           final glyph = ready.glyphFor(unicode);
-          return glyph == null ? selectedStatic() : _glyph(glyph, family: ready.family);
+          return glyph == null ? selectedStatic() : _glyph(context, glyph, family: ready.family);
         }
         return FutureBuilder<EmojiFontFace?>(
           future: EmojiFontService.instance.ensure(set),
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              // Keep the layout stable without requesting one PNG per emoji
-              // while the selected font is being downloaded.
-              return SizedBox(width: width ?? height ?? 18, height: height ?? width ?? 18);
+              // Temporarily use the system glyph without requesting one PNG
+              // per emoji while the selected font is being downloaded.
+              return _glyph(context, String.fromCharCodes([cp, 0xfe0f]));
             }
             final face = snapshot.data;
             final glyph = face?.glyphFor(unicode);
-            return glyph == null ? selectedStatic() : _glyph(glyph, family: face!.family);
+            return glyph == null ? selectedStatic() : _glyph(context, glyph, family: face!.family);
           },
         );
       },
     );
   }
 
-  Widget _glyph(String glyph, {String? family}) {
+  Widget _glyph(BuildContext context, String glyph, {String? family}) {
     final size = height ?? width ?? 18;
     return SizedBox(
       width: width ?? size,
@@ -216,7 +216,7 @@ class StyledEmojiImage extends ConsumerWidget {
             fontFamily: family,
             fontSize: size,
             height: 1,
-            color: Colors.black,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
       ),

@@ -153,10 +153,11 @@ Set<int> emojiFontCoverage(Uint8List bytes) {
 Set<int>? _verifiedCoverage((EmojiFontSpec, Uint8List) input) {
   final (spec, bytes) = input;
   if (bytes.length != spec.size) return null;
-  final hash = sha1.convert([
-    ...'blob ${bytes.length}\u0000'.codeUnits,
-    ...bytes,
-  ]).toString();
+  final header = 'blob ${bytes.length}\u0000'.codeUnits;
+  final object = Uint8List(header.length + bytes.length)
+    ..setRange(0, header.length, header)
+    ..setRange(header.length, header.length + bytes.length, bytes);
+  final hash = sha1.convert(object).toString();
   if (hash != spec.blob) return null;
   final coverage = emojiFontCoverage(bytes);
   return coverage.isEmpty ? null : coverage;
