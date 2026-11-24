@@ -178,7 +178,8 @@ jobs:
         with:
           distribution: temurin
           # Gradle 缓存交给 setup-gradle，避免双重缓存互相踩
-          java-version: '17'
+          # AGP 9.3 lint uses Java 21 APIs (List.removeLast); app bytecode stays JVM 17.
+          java-version: '21'
 
       - name: Setup Gradle Cache
         uses: gradle/actions/setup-gradle@v4
