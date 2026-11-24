@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -24,7 +25,7 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
             color: scheme.surfaceContainerLow,
             clipBehavior: Clip.antiAlias,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: context.shapes.borderRadius(16),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,

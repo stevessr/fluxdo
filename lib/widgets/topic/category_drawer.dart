@@ -1546,7 +1546,7 @@ class _MoreNavRow extends StatelessWidget {
                       color: colorScheme.primaryContainer.withValues(
                         alpha: 0.65,
                       ),
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: context.shapes.borderRadius(9),
                     ),
                     child: Icon(
                       icon,

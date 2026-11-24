@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'package:flutter/material.dart';
 
 import '../../../../../l10n/s.dart';
@@ -121,7 +122,7 @@ class _ColorInsertDialogState extends State<ColorInsertDialog> {
                 for (final entry in ColorInsertDialog._palette.entries)
                   InkWell(
                     onTap: () => _submit(entry.key),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: context.shapes.borderRadius(20),
                     child: Tooltip(
                       message: '${entry.value} ${entry.key}',
                       child: Container(

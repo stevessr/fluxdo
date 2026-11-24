@@ -649,7 +649,7 @@ class _PostJsonSummaryChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: context.shapes.borderRadius(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -731,7 +731,7 @@ class _PostJsonNode extends StatelessWidget {
             color: depth == 0
                 ? theme.colorScheme.surfaceContainerLow
                 : theme.colorScheme.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: context.shapes.borderRadius(12),
             border: Border.all(color: theme.colorScheme.outlineVariant),
           ),
           child: ExpansionTile(
@@ -780,7 +780,7 @@ class _PostJsonNode extends StatelessWidget {
           color: depth == 0
               ? theme.colorScheme.surfaceContainerLow
               : theme.colorScheme.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: context.shapes.borderRadius(12),
           border: Border.all(color: theme.colorScheme.outlineVariant),
         ),
         child: Padding(
@@ -825,7 +825,7 @@ class _PostJsonNode extends StatelessWidget {
                   color: theme.colorScheme.surfaceContainerHighest.withValues(
                     alpha: 0.45,
                   ),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: context.shapes.borderRadius(8),
                 ),
                 child: SelectableText(
                   displayValue,

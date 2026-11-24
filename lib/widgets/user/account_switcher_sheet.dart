@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -497,7 +497,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHigh.withValues(alpha: 0.97),
-                borderRadius: BorderRadius.circular(36),
+                borderRadius: context.shapes.borderRadius(36),
                 border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.55),
                 ),
@@ -903,7 +903,7 @@ class _AccountTile extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: context.shapes.borderRadius(999),
                 ),
                 child: Text(
                   l10n.accountManage_currentChip,

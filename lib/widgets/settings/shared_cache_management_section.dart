@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'package:ai_model_manager/ai_model_manager.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -454,7 +455,7 @@ class _UsagePill extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: context.shapes.borderRadius(999),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

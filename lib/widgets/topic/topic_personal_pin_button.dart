@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show showInteractionBottomSheet;
+import 'package:common_ui/common_ui.dart' show showInteractionBottomSheet, UiShapesContext;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -286,7 +286,7 @@ class _TopicPersonalPinButtonState
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: context.shapes.borderRadius(8),
         border: Border.all(color: colors.outlineVariant),
       ),
       child: Row(
@@ -335,7 +335,7 @@ class _TopicPersonalPinButtonState
             onTap: _mutating
                 ? null
                 : () => unawaited(_showMobileOptions(state, isPinned)),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: context.shapes.borderRadius(8),
             child: trigger,
           ),
         ),

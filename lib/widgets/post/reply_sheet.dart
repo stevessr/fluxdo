@@ -1022,7 +1022,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
           color: theme.colorScheme.surfaceContainerHighest.withValues(
             alpha: 0.45,
           ),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: context.shapes.borderRadius(14),
           border: Border.all(
             color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
           ),
