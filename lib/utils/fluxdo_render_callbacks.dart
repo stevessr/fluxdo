@@ -1322,6 +1322,21 @@ class FluxdoRenderCallbacks {
                   ? UrlHelper.resolveMediaUrl(resolvedUrl)
                   : UrlHelper.resolveMediaUrl(srcsetUrl);
               final baseUrl = UrlHelper.resolveMediaUrl(resolvedUrl);
+              // A failed optimized thumbnail must not require opening the
+              // viewer. Use exactly the same original URL as the lightbox.
+              final fullUrl = image.lightboxUrl ?? resolvedUrl;
+              var viewerUrl = DiscourseImageUtils.isUploadUrl(fullUrl)
+                  ? (DiscourseImageUtils.getCachedUploadUrl(fullUrl) ?? fullUrl)
+                  : UrlHelper.resolveMediaUrl(fullUrl);
+              if (image.lightboxUrl == null) {
+                viewerUrl = DiscourseImageUtils.getOriginalUrl(viewerUrl);
+              }
+              final originalFallback = viewerUrl.isNotEmpty &&
+                      viewerUrl != displayUrl &&
+                      viewerUrl != baseUrl &&
+                      !DiscourseImageUtils.isUploadUrl(viewerUrl)
+                  ? viewerUrl
+                  : null;
               final dominant = image.dominantColor;
               Widget img = LazyImage(
                 imageProvider: discourseImageProvider(displayUrl),
@@ -1329,6 +1344,10 @@ class FluxdoRenderCallbacks {
                     ? null
                     : discourseImageProvider(baseUrl),
                 fallbackCacheKey: displayUrl == baseUrl ? null : baseUrl,
+                originalImageProvider: originalFallback == null
+                    ? null
+                    : discourseImageProvider(originalFallback),
+                originalCacheKey: originalFallback,
                 placeholderColor: dominant == null
                     ? null
                     : Color(
@@ -1364,17 +1383,7 @@ class FluxdoRenderCallbacks {
                   // 只有裸 <img>(无 lightbox 包装)才用 /optimized/→
                   // /original/ 正则反推兜底(正则对 CDN 变体路径有漏配
                   // 风险,能不用就不用)。
-                  final hasLightbox = image.lightboxUrl != null;
-                  final fullUrl = image.lightboxUrl ?? resolvedUrl;
-                  var resolvedFullUrl = DiscourseImageUtils.isUploadUrl(fullUrl)
-                      ? (DiscourseImageUtils.getCachedUploadUrl(fullUrl) ??
-                            fullUrl)
-                      : UrlHelper.resolveMediaUrl(fullUrl);
-                  if (!hasLightbox) {
-                    resolvedFullUrl = DiscourseImageUtils.getOriginalUrl(
-                      resolvedFullUrl,
-                    );
-                  }
+                  final resolvedFullUrl = viewerUrl;
                   // 画廊数据在点击时才解析(长帖懒解析场景首次点图会触发
                   // 全 chunk parse,离散动作可接受;之后命中缓存)。
                   // 全帖画廊非空时走画廊 viewer(左右切同帖其他图);否则单图。
